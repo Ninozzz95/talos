@@ -118,8 +118,22 @@ function Copy-ConsegnaInPublic([string]$Da, [string]$A) {
   }
 }
 
+# ⛔⛔⛔ 29/10/2026 — CHI ASCOLTA SI RICONOSCE DALLA FORMA, NON DALLO STATO. Misurato su questo PC dopo il riavvio del mattino: il
+#   socket del 4174 (node, 127.0.0.1) torna con `State` VUOTO (valore 0, che l'enumerazione non ha: Listen è 2), quindi
+#   `-State Listen` non lo vedeva. Lo script credeva la porta libera, non fermava niente, avviava un server nuovo che moriva con
+#   «Port 4174 is already in use» e dichiarava «riavviato» perché la salute la dava il server VECCHIO: dalle 08:16 alle 11:03
+#   cinque consegne hanno aggiornato solo il frontend. Le prove C04 lo mostravano (un ascoltatore finto di node, mai visto, e la
+#   build fino al tetto di 120 s) e le avevo lette come «ambiente». Nessuna fonte documenta lo stato vuoto (Microsoft Learn
+#   «Get-NetTCPConnection», cercato il 29/10/2026). ⇒ In ascolto = porta locale giusta, remoto 0.0.0.0:0 o [::]:0, e non solo
+#   «Bound» (legato e mai messo in ascolto); `Listen` vale sempre.
+function Get-InAscolto([int]$porta) {
+  @(Get-NetTCPConnection -LocalPort $porta -ErrorAction SilentlyContinue | Where-Object {
+      $_.State -eq 'Listen' -or ($_.RemotePort -eq 0 -and $_.RemoteAddress -in @('0.0.0.0', '::') -and $_.State -ne 'Bound')
+    })
+}
+
 # ── 0) C04: lo stop gentile è possibile? Si chiede PRIMA di costruire ────────────────────────────────────────────────────────────
-$inAscoltoAllInizio = @(Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorAction SilentlyContinue)
+$inAscoltoAllInizio = @(Get-InAscolto $Porta)
 $gettoneAllInizio = Get-GettoneDiSpegnimento
 if ($inAscoltoAllInizio.Count -gt 0 -and -not $gettoneAllInizio.gettone) {
   $primo = Get-Process -Id $inAscoltoAllInizio[0].OwningProcess -ErrorAction SilentlyContinue
@@ -145,7 +159,7 @@ if ($PSCmdlet.ShouldProcess($frontend, 'npm run build')) {
 
 # ── 2) ferma chi ascolta sulla porta: SOLO in modo gentile (C04: se non basta, ci si ferma e lo si dice) ──────────────────────
 $inAscolto = @()
-foreach ($c in (Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorAction SilentlyContinue)) {
+foreach ($c in (Get-InAscolto $Porta)) {
   $p = Get-Process -Id $c.OwningProcess -ErrorAction SilentlyContinue
   if ($null -ne $p -and -not ($inAscolto | Where-Object { $_.Id -eq $p.Id })) { $inAscolto += $p }
 }
@@ -174,9 +188,9 @@ foreach ($p in $inAscolto) {
 if ($WhatIfPreference) { Write-Output 'a secco (-WhatIf): niente fermato, niente costruito, niente consegnato, niente avviato.'; exit 0 }
 for ($i = 0; $i -lt 40; $i++) {
   Start-Sleep -Milliseconds 250
-  if (-not (Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorAction SilentlyContinue)) { break }
+  if (-not (Get-InAscolto $Porta)) { break }
 }
-if (Get-NetTCPConnection -LocalPort $Porta -State Listen -ErrorAction SilentlyContinue) {
+if (Get-InAscolto $Porta) {
   throw ("la {0} è ancora occupata dopo 10 secondi: non consegno e non riavvio alla cieca (public/ non e' stato toccato)" -f $Porta)
 }
 
@@ -266,21 +280,36 @@ if (-not $env:TALOS_HARNESS_UI_WORKFLOW_ALTRO_DIR -and $env:APPDATA -and $env:TA
 # del 04/10/2026. Da qui la variabile viene SEMPRE riscritta col valore del parametro, subito prima dell'avvio:
 # l'ambiente dell'app non può più vincere.
 $env:TALOS_HARNESS_UI_PORT = [string]$Porta
+$env:TALOS_SEGNALAZIONE_PROBLEMA = 'on' # «Segnala un problema» (revisione D, F4): il 4174 è un desktop, la seconda porta si accende
 
 $log = Join-Path $harness '.talos-4174.log'
 $logErrori = Join-Path $harness '.talos-4174.err.log'
+$avviato = $null
 if ($PSCmdlet.ShouldProcess('server.mjs', ("avvio sulla {0}" -f $Porta))) {
-  Start-Process -FilePath 'C:\Program Files\nodejs\node.exe' `
+  $avviato = Start-Process -FilePath 'C:\Program Files\nodejs\node.exe' `
     -ArgumentList 'server.mjs' -WorkingDirectory $harness -WindowStyle Hidden `
-    -RedirectStandardOutput $log -RedirectStandardError $logErrori
+    -RedirectStandardOutput $log -RedirectStandardError $logErrori -PassThru
 }
 
-# ── 4) e si aspetta che RISPONDA ────────────────────────────────────────────────────────────────
+# ── 4) e si aspetta che RISPONDA — ma LUI, non un altro ──────────────────────────────────────────────────────────────────────────
+# ⛔ 29/10/2026: la salute la può dare anche un server vecchio rimasto sulla porta (vedi `Get-InAscolto`). «Riavviato» si dice solo
+#    se chi ascolta è il processo appena avviato; se quello è già uscito, si dice perché (le ultime righe del suo log d'errore).
 for ($i = 0; $i -lt 60; $i++) {
   Start-Sleep -Milliseconds 500
-  try {
-    $r = Invoke-WebRequest -Uri ("http://127.0.0.1:{0}/api/v1/health" -f $Porta) -UseBasicParsing -TimeoutSec 2
-    if ($r.StatusCode -eq 200) {
+  if ($null -ne $avviato -and $avviato.HasExited) {
+    $coda = if (Test-Path $logErrori) { (Get-Content -Path $logErrori -Tail 4 -ErrorAction SilentlyContinue) -join ' | ' } else { '' }
+    throw ("il server appena avviato (pid={0}) e' uscito subito: {1}" -f $avviato.Id, $coda)
+  }
+  $risponde = $false
+  try { $risponde = (Invoke-WebRequest -Uri ("http://127.0.0.1:{0}/api/v1/health" -f $Porta) -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200 } catch { }
+  if ($risponde) {
+      # fuori dal try: un `catch { }` vuoto inghiottirebbe questo errore e il ciclo finirebbe in «non ha risposto»
+      if ($null -ne $avviato) {
+        $chi = @(Get-InAscolto $Porta | ForEach-Object { $_.OwningProcess } | Select-Object -Unique)
+        if ($chi -notcontains $avviato.Id) {
+          throw ("sulla {0} risponde un ALTRO processo (pid={1}), non quello appena avviato (pid={2}): il codice nuovo NON gira" -f $Porta, ($chi -join ','), $avviato.Id)
+        }
+      }
       Write-Output ''
       Write-Output ("  ✓ http://127.0.0.1:{0}  — codice aggiornato, server riavviato" -f $Porta)
       # ⛔ il log si LEGGE: un avviso all'avvio è l'unico posto dove il kernel mancante si dichiara
@@ -289,7 +318,6 @@ for ($i = 0; $i -lt 60; $i++) {
         if ($avvisi) { Write-Output ''; Write-Output '  ⛔ avvisi nel log:'; $avvisi | ForEach-Object { Write-Output ('     ' + $_.Line) } }
       }
       exit 0
-    }
-  } catch { }
+  }
 }
 throw ("il {0} non ha risposto entro 30 secondi" -f $Porta)

@@ -7,9 +7,10 @@
  * ⛔ La carta dice CHE COSA cambia e per CHI: «per ogni modello» (la lista della persona) o «per <modello>» (una voce di serie).
  */
 import { t as traduci } from './lingua.js';
+import { conToken } from './context-separator.js';
 import { nomeModelloUmano } from './chat-foot.js'; // mai l'id grezzo del modello a schermo
 
-export const ATTREZZI_FORNITORI_CON_CARTA = Object.freeze(['provider_exclude', 'provider_allow', 'chatgpt_account']);
+export const ATTREZZI_FORNITORI_CON_CARTA = Object.freeze(['provider_exclude', 'provider_allow', 'chatgpt_account', 'local_model_window']);
 export const eCartaFornitori = (azione) => ATTREZZI_FORNITORI_CON_CARTA.includes(azione?.tipo);
 
 function el(doc, tag, classe, testo) { const n = doc.createElement(tag); if (classe) n.className = classe; if (testo !== undefined) n.textContent = testo; return n; }
@@ -20,7 +21,14 @@ function kv(doc, k, v) { const n = el(doc, 'div', 'talos-kv'); n.append(el(doc, 
 const cambiDi = (azione) => (Array.isArray(azione?.cambi) ? azione.cambi.filter((c) => c && (c.campo === 'persona' || c.campo === 'di-serie')) : []);
 const nomeModello = (id) => nomeModelloUmano(id) || id || '';
 
+const numeroDiToken = (n) => conToken(n);
+
 export function testiCartaFornitori(azione) {
+  // L1 1.3 (owner 26/10/2026): il modello chiede di riaprire il modello locale più grande (`local_model_window`, action enlarge)
+  if (azione?.tipo === 'local_model_window') {
+    return { badge: traduci('varie.providerCard.windowBadge'), bersaglio: `${azione.modello ?? ''} · ${numeroDiToken(azione.prima)} → ${numeroDiToken(azione.dopo)}`,
+      perche: traduci('varie.providerCard.windowWhy'), motivo: '', nota: '' };
+  }
   // 11/10/2026: scollegare ChatGPT dalla chat (`chatgpt_account`, action disconnect)
   if (azione?.tipo === 'chatgpt_account') {
     return { badge: traduci('varie.providerCard.chatgptBadge'), bersaglio: azione.email || 'ChatGPT', perche: traduci('varie.providerCard.chatgptDisconnect'), motivo: '', nota: '' };
@@ -50,6 +58,10 @@ export function creaBloccoCartaFornitori(doc, azione) {
      come dato: quello è della carta, e un selettore troverebbe due elementi (lo stesso avviso di automazione-carta.js). */
   const blocco = el(doc, 'div', 'talos-approval__automazione');
   blocco.dataset.dettaglioFornitori = azione?.tipo ?? '';
+  if (azione?.tipo === 'local_model_window') {
+    blocco.append(kv(doc, traduci('varie.providerCard.before'), numeroDiToken(azione.prima)), kv(doc, traduci('varie.providerCard.after'), numeroDiToken(azione.dopo)));
+    return blocco;
+  }
   if (azione?.tipo === 'chatgpt_account') {
     blocco.append(kv(doc, traduci('varie.providerCard.before'), traduci('varie.providerCard.chatgptNow')), kv(doc, traduci('varie.providerCard.after'), traduci('varie.providerCard.chatgptAfter')));
     return blocco;

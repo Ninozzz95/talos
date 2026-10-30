@@ -263,6 +263,17 @@ export async function avviaSessione({
   limiteUscitaToken = null,
   /* 21/10/2026 (CLI, `context.compactAtTokens`): il tetto di compattazione scelto dall'ospite, sullo stesso filo. Additivo. */
   tettoCompattazioneToken = null,
+  /* L1 1.3, revisione blocco 4 (A-3, A-4; owner A1-1 26/10/2026): la finestra del modello locale di questo PC, viva — `{ attuale,
+     puoCrescere, cresci }` dal registro, solo per un modello `local:` del supervisore. Additivo: assente ⇒ il giro com'era. */
+  finestraLocale = null,
+  /* L1 1.3, revisione blocco 5 (A-4; owner 26/10 notte): il giro non ha la persona davanti (automazione, passo di Workflow, sotto-agente).
+     Va all'adattatore: sul rifiuto del motore locale si riassume, non si riapre e non si chiede. Additivo: assente ⇒ come prima. */
+  senzaPersona = false,
+  /* OB-REV-03 (owner 15/10 sera): «nessuno davanti» al kernel, che toglie la guida «the tool pauses for an answer». Il registro lo
+     metteva già nelle opzioni del giro (`session-registry.mjs`, `nessunoDavanti(voce)`), ma qui si perdeva: trovato nella revisione 5. */
+  nessunoDavanti = false,
+  /* Owner 28/10/2026 (cache, punto 2): lo stato della cache del giro prima, dal registro. Additivo. */
+  statoCachePrecedente = null,
   /* Revisione 6 della CLI (S2-2): lo scarto misurato nel giro prima, dal registro, sullo stesso filo. Additivo: assente ⇒ gli attrezzi. */
   scartoMisurato = null,
   /* Revisione 8 della CLI (N1): la stima degli schemi del giro che ha misurato lo scarto, dal registro, sullo stesso filo. Additivo. */
@@ -346,6 +357,8 @@ export async function avviaSessione({
      l'istantanea mai accesa, e dal 24/09 (5ca876475) ogni giro dopo una compattazione ripartiva dalla storia INTERA
      (giro 2 a 30.273 token, ricompattato in primo piano per 13,6 s). Passati al motore solo se ci sono: la CLI non li passa. */
   recordCompattazioneIniziale = null, compattazioneIstantanea = false, compattazionePronta = null, compattazioneInArrivo = null,
+  /* cache, punto 4 (owner 28/10/2026): passato al motore solo se acceso — l'elenco esplicito qui sotto lo perderebbe altrimenti (IST-REV-00) */
+  riassuntoSicuroPerCache = false,
   /* C3 tappa 4 (owner 09/10): la PAUSA di una delega — l'attrezzo in volo finisce, il giro dopo non parte. Passata al motore
      solo se c'è (la CLI non la passa e non vede niente di diverso). */
   segnalePausa = null,
@@ -366,6 +379,10 @@ export async function avviaSessione({
   fallbackProviders = [], onCambioFornitore: depositaCambioFornitore,
   /* K3b (03/10/2026): la lingua dell'interfaccia, per l'istruzione della descrizione dei comandi; assente ⇒ italiano. */
   linguaInterfaccia = null,
+  /* owner 28/10/2026: la lingua delle risposte ('auto'/assente = Automatica, o un codice) — il nucleo la mette nella riga di lingua. */
+  linguaDelleRisposte = null,
+  /* owner 28/10/2026: la lingua dell'ultimo messaggio (codice), quando chi lo manda la sa — il nucleo ne fa una nota in coda in Automatica. */
+  linguaDelMessaggio = null,
   /*
    * ⛔⛔⛔ 02/09 — LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md, §6/§7.
    * L'etichetta del permesso della sessione ("Read only"/"Workspace
@@ -417,9 +434,16 @@ export async function avviaSessione({
    * configurazione provider.
    */
   immagine,
+  /* L-1 del kit (owner 29/10/2026 sera): `() => string|null`, la base di OpenRouter scelta dalla persona (server.mjs) */
+  baseImmaginiFn = null,
   generaImmagineFn = generaImmagineOpenRouterReale,
   persistGeneratedImageFn,
   removeGeneratedImageFn,
+  /* Owner 27/10/2026, `view_image`: inoltrati com'è al nucleo (`onGuardaImmagine`, `vedeImmaginiFn`) — vedi `guarda-immagine-ospite.mjs` */
+  guardaImmagineFn = null,
+  vedeImmaginiFn = null,
+  /* Owner 27/10/2026, `local_page`: inoltrata com'è al nucleo; la conversazione l'ha già legata il registro */
+  apriPaginaLocaleFn = null,
   /*
    * ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
    * `ricercaWeb` appena sopra: inoltrato SENZA logica propria a
@@ -493,6 +517,7 @@ export async function avviaSessione({
   cartellaPagineWeb, // politica di taglio di `naviga` (owner 01/10/2026): la cartella delle pagine della sessione, inoltrata com'è al kernel
   cartellaIncollati, // §4.2 regola K (owner 22/10/2026): la cartella delle copie intere delle richieste accorciate, inoltrata com'è
   ricercheInCorso, // F001b (owner 01/10/2026): il registro delle ricerche che continuano della sessione, inoltrato com'è al kernel
+  percorsiBloccatiFn, // owner 27/10/2026: le cartelle bloccate per il dispositivo del giro, inoltrate tal quali al kernel
   preferenzeWslFn, consensiSessione, // F009 (owner 01/10/2026): preferenza utente WSL e consenso root della sessione, inoltrati tal quali al kernel
   casaLinuxSessione, // Fase B (owner 01/10/2026): la casa Linux della sessione, inoltrata com'è al kernel
   registroLetture, // T25/B09: il registro delle letture della SESSIONE, inoltrato com'è al kernel (assente ⇒ il kernel ne crea uno per il giro)
@@ -528,6 +553,10 @@ export async function avviaSessione({
   onObiettivoFn,
   // R5.11 (owner 18/10/2026): annullare le modifiche ai file dalla chat, inoltrato com'è (lo lega il registro)
   onAnnullaFileFn,
+  // R-26 B (owner 29/10/2026 notte): che cosa ha scritto l'agente nel progetto, per il kernel che protegge il lavoro della persona
+  lavoroDellAgenteFn,
+  // «Segnala un problema» (owner 29/10/2026): la bozza di `report_problem`, inoltrata com'è (lo lega il registro)
+  onSegnalazioneFn,
   // R5.12 (owner 18/10/2026): i telefoni collegati dalla chat, inoltrato com'è (lo lega il registro)
   onTelefoniFn,
   /*
@@ -772,6 +801,9 @@ export async function avviaSessione({
     reasoning: reasoning ?? null,
     permessi: permessi ?? null,
     modalitaOperativa,
+    /* 26/10/2026 (allegati apribili, revisione A-F1): la cartella di PARTENZA, dove stanno i file della chat (`cartellaPerChatFile`), quando
+       non è la radice dei permessi (Accesso pieno da un progetto: radice = il disco). Assente quando coincide: la finestra usa `cartella`. */
+    ...(cartellaPerCreare !== cartella ? { cartellaBase: cartellaPerCreare } : {}),
     /* ⛔ 24/09/2026, decisione owner 36 — in questo giro il piano si presenta con l'attrezzo (e si approva sulla sua scheda):
        lo schermo non deve fabbricare un «piano proposto» dal testo finale. Presente solo quando è vero. */
     ...(modalitaOperativa === 'piano' && agentRole !== 'child' && typeof presentaPianoFn === 'function'
@@ -1317,6 +1349,13 @@ export async function avviaSessione({
     }
     /* Decisione 14 (owner 08/10/2026 sera): chi ha servito il giro. Un evento persistito, così la testata della risposta lo dice
        anche dopo una ricarica; il nome è quello di OpenRouter, mai riscritto. */
+    if (evento.tipo === 'cache-ricominciata') {
+      /* Owner 28/10/2026 (cache, punto 2): la cache del fornitore è ripartita da capo, col motivo. Additivo: chi non lo conosce lo ignora. */
+      return onEvento({ type: 'CUSTOM', name: 'talos.cache-ricominciata', value: {
+        schema: 'talos.cache-ricominciata.v1', threadId, runId, giro: evento.giro, motivo: evento.motivo,
+        tokenDaRileggere: evento.tokenDaRileggere ?? null, at: evento.at,
+      } });
+    }
     if (evento.tipo === 'fornitore-a-valle') {
       if (typeof evento.fornitore !== 'string' || !evento.fornitore) return undefined;
       return onEvento({ type: 'CUSTOM', name: 'talos.fornitore-a-valle', value: {
@@ -1384,6 +1423,9 @@ export async function avviaSessione({
         ...(evento.senzaCarta ? { unasked: evento.senzaCarta } : {}),
         // R-03 (17/10/2026): il rifiuto della delega come dati, per chi lo traduce per la persona (la CLI) senza regex sul testo
         ...(evento.rifiuto ? { refusal: { code: evento.rifiuto.codice, retryable: evento.rifiuto.ritentabile, reason: evento.rifiuto.motivo } } : {}),
+        // view_image (27/10/2026): l'immagine guardata, coi nomi del contratto pubblicato (`images`); `toolCallResult` decide cosa entra
+        ...(Array.isArray(evento.immagini) && evento.immagini.length
+          ? { images: evento.immagini.map((i) => ({ id: i?.riferimento, mimeType: i?.mime, width: i?.larghezza, height: i?.altezza })) } : {}),
         /* ⛔ BUG-14: il kernel sparge `processoPerEvento` direttamente sull'evento `tool-esito`
            (talosHarness.mjs `...(processoPerEvento ?? {})`) — inoltra i campi sfondo per la riga dei Processi. */
         ...(evento.inSfondo === true
@@ -1927,8 +1969,11 @@ export async function avviaSessione({
     let immagineGenerata;
     const prompt = String(argomenti?.prompt ?? '');
     try {
+      /* L-1 del kit (owner 29/10/2026 sera): la chiave va solo all'indirizzo di OpenRouter scelto dalla persona, come la chat */
+      let baseUrl = null;
+      try { baseUrl = typeof baseImmaginiFn === 'function' ? baseImmaginiFn() : null; } catch { baseUrl = null; }
       immagineGenerata = await generaImmagineFn({
-        prompt, shape: argomenti?.shape, modello: immagine.modello, nativo: immagine.nativo, chiave,
+        prompt, shape: argomenti?.shape, modello: immagine.modello, nativo: immagine.nativo, chiave, baseUrl,
       });
     } catch (errore) {
       const dettaglio = errore instanceof Error ? errore.message : String(errore);
@@ -2458,6 +2503,10 @@ export async function avviaSessione({
       finestraToken, /* ⛔ BUG-5 (05/10/2026): inoltrata al kernel — la soglia diventa 0,75 della finestra VERA del modello */
       ...(limiteUscitaToken ? { limiteUscitaToken } : {}), // 21/10: il tetto d'uscita del riassunto (`tettoUscitaRiassunto`)
       ...(Number.isSafeInteger(tettoCompattazioneToken) && tettoCompattazioneToken > 0 ? { tettoCompattazioneToken } : {}), // 21/10: il tetto dell'ospite
+      ...(finestraLocale && typeof finestraLocale === 'object' ? { finestraLocale } : {}), // L1 1.3 (A-3, A-4): la finestra viva del modello locale
+      ...(senzaPersona === true ? { senzaPersona: true } : {}), // revisione blocco 5 (A-4): all'adattatore, sul rifiuto si riassume
+      ...(nessunoDavanti === true ? { nessunoDavanti: true } : {}), // OB-REV-03: al kernel, il filo che mancava
+      ...(statoCachePrecedente && typeof statoCachePrecedente === 'object' ? { statoCachePrecedente } : {}), // cache, punto 2
       ...(typeof modelloRiassunto === 'string' && modelloRiassunto ? { modelloRiassunto } : {}), // 21/10 (CLI): il modello dei riassunti
       ...(Number.isFinite(finestraRiassuntoToken) && finestraRiassuntoToken > 0 ? { finestraRiassuntoToken } : {}),
       ...(Number.isFinite(scartoMisurato) && scartoMisurato >= 0 ? { scartoMisurato } : {}), // revisione 6 della CLI (S2-2)
@@ -2479,6 +2528,7 @@ export async function avviaSessione({
       ...(Number.isSafeInteger(riassuntoTettoMs) && riassuntoTettoMs > 0 ? { riassuntoTettoMs } : {}),
       ...(recordCompattazioneIniziale ? { recordCompattazioneIniziale } : {}), // IST-REV-00b: il turno parte già proiettato
       ...(compattazioneIstantanea === true ? { compattazioneIstantanea: true } : {}), // IST-REV-00: la compattazione istantanea
+      ...(riassuntoSicuroPerCache === true ? { riassuntoSicuroPerCache: true } : {}), // cache, punto 4
       ...(compattazionePronta ? { compattazionePronta } : {}),
       ...(compattazioneInArrivo ? { compattazioneInArrivo } : {}),
       ...(typeof onRichiestaSpedita === 'function' ? { onRichiestaSpedita } : {}), // L3-6: la scheda Contesto
@@ -2498,7 +2548,16 @@ export async function avviaSessione({
       ...(ricostruisciContestoIniziale === true ? { ricostruisciContestoIniziale: true } : {}),
       fallbackProviders,
       ...(linguaInterfaccia ? { linguaInterfaccia } : {}),
-      onAvviso: async (messaggio, { ripetibile = false, nota = false } = {}) => {
+      ...(linguaDelleRisposte ? { linguaDelleRisposte } : {}), // owner 28/10
+      ...(linguaDelMessaggio ? { linguaDelMessaggio } : {}), // owner 28/10
+      onAvviso: async (messaggio, { ripetibile = false, nota = false, riga = null, dati = null } = {}) => {
+        /* ⭐ L1 1.3 (owner 26/10/2026, bozzetto approvato): la finestra del modello locale allargata da sola è UNA RIGA di stato nella
+           conversazione (come «Context compacted»), non una bolla del modello: evento durevole che il frontend disegna come separatore,
+           coi dettagli a richiesta. `messaggio` resta la frase completa per chi non conosce l'evento (registro, esportazioni). */
+        if (riga === 'finestra-locale' && dati && typeof dati === 'object') {
+          await onEvento({ type: 'CUSTOM', name: 'talos.finestra-locale', value: { ...dati, testo: typeof messaggio === 'string' ? messaggio : String(messaggio?.testo ?? ''), at: new Date().toISOString() } }, { durable: true });
+          return;
+        }
         /* ⛔ BUG-7 (04/10, owner): stesso messaggio = una bolla sola per sessione (Set sopra).
            ⛔ BUG-7-cura2: la dedup ora dura TUTTA la sessione (Set su consensiSessione), quindi chi ha
            un avviso che DEVE potersi ripetere lo dichiara: `onAvviso(testo, { ripetibile: true })` —
@@ -2545,6 +2604,8 @@ export async function avviaSessione({
       },
       onConsumoFornitore: async evento => onEvento({ type: 'CUSTOM', name: 'consumo-fornitore', value: evento }, { durable: true }),
       strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onAggiornaArtefatto, onDocumento, onImmagine, modelloPlanner,
+      ...(typeof guardaImmagineFn === 'function' ? { onGuardaImmagine: guardaImmagineFn, vedeImmaginiFn } : {}), // owner 27/10/2026, view_image
+      ...(typeof apriPaginaLocaleFn === 'function' ? { apriPaginaLocaleFn, vedeImmaginiFn } : {}), // owner 27/10/2026, local_page
       ...(ponteAcceso ? { attrezziDifferiti } : {}), // 19/10: `true` o `'essenziali'` (il modello locale del telefono), inoltrato com'è
       ...(ponteAcceso && Number.isSafeInteger(finestraPerGliAttrezzi) && finestraPerGliAttrezzi > 0 ? { finestraPerGliAttrezzi } : {}), // L1, 20/10
       // ⭐ L9 (12/09/2026) — inoltrati SENZA logica propria, come tutto il resto in questo file:
@@ -2573,6 +2634,8 @@ export async function avviaSessione({
       onFornitoriFn, // 0.1.25: i fornitori esclusi, inoltrato com'è
       onObiettivoFn, // /goal G6: l'obiettivo, inoltrato com'è
       onAnnullaFileFn, // R5.11: annullare le modifiche ai file, inoltrato com'è
+      lavoroDellAgenteFn, // R-26 B: inoltrato com'è (lezione del 17/10: un'opzione nuova si porta lungo tutto il filo)
+      onSegnalazioneFn, // «Segnala un problema» (29/10/2026): inoltrato com'è
       onTelefoniFn, // R5.12: i telefoni collegati, inoltrato com'è
       onRichiestaPianoFn, // Rilievo 3 (§1.7): la richiesta del modo Piano, inoltrata com'è
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
@@ -2587,6 +2650,7 @@ export async function avviaSessione({
       preferenzeWslFn,
       consensiSessione,
       casaLinuxSessione,
+      ...(typeof percorsiBloccatiFn === 'function' ? { percorsiBloccatiFn } : {}),
       /* L1 (owner 20/10/2026 sera, «Percorso vero a tutti»): la nota «dove sei» e gli alias del percorso (`kernel/dove-sei.mjs`);
          il kernel la ignora in una sessione mobile. */
       doveNelPrompt: true,
@@ -2761,11 +2825,14 @@ export async function compattaSessione({
  *   misurato il 09/09 sul giro D1 (`runtime-owner-adapter.mjs::callContextModel`).
  * @returns {Promise<{scelta:object|null, finishReason:string|null, usage:object|null}>}
  */
-export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxOutputTokens, reasoning, fetchDiRete = fetch, segnaleStop, onProgresso = null, tentativo = 1, tentativiMassimi, attesaRitentaMassimaMs }) {
+export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxOutputTokens, reasoning, fetchDiRete = fetch, segnaleStop, onProgresso = null, tentativo = 1, tentativiMassimi, attesaRitentaMassimaMs, attrezzi = [], marcatoreDiCache }) {
   /* Lane CLI, 03/10/2026: con `onProgresso` il riassunto si conta mentre si scrive, come in `compattaSessione`. */
   const contatore = typeof onProgresso === 'function' ? creaContatoreRiassunto({ emetti: onProgresso, tentativo }) : null;
   const esito = await chiamaConRitenta({
-    modello, chiave, messaggi, attrezzi: [], fetchDiRete,
+    /* cache, punto 4 (owner 28/10/2026): gli attrezzi della conversazione nella forma che rilegge la cache; di serie nessuno, come sempre.
+       `marcatoreDiCache` passa com'è: `null` = nessun marcatore, assente = quello di serie del nucleo. */
+    modello, chiave, messaggi, attrezzi: Array.isArray(attrezzi) ? attrezzi : [], fetchDiRete,
+    ...(marcatoreDiCache !== undefined ? { marcatoreDiCache } : {}),
     ...(Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 ? { maxOutputTokens } : {}),
     ...(reasoning ? { reasoning } : {}),
     ...(segnaleStop ? { segnaleStop } : {}),

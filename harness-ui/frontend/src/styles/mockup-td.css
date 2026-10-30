@@ -370,8 +370,7 @@ details.td-theme-note p { margin: 8px 0 0; }
 @container (max-width: 560px) {
   .td-master { padding: 20px; }
   .td-grid { grid-template-columns: 1fr; }
-  .td-intro h2 { font-size: 24px; }
-  .td-intro-mark { display: none; }
+  /* la testata stretta resta quella comune (22 px, senza riquadro): owner 29/10/2026, una testata sola per tutte le sezioni */
   .td-toolbar { gap: 8px; }
   .td-search { max-width: none; }
   .td-list .td-card-open { grid-template-columns: 1fr auto; gap: 5px; }
@@ -793,20 +792,26 @@ details.td-theme-note p { margin: 8px 0 0; }
    più sotto resta solo delle Note (le automazioni si scrivono nel foglio). */
 /* Testata della pagina — CSS-0346/0347/0348 (`.page-demo>header`, `h2`, `p`) e CSS-0015 (h1,h2,h3). L'Atlas non ha il
    marchio a sinistra del titolo; il pulsante «Nuova nota» sta a destra (lo mette lì `montaPulsanteNuova`). */
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro { align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 18px; }
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro > div { flex: 1 1 auto; min-width: 0; }
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro-mark { display: none; }
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro h2 { font-size: 22px; font-weight: 550; line-height: 1.5; letter-spacing: -.025em; margin: 0 0 4px; }
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro p { font-size: 11px; }
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro > [data-nuova] { flex: none; }
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-intro > [data-nuova] .i { width: 15px; height: 15px; }
+/* ⛔ Owner 29/10/2026 (testate delle sezioni, scelta «A · come Note» sul bozzetto coi pezzi veri): questa testata non è più solo
+   di Note, Automazioni e Libreria — vale per OGNI `.td-section` (Attività, Memoria, Ricerca, Progetti…), da una fonte sola, così
+   due sezioni non possono più avere testate diverse. Titolo e frase senza il riquadro con l'icona; «Nuova…» a destra del titolo
+   dove la sezione crea qualcosa (lo mette lì `montaPulsanteNuova({ nellaTesta: true })`). Cancello: testate-sezioni.spec.mjs. */
+.td-section .td-intro { align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 18px; }
+.td-section .td-intro > div { flex: 1 1 auto; min-width: 0; }
+.td-section .td-intro-mark { display: none; }
+.td-section .td-intro h2 { font-size: 22px; font-weight: 550; line-height: 1.5; letter-spacing: -.025em; margin: 0 0 4px; }
+.td-section .td-intro p { font-size: 11px; }
+.td-section .td-intro > [data-nuova], .td-section .td-intro > [data-automation-action="new"] { flex: none; }
+.td-section .td-intro > [data-nuova] .i { width: 15px; height: 15px; }
 
 /* Strumenti — CSS-0349/0350 (`.page-tools`, `.page-tools .input-wrap`): gap 8, 14 sopra e sotto, la ricerca cresce
    (min 170). Il select è quello dei controlli (F1, `controls.css`): qui si tolgono solo le misure proprie di `.td-select`. */
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-toolbar { gap: 8px; margin: 14px 0; }
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-search { flex: 1 1 0%; min-width: 170px; max-width: none; }
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-toolbar > .talos-grow { display: none; }
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-select { min-height: 0; height: 36px; max-width: none; padding: 0 32px 0 11px; border-radius: 9px; background: var(--talos-panel-soft); font-size: 12px; }
+/* Owner 29/10/2026 («Sì, larga come Note»): anche la riga della ricerca è una sola per ogni `.td-section`, non solo per Note,
+   Automazioni e Libreria. Cancello: testate-sezioni.spec.mjs (larghezza della ricerca). */
+.td-section .td-toolbar { gap: 8px; margin: 14px 0; }
+.td-section .td-search { flex: 1 1 0%; min-width: 170px; max-width: none; }
+.td-section .td-toolbar > .talos-grow { display: none; }
+.td-section .td-select { min-height: 0; height: 36px; max-width: none; padding: 0 32px 0 11px; border-radius: 9px; background: var(--talos-panel-soft); font-size: 12px; }
 
 /* La riga della selezione — `atlas.js:148` (`row between small`, margine 12 · 16), CSS-0152/0154/0159, e la casella
    `.checkline` CSS-0188/0189: nessuna cornice, testo 11, spazio 9 fra casella e parola. */
@@ -915,15 +920,7 @@ details.td-theme-note p { margin: 8px 0 0; }
 :root:is([data-talos-theme="aurora"], [data-talos-theme="violet"], [data-talos-theme="claudius"], [data-talos-theme="calm"]) .td-section[data-section="libreria"] { --lib-raggio-card: .75rem; --lib-raggio-controllo: .75rem; }
 
 /* Testata e strumenti — come F2 (Atlas `.page-demo>header`, `.page-tools`). */
-.td-section[data-section="libreria"] .td-intro { align-items: center; justify-content: space-between; gap: 18px; margin: 0 0 18px; }
-.td-section[data-section="libreria"] .td-intro > div { flex: 1 1 auto; min-width: 0; }
-.td-section[data-section="libreria"] .td-intro-mark { display: none; }
-.td-section[data-section="libreria"] .td-intro h2 { font-size: 22px; font-weight: 550; line-height: 1.5; letter-spacing: -.025em; margin: 0 0 4px; }
-.td-section[data-section="libreria"] .td-intro p { font-size: 11px; }
-.td-section[data-section="libreria"] .td-toolbar { gap: 8px; margin: 14px 0; }
-.td-section[data-section="libreria"] .td-search { flex: 1 1 0%; min-width: 170px; max-width: none; }
-.td-section[data-section="libreria"] .td-toolbar > .talos-grow { display: none; }
-.td-section[data-section="libreria"] .td-select { min-height: 0; height: 36px; max-width: none; padding: 0 32px 0 11px; border-radius: 9px; background: var(--talos-panel-soft); font-size: 12px; }
+/* la testata è quella comune di ogni `.td-section` (owner 29/10/2026, «A · come Note»), sopra nel blocco di Note */
 /* ⛔ 27/09 notte (foto del 4174): con le tendine a tema (rilievo 14) il rivestimento è largo 100% (`calm-controls.css:5`,
    `.calm-control--select { width:100% }`, pensato per le righe delle Impostazioni) e la barra andava su quattro righe. Qui
    la tendina è larga quanto il suo contenuto e ha le misure che il `.td-select` aveva nella barra. Prova: ATLAS-F3-12. */

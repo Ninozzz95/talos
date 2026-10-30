@@ -27,6 +27,7 @@ import { giriDellaSessione, spiegaGiriFermati } from './consumo-sessione.js'; //
 import { nomeModelloUmano } from './chat-foot.js'; // 13/09 R-08: la targa di un GGUF locale diventa un nome
 import { linguaCorrenteDiT, t as tr, tn } from './lingua.js';
 import { scriviNomeConNumero } from './nome-con-numero.js'; // 15/10/2026 (owner): il «-2» di un doppione resta in vista
+import { durataBreveRigaViva } from './durata-breve.js'; // owner 27/10/2026: la riga in corso dice da quanto
 
 /**
  * Per quanto tempo una riga dice «ha appena risposto». Un minuto: abbastanza da vederlo tornando
@@ -38,6 +39,7 @@ export const SEGNALE_NOVITA_MS = 60_000;
 const TONI = Object.freeze({
   attesa: 'warning',
   vivo: 'live',
+  agenti: 'live', // owner 29/10/2026: la chat ha risposto, i suoi agenti lavorano ancora
   'in-pausa': 'warning', // C3 tappa 4: ambra, come «In pausa» nell'elenco degli agenti
   /* owner 23/10/2026 sera (mobile e desktop): l'ultimo giro finito in errore non giudica la chat — «da riprendere», ambra come
      «aspetta te», non rosso. La chat si riprende scrivendo; il guasto resta detto nel titolo della riga (`helpError`). */
@@ -96,6 +98,9 @@ export function statoSessione(sessione) {
    */
   else if (sessione.interrotta) classe = 'interrotto';
   else if (!sessione.conclusa) classe = 'vivo';
+  /* Owner 29/10/2026 sera, «Stop anche a chat ferma» (bozzetto approvato): la chat ha già risposto ma i suoi agenti (tutto l'albero)
+     lavorano ancora — non è «conclusa» per chi la guarda. Il numero lo dà il server (`discendentiAlLavoro`, session-registry `elenca`). */
+  else if (Number(sessione.discendentiAlLavoro) > 0) classe = 'agenti';
   // /goal G6 (15/10/2026): conclusa senza nessun giro — una chat nata ferma aspetta il suo primo messaggio, non ha un esito
   else if (sessione.primoMessaggioAtteso === true) classe = 'pendente';
   // ⛔ il motivo VINCE sull'esito: «fermata» e «giri finiti» sono chiusure previste, non guasti.
@@ -110,7 +115,8 @@ export function statoSessione(sessione) {
    * «errore», «fermata»), è più utile della sola parola «errore»: è quello che
    * il mockup mostra («giri finiti»). Se non c'è, non si inventa.
    */
-  const testo = classe === 'errore' && sessione.motivoChiusura === 'giri-finiti' ? tr('processi.session.stateTurnLimit') : tr(ETICHETTE[classe]);
+  const testo = classe === 'agenti' ? tn('processi.session.stateAgentsOne', 'processi.session.stateAgentsMany', Number(sessione.discendentiAlLavoro))
+    : classe === 'errore' && sessione.motivoChiusura === 'giri-finiti' ? tr('processi.session.stateTurnLimit') : tr(ETICHETTE[classe]);
   /*
    * ⛔ 06/9, misurato sullo screenshot: «interrotta · scrivi per riprenderla» TRONCAVA la riga e si
    * mangiava il nome del modello — il consiglio rubava l'informazione. In 180 px l'etichetta resta
@@ -578,7 +584,20 @@ export function creaSessionItem(sessione, opzioni = {}) {
 
   const aside = el(documentObj, 'span', 'talos-session-item__aside');
   if (!opzioni.pendente) {
-    aside.append(el(documentObj, 'span', null, oraCompatta(sessione.avviataAlle, opzioni.adesso)));
+    /* ⛔ Owner 27/10/2026 («Sì, tutte e due»): una conversazione che lavora dice «da 1m 35s» al posto dell'ora d'inizio, come il suo
+       nodo nell'albero dei rami; finito il giro torna l'ora, che intanto resta nel suggerimento. Il conto parte dal giro VERO
+       (`inizioGiroAlle` della riga dell'elenco, l'istante del RunStarted): senza, l'ora com'era. A destra e non dopo il modello,
+       perché un nome lungo si taglia coi puntini e il contatore sparirebbe proprio lì. */
+    const inizioGiroMs = stato.classe === 'vivo' ? Date.parse(sessione.inizioGiroAlle ?? '') : NaN;
+    const ora = oraCompatta(sessione.avviataAlle, opzioni.adesso);
+    if (Number.isFinite(inizioGiroMs)) {
+      const tempo = el(documentObj, 'span', 'talos-session-item__tempo');
+      tempo.dataset.sessioneDa = String(inizioGiroMs);
+      if (ora) tempo.title = ora;
+      segnaDurataSessione(tempo);
+      aside.append(tempo);
+      accendiOrologioSessioni(documentObj);
+    } else aside.append(el(documentObj, 'span', null, ora));
     // ⛔ 06/9, CB-04: la riga dell'elenco parla della SESSIONE, quindi i giri sono quelli di
     //    tutta la conversazione: `usage` è il solo ultimo invio, e diceva «1 giro» su tre.
     /*
@@ -613,6 +632,28 @@ export function creaSessionItem(sessione, opzioni = {}) {
     riga.addEventListener('contextmenu', (event) => { event.preventDefault(); event.stopPropagation(); opzioni.onMenu(event); });
   }
   return riga;
+}
+
+/* L'orologio delle righe in corso: uno solo per tutto l'elenco, spento quando non c'è più una riga da contare (un ridisegno le
+   ricrea: chi c'è si conta, chi è sparito no). `impostaOrologioSessioni` per le prove. */
+let adessoSessioni = () => Date.now();
+export function impostaOrologioSessioni(fn) { adessoSessioni = typeof fn === 'function' ? fn : () => Date.now(); }
+function segnaDurataSessione(nodo) {
+  const da = Number(nodo?.dataset?.sessioneDa);
+  if (!Number.isFinite(da)) return;
+  const testo = tr('processi.session.liveFor', { t: durataBreveRigaViva(Math.max(0, Math.floor(adessoSessioni() - da))) });
+  if (nodo.textContent !== testo) nodo.textContent = testo;
+}
+let orologioSessioni = null;
+function accendiOrologioSessioni(documentObj) {
+  const finestra = documentObj?.defaultView ?? globalThis;
+  if (orologioSessioni !== null || typeof finestra?.setInterval !== 'function') return;
+  orologioSessioni = finestra.setInterval(() => {
+    const tempi = typeof documentObj?.querySelectorAll === 'function' ? [...documentObj.querySelectorAll('[data-sessione-da]')] : [];
+    if (!tempi.length) { finestra.clearInterval(orologioSessioni); orologioSessioni = null; return; }
+    for (const nodo of tempi) segnaDurataSessione(nodo);
+  }, 1000);
+  orologioSessioni?.unref?.();
 }
 
 /** Proiezione della sidebar richiesta dall’owner: il catalogo completo resta intatto. */

@@ -510,3 +510,29 @@ test('TCA-R-10 — revisione avversaria 24/10 (F2-2): la cartella mostrata diven
     assert.equal(a.consensiSulDisco(), null, 'niente scritto')
   } finally { await b.via() }
 })
+
+test('TCA-R-11 — owner 27/10/2026 (il nega vince): revocare una cartella ancora raggiungibile dice al modello che è BLOCCATA e attraverso cosa; l\'elenco la mostra bloccata; una giunzione dice «stessa cartella»', async (t) => {
+  const a = ambiente(t)
+  const lavori = a.crea('lavori')
+  const uno = a.crea('lavori', 'uno')
+  await a.cartelle.consentiInAnticipo(ID_PIXEL, lavori)
+  await a.cartelle.consentiInAnticipo(ID_PIXEL, uno)
+  const cUno = (await a.cartelle.consensiDi(ID_PIXEL)).find((c) => c.nome === 'uno')
+  const b = await registroCon({ remoto: a.remoto })
+  try {
+    const fatto = await b.ospite('remote_phone_folder_revoke', { phone: 'abcd1234', folder: cUno.cartellaId }, { fase: 'esegui' })
+    assert.match(fatto.testo, /It was still reachable through "lavori", which stays allowed: it is now BLOCKED for this device, so a session in "lavori" cannot reach it either\. Tell the person\.$/u)
+    const elenco = (await b.ospite('remote_phone_folders', { phone: 'abcd1234' }, { fase: 'esegui' })).testo.split('\n')
+    assert.equal(elenco.filter((r) => r.includes('BLOCKED "uno"')).length, 1, elenco.join('\n'))
+    assert.equal(elenco.filter((r) => /^  - "uno" · folder /u.test(r)).length, 0, 'never listed as allowed as well')
+    /* la giunzione: Y diventa un passaggio verso X, e revocare Y blocca anche X — lo si dice */
+    const x = a.crea('X'); const y = a.crea('Y')
+    await a.cartelle.consentiInAnticipo(ID_PIXEL, y); await a.cartelle.consentiInAnticipo(ID_PIXEL, x)
+    rimuoviCartellaDiProva(y); symlinkSync(x, y, 'junction')
+    t.after(() => { try { unlinkSync(y) } catch { /* già tolta */ } })
+    const cY = await a.cartelle.consensoDi(ID_PIXEL, y)
+    const g = await b.ospite('remote_phone_folder_revoke', { phone: 'abcd1234', folder: cY.cartellaId }, { fase: 'esegui' })
+    assert.match(g.testo, /It is the same folder on disk as "X", which was still allowed: both are now BLOCKED for this device\. Tell the person\.$/u)
+    senzaSegreti(JSON.stringify([fatto, g]), a)
+  } finally { await b.via() }
+})

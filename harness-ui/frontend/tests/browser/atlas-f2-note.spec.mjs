@@ -235,16 +235,19 @@ test('ATLAS-F2-08 · Le funzioni della sezione ci sono tutte (verde prima e dopo
   expect(nonGet).toEqual([]);
 });
 
-test('ATLAS-F2-09 · La ricetta td-* delle altre sezioni NON cambia (Memoria, verde prima e dopo)', async ({ page }) => {
+/* Owner 29/10/2026 («A · come Note»): la TESTATA ora è una sola per tutte le sezioni (22 px, niente riquadro, «Nuovo ricordo» a destra
+   del titolo); il resto della ricetta td-* della Memoria (card, aperture, barra della selezione) resta com'era. */
+test('ATLAS-F2-09 · Memoria: testata come Note, il resto della ricetta td-* NON cambia', async ({ page }) => {
   const nonGet = await apri(page, 'memoria');
   const mem = '#schermoMemoria .td-section';
   await expect(page.locator(`${mem} .td-card`).first()).toBeVisible();
-  expect((await stili(page.locator(`${mem} .td-intro h2`), ['font-size']))['font-size']).toBe('26px');
-  await expect(page.locator(`${mem} .td-intro-mark`)).toBeVisible();
+  expect((await stili(page.locator(`${mem} .td-intro h2`), ['font-size']))['font-size']).toBe('22px');
+  await expect(page.locator(`${mem} .td-intro-mark`)).toBeHidden();
   const c = await stili(page.locator(`${mem} .td-card`).first(), ['border-top-left-radius']);
   expect(c['border-top-left-radius']).toBe('12px');
   expect((await stili(page.locator(`${mem} .td-card-open`).first(), ['padding-top']))['padding-top']).toBe('20px');
-  await expect(page.locator(`${mem} .td-intro > [data-nuova]`), 'la «Nuova» della Memoria resta dov\'era').toHaveCount(0);
+  await expect(page.locator(`${mem} .td-intro > [data-nuova]`), '«Nuovo ricordo» a destra del titolo').toBeVisible();
+  await expect(page.locator('#schermoMemoria .talos-topbar [data-nuova]'), 'e non anche nella barra in alto').toHaveCount(0);
   const bulk = await stili(page.locator(`${mem} .td-bulk`), ['border-top-width']);
   expect(bulk['border-top-width']).toBe('1px');
   expect(nonGet).toEqual([]);

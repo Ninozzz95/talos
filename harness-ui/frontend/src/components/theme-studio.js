@@ -409,10 +409,23 @@ export function movimentoRidotto(doc = globalThis.document) {
  * ⛔ Se il valore non è un colore, `style.color` resta vuoto: si dice il ripiego, non si inventa.
  */
 let sondaColore = null;
+/* ⛔ 28/10/2026 (sfondo acceso di serie): l'anteprima risolve la tavolozza a ogni pausa dello scorrimento, e la sonda veniva riscritta
+   40 volte mentre il testo scorre (STREAMING-FLUIDO-06). Lo stesso grezzo, nello stesso documento, dà lo stesso colore: si risolve una volta. */
+const coloriPerDocumento = new WeakMap();
 export function risolviColore(grezzo, doc = globalThis.document, ripiego = '') {
   const valore = String(grezzo || '').trim();
   if (!valore) return ripiego;
   if (!doc?.body || !doc.createElement) return ripiego || valore;
+  let cache = coloriPerDocumento.get(doc);
+  if (!cache) { cache = new Map(); coloriPerDocumento.set(doc, cache); }
+  const chiave = `${valore}\u0000${ripiego}`;
+  if (cache.has(chiave)) return cache.get(chiave);
+  if (cache.size > 256) cache.clear();
+  const risolto = risolviColoreConLaSonda(valore, doc, ripiego);
+  cache.set(chiave, risolto);
+  return risolto;
+}
+function risolviColoreConLaSonda(valore, doc, ripiego) {
   if (!sondaColore || !sondaColore.isConnected || sondaColore.ownerDocument !== doc) {
     sondaColore = doc.createElement('span');
     sondaColore.setAttribute('aria-hidden', 'true');

@@ -84,11 +84,18 @@ test('FERMATA-INVIO-05 — Esc durante la capture INIZIALE: il giro finisce «st
   assert.match(JSON.stringify(esito), /stopped on request: before round 1\./u);
 });
 
-test('FERMATA-INVIO-06 — AL CONTRARIO: un errore vero della capture iniziale, senza Stop, passa com era', async (t) => {
+/* 29/10/2026: «passa com'era» voleva dire «lancia». Ora un errore vero della capture, senza Stop, si dice una volta e il giro va avanti
+   (regola dell'owner del 12/10, forma concordata con la CLI; tests/capture-nativo-non-ferma.test.mjs). Il verso contrario resta: NON
+   diventa uno Stop, cioè la richiesta parte. */
+test('FERMATA-INVIO-06 — AL CONTRARIO: un errore vero della capture iniziale, senza Stop, non diventa uno Stop: la richiesta parte', async (t) => {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-fermata-invio-'));
   writeFileSync(join(cartella, 'uno.txt'), 'x');
   t.after(() => rimuoviCartellaDiProva(cartella));
   const contextHooks = { capture: async ({ reason }) => { if (reason === 'start') throw Object.assign(new Error('archivio rotto'), { code: 'CTX_STORE_BROKEN' }); }, prepare: async ({ messages }) => ({ messages }) };
-  await assert.rejects(talosLavora({ cartella, task: { consegna: 'Elenca la cartella.' }, modello: 'z-ai/glm-5.3-flash', chiave: 'fixture',
-    fetchDiRete: async () => { throw new Error('mai'); }, contestoDelProgetto: 'PREAMBOLO', comandoProva: 'node -e 0', contextHooks }), /archivio rotto/u);
+  let richieste = 0;
+  const esito = await talosLavora({ cartella, task: { consegna: 'Elenca la cartella.' }, modello: 'z-ai/glm-5.3-flash', chiave: 'fixture',
+    fetchDiRete: async () => { richieste += 1; return Response.json({ choices: [{ message: { role: 'assistant', content: 'Fatto.' }, finish_reason: 'stop' }] }); },
+    contestoDelProgetto: 'PREAMBOLO', comandoProva: 'node -e 0', contextHooks });
+  assert.equal(richieste, 1);
+  assert.doesNotMatch(JSON.stringify(esito), /stopped on request/u);
 });

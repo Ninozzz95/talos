@@ -89,7 +89,8 @@ test('ESEMPI-05 le forme: chiavi vere di forma sì, segnaposto e nomi no', () =>
   for (const vero of [SK, AWS, PEM, `ghp_${'a1'.repeat(18)}`, `AIza${'B'.repeat(35)}`]) assert.ok(formaDiSegretoNelTesto(`x = ${vero}`), vero.slice(0, 12))
   for (const finto of ['sk-your-key-here', 'sk-learn-compatible-estimator-thing', 'AKIA_EXAMPLE', 'ghp_short', `X${SK}`]) assert.equal(formaDiSegretoNelTesto(`x = ${finto}`), null, finto.slice(0, 16))
   // le 9 forme della CLI (redact.ts:24-36, il PEM in una), `Bearer` (redact.ts:39) e tre di Hermes (redact.py): nessuna inventata
-  assert.equal(FORME_DI_SEGRETO.length, 13)
+  // + Z.AI (revisione D del 29/10/2026, concordata con la CLI che la copia in redact.ts)
+  assert.equal(FORME_DI_SEGRETO.length, 14)
   // le chiavi d'esempio della documentazione non fanno chiedere (AWS, jwt.io)
   assert.equal(formaDiSegretoNelTesto('aws_access_key_id = AKIAIOSFODNN7EXAMPLE'), null)
   assert.equal(formaDiSegretoNelTesto('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'), null)

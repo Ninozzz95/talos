@@ -40,17 +40,23 @@ async function paginaDa(fetchFn, sessionId, corpo) {
   return dati.data.indirizzo;
 }
 
-/** Un file della cartella della sessione (percorso relativo, con `/`). */
-export function fonteDaCartella({ sessionId, percorso, nome = null, dimensione, fetchFn = (...a) => globalThis.fetch(...a) }) {
+/**
+ * Un file della cartella della sessione (percorso relativo, con `/`).
+ * `perIlModello` (anteprima nelle domande, owner 29/10/2026): il file l'ha indicato il MODELLO. Le rotte ricevono `origine=modello` e
+ *   applicano la regola dei segreti della lettura (`PREVIEW_FILE_SECRET`); e niente `creaPagina`: una pagina HTML resa coi suoi vicini
+ *   potrebbe incorniciare un `.env` accanto a lei, quindi l'HTML di un'anteprima si disegna da solo, senza file né rete (chi la chiama).
+ */
+export function fonteDaCartella({ sessionId, percorso, nome = null, dimensione, perIlModello = false, fetchFn = (...a) => globalThis.fetch(...a) }) {
   const nomeVero = nome ?? String(percorso ?? '').split('/').pop();
+  const origine = perIlModello ? '&origine=modello' : '';
   return {
     origine: 'cartella',
     nome: nomeVero,
     percorso,
     dimensione: Number.isFinite(dimensione) ? dimensione : undefined,
-    leggiByte: () => byteDa(fetchFn, `${API}/sessions/${enc(sessionId)}/file?percorso=${enc(percorso)}`),
-    creaPagina: () => paginaDa(fetchFn, sessionId, { percorso }),
-    indirizzoPdf: `${API}/sessions/${enc(sessionId)}/file/anteprima?percorso=${enc(percorso)}`,
+    leggiByte: () => byteDa(fetchFn, `${API}/sessions/${enc(sessionId)}/file?percorso=${enc(percorso)}${origine}`),
+    ...(perIlModello ? {} : { creaPagina: () => paginaDa(fetchFn, sessionId, { percorso }) }),
+    indirizzoPdf: `${API}/sessions/${enc(sessionId)}/file/anteprima?percorso=${enc(percorso)}${origine}`,
   };
 }
 

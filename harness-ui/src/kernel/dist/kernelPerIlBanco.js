@@ -1,4 +1,5 @@
 import { mkdir, writeFile, readFile, readdir, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { collegamentoVersoLaRete } from "../file-namespace-contract.mjs";
 function discoNode(o) {
@@ -360,7 +361,7 @@ const CODICI_RIFERIMENTO_MANCANTE = Object.freeze(/* @__PURE__ */ new Set([
 function improntaDi(ts, d) {
   return {
     codice: d.code,
-    file: d.file ? d.file.fileName : null,
+    file: d.file?.fileName ?? null,
     messaggio: ts.flattenDiagnosticMessageText(d.messageText, " ").trim()
   };
 }
@@ -424,13 +425,23 @@ function soppressioniIntrodotte(prima, dopo) {
   }
   return fuori;
 }
+/*
+ * ⛔ 29/10/2026 notte (Desktop, trovato lavorando al cancello veloce): il compilatore cerca gli import col nome ASSOLUTO rispetto a
+ *   `getCurrentDirectory()` ("/"): per `import { f } from "./m5"` dentro `src/nuovo.ts` chiede `/src/m5.ts`, ma la mappa teneva
+ *   `src/m5.ts`. Ogni import relativo restava «Cannot find module» (2307): nei file vecchi c'era già nel «prima» e non contava, in un
+ *   file NUOVO era sempre «introdotto» ⇒ il cancello rifiutava qualunque sorgente nuovo che importasse un modulo vicino. Dentro il
+ *   cancello i nomi diventano assoluti. Il nome del file nell'impronta serve solo a confrontare prima e dopo dentro questo modulo (i
+ *   messaggi citano lo specificatore dell'import, non il nome): resta quello interno, così lo stesso file scritto con barre diverse
+ *   nel prima e nel dopo non sembra nuovo.
+ */
+const nomeInterno = (p) => /^(?:\/|[A-Za-z]:[\\/])/.test(p) ? p : `/${p.replace(/\\/g, "/")}`;
 async function riferimentiNonRisolti(sorgenti, libreria) {
   const ts = await caricaCompilatore();
   const file = /* @__PURE__ */ new Map();
   for (const { percorso, testo } of sorgenti) {
     if (testo === null) continue;
     if (!ESTENSIONI_SORGENTE.includes(estensioneDi(percorso))) continue;
-    file.set(percorso, testo);
+    file.set(nomeInterno(percorso), testo);
   }
   if (file.size === 0) return [];
   const program = ts.createProgram(
@@ -448,13 +459,173 @@ async function riferimentiNonRisolti(sorgenti, libreria) {
   }
   return fuori;
 }
-async function cancelloSemantico(prima, dopo, libreria) {
+/*
+ * ⛔ R-28 di Performance (29/10/2026 notte; owner: «cancello veloce», strada A; contratto con la CLI, A2 e le sue cinque condizioni).
+ *   Prima ogni scrittura costruiva DUE programmi TypeScript interi e ricontrollava TUTTI i file, riparsando perfino lib.es*.d.ts:
+ *   2-6 s su 230 sorgenti. Ora, a esito identico (stesse impronte, stesso ordine dei file ⇒ stesso `perche`):
+ *   · ogni file (librerie comprese) si analizza una volta per CONTENUTO: la chiave è nome + hash del testo, mai «stesso giro», così
+ *     due agenti che scrivono insieme nella stessa cartella, una modifica della persona o un `git checkout` cambiano la chiave;
+ *   · il risultato di uno stato intero (tutti i nomi + hash) si ricorda: il «prima» di una scrittura è quasi sempre il «dopo» della
+ *     precedente, e non si ricalcola;
+ *   · il controllo usa `createSemanticDiagnosticsBuilderProgram` sul costruttore precedente (wiki di TypeScript «Using the Compiler
+ *     API»): ricontrolla solo i file cambiati e quelli che ne dipendono, gli altri tornano dalla sua memoria;
+ *   · dopo 10 minuti di inattività la cache si svuota: con un timer `unref` (il server rende la memoria, `talos -p` esce subito) e
+ *     comunque alla chiamata dopo;
+ *   · un progetto oltre TETTO_BYTE_CANCELLO di sorgenti torna al calcolo di sempre, mai a un risultato diverso. ⛔ Il tetto è sulla
+ *     MEMORIA, misurata il 29/10: un costruttore tiene ~7 MB fissi più 130-570 volte i byte del testo (100 file/17 KB → 9,6 MB,
+ *     1.000/178 KB → 27,9 MB, 3.000/545 KB → 70,3 MB). 2 MiB ⇒ al più ~270 MB, e il secondo costruttore resta solo se i due
+ *     insieme stanno sotto lo stesso tetto;
+ *   · le chiamate si mettono in fila: il costruttore precedente non si usa da due parti insieme.
+ *   `freddo: true` calcola come prima (la prova di equivalenza confronta i due).
+ *   Mobile 29/10/2026: sul telefono node vive dentro il processo dell'app, con molto meno margine di un PC ⇒ su Android il tetto è
+ *   512 KiB (~70 MB al più). `TALOS_CANCELLO_CACHE_KIB` lo cambia ovunque, e `0` spegne la cache (sempre il calcolo di sempre); un
+ *   valore che non è un intero si ignora.
+ */
+const TETTO_BYTE_CANCELLO = 2 * 1024 * 1024;
+const TETTO_BYTE_CANCELLO_ANDROID = 512 * 1024;
+function tettoCancello({ ambiente = process.env, piattaforma = process.platform } = {}) {
+  const chiesto = String(ambiente?.TALOS_CANCELLO_CACHE_KIB ?? "").trim();
+  if (/^\d{1,7}$/.test(chiesto)) return Number(chiesto) * 1024;
+  return piattaforma === "android" ? TETTO_BYTE_CANCELLO_ANDROID : TETTO_BYTE_CANCELLO;
+}
+const INATTIVITA_CANCELLO_MS = 10 * 60 * 1e3;
+const STATI_RICORDATI = 32;
+const cacheCancello = { sorgenti: /* @__PURE__ */ new Map(), costruttori: [], risultati: /* @__PURE__ */ new Map(), ultimoUso: 0, libreria: null, sveglia: null };
+let codaCancello = Promise.resolve();
+const hashTesto = (t) => createHash("sha1").update(t).digest("hex");
+function svuotaCacheCancello() {
+  if (cacheCancello.sveglia) clearTimeout(cacheCancello.sveglia);
+  cacheCancello.sveglia = null;
+  cacheCancello.sorgenti.clear();
+  cacheCancello.costruttori = [];
+  cacheCancello.risultati.clear();
+  cacheCancello.libreria = null;
+}
+function statoCacheCancello() {
+  return { sorgenti: cacheCancello.sorgenti.size, costruttori: cacheCancello.costruttori.length, risultati: cacheCancello.risultati.size };
+}
+async function riferimentiNonRisoltiVeloce(sorgenti, libreria) {
+  const ts = await caricaCompilatore();
+  const file = /* @__PURE__ */ new Map();
+  let byte = 0;
+  for (const { percorso, testo } of sorgenti) {
+    if (testo === null) continue;
+    if (!ESTENSIONI_SORGENTE.includes(estensioneDi(percorso))) continue;
+    file.set(nomeInterno(percorso), testo);
+    byte += testo.length;
+  }
+  if (file.size === 0) return [];
+  const tetto = tettoCancello();
+  if (tetto === 0 || byte > tetto) return riferimentiNonRisolti(sorgenti, libreria);
+  const ora = Date.now();
+  if (ora - cacheCancello.ultimoUso > INATTIVITA_CANCELLO_MS || cacheCancello.libreria !== libreria) svuotaCacheCancello();
+  cacheCancello.ultimoUso = ora;
+  cacheCancello.libreria = libreria;
+  if (cacheCancello.sveglia) clearTimeout(cacheCancello.sveglia);
+  cacheCancello.sveglia = setTimeout(svuotaCacheCancello, INATTIVITA_CANCELLO_MS);
+  cacheCancello.sveglia.unref?.();
+  const versioni = /* @__PURE__ */ new Map();
+  for (const [nome, testo] of file) versioni.set(nome, hashTesto(testo));
+  const chiaveStato = hashTesto([...versioni].map(([n, v]) => `${n}\0${v}`).join("\n"));
+  const ricordato = cacheCancello.risultati.get(chiaveStato);
+  if (ricordato) {
+    cacheCancello.risultati.delete(chiaveStato);
+    cacheCancello.risultati.set(chiaveStato, ricordato);
+    return ricordato.map((i) => ({ ...i }));
+  }
+  const host = hostInMemoria(ts, file, libreria);
+  host.getSourceFile = (f, target) => {
+    const testo = file.get(f) ?? libreria?.file.get(f);
+    if (testo === void 0) return void 0;
+    const versione = file.has(f) ? versioni.get(f) : `lib:${f}`;
+    const chiave = `${f}\0${versione}`;
+    let sf = cacheCancello.sorgenti.get(chiave);
+    if (!sf) {
+      sf = ts.createSourceFile(f, testo, target, true, genereDi(ts, f));
+      sf.version = versione;
+      cacheCancello.sorgenti.set(chiave, sf);
+    }
+    return sf;
+  };
+  const nomi = [...file.keys()];
+  let scelto = null;
+  let migliore = 0;
+  for (const c of cacheCancello.costruttori) {
+    let comuni = 0;
+    for (const n of nomi) if (c.nomi.has(n)) comuni++;
+    if (comuni > migliore) { migliore = comuni; scelto = c; }
+  }
+  const vecchio = scelto && migliore * 2 >= nomi.length ? scelto.costruttore : void 0;
+  const costruttore = ts.createSemanticDiagnosticsBuilderProgram(nomi, { noEmit: true, skipLibCheck: true, allowJs: true, checkJs: false }, host, vecchio);
+  const program = costruttore.getProgram();
+  /*
+   * ⛔ Prima si consumano i file «toccati» (builder.ts: `getSemanticDiagnostics(sourceFile)` legge la cache del file senza propagare
+   *   il cambiamento a chi lo importa; la propagazione avviene solo in `getSemanticDiagnosticsOfNextAffectedFile`). Senza questo giro,
+   *   togliere un export da m8 lasciava a m7 la diagnosi vecchia: trovato dalla prova di equivalenza CANC-A2-01.
+   */
+  while (costruttore.getSemanticDiagnosticsOfNextAffectedFile()) {
+  }
+  const fuori = [];
+  for (const nome of nomi) {
+    const sorgente = program.getSourceFile(nome);
+    if (!sorgente) continue;
+    for (const d of costruttore.getSemanticDiagnostics(sorgente)) {
+      if (CODICI_RIFERIMENTO_MANCANTE.has(d.code)) fuori.push(improntaDi(ts, d));
+    }
+  }
+  /* il costruttore usato come base si consuma (TypeScript lo «rilascia»): al suo posto il nuovo; al più due insiemi di file (due
+     cartelle), e il secondo solo se i due insiemi stanno sotto il tetto della memoria */
+  const tenuti = [{ nomi: new Set(nomi), costruttore, byte }];
+  const altro = cacheCancello.costruttori.find((c) => c !== scelto);
+  if (altro && altro.byte + byte <= tetto) tenuti.push(altro);
+  cacheCancello.costruttori = tenuti;
+  /* restano in memoria solo i file che i costruttori tenuti usano ancora: le versioni vecchie se ne vanno */
+  const vivi = /* @__PURE__ */ new Set();
+  for (const c of cacheCancello.costruttori) for (const sf of c.costruttore.getProgram().getSourceFiles()) vivi.add(`${sf.fileName}\0${sf.version}`);
+  for (const k of cacheCancello.sorgenti.keys()) if (!vivi.has(k)) cacheCancello.sorgenti.delete(k);
+  cacheCancello.risultati.set(chiaveStato, fuori.map((i) => ({ ...i })));
+  while (cacheCancello.risultati.size > STATI_RICORDATI) cacheCancello.risultati.delete(cacheCancello.risultati.keys().next().value);
+  return fuori;
+}
+/*
+ * R-28, A0 (owner 29/10/2026 notte, «prima il salto esatto»): con `checkJs: false` il compilatore controlla solo i file TypeScript e i
+ *   JavaScript che chiedono `@ts-check`; negli altri non nasce nessuna diagnosi semantica. Se né il prima né il dopo hanno un file
+ *   controllabile, le due liste sono vuote per costruzione e il compilatore non serve. La prova è larga apposta (un `@ts-nocheck` o un
+ *   `@ts-check` dentro una stringa contano come «controllabile»): sbagliare verso il calcolo vero costa tempo, mai l'esito.
+ */
+const ESTENSIONI_TS = Object.freeze([".ts", ".tsx", ".mts", ".cts"]);
+const CHIEDE_IL_CONTROLLO = /@ts-check\b/;
+function haFileControllabili(sorgenti) {
+  for (const { percorso, testo } of sorgenti) {
+    if (testo === null) continue;
+    const estensione = estensioneDi(percorso);
+    if (ESTENSIONI_TS.includes(estensione)) return true;
+    if (ESTENSIONI_SORGENTE.includes(estensione) && CHIEDE_IL_CONTROLLO.test(testo)) return true;
+  }
+  return false;
+}
+function inFilaCancello(lavoro) {
+  const turno = codaCancello.then(lavoro, lavoro);
+  codaCancello = turno.then(() => void 0, () => void 0);
+  return turno;
+}
+async function cancelloSemantico(prima, dopo, libreria, { freddo = false } = {}) {
   const fatto = { famiglia: "introduced-references", nome: "modifica candidata" };
   let baseline;
   let candidato;
   try {
-    baseline = await riferimentiNonRisolti(prima, libreria);
-    candidato = await riferimentiNonRisolti(dopo, libreria);
+    if (!freddo && !haFileControllabili(prima) && !haFileControllabili(dopo)) {
+      baseline = [];
+      candidato = [];
+    } else if (freddo) {
+      baseline = await riferimentiNonRisolti(prima, libreria);
+      candidato = await riferimentiNonRisolti(dopo, libreria);
+    } else {
+      ({ baseline, candidato } = await inFilaCancello(async () => ({
+        baseline: await riferimentiNonRisoltiVeloce(prima, libreria),
+        candidato: await riferimentiNonRisoltiVeloce(dopo, libreria)
+      })));
+    }
   } catch (errore) {
     return {
       stato: "ignoto",
@@ -520,5 +691,8 @@ export {
   discoNode,
   fontiDaDisco,
   libreriaStandard,
-  risolviSimbolo
+  risolviSimbolo,
+  statoCacheCancello,
+  svuotaCacheCancello,
+  tettoCancello
 };

@@ -616,13 +616,26 @@ export function loadConfig(
     /* ⭐ 15/10/2026 (owner: «i minuti di compattazione non devono esistere»): la compattazione istantanea — il riassunto si prepara in
        sottofondo dall'80% della soglia e alla soglia si scambia senza attesa. Accesa di serie sul desktop; «0», «false» o «off» la spengono. */
     compattazioneIstantanea: !/^(0|false|off|no)$/iu.test(String(env.TALOS_HARNESS_UI_INSTANT_COMPACTION ?? '').trim()),
+    /* Owner 28/10/2026 (cache dei prompt, punto 4): il riassunto col modello della conversazione rilegge la cache (stessi attrezzi, stessa
+       storia). SPENTO di serie finché il banco non misura quante volte il modello chiama un attrezzo invece di riassumere (correzione 4 della
+       CLI); «1», «true» o «on» lo accendono. */
+    riassuntoSicuroPerCache: /^(1|true|on|yes)$/iu.test(String(env.TALOS_HARNESS_UI_CACHE_SAFE_SUMMARY ?? '').trim()),
+    /* M 28/10/2026 notte: il riconoscitore della lingua dei messaggi scritti (ELD), acceso di serie; il profilo del dispositivo lo spegne
+       con «0», «false» o «off» e il server non lo carica mai */
+    riconosciLinguaScritta: !/^(0|false|off|no)$/iu.test(String(env.TALOS_HARNESS_UI_TEXT_LANGUAGE ?? '').trim()),
     publicDir,
     modello: parseModello(env.TALOS_HARNESS_UI_MODEL),
     // Come lo stato dell'arte: in assenza di elenco esplicito la prima
     // workspace è la radice del progetto desktop che contiene il server.
+    /*
+     * ⛔ 29/10/2026 — NELL'APP INSTALLATA NESSUN PROGETTO DI SERIE (owner: «la prima», cioè «Scegli una cartella»). Il ripiego qui sotto
+     *   è la cartella sopra il server: nello sviluppo è il progetto, ma nel pacchetto è `…\Programs\TALOS\resources` — compariva come
+     *   «resources» fra i Progetti, e il modello poteva scrivere dentro l'installazione. Il guscio lo dice con
+     *   `TALOS_HARNESS_UI_DEFAULT_PROJECT=none` (`desktop/runtime.mjs`), e l'app parte dalla schermata «Scegli una cartella».
+     */
     cartelleProgetto: parseCartelleProgetto(
       env.TALOS_HARNESS_UI_PROJECT_DIRS,
-      resolve(fileURLToPath(new URL('../', moduleUrl))),
+      /^none$/iu.test(String(env.TALOS_HARNESS_UI_DEFAULT_PROJECT ?? '').trim()) ? null : resolve(fileURLToPath(new URL('../', moduleUrl))),
     ),
     /*
      * ⛔ Nessun fail() se manca: Harness UI resta usabile in sola lettura
@@ -644,6 +657,9 @@ export function loadConfig(
     llamaServerFallbackPath: typeof env.TALOS_LLAMA_SERVER_FALLBACK_PATH === 'string' && env.TALOS_LLAMA_SERVER_FALLBACK_PATH.trim()
       ? resolve(env.TALOS_LLAMA_SERVER_FALLBACK_PATH.trim())
       : (!env.TALOS_LLAMA_SERVER_PATH?.trim() ? parseLlamaServerPath(undefined, moduleUrl, () => ({ status: 1 })) : undefined),
+    /* Router mode of the local engine (owner 26/10/2026 night, decision 3): behind a switch, OFF by default, until the bench promotes
+       it. Only the exact value `1` turns it on; anything else (absent, `0`, `true`) leaves today's engine. `llama-router-supervisor.mjs`. */
+    motoreLocaleRouter: env.TALOS_LOCAL_ROUTER === '1',
     ownerRuntimeModule: parseOwnerRuntimeModule(env.TALOS_OWNER_RUNTIME_MODULE, moduleUrl),
     ricercaWeb: parseRicercaWeb(env),
     labs: parseLabs(env.TALOS_LABS, moduleUrl), // ⭐ 04/9, W0-04

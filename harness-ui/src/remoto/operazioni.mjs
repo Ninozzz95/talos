@@ -43,6 +43,14 @@ const turnoDi = (args) => {
   if (!Number.isSafeInteger(t) || t < 0 || t > 999_999_999) throw errore('BAD_MESSAGE', 'A valid turn number is needed.');
   return String(t);
 };
+/* Owner 27/10/2026 («il dispositivo collegato deve poter cambiare tutte le impostazioni»): le azioni dell'obiettivo (/goal), solo quelle
+   della rotta del PC (`http-app.mjs`, `/goal/(?:pausa|riprendi|togli|contratto|criteri|proposta|verifica)`), mai un pezzo di percorso */
+const AZIONI_OBIETTIVO = new Set(['pausa', 'riprendi', 'togli', 'contratto', 'criteri', 'proposta', 'verifica']);
+const azioneObiettivo = (args) => {
+  const a = args?.action;
+  if (typeof a !== 'string' || !AZIONI_OBIETTIVO.has(a)) throw errore('BAD_MESSAGE', 'A valid goal action is needed.');
+  return a;
+};
 /* R-M4 bis: il fornitore di cui il telefono chiede i modelli, solo fra quelli col catalogo nel selettore (la stessa lista della rotta,
    `http-app.mjs` `ROTTA_MODELLI_FORNITORE`), mai un pezzo di percorso */
 const idFornitore = (args) => {
@@ -181,6 +189,16 @@ export const OPERAZIONI_HTTP = Object.freeze({
   /* Parità remoto ↔ desktop, punto 2 (owner 23/10 sera, censimento A10, A19, A21, A22, A23, A24, C2): le azioni piccole che il PC
      ha già. Le rotte sono quelle della finestra, coi loro controlli: qui solo l'elenco chiuso e la forma degli argomenti. */
   'session.queue.send': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/queue/invia`, corpo: corpoOggetto },
+  /* owner 27/10/2026: «il dispositivo collegato deve poter cambiare tutte le impostazioni» — anche dove girano i comandi e il loro racconto */
+  'session.commands-location': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/dove-girano-i-comandi`, corpo: corpoOggetto },
+  /* owner 27/10/2026, secondo passo: il motore del contesto della conversazione — leggerlo e cambiarne le impostazioni (la rotta vuole
+     `{ patch, expectedRevision }`: la revisione la dà la lettura, come al pannello del PC). Il motore avvisa già ogni finestra da sé. */
+  'session.context': { metodo: 'GET', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/context` },
+  'session.context.settings': { metodo: 'PATCH', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/context/settings`, corpo: corpoOggetto },
+  'session.goal': { metodo: 'GET', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/goal` },
+  'session.goal.set': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/goal`, corpo: corpoOggetto },
+  'session.goal.action': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/goal/${azioneObiettivo(a)}`, corpo: corpoOggetto },
+  'session.commands-in-chat': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/comandi-nella-conversazione`, corpo: corpoOggetto },
   'session.queue.cancel': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/queue/annulla`, corpo: corpoOggetto },
   'session.compact.skip': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/compaction/skip`, corpo: corpoOggetto },
   'session.compact.undo': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/compaction/${idCompattazione(a)}/undo`, corpo: corpoVuoto },
@@ -207,6 +225,25 @@ export const OPERAZIONI_HTTP = Object.freeze({
 });
 
 export const OPERAZIONI_EVENTI = Object.freeze(['session.events', 'session.unsubscribe']);
+/**
+ * 27/10/2026 (Mobile, caso dell'owner «sul PC è fermo, sul dispositivo lavora»): lo stream locale ha `:battito` ogni 15 s
+ * (`http-app.mjs`, P0 punto 7), l'iscrizione remota non aveva niente. Un'iscrizione persa senza che la connessione si chiuda, o uno
+ * stream muto, lasciava il dispositivo senza modo di accorgersene. Ora ogni iscrizione viva riceve questo evento ogni 15 s: senza
+ * `_sequenza`, quindi mai salvato, mai rigiocato, e `after` non si muove. Il dispositivo (dalla sua parte) riapre l'iscrizione se a
+ * giro vivo non arriva niente per 40 s. Un CUSTOM sconosciuto i telefoni già usciti lo ignorano (verificato dal Mobile).
+ */
+export const BATTITO_REMOTO = Object.freeze({ type: 'CUSTOM', name: 'talos.battito', value: Object.freeze({}) });
+/**
+ * 27/10/2026 (revisione GFR del Mobile, B1/B2): il battito prova il FILO, non la sorgente — un'iscrizione al registro persa con la
+ *   connessione viva, o un PC riavviato a metà giro (nessun terminale scritto), lasciavano il battito regolare e il dispositivo «al
+ *   lavoro». Ora porta anche `ultimaSequenza` e `lavora` dal registro (`statoPerIlBattito`), letti a ogni battito; un registro che
+ *   non li sa dare manda il battito di prima, vuoto.
+ */
+export function battitoConStato(stato) {
+  if (!stato || !Number.isSafeInteger(stato.ultimaSequenza) || typeof stato.lavora !== 'boolean') return BATTITO_REMOTO;
+  return { type: 'CUSTOM', name: 'talos.battito', value: { ultimaSequenza: stato.ultimaSequenza, lavora: stato.lavora } };
+}
+export const BATTITO_REMOTO_MS = 15_000;
 export const ISCRIZIONI_MASSIME = 8; // per connessione: il telefono guarda una conversazione, al più qualche figlia
 
 /**
@@ -226,7 +263,8 @@ const SCRITTURE_DI_SESSIONE = new Set(['session.send', 'session.queue', 'session
      fermare un processo e mettere in pausa una delega, che come `session.stop` sono sempre ammessi (fermare non scrive niente) */
   'session.queue.send', 'session.queue.cancel', 'session.compact.skip', 'session.compact.undo', 'session.fork', 'session.delete',
   'session.delegation.resume', 'session.delegation.retry', 'session.process.remove', 'session.process.background',
-  'session.message.delete']); // parità, punto 4
+  'session.message.delete', // parità, punto 4
+  'session.commands-location', 'session.commands-in-chat', 'session.goal.set', 'session.goal.action', 'session.context.settings']); // owner 27/10/2026: impostazioni dal dispositivo
 export const OPERAZIONI_CONSENSO = Object.freeze(['consent.request', 'consent.wait', 'session.consent', 'chat.folder']); // Parte 4: chat.folder
 /*
  * R5.13 (24/10/2026 notte; contratto Parte 2, «Revision 1: AGREED»): lo scambio di file, col modulo `file-dispositivi.mjs`. Ci sono
@@ -239,7 +277,8 @@ export const OPERAZIONI_FILE = Object.freeze(['file.upload.begin', 'file.upload.
 const ID_RICHIESTA = /^[A-Za-z0-9_-]{8,64}$/u;
 const conStato = (e, stato) => Object.assign(e, { stato });
 
-export function creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, cartelle = null, file = null }) {
+export function creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, cartelle = null, file = null,
+  battitoMs = BATTITO_REMOTO_MS, ogni = setInterval, smetti = clearInterval }) {
   /** La cartella reale di una sessione del PC, o null (la rotta deciderà). */
   const cartellaDellaSessione = async (sessionId) => {
     try {
@@ -371,7 +410,14 @@ export function creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, c
         /* R5.13: l'avviso leggero `file.nuovo {sessionId, fileId}` sullo stesso stream (contratto, «Revision 1», Q2) — non salvato, non
            rigiocato: `file.list` resta la fonte di verità. Solo a chi ha le operazioni dei file. */
         const togliFile = cartelle && file && dispositivoId ? file.ascoltaSessione(id, dispositivoId, (evento) => { manda(evento)?.catch?.(() => {}); }) : null;
-        disiscrivi = () => { togliEventi?.(); togliFile?.(); };
+        /* il battito (vedi `BATTITO_REMOTO`): finisce con l'iscrizione — disiscrivere, la stessa `sub` richiesta di nuovo, la connessione chiusa */
+        const battito = ogni(() => {
+          let stato = null;
+          try { stato = sessionRegistry.statoPerIlBattito?.(id) ?? null; } catch { stato = null; }
+          manda(battitoConStato(stato))?.catch?.(() => {});
+        }, battitoMs);
+        battito?.unref?.();
+        disiscrivi = () => { smetti(battito); togliEventi?.(); togliFile?.(); };
         return { sub, after };
       }
       if (op === 'session.unsubscribe') {

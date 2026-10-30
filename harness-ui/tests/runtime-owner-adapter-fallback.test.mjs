@@ -353,6 +353,23 @@ test('PH-FALLBACK-23 motore locale morto all\'avvio: arriva la sua frase con le 
   assert.deepEqual(b.consumi, [], 'nessuna ricevuta per un motore che non è partito');
   assert.equal(b.richieste.length, 0, 'e nessuna chiamata di rete');
 });
+/* 27/10/2026 (G-R6, revisione del blocco 10): il router del motore locale non risponde e non si è potuto fermare. Il suo codice nuovo
+   nasce PRIMA della rete come gli altri dell'avvio: passa com'è, con la sua frase, senza fornitore di riserva e senza consumo. */
+test('PH-FALLBACK-23c router del motore locale che non si ferma: il suo codice passa com\'è, nessuna riserva, nessun consumo', async t => {
+  const b = await banco(t, (_req, res) => rispondiBene(res));
+  const f = creaFetchMultiProvider(fetch, localeCon(b, {
+    localePronto: () => false,
+    avviaLocale: () => { throw erroreCon('The local engine router does not answer and could not be stopped, so un-gguf was not loaded a second time beside it: it may still hold the model in the graphics card memory. Close TALOS, or end «llama-server» (or another program using the graphics card) in Task Manager, then try again.', 'RUNTIME_ROUTER_NOT_STOPPED'); },
+  }));
+  await assert.rejects(() => esegui(f, { modello: 'local:un-gguf' }), (errore) => {
+    assert.equal(errore.code, 'RUNTIME_ROUTER_NOT_STOPPED', `il suo codice, non un guasto del fornitore: ${errore.code}`);
+    assert.match(errore.message, /could not be stopped/u);
+    return true;
+  });
+  assert.deepEqual(b.consumi, []);
+  assert.equal(b.richieste.length, 0, 'nessun fornitore di riserva');
+  assert.equal(b.eventi.filter((e) => e.tipo === 'cambio-fornitore').length, 0);
+});
 test('PH-FALLBACK-24 indirizzo del motore mancante: errore di configurazione, non un rifiuto', async t => {
   const b = await banco(t, (_req, res) => rispondiBene(res));
   const f = creaFetchMultiProvider(fetch, localeCon(b, { leggiRuntime: () => ({}) }));
@@ -387,6 +404,47 @@ test('PH-FALLBACK-25 contesto pieno del motore locale: il suo codice e i suoi nu
     assert.deepEqual(b.consumi, []);
     assert.equal(b.richieste.length, 0, 'e nessun fornitore di riserva');
   }
+});
+/*
+ * L1 1.3, revisione blocco 4 (A-8, mutante M1 sopravvissuto): «Chiedimi» sulla strada VERA (`eseguiConFallback`, con un fornitore di
+ *   riserva configurato) — la carta la decide la persona: il suo codice e i suoi numeri, mai un fornitore di riserva, mai un consumo.
+ */
+test('PH-FALLBACK-25b «Chiedimi» della finestra locale piena: LOCAL_WINDOW_ASK coi numeri, nessun fornitore di riserva', async t => {
+  const pieno = JSON.stringify({ error: { code: 400, message: 'request (17230 tokens) exceeds the available context size (16384 tokens), try increasing it', type: 'exceed_context_size_error', n_prompt_tokens: 17230, n_ctx: 16384 } });
+  const b = await banco(t, (_req, res) => rispondiBene(res));
+  const locali = [];
+  const f = creaFetchMultiProvider(fetch, localeCon(b, {
+    localePronto: () => true,
+    chiamaLocale: async (_percorso, opzioni) => { locali.push(JSON.parse(opzioni.body)); return new Response(pieno, { status: 400, headers: { 'Content-Type': 'application/json' } }); },
+    allargaFinestraLocale: async () => ({ ok: false, motivo: 'chiedi', prima: 16_384, dopo: 24_576, memoriaInPiu: null, nome: 'un-gguf' }),
+  }));
+  await assert.rejects(() => esegui(f, { modello: 'local:un-gguf' }), (errore) => {
+    assert.equal(errore.code, 'LOCAL_WINDOW_ASK');
+    assert.deepEqual({ promptToken: errore.promptToken, finestraProposta: errore.finestraProposta }, { promptToken: 17_230, finestraProposta: 24_576 });
+    return true;
+  });
+  assert.equal(locali.length, 1);
+  assert.deepEqual(b.consumi, []);
+  assert.equal(b.richieste.length, 0, 'nessun fornitore di riserva');
+});
+
+/* 26/10/2026 (D-0146-1 del Mobile): il motore dell'app che non risponde è una condizione nata PRIMA della rete — l'app lo riapre al
+   prossimo invio — e non un guasto del fornitore: anche con una riserva configurata non si cambia fornitore e non si spende niente. */
+test('PH-FALLBACK-25b il motore dell\'app che non risponde: il suo codice, nessuna riserva, nessun consumo', async t => {
+  const b = await banco(t, (_req, res) => rispondiBene(res));
+  const ospiti = [];
+  const f = creaFetchMultiProvider(fetch, localeCon(b, {
+    ospitePronto: (m) => m === 'lfm2.5.gguf',
+    chiamaLocaleOspite: async (percorso) => { ospiti.push(percorso); throw erroreCon('The on-device engine in the app did not answer: send the message again, the app reopens it.', 'LOCAL_GUEST_UNREACHABLE'); },
+  }));
+  await assert.rejects(() => esegui(f, { modello: 'locale-ospite:lfm2.5.gguf' }), (errore) => {
+    assert.equal(errore.code, 'LOCAL_GUEST_UNREACHABLE', `il suo codice, non un guasto del fornitore: ${errore.code}`);
+    return true;
+  });
+  assert.equal(ospiti.length, 1, 'una richiesta sola al motore dell\'app');
+  assert.equal(b.richieste.length, 0, 'nessun fornitore di riserva');
+  assert.equal(b.eventi.filter((e) => e.tipo === 'cambio-fornitore').length, 0);
+  assert.deepEqual(b.consumi, []);
 });
 
 /*

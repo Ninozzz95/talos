@@ -147,7 +147,7 @@ test('F009-07: WSL come root senza nessuno interpellato («Scrive nel progetto»
     assert.equal(domanda.comando, 'echo uno')
     assert.equal(domanda.wslRoot.utente, 'root')
     // K4b (11/10/2026): inglese + chiave + valori; l'italiano lo dice l'interfaccia (frasi-permesso-k4b.test.mjs)
-    assert.equal(domanda.wslRoot.frase, "This command runs in Linux (WSL, Ubuntu) as root, and with this session's permissions nobody approves it: it can change the whole Linux system and write to the Windows disks. If you confirm it, it applies to the whole session.")
+    assert.equal(domanda.wslRoot.frase, "This command would run in Linux (WSL, Ubuntu) as root. With this session's permissions commands run without asking, but as root it can change the whole Linux system and write to the Windows disks. If you confirm, commands in Linux (WSL, Ubuntu) can run as root for the rest of this session without asking again.")
     assert.deepEqual([domanda.wslRoot.fraseChiave, domanda.wslRoot.fraseParams], ['server.approval.wslRoot.user', { linux: 'Linux (WSL, Ubuntu)', utente: 'root' }])
     assert.deepEqual(primo.eseguiti.map((e) => e.comando), ['echo uno', 'echo due'])
     assert.equal(consensiSessione.rootWsl, true)

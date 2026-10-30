@@ -18,7 +18,7 @@ TALOS Desktop is a local coding workspace for Windows, with a terminal, file rev
 
 Use a compatible GGUF model on your device or connect the cloud model you choose with your own API key. Actions pass through explicit permissions; observable outcomes are checked before success is reported.
 
-Install the **signed APK** from [Releases](https://github.com/Ninozzz95/talos/releases), choosing a mobile tag **`v*`** such as `v0.1.30`. Check the release's SHA256 before installing. Keep the existing app installed to preserve its data when updating. If you have 0.1.44 or 0.1.45, install `v0.1.46` by hand once; from there on TALOS updates itself.
+Install the **signed APK** from [Releases](https://github.com/Ninozzz95/talos/releases), choosing a mobile tag **`v*`** such as `v0.1.30`. Check the release's SHA256 before installing. Keep the existing app installed to preserve its data when updating.
 
 [Mobile guide, requirements and screenshots →](mobile/README.md)
 

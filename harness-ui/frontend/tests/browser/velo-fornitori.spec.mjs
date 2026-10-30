@@ -36,7 +36,7 @@ const FORNITORI = [
   { id: 'ollama', label: 'Ollama', requiresKey: false, keyConfigured: false, supportsEndpoint: true, endpoint: 'http://127.0.0.1:11434', endpointConfigured: true, timeoutSeconds: 60, execution: 'local' },
   { id: 'anthropic', label: 'Anthropic', requiresKey: true, keyConfigured: false, supportsEndpoint: true, endpoint: '', endpointConfigured: false, timeoutSeconds: 60, execution: 'cloud' },
 ];
-const NOVE = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'telefoni', 'models', 'costi', 'workspace', 'account']; // 18/10/2026: + «Telefoni collegati»
+const NOVE = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'telefoni', 'models', 'costi', 'workspace', 'account', 'aggiornamenti']; // 18/10/2026: + «Telefoni collegati» · 29/10: + «Aggiornamenti», solo dell'app installata (nel browser c'è ma nascosta)
 const CHIAVE_SEZIONE = 'talos.harness.desktop.settings.section.v1';
 const FOTO = resolve(process.cwd(), 'artifacts', 'provider-unica-superficie-2026-09-23');
 
@@ -144,10 +144,12 @@ test('VELO-FORNITORI-A — le Impostazioni hanno NOVE sezioni, e «Provider e ac
   const nav = page.locator('#schermoImpostazioni [role="tablist"] [data-settings-tab]');
   await expect(nav).toHaveCount(NOVE.length); // 18/10/2026: dieci con «Telefoni collegati» — il conto viene dalla lista, non da un numero a mano
   expect(await nav.evaluateAll((n) => n.map((x) => x.dataset.settingsTab))).toEqual(NOVE);
+  /* 29/10/2026: «Aggiornamenti» è solo dell'app installata (`soloApp`): nel browser la voce c'è ma è nascosta, e il suo pannello non nasce */
+  await expect(page.locator('#schermoImpostazioni [data-settings-tab="aggiornamenti"]')).toBeHidden();
   /* La colonna delle sezioni (e non ogni tablist: il laboratorio ha la SUA, con la scheda «Provider»). */
   await expect(page.locator('#schermoImpostazioni .settings-nav')).not.toContainText('Provider e accessi');
   await expect(page.locator('#setting-tab-providers')).toHaveCount(0);
-  await expect(page.locator('[id^="setting-panel-"]')).toHaveCount(NOVE.length); // 18/10/2026: dieci, dalla lista
+  await expect(page.locator('[id^="setting-panel-"]')).toHaveCount(NOVE.length - 1); // 18/10/2026: dieci, dalla lista · 29/10: meno «Aggiornamenti», che nel browser non ha pannello
   /* Il selettore della finestra stretta nasce dallo stesso elenco: nove anche lui. */
   expect(await page.locator('#settingsSectionSelect option').evaluateAll((o) => o.map((x) => x.value))).toEqual(NOVE);
   /* E la ricerca delle parole dei fornitori porta al laboratorio, mai a un vuoto. */

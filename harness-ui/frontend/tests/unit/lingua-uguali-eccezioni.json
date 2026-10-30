@@ -2,7 +2,17 @@
  "nota": "LINGUA-UGUALI (24/10/2026, owner, punto 4 della revisione a blocco 5): le chiavi il cui testo è IDENTICO in italiano e in inglese per scelta — nomi propri, unità, sigle, termini tecnici usati così in italiano. Generato dallo stato del 24/10/2026 dopo «Seguito», «Revisione», «Bacheca»: da rivedere con l'owner (alcune voci possono essere traduzioni mancate). Una chiave nuova uguale nelle due lingue fa fallire LINGUA-UGUALI finché non si traduce o non si aggiunge qui; una voce che non è più uguale va tolta.",
  "motivi": {
   "remoto.sendFile.row.detail": "R5.13 (24/10/2026): «{file} → {device}» è solo il nome del file, una freccia e il nome del dispositivo, uguale nelle due lingue (bozzetto 3b)",
-  "app.modelPicker.autoShort": "Pillola del ragionamento (24/10/2026, bozzetto approvato): «Auto» si dice così anche in italiano; il suggerimento dice «Automatico»/«Automatic». Unione delle fusioni del 25/10"
+  "app.modelPicker.autoShort": "Pillola del ragionamento (24/10/2026, bozzetto approvato): «Auto» si dice così anche in italiano; il suggerimento dice «Automatico»/«Automatic». Unione delle fusioni del 25/10",
+  "chat.context.separator.tokensOne": "L1 1.3 (26/10/2026): «{n} token» al singolare è uguale nelle due lingue, come chat.goal.head.tokensOne",
+  "app.activity.arg.html": "Nome di un argomento d’attrezzo (27/10/2026, parità col Mobile T8): «HTML» si dice così anche in italiano",
+  "app.activity.arg.id": "Nome di un argomento d’attrezzo (27/10/2026, parità col Mobile T8): «id» si dice così anche in italiano",
+  "app.activity.arg.url": "Nome di un argomento d’attrezzo (27/10/2026, parità col Mobile T8): «URL» si dice così anche in italiano",
+  "app.activity.arg.workflow": "Nome di un argomento d’attrezzo (27/10/2026, parità col Mobile T8): «workflow» si dice così anche in italiano",
+  "segnala.diag.app": "«Segnala un problema» (29/10/2026): «TALOS desktop {versione} ({sistema})» è il nome del prodotto, un numero e il sistema, uguale nelle due lingue (bozzetto approvato)",
+  "segnala.kind.short.idea": "«Segnala un problema» (29/10/2026): «Idea» è la stessa parola in italiano e in inglese",
+  "chat.context.live.durationSeconds": "Owner 29/10/2026 (via Mobile): «12s · 1m 4s» uguale su telefono e PC e in tutte le lingue.",
+  "chat.context.live.durationMinutes": "Owner 29/10/2026 (via Mobile): «12s · 1m 4s» uguale su telefono e PC e in tutte le lingue.",
+  "chat.context.live.durationHours": "Owner 29/10/2026 (via Mobile): «12s · 1m 4s» uguale su telefono e PC e in tutte le lingue."
  },
  "chiavi": [
   "agenti.delegations.filesOne",
@@ -11,6 +21,10 @@
   "agenti.graph.segmentCount",
   "agenti.results.bytesOne",
   "agenti.sources.workflow",
+  "app.activity.arg.html",
+  "app.activity.arg.id",
+  "app.activity.arg.url",
+  "app.activity.arg.workflow",
   "app.board.mcp.serverLine",
   "app.board.plugins.hooksOne",
   "app.board.plugins.toolsOne",
@@ -49,6 +63,7 @@
   "chat.context.manager",
   "chat.context.row.beforeAfter",
   "chat.context.row.thousands",
+  "chat.context.separator.tokensOne",
   "chat.diff.inFile",
   "chat.foot.permission.groupPart",
   "chat.goal.command.name",
@@ -370,6 +385,11 @@
   "varie.reader.slide.placeholder.smartArt",
   "varie.tools.kind.test.shortOne",
   "varie.tools.kind.webSearch.filter",
-  "varie.tools.other.many"
+  "varie.tools.other.many",
+  "segnala.diag.app",
+  "segnala.kind.short.idea",
+  "chat.context.live.durationSeconds",
+  "chat.context.live.durationMinutes",
+  "chat.context.live.durationHours"
  ]
 }

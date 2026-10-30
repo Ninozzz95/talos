@@ -166,7 +166,7 @@ export function montaPonteLegacy(documentObj = document) {
   battezza(uno(coda, '[data-coda-invia]'), { id: 'inviaQueued' });
   coda.hidden = true;
   const compositore = uno(piede, '#composerForm');
-  battezza(uno(compositore, '.talos-send'), { classi: ['send-btn'] });
+  battezza(uno(compositore, '.talos-send[data-c="SendButton"]'), { classi: ['send-btn'] }); // 29/10: solo Invia, non lo Stop degli agenti accanto
   battezza(uno(compositore, '.talos-composer__mic'), { classi: ['composer-mic'] }); // 05/9 Fase 2: ChatFooter — il microfono dell'originale (dettatura)
   battezza(uno(piede, '.talos-statusbar'), { classi: ['runtime-status'] });
   // 05/9 Fase 2 (T-16): i tre toast dimostrativi del mockup restano nel documento

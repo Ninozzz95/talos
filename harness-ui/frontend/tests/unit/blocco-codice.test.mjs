@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { creaBloccoCodice, aggiornaBloccoCodice, etichettaLinguaggio, chiaveLinguaggio, evidenziaInAttesa } from '../../src/components/conversazione.js';
+import { creaBloccoCodice, aggiornaBloccoCodice, etichettaLinguaggio, chiaveLinguaggio, evidenziaInAttesa, vociBloccoCodice } from '../../src/components/conversazione.js';
+import { t } from '../../src/components/lingua.js';
 
 /*
  * 09/09/2026 — l'owner con lo screenshot: «i blocchi di codice appaiono frammentati in strisce
@@ -277,4 +278,137 @@ test('CODICE-RINVIO: in rigiocata il blocco nasce in testo e si colora solo quan
   assert.equal(subito, 1);
   assert.equal(vivo.dataset.evidenziazione, undefined);
   assert.equal(vivo.trovaTag('code').className, 'language-javascript');
+});
+
+/* ------------------------------------------------- 23/10/2026: barra ferma, «⋯», esporta */
+
+test('BLOCCO-ALTRO-01 — la barra ha «Copia» e «⋯» (mai di più), il «⋯» dice di quale codice si parla ed è spento mentre il blocco arriva; si accende alla chiusura', () => {
+  const blocco = creaBloccoCodice({ testo: 'riga 1\n', linguaggio: 'py', chiuso: false }, { document: documentoFinto(), evidenzia: () => null });
+  const testa = blocco.trova('code-block-head');
+  const pulsanti = testa.figli.filter((f) => f.tag === 'button');
+  assert.deepEqual(pulsanti.map((b) => b.className), ['code-block-copy', 'code-block-more'], 'due pulsanti: Copia e ⋯');
+  const altro = blocco.trova('code-block-more');
+  assert.equal(altro.getAttribute('aria-haspopup'), 'menu');
+  assert.equal(altro.getAttribute('aria-expanded'), 'false');
+  assert.equal(altro.getAttribute('aria-label'), t('chat.code.more', { language: 'Python' }));
+  assert.equal(altro.disabled, true, 'spento mentre arriva');
+  assert.deepEqual(vociBloccoCodice(blocco), [], 'nessuna voce mentre arriva');
+  aggiornaBloccoCodice(blocco, { testo: 'riga 1\nriga 2\n', chiuso: true });
+  assert.equal(altro.disabled, false, 'acceso alla chiusura');
+  assert.equal(vociBloccoCodice(blocco).length, 3);
+});
+
+test('BLOCCO-ALTRO-02 — le voci scaricano il testo GREZZO nei tre formati, col nome dalla riga d\'apertura; «Comprimi» solo sopra le 40 righe, e lo stesso comando riapre', () => {
+  const grezzo = Array.from({ length: 45 }, (_, i) => `linea ${i}\t  fine`).join('\n');
+  const blocco = creaBloccoCodice({ testo: grezzo, linguaggio: 'python', chiuso: true, info: 'python sync.py' }, { document: documentoFinto(), evidenzia: () => '<span>x</span>' });
+  const scaricati = [];
+  const voci = vociBloccoCodice(blocco, { scarica: (f) => scaricati.push(f), ora: () => new Date(2026, 9, 23, 22, 14) });
+  assert.deepEqual(voci.map((v) => v.chiave), ['sorgente', 'md', 'txt', 'comprimi']);
+  assert.equal(voci[0].testo, t('chat.code.downloadAs', { ext: 'py' }));
+  for (const v of voci.slice(0, 3)) v.fai();
+  assert.deepEqual(scaricati.map((f) => f.nome), ['sync.py', 'sync.md', 'sync.txt']);
+  assert.equal(scaricati[0].testo, grezzo, 'il testo grezzo, non quello evidenziato');
+  assert.ok(scaricati[1].testo.includes(grezzo));
+  /* Comprimi: la classe e la riga «Mostra tutte le N righe»; la voce diventa «Espandi» e lo riapre */
+  voci[3].fai();
+  assert.ok(blocco.classList.contains('code-block--compresso'));
+  assert.equal(blocco.trova('code-block-espandi__pulsante')?.textContent, t('chat.code.showAllMany', { count: 45 }));
+  const dopo = vociBloccoCodice(blocco);
+  assert.equal(dopo.at(-1).testo, t('chat.code.expand'));
+  /* AL CONTRARIO: un blocco corto non offre «Comprimi» */
+  const corto = creaBloccoCodice({ testo: 'a\nb\n', linguaggio: 'js', chiuso: true }, { document: documentoFinto(), evidenzia: () => null });
+  assert.deepEqual(vociBloccoCodice(corto).map((v) => v.chiave), ['sorgente', 'md', 'txt']);
+});
+
+test('BLOCCO-ALTRO-03 — il CSS: il blocco taglia con `clip` (mai `hidden`, che fermerebbe la barra al blocco) e la barra è sticky; nella chat sale degli 8 px del margine', () => {
+  /* il lettore delle regole tiene anche il commento che precede il selettore: si confronta la fine */
+  const blocco = REGOLE_BLOCCO().find((r) => /(^|\n|\/)\s*\.code-block$/u.test(r.selettore) && r.corpo.includes('--codice-fondo'));
+  assert.match(blocco.corpo, /overflow:clip/);
+  assert.doesNotMatch(blocco.corpo, /overflow:hidden/, 'AL CONTRARIO: hidden fa del blocco un contenitore di scorrimento e lo sticky muore');
+  const testa = REGOLE_BLOCCO().find((r) => /(^|\n|\/)\s*\.code-block \.code-block-head$/u.test(r.selettore));
+  assert.match(testa.corpo, /position:sticky/);
+  assert.match(testa.corpo, /top:0/);
+  const nellaChat = REGOLE_BLOCCO().find((r) => r.selettore.endsWith('.talos-conversation .code-block .code-block-head'));
+  assert.match(nellaChat?.corpo ?? '', /top:-8px/);
+  /* revisione F14: nella pagina del modello la barra della pagina è ferma (z-index 5) e coprirebbe quella del blocco: lì non si ferma */
+  const nellaPaginaModello = REGOLE_BLOCCO().find((r) => r.selettore.endsWith('.talos-pagina-modello .code-block .code-block-head'));
+  assert.match(nellaPaginaModello?.corpo ?? '', /position:static/);
+  assert.match(CSS_SPEDITO, /\.talos-conversation\{flex:1 1 auto; min-height:0; overflow-y:auto; padding:8px /, 'il margine sopra della chat è 8 px: se cambia, cambia anche il top della barra');
+});
+
+test('BLOCCO-ALTRO-04 — revisione F4: dove il `<pre>` ha già un tetto suo (la conversazione figlia) «Comprimi» non si offre; AL CONTRARIO senza tetto sì', () => {
+  const grezzo = Array.from({ length: 60 }, (_, i) => `riga ${i}`).join('\n');
+  const conTetto = { ...documentoFinto(), defaultView: { getComputedStyle: () => ({ maxHeight: '320px' }) } };
+  const nellaFiglia = creaBloccoCodice({ testo: grezzo, linguaggio: 'js', chiuso: true }, { document: conTetto, evidenzia: () => null });
+  assert.deepEqual(vociBloccoCodice(nellaFiglia).map((v) => v.chiave), ['sorgente', 'md', 'txt']);
+  const senzaTetto = { ...documentoFinto(), defaultView: { getComputedStyle: () => ({ maxHeight: 'none' }) } };
+  const nellaChat = creaBloccoCodice({ testo: grezzo, linguaggio: 'js', chiuso: true }, { document: senzaTetto, evidenzia: () => null });
+  assert.deepEqual(vociBloccoCodice(nellaChat).map((v) => v.chiave), ['sorgente', 'md', 'txt', 'comprimi']);
+});
+
+test('BLOCCO-ALTRO-05 — un codice in testo semplice non offre «Download as .txt» accanto a «Download as text (.txt)»: una voce sola', () => {
+  const testo = creaBloccoCodice({ testo: 'riga\n', linguaggio: 'text', chiuso: true }, { document: documentoFinto(), evidenzia: () => null });
+  assert.deepEqual(vociBloccoCodice(testo).map((v) => v.chiave), ['md', 'txt']);
+  /* AL CONTRARIO: con una lingua vera la voce del suo file c'è */
+  const py = creaBloccoCodice({ testo: 'x = 1\n', linguaggio: 'python', chiuso: true }, { document: documentoFinto(), evidenzia: () => null });
+  assert.deepEqual(vociBloccoCodice(py).map((v) => v.chiave), ['sorgente', 'md', 'txt']);
+});
+
+test('BLOCCO-ALTRO-06 — «text» non è una lingua: l\'etichetta è quella tradotta e il nome del «⋯» non dice «text code»; AL CONTRARIO python sì', () => {
+  const testo = creaBloccoCodice({ testo: 'riga\n', linguaggio: 'text', chiuso: true }, { document: documentoFinto(), evidenzia: () => null });
+  assert.equal(testo.trova('code-block-lang').textContent, t('chat.code.plainText'));
+  assert.equal(testo.trova('code-block-more').getAttribute('aria-label'), t('chat.code.morePlain'));
+  const py = creaBloccoCodice({ testo: 'x\n', linguaggio: 'python', chiuso: true }, { document: documentoFinto(), evidenzia: () => null });
+  assert.equal(py.trova('code-block-more').getAttribute('aria-label'), t('chat.code.more', { language: 'Python' }));
+});
+
+/* revisione 24/10 (riserve S4 sui blocchi di codice): niente doppione .md, ed etichette col nome della lingua */
+test('BLOCCO-REV-01 — un blocco che è già un .md: una sola voce .md, GREZZA (senza recinto); gli altri tengono le tre voci', () => {
+  for (const [linguaggio, info, nome] of [['markdown', 'markdown', /^talos-markdown-.*\.md$/u], ['text', 'text notes.md', /^notes\.md$/u]]) {
+    const blocco = creaBloccoCodice({ testo: '# Titolo\n\ntesto\n', linguaggio, chiuso: true, info }, { document: documentoFinto(), evidenzia: () => null });
+    const scaricati = [];
+    const voci = vociBloccoCodice(blocco, { scarica: (f) => scaricati.push(f), ora: () => new Date(2026, 9, 24, 12, 0) });
+    assert.deepEqual(voci.map((v) => v.chiave), ['sorgente', 'txt'], linguaggio);
+    voci[0].fai();
+    assert.match(scaricati[0].nome, nome, linguaggio);
+    assert.equal(scaricati[0].testo, '# Titolo\n\ntesto\n', `${linguaggio}: il Markdown com'è, senza recinto`);
+  }
+  /* AL CONTRARIO: il codice tiene la versione Markdown col recinto */
+  const py = creaBloccoCodice({ testo: 'x = 1\n', linguaggio: 'python', chiuso: true }, { document: documentoFinto(), evidenzia: () => null });
+  assert.deepEqual(vociBloccoCodice(py).map((v) => v.chiave), ['sorgente', 'md', 'txt']);
+});
+
+test('BLOCCO-REV-02 — le etichette: html5 → HTML, c99 → C, css3 → CSS, es6 → JavaScript; url e hta come testo; una lingua ignota resta com\'è', () => {
+  assert.deepEqual(['html5', 'c99', 'css3', 'php8', 'es6', 'ES2015'].map(etichettaLinguaggio), ['HTML', 'C', 'CSS', 'PHP', 'JavaScript', 'JavaScript']);
+  assert.deepEqual(['url', 'hta', 'URL'].map(etichettaLinguaggio), ['', '', '']);
+  /* revisione a blocco 3 (24/10/2026, S4): quando l'estensione è capita, l'etichetta è il nome di quella lingua (prima «python3» restava
+     grezzo); una lingua ignota, o un formato a sé come json5, resta com'è */
+  assert.deepEqual(['brainfuck', 'python3', 'Python', 'c++17', 'lua5.4', 'golang', 'json5'].map(etichettaLinguaggio),
+    ['brainfuck', 'Python', 'Python', 'C++', 'Lua', 'Go', 'json5']);
+});
+
+test('BLOCCO-ALTRO-A-CAPO — «A capo» solo se una riga sborda, e lo stesso comando torna a «Una riga»; il testo scaricato resta grezzo', () => {
+  const lunga = `const x = ${'"a".repeat(1) + '.repeat(40)}1;`;
+  const blocco = creaBloccoCodice({ testo: `${lunga}\nconst y = 2;\n`, linguaggio: 'js', chiuso: true }, { document: documentoFinto(), evidenzia: () => null });
+  const pre = blocco.figli.find((f) => f.tag === 'pre');
+  assert.ok(pre, 'il <pre> del blocco');
+  /* AL CONTRARIO: nessuna riga oltre il bordo ⇒ la voce non c'è (non cambierebbe niente) */
+  pre.scrollWidth = 400; pre.clientWidth = 400;
+  assert.deepEqual(vociBloccoCodice(blocco).map((v) => v.chiave), ['sorgente', 'md', 'txt']);
+  /* una riga più larga del blocco ⇒ «A capo»; dopo, la classe e la voce che torna indietro */
+  pre.scrollWidth = 900;
+  const voci = vociBloccoCodice(blocco);
+  assert.deepEqual(voci.map((v) => v.chiave), ['sorgente', 'md', 'txt', 'a-capo']);
+  assert.equal(voci.at(-1).testo, t('chat.code.wrap'));
+  voci.at(-1).fai();
+  assert.ok(blocco.classList.contains('code-block--a-capo'));
+  pre.scrollWidth = 400; // ora va a capo: niente sborda più, ma la voce resta per tornare indietro
+  const dopo = vociBloccoCodice(blocco);
+  assert.equal(dopo.at(-1).chiave, 'a-capo');
+  assert.equal(dopo.at(-1).testo, t('chat.code.noWrap'));
+  dopo.at(-1).fai();
+  assert.ok(!blocco.classList.contains('code-block--a-capo'));
+  /* il CSS: va a capo solo col segno, e senza toccare il testo */
+  const css = readFileSync(path.join(QUI, '../../src/styles/index.css'), 'utf8');
+  assert.match(css, /\.code-block\.code-block--a-capo pre > code\{white-space:pre-wrap; overflow-wrap:anywhere\}/u);
 });

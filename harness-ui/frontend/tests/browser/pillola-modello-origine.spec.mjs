@@ -29,29 +29,35 @@ test.beforeEach(async ({ page }) => {
   await page.locator('.talos-sidebar [data-vaia="chat"]').first().click();
 });
 
+/*
+ * ⛔ Owner 28/10/2026 notte (parità col Mobile, «logo + SOLO il nome del modello, non il nome del provider + il modello»): l'origine
+ *   che il 13/10 (L3-10) si scriveva davanti al nome — «Gemini · gemini-3.8-flash» — ora la dice il LOGO della via d'accesso
+ *   (`viaDelModello` in chat-foot.js). Gli stessi casi, nei due versi: il testo è il solo nome, il logo è quello della strada vera.
+ */
 const CASI = [
-  // [id del modello, pillola attesa in italiano, perché]
-  ['gemini:gemini-3.8-flash', 'Gemini · gemini-3.8-flash', 'diretto: l’origine davanti'],
-  ['zai:glm-5.3-flash', 'Z.AI · glm-5.3-flash', 'diretto, nome con un punto'],
-  ['anthropic:claude-sonnet-5', 'Anthropic · claude-sonnet-5', 'diretto'],
-  ['openai:gpt-5.5-mini', 'OpenAI · gpt-5.5-mini', 'diretto'],
-  ['google/gemini-3.8-flash', 'gemini-3.8-flash', 'OpenRouter, la strada di serie: niente origine'],
-  ['z-ai/glm-5.3-flash', 'glm-5.3-flash', 'OpenRouter con la grafia di un diretto: niente origine'],
-  ['meta-llama/llama-4:free', 'llama-4:free', 'OpenRouter coi due punti DOPO la barra: non è un prefisso'],
-  ['openrouter:z-ai/glm-5.3-flash', 'glm-5.3-flash', 'OpenRouter col suo prefisso esplicito (config.mjs:189): niente origine'],
-  ['chatgpt:gpt-5.5', 'gpt-5.5', 'piano ChatGPT: l’origine la dice già la sua pastiglia'],
-  /* revisione del 15/10 (c3f792b1a), i due casi da giudicare, scritti per non decidere in silenzio: */
-  ['ollama:qwen3:8b', 'qwen3:8b', 'Ollama non è fra i diretti: gira su questo computer, come i locali'],
-  ['lmstudio:qwen/qwen3-4b', 'LM Studio · qwen3-4b', 'LM Studio sta fra i diretti (ha la sua scheda nel selettore): dice da dove arriva'],
-  ['ollama-cloud:gpt-oss:120b', 'Ollama Cloud · gpt-oss:120b', 'Ollama Cloud è un diretto: l’origine distingue il cloud dal motore di casa'],
-  ['sconosciuto:modello-x', 'modello-x', 'un fornitore che nessuna mappa sa nominare: mai l’id a schermo'],
+  // [id del modello, pillola attesa, via d'accesso del logo, perché]
+  ['gemini:gemini-3.8-flash', 'gemini-3.8-flash', 'gemini', 'diretto: l\u2019origine la dice il logo'],
+  ['zai:glm-5.3-flash', 'glm-5.3-flash', 'zai', 'diretto, nome con un punto'],
+  ['anthropic:claude-sonnet-5', 'claude-sonnet-5', 'anthropic', 'diretto (monogramma: nessun marchio verificabile)'],
+  ['openai:gpt-5.5-mini', 'gpt-5.5-mini', 'openai', 'diretto (monogramma)'],
+  ['google/gemini-3.8-flash', 'gemini-3.8-flash', 'openrouter', 'OpenRouter, la strada di serie'],
+  ['z-ai/glm-5.3-flash', 'glm-5.3-flash', 'openrouter', 'OpenRouter con la grafia di un diretto'],
+  ['meta-llama/llama-4:free', 'llama-4:free', 'openrouter', 'OpenRouter coi due punti DOPO la barra: non è un prefisso'],
+  ['openrouter:z-ai/glm-5.3-flash', 'glm-5.3-flash', 'openrouter', 'OpenRouter col suo prefisso esplicito (config.mjs:189)'],
+  ['chatgpt:gpt-5.5', 'gpt-5.5', 'chatgpt', 'piano ChatGPT: la sua pastiglia resta accanto'],
+  ['ollama:qwen3:8b', 'qwen3:8b', 'ollama', 'Ollama, il motore di casa'],
+  ['lmstudio:qwen/qwen3-4b', 'qwen3-4b', 'lmstudio', 'LM Studio'],
+  ['ollama-cloud:gpt-oss:120b', 'gpt-oss:120b', 'ollama-cloud', 'Ollama Cloud (il marchio condiviso di Ollama)'],
+  ['sconosciuto:modello-x', 'modello-x', 'sconosciuto', 'un fornitore che nessuna mappa sa nominare: mai l\u2019id a schermo (monogramma)'],
 ];
 
-test('PILLOLA-ORIGINE-01 — un fornitore diretto dice da dove arriva; OpenRouter, il piano e gli ignoti no', async ({ page }) => {
+test('PILLOLA-ORIGINE-01 — owner 28/10: il testo è SOLO il nome; il logo è quello della via d\u2019accesso, e l\u2019id intero sta nel suggerimento', async ({ page }) => {
   let i = 0;
-  for (const [modello, atteso, perche] of CASI) {
+  for (const [modello, atteso, via, perche] of CASI) {
     await apri(page, modello, `caso-${i++}`);
     await expect(pillola(page), `${modello}: ${perche}`).toHaveText(atteso);
+    await expect(page.locator('#schermoChat [data-open-sheet="model"] > [data-via-del-modello]'), `${modello}: un logo solo`).toHaveCount(1);
+    await expect(page.locator('#schermoChat [data-open-sheet="model"] > [data-via-del-modello]'), `${modello}: la via`).toHaveAttribute('data-via-del-modello', via);
     await expect(page.locator('#schermoChat [data-open-sheet="model"]'), 'il suggerimento tiene l’id intero').toHaveAttribute('title', new RegExp(`${modello.replace(/[.*+?^${}()|[\]\\/]/gu, '\\$&')}$`, 'u'));
   }
 });
@@ -93,7 +99,7 @@ for (const tema of ['light', 'dark']) {
     await page.waitForFunction(() => window.__talosHarnessUiRuntime);
     await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15_000 });
     await apri(page, 'gemini:gemini-3.8-flash', `foto-${tema}`);
-    await expect(pillola(page)).toHaveText('Gemini · gemini-3.8-flash');
+    await expect(pillola(page)).toHaveText('gemini-3.8-flash');
     await page.screenshot({ path: `${process.env.TALOS_REVISIONE_FOTO_DIR}/pillola-origine-${tema}.png` });
   });
 }

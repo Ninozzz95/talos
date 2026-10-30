@@ -58,7 +58,7 @@ function avvisiKernelEreditato(env, adattatore) {
     .map(([, valore]) => 'Kernel: ignorata la variabile TALOS_OWNER_RUNTIME_MODULE ereditata dal sistema (' + valore.trim() + '). L’app installata usa il suo adattatore: ' + adattatore + '.');
 }
 
-export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, dataDir, scratchDir, motoreLocale, env = process.env, keyringScope = 'desktop', installata = false }) {
+export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, dataDir, scratchDir, motoreLocale, env = process.env, keyringScope = 'desktop', installata = false, versione = null }) {
   if (!isAbsolute(execPath ?? '')) throw new Error('Percorso eseguibile assoluto richiesto.');
   if (!portaValida(port)) throw new Error('La porta del figlio non è consentita.');
   if (!/^[a-f0-9]{64}$/.test(token ?? '')) throw new Error('Credenziale locale non valida.');
@@ -88,7 +88,13 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
   Object.assign(ambiente, {
     ELECTRON_RUN_AS_NODE: '1', TALOS_HARNESS_UI_HOST: '127.0.0.1', TALOS_HARNESS_UI_PORT: String(port),
     TALOS_HARNESS_UI_TOKEN: token, TALOS_HARNESS_UI_REPORT_FILE: reportFile,
-    TALOS_DESKTOP_DATA_DIR: dataDir,
+    /* «Segnala un problema» (revisione D del 29/10/2026, F4): `TALOS_SEGNALAZIONE_PROBLEMA` è l'interruttore POSITIVO della seconda
+       porta — l'attrezzo `report_problem` esiste solo dove chi ospita il server lo accende (`segnalazioneAccesaDallAmbiente`); il Pad e
+       «Codice in casa» no. ⛔ Il commento sta SOPRA la riga: un commento fra una virgola e il nome lo nasconde alla guardia CLI-REQ-04. */
+    TALOS_DESKTOP_DATA_DIR: dataDir, TALOS_SEGNALAZIONE_PROBLEMA: 'on',
+    /* 29/10/2026 (owner): l'app installata parte senza progetto, dalla schermata «Scegli una cartella»; senza questo il server
+       prendeva la sua stessa cartella (`resources`) come primo progetto */
+    TALOS_HARNESS_UI_DEFAULT_PROJECT: 'none',
     TALOS_HARNESS_UI_SESSIONS_DIR: join(dataDir, 'sessions'),
     /*
      * ⛔ (16/09/2026) — l'app installata ha un namespace SUO nel portachiavi (`<servizio>-desktop`,
@@ -103,6 +109,10 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
    * sono stati spostati. Assegnazione semplice per nome: la forma che la guardia CLI-REQ-04 (a) sa leggere.
    */
   if (scratchDir) ambiente.TALOS_SCRATCH_DIR = scratchDir;
+  /* «Segnala un problema» (owner 29/10/2026): la versione dell'app per la diagnostica della segnalazione. Solo un numero di versione:
+     un valore con un'altra forma non si passa (il server lo leggerebbe come detto dal guscio). */
+  if (typeof versione === 'string' && /^\d{1,4}\.\d{1,4}\.\d{1,6}(?:-[0-9A-Za-z.-]{1,32})?$/u.test(versione)) ambiente.TALOS_DESKTOP_VERSION = versione;
+  else delete ambiente.TALOS_DESKTOP_VERSION;
   /* Fase B: dove sono i binari per Linux del pacchetto (`cartellaCasaLinux` nel server). Dal sorgente non si passa: il server usa
      `.casa-linux/` preparata con `npm run prepara:casa-linux`, o la variabile già dichiarata dal sistema. */
   if (percorsi.casaLinux) ambiente.TALOS_CASA_LINUX = percorsi.casaLinux;

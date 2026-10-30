@@ -8,7 +8,7 @@ import { expect, test } from '@playwright/test';
 const CARTELLA = process.env.TALOS_FOTO_DIR;
 test.skip(!CARTELLA, 'solo su richiesta: TALOS_FOTO_DIR');
 
-const FRASE = 'Questo comando gira in Linux (WSL, Ubuntu) come root, e con i permessi di questa sessione nessuno lo approva: può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se lo confermi, vale per tutta la sessione.';
+const FRASE = 'Questo comando girerebbe in Linux (WSL, Ubuntu) come root. Con i permessi di questa sessione i comandi partono senza chiedere, ma come root può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se confermi, per il resto di questa sessione i comandi in Linux (WSL, Ubuntu) potranno girare come root senza chiederlo di nuovo.';
 const ETICHETTA = "wsl2 (Linux in WSL come root; nessun isolamento: /mnt/c è il disco di Windows con i diritti dell'utente Windows di TALOS, e lì i permessi Linux non valgono)";
 
 async function apri(page, tema) {

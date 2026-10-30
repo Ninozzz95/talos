@@ -33,6 +33,7 @@ import { CHIAVE_COORDINAZIONE } from './coordinazione.js';
  * modi di chiamare quattro cose. Ora è una VISTA dell'unica mappa (`politiche.js`).
  */
 import { POLITICHE } from './politiche.js';
+import { glifoFornitore } from './loghi-fornitori.js'; // 28/10/2026: il logo della via d'accesso nella pillola del modello
 /** Il separatore dei decimali nella lingua corrente: virgola in italiano, punto in inglese (il numero resta quello di `toFixed`). */
 const conSeparatoreDecimale = (testo) => (linguaCorrenteDiT() === 'en' ? testo : testo.replace('.', ','));
 const CHIAVI_PERMESSO = {"Read only":"chat.foot.permission.readOnly","Workspace write":"chat.foot.permission.workspaceWrite","On request":"chat.foot.permission.onRequest","Full access":"chat.foot.permission.fullAccess"};
@@ -205,6 +206,73 @@ export function chipDelPermesso(permesso, permessiPerAttrezzo, opzioni = {}) {
  * quantizzazione (`Q4_0`, `Q4_K_M`: 4 bit, K = super-blocchi, M = variante media). Qui se ne ricava
  * una riga leggibile; l'identificatore intero resta nel suggerimento del puntatore, mai perso.
  */
+/*
+ * ⛔ 27/10/2026 (owner, foto del 4174: «LFM2 5 · 24B»): l'id di un modello locale è la targa del repo con i punti diventati trattini, e
+ * da lì «2.5» non si ricostruisce — «SmolLM2-1-7B» è 1,7 B, «Llama-3-8B» è 8 B: nessuna regola sul testo li distingue. Il nome vero sta
+ * nel catalogo (`GET /api/v1/local-models`, `files[0].path`: «LFM2.5-24B-A2B-Q4_K_M.gguf»). Chi legge il catalogo lo registra qui;
+ * `true` se qualcosa è cambiato, così chi chiama ridisegna i nomi già a schermo.
+ */
+const FILE_DEI_MODELLI_LOCALI = new Map();
+export function registraModelliLocali(elenco) {
+  if (!Array.isArray(elenco)) return false;
+  let cambiato = false;
+  for (const modello of elenco) {
+    const percorso = modello?.files?.[0]?.path;
+    const file = typeof percorso === 'string' ? percorso.split(/[\\/]/u).pop() : '';
+    if (typeof modello?.id !== 'string' || !modello.id || !/\.gguf$/iu.test(file)) continue;
+    const chiave = `local:${modello.id}`;
+    if (FILE_DEI_MODELLI_LOCALI.get(chiave) !== file) { FILE_DEI_MODELLI_LOCALI.set(chiave, file); cambiato = true; }
+  }
+  return cambiato;
+}
+
+/*
+ * Owner 28/10/2026 notte (parità col Mobile, che l'owner ha chiesto per primo): nella pillola del compositore il LOGO del fornitore e
+ *   solo il nome del modello — come il selettore di assistant-ui («Each model's `icon` … renders in both the trigger and the dropdown
+ *   item»; il pulsante chiuso mostra icona, nome e sforzo, mai il nome del fornitore: assistant-ui.com/elements/model-picker, letto il
+ *   28/10/2026). Il fornitore è la VIA D'ACCESSO, accordata col Mobile (`TalosMobileProviderIcon :provider`): quella che decide costo e
+ *   permessi — `z-ai/glm-5.3-flash` passa da OpenRouter e mostra OpenRouter; il nome breve toglie già l'autore.
+ *   Stessa regola di FORMA di `separaFonteModello` sul server (`src/model-destination.mjs:66`): `local:` è il motore locale, un nome
+ *   semplice prima dei due punti (senza barre) è un fornitore diretto, tutto il resto passa da OpenRouter (anche `meta-llama/x:free`).
+ *   ⛔ Niente elenco dei fornitori qui (vedi `nomeModelloUmano`): il marchio lo sceglie `loghi-fornitori.js`, che non importa niente;
+ *   un fornitore senza un marchio verificabile prende il suo monogramma, come nelle card.
+ */
+export function viaDelModello(id) {
+  if (typeof id !== 'string' || !id.trim()) return null;
+  const grezzo = id.trim();
+  const diretto = /^([a-z][a-z0-9-]*):(?=.)/u.exec(grezzo);
+  return diretto ? diretto[1] : 'openrouter';
+}
+
+/** L'icona generica di partenza di ogni pillola, tenuta da parte la prima volta che un logo la sostituisce. */
+const ICONE_DI_PARTENZA = new WeakMap();
+
+/** Il logo della via d'accesso al posto dell'icona generica della pillola; rifatto solo quando la via cambia. */
+function aggiornaLogoDellaPillola(pillola, via) {
+  if (!pillola || (pillola.dataset.via ?? null) === (via ?? null)) return;
+  /* l'icona di partenza o il logo messo prima: un monogramma è uno span, non un svg, e cambiando modello va sostituito lo stesso */
+  const icona = pillola.querySelector(':scope > [data-via-del-modello], :scope > svg');
+  if (!icona) return;
+  /* Revisione blocco 17 (R17-6): senza modello torna l'icona di partenza, non resta il logo del fornitore di prima */
+  if (!via) {
+    const partenza = ICONE_DI_PARTENZA.get(pillola);
+    if (partenza && icona !== partenza) icona.replaceWith(partenza);
+    delete pillola.dataset.via;
+    return;
+  }
+  if (!ICONE_DI_PARTENZA.has(pillola) && !icona.hasAttribute('data-via-del-modello')) ICONE_DI_PARTENZA.set(pillola, icona);
+  /* R17-5: il piano ChatGPT è di OpenAI — come il Mobile (`TalosMobileProviderIcon`: `chatgpt: openaiLogo`); col suo id prendeva la «C»
+     di Cerebras, e due vie diverse si leggevano uguali */
+  const { nodo } = glifoFornitore({ id: via === 'chatgpt' ? 'openai' : via }, { document: pillola.ownerDocument });
+  for (const classe of 'i i--sm'.split(' ')) nodo.classList.add(classe); // la classe intera, come gli altri componenti
+  /* il monogramma nasce a 22 px per le card: nella pillola sta alla misura dell'icona che sostituisce */
+  if (nodo.dataset.glifo === 'monogramma') Object.assign(nodo.style, { width: '16px', height: '16px', fontSize: nodo.textContent.length > 1 ? '7px' : '9px' });
+  nodo.setAttribute('aria-hidden', 'true'); // il nome intero sta nel suggerimento del pulsante
+  nodo.dataset.viaDelModello = via;
+  icona.replaceWith(nodo);
+  pillola.dataset.via = via;
+}
+
 export function nomeModelloUmano(id) {
   if (typeof id !== 'string' || !id.trim()) return '';
   const grezzo = id.trim();
@@ -217,9 +285,26 @@ export function nomeModelloUmano(id) {
     const senzaFonte = grezzo.replace(/^[a-z][a-z0-9-]*:(?=.)/u, '');
     return senzaFonte.replace(/^~/u, '').split('/').pop();
   }
-  let resto = grezzo.replace(/^local:/i, '').replace(/[-_.]gguf$/i, '');
+  /* 27/10/2026: col catalogo letto, il nome viene dal FILE (dove il punto della versione c'è e chi pubblica non c'è); senza, dall'id.
+     ⛔ Revisione blocco 8 (G-R1): un file dal nome GENERICO («model.gguf», «ggml-model-q4_0.gguf», «Scaricato (1).gguf») non sa dire
+     il modello, e cancellava un nome che l'id sapeva («Phi 3 mini», «Llama 2 · 7B»): allora vince l'id. */
+  const file = FILE_DEI_MODELLI_LOCALI.get(grezzo) ?? null;
+  if (file) {
+    const dalFile = nomeDaTarga(file.replace(/\.gguf$/i, '').replace(/-\d{5}-of-\d{5}$/i, ''), { conAutore: false });
+    if (dalFile.pulito && !NOMI_GENERICI.test(dalFile.pulito)) return dalFile.testo;
+  }
+  return nomeDaTarga(grezzo.replace(/^local:/i, '').replace(/[-_.]gguf$/i, ''), { conAutore: true }).testo;
+}
+
+/* Revisione blocco 9 (G-R1): anche i nomi che danno gli strumenti di conversione — unsloth `save_pretrained_gguf` («unsloth.Q4_K_M»),
+   «converted», «output», il proiettore «mmproj model» — non dicono il modello. */
+const NOMI_GENERICI = /^(?:ggml\s*|mmproj\s*)?(?:model|modello|gguf|ggml|weights|download|scaricato|unsloth|converted|output|mmproj)(?:\s*\(\d+\))?$|^\s*\(\d+\)\s*$/iu;
+
+/** Il nome leggibile da una targa (l'id del catalogo, o il nome del file senza estensione). `conAutore`: il primo pezzo è chi pubblica. */
+function nomeDaTarga(resto, { conAutore }) {
   /* anche dopo un punto: «Mistral-7B-Instruct-v0.3.Q4_K_M» */
-  const quant = /(?:^|[-_.])(IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*)(?=[-_.]|$)/i.exec(resto);
+  /* G-R1 (revisione blocco 9): anche i pesi non quantizzati, F16/F32/BF16, in maiuscolo o minuscolo («ggml-model-f16») */
+  const quant = /(?:^|[-_.])(IQ\d\w*|Q\d(?:[-_]\d)?(?:[-_][A-Z]+)*|B?F(?:16|32))(?=[-_.]|$)/i.exec(resto);
   /* ⛔ Revisione a blocco 10 (A10-9): nelle targhe di Hugging Face il punto decimale diventa un trattino — «Qwen3-0-6B» è 0,6 B, e
      usciva «Qwen3 0 · 6B», un modello dieci volte più grande. Solo davanti a uno ZERO il trattino è una virgola: «Llama-3-8B» è 8 B. */
   const parametri = /(?:^|[-_])((?:0[-_]\d+|\d+(?:[.,]\d+)?)B)(?:[-_]A((?:0[-_]\d+|\d+(?:[.,]\d+)?)B))?(?=[-_]|$)/i.exec(resto);
@@ -230,14 +315,14 @@ export function nomeModelloUmano(id) {
   let nome = Number.isFinite(fine) ? resto.slice(0, fine) : resto;
   nome = nome.replace(/[-_](GGUF|MLX|AWQ|GPTQ)$/i, '');
   const pezzi = nome.split(/[-_]/).filter(Boolean);
-  if (pezzi.length > 1) pezzi.shift(); // il primo segmento è chi ha pubblicato il file, non il modello
+  if (pezzi.length > 1 && conAutore) pezzi.shift(); // nell'id il primo segmento è chi ha pubblicato il file, non il modello
   // un secondo prefisso di fabbrica (nvidia_Nemotron…) sparisce solo se si ripete dentro al nome
   const pulito = pezzi.join(' ').replace(/\s+/g, ' ').trim();
   /* la targa intera solo se non c'è niente da dire: «local:7B» è «7B», non «7B · 7B» */
   const parti = [pulito || (parametri || quant ? '' : resto)];
   if (parametri) parti.push(parametri[2] ? t('chat.foot.activeOf', { totali: parametri[1], attivi: parametri[2].replace(/^A/i, '') }) : parametri[1]);
   if (quant) parti.push(quant[1].toUpperCase().replace(/-/g, '_'));
-  return parti.filter(Boolean).join(' · ');
+  return { pulito, testo: parti.filter(Boolean).join(' · ') };
 }
 
 /*
@@ -545,6 +630,7 @@ export function aggiornaPiedeChat(piede, dati = {}) {
   // l'identificatore intero resta raggiungibile: a schermo il nome, nel suggerimento la targa
   const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
   imposta(pillolaModello, 'title', dati.modelloId ? t('chat.foot.model.changeNamed', { modello: dati.modelloId }) : t('chat.foot.model.change'));
+  aggiornaLogoDellaPillola(pillolaModello, viaDelModello(dati.modelloId));
   const permesso = piede.querySelector('[data-open-sheet="permissions"]');
   if (permesso) {
     const label = permesso.querySelector('.talos-chip__label');

@@ -103,7 +103,10 @@ export function creaChiamataInterna({ httpApp, porta, gettone = null, attesaMass
            per scegliere la frase) viaggiano con l'errore; li ripulisce chi li manda al telefono (`servizio.mjs`). */
         rifiuta(Object.assign(errore(code, message), { stato: res.statusCode,
           ...(busta?.error?.reason !== undefined ? { reason: busta.error.reason } : {}),
-          ...(busta?.error?.params !== undefined ? { params: busta.error.params } : {}) }));
+          ...(busta?.error?.params !== undefined ? { params: busta.error.params } : {}),
+          /* Mobile 27/10/2026 (censimento «Avvisi ed errori»): anche la frase PRECISA del rifiuto (`explanation` della busta, già
+             pubblicabile: public-problem.mjs `messaggioPubblicabile`), senza la quale il telefono vedeva solo quella generica del codice */
+          ...(typeof busta?.error?.explanation === 'string' ? { explanation: busta.error.explanation } : {}) }));
       });
       try { httpApp(req, res); } catch (e) { if (!fatto) { fatto = true; clearTimeout(scadenza); rifiuta(e); } }
     });

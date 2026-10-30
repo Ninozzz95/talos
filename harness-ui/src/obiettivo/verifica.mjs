@@ -56,6 +56,7 @@ export const MOTIVI_NON_VERIFICABILE = Object.freeze([
   'file-unreadable',
   'not-a-file',
   'file-too-large',
+  'folder-blocked', // revisione blocco 11 (A-R3): il file o il comando toccano una cartella bloccata per il dispositivo che guida
 ]);
 
 const MARCA = Object.freeze({ stdout: '[stdout]', stderr: '[stderr]' });

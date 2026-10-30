@@ -26,6 +26,7 @@ import { AREE, TESTI } from '../frontend/src/i18n/testi/index.js';
 import { impostaLingua } from '../frontend/src/components/lingua.js';
 import { testoErroreServer } from '../frontend/src/components/errori.js';
 import { eFraseItaliana } from '../frontend/scripts/cancello/testi-a-schermo.mjs';
+import { vociDeiLetteraliDelServer } from './aiuto/letterali-del-server.mjs';
 
 /*
  * LA TABELLA «frase italiana di prima → code + reason + frase inglese». È anche il documento che va alla CLI: l'italiano è
@@ -266,6 +267,8 @@ test('RIFIUTI-REG-02 — AL CONTRARIO: una voce di motivo del dizionario senza i
   // 16/10/2026: il rifiuto del terminale senza sessione sta nel registro dei TERMINALI (`terminal-registry.mjs`); lo prova
   // `terminale-senza-sessione-desktop.test.mjs` (TERMINALE-SENZA-SESSIONE-05)
   attese.add(chiaveDizionario('TERMINAL_LIMIT_REACHED', 'standalone-terminals-in-use'));
+  // 27/10/2026: le voci dei letterali del server che arrivano alla persona così come sono (canale remoto, `explanation`): `aiuto/letterali-del-server.mjs`
+  for (const chiave of vociDeiLetteraliDelServer(AREE.errori.en)) attese.add(chiave);
   const FORMA_MOTIVO = /^[A-Z][A-Z0-9_]*\.(?!(?:message|title|explanation|action)$)[a-z][a-z0-9_]*$/u;
   const residui = Object.keys(AREE.errori.en).filter((k) => FORMA_MOTIVO.test(k) && !attese.has(k));
   assert.deepEqual(residui, [], 'voci di motivi che il registro non dice più');

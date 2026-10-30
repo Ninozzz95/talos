@@ -23,6 +23,7 @@ import { attendiScritture } from '../src/session-store.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { cartellaDiProva as cartellaTemporanea } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const ePasso = (e) => e?.type === 'CUSTOM' && e.name === NOME_EVENTO_PROGRESSO_COMPATTAZIONE;
 
@@ -104,7 +105,7 @@ function fintoFornitore({ chiamateTool = 10, finishReason = 'stop' } = {}) {
   const corpi = [];
   let lavoro = 0;
   const fetchDiRete = async (_url, init) => {
-    const body = JSON.parse(init.body);
+    const body = corpoSenzaMarcatori(init.body);
     corpi.push(body);
     const usage = { prompt_tokens: Math.ceil(JSON.stringify(body.messages).length / 4), completion_tokens: 5 };
     if (eRichiestaDiRiassunto(body)) {
@@ -228,7 +229,7 @@ test('CP-SERVIZIO-02 — «Compatta ora»: con onProgresso il riassunto si conta
   ];
   const corpi = [];
   const fetchDiRete = async (_url, init) => {
-    const body = JSON.parse(init.body);
+    const body = corpoSenzaMarcatori(init.body);
     corpi.push(body);
     if (body.stream === true) return rispostaSse(['RIASSUNTO ', 'MANUALE ', 'A PEZZI']);
     return Response.json({ choices: [{ message: { role: 'assistant', content: 'RIASSUNTO MANUALE' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 3 } });

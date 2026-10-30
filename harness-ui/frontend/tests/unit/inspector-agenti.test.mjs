@@ -360,3 +360,15 @@ test('L315-BADGE-03 il filtro «Errori» trova il fallito e l\'incerto, come il 
   assert.equal(agenteNelFiltro(FIGLIA, 'fallita'), false);
   assert.equal(agenteNelFiltro(FIGLIA, 'conclusa'), true);
 });
+
+test('REV3-MADRE — revisione a blocco 3 (24/10/2026, S3 vecchio): la madre con una carta aperta «aspetta te», col numero della finestra o col sì del server', async () => {
+  const { statoDelPasso } = await import('../../src/components/grafo/run-dalle-deleghe.js');
+  assert.equal(statoDelPasso({ conclusa: false, inAttesaApprovazione: 1 }), 'waiting_human', '⛔ prima un numero diceva «In corso»');
+  assert.equal(statoDelPasso({ conclusa: false, inAttesaApprovazione: true }), 'waiting_human');
+  /* AL CONTRARIO: zero carte aperte non è un'attesa */
+  assert.notEqual(statoDelPasso({ conclusa: false, inAttesaApprovazione: 0 }), 'waiting_human');
+  /* e la finestra manda un sì/no, non il conto (app.js, la riga della madre) */
+  const { readFileSync } = await import('node:fs');
+  const app = readFileSync(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
+  assert.match(app, /inAttesaApprovazione: state\.realSession\.approvazioniPendenti\.size > 0/u);
+});

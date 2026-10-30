@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ATTREZZI_ESTESI_OPENAI, PARAMETRI_ELENCO, confineSulleVoci, fraseAttrezzoRinominato, talosLavora } from '../src/kernel/talosHarness.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const voce = (i, nome, fileType, origine, giorno, testoEstratto) => ({ id: `lib-${i}`, nome, fileType, origine, mediaType: fileType === 'image' ? 'image/png' : 'text/markdown',
   aggiornatoIl: `2026-10-${String(giorno).padStart(2, '0')}T10:00:00.000Z`, ...(testoEstratto ? { testoEstratto } : {}) });
@@ -132,7 +133,7 @@ test('C5-LIB-08 (review RED, through the real kernel): no row with the injected 
     cartella, task: { consegna: 'guarda la libreria' }, modello: 'x', chiave: 'y', strumentiEstesi: ['library_find'],
     onLetturaSezione: async (_nome, a) => trovaLibreria(CENTO, a),
     fetchDiRete: async (_url, opzioni) => {
-      corpi.push(JSON.parse(opzioni.body));
+      corpi.push(corpoSenzaMarcatori(opzioni.body));
       const scelta = risposte[Math.min(n++, risposte.length - 1)];
       return { ok: true, status: 200, json: async () => ({ choices: [{ message: scelta }], usage: { prompt_tokens: 10, completion_tokens: 5 } }), text: async () => '' };
     },

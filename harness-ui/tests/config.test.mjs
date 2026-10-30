@@ -483,3 +483,13 @@ test('CONFIG-INSTANT-COMPACTION (15/10/2026) — la compattazione istantanea è 
   for (const spento of ['0', 'false', 'OFF', ' no ']) assert.equal(loadConfig({ TALOS_HARNESS_UI_INSTANT_COMPACTION: spento }, import.meta.url).compattazioneIstantanea, false, spento);
   assert.equal(loadConfig({ TALOS_HARNESS_UI_INSTANT_COMPACTION: '1' }, import.meta.url).compattazioneIstantanea, true);
 });
+
+/* 29/10/2026 (owner: nell'app installata «Scegli una cartella»): il guscio dice `TALOS_HARNESS_UI_DEFAULT_PROJECT=none` e il server NON prende
+   la sua stessa cartella (nel pacchetto `…\Programs\TALOS\resources`) come primo progetto. Un elenco esplicito vale comunque. */
+test('CONFIG-SENZA-PROGETTO-01 — con DEFAULT_PROJECT=none nessun progetto di serie; un elenco esplicito resta quello', () => {
+  assert.deepEqual(loadConfig({ TALOS_HARNESS_UI_DEFAULT_PROJECT: 'none' }, import.meta.url).cartelleProgetto, []);
+  const cartella = mkdtempSync(join(tmpdir(), 'talos-progetto-'));
+  const esplicito = loadConfig({ TALOS_HARNESS_UI_DEFAULT_PROJECT: 'none', TALOS_HARNESS_UI_PROJECT_DIRS: cartella }, import.meta.url).cartelleProgetto;
+  assert.equal(esplicito.length, 1);
+  assert.equal(loadConfig({ TALOS_HARNESS_UI_DEFAULT_PROJECT: 'qualcosa' }, import.meta.url).cartelleProgetto.length, 1, 'solo «none» toglie il ripiego');
+});

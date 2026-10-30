@@ -153,3 +153,22 @@ export function creaRitmo(opzioni = {}) {
     },
   };
 }
+
+/*
+ * 28/10/2026 — QUANTE PAROLE COMINCIANO in un tratto appena rivelato. Il ritmo rivela pochi caratteri a fotogramma, e contare le
+ *   parole DENTRO il tratto («Sec», poi «onda» = due) dava un tempo in più per ogni parola spezzata: la dissolvenza, che assegna i
+ *   tempi camminando all'indietro dalla coda (`avvolgiParoleRecenti`), li faceva cadere sulle parole già a schermo, che tornavano
+ *   a salire dal trasparente (misurato: 0,42 · 0,69 · 0,84 dall'ultima indietro, al pezzo dopo una pausa).
+ * ⇒ Una parola si conta dove COMINCIA, come Streamdown (`packages/streamdown/lib/animate.ts:571`, clone del 23/10/2026:
+ *   `skipAnimation = prevLen > 0 && partStart < prevLen`): un carattere non bianco preceduto da un bianco, o dall'inizio del testo —
+ *   guardando anche il carattere PRIMA del tratto.
+ */
+export function paroleCheInizianoNelTratto(testo, da, a) {
+  const s = String(testo ?? '');
+  const fine = Math.min(a, s.length);
+  let parole = 0;
+  for (let i = Math.max(0, da); i < fine; i += 1) {
+    if (!/\s/u.test(s[i]) && (i === 0 || /\s/u.test(s[i - 1]))) parole += 1;
+  }
+  return parole;
+}

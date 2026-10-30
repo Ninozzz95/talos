@@ -4,14 +4,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { talosLavora as canonical, generaChiaviFirmaRicevute, verificaFirmaRicevuta } from '../src/kernel/talosHarness.mjs';
+import { talosLavora as canonical, generaChiaviFirmaRicevute, verificaFirmaRicevuta, rigaLinguaDelleRisposte } from '../src/kernel/talosHarness.mjs';
 import { talosLavora as desktop } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const PROMPT = 'Leggi il documento e riferisci. Non creare note o altri file.';
 const CONTENT = 'Documento\r\nCittà 🐇 e simboli <>&\nUltima riga.';
 // F-027, estensione (03/10/2026): una sessione nata col confine; quella vecchia, che riceve la frase in coda, la prova F027E-SESSIONE-VECCHIA
-const history = prompt => [{ role: 'system', content: `Rispetta la richiesta e i permessi.\n\n${ISTRUZIONE_CONFINE_DATI}` }, { role: 'user', content: prompt }];
+/* 28/10: una sessione di oggi nasce con la regola di lingua nel primo messaggio (come col confine): la ripresa non aggiunge niente */
+const history = prompt => [{ role: 'system', content: `Rispetta la richiesta e i permessi.\n\n${ISTRUZIONE_CONFINE_DATI}\n\n${rigaLinguaDelleRisposte()}` }, { role: 'user', content: prompt }];
 const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
 const reads = n => Array.from({ length: n }, (_, i) => [call(`r${i}`, 'leggi', { percorso: 'documento.txt' })]);
 function fixture(t) {

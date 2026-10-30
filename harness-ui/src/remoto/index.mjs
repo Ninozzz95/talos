@@ -32,10 +32,15 @@ function errore(code, message) {
 /*
  * La matrice del QR la calcola il server, per la finestra e per la CLI allo stesso modo. `qrcode-generator` 2.0.4 (MIT, nessuna
  * dipendenza, 30 file: scelto per il peso dell'aggiornamento, owner 11/10) invece di `qrcode` (Happy `qrMatrix.ts`, t3code), che
- * porta con sé yargs e pngjs. Correzione d'errore M, come i QR di accoppiamento di Happy e Codex.
+ * porta con sé yargs e pngjs.
+ * Correzione d'errore L (owner 26/10/2026 notte tarda, «Sì, rimpicciolisci»): il QR col relay di n0 non entrava in un terminale
+ * 120×30. Come chi lo stampa nel terminale: Hermes `telegram_managed_bot.py:63-75` (ERROR_CORRECT_L) e Happy CLI `qrcode.ts:6-15`
+ * (`qrcode-terminal`, L di serie); M è dell'app di Happy, che lo disegna in pixel. Codex non disegna QR (ricerca della CLI,
+ * `RICERCA-T4-QR-ALTEZZA.md` §1-§2.2: la frase di prima, «M come Happy e Codex», era imprecisa). ⛔ Da provare col telefono vero
+ * prima di pubblicare (Windows Terminal e conhost): condizione dell'owner.
  */
 export function moduliDelQr(testo) {
-  const q = qrcode(0, 'M');
+  const q = qrcode(0, 'L');
   q.addData(testo);
   q.make();
   const lato = q.getModuleCount();
@@ -49,8 +54,22 @@ function relayValido(relay) {
   if (relay?.modo === 'proprio' && typeof relay.url === 'string' && relay.url.trim()) {
     const url = relay.url.trim().slice(0, 500);
     /* D-C3 (revisione a blocco 3, 24/10/2026): la stessa regola dell'accensione, già qui — la rotta rifiuta e la carta resta aperta */
-    try { analizzaIndirizzoRelay(url); } catch { return null; }
-    return { modo: 'proprio', url };
+    let analizzato;
+    try { analizzato = analizzaIndirizzoRelay(url); } catch { return null; }
+    /*
+     * Owner 26/10/2026 notte tarda (QR più piccolo; trovato dal Mobile con le prove di andata e ritorno): si salva e si mette nel QR la
+     *   forma NORMALIZZATA dell'indirizzo (`URL.href`: spazi e caratteri non ASCII codificati). Il PC legge con l'URL del WHATWG, che
+     *   accetta «con spazio+più»; il telefono con `java.net.URI` (`TalosRemotoCustodia.kt:95-107`), che lo rifiuta («Illegal character in
+     *   query») e diceva «indirizzo del relay non utilizzabile». Il gettone letto dalle due forme è lo stesso (`searchParams.get`).
+     * ⛔ La barra dopo il dominio NON si aggiunge se non c'era: `href` scrive «https://host/» per «https://host», e il telefono confronta
+     *   i relay propri come testo (`ponteDi`) — un PC già accoppiato sembrerebbe un altro.
+     * ⛔ Revisione blocco 7, C-R1: si toglie SOLO se dopo il dominio non c'è un percorso. Il WHATWG legge anche `https:host/talos`,
+     *   `https:/host/talos` e `https:\\host\talos`: lì l'espressione sul testo dice «nessuna barra scritta», ma la barra di `href` è
+     *   quella del PERCORSO, e toglierla incollava il percorso all'host («relay.casa.exampletalos»).
+     */
+    const conBarra = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*\//iu.test(url) || analizzato.pathname !== '/';
+    const normale = conBarra ? analizzato.href : analizzato.href.replace(/^([a-z][a-z0-9+.-]*:\/\/[^/?#]*)\//iu, '$1');
+    return { modo: 'proprio', url: normale };
   }
   return null;
 }
@@ -81,6 +100,9 @@ export function creaRemoto({
   fileConsensi = null, fileSegretoCartelle = null, cartelleAmmesse = [], cartelleEscluse = [],
   cartellaChat = null, // Parte 4 (24/10/2026): la cartella di serie della Chat dei dispositivi, nei dati di TALOS
   chatImageStore = null, // D-5 (25/10/2026): l'archivio delle immagini della chat, lo stesso della finestra
+  /* 26/10/2026 (CLI 0.6.15, T2): chi ospita il remoto dice il SUO nome al telefono («TALOS CLI»), e le capacità che dichiara
+     (`servizio.mjs`). Di serie come prima: «TALOS desktop», nessuna capacità. */
+  programma = 'TALOS desktop', capacita = [],
 } = {}) {
   const identita = creaIdentitaRemoto({ keyring });
   const dispositivi = creaElencoDispositivi({ file: fileTelefoni, fs });
@@ -103,6 +125,8 @@ export function creaRemoto({
   const file = cartelle && fileSegretoCartelle
     ? creaFileDeiDispositivi({
       cartella: join(dirname(fileSegretoCartelle), 'file-dispositivi'), sessionRegistry,
+      // revisione blocco 11 (A-R2): le cartelle bloccate di quel dispositivo, dalla stessa fonte di `remote_phone_folders`
+      bloccateDi: async (dispositivoId) => (await cartelle.consensiDi(dispositivoId)).filter((c) => c.bloccata).map((c) => c.percorso),
       salvaImmagine: chatImageStore ? (x) => chatImageStore.upload(x) : null,
       eventiDellaSessione: (sessionId) => {
         const eventi = [];
@@ -123,11 +147,14 @@ export function creaRemoto({
    *   della lettura, con le sue regole (il gettone del relay mai alla finestra, ecc.).
    */
   const ascoltatoriStato = new Set();
-  const MOTIVI_DI_CAMBIO = new Set(['telefono-collegato', 'telefono-scollegato', 'accoppiamento-in-attesa']);
+  /* 26/10/2026 (contratto con la CLI, T5): anche una sveglia partita — la finestra rilegge `sveglie` e dice «avvisato il telefono» */
+  const MOTIVI_DI_CAMBIO = new Set(['telefono-collegato', 'telefono-scollegato', 'accoppiamento-in-attesa', 'sveglia-inviata']);
   const avvisaEAnnuncia = (a) => {
     avvisa(a);
     if (!MOTIVI_DI_CAMBIO.has(a?.tipo)) return;
-    for (const fn of [...ascoltatoriStato]) { try { fn({ type: 'remote.changed', motivo: a.tipo }); } catch { /* un ascoltatore che cade non ferma il servizio */ } }
+    /* B-R2 (CLI, 27/10): la sveglia mandata dice anche PER QUALE sessione, così chi mostra quella carta rilegge solo se lo riguarda */
+    const evento = { type: 'remote.changed', motivo: a.tipo, ...(a.tipo === 'sveglia-inviata' && typeof a.sessione === 'string' ? { sessione: a.sessione } : {}) };
+    for (const fn of [...ascoltatoriStato]) { try { fn(evento); } catch { /* un ascoltatore che cade non ferma il servizio */ } }
   };
   /* «Dimentica questo computer» dal telefono (contratto §12): l'unica operazione che tocca il servizio stesso. */
   const operazioni = {
@@ -166,6 +193,7 @@ export function creaRemoto({
         await dispositivi.revoca(id, 'telefono');
         await cartelle?.dimentica(id); // R5.12: dimenticato, nessuna sua cartella resta consentita
         await file?.dimenticaDispositivo(id); // R5.13: i suoi trasferimenti a metà e le sue offerte se ne vanno con lui
+        svegliatore?.dimentica(id); // T5 (26/10): le sue sveglie non si raccontano più
         contesto.dopoLaRisposta(() => servizio?.revoca(id, 'telefono'));
         return { dimenticato: true };
       }
@@ -230,12 +258,12 @@ export function creaRemoto({
       });
       /* REV4-C3b: spento mentre partiva ⇒ il trasporto appena nato si chiude qui e non si installa */
       if (mia !== generazione) { await t.ferma().catch(() => {}); throw superato(); }
-      servizio = creaServizioRemoto({ pcId: t.id, nomePc, vapidPubblica: identita.vapid().publicKey, accoppiamento, dispositivi, operazioni, avvisa: avvisaEAnnuncia, effimero: effimero === true });
+      servizio = creaServizioRemoto({ pcId: t.id, nomePc, programma, capacita, vapidPubblica: identita.vapid().publicKey, accoppiamento, dispositivi, operazioni, avvisa: avvisaEAnnuncia, effimero: effimero === true });
       risolviServizio(servizio);
       /* La sveglia dei telefoni non collegati (contratto §E, §10): parte e si ferma col trasporto. */
       svegliatore = creaSveglia({
         elenca: () => sessionRegistry?.elenca?.() ?? [], dispositivi, inLinea: () => servizio?.inLinea() ?? [],
-        vapid: identita.vapid(), invia: inviaWebPush, avvisa,
+        vapid: identita.vapid(), invia: inviaWebPush, avvisa: avvisaEAnnuncia,
       });
       fermaSveglia = svegliatore.avvia();
       trasporto = t;
@@ -260,6 +288,7 @@ export function creaRemoto({
 
     async stato() {
       const i = await leggiImpostazioni();
+      const elenco = await dispositivi.elenca();
       const disponibile = Boolean(await caricaIroh().catch(() => null));
       return {
         disponibile, acceso: i.acceso, sceltaFatta: Boolean(i.relay),
@@ -268,7 +297,12 @@ export function creaRemoto({
         pcId: trasporto?.id ?? null, inLinea: servizio?.inLinea() ?? [], ultimoErrore,
         /* 24/10/2026 (contratto col Mobile, tavola 1 del bozzetto remoto): il nome del PC, accanto al suo codice breve nella finestra */
         nomePc: typeof nomePc === 'string' && nomePc ? nomePc : null,
-        telefoni: (await dispositivi.elenca()).map((v) => ({ ...v, inLinea: (servizio?.inLinea() ?? []).includes(v.id), percorso: servizio?.percorsi()[v.id] ?? null })),
+        telefoni: elenco.map((v) => ({ ...v, inLinea: (servizio?.inLinea() ?? []).includes(v.id), percorso: servizio?.percorsi()[v.id] ?? null })),
+        /* «Telefono avvisato» (contratto con la CLI, 26/10/2026, T5): l'ultima sveglia accettata per ogni telefono non revocato, in memoria */
+        sveglie: (svegliatore?.ultimeSveglie() ?? []).flatMap((s) => {
+          const v = elenco.find((x) => x.id === s.telefono && !x.revocatoAlle);
+          return v ? [{ ...s, nome: v.nome ?? null }] : [];
+        }),
         attese: accoppiamento.inAttesa(), accoppiamento: accoppiamento.stato(),
         /* R5.12: le domande «Consenti a … di lavorare in …?» aperte, per la carta della finestra (il percorso intero solo qui) */
         consensi: cartelle?.inAttesa() ?? [],
@@ -339,7 +373,10 @@ export function creaRemoto({
         catch (e) { if (e?.code === SUPERATO) throw spento(); throw e; }
       }
       if (mia !== generazione || !i.acceso) throw spento();
-      const relay = i.relay.modo === 'proprio' ? i.relay.url : t.relayDiCasa();
+      /* Owner 26/10/2026 notte tarda: con i server di n0 il QR non porta il relay — il telefono trova il PC dal suo id (scoperta n0,
+         `presetN0` in `trasporto-iroh.mjs`; docs.iroh.computer «Another endpoint needs only the Endpoint ID to connect»; il telefono
+         lo accetta da 0.1.44, `relayDalQr(null)`). Il relay proprio resta: porta il gettone e un indirizzo che n0 non dà. */
+      const relay = i.relay.modo === 'proprio' ? i.relay.url : null;
       const offerta = accoppiamento.apri({ pcId: t.id, relay });
       return { gettone: offerta.gettone, qr: offerta.qr, scadeAlle: offerta.scadeAlle, moduli: moduliDelQr(offerta.qr) };
     },
@@ -354,6 +391,7 @@ export function creaRemoto({
     async revoca(id) {
       const esito = servizio ? await servizio.revoca(id, 'pc') : await dispositivi.revoca(id, 'pc');
       await cartelle?.dimentica(id); // R5.12
+      svegliatore?.dimentica(id); // T5 (26/10): le sue sveglie non si raccontano più
       await file?.dimenticaDispositivo(id); // R5.13
       return esito;
     },

@@ -56,7 +56,7 @@ const soloTelefoni = (elenco) => elenco.filter((n) => ATTREZZI_TELEFONI.has(n))
 
 test('TEL-K-01 — si offrono SOLO con l\'ospite; senza (la CLI) nessuna traccia; a una figlia no; in Piano solo l\'elenco', async (t) => {
   const c = cartella(t)
-  assert.deepEqual(soloTelefoni((await giro(c, [], { ospite: OSPITE })).offerti[0]), ['remote_phones', 'remote_phone_pair', 'remote_control', 'remote_phone_revoke', 'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', 'remote_device_send_file']) // R5.12 23/10: + le cartelle · R5.14: + remote_control, accanto al QR · R5.13 (24/10): + mandare un file
+  assert.deepEqual(soloTelefoni((await giro(c, [], { ospite: OSPITE })).offerti[0]), ['remote_phones', 'remote_phone_pair', 'remote_control', 'remote_phone_revoke', 'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', 'remote_phone_folder_unblock', 'remote_device_send_file']) // 27/10: + sbloccare (cartelle bloccate, B4) · R5.12 23/10: + le cartelle · R5.14: + remote_control, accanto al QR · R5.13 (24/10): + mandare un file
   const senza = await giro(c, [])
   assert.deepEqual(soloTelefoni(senza.offerti[0]), [])
   assert.doesNotMatch(senza.sistemi[0], /remote_phone/u, 'richiesta CLI 18/10: nessuna traccia nel testo che riceve il modello')

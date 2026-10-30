@@ -1127,6 +1127,26 @@ test('⭐⭐⭐ generate_image: genera→salva, un evento StateDelta con una rig
   assert.match(evento.delta[0].value, /^\[image image\/png, 4 bytes\]$/, 'mai i byte grezzi — un\'immagine non è testo UTF-8');
 });
 
+/* L-1 del kit (owner 29/10/2026 sera, «anche le immagini all'indirizzo scelto»): il filo dall'ospite al generatore porta la base scelta;
+   un ospite che sbaglia nel leggerla non ferma l'immagine (torna quella di serie). */
+test('IMG-IND-FILO generate_image: la base di OpenRouter scelta dalla persona arriva al generatore; senza, o se l\'ospite lancia, null', async () => {
+  const viste = [];
+  const prova = async (baseImmaginiFn) => {
+    await avviaSessione({
+      cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {},
+      talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' }, immagini: [{ argomenti: { prompt: 'p', shape: 'square' } }] } }),
+      immagine: IMMAGINE_CONFIG, baseImmaginiFn,
+      generaImmagineFn: async (spec) => { viste.push(spec.baseUrl); return { mediaType: 'image/png', bytes: new Uint8Array([1]), fileStem: 'p' }; },
+      creaFileWorkspaceFn: async ({ nome }) => ({ percorso: nome }),
+      ...libreriaFinta(),
+    });
+  };
+  await prova(() => 'http://127.0.0.1:5555/api/v1');
+  await prova(undefined);
+  await prova(() => { throw new Error('registro illeggibile'); });
+  assert.deepEqual(viste, ['http://127.0.0.1:5555/api/v1', null, null]);
+});
+
 /*
  * ⛔⛔ 10/09, owner: «OGNI artefatto va salvato in libreria». Misurato prima di curare: la copia in
  * Libreria era chiamata DUE volte in questo file — artefatto HTML e documento — e l'immagine
@@ -1192,6 +1212,7 @@ test('⭐⭐⭐ generate_image: generaImmagineFn riceve prompt/shape VERI del mo
 
   assert.deepEqual(catturato, {
     prompt: 'una montagna innevata', shape: 'landscape', modello: 'google/gemini-3.1-flash-image', nativo: true, chiave: 'chiave-vera',
+    baseUrl: null, // L-1 del kit (29/10/2026): senza un indirizzo scelto, quello di serie
   });
 });
 
@@ -3579,4 +3600,49 @@ test('PONTE-SERVER-02: avviaSessione inoltra attrezziDifferiti al kernel; assent
   await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn });
   assert.equal(visti[0].attrezziDifferiti, true);
   assert.equal('attrezziDifferiti' in visti[1], false);
+});
+
+test('LINGUA-AGENT-01 — owner 28/10: la lingua delle risposte arriva al kernel; senza lingua il kernel non la riceve', async () => {
+  const visti = [];
+  for (const linguaDelleRisposte of ['fa', null]) {
+    await avviaSessione({ cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+      onEvento: () => {}, linguaDelleRisposte,
+      talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { visti.push(input); } }),
+    });
+  }
+  assert.equal(visti[0].linguaDelleRisposte, 'fa');
+  assert.equal('linguaDelleRisposte' in visti[1], false);
+});
+
+test('LINGUA-MSG-AGENT-01 — owner 28/10: la lingua del messaggio arriva al kernel; senza, il kernel non la riceve', async () => {
+  const visti = [];
+  for (const linguaDelMessaggio of ['de', null]) {
+    await avviaSessione({ cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+      onEvento: () => {}, linguaDelMessaggio,
+      talosLavoraFn: talosLavoraFinto({ script: { esito: { comeFinita: 'concluso', detto: 'fatto' } }, cattura: (input) => { visti.push(input); } }),
+    });
+  }
+  assert.equal(visti[0].linguaDelMessaggio, 'de');
+  assert.equal('linguaDelMessaggio' in visti[1], false);
+});
+
+test('CACHE-RICOMINCIATA-AGENT-01 — owner 28/10 (cache, punto 2): l\'evento del giro diventa CUSTOM `talos.cache-ricominciata`; lo stato del giro prima arriva al nucleo', async () => {
+  const eventi = [];
+  let ricevuto = null;
+  const stato = { modello: 'm', attrezzi: 'a', nomiAttrezzi: [], sistema: 's', messaggi: ['x'], tokenDaCache: 10, at: 1, durataMs: 300_000 };
+  await avviaSessione({ cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k', statoCachePrecedente: stato,
+    onEvento: (e) => { eventi.push(e); },
+    talosLavoraFn: async (input) => {
+      ricevuto = input.statoCachePrecedente;
+      input.onGiro?.({ giro: 1, tipo: 'cache-ricominciata', motivo: 'pausa', tokenDaRileggere: 7_000, at: '2026-10-28T20:00:00.000Z' });
+      return { comeFinita: 'concluso', detto: 'fatto', messaggiFinali: [] };
+    },
+  });
+  assert.deepEqual(ricevuto, stato, 'lo stato arriva al nucleo così com\'è');
+  const custom = eventi.find((e) => e.type === 'CUSTOM' && e.name === 'talos.cache-ricominciata');
+  assert.ok(custom, `evento assente: ${JSON.stringify(eventi.map((e) => e.name ?? e.type))}`);
+  assert.equal(custom.value.schema, 'talos.cache-ricominciata.v1');
+  assert.equal(custom.value.motivo, 'pausa');
+  assert.equal(custom.value.tokenDaRileggere, 7_000);
+  assert.equal(custom.value.giro, 1);
 });

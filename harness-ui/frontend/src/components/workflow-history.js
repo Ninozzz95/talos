@@ -1,4 +1,5 @@
 import { linguaCorrenteDiT, t } from './lingua.js';
+import { mostraCaricamentoVivo } from './caricamento-vivo.js'; // owner 29/10/2026: oltre 2 s il caricamento diventa la riga viva
 
 /* Le chiavi dei testi di stato: la lingua si risolve al momento dell'uso, non al caricamento del modulo. */
 const STATUS = Object.freeze({
@@ -64,7 +65,7 @@ export function montaCronologiaWorkflow(contenitore, { fetchFn, sessionId, onApr
     const current = ++generation;
     if (!append) { offset = 0; nextOffset = null; list.replaceChildren(); }
     more.hidden = true;
-    message.textContent = t('agenti.history.loading');
+    mostraCaricamentoVivo(message, t('agenti.history.loading'));
     try {
       const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
       if (status.value) params.set('stato', status.value);

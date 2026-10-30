@@ -105,7 +105,7 @@ function barChart(block, theme) {
                 margin: [0, 2, 0, 0],
             },
         ],
-        margin: [0, 4, 0, 12],
+        margin: [0, 16, 0, 0],
     }
 }
 
@@ -171,7 +171,7 @@ function pieChart(block, theme) {
                 },
             ],
         }],
-        margin: [0, 4, 0, 12],
+        margin: [0, 16, 0, 0],
     }
 }
 
@@ -195,7 +195,7 @@ function renderBlock(block, theme) {
         case 'list':
             return [{
                 [block.ordered ? 'ol' : 'ul']: block.items.map((item) => ({ text: item, style: 'body' })),
-                margin: [0, 0, 0, 10],
+                margin: [0, 10, 0, 0],
             }]
         case 'kpi':
             return [{
@@ -209,7 +209,7 @@ function renderBlock(block, theme) {
                     margin: [8, 10, 8, 10],
                 })),
                 columnGap: 8,
-                margin: [0, 4, 0, 14],
+                margin: [0, 18, 0, 0],
             }]
         case 'table': {
             const head = block.head ?? []
@@ -252,15 +252,16 @@ function renderBlock(block, theme) {
                     paddingTop: () => 5,
                     paddingBottom: () => 5,
                 },
-                margin: [0, 2, 0, 14],
+                margin: [0, 16, 0, 0],
             }]
         }
         case 'chart':
             return [block.kind === 'pie' ? pieChart(block, theme) : barChart(block, theme)]
         case 'spacer':
-            return [{ text: ' ', margin: [0, 6, 0, 6] }]
+            return [{ text: ' ', margin: [0, 12, 0, 0] }]
         case 'pb':
-            return [{ text: '', pageBreak: 'after' }]
+            // CHAT-141: il salto non è più un nodo; lo porta il primo nodo del blocco dopo (`buildTalosReportDefinition`)
+            return []
         default:
             return []
     }
@@ -269,18 +270,37 @@ function renderBlock(block, theme) {
 export function buildTalosReportDefinition(spec) {
     const theme = TALOS_REPORT_THEMES[spec.theme ?? 'report'] ?? TALOS_REPORT_THEMES.report
     const content = []
-    let lastWasBreak = true // un'interruzione prima di ogni contenuto sarebbe una pagina vuota
+    /*
+     * ⛔⛔ CHAT-141 — LE PAGINE BIANCHE (trovate dal Mobile sull'audit v2 dell'owner: 6 pagine, la 5 interamente bianca; stesso
+     * costruttore qui, stessa cura, 12fbf5285 del Mobile).
+     *
+     * Con pdfmake il `pb` era un nodo `{ text: '', pageBreak: 'after' }` che occupa una riga, e gli spazi erano margini INFERIORI. Una
+     * sezione che finisce negli ultimi punti della pagina: il margine o la riga del `pb` aprono la pagina dopo, e il salto ne apre
+     * un'altra; quella in mezzo resta col solo piè di pagina. E un `pb` in coda lasciava sempre una pagina bianca alla fine.
+     *
+     * ⇒ Il salto lo porta il PRIMO nodo del blocco dopo (`pageBreak: 'before'`, il consiglio del manutentore in pdfmake #2794, letto il
+     * 29/10/2026), e gli spazi stanno IN ALTO: un margine superiore che non entra porta il nodo stesso alla pagina dopo, senza aprirne
+     * una vuota. Un salto in testa, uno in coda, o seguito solo da spazi e altri salti, non ha niente da portare e sparisce.
+     * ⛔ «In testa» vuol dire prima di un contenuto VERO: uno spazio in apertura seguito da un salto lasciava una prima pagina col solo
+     * spazio (BIANCHE-07, trovato dal mutante sopravvissuto del 29/10; c'era anche prima della cura).
+     */
+    let saltoInAttesa = false
+    let haContenuto = false
 
     for (const block of spec.blocks) {
         if (block.t === 'pb') {
-            // Interruzioni consecutive sono pagine vuote che nessuno ha chiesto.
-            if (lastWasBreak) continue
-            lastWasBreak = true
+            saltoInAttesa = haContenuto
+            continue
         }
-        else {
-            lastWasBreak = false
+        // uno spazio subito dopo un salto finirebbe da solo in cima alla pagina nuova
+        if (saltoInAttesa && block.t === 'spacer') continue
+        const nodi = renderBlock(block, theme)
+        if (saltoInAttesa && nodi.length) {
+            nodi[0] = { ...nodi[0], pageBreak: 'before' }
+            saltoInAttesa = false
         }
-        content.push(...renderBlock(block, theme))
+        if (block.t !== 'spacer' && nodi.length) haContenuto = true
+        content.push(...nodi)
     }
 
     const footerText = spec.footer?.text ?? ''
@@ -299,11 +319,11 @@ export function buildTalosReportDefinition(spec) {
             coverTitle: { fontSize: 30, bold: true, color: theme.brand, margin: [0, 0, 0, 10] },
             coverSubtitle: { fontSize: 13, color: theme.muted, margin: [0, 0, 0, 26] },
             coverDate: { fontSize: 11, color: theme.accent },
-            h1: { fontSize: 18, bold: true, color: theme.brand, margin: [0, 14, 0, 6] },
-            h2: { fontSize: 14, bold: true, color: theme.brand, margin: [0, 12, 0, 5] },
-            h3: { fontSize: 11, bold: true, color: theme.ink, margin: [0, 10, 0, 4] },
-            body: { margin: [0, 0, 0, 8] },
-            note: { fontSize: 8.5, color: theme.muted, italics: true, margin: [0, 0, 0, 10] },
+            h1: { fontSize: 18, bold: true, color: theme.brand, margin: [0, 20, 0, 0] },
+            h2: { fontSize: 14, bold: true, color: theme.brand, margin: [0, 17, 0, 0] },
+            h3: { fontSize: 11, bold: true, color: theme.ink, margin: [0, 14, 0, 0] },
+            body: { margin: [0, 8, 0, 0] },
+            note: { fontSize: 8.5, color: theme.muted, italics: true, margin: [0, 10, 0, 0] },
             kpiValue: { fontSize: 17, bold: true, color: theme.brand },
             kpiLabel: { fontSize: 8.5, color: theme.muted },
             kpiDelta: { fontSize: 9, color: theme.accent, bold: true },

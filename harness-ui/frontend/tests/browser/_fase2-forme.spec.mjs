@@ -69,6 +69,7 @@ const SEZIONI = [
     id: 'tools',
     idAttesi: [
       'settings-group-tools-policy', 'settings-group-tools-search', 'settingsToolsFacts',
+      'settings-group-tools-dove-girano', // owner 27/10/2026: «Dove girano i comandi» di serie (c71639d26)
       'setting-source-preview', 'searchSourceMount', 'fonte-label-duckduckgo', 'fonte-label-tavily',
       'fonte-label-brave', 'fonte-label-searxng', 'fonte-label-custom', 'fonte-label-off', 'fonte-query',
     ],
@@ -258,12 +259,12 @@ test('FORME-05 · la copia che la testata ha spostato c\'è ancora, in italiano 
     /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni: niente più «Stato degli accessi» / «Access state». */
     it: {
       privacy: ['Dati locali del browser', 'Trasferisci le preferenze', 'Link dalla chat'],
-      tools: ['Policy della sessione', 'Origine della ricerca web'],
+      tools: ['Policy della sessione', 'Dove girano i comandi', 'Origine della ricerca web'], // 27/10: la carta di serie dei comandi
       costi: ['Consumo registrato'],
     },
     en: {
       privacy: ['Local browser data', 'Transfer preferences', 'Links from chat'],
-      tools: ['Session policy', 'Web search source'],
+      tools: ['Session policy', 'Where commands run', 'Web search source'],
       costi: ['Recorded usage'],
     },
   };

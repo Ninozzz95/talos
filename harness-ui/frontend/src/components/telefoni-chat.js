@@ -191,7 +191,7 @@ export function nomeDallEsitoRevoca(testo) {
  */
 export function creaBloccoCartaCartella(doc, azione) {
   const blocco = nodo(doc, 'div', 'talos-approval__automazione talos-telefoni-chat');
-  blocco.dataset.telefoniCartella = azione?.tipo === 'remote_phone_folder_revoke' ? 'togli' : 'consenti';
+  blocco.dataset.telefoniCartella = azione?.tipo === 'remote_phone_folder_revoke' ? 'togli' : azione?.tipo === 'remote_phone_folder_unblock' ? 'sblocca' : 'consenti';
   const v = azione?.telefono ?? {};
   blocco.append(
     rigaTelefonoInChat(doc, { id: v.idCorto, nome: v.nome, inLinea: v.inLinea, ultimaVoltaAlle: v.ultimaVoltaAlle }),
@@ -204,6 +204,16 @@ export function testiCartaCartella(azione) {
   const togli = azione?.tipo === 'remote_phone_folder_revoke';
   const name = azione?.telefono?.nome || t('remoto.confirm.unnamed');
   const folder = azione?.cartella?.nome || '';
+  /* owner 27/10/2026: sbloccare dalla chat (contratto cartelle bloccate, giro 2, B4) — la carta c'è sempre */
+  if (azione?.tipo === 'remote_phone_folder_unblock') {
+    return {
+      badge: t('remoto.chat.folderUnblockCard.badge'),
+      bersaglio: t('remoto.chat.folderUnblockCard.target', { name, folder }),
+      perche: t('remoto.chat.folderUnblockCard.why'),
+      motivo: '',
+      nota: t('remoto.chat.folderUnblockCard.note'),
+    };
+  }
   return {
     badge: t(togli ? 'remoto.chat.folderRevokeCard.badge' : 'remoto.consent.badge'),
     bersaglio: t(togli ? 'remoto.chat.folderRevokeCard.target' : 'remoto.chat.folderAllowCard.target', { name, folder }),

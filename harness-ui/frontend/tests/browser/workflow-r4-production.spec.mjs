@@ -205,7 +205,8 @@ test('R4-PLAN-TYPED-REPLAY: the durable versioned fact replaces legacy final-tex
         revision: 1, status: 'proposed', content: '# Piano verificato\n\n- Misurare',
         model: 'z-ai/glm-5.3-flash', at: '2026-09-23T10:00:00.000Z' } }, generation);
   });
-  const plan = page.locator('[data-c="PlanArtifact"]');
+  /* owner 27/10/2026: le revisioni superate restano chiuse nella loro riga; si conta la scheda corrente */
+  const plan = page.locator('[data-c="PlanArtifact"]:not([data-sostituito])');
   await expect(plan).toHaveCount(1);
   await expect(plan).toHaveAttribute('data-source', 'journal');
   await expect(plan).toContainText('Piano verificato');
@@ -419,9 +420,9 @@ for (const [lingua, attesi] of [
  *   revisione 2, con la testata dentro la parte visibile della conversazione.
  */
 test('R4-PLAN-VIEWPORT-VISIBILITY: a plan revision arriving in a new turn is visible at 1920x1080', async ({ page }) => {
-  /* 24/09/2026 — decisione owner: card UNICA aggiornata in loco + avviso «Piano aggiornato (revisione n) · Vai al
-     piano» sopra il composer (ricerca 10×4: dieci concorrenti, tutti un solo piano aggiornato in loco). La prova
-     pretende l'avviso alla revisione 2, e che «Vai al piano» porti la testata della card nella parte visibile. */
+  /* ⛔ owner 27/10/2026, «gravissima» — supera la decisione del 24/09 (card aggiornata in loco + «Vai al piano»): la revisione
+     nuova nasce IN FONDO, dove la persona sta leggendo, e la vecchia si chiude in una riga al suo posto. La prova pretende UNA
+     scheda corrente alla revisione 2, la testata in vista SENZA nessun clic, e l'avviso spento. */
   const sid = 'r4-plan-viewport';
   const erroriPagina = [];
   page.on('pageerror', (e) => erroriPagina.push(String(e?.message || e)));
@@ -466,18 +467,15 @@ test('R4-PLAN-VIEWPORT-VISIBILITY: a plan revision arriving in a new turn is vis
       { type: 'CUSTOM', name: 'talos.plan', _sequenza: 9508, value: fatto(2, '# Piano rivisto\n\n1. Misurare di nuovo\n2. Correggere', '2026-09-23T10:05:00.000Z') },
     ]) runtime.handleRealEvent(evento, generation);
   }, sid);
-  const plan = page.locator('#conversation [data-c="PlanArtifact"]');
+  const plan = page.locator('#conversation [data-c="PlanArtifact"]:not([data-sostituito])');
   await expect(plan).toHaveCount(1);
   await expect(plan).toHaveAttribute('data-source', 'journal');
   await expect(plan).toHaveAttribute('data-revision', '2');
   await expect(plan).toContainText('Piano rivisto');
   await chiudiToastAperti(page);
   expect(erroriPagina, 'errori JavaScript in pagina durante i due giri').toEqual([]);
-  const avviso = page.locator('#avvisoPiano');
-  await expect(avviso, 'la revisione 2 fuori vista deve accendere l’avviso sopra il composer').toBeVisible();
-  await expect(avviso).toContainText('revisione 2');
-  await avviso.getByRole('button', { name: 'Vai al piano' }).click();
-  await expect(avviso).toBeHidden();
+  await expect(page.locator('#avvisoPiano'), 'la revisione nasce dove si legge: nessun avviso che porta altrove').toBeHidden();
+  await expect(page.locator('#conversation .talos-piano-sostituito')).toHaveCount(1);
   // La geometria si legge a scorrimento fermo: si aspetta che la testata smetta di muoversi.
   await expect.poll(async () => {
     const a = await plan.locator('.talos-plan-artifact__heading').boundingBox();

@@ -20,6 +20,7 @@ import {
   talosLavora,
 } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 function tempDir(t) {
   const dir = mkdtempSync(join(tmpdir(), 'talos-blackbox-hotfix-'));
@@ -251,7 +252,7 @@ test('T-03: tool results longer than 8k reach the next model turn intact when Co
   const requests = [];
   let call = 0;
   const fetchDiRete = async (_url, init) => {
-    requests.push(JSON.parse(init.body));
+    requests.push(corpoSenzaMarcatori(init.body));
     call += 1;
     if (call === 1) {
       return okJson({
@@ -282,7 +283,7 @@ test('T-09: repeated tool use preserves results without adding an unsolicited us
   const requests = [];
   let call = 0;
   const fetchDiRete = async (_url, init) => {
-    requests.push(JSON.parse(init.body));
+    requests.push(corpoSenzaMarcatori(init.body));
     call += 1;
     if (call <= 7) {
       return okJson({

@@ -223,6 +223,10 @@ const SEGRETI_DEL_SERVER_ATTESI = [
   'TALOS_HARNESS_RECEIPT_PRIVATE_KEY_B64',
   'TALOS_HARNESS_SEARCH_API_KEY',
   'ELECTRON_RUN_AS_NODE',
+  'TALOS_DESKTOP_VERSION', // «Segnala un problema» (29/10/2026): la versione dell'app per la diagnostica, solo del server del guscio
+  'TALOS_SEGNALAZIONE_PROBLEMA', // revisione D (F4): l'interruttore della seconda porta, solo del server del guscio
+  'TALOS_HARNESS_UI_KEYRING_SCOPE', // 29/10: lo spazio di nomi del portachiavi dell'app, nascosto alla guardia da un commento
+  'TALOS_HARNESS_UI_DEFAULT_PROJECT', // 29/10: «nessun progetto di serie» dell'app installata, nascosto allo stesso modo
 ];
 
 test('⛔⛔⛔ CLI-REQ-04 — il terminale NON eredita i segreti del server, asseriti UNO PER UNO per nome', () => {
@@ -325,8 +329,11 @@ function nomiMessiNellAmbiente(corpo) {
   };
   // 1 · `Object.assign(ambiente, { CHIAVE: ..., ... })` — un oggetto letterale, senza spread.
   consuma(/Object\.assign\(ambiente,\s*\{([^{}]*)\}\s*\)/g, (_tutto, dentro) => {
-    assert.ok(!dentro.includes('...'), `spread dentro Object.assign(ambiente, …): la guardia non sa leggerlo → ${dentro.trim()}`);
-    for (const m of dentro.matchAll(/(?:^|,)\s*([A-Za-z_$][\w$]*)\s*:/g)) nomi.add(m[1]);
+    /* 29/10/2026: i commenti si tolgono PRIMA di leggere — uno fra la virgola e il nome lo nascondeva, e due nomi passavano senza
+       decisione. Un commento non può contenere `{` o `}` senza rompere già la forma 1, quindi la sua fine si trova sempre qui dentro. */
+    const senzaCommenti = dentro.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[\s,])\/\/[^\n]*/g, '$1');
+    assert.ok(!senzaCommenti.includes('...'), `spread dentro Object.assign(ambiente, …): la guardia non sa leggerlo → ${dentro.trim()}`);
+    for (const m of senzaCommenti.matchAll(/(?:^|,)\s*([A-Za-z_$][\w$]*)\s*:/g)) nomi.add(m[1]);
   });
   // 2 · `ambiente.NOME = ...` e `delete ambiente.NOME` (il delete non AGGIUNGE, ma è una forma nota).
   consuma(/delete\s+ambiente\.([A-Za-z_$][\w$]*)/g);
@@ -384,6 +391,9 @@ test('⛔⛔ CLI-REQ-04 (a) AL CONTRARIO — la guardia RIFIUTA le forme che non
   // E nel verso giusto la stessa guardia legge senza protestare.
   const sana = testa + "  ambiente.TALOS_UNA = 'x';\n  Object.assign(ambiente, { TALOS_DUE: 'y' });" + coda;
   assert.deepEqual([...nomiMessiNellAmbiente(corpoDiCreaAvvioFiglio(sana))].sort(), ['TALOS_DUE', 'TALOS_UNA']);
+  /* 29/10/2026: un commento (a blocco o di riga) fra la virgola e il nome NON lo nasconde più: prima due nomi veri passavano così */
+  const coiCommenti = testa + "  Object.assign(ambiente, {\n    TALOS_A: 'a',\n    /* perché c'è */\n    TALOS_B: 'b', // e questo\n    TALOS_C: 'c',\n  });" + coda;
+  assert.deepEqual([...nomiMessiNellAmbiente(corpoDiCreaAvvioFiglio(coiCommenti))].sort(), ['TALOS_A', 'TALOS_B', 'TALOS_C']);
 });
 
 /*

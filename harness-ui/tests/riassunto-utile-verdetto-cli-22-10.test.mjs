@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { promisify } from 'node:util';
 import test from 'node:test';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 /* Il lettore di git del blocco dei fatti si lega a `execFile` quando il suo modulo si carica: lo si avvolge PRIMA di caricare il kernel,
    e si contano le sole letture del blocco (`git -C <cartella> log --oneline`). */
@@ -153,7 +154,7 @@ async function giroConIncollato(t, messaggiVecchi) {
   const cartella = cartellaDiProva('talos-verdetto-git-');
   let riassunti = 0;
   const fetchDiRete = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) { riassunti += 1; return rispostaFinta(`## Riassunto\n${'Dettaglio del lavoro fatto. '.repeat(12)}`); }
     return rispostaFinta('OK', stima(corpo.messages));
   };
@@ -186,7 +187,7 @@ test('VERDETTO-CLI-CORNICE-01 — nel giro la cornice conta: con la soglia dove 
     process.env[compattazione.VARIABILE_TETTO_TOKEN] = String(tetto);
     const conti = { riassunti: 0, primaRichiesta: null };
     const fetchDiRete = async (_u, o) => {
-      const corpo = JSON.parse(o.body);
+      const corpo = corpoSenzaMarcatori(o.body);
       if (!corpo.tools?.length) { conti.riassunti += 1; return rispostaFinta('## Riassunto\nbreve.'); }
       conti.primaRichiesta ??= corpo.messages;
       return rispostaFinta('OK', stima(corpo.messages));
@@ -234,7 +235,7 @@ test('VERDETTO-CLI-FASCIA-01 — una preparazione in sottofondo nella fascia inc
     contestoDelProgetto: 'Project files:\n', compattazioneIstantanea: true,
     onGiro: (e) => { if (e?.tipo === 'compattazione-preparata') eventi.push(e.fase ?? e.motivo ?? null); },
     fetchDiRete: async (_u, o) => {
-      const corpo = JSON.parse(o.body);
+      const corpo = corpoSenzaMarcatori(o.body);
       if (!corpo.tools?.length) { riassunti += 1; return rispostaFinta('## Riassunto\nbreve.'); }
       return rispostaFinta('fatto', stima(corpo.messages));
     } });
@@ -273,7 +274,7 @@ test('VERDETTO-CLI-SCARTO-01 — senza scarto misurato la prima richiesta porta 
     const ris = await talosLavoraVero({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: messaggi, contestoDelProgetto: 'Project files:\n',
       onGiro: (e) => { if (e?.tipo === 'compattazione-inizio') conti.inizi += 1; },
       fetchDiRete: async (_u, o) => {
-        const corpo = JSON.parse(o.body);
+        const corpo = corpoSenzaMarcatori(o.body);
         if (!corpo.tools?.length) { conti.riassunti += 1; return rispostaFinta('## Riassunto\nbreve.'); }
         return rispostaFinta('fatto', stima(corpo.messages) + piu);
       }, ...input });
@@ -298,7 +299,7 @@ async function giroConGitLento(t, { fetchDelRiassunto, stopDopoMs = null, ritard
   lettureGit.length = 0;
   ritardoGitMs = ritardo;
   const fetchDiRete = async (u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) {
       if (stopDopoMs !== null) setTimeout(() => stop.abort(), stopDopoMs).unref();
       return fetchDelRiassunto(o);

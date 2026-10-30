@@ -88,7 +88,9 @@ test('R04-WINDOWS — Node 24, PowerShell, cache e cancelli prima dello staging'
   assert.equal(desktop.defaults.run.shell, 'pwsh');
   assert.equal(desktop['timeout-minutes'], 45);
   assert.equal(desktop.if, "startsWith(github.ref_name, 'desktop-v')");
-  assert.deepEqual(workflow.on.push.tags, ['v*', 'desktop-v*']);
+  /* owner 27/10/2026: dalla 0.1.47 il mobile si tagga `mobile-vX.Y.Z` (release.yml, 808c25c53); `v*` resta per i tag già usciti.
+     Il desktop resta solo su `desktop-v*` (la riga sopra). */
+  assert.deepEqual(workflow.on.push.tags, ['v*', 'mobile-v*', 'desktop-v*']);
   const setup = passi.find(p => p.uses?.startsWith('actions/setup-node@'));
   assert.equal(String(setup.with['node-version']), '24');
   assert.equal(setup.with.cache, 'npm');

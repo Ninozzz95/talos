@@ -203,6 +203,109 @@ export function testoPerLoSchermo(testo) {
 }
 
 /*
+ * ⛔⛔ 29/10/2026 — LE RIGHE DEL CONFINE COPIATE DAL MODELLO (owner: «Toglierla dalla risposta»). Un modello piccolo (Llama-3.2-1B
+ *   locale, trovato dal Mobile il 22/10, sessioni 476ec8d3 e 7415a703) ricopiava nella SUA risposta la riga d'apertura del confine:
+ *   a schermo si vedeva, e tornava nella storia del giro dopo, dove la ricopiava di nuovo. `togliConfiniDati` lavora solo sulle coppie
+ *   vere e solo sui risultati degli attrezzi; nessun concorrente lo gestisce (Hermes avvolge solo web, browser e MCP,
+ *   `agent/tool_dispatch_helpers.py:484-485`, e toglie l'involucro solo dagli artefatti, `apps/desktop/.../artifact-utils.ts:174`).
+ * ⇒ Un filtro a flusso gemello di quello dei `<think>` (`ragionamento-nel-testo.mjs`, forma presa da Hermes `think_scrubber.py`),
+ *   con gli stessi vincoli di prudenza (contratto concordato con la CLI il 29/10):
+ *   1. si toglie solo una riga INTERA con la forma esatta della busta (codice di 12 cifre esadecimali), col suo a capo;
+ *   2. mai dentro un blocco di codice (``` o ~~~, anche più lunghi e con fino a 3 spazi davanti, come CommonMark): un modello che
+ *      spiega la busta la mostra lì, e lì resta;
+ *   3. una riga che comincia come la busta si trattiene finché non si sa; se non lo è, torna testo identico, byte per byte. Il
+ *      tetto è largo (CLI: la `from=` di una pagina web porta l'indirizzo intero, più `neutralized=…`): oltre, la riga esce com'è.
+ */
+const RIGA_DI_CONFINE = /^[ \t]*<<<(?:END_)?TALOS_DATA id=[0-9a-f]{12}(?:[ \t][^\n]*)?>>>[ \t]*\r?$/u
+/* CommonMark: un recinto si apre con 3+ apici inversi o tilde (fino a 3 spazi davanti), e lo chiude solo una riga dello STESSO
+   carattere, lunga almeno quanto l'apertura, senza altro dopo (nota della CLI, 29/10: con un interruttore semplice un ``` dentro un
+   blocco ~~~ riaccendeva il filtro dentro il codice). */
+const RECINTO_DI_CODICE = /^[ \t]{0,3}(`{3,}|~{3,})/u
+const SOLO_RECINTO = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*\r?$/u
+/* quanto della riga in corso si tiene per riconoscere un recinto: una riga di chiusura vera è corta */
+const TESTA_DELLA_RIGA = 64
+const INIZI_DI_CONFINE = ['<<<TALOS_DATA', '<<<END_TALOS_DATA']
+const TETTO_ATTESA = 4096
+
+/** Una riga ancora senza a capo che POTREBBE diventare una riga del confine (e allora si aspetta il resto). */
+function potrebbeEssereConfine(riga) {
+    if (riga.length > TETTO_ATTESA) return false
+    const t = riga.replace(/^[ \t]*/u, '')
+    return INIZI_DI_CONFINE.some((inizio) => inizio.startsWith(t) || t.startsWith(inizio))
+}
+
+/** Il filtro per un flusso: `scrivi(delta)` → il testo da mostrare adesso; `chiudi()` → ciò che restava da parte. Uno per risposta. */
+export function creaFiltroConfiniNelTesto() {
+    let daParte = '' // l'inizio di una riga che potrebbe essere del confine
+    let testaRiga = '' // i primi caratteri della riga in corso, già usciti: servono a riconoscere un recinto di codice
+    let inizioRiga = true
+    let recinto = null // il recinto che ha aperto il blocco di codice in corso: { carattere, lunghezza }
+    let nelCodice = false
+
+    function chiudiRiga(riga) {
+        if (!recinto) {
+            const apre = RECINTO_DI_CODICE.exec(riga)
+            if (apre) recinto = { carattere: apre[1][0], lunghezza: apre[1].length }
+        } else {
+            const chiude = SOLO_RECINTO.exec(riga)
+            if (chiude && chiude[1][0] === recinto.carattere && chiude[1].length >= recinto.lunghezza) recinto = null
+        }
+        nelCodice = recinto !== null
+        testaRiga = ''
+        inizioRiga = true
+    }
+
+    function scrivi(delta) {
+        if (typeof delta !== 'string' || delta === '') return ''
+        let resto = daParte + delta
+        daParte = ''
+        let uscita = ''
+        while (resto) {
+            const aCapo = resto.indexOf('\n')
+            if (!inizioRiga) {
+                const pezzo = aCapo < 0 ? resto : resto.slice(0, aCapo + 1)
+                uscita += pezzo
+                // la riga senza il suo a capo: un recinto si riconosce sulla riga intera (la chiusura vuole che dopo non ci sia altro)
+                if (testaRiga.length < TESTA_DELLA_RIGA) testaRiga += (aCapo < 0 ? pezzo : pezzo.slice(0, -1)).slice(0, TESTA_DELLA_RIGA - testaRiga.length)
+                resto = resto.slice(pezzo.length)
+                if (aCapo >= 0) chiudiRiga(testaRiga)
+                continue
+            }
+            if (aCapo >= 0) {
+                const riga = resto.slice(0, aCapo)
+                resto = resto.slice(aCapo + 1)
+                if (!nelCodice && RIGA_DI_CONFINE.test(riga)) continue // la riga del confine e il suo a capo escono
+                uscita += `${riga}\n`
+                chiudiRiga(riga)
+                continue
+            }
+            if (!nelCodice && potrebbeEssereConfine(resto)) { daParte = resto; break }
+            uscita += resto
+            testaRiga = resto.slice(0, TESTA_DELLA_RIGA)
+            inizioRiga = false
+            resto = ''
+        }
+        return uscita
+    }
+
+    function chiudi() {
+        const coda = daParte
+        daParte = ''
+        if (coda && !nelCodice && RIGA_DI_CONFINE.test(coda)) return ''
+        return coda
+    }
+
+    return { scrivi, chiudi }
+}
+
+/** Lo stesso filtro su un testo intero (risposta non in streaming, o un messaggio già completo). */
+export function togliRigheDiConfineNelTesto(testo) {
+    if (typeof testo !== 'string' || !testo.includes('TALOS_DATA')) return testo
+    const filtro = creaFiltroConfiniNelTesto()
+    return filtro.scrivi(testo) + filtro.chiudi()
+}
+
+/*
  * ⛔ DOVE stava il testo sospetto, come DATO e non come frase (owner 03/10/2026: «ogni singola parola nella app deve essere sia in
  *   inglese che in italiano» e «frasi del kernel solo come codici»). Il kernel dice il tipo di posto e, se c'è, il nome; le
  *   parole nelle due lingue le mette l'interfaccia (`frontend/src/i18n/testi/kernel.js`, chiavi `kernel.luogo.<tipo>`).

@@ -366,6 +366,27 @@ export function creaPuntiDiRipristino({
       }).catch((e) => avvisa({ tipo: 'registro', motivo: e?.message }));
     },
 
+    /**
+     * R-26 B (owner 29/10/2026 notte) — fra i percorsi assoluti dati, quelli che TALOS ha scritto (il registro qui sopra) e che da allora
+     *   nessuno ha cambiato: l'impronta di adesso è quella registrata. Il kernel lascia passare `git stash`/`reset --hard`/… solo su
+     *   modifiche tutte dell'agente. ⛔ Ciò che ha scritto un comando della shell non è nel registro (TALOS non sa che cosa ha scritto),
+     *   quindi conta come della persona: la scelta prudente, la stessa del ripristino sicuro.
+     */
+    async dellAgente({ progetto, assoluti = [] } = {}) {
+      if (typeof progetto !== 'string' || !Array.isArray(assoluti) || assoluti.length === 0) return [];
+      let store;
+      try { store = await cartellaDelloStore(progetto); } catch { return []; }
+      const reg = await leggiJson(fileRegistro(store), {}).catch(() => ({}));
+      const suoi = [];
+      for (const assoluto of assoluti) {
+        const rel = relativoAlProgetto(progetto, assoluto);
+        const voce = rel === null ? null : reg[rel];
+        if (!voce || typeof voce.sha256 !== 'string') continue;
+        if ((await improntaDelFile(assoluto)) === voce.sha256) suoi.push(assoluto);
+      }
+      return suoi;
+    },
+
     /** I punti di una conversazione, dal più vecchio: `{ turno, alle, annullabile, motivo?, fuori }`. */
     async elenco({ sessionId, progetto } = {}) {
       if (!valida(sessionId) || typeof progetto !== 'string') return [];

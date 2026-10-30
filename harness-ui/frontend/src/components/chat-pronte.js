@@ -28,7 +28,7 @@ export const NODI_PRONTI_MASSIMI = 150_000;
  */
 export const CAMPI_DELLA_CHAT = Object.freeze([
   'approvazioniPendenti', 'attesaAperturaSequenza', 'attesaBubble', 'batchAttivo', 'browserIndice', 'browserPagine',
-  'cachePromptPrecedenti', 'cacheSessione', 'carteDelleFiglie', 'cartellaAssoluta', 'codaInPausa', 'codaMessaggi',
+  'cachePromptPrecedenti', 'cacheSessione', 'carteDelleFiglie', 'cartellaAssoluta', 'cartellaBase', 'codaInPausa', 'codaMessaggi',
   'comandiInVolo', 'currentRunModel', 'domandeDelleFiglie', 'domandePendenti', 'durateRagionamento', 'eventiAttrezzi',
   'eventiUsageContesto', 'fileSelezionati', 'followUpBubbleInAttesa', 'messageElements', 'previewProjectId',
   'previewWorkspaceName', 'prossimoOrdineAttivita', 'ragionamentoBubble', 'redirectInvalidatedIds', 'redirectPendingId',

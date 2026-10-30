@@ -42,7 +42,14 @@ async function fingi(page) {
       return route.fulfill({ json: { ok: true, data: { cartellaId: 'cartella-0000000000000002', nome: percorso.split('\\').pop() } } });
     }
     const revoca = /^\/api\/v1\/remote\/phones\/t1\/folders\/([^/]+)\/revoke$/u.exec(p);
+    if (revoca && stato.revocaBlocca) {
+      /* owner 27/10/2026 (il nega vince): la cartella restava raggiungibile da «Projects» ⇒ il server la tiene come BLOCCATA */
+      stato.cartelle = stato.cartelle.map((c) => (c.cartellaId === revoca[1] ? { cartellaId: c.cartellaId, nome: c.nome, percorso: c.percorso, bloccataAlle: new Date().toISOString(), bloccata: true, esiste: true } : c));
+      return route.fulfill({ json: { ok: true, data: { revocata: true, bloccata: true, tramite: { cartellaId: 'cartella-progetti', nome: 'Projects' }, stessaCartella: false } } });
+    }
     if (revoca) { stato.cartelle = stato.cartelle.filter((c) => c.cartellaId !== revoca[1]); return route.fulfill({ json: { ok: true, data: { revocata: true } } }); }
+    const sblocca = /^\/api\/v1\/remote\/phones\/t1\/folders\/([^/]+)\/unblock$/u.exec(p);
+    if (sblocca) { stato.cartelle = stato.cartelle.filter((c) => c.cartellaId !== sblocca[1]); return route.fulfill({ json: { ok: true, data: { sbloccata: true } } }); }
     return route.fulfill({ status: 404, json: { ok: false, error: { code: 'NOT_FOUND' } } });
   });
   await page.route('**/api/v1/workspace-browser**', (route) => route.fulfill({ json: { ok: true, data: {
@@ -64,11 +71,11 @@ async function alberoCheRiempie(page) {
   expect(albero.height).toBeGreaterThan(400);
   expect(scelta.height).toBeLessThan(90);
 }
-async function apri(page) {
+async function apri(page, { colorMode = null } = {}) {
   await page.setViewportSize({ width: 1920, height: 1080 });
-  await page.addInitScript(() => {
-    localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { uiLanguage: 'en' } }));
-  });
+  await page.addInitScript((tema) => {
+    localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { uiLanguage: 'en', ...(tema ? { colorMode: tema } : {}) } }));
+  }, colorMode);
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15_000 });
 }
@@ -374,4 +381,83 @@ test('REMOTO-CARTELLE-12 — 24/10 (contratto col Mobile): «This computer · <n
   await page.locator('[data-settings-tab="telefoni"]').click();
   await expect(page.locator('[data-remoto-questo-pc]')).toContainText('This computer');
   await expect(page.locator('[data-remoto-questo-pc]')).toContainText('DESKTOP-ESEMPIO · 31ab');
+});
+
+for (const tema of ['dark', 'light']) {
+  test(`REMOTO-CARTELLE-11 (${tema}) — owner 27/10/2026, il nega vince: «Revoke» su una cartella ancora raggiungibile la lascia BLOCCATA e lo dice; il suo menu ha solo «Unblock»`, async ({ page }) => {
+    const stato = await fingi(page);
+    stato.consensi = [];
+    stato.revocaBlocca = true;
+    await apri(page, { colorMode: tema });
+    await page.locator('[data-vaia="impostazioni"]').click();
+    await page.locator('[data-settings-tab="telefoni"]').click();
+    const riga = page.locator('[data-remoto-cartella="cartella-0000000000000001"]');
+    await riga.locator('[data-remoto-cartella-altro]').click();
+    await page.locator('#menuCartellaDispositivo [role=menuitem]', { hasText: 'Revoke' }).click();
+    const avviso = page.getByRole('status').filter({ hasText: 'It is now blocked' });
+    await expect(avviso).toContainText('“talos-site” revoked from Pad di Nino');
+    await expect(avviso).toContainText('It is now blocked: it was still reachable through “Projects”.');
+    await expect(riga).toHaveAttribute('data-remoto-bloccata', '');
+    await expect(riga.locator('.talos-badge--warning')).toHaveText('Blocked');
+    await expect(riga).toContainText('the device’s turns can’t open it, not even from another allowed folder'); // A-R6 (27/10): la frase onesta
+    /* il tema chiesto è quello a schermo: luminanza dello sfondo del corpo (la prima corsa fotografava il chiaro due volte) */
+    const luce = await page.evaluate(() => { const [r, g, b] = getComputedStyle(document.body).backgroundColor.match(/\d+/gu).map(Number); return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; });
+    expect(tema === 'dark' ? luce < 0.35 : luce > 0.65, `luminanza ${luce} per ${tema}`).toBe(true);
+    await expect(riga).not.toContainText('allowed today');
+    await page.locator('[data-remoto-cartelle="t1"]').screenshot({ path: `test-results/remoto-cartella-bloccata-${tema}.png` });
+    await riga.click({ button: 'right' });
+    await expect(page.locator('#menuCartellaDispositivo [role=menuitem]')).toHaveText(['Unblock']);
+    await page.locator('#menuCartellaDispositivo [role=menuitem]', { hasText: 'Unblock' }).click();
+    await expect(riga).toHaveCount(0, { timeout: 10_000 });
+    expect(stato.chiamate).toContain('POST /api/v1/remote/phones/t1/folders/cartella-0000000000000001/unblock');
+  });
+}
+
+for (const tema of ['dark', 'light']) {
+  test(`REMOTO-CARTELLE-13 (${tema}) — owner 27/10/2026 (contratto cartelle bloccate, giro 2, B4): la carta «Unblock … for …?» dalla chat, «Unblock» / «Keep it blocked», niente «Modifica»; approvata, risponde`, async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    const stato = await fingi(page);
+    stato.consensi = [];
+    await apri(page, { colorMode: tema });
+    const risposte = await inChat(page, stato);
+    await eventi(page, [{ type: 'ApprovalRequested', requestId: 'cart-req-13', _sequenza: 2, azione: { tipo: 'remote_phone_folder_unblock', toolCallId: 'call-c13', telefono: DISPOSITIVO, cartella: CARTELLA } }]);
+    const carta = page.locator('[data-request-id="cart-req-13"]');
+    await expect(carta).toBeVisible();
+    await expect(carta).toContainText('Unblock a folder');
+    await expect(carta).toContainText('Unblock “AVM” for Pad di Nino?');
+    await expect(carta).toContainText('Full access too');
+    await expect(carta).toContainText('It is not allowed by itself');
+    await expect(carta.locator('[data-telefoni-cartella="sblocca"] .talos-remoto-riga__nome')).toHaveText(['Pad di Nino', 'AVM']);
+    await expect(carta.locator('[data-approva-una-volta]')).toHaveText('Unblock');
+    await expect(carta.locator('[data-nega]')).toHaveText('Keep it blocked');
+    await expect(carta.locator('[data-modifica-automazione]')).toHaveCount(0);
+    const luce = await page.evaluate(() => { const [r, g, b] = getComputedStyle(document.body).backgroundColor.match(/\d+/gu).map(Number); return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255; });
+    expect(tema === 'dark' ? luce < 0.35 : luce > 0.65, `luminanza ${luce} per ${tema}`).toBe(true);
+    await page.screenshot({ path: `test-results/remoto-carta-sblocca-${tema}.png` });
+    await carta.locator('[data-approva-una-volta]').click();
+    await expect.poll(() => risposte).toEqual([{ requestId: 'cart-req-13', approvato: true }]);
+  });
+}
+
+for (const tema of ['dark', 'light']) {
+  test(`REMOTO-CARTELLE-14 (${tema}) — revisione del blocco 10, B-R3: la carta per una cartella BLOCCATA dice che consentendo la si sblocca; senza blocco non lo dice`, async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    const stato = await fingi(page);
+    stato.consensi = [{ ...stato.consensi[0], bloccata: true }];
+    await apri(page, { colorMode: tema });
+    const carta = page.locator('[data-remoto-consenso="richiesta-0001"]');
+    await expect(carta).toBeVisible({ timeout: 10_000 });
+    await expect(carta).toHaveAttribute('data-remoto-consenso-bloccata', '');
+    await expect(carta.locator('.talos-approval__why')).toContainText('You had blocked it for this device: allowing it unblocks it.');
+    await page.screenshot({ path: `test-results/remoto-consenso-bloccata-${tema}.png` });
+  });
+}
+
+test('REMOTO-CARTELLE-14b — al contrario: una cartella non bloccata ha la carta di sempre', async ({ page }) => {
+  await fingi(page);
+  await apri(page);
+  const carta = page.locator('[data-remoto-consenso="richiesta-0001"]');
+  await expect(carta).toBeVisible({ timeout: 10_000 });
+  await expect(carta).not.toHaveAttribute('data-remoto-consenso-bloccata', /.*/u);
+  await expect(carta.locator('.talos-approval__why')).not.toContainText('blocked');
 });

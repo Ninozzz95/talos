@@ -94,7 +94,7 @@ test('COMPOSER-SCALE-01 — da 1024 a 1440, in ogni combinazione di pillole, nes
       if (m.terminale.tagliata) errori.push(`${dove}: «${m.terminale.testo}» tagliata`);
       if (m.piano?.tagliata) errori.push(`${dove}: «${m.piano.testo}» tagliata`);
       if (m.piano?.ceduta && !m.permesso.ceduta) errori.push(`${dove}: il piano ha ceduto prima del permesso`);
-      if (m.piano?.ceduta && m.scala !== '3') errori.push(`${dove}: il piano cede solo al gradino 3, per ultimo`);
+      if (m.piano?.ceduta && m.scala !== '4') errori.push(`${dove}: il piano cede solo al gradino 4, per ultimo`); // 27/10: il 3 è del ragionamento
       if (m.sfonda) errori.push(`${dove}: la barra sfonda`);
       // l'ordine: il permesso cede solo dopo «Terminale»; il modello si stringe solo quando gli altri due hanno già ceduto
       if (m.permesso.ceduta && !m.terminale.ceduta) errori.push(`${dove}: il permesso ha ceduto prima di «Terminale»`);

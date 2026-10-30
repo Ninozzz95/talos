@@ -529,6 +529,9 @@ export function creaOrologioRiassunto({ segnaleStop = null, segnaleSalta = null,
 function wrapContextHooks(original, {
   cartella, modello, chiave, fetchDiRete, segnaleStop, telemetry, extraUsage, emitOnGiro,
   reasoning, soglie, recordIniziale = null, records = [], progressoAcceso = false, limiteUscitaToken = null,
+  /* L1 1.3, revisione blocco 4 (A-3, A-4): la finestra viva del modello locale (`{ attuale, puoCrescere, cresci }`, dall'ospite) e chi
+     ricalcola le soglie su una finestra nuova. Assenti (la CLI, i modelli in cloud) ⇒ le soglie di inizio giro, come sempre. */
+  finestraLocale = null, ricalcolaSoglie = null,
   riassuntoInattivitaMs = RIASSUNTO_INATTIVITA_MS, riassuntoTettoMs = RIASSUNTO_TETTO_MS, segnaleSaltaRiassunto = null,
   /* 22/10/2026 (revisione avversaria, C): lo Skip della compattazione IN CORSO — il registro ne arma uno nuovo a ogni compattazione che si
      apre, e qui si legge al momento. Assente ⇒ `segnaleSaltaRiassunto`, uno per giro come prima. */
@@ -576,6 +579,12 @@ function wrapContextHooks(original, {
      com'era. La CLI oggi (0.6.12) carica il kernel di BASE, non questo adapter; dalla 0.6.13 passerà di qui con le sue decisioni
      sulla compattazione e il suo avanzamento in streaming (lane CLI, 21/10/2026: il commento di prima lo dava già per fatto). */
   istantanea = false,
+  /* Owner 28/10/2026 (cache dei prompt, punto 4): il riassunto col modello della conversazione riparte con gli STESSI attrezzi e la stessa
+     storia, così rilegge la cache invece di riscriverla (`richiestaDiRiassuntoSicuraPerCache`). Spento di serie finché il banco non misura
+     quante volte il modello chiama un attrezzo invece di riassumere (correzione 4 della CLI); lo accende l'ospite. */
+  riassuntoSicuroPerCache = false,
+  /* …e il marcatore delle richieste di questo giro (`marcatoreDiCachePer`), lo stesso che il riassunto sicuro porta per rileggere */
+  marcatoreDelGiro = undefined,
 } = {}) {
   let compacted = compattazione.eRecordValido(recordIniziale) ? recordIniziale : null;
   /*
@@ -601,6 +610,8 @@ function wrapContextHooks(original, {
      (fornitore senza `usage`, o con numeri non plausibili) restituisce lei, non lo scarto ereditato: il registro la usa nel riassunto di
      fine giro e nel /compact, che gli schemi davanti non li hanno. */
   let stimaAttrezziDelGiro = null;
+  /* cache, punto 4: gli attrezzi dell'ULTIMA richiesta partita (non della prima: il ponte ne carica in coda), quelli che il fornitore ha in cache */
+  let attrezziUltimaRichiesta = null;
   const scartoCorrente = () => ultimoScarto ?? scartoDellaStima ?? 0;
   /* Seconda passata della revisione 7 (F6): per «può entrare?» lo scarto INTERO — il più grande fra quello plausibile misurato senza tetto,
      la stima degli attrezzi del giro e quello della misura (`scartoPlausibile`, compattazione-desktop) */
@@ -782,6 +793,13 @@ function wrapContextHooks(original, {
   /* A1: la richiesta del giro per cui il motore del contesto ha già scaduto/saltato/rifiutato il riassunto del modello — lì la
      compattazione semplice va dritta al riassunto senza modello (`{ requestIndex, ragione }`) */
   let senzaModelloPerRichiesta = null;
+  /* ⛔⛔ Owner 27/10/2026 (dal vivo, piano ChatGPT, 245k token, motore del contesto acceso): «e continua a compattare se salto da pc
+     padre». Lo Skip valeva per UNA richiesta (`senzaModelloPerRichiesta` legato a `requestIndex`): col motore del contesto la storia
+     attiva resta lunga, e la richiesta dopo nello stesso giro (la domanda di un sotto-agente, il risultato di un attrezzo) ripartiva con
+     un riassunto nuovo, da saltare di nuovo — dal dispositivo sembrava che «Salta» non facesse niente. Decisione dell'owner: «Salta» vale
+     PER TUTTO IL GIRO. Da qui alla fine del giro ogni richiesta va alla compattazione semplice senza modello; il giro dopo riprova il
+     riassunto vero. Supera la regola del 22/10 (revisione C, «lo Skip vale per la compattazione che salta»). */
+  let saltatoNelGiro = false;
   /* A1, la STIMA PRIMA: la velocità di lettura del prompt misurata dal motore locale (`timings` di llama-server o del motore
      dell'app: token letti davvero / ms, `leggiTempiDelMotore` nel kernel). Solo su letture di almeno `LETTURA_MINIMA_PER_LA_STIMA`
      token: una lettura piccola misura il rumore. Ignota (i fornitori cloud non la mandano) ⇒ nessuna stima: decidono gli orologi.
@@ -825,15 +843,20 @@ function wrapContextHooks(original, {
     if (Number.isSafeInteger(p) && p > 0 && !(massimoAccettato >= p)) massimoAccettato = p;
     return esito;
   };
-  const chiediRiassunto = async (messaggiRichiesta, maxOutputTokens, contatore = null, { secondaria = false, orologio = null, modelloScelto = null } = {}) => {
+  const chiediRiassunto = async (messaggiRichiesta, maxOutputTokens, contatore = null, { secondaria = false, orologio = null, modelloScelto = null, attrezziSicuri = null } = {}) => {
     const segnale = orologio?.segnale ?? segnaleStop;
     /* 21/10/2026 (CLI): col modello del riassunto anche il ragionamento si sceglie per LUI */
-    const reasoningScelto = modelloScelto && modelloScelto !== modello ? compattazione.reasoningPerRiassunto(reasoning, { modello: modelloScelto }) : reasoningRiassunto;
+    /* RIV14b-C2: la forma sicura rimanda il ragionamento della conversazione — su Anthropic cambiarlo invalida la cache dei messaggi */
+    const reasoningScelto = Array.isArray(attrezziSicuri) && attrezziSicuri.length > 0 ? reasoning
+      : modelloScelto && modelloScelto !== modello ? compattazione.reasoningPerRiassunto(reasoning, { modello: modelloScelto }) : reasoningRiassunto;
     const esito = await kernel.chiamaConRitenta({
       modello: modelloScelto ?? modello,
       chiave,
       messaggi: messaggiRichiesta,
-      attrezzi: [],
+      /* cache, punto 4: la forma sicura parte con gli attrezzi della conversazione e il marcatore del giro (per RILEGGERE); quella di
+         sempre senza attrezzi e senza marcatori — non rilegge niente e nessuno rileggerà lei */
+      attrezzi: Array.isArray(attrezziSicuri) && attrezziSicuri.length > 0 ? attrezziSicuri : [],
+      marcatoreDiCache: Array.isArray(attrezziSicuri) && attrezziSicuri.length > 0 ? marcatoreDelGiro : null,
       maxOutputTokens,
       ...(reasoningScelto ? { reasoning: reasoningScelto } : {}),
       ...(fetchDiRete ? { fetchDiRete } : {}),
@@ -918,7 +941,7 @@ function wrapContextHooks(original, {
      */
     const pressione = compattazione.riduciCodaSottoPressione(divise.coda, {
       budgetToken: compattazione.budgetCoda(sulBersaglio && !(Number.isFinite(soglie.soglia) && soglie.soglia > 0 && soglie.soglia <= bersaglio) ? bersaglio : soglie.soglia) });
-    const parti = { ...divise, coda: pressione.coda };
+    const parti = { ...divise, coda: pressione.coda, prefissoInviato: projected.slice(0, divise.fineTratto) }; // RIV14b-C1
     /* Pezzo D: il freno di adesso — si riarma (null) se il tratto da riassumere è cresciuto del 10% della soglia dal verdetto, o se
        modello o finestra sono cambiati */
     const mezzoDiAdesso = compattazione.mezzoDellaProiezione(projected);
@@ -1133,9 +1156,17 @@ function wrapContextHooks(original, {
      *   la richiesta di riassunto da sola rientrava nell'overflow e la compattazione non sostituiva MAI la storia. */
     /* L1 (20/10/2026): il limite si misura sulla FINESTRA del modello (`ingressoRiassuntoPerFinestra`), non solo in caratteri:
        sul codice un token vale ~2 caratteri e 160.000 caratteri non entravano in 65.536 token. Al secondo tentativo, la metà. */
-    const richiestaPer = (tentativo) => compattazione.ingressoRiassuntoPerFinestra(piuBreve ? richiestaBreve() : richiesta, {
-      finestraToken: finestraDelRiassunto, maxOutputTokens: budget.maxOutputTokens, frazione: tentativo === 0 ? 1 : 0.5,
-    });
+    /* Cache, punto 4: col modello della CONVERSAZIONE (correzione 1 della CLI: col leggero o con un altro scelto la cache è di un altro
+       modello) e con l'interruttore acceso, il primo tentativo rilegge il prefisso. Il secondo — dopo un attrezzo chiamato, un vuoto, un
+       troncato — è quello di sempre: il ripiego non cambia. Se la forma sicura non entra (`null`), la forma di sempre anche al primo. */
+    const richiestaSicura = riassuntoSicuroPerCache && scelta.modello === modello && Array.isArray(attrezziUltimaRichiesta)
+      ? compattazione.richiestaDiRiassuntoSicuraPerCache({ ...parti, paroleMassime: budget.paroleMassime, attrezzi: attrezziUltimaRichiesta,
+        finestraToken: finestraDelRiassunto, maxOutputTokens: budget.maxOutputTokens })
+      : null;
+    const richiestaPer = (tentativo) => (tentativo === 0 && !piuBreve && richiestaSicura ? richiestaSicura
+      : compattazione.ingressoRiassuntoPerFinestra(piuBreve ? richiestaBreve() : richiesta, {
+        finestraToken: finestraDelRiassunto, maxOutputTokens: budget.maxOutputTokens, frazione: tentativo === 0 ? 1 : 0.5,
+      }));
     /* ⛔ BUG-5, revisione R1 (05/10/2026): `esito` parte null. Se la GUARDIA del giro di fallimenti rompe al primo
      *   giro (contatore già al massimo: il ritentativo overflow K8 dell'infer chiama `compattaOra` senza passare da
      *   `decidiCompattazione`), nessun tentativo si paga e l'esito sintetico più sotto rende la chiusura CLASSIFICATA
@@ -1148,6 +1179,7 @@ function wrapContextHooks(original, {
     const stimaLetturaMs = !inSottofondo && velocitaLetturaTokSec && scelta.modello === modello ? (kernel.stimaTokenConversazione(richiestaPer(0)) * 1000) / velocitaLetturaTokSec : null;
     /* Pezzo C: sul rifiuto, quando il bersaglio non ammette un riassunto pagato, quello senza modello parte subito (ragione 'bersaglio') */
     const forzato = inSottofondo ? null : forzatoDalBersaglio ?? (senzaModelloPerRichiesta?.requestIndex === requestIndex ? senzaModelloPerRichiesta.ragione
+      : saltatoNelGiro ? 'saltato' // owner 27/10: lo Skip vale per tutto il giro
       : stimaLetturaMs !== null && stimaLetturaMs > riassuntoTettoMs ? 'stima' : null);
     const orologio = inSottofondo || forzato ? null : creaOrologioRiassunto({ segnaleStop, segnaleSalta: segnaleSalta(), inattivitaMs: riassuntoInattivitaMs, tettoMs: riassuntoTettoMs });
     if (forzato) esito = { ok: false, riassunto: '', motivo: forzato, classe: forzato };
@@ -1163,11 +1195,12 @@ function wrapContextHooks(original, {
       const inviata = richiestaPer(tentativo);
       const tetto = compattazione.tettoUscitaRiassunto(inviata, { finestraToken: finestraDelRiassunto, limiteUscita: limiteDelRiassunto });
       try {
-        try { esito = await chiediRiassunto(inviata, tetto, contatore, { secondaria: inSottofondo, orologio, modelloScelto: scelta.modello }); }
+        const attrezziSicuri = inviata === richiestaSicura ? attrezziUltimaRichiesta : null; // cache, punto 4
+        try { esito = await chiediRiassunto(inviata, tetto, contatore, { secondaria: inSottofondo, orologio, modelloScelto: scelta.modello, attrezziSicuri }); }
         catch (rifiuto) {
           /* revisione del 21/10 (S2): il fornitore ha un limite d'uscita più basso del tetto ⇒ una volta col budget, che lo rispetta */
           if (segnaleStop?.aborted || orologio?.ragione || tetto <= budget.maxOutputTokens || !compattazione.eRifiutoDelTettoUscita(rifiuto)) throw rifiuto;
-          esito = await chiediRiassunto(inviata, budget.maxOutputTokens, contatore, { secondaria: inSottofondo, orologio, modelloScelto: scelta.modello });
+          esito = await chiediRiassunto(inviata, budget.maxOutputTokens, contatore, { secondaria: inSottofondo, orologio, modelloScelto: scelta.modello, attrezziSicuri });
         }
       }
       catch (errore) {
@@ -1210,6 +1243,7 @@ function wrapContextHooks(original, {
        (`context_compressor.py:768`, `:830-840`): si annulla e la sessione resta intatta, il ripiego solo al contatore pieno. */
     /* A1 (21/10/2026): tetto scaduto e Skip portano al ripiego SEMPRE — il giro aspettava perché la richiesta non stava sotto la soglia */
     const perOrologio = esito.motivo === 'tempo' || esito.motivo === 'saltato' || (forzato !== null && esito.motivo === forzato);
+    if (!inSottofondo && esito.motivo === 'saltato') saltatoNelGiro = true; // owner 27/10: per tutto il giro
     if (!esito.ok && !inSottofondo && (perOrologio || motivo === 'overflow' || esito.motivo === 'esaurito' || fallimentiRiassuntoConsecutivi >= compattazione.FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI)) {
       /* la ragione in una parola per la riga d'esito (contratto riga viva §3): tempo · saltato · esaurito · rifiutato */
       const ragione = perOrologio ? esito.motivo : esito.motivo === 'esaurito' || fallimentiRiassuntoConsecutivi >= compattazione.FALLIMENTI_RIASSUNTO_CONSECUTIVI_MASSIMI ? 'esaurito' : 'rifiutato';
@@ -1422,7 +1456,10 @@ function wrapContextHooks(original, {
     if (comeFinita === 'arrivato') {
       const arrivato = scambioPossibile(rawMessages, { token, misura });
       if (arrivato) return { proiezione: usaPronta(arrivato, { requestIndex, motivo }) };
-    } else senzaModelloPerRichiesta = { requestIndex, ragione: comeFinita };
+    } else {
+      senzaModelloPerRichiesta = { requestIndex, ragione: comeFinita };
+      if (comeFinita === 'saltato') saltatoNelGiro = true; // owner 27/10: per tutto il giro
+    }
     return {};
   };
 
@@ -1625,10 +1662,74 @@ function wrapContextHooks(original, {
     inVolo = { promessa, firma: { coveredThrough: copia.length, impronta, base } };
   };
 
+  /*
+   * ⭐ L1 1.3, revisione blocco 4 (A-3, A-4; owner A1-1 26/10/2026, «Tutte e due, visibili») — la finestra VIVA del modello locale.
+   *   A-4: le soglie si calcolavano una volta per giro; allargata la finestra sul rifiuto del motore, il passo dopo dello STESSO giro
+   *   riassumeva col 75% della finestra vecchia (la riga «Window enlarged» e subito «Context compacted»). Ora si rilegge a ogni misura.
+   *   A-3: il kernel riassume al 75%, prima che il motore sia pieno: l'allargamento sul rifiuto non arrivava quasi mai. Ora, alla soglia,
+   *   si sale di un gradino PRIMA di riassumere, come Hermes (`agent/turn_preflight.py:104-112`: «grow the context window before
+   *   compressing», poi ricalibra e non comprime). «Chiedimi» ⇒ niente riassunto senza la persona: la richiesta parte, e se non entra la
+   *   carta lo chiede (il rifiuto del motore, `LOCAL_WINDOW_ASK`).
+   */
+  const seguiLaFinestra = () => {
+    if (!finestraLocale || typeof ricalcolaSoglie !== 'function') return false;
+    let adesso = null;
+    try { adesso = Number(finestraLocale.attuale()); } catch { return false; }
+    if (!Number.isSafeInteger(adesso) || adesso <= 0 || adesso === soglie.finestraToken) return false;
+    Object.assign(soglie, ricalcolaSoglie(adesso));
+    return true;
+  };
+  /* Uno Stop mentre il motore si riapre (decine di secondi) ferma il giro subito; la riapertura finisce da sé. */
+  const finoAlloStop = (promessa) => (!segnaleStop ? promessa : new Promise((risolvi, rifiuta) => {
+    if (segnaleStop.aborted) { rifiuta(segnaleStop.reason); return; }
+    const ferma = () => rifiuta(segnaleStop.reason);
+    segnaleStop.addEventListener('abort', ferma, { once: true });
+    promessa.then((v) => { segnaleStop.removeEventListener('abort', ferma); risolvi(v); }, (e) => { segnaleStop.removeEventListener('abort', ferma); rifiuta(e); });
+  }));
+  const cresciAllaSoglia = async (token) => {
+    const crescita = Promise.resolve().then(() => finestraLocale.cresci({ servono: token }));
+    crescita.catch(() => { /* dopo uno Stop nessuno la aspetta */ });
+    let esito = null;
+    try { esito = await finoAlloStop(crescita); } catch (errore) {
+      if (segnaleStop?.aborted) throw errore;
+      return 'no';
+    }
+    if (esito?.ok === true) return seguiLaFinestra() ? 'cresciuta' : 'no';
+    return esito?.motivo === 'chiedi' ? 'chiedi' : 'no';
+  };
+
+  /*
+   * L1 1.3, revisione blocco 6 (A-R1..A-R3; owner 26/10/2026 notte, «col motore del contesto acceso si allarga anche lì prima di
+   * riassumere»): col motore del contesto acceso la crescita la chiede IL MOTORE, al suo cancello della compressione, sulla sua proiezione
+   * misurata (`growWindow` in `context-engine/src/engine.mjs` prepareForRequest). La cura del blocco 5 misurava qui la storia GREZZA del
+   * kernel, che dopo un riassunto del motore resta grande: «Chiedimi» faceva partire la storia intera (38.795 token contro 1.947) e la
+   * carta proponeva di riaprire il motore; «Allarga» lo ricaricava a 65K per una richiesta da 2.890 (REV-B6-A2, REV-B6-A3, col motore vero).
+   *   · cresciuta ⇒ il motore rimisura sulla finestra nuova;
+   *   · «Chiedimi» ⇒ il motore manda la sua proiezione com'è, e se non entra la carta lo chiede coi numeri giusti;
+   *   · niente (scelta «Riassumi», motore condiviso, nessun gradino) ⇒ il motore riassume come sempre.
+   */
+  /*
+   * ⛔ Revisione blocco 7, A-R6 (27/10/2026): il motore decide «non entra» sul SUO limite (finestra − riserva − margine; il margine è il
+   *   15% quando il conteggio è stimato, `context-engine/src/profiles.mjs`), chi cresce risponde «già allargata» sotto il 75% della finestra.
+   *   Su 16.384 col conteggio stimato il motore si fermava a 11.878, la crescita partiva solo da 12.288: in mezzo «Chiedimi» riassumeva
+   *   senza la persona e «Allarga» riassumeva invece di allargare. Ora la misura arriva a chi cresce nella SUA scala: «al limite del
+   *   motore» = «al 75%». Mai meno dei token veri (col conteggio esatto il limite è sopra il 75% e la scala direbbe meno).
+   */
+  const cresciAlCancelloDelMotore = async ({ inputTokens, windowTokens, inputLimit }) => {
+    /* revisione blocco 8 (nota su A-R6): senza una misura valida non si cresce — `servono: NaN` era letto «sali di un gradino» */
+    if (!Number.isFinite(Number(inputTokens)) || Number(inputTokens) <= 0) return { grown: false };
+    const nellaScalaDiChiCresce = Number(inputLimit) > 0 && Number(windowTokens) > 0
+      ? Math.ceil(Number(inputTokens) * Number(windowTokens) * compattazione.FRAZIONE_FINESTRA / Number(inputLimit))
+      : 0;
+    const esito = await cresciAllaSoglia(Math.max(Number(inputTokens) || 0, nellaScalaDiChiCresce));
+    return esito === 'cresciuta' ? { grown: true } : esito === 'chiedi' ? { sendAsIs: true } : { grown: false };
+  };
+
   const maybeCompactLegacy = async (rawMessages, requestIndex) => {
+    seguiLaFinestra(); // A-4
     const projected = projectLegacy(rawMessages);
-    const { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: projected, finestraToken: soglie.finestraToken, scarto: scartoDellaStima ?? 0 });
-    const decisione = compattazione.decidiCompattazione({
+    let { token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: projected, finestraToken: soglie.finestraToken, scarto: scartoDellaStima ?? 0 });
+    const decidi = () => compattazione.decidiCompattazione({
       token,
       soglia: soglie.soglia,
       emergenza: soglie.emergenza,
@@ -1647,6 +1748,16 @@ function wrapContextHooks(original, {
        */
       emergenzaEsaurita: tentativiFallitiNelTurno >= 2 || compattazioniInefficaci >= 2 || inefficaciTotali >= INEFFICACI_TOTALI_MASSIME,
     });
+    let decisione = decidi();
+    /* A-3: alla soglia (o all'emergenza) prima si cresce; cresciuta ⇒ si rimisura sulla finestra nuova e si decide di nuovo */
+    if (decisione.scatta && finestraLocale) {
+      const crescita = await cresciAllaSoglia(token);
+      if (crescita === 'chiedi') return projected;
+      if (crescita === 'cresciuta') {
+        ({ token, misura } = compattazione.misuraOccupazione({ ancora, messaggi: projected, finestraToken: soglie.finestraToken, scarto: scartoDellaStima ?? 0 }));
+        decisione = decidi();
+      }
+    }
     if (!istantanea) {
       if (!decisione.scatta) return projected;
       /* 22/10/2026 (CLI, S3-B): il riassunto di fine giro del registro ancora in volo quando il giro parte (`compattazioneInArrivo`):
@@ -1675,7 +1786,10 @@ function wrapContextHooks(original, {
     }
     if (!decisione.scatta || decisione.motivo === 'soglia') {
       /* dall'80% della soglia si prepara in sottofondo; sotto l'emergenza la richiesta non aspetta mai */
-      if (token >= soglie.warningTokens && !tentativiEsauriti) avviaPreparazione(rawMessages, projected, { requestIndex, tokenMisurati: token, misura });
+      /* owner 27/10/2026 (misura della CLI sul b000e7253): dopo «Salta» la richiesta passava di qui e, sopra la soglia d'avviso, avviava
+         il riassunto PAGATO in sottofondo — uno per giro, preso dal giro dopo. «Per tutto il giro» vuol dire nessun riassunto col
+         modello fino alla fine del giro, nemmeno in sottofondo. */
+      if (token >= soglie.warningTokens && !tentativiEsauriti && !saltatoNelGiro) avviaPreparazione(rawMessages, projected, { requestIndex, tokenMisurati: token, misura });
       return projected;
     }
     /* emergenza: `compattaDovuta` — il riassunto in preparazione si aspetta solo se vale ancora; valido ma non sufficiente diventa la
@@ -1937,6 +2051,7 @@ function wrapContextHooks(original, {
       providerRequests += 1;
       /* S2-2: senza uno scarto misurato, quello degli schemi degli attrezzi della prima richiesta */
       if (stimaAttrezziDelGiro === null) stimaAttrezziDelGiro = compattazione.stimaDegliAttrezzi(payload?.tools);
+      if (Array.isArray(payload?.tools)) attrezziUltimaRichiesta = payload.tools; // cache, punto 4
       /* N1 (revisione 8 della CLI): lo scarto ereditato è una MISURA, e vale per gli attrezzi del giro che l'ha presa. Se questo giro ne
          manda di più (un server MCP collegato a metà sessione: migliaia di token di schemi), la differenza si aggiunge — la prima
          richiesta non si misura con meno degli schemi che manda davvero. Uno scarto misurato più piccolo della stima degli schemi resta
@@ -1980,6 +2095,14 @@ function wrapContextHooks(original, {
          motore). Quando è lei la finestra che vale (più piccola del catalogo, o il catalogo non ne ha), la richiesta passa dalla
          compattazione semplice, che la usa (`soglie`, dal registro); il motore riprende quando il rifiuto non vale più (R12-3). Niente
          riga: non è un guasto del motore, è il fornitore che ha detto la sua finestra. L'archivio continua a riceverla da `capture`. */
+      /* owner 27/10/2026: la persona ha saltato il riassunto in questo giro ⇒ il motore del contesto non riparte con un riassunto nuovo a
+         ogni richiesta: fino alla fine del giro la compattazione semplice senza modello (come R13-4 qui sotto, l'archivio continua a
+         ricevere le richieste da `capture`). Niente riga di ripiego: è stata la persona. */
+      else if (saltatoNelGiro) {
+        ripiego = true;
+        senzaModelloPerRichiesta = { requestIndex, ragione: 'saltato' };
+        prepared = { messages: await maybeCompactLegacy(inputMessages, requestIndex) };
+      }
       else if (rifiutoNoto && Number.isFinite(rifiutoNoto.finestra) && rifiutoNoto.finestra > 0
         && !(Number.isFinite(soglie.finestraToken) && soglie.finestraToken < rifiutoNoto.finestra)) {
         ripiego = true;
@@ -1992,7 +2115,13 @@ function wrapContextHooks(original, {
           const segnaleRichiesta = saltaDellaRichiesta && payload?.signal ? AbortSignal.any([payload.signal, saltaDellaRichiesta])
             : saltaDellaRichiesta ?? payload?.signal;
           prepared = await original.prepare({ ...payload, messages: inputMessages, originali: grezzi, summaryCeilingMs: riassuntoTettoMs,
-            onInTurnWait: ascoltaAttesaDelMotore(requestIndex), ...(segnaleRichiesta ? { signal: segnaleRichiesta } : {}) });
+            onInTurnWait: ascoltaAttesaDelMotore(requestIndex), ...(segnaleRichiesta ? { signal: segnaleRichiesta } : {}),
+            ...(finestraLocale ? { growWindow: cresciAlCancelloDelMotore } : {}) }); // L1 1.3, revisione blocco 6
+          /* ⛔ owner 27/10/2026 (CLI, traccia della richiesta 9): il motore del contesto VERO, allo Skip, gestisce da sé l'interruzione e
+             TORNA con la sua proiezione invece di lanciare — la bandierina del giro, accesa solo nel ramo d'errore qui sotto, restava
+             spenta, e alla richiesta dopo un altro guasto del motore faceva pagare il riassunto della compattazione semplice. Lo Skip si
+             riconosce dal SEGNALE, non dal modo in cui il motore finisce: scattato, e non per uno Stop, vale per tutto il giro. */
+          if (saltaDellaRichiesta?.aborted === true && !segnaleStop?.aborted && !payload?.signal?.aborted) saltatoNelGiro = true;
           /* 12/10/2026, decisione dell'owner («Si ripara da solo»): l'archivio non combaciava, i vecchi originali sono stati messi
              da parte e il motore è ripartito dalla storia attiva. La chat lo dice con una riga, che non ferma niente. */
           if (prepared?.riallineato) {
@@ -2017,6 +2146,7 @@ function wrapContextHooks(original, {
           const ragioneSenzaModello = saltato ? 'saltato' : errore?.code === 'CTX_COMPACTION_TIMEOUT' ? 'tempo'
             : RIASSUNTI_RIFIUTATI_DAL_MOTORE.has(errore?.code) ? 'rifiutato' : null;
           if (ragioneSenzaModello) senzaModelloPerRichiesta = { requestIndex, ragione: ragioneSenzaModello };
+          if (ragioneSenzaModello === 'saltato') saltatoNelGiro = true; // owner 27/10: per tutto il giro
           ripiego = true;
           /* 22/10/2026 (Mobile; owner «cura nella 0.1.36»): dopo «Salta il riassunto» il ripiego è una scelta della persona, non un guasto
              del motore — la riga di «ripiego» era di troppo e contraddiceva la riga d'esito. Un guasto vero la dice come prima. */
@@ -2366,7 +2496,9 @@ export async function talosLavora(input = {}) {
     && input.comandoProva.trim().length > 0
     && !DEFAULT_NPM_TEST.test(input.comandoProva.trim());
   const comandoProva = input.comandoProva ?? 'npm test';
-  const provaSenzaSuite = await motivoProvaSenzaSuiteDesktop({ cartella: input.cartella, comandoProva, esplicito: explicitTestCommand });
+  /* 26/10/2026 (CLI, stress test 0.6.14): il motivo si calcola AL MOMENTO di `prova`, non all'avvio del giro — un package.json scritto
+     nello stesso giro risultava «assente» (prova PROVA-MOMENTO-01). Il kernel chiama la funzione a ogni `prova`. */
+  const provaSenzaSuite = () => motivoProvaSenzaSuiteDesktop({ cartella: input.cartella, comandoProva, esplicito: explicitTestCommand });
   const onGiro = wrapOnGiro(input.onGiro, { cartella: input.cartella, telemetry, calls });
   /*
    * Le soglie si calcolano UNA volta per turno, dall'ambiente e dalla finestra che il chiamante passa
@@ -2376,10 +2508,28 @@ export async function talosLavora(input = {}) {
      costruttore da configurazione (`agent/context_compressor.py:2903` threshold_tokens_cap, letto in `agent_init.py:1463`). Vince
      sull'ambiente; solo un intero positivo è un tetto scritto apposta, il resto ricade sulla variabile. */
   const tettoOpzione = Number.isSafeInteger(input.tettoCompattazioneToken) && input.tettoCompattazioneToken > 0 ? input.tettoCompattazioneToken : null;
+  const tettoDelGiro = tettoOpzione ?? compattazione.leggiTettoEsplicito(process.env);
   const soglie = compattazione.calcolaSoglie({
-    tettoToken: tettoOpzione ?? compattazione.leggiTettoEsplicito(process.env),
+    tettoToken: tettoDelGiro,
     finestraToken: input.finestraToken ?? null,
   });
+  /* L1 1.3, revisione blocco 4 (A-4): con la finestra viva del modello locale le soglie si RICALCOLANO quando la finestra cambia a metà
+     giro (allargata sul rifiuto del motore, alla soglia, dal modello o dalla carta), con lo stesso tetto del giro. Solo un oggetto con
+     le tre funzioni conta: altro ⇒ le soglie di inizio giro, come prima. */
+  const finestraLocaleDellOspite = input.finestraLocale && typeof input.finestraLocale.attuale === 'function'
+    && typeof input.finestraLocale.puoCrescere === 'function' && typeof input.finestraLocale.cresci === 'function' ? input.finestraLocale : null;
+  /* Revisione blocco 5 (A-4; owner 26/10 notte, «riassume, come senza nessuno davanti»): un giro senza la persona davanti non lascia
+     mai la richiesta in attesa di una carta che nessuno vede. Il registro lo dice già all'ospite (`senzaPersona`, «Chiedimi» vale
+     «Riassumi»); qui lo si ripete nel kernel, perché un ospite che non lo sapesse farebbe morire il giro con LOCAL_WINDOW_ASK. */
+  const senzaPersonaNelGiro = input.nessunoDavanti === true || input.senzaPersona === true;
+  const finestraLocale = finestraLocaleDellOspite && senzaPersonaNelGiro ? {
+    attuale: () => finestraLocaleDellOspite.attuale(),
+    puoCrescere: () => finestraLocaleDellOspite.puoCrescere(),
+    cresci: async (opzioni) => {
+      const esito = await finestraLocaleDellOspite.cresci(opzioni);
+      return esito?.motivo === 'chiedi' ? { ...esito, motivo: 'senza-persona' } : esito;
+    },
+  } : finestraLocaleDellOspite;
   /* 21/10/2026 (revisione S2): il limite d'uscita del modello, dove il registro lo sa (endpoint OpenRouter); null ⇒ 32.000 + la cintura */
   const limiteUscitaToken = Number.isFinite(input.limiteUscitaToken) && input.limiteUscitaToken > 0 ? Math.floor(input.limiteUscitaToken) : null;
   const records = [];
@@ -2394,6 +2544,7 @@ export async function talosLavora(input = {}) {
     emitOnGiro: onGiro,
     reasoning: input.reasoning,
     soglie,
+    ...(finestraLocale ? { finestraLocale, ricalcolaSoglie: (finestraToken) => compattazione.calcolaSoglie({ tettoToken: tettoDelGiro, finestraToken }) } : {}),
     limiteUscitaToken,
     recordIniziale: input.recordCompattazioneIniziale ?? null,
     records,
@@ -2403,6 +2554,11 @@ export async function talosLavora(input = {}) {
     compattazionePronta: input.compattazionePronta ?? null,
     istantanea: input.compattazioneIstantanea === true && !compattazione.motoreAPostoUnico(input.modello),
     compattazioneInArrivo: input.compattazioneInArrivo ?? null,
+    /* Cache, punto 4 (owner 28/10/2026): spento di serie; il marcatore del giro con la regola della durata del nucleo (talosHarness.mjs,
+       `marcatoreDiCachePer` alla chiamata del giro: 5 minuti quando il ritmo è della macchina o per Qwen) */
+    riassuntoSicuroPerCache: input.riassuntoSicuroPerCache === true,
+    marcatoreDelGiro: kernel.marcatoreDiCachePer({ modello: input.modello,
+      ritmoDellaMacchina: input.nessunoDavanti === true || input.senzaPersona === true || input.agentRole === 'child' }),
     /* A1 (owner 21/10/2026 sera): i due orologi del riassunto ATTESO e il «Skip» della persona (contratto riga viva §4-§5) */
     riassuntoInattivitaMs: interoPositivo(input.riassuntoInattivitaMs, RIASSUNTO_INATTIVITA_MS),
     riassuntoTettoMs: interoPositivo(input.riassuntoTettoMs, RIASSUNTO_TETTO_MS),

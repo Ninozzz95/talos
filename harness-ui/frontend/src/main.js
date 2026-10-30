@@ -21,6 +21,8 @@ import { montaPonteLegacy } from './bridge/legacy-dom.js';
 import { montaBarraFinestra } from './components/barra-finestra.js';
 import { montaAggiornamenti } from './components/aggiornamenti.js';
 import { montaMotoreContesto } from './components/motore-contesto.js';
+import { montaFinestraPiena } from './components/finestra-piena.js'; // L1 1.3 (26/10/2026)
+import { montaDoveGiranoDiSerie } from './components/dove-girano-di-serie.js'; // owner 27/10/2026: dove girano i comandi, di serie
 import { montaSitiFidati } from './components/siti-fidati.js';
 import { confermaModale } from './components/modale-td.js';
 
@@ -35,6 +37,8 @@ await import('./legacy/app.js');
 montaAggiornamenti({ conferma: confermaModale }); // «Riavvia ora» chiede se una sessione sta lavorando
 /* C1 (owner 09/10/2026 sera): «Motore del contesto» nel pannello «Memoria e contesto», che esiste solo dopo il monolite. */
 montaMotoreContesto();
+montaFinestraPiena();
+montaDoveGiranoDiSerie();
 /* 11/10/2026 (owner: link cliccabili con conferma del sito): i siti che si aprono senza chiedere, in «Sicurezza e privacy». */
 montaSitiFidati();
 

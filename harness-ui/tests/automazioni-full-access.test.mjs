@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { talosLavora } from '../src/kernel/talosHarness.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 /*
  * ⭐ FULL ACCESS NON CHIEDE (owner 12/10/2026 «per legge»; quarta tornata 17/10, due consigliate). In «Full access» la carta delle
@@ -16,7 +17,7 @@ function fornitore(chiamate) {
   const richieste = [];
   let n = 0;
   const fetchDiRete = async (_url, init) => {
-    richieste.push(JSON.parse(init.body));
+    richieste.push(corpoSenzaMarcatori(init.body));
     n += 1;
     const message = n === 1
       ? { role: 'assistant', content: null, tool_calls: chiamate.map(([id, name, args]) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } })) }

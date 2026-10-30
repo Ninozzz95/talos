@@ -62,8 +62,25 @@ import { talosSafeFileStem } from './document-filename.mjs';
  *   un'immagine, manda comunque il suo prompt a openrouter.ai. Sta scritto qui perché la prossima
  *   persona che legge questo file lo sappia senza doverlo scoprire.
  */
-const OPENROUTER_IMAGES_URL = 'https://openrouter.ai/api/v1/images';
-const OPENROUTER_CHAT_URL = 'https://openrouter.ai/api/v1/chat/completions';
+/*
+ * ⛔ L-1 del kit dello stress test (29/10/2026; owner 29/10 sera, «anche le immagini all'indirizzo scelto», la stessa regola di Z.AI
+ *   del 14/10: «la chiave solo all'indirizzo scelto»). Con OpenRouter impostato su un altro indirizzo (un proxy, un server della
+ *   persona) la chat lo rispettava e le immagini no: la CHIAVE andava a openrouter.ai. Ora le due strade partono dalla stessa base
+ *   della chat (`endpoint` del registro dei fornitori, senza barra finale) più `/images` o `/chat/completions`; senza un indirizzo
+ *   scelto resta quello di serie. Se quell'indirizzo non sa fare immagini, l'errore del fornitore lo dice (TALOS_IMAGE_UPSTREAM_ERROR).
+ */
+const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
+
+/** La base delle immagini dal runtime di OpenRouter del registro: solo un indirizzo SCELTO e http(s) valido, altrimenti `null`. */
+export function baseImmaginiOpenRouter(runtime) {
+  if (!runtime || runtime.endpointConfigured !== true || typeof runtime.endpoint !== 'string') return null;
+  try {
+    const u = new URL(runtime.endpoint);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+  } catch { return null; }
+  return runtime.endpoint.replace(/\/+$/u, '');
+}
+const indirizzo = (baseUrl, percorso) => `${(typeof baseUrl === 'string' && baseUrl ? baseUrl : OPENROUTER_BASE).replace(/\/+$/u, '')}${percorso}`;
 
 /** ⭐ Le tre forme che il tool del kernel offre — stesso vocabolario di `mobile/src/lib/images/imageTools.ts` (`SHAPES`), non un terzo nuovo. */
 export const ASPECT_RATIO_PER_FORMA = Object.freeze({ square: '1:1', portrait: '9:16', landscape: '16:9' });
@@ -82,10 +99,10 @@ async function leggiCorpoJson(risposta, dove) {
   }
 }
 
-async function chiamaImmaginiDedicato({ prompt, shape, modello, chiave }, fetchFn) {
+async function chiamaImmaginiDedicato({ prompt, shape, modello, chiave, baseUrl }, fetchFn) {
   let risposta;
   try {
-    risposta = await fetchFn(OPENROUTER_IMAGES_URL, {
+    risposta = await fetchFn(indirizzo(baseUrl, '/images'), {
       method: 'POST',
       headers: { Authorization: `Bearer ${chiave}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: modello, prompt, aspect_ratio: ASPECT_RATIO_PER_FORMA[shape] ?? '1:1' }),
@@ -102,10 +119,10 @@ async function chiamaImmaginiDedicato({ prompt, shape, modello, chiave }, fetchF
   return { mediaType: typeof voce.media_type === 'string' && voce.media_type ? voce.media_type : 'image/png', bytes: Buffer.from(voce.b64_json, 'base64') };
 }
 
-async function chiamaImmaginiNativo({ prompt, modello, chiave }, fetchFn) {
+async function chiamaImmaginiNativo({ prompt, modello, chiave, baseUrl }, fetchFn) {
   let risposta;
   try {
-    risposta = await fetchFn(OPENROUTER_CHAT_URL, {
+    risposta = await fetchFn(indirizzo(baseUrl, '/chat/completions'), {
       method: 'POST',
       headers: { Authorization: `Bearer ${chiave}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: modello, messages: [{ role: 'user', content: prompt }], modalities: ['text', 'image'] }),
@@ -133,10 +150,10 @@ async function chiamaImmaginiNativo({ prompt, modello, chiave }, fetchFn) {
  */
 export async function generaImmagineOpenRouter(spec, deps = {}) {
   const fetchFn = deps.fetchFn ?? fetch;
-  const { prompt, shape, modello, nativo, chiave } = spec;
+  const { prompt, shape, modello, nativo, chiave, baseUrl = null } = spec;
   const { mediaType, bytes } = nativo
-    ? await chiamaImmaginiNativo({ prompt, modello, chiave }, fetchFn)
-    : await chiamaImmaginiDedicato({ prompt, shape, modello, chiave }, fetchFn);
+    ? await chiamaImmaginiNativo({ prompt, modello, chiave, baseUrl }, fetchFn)
+    : await chiamaImmaginiDedicato({ prompt, shape, modello, chiave, baseUrl }, fetchFn);
   // ⭐ un nome file leggibile dal prompt, mai "immagine-<uuid>" — stesso principio di talosSafeFileStem già in uso per document-generator.mjs.
   const fileStem = talosSafeFileStem(prompt, 80, 'immagine');
   return { mediaType, bytes, fileStem };

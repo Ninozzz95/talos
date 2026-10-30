@@ -77,6 +77,7 @@
  */
 import { interpola, linguaCorrenteDiT, t } from './lingua.js';
 import { TESTI } from '../i18n/testi/index.js';
+import { conToken } from './context-separator.js'; // L1 1.3: il numero con la sua unità, al plurale giusto
 
 /** I numeri nella lingua corrente (stesso uso di `capability.js`: italiano con il punto delle migliaia, altrimenti inglese). */
 const numeroLocale = (n) => Number(n).toLocaleString(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
@@ -266,6 +267,22 @@ const CHATGPT_DA_RIPROVARE = new Set(['CHATGPT_RETE', 'CHATGPT_RINNOVO_FALLITO',
 
 /** Il codice tecnico e il messaggio grezzo, come li manda il server. */
 const REGOLE = [
+  /*
+   * §4.2, regola N (owner 22/10/2026; bozzetto «Invia come allegato» approvato il 29/10, «Sì, così»): il messaggio della persona da solo
+   *   non entra nella finestra del modello. Il server si è fermato PRIMA di pagare (`richiesta-troppo-grande.mjs`) e lo dice col suo
+   *   codice e i suoi numeri, già nella lingua dell'interfaccia (`server.run.requestTooLarge`): qui la carta li usa così come sono.
+   *   `allegabile` (dati del RunError, passati da chi disegna) decide se c'è il pulsante: con immagini o un testo corto non c'è niente da
+   *   togliere, e la carta lo dice invece di offrire un gesto che fallirebbe. Tono d'attenzione, non rosso: non è un guasto.
+   */
+  {
+    id: 'richiesta-troppo-grande', famiglia: 'richiesta-troppo-grande', riconosce: (_testo, code) => code === 'REQUEST_TOO_LARGE',
+    spiega: (tecnico, _codice, contesto = {}) => ({
+      cosa: t('errori.turno.troppoGrande.cosa'),
+      perche: [tecnico, t('errori.turno.troppoGrande.nienteInviato')].filter(Boolean).join(' '),
+      rimedi: [t(contesto?.allegabile === true ? 'errori.turno.troppoGrande.comeAllegato' : 'errori.turno.troppoGrande.accorcia')],
+      allegabile: contesto?.allegabile === true,
+    }),
+  },
   ...[
     { codice: 'PROVIDER_BUDGET_OCCUPIED', id: 'budget-occupato', chiave: 'budgetOccupato', rimedi: ['rimedio1'] },
     { codice: 'PROVIDER_KEY_SPEND_LIMIT', id: 'limite-spesa-chiave', chiave: 'limiteSpesaChiave', rimedi: ['rimedio1', 'rimedio2'] },
@@ -519,6 +536,28 @@ const REGOLE = [
     },
   },
   {
+    /*
+     * L1 1.3 (owner 26/10/2026, bozzetto approvato) — «Chiedimi»: la finestra del modello locale si potrebbe allargare, ma la persona
+     *   ha scelto di decidere ogni volta. Il server NON ha riassunto (codice suo, `LOCAL_WINDOW_ASK`): la carta dice i numeri PRIMA
+     *   del clic e offre le due strade (azioni in `app.js`: «Allarga la finestra», «Riassumi»).
+     */
+    id: 'finestra-da-scegliere',
+    riconosce: (t, codice) => codice === 'LOCAL_WINDOW_ASK' || /LOCAL_WINDOW_ASK/u.test(t),
+    spiega: (testo) => {
+      const n = [...String(testo).matchAll(/\((\d+) tokens\)|with (\d+) tokens/gu)].map((m) => Number(m[1] ?? m[2]));
+      const [servono, finestra, dopo] = n;
+      return {
+        cosa: t('errori.turno.finestraDaScegliere.cosa'),
+        perche: servono && finestra && dopo
+          ? t('errori.turno.finestraDaScegliere.percheMisura', { chiesti: conToken(servono), finestra: conToken(finestra), dopo: conToken(dopo) })
+          : t('errori.turno.finestraDaScegliere.perche'),
+        rimedi: [],
+        servono: Number.isSafeInteger(servono) ? servono : null,
+        dopo: Number.isSafeInteger(dopo) ? dopo : null,
+      };
+    },
+  },
+  {
     id: 'contesto-pieno',
     // 25/09 sera: anche il motore locale pieno, che sale col suo codice e i numeri in italiano (runtime-owner-adapter.mjs)
     // F1 della CLI (16/10/2026): anche la frase dell'adattatore dei fornitori, col marcatore `context_length_exceeded`
@@ -528,10 +567,15 @@ const REGOLE = [
       const chiesti = Number(numeri[1]) || null;
       const finestra = Number(numeri[2]) || Number((/n_ctx"?\s*:\s*(\d+)/i.exec(testo) || [])[1]) || null;
       return {
+        /* Revisione blocco 4 (A-8): la carta del bozzetto («Choose another model») è dei modelli LOCALI, dove la finestra è già cresciuta
+           o il riassunto è già stato provato; un modello in cloud tiene «Compatta ora» come prima. */
+        locale: /exceed_context_size|exceeds the available context size|\bLOCAL_CONTEXT_EXCEEDED\b/i.test(testo),
         cosa: t('errori.turno.contestoPieno.cosa'),
         perche: chiesti && finestra
           ? t('errori.turno.contestoPieno.percheMisura', { chiesti: numeroLocale(chiesti), finestra: numeroLocale(finestra) })
           : t('errori.turno.contestoPieno.perche'),
+        /* L1 1.3 (26/10/2026): la carta arriva DOPO che la finestra si è già allargata da sola o il riassunto è già stato provato;
+           niente più «--ctx-size» (owner: nomi tecnici e un gesto che dall'app non si fa). */
         rimedi: [
           t('errori.turno.contestoPieno.rimedio1'),
           t('errori.turno.contestoPieno.rimedio2'),
@@ -577,6 +621,27 @@ const REGOLE = [
         t('errori.turno.modelloNonEntra.rimedio2'),
       ],
     }),
+  },
+  {
+    /*
+     * ⛔ 27/10/2026 (G-R6, revisione del blocco 10) — il router del motore locale non risponde e taskkill non l'ha fermato: il modello
+     *   NON si carica una seconda volta accanto alla sua copia. Prima arrivava come `RUNTIME_PROCESS_FAILED` e diventava la carta
+     *   «non ancora tradotta» con «Riprova il giro»: il rimedio sbagliato, riprovare aspetta lo stesso router incantato. Il server ha ora
+     *   un codice suo; la frase inglese di prima (storie salvate) si riconosce anche dal testo.
+     */
+    id: 'router-non-fermato',
+    riconosce: (t, codice) => codice === 'RUNTIME_ROUTER_NOT_STOPPED' || /\bRUNTIME_ROUTER_NOT_STOPPED\b|router does not answer and could not be stopped/u.test(t),
+    spiega: (testo) => {
+      const modello = /, so (.+?) was not loaded a second time beside it/u.exec(String(testo))?.[1];
+      return {
+        cosa: t('errori.turno.routerNonFermato.cosa'),
+        perche: t('errori.turno.routerNonFermato.perche', { modello: modello ?? t('errori.turno.routerNonFermato.modelloGenerico') }),
+        rimedi: [
+          t('errori.turno.routerNonFermato.rimedio1'),
+          t('errori.turno.routerNonFermato.rimedio2'),
+        ],
+      };
+    },
   },
   {
     /*
@@ -919,7 +984,8 @@ const MESSAGGI_DEL_KERNEL = [
   { chiave: 'errori.kernel.motoreOspiteOccupato', re: /^(?:The on-device model is busy with another job \(a chat reply or a context summary\); try again when it has finished\.|Il modello sul dispositivo è occupato con un altro lavoro \(una risposta nella chat o un riassunto del contesto\); riprova quando ha finito\.|The local model is busy answering in the chat: one reply at a time\. Try again when it has finished\.|Il modello locale sta rispondendo nella chat: una risposta alla volta\. Riprova quando ha finito\.)$/u },
   { chiave: 'errori.kernel.motoreOspiteNonAperto', re: /^(?:No local model is open in the app: open one from the model picker\.|Nessun modello locale è aperto nell’app: aprine uno dal selettore dei modelli\.)$/u },
   { chiave: 'errori.kernel.motoreOspiteCambiato', re: /^(?:Another on-device model is open now; choose it again in Code\.|Ora sul dispositivo è aperto un altro modello: sceglilo di nuovo nel Codice\.)$/u },
-  { chiave: 'errori.kernel.motoreOspiteNonRisponde', re: /^(?:The local engine in the app does not answer\.|Il motore locale dell’app non risponde\.)$/u },
+  /* 26/10/2026 (D-0146-1): la frase nuova dice cosa fare; quella di prima resta riconosciuta per le storie salvate */
+  { chiave: 'errori.kernel.motoreOspiteNonRisponde', re: /^(?:The on-device engine in the app did not answer: send the message again, the app reopens it\.|Il motore sul dispositivo non ha risposto: rimanda il messaggio, l’app lo riapre\.|The local engine in the app does not answer\.|Il motore locale dell’app non risponde\.)$/u },
   { chiave: 'errori.kernel.richiestaInterrotta', re: /^(?:The request to the provider was interrupted\.|La richiesta al fornitore è stata interrotta\.)$/u },
   { chiave: 'errori.kernel.fornitoreIrraggiungibile', re: /^(?:The provider could not be reached\.|Non è stato possibile raggiungere il fornitore\.)$/u },
   { chiave: 'errori.kernel.credenzialeNonAccettata', re: /^(?:Credential not accepted by the provider\.|Credenziale non accettata dal fornitore\.)$/u },
@@ -983,7 +1049,7 @@ export function spiegaErrore(messaggio, codice = '', contesto = {}) {
      * mettere nel GREZZO (dove va) senza mostrarlo a schermo — e per questo una regola può dettare
      * il proprio `tecnico` invece di ereditare il messaggio nudo.
      */
-    const s = regola.spiega(tecnico, codice);
+    const s = regola.spiega(tecnico, codice, contesto);
     return { id: regola.id, famiglia: regola.famiglia ?? null, origine, ...s, tecnico: s.tecnico ?? tecnico, riconosciuto: true };
   }
   return {
@@ -1013,6 +1079,8 @@ export function spiegaErrore(messaggio, codice = '', contesto = {}) {
 const VESTIZIONI = {
   'piano-chatgpt': { badge: 'errori.turno.vestizione.pianoChatgpt.badge', titolo: 'errori.turno.vestizione.pianoChatgpt.titolo', tono: 'warning' },
   'limite-fornitore': { badge: 'errori.turno.vestizione.limiteFornitore.badge', titolo: 'errori.turno.vestizione.limiteFornitore.titolo', tono: 'warning' },
+  // «Invia come allegato» (bozzetto 29/10): attenzione, come nel bozzetto; niente è stato inviato e niente si è guastato
+  'richiesta-troppo-grande': { badge: 'errori.turno.vestizione.troppoGrande.badge', titolo: 'errori.turno.vestizione.troppoGrande.titolo', tono: 'warning' },
   'esito-fornitore-incerto': { badge: 'errori.turno.vestizione.esitoIncerto.badge', titolo: 'errori.turno.vestizione.esitoIncerto.titolo', tono: 'warning' },
   fermato: { badge: 'errori.turno.vestizione.fermato.badge', titolo: 'errori.turno.vestizione.fermato.titolo', tono: 'accent' },
   // C3 tappa 4: la pausa di una delega, ambra come «In pausa» nell'elenco e nel dettaglio dell'agente

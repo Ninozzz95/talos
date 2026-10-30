@@ -1,0 +1,30 @@
+/*
+ * «Segnala un problema» (bozzetto approvato dall'owner il 29/10/2026). Solo la disposizione: pillole, campi, casella, pulsanti e modale
+ * sono i pezzi che il prodotto ha già. Colori solo dai token: chiaro e scuro vengono da soli.
+ */
+dialog.td-modal[data-segnala-problema] { width: min(640px, calc(100vw - 32px)); }
+dialog.td-modal[data-segnala-problema] .td-modal-content { display: grid; gap: 14px; }
+.talos-segnala__origine { margin: 0; }
+.talos-segnala__tipi { display: flex; flex-wrap: wrap; gap: 6px; }
+.talos-segnala__descrizione { min-height: 120px; }
+.talos-segnala__diagnostica { border: 1px solid var(--talos-border-subtle, var(--talos-border)); border-radius: var(--talos-radius-control, 10px); min-width: 0; }
+.talos-segnala__allega { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: var(--talos-font-size-xs, 13px); color: var(--talos-text); cursor: pointer; }
+.talos-segnala__righe {
+  margin: 0; padding: 10px 12px; border-top: 1px solid var(--talos-border-subtle, var(--talos-border));
+  font: 12px/1.5 var(--talos-font-mono, ui-monospace, Consolas, monospace); color: var(--talos-muted);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+/* tolta: si legge ancora (la persona vede che cosa NON parte), più tenue */
+.talos-segnala__diagnostica[data-tolta="si"] .talos-segnala__righe { opacity: .45; }
+.talos-segnala__privacy { margin: 0; }
+.talos-segnala__taglio, .talos-segnala__privato { margin: 0; }
+.talos-segnala__piede { display: flex; justify-content: flex-end; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.talos-segnala__esito { margin: 0 auto 0 0; min-height: 1.5em; }
+/* la carta in chat: una bozza, non un permesso — bordo sottile, niente colore d'allarme */
+.talos-segnala-carta {
+  display: grid; gap: 6px; margin: 8px 0; padding: 10px 12px; max-width: 560px;
+  border: 1px solid var(--talos-border-subtle, var(--talos-border)); border-radius: var(--talos-radius-card, 12px); background: var(--talos-panel-soft, transparent);
+}
+.talos-segnala-carta__titolo { font-weight: 600; }
+.talos-segnala-carta__bozza { overflow-wrap: anywhere; }
+.talos-segnala-carta__azioni { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }

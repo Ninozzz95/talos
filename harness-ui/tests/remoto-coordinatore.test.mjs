@@ -35,10 +35,10 @@ function banco(t, { binding = {} } = {}) {
     gestisci = g;
     return { id: 'pc-id', relayDiCasa: () => 'https://euc1-1.relay.n0.example/', indirizziDiretti: () => [], ferma: async () => { fermati.push(true); } };
   };
-  const crea = () => creaRemoto({
+  const crea = (inPiu = {}) => creaRemoto({
     keyring, fileImpostazioni: join(dir, 'remoto', 'impostazioni.json'), fileTelefoni: join(dir, 'remoto', 'telefoni.json'),
     chiama: async () => ({ dati: null }), sessionRegistry: { esiste: () => false }, iscriviConRigiocata: () => () => {},
-    caricaIroh: async () => binding, avviaTrasporto, nomePc: 'PC di Nino',
+    caricaIroh: async () => binding, avviaTrasporto, nomePc: 'PC di Nino', ...inPiu,
   });
   return { dir, keyring, avvii, fermati, crea, gestisci: (c) => gestisci(c) };
 }
@@ -54,12 +54,12 @@ test('IDX-01 spento di serie: nessun endpoint finché la persona non sceglie com
   assert.deepEqual(b.avvii, [], 'nessun trasporto avviato');
 });
 
-test('IDX-02 scelti i server di n0: il QR porta l\'id del PC e il relay di casa; acceso resta acceso al riavvio', async (t) => {
+test('IDX-02 scelti i server di n0: il QR porta l\'id del PC e NON il relay di casa (owner 26/10); acceso resta acceso al riavvio', async (t) => {
   const b = banco(t); const r = b.crea();
   await r.imposta({ relay: { modo: 'n0' } });
   assert.deepEqual(b.avvii, [], 'scegliere il relay non accende');
   const o = await r.apriAccoppiamento();
-  assert.match(o.qr, /^talos-remote:1\?pc=pc-id&relay=https%3A%2F%2Feuc1-1\.relay\.n0\.example%2F&t=[A-Za-z0-9_-]{22}&exp=\d+$/);
+  assert.match(o.qr, /^talos-remote:1\?pc=pc-id&t=[A-Za-z0-9_-]{22}&exp=\d+$/);
   assert.equal(b.avvii.length, 1); assert.deepEqual(b.avvii[0].relay, { modo: 'n0' });
   await r.apriAccoppiamento();
   assert.equal(b.avvii.length, 1, 'un endpoint solo, anche aprendo due QR');
@@ -73,7 +73,7 @@ test('IDX-03 il proprio talos-relay: il QR porta il SUO indirizzo; un indirizzo 
   const b = banco(t); const r = b.crea();
   await r.imposta({ relay: { modo: 'proprio', url: 'https://relay.casa-di-nino.example' } });
   const o = await r.apriAccoppiamento();
-  assert.match(o.qr, /relay=https%3A%2F%2Frelay\.casa-di-nino\.example&/);
+  assert.match(o.qr, /relay=https:\/\/relay\.casa-di-nino\.example&/);
   assert.equal((await r.stato()).relay.url, 'https://relay.casa-di-nino.example');
 });
 
@@ -141,9 +141,101 @@ test('IDX-08 talos-relay col gettone (owner 18/10): il QR porta l\'indirizzo INT
   const b = banco(t); const r = b.crea();
   await r.imposta({ relay: { modo: 'proprio', url: 'https://relay.casa-di-nino.example/?token=segreto-43' } });
   const o = await r.apriAccoppiamento();
-  assert.match(o.qr, /relay=https%3A%2F%2Frelay\.casa-di-nino\.example%2F%3Ftoken%3Dsegreto-43&/);
+  assert.match(o.qr, /relay=https:\/\/relay\.casa-di-nino\.example\/\?token=segreto-43&/);
   assert.equal(b.avvii[0].relay.url, 'https://relay.casa-di-nino.example/?token=segreto-43', 'il trasporto riceve il gettone');
   const s = await r.stato();
   assert.equal(s.relay.url, 'https://relay.casa-di-nino.example/');
   assert.doesNotMatch(JSON.stringify(s), /segreto-43/);
+});
+
+test('ACC-QR-05 (Mobile, 26/10 notte tarda) un relay scritto con spazi o lettere accentate si salva e va nel QR NORMALIZZATO: il telefono lo legge, il gettone è lo stesso', async (t) => {
+  const grezzo = 'https://relay.example/?token=con spazio+più%25e&x=y=z?w';
+  const b = banco(t); const r = b.crea();
+  await r.imposta({ relay: { modo: 'proprio', url: grezzo } });
+  const o = await r.apriAccoppiamento();
+  const normale = 'https://relay.example/?token=con%20spazio+pi%C3%B9%25e&x=y=z?w';
+  assert.equal(b.avvii[0].relay.url, normale, 'il trasporto riceve la forma normalizzata');
+  assert.equal(new URLSearchParams(o.qr.slice(o.qr.indexOf('?') + 1)).get('relay'), normale, 'il QR porta la forma normalizzata');
+  assert.doesNotMatch(normale, /[^\x21-\x7e]/u, 'niente spazi né caratteri non ASCII: `java.net.URI` del telefono la accetta');
+  assert.equal(new URL(normale).searchParams.get('token'), new URL(grezzo).searchParams.get('token'), 'il gettone letto è lo stesso');
+  /* AL CONTRARIO: un indirizzo già pulito resta com'era, senza la barra che `href` aggiungerebbe dopo il dominio (il telefono confronta
+     i relay propri come testo: un PC già accoppiato non deve sembrare un altro) */
+  const c = banco(t); const r2 = c.crea();
+  await r2.imposta({ relay: { modo: 'proprio', url: 'https://relay.casa-di-nino.example' } });
+  await r2.apriAccoppiamento();
+  assert.equal(c.avvii[0].relay.url, 'https://relay.casa-di-nino.example');
+});
+
+/* Revisione blocco 7, C-R1 (27/10/2026): il WHATWG accetta anche `https:host/percorso`, `https:/host/percorso` e `https:\\host\percorso`.
+   Lì «la persona non ha scritto `://host/`» era vero, e la barra tolta era quella del PERCORSO: l'host diventava «relay.casa.exampletalos». */
+test('ACC-QR-06 (revisione blocco 7) un relay scritto senza le due barre o con le barre rovesce, e con un percorso, tiene host e percorso', async (t) => {
+  for (const scritto of ['https:\\\\relay.casa.example\\talos?token=segreto-43', 'https:relay.casa.example/talos?token=segreto-43', 'https:/relay.casa.example/talos?token=segreto-43']) {
+    const b = banco(t); const r = b.crea();
+    await r.imposta({ relay: { modo: 'proprio', url: scritto } });
+    const o = await r.apriAccoppiamento();
+    const nelQr = new URLSearchParams(o.qr.slice(o.qr.indexOf('?') + 1)).get('relay');
+    for (const [dove, url] of [['salvato', b.avvii[0].relay.url], ['nel QR', nelQr]]) {
+      assert.equal(new URL(url).host, 'relay.casa.example', `${dove}: host cambiato in «${url}» (scritto ${scritto})`);
+      assert.equal(new URL(url).pathname, '/talos', `${dove}: percorso perso in «${url}»`);
+    }
+  }
+});
+
+/* 26/10/2026 (CLI 0.6.15, T2; contratto `spazio` con CLI e Mobile): il programma e le capacità passano da `creaRemoto` fino al telefono,
+   in `pair.code`/`pair.ok` e in `pc.info` alla riconnessione. Lungo TUTTO il filo, non solo nel servizio. */
+async function accoppiaEChiedi(b, r, op) {
+  await r.imposta({ relay: { modo: 'n0' }, acceso: true });
+  const { gettone } = await r.apriAccoppiamento();
+  const coda = []; let fine = false; const attesi = [];
+  const lettore = creaLettore(); const ricevuti = [];
+  const conn = (alpn) => ({
+    remoteId: 'tel-id', alpn, chiusa: new Promise(() => {}), chiudi() { fine = true; while (attesi.length) attesi.shift()(null); },
+    stream: { leggi: () => (coda.length ? Promise.resolve(coda.shift()) : fine ? Promise.resolve(null) : new Promise((x) => attesi.push(x))), scrivi: async (byte) => { if (fine) throw new Error('stream closed'); ricevuti.push(...lettore.aggiungi(byte)); }, finisci: async () => {} },
+  });
+  const manda = (m) => { const byte = codifica(m); const a = attesi.shift(); if (a) a(byte); else coda.push(byte); };
+  const fattoPair = b.gestisci(conn('talos-remote-pair/1'));
+  manda({ t: 'pair.hello', gettone, nome: 'Pad' });
+  await finche(async () => (await r.stato()).attese.length > 0);
+  const codice = ricevuti.find((m) => m.t === 'pair.code');
+  await r.conferma((await r.stato()).attese[0].id);
+  await finche(() => ricevuti.some((m) => m.t === 'pair.ok'));
+  const ok = ricevuti.find((m) => m.t === 'pair.ok');
+  await fattoPair;
+  fine = false; ricevuti.length = 0;
+  const fatto = b.gestisci(conn(ALPN_LAVORO));
+  manda({ t: 'req', n: 'n-info-0001', op, args: {} });
+  await finche(() => ricevuti.at(-1)?.n === 'n-info-0001');
+  const risposta = ricevuti.at(-1);
+  fine = true; while (attesi.length) attesi.shift()(null);
+  await fatto;
+  return { codice, ok, risposta };
+}
+
+test('IDX-10 il programma e le capacità di chi ospita arrivano al telefono: pair.code, pair.ok e pc.info alla riconnessione', async (t) => {
+  const b = banco(t); const r = b.crea({ programma: 'TALOS CLI', capacita: ['spazio-worktree', 'NON VALIDA!', 'spazio-worktree'] });
+  const { codice, ok, risposta } = await accoppiaEChiedi(b, r, 'pc.info');
+  assert.equal(codice.pc.programma, 'TALOS CLI');
+  assert.deepEqual(codice.pc.capacita, ['spazio-worktree'], 'solo nomi validi, senza doppioni');
+  assert.equal(ok.pc.programma, 'TALOS CLI');
+  assert.deepEqual(ok.pc.capacita, ['spazio-worktree']);
+  assert.deepEqual(risposta, { v: 1, t: 'res', n: 'n-info-0001', ok: true, data: { id: 'pc-id', nome: 'PC di Nino', programma: 'TALOS CLI', capacita: ['spazio-worktree'] } });
+});
+
+test('IDX-11 AL CONTRARIO: senza argomenti tutto come prima — «TALOS desktop» e nessun campo `capacita`', async (t) => {
+  const b = banco(t); const r = b.crea();
+  const { codice, ok, risposta } = await accoppiaEChiedi(b, r, 'pc.info');
+  assert.equal(codice.pc.programma, 'TALOS desktop');
+  assert.equal(Object.hasOwn(codice.pc, 'capacita'), false);
+  assert.equal(Object.hasOwn(ok.pc, 'capacita'), false);
+  assert.deepEqual(risposta.data, { id: 'pc-id', nome: 'PC di Nino', programma: 'TALOS desktop' });
+});
+
+test('IDX-12 (revisione blocco 2, N4) un programma vuoto o `null` da chi ospita non arriva così al telefono: «TALOS desktop»', async (t) => {
+  for (const programma of [null, '   ', 42]) {
+    const b = banco(t); const r = b.crea({ programma });
+    const { codice, ok, risposta } = await accoppiaEChiedi(b, r, 'pc.info');
+    assert.equal(codice.pc.programma, 'TALOS desktop', String(programma));
+    assert.equal(ok.pc.programma, 'TALOS desktop', String(programma));
+    assert.equal(risposta.data.programma, 'TALOS desktop', String(programma));
+  }
 });

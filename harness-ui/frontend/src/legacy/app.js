@@ -1,4 +1,5 @@
 import { createCommandPalette } from '../features/navigation/command-palette.ts';
+import { mostraCaricamentoVivo } from '../components/caricamento-vivo.js'; // owner 29/10/2026: i «Caricamento…» oltre 2 s diventano la riga viva
 import { commandById, commandDisabledReason } from '../services/commands/registry.ts';
 import { createOverlayManager } from '../design-system/overlays/manager.ts';
 import { createApiClient } from '../services/api-client.ts';
@@ -19,6 +20,7 @@ import { testiUtenteWsl, testiDoveGiranoIComandi } from '../components/utente-ws
 import { montaPastigliaPiano, mostraBenvenutoPiano } from '../components/piano-chatgpt.js'; // 11/10/2026: il piano ChatGPT nel composer
 import { creaConsensiUi, creaRemotoUi, dettaglioTelefono, disegnaTelefoni } from '../components/remoto.js'; // 18/10/2026: il controllo remoto (mockup v5); R5.12 le carte del consenso
 import { creaAnnullaFile, creaBloccoCartaAnnulla, testiCartaAnnulla } from '../components/annulla-file.js';
+import { creaCartaBozza, creaSegnalaProblema } from '../components/segnala-problema.js'; // 29/10/2026: «Segnala un problema» (due porte)
 import { creaBloccoAccendiRemoto, sceltaDelPonte, mostraErroreNelBlocco, testiCartaAccendi, creaBloccoSpegniRemoto, testiCartaSpegni, creaBloccoConfermaInChat, creaCartaAccendiDellaPersona, ponteCambiatoDallaCarta } from '../components/telefoni-chat.js'; // R5.14 (owner 23/10/2026): collegare un dispositivo dalla chat, bozzetti approvati
 import { creaBloccoElencoTelefoni, creaBloccoQrInChat, creaBloccoRemotoSpento, creaBloccoCartaRevoca, testiCartaRevoca, creaBloccoCartaQr, testiCartaQr, segnaRevocaSenzaCarta, nomeDallEsitoRevoca, chiudiQr, creaBloccoCartaCartella, testiCartaCartella, nomiDallEsitoRevocaCartella } from '../components/telefoni-chat.js'; // R5.12: i telefoni collegati dalla chat (mockup approvato 18/10) // 18/10/2026: «Annulla le modifiche ai file» (R5.11, mockup approvato)
 import { montaClicSuiLink } from '../components/conferma-link.js'; // 11/10/2026: i link della chat, col clic che chiede conferma
@@ -38,6 +40,7 @@ import {aggiornaEstensioni,collegaSchedeCapability,mostraSchedaCapability} from 
 import { aggiornaPaginaCapability, creaToolListRow } from '../components/capability.js';
 import { creaAutomationRow } from '../components/automazioni.js';
 import { aggiornaPaginaAutomazioni, apriAutomazioneNelPannello } from '../components/automazioni-sezione.js'; // 08/10/2026: la pagina come Libreria e Note (owner)
+import { RITARDO_CAMBIAMENTI_ALBERO_MS, livelliSottoCartelleSparite, livelliToccatiDalCambiamento, stessoLivello } from '../components/albero-cambiamenti.js'; // owner 28/10/2026: la scheda File non sfarfalla più
 import { vociMenuAutomazione, parolaEsitoGiro } from '../components/automazioni-v2.js'; // automazioni a due porte (owner 08/10/2026 notte)
 import { creaFoglioAutomazione } from '../components/automazione-foglio.js';
 import { eCartaAutomazione, cartaModificabile, testiCartaAutomazione, creaBloccoCartaAutomazione, segnaAutomazioneSenzaCarta } from '../components/automazione-carta.js';
@@ -62,10 +65,13 @@ import { montaRailWorkflow } from '../components/rail-workflow.js'; // F3-50, 25
 import { montaSelettoreGrafo, montaSelettoreRail } from '../components/grafo-sorgenti.js';
 import { montaCronologiaWorkflow } from '../components/workflow-history.js';
 import { applicaDecisionePiano, createPlanArtifact, parsePlanEvent } from '../components/plan-artifact.js';
+import { aggiungiCosaECambiato, creaRigaPianoSostituito, differenzeDelPiano } from '../components/piano-rivisto.js';
+import { etichettaArgomento } from '../components/etichette-argomenti.js';
 import { bozzaDaiTetti, creaCardProposta, disegnaCardProposta, leggiRicevutaProposta } from '../components/workflow-proposal-card.js'; // F3-33a, 25/09/2026
 import { creaClientProposta, testoErroreComando, testoAmbiguo } from '../components/workflow-proposal-client.js';
 import { renderizzaMarkdown } from '../components/markdown.js'; // BC-29 (12/09): il render Markdown della chat, uno solo per chat, note, libreria e ricerca
-import { creaRitmo } from '../components/ritmo-streaming.js'; // 22/10/2026: il testo che arriva a pacchetti esce a flusso continuo
+import { VALORI_LINGUA_DELLE_RISPOSTE, opzioniLingueDelleRisposte, linguaDellaDettatura } from '../components/lingue-delle-risposte.js'; // owner 28/10/2026
+import { creaRitmo, paroleCheInizianoNelTratto } from '../components/ritmo-streaming.js'; // 22/10/2026: il testo che arriva a pacchetti esce a flusso continuo
 import { avanzaScansione, chiudiInArrivo, confineDiRivelazione, creaScansione } from '../components/markdown-in-arrivo.js'; // 22/10/2026: confini, rivelazione e coda del markdown in arrivo
 import { segnaTurniDisegnati } from '../components/turni-disegnati.js'; // 22/10/2026: un turno si salta fuori vista solo dopo il suo primo disegno
 import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: al posto di window.confirm()
@@ -90,6 +96,7 @@ import { contaDiff } from '../components/review.js'; // 06/9 B2: +N −M dei fil
 import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo, nomeLeggibileAttrezzo, fraseSpecie, origineAvvisoPlugin } from '../components/nomi-attrezzi.js'; // BC-59 (17/09): la mappa dei nomi umani vive in UN posto solo — qui c'era una copia, e si era fermata al 12/09
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
+import { collegaDomandaAppiccicata } from '../components/domanda-appiccicata.js'; // 27/10/2026: la domanda ferma in cima, una sola alla volta
 import { creaChatPronte, chatParcheggiabile, campiDellaChat, ultimaSequenzaVista } from '../components/chat-pronte.js'; // B1 (owner 10/10/2026): le ultime 3 chat pronte
 import { LINGUE as LINGUE_MENU, risolviLingua, linguaDaIndirizzo, applicaLingua, etichettaLinguaRisolta, t as tr, tn as trn, elenco as elencoNellaLingua, linguaCorrenteDiT, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
 import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
@@ -112,6 +119,7 @@ import { raggruppaInHunk } from '../components/diff-hunk.js'; // PO-11 (10/09): 
 import { leggiRisultatiRicerca, creaRisultatiRicerca, creaPillolaFonti, apriModaleFonti } from '../components/risultati-ricerca.js'; // 10/09: la ricerca web si legge come una ricerca
 import { creaDiffInChat, aggiungiGiroAllaSpine, collegaNavigazioneSpina, creaApprovazione, creaNotaErrore, segnaEsitoApprovazione, creaArtefatto, creaAttesa, creaAttivita, creaAzioniMessaggio, creaBloccoCodice, aggiornaBloccoCodice, evidenziaInAttesa, creaFileScaricabile, creaFileToccati, dimensioneLeggibile, creaMessaggioTalos, creaMessaggioUtente, creaNotaSistema, creaRigaAttrezzo, creaTurno, impostaDiffAttivita, impostaEsitoRiga, impostaTonoUltimoTick, oraMessaggio, TESTI_MESSAGGIO, segnaFornitoreAValle, fornitoriAValleDi } from '../components/conversazione.js'; // 05/9 Fase 2: Conversazione — i blocchi della chat sono quelli del mockup
 import { creaRichiestaMcp, segnaEsitoRichiestaMcp } from '../components/richiesta-mcp.js'; // 02/10/2026: le richieste dei server MCP
+import { infoDelFile } from '../components/codice-esporta.js'; // 23/10/2026: il lettore dà al blocco di codice il nome vero del file
 import { collegaCronologia } from '../components/cronologia.js'; // 06/9: la barra di navigazione della conversazione
 import { fraseCercata } from '../components/frase-cercata.js'; // 07/9 O-60: la query del motore diventa una frase
 import { creaVistaViva } from '../components/browser-vivo.js'; // 07/9: lo schermo del browser pilotato dal server
@@ -120,7 +128,7 @@ import { gestoPerIlServer } from '../components/browser-gesti.js'; // 07/9: la v
 import { montaScorciatoie, normalizzaTastiScritti, riconosci, suApple, etichettaTasto } from '../components/scorciatoie.js'; // 06/9 audit: le scorciatoie scritte a schermo devono funzionare, col modificatore della piattaforma
 import { TIPO_FRAME_CONTROLLO, TIPO_FRAME_DATI, codificaFrameClient, collegaAppunti, creaCodaTasti, creaTerminaleXterm, decodificaFrameServer } from '../components/terminale-xterm.js';
 import { aCapoXterm, creaMemoSchedeAgente, idComandoVivoUnico, idSchedaAgente, schedeAgenteConMemo as schedeAgenteConMemoComponente, testoSchedaAgente } from '../components/terminale-agente.js'; // PO-10 passo 2 (02/10/2026) → BUG-23 (06/10): la scheda agente UNICA del Terminale // P0/A 16/09: il corpo del terminale — xterm, appunti e menu — fuori dal monolite
-import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano } from '../components/chat-foot.js';
+import { aggiornaPiedeChat, dettaglioUtile, etichettaPermesso, fondoInVista, nomeModelloUmano, registraModelliLocali } from '../components/chat-foot.js';
 import { progettiConSessioni } from '../components/progetti.js'; // 06/9: la voce «Progetti» aveva un contatore e nessuna pagina (il montaggio è in sezioni-adattatori.js)
 import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i suggerimenti sono nostri, col tema e con la tastiera
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
@@ -133,11 +141,12 @@ import { sembraHtml, testoLeggibile } from '../components/testo-pagina.js'; // 0
 import { frasiRitratto, avvisoRitratto } from '../components/cartella-ritratto.js'; // 06/9 F9/F10/F19-F21: cosa c'e' nella cartella
 import { sommaUsage, usageDellaSessione } from '../components/consumo-sessione.js'; // 06/9 CB-04: il consumo della SESSIONE, non dell'ultimo invio
 import { contextUsageFromEvents } from '../../../../context-engine/src/usage.mjs';
-import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, chipDegliAllegati, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato } from '../components/allegati.js';
+import { VIE_ALLEGATO, TETTI_ALLEGATI, allegatoPesante, chipDegliAllegati, costoAllegato, costoTotale, frasiTetti, nomeBreveAllegato, relativoNellaRadice } from '../components/allegati.js';
 import { bollaDaInviare, bollaPerLaRigiocata } from '../components/bolla-della-persona.js'; // C09 (10/10/2026): la bolla della persona anche dopo una ricarica
 import { creaAnteprimaImmagine, payloadImmagini } from '../components/immagini-chat.js';
 import { versioniDelPunto, storiaDelRamo, eventiFinoAlGiro, eUnRiprova, puntoDelTaglio, pezziDegliAllegati, consegnaConAllegati } from '../components/rami.js'; // 24/10: rami di Riprova / Modifica (sera: cure REV4)
 import { creaLettore } from '../components/lettore/lettore.js'; // F5 File reader (26/09/2026): il lettore dei file, nel rail e a schermo intero
+import { percorsoDiAnteprima, htmlDiAnteprima, POLITICA_HTML_ANTEPRIMA } from '../components/anteprima-domanda.js'; // owner 29/10/2026: l'anteprima nelle domande
 import { creaSchedaGithub } from '../components/scheda-github.js'; // F6-1 (26/09/2026): la scheda «GitHub», parte locale
 import { apriConfermaRun, conseguenzeAnnulla } from '../components/controlli-run.js';
 import { nodiRichiestaInviata, nodiCosaHaTenuto } from '../components/contesto-finestre.js'; // C1 (10/10): le finestre della scheda Contesto
@@ -147,10 +156,10 @@ import { caricatoreOffice, fonteDaCartella } from '../components/lettore/fonti.j
 import { montaContextCompactor } from '../components/context-compactor.js';
 import { finestraDiContesto } from '../components/contesto.js'; // 09/09: la finestra è UNA SOLA — la colonna destra e la modale leggono lo stesso descrittore
 import { creaContestoTrascrizione, trascriviEventoInterno } from '../components/trascrizione-eventi-interni.js'; // R-04 (17/10/2026): il trascritto esportato non mostra la contabilita
-import { aggiornaSeparatoreContesto, aggiornaSeparatoreLegacy, alternaRiassuntoLegacy } from '../components/context-separator.js'; // F5, 24/09/2026: il separatore esteso al legacy
+import { aggiornaSeparatoreContesto, aggiornaSeparatoreLegacy, alternaRiassuntoLegacy, aggiornaRigaFinestraLocale, EVENTO_FINESTRA_LOCALE, conToken } from '../components/context-separator.js'; // F5, 24/09/2026: il separatore esteso al legacy
 import { createContextClient } from '../services/context-client.js';
 import { createContextMonitor } from '../services/context-monitor.js';
-import { aggiornaAvanzamentoContesto, aggiornaAvanzamentoLegacy, ridisegnaRigaVivaNellaLingua } from '../components/context-progress.js'; // F5, 24/09/2026: la barra anche per il legacy
+import { aggiornaAvanzamentoContesto, aggiornaAvanzamentoLegacy, ridisegnaRigaVivaNellaLingua, durataBreveRigaViva } from '../components/context-progress.js'; // F5, 24/09/2026: la barra anche per il legacy
 import { montaFasciaObiettivo, aggiornaFasciaObiettivo, sceltaPer as sceltaFasciaObiettivo, ricordaScelta as ricordaSceltaFasciaObiettivo, chiaveDelloStato as chiaveDelloStatoObiettivo } from '../components/obiettivo-fascia.js'; // /goal G6, 15/10/2026: la fascia dell'obiettivo
 import { creaCartaObiettivo, comandoObiettivo, stessiControlli } from '../components/obiettivo-carta.js'; // /goal G6: la carta di conferma dei controlli e `/goal`
 import { EVENTO_MCP_AVVIO, creaRicordoAvvisiMcp, nuoviServerNonPartiti, creaNotaMcpNonPartito } from '../components/avviso-mcp.js'; // owner 17/10/2026: un server MCP che non parte si dice in chat
@@ -161,6 +170,7 @@ import { montaGuscioLaboratorio } from '../components/lab-cornice-v3.js'; // 18/
 import { montaSchedaModello, idDelDownload } from '../components/scheda-modello.js'; // 18/09 corsia 4: la pagina del modello (scheda HF, file, compatibilità) — la monta `apriPaginaModello`
 import { creaBloccoCartaInvioFile, testiCartaInvioFile, statoOfferta, statoTroppoGrande, mettiStatoSullaScheda, aggiungiPiuAllaScheda, vociInvio, vociSceltaDispositivo, datiDallEsitoInvio, datiDalTroppoGrande, chiaveDelRifiutoInvio } from '../components/invio-file-chat.js'; // R5.13 corsa 2 (24/10/2026): mandare un file a un dispositivo, bozzetti approvati D1-D8
 import { creaMenuContestuale, apriMenuContestuale } from '../components/schede.js'; // R5.13 corsa 2: il menu del file (lo stesso menu dei messaggi e del Terminale)
+import { decidiStop, apriMenuStop } from '../components/menu-stop.js'; // owner 29/10/2026: lo Stop coi sotto-agenti al lavoro
 import { tieniInVistaScheda } from '../components/schede.js'; // 26/09 F6-1: la fila della colonna destra scorre, e la scheda attiva resta in vista
 import { impostaNomiNoti, scriviNomeConNumero } from '../components/nome-con-numero.js'; // 15/10/2026 (owner): il «-2» di un doppione resta in vista
 import { creaPillolaRagionamento, livelliDaMostrare, statoDelLivello } from '../components/pillola-ragionamento.js'; // 24/10/2026 (owner): la pillola del ragionamento nel compositore
@@ -438,6 +448,9 @@ const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP
       browserIndice: -1,
       /** 06/9 K-I — le pagine aperte DALLA PERSONA dentro TALOS (cornice viva), le letture chiuse come schede, la scheda attiva, la richiesta di lettura in attesa di una decisione. */
       browserVive: [],
+      /** Owner 27/10/2026: i server locali della conversazione per porta, e la riga in chat di ciascuno (`toolCallId:porta` → elemento). */
+      serverLocali: new Map(),
+      righeServerLocali: new Map(),
       browserChiuse: new Set(),
       browserAttiva: null,
       browserRichiesta: null,
@@ -593,6 +606,7 @@ const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP
   const composerInput = $('#composerInput');
   const composerForm = $('#composerForm');
   const redirectRunButton = $('#redirectRunButton');
+  const fermaAgentiButton = $('#fermaAgentiButton'); // owner 29/10/2026 sera: Stop anche a chat ferma
   const sendButton = $('.send-btn', composerForm);
   const queuedMessage = $('#queuedMessage');
   const bivioInvio = $('.talos-bivio'); // 06/9 B14 — il bivio esplicito dell'Invio durante un giro
@@ -892,6 +906,12 @@ const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP
   let treeRenderNeedsRerun = false;
   /* ⛔ BC-42 — «l'albero ha qualcosa da rileggere, ma nessuno lo sta guardando». Vedi `programmaRenderAlberoReale`. */
   let alberoDaRidisegnare = false;
+  /* Owner 28/10/2026 («la tab file flickera»): i `WorkspaceChanged` si raccolgono qui per 500 ms, poi un giro solo li confronta
+     con ciò che è a schermo. Vedi `accodaCambiamentiAlbero`. */
+  let cambiamentiAlbero = null; // { generation, percorsi: Set<string> }
+  let cambiamentiAlberoTimer = null;
+  let verificaAlberoInVolo = null;
+  const listeAlberoVecchie = new WeakSet(); // le liste di cartelle chiuse il cui contenuto è cambiato: si rileggono alla riapertura
   let sessionListRefreshTimer = null;
 
   if (HOST().classList.contains('talos-embedded')) {
@@ -1470,19 +1490,6 @@ const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP
     return scelta === 'typewriter' || scelta === 'fade' ? scelta : 'none';
   }
 
-  /**
-   * C'è testo arrivato e non ancora a schermo in un messaggio montato? (il ritmo lo sta ancora srotolando, al più 260 ms). Per chi
-   * misura la posizione di qualcosa che il testo in arrivo può ancora spostare (l'avviso «Piano aggiornato»).
-   */
-  function testoStreamingIndietro() {
-    for (const [messageId, statoRender] of state.realSession.renderIncrementale) {
-      const grezzo = state.realSession.testoGrezzoMessaggi.get(messageId);
-      if (typeof grezzo !== 'string' || statoRender.mostrato >= grezzo.length) continue;
-      if (state.realSession.messageElements.get(messageId)?.isConnected) return true;
-    }
-    return false;
-  }
-
   /** Lo stato del disegno di UN messaggio: uno solo, ovunque nasca (prima lo stesso oggetto era scritto a mano in tre punti). */
   function nuovoStatoRender() {
     return { prefisso: null, nodiCoda: [], mostrato: 0, ultimoTickMs: null, paroleRecenti: [], fineRicevuta: false, ritmo: null, scansione: null, coda: null };
@@ -1540,7 +1547,9 @@ const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP
     if (nuovo > proposto) r.allinea(nuovo); // un segno che non si vede è passato in un colpo: il ritmo non lo ripaga in tempo
     statoRender.mostrato = nuovo;
     if (ritmo.perParola && nuovo > precedente) {
-      const nuoveParole = contaParole(testo.slice(precedente, nuovo));
+      // 28/10/2026: le parole che COMINCIANO nel tratto, non quelle che ci stanno dentro (una parola spezzata contava due volte e
+      // il tempo in più ricolorava le parole già a schermo: `paroleCheInizianoNelTratto`, come Streamdown)
+      const nuoveParole = paroleCheInizianoNelTratto(testo, precedente, nuovo);
       for (let k = 0; k < nuoveParole; k += 1) statoRender.paroleRecenti.push(ora);
     }
     if (ritmo.perParola) {
@@ -1658,7 +1667,8 @@ const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP
     }
     const arretrato = testoGrezzo.length - statoRender.mostrato;
     /* la coda si disegna coi segni aperti chiusi per finta finché il messaggio sta arrivando; il testo finale, esatto */
-    renderizzaMarkdownIncrementale(copia, statoRender, testoGrezzo.slice(0, statoRender.mostrato), { inArrivo: !(statoRender.fineRicevuta && arretrato === 0) });
+    const finito = Boolean(statoRender.fineRicevuta && arretrato === 0);
+    renderizzaMarkdownIncrementale(copia, statoRender, testoGrezzo.slice(0, statoRender.mostrato), { inArrivo: !finito, finito });
     if (modalita === 'fade') avvolgiParoleRecenti(copia, statoRender.paroleRecenti, t0);
     /*
      * ⛔⛔⛔ 02/9 — owner: "il logo di caricamento deve esistere fino a
@@ -1817,11 +1827,18 @@ const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP
     }
     const generation = state.realSession.generation;
     cancellaRenderAlberoDifferito();
-    treeRenderTimer = window.setTimeout(() => {
+    const quandoTocca = () => {
       treeRenderTimer = null;
       if (generation !== state.realSession.generation) return;
+      /* Owner 28/10/2026: mentre la persona rinomina una riga, un ridisegno automatico le porterebbe via il campo sotto le dita.
+         Come VS Code (`explorerService.ts`, `setEditable` ferma il giro dei cambiamenti): si aspetta che finisca, e poi si disegna. */
+      if (document.querySelector('#inspector-files .ft-node[data-rinomina-in-corso="si"]')) {
+        treeRenderTimer = window.setTimeout(quandoTocca, RITARDO_CAMBIAMENTI_ALBERO_MS);
+        return;
+      }
       void renderizzaAlberoReale();
-    }, 60);
+    };
+    treeRenderTimer = window.setTimeout(quandoTocca, 60);
   }
 
   function programmaAggiornamentoElencoSessioniReali() {
@@ -3121,7 +3138,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     },
     suCambio: (stato, dettagli) => {
       aggiornaStatoConnessione(barraStatoChat, stato, dettagli);
-      if (stato === 'ricollegato') linguaDettaAlServer.clear(); // K3b: un server ripartito non sa più la lingua dell'interfaccia
+      /* K3b: un server ripartito non sa più la lingua dell'interfaccia; R13-D (revisione del blocco 13, 28/10): né quella delle risposte,
+         che tiene solo in memoria — senza dimenticarla qui, dopo un riavvio la lingua scelta tornava Automatica in silenzio. */
+      if (stato === 'ricollegato') { linguaDettaAlServer.clear(); linguaRisposteDettaAlServer.clear(); }
       /*
        * ⛔⛔⛔ 06/9, CB-20-bis — QUI stava il buco: la sorveglianza sapeva che il server
        * non risponde e lo scriveva SOLO nella barra in fondo; la chat, che è la parte
@@ -3219,6 +3238,15 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   function fetchSorvegliata(url, init) { return apiCentrale().observedFetch(url, init); }
 
   // REAL_DATA_RENDER_START
+  /* Owner 29/10/2026, bozzetto «Caricamenti vivi» («Testo fermo, poi riga viva»): un «Caricamento…» che dura oltre 2 s diventa la
+     riga dell'attesa in chat coi secondi (`components/caricamento-vivo.js`). `chiave`: i pannelli che si ridisegnano non ricominciano da zero. */
+  function elementoCaricamento(tagName, className, testo, chiave) {
+    const node = document.createElement(tagName);
+    if (className) node.className = className;
+    mostraCaricamentoVivo(node, testo, { chiave });
+    return node;
+  }
+
   function textElement(tagName, className, value) {
     const element = document.createElement(tagName);
     if (className) element.className = className;
@@ -3308,17 +3336,17 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * grezzo. ⛔ Il montaggio sta qui e non nel componente: la copia di TALOS mostra anche la conferma
    * in pagina, che il componente da solo non conosce.
    */
-  function costruisciBloccoCodice(testoCodice, linguaggioDichiarato, chiuso, { rinvia = null } = {}) {
+  function costruisciBloccoCodice(testoCodice, linguaggioDichiarato, chiuso, { rinvia = null, info = '', senzaColori = false } = {}) {
     return creaBloccoCodice(
-      { testo: testoCodice, linguaggio: linguaggioDichiarato, chiuso },
-      { copia: (testo) => copyText(testo, tr('app.common.codeCopied')), ...(rinvia ? { rinvia } : {}) },
+      { testo: testoCodice, linguaggio: linguaggioDichiarato, chiuso, info }, // `info`: la riga d'apertura, per il nome del file da scaricare
+      { copia: (testo) => copyText(testo, tr('app.common.codeCopied')), ...(rinvia ? { rinvia } : {}), ...(senzaColori ? { evidenzia: () => null } : {}) },
     );
   }
   /* B1 (09/10/2026 sera): SOLO i messaggi della chat rinviano il colore durante la rigiocata — il confine e «Mostra precedenti»
      colorano la colonna della chat e nient'altro. Il lettore di file e il Laboratorio usano `costruisciBloccoCodice` senza
      rinvio, e colorano subito anche in rigiocata o a una riconnessione (review del desktop, Y1). Se il confine non arriva mai
      (flusso rotto, server vecchio) il codice della chat resta TESTO leggibile e copiabile, senza colore, fino al prossimo replay. */
-  const bloccoCodiceDellaChat = (testoCodice, linguaggioDichiarato, chiuso) => costruisciBloccoCodice(testoCodice, linguaggioDichiarato, chiuso, { rinvia: () => state.realSession.inRigiocata });
+  const bloccoCodiceDellaChat = (testoCodice, linguaggioDichiarato, chiuso, info = '') => costruisciBloccoCodice(testoCodice, linguaggioDichiarato, chiuso, { rinvia: () => state.realSession.inRigiocata, info });
 
   /*
    * ⛔ 12/09 (BC-29) — IL RENDERER NON VIVE PIÙ QUI. Le 153 righe che stavano in questo punto sono
@@ -3390,14 +3418,15 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
 
   /** La coda cresce sul posto se ha ancora la forma di prima: vero se l'ha fatto, falso se va ridisegnata. */
-  function aggiornaCodaSulPosto(statoRender, testoCoda, scansione, inArrivo) {
+  function aggiornaCodaSulPosto(statoRender, testoCoda, scansione, inArrivo, finito = false) {
     const coda = statoRender.coda;
     if (!coda || !coda.nodo.isConnected || statoRender.nodiCoda[0] !== coda.nodo) return false;
     if (coda.tipo === 'recinto') {
       if (!scansione.dentroFence) return false;
       const codice = testoCoda === coda.apertura ? '' : testoCoda.startsWith(`${coda.apertura}\n`) ? testoCoda.slice(coda.apertura.length + 1) : null;
       if (codice === null) return false;
-      aggiornaBloccoCodice(coda.nodo, { testo: codice, chiuso: false });
+      /* a messaggio finito un recinto mai chiuso (risposta troncata) non arriva più: si copia e si esporta (revisione F12) */
+      aggiornaBloccoCodice(coda.nodo, { testo: codice, chiuso: finito });
       return true;
     }
     if (coda.tipo === 'tabella') {
@@ -3430,14 +3459,16 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     return false;
   }
 
-  function renderizzaMarkdownIncrementale(contenitore, statoRender, testoGrezzo, { inArrivo = false } = {}) {
+  /* `finito`: SOLO chi sa che il testo è intero (il messaggio della chat, `fineRicevuta` e niente arretrato) lo dice. Il ragionamento
+     disegnato a pezzi chiama senza opzioni e il suo testo può essere a metà: lì un recinto aperto resta aperto. */
+  function renderizzaMarkdownIncrementale(contenitore, statoRender, testoGrezzo, { inArrivo = false, finito = false } = {}) {
     const testo = String(testoGrezzo ?? '');
     const scansione = statoRender.scansione || (statoRender.scansione = creaScansione());
     const confine = avanzaScansione(scansione, testo, testo.length);
     const stabile = testo.slice(0, confine);
     const testoCoda = testo.slice(confine);
     if (statoRender.prefisso !== null && stabile.length === statoRender.prefisso.length && stabile === statoRender.prefisso
-      && aggiornaCodaSulPosto(statoRender, testoCoda, scansione, inArrivo)) return;
+      && aggiornaCodaSulPosto(statoRender, testoCoda, scansione, inArrivo, finito)) return;
     statoRender.coda = null;
     if (statoRender.prefisso === null || !stabile.startsWith(statoRender.prefisso)) {
       contenitore.replaceChildren(renderizzaMarkdownSemplice(stabile, { bloccoCodice: bloccoCodiceDellaChat }));
@@ -3467,7 +3498,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     }
     /* finché il messaggio sta arrivando, i segni aperti dell'ultima riga si chiudono per finta (mai dentro un recinto) */
     const codaDaDisegnare = inArrivo ? chiudiInArrivo(testoCoda, { dentroFence: scansione.dentroFence }) : testoCoda;
-    const coda = renderizzaMarkdownSemplice(codaDaDisegnare, { bloccoCodice: bloccoCodiceDellaChat });
+    /* ⛔ revisione F12: finito il messaggio, un recinto rimasto aperto (risposta troncata) è il codice che c'è e non ne arriverà
+       altro: Copia e «⋯» si accendono, invece di dire «Incoming…» per sempre */
+    const bloccoDellaCoda = finito ? (t, l, _chiuso, info) => bloccoCodiceDellaChat(t, l, true, info) : bloccoCodiceDellaChat;
+    const coda = renderizzaMarkdownSemplice(codaDaDisegnare, { bloccoCodice: bloccoDellaCoda });
     statoRender.nodiCoda = [...coda.childNodes];
     contenitore.appendChild(coda);
     statoRender.coda = descriviCodaStreaming(testoCoda, scansione, statoRender.nodiCoda);
@@ -3862,6 +3896,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         onCambiaRelay: async () => { if (await montaRemoto.ui?.primaVolta()) void aggiornaRemoto(); },
         cartelleDi,
         onRevocaCartella: revocaCartellaDelDispositivo,
+        onSbloccaCartella: sbloccaCartellaDelDispositivo,
         onAggiungiCartella: (v) => { void apriSceltaCartellaPerDispositivo(v, (percorso) => consentiCartellaAlDispositivo(v, percorso)); },
       });
     }
@@ -3877,8 +3912,20 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
   async function revocaCartellaDelDispositivo(v, c) {
     try {
-      await apiCentrale().post(`/api/v1/remote/phones/${encodeURIComponent(v.id)}/folders/${encodeURIComponent(c.cartellaId)}/revoke`, {});
-      toast(tr('remoto.folders.revoked', { folder: c.nome, name: v.nome || tr('remoto.confirm.unnamed') }));
+      const esito = await apiCentrale().post(`/api/v1/remote/phones/${encodeURIComponent(v.id)}/folders/${encodeURIComponent(c.cartellaId)}/revoke`, {});
+      const nome = v.nome || tr('remoto.confirm.unnamed');
+      /* owner 27/10/2026: se restava raggiungibile è diventata BLOCCATA, e lo si dice (con la gemella, se è la stessa cartella) */
+      /* titolo come sempre; il blocco nel corpo (un solo argomento ripete il titolo nell'etichetta: vista nella prova REMOTO-CARTELLE-11) */
+      toast(tr('remoto.folders.revoked', { folder: c.nome, name: nome }), esito?.bloccata
+        ? tr(esito.stessaCartella ? 'remoto.folders.revokedSame' : 'remoto.folders.revokedBlocked', { through: esito.tramite?.nome ?? '' })
+        : '');
+    } catch (e) { toast(tr('remoto.folders.title'), erroreRemoto(e).messaggio); }
+    void aggiornaRemoto();
+  }
+  async function sbloccaCartellaDelDispositivo(v, c) {
+    try {
+      await apiCentrale().post(`/api/v1/remote/phones/${encodeURIComponent(v.id)}/folders/${encodeURIComponent(c.cartellaId)}/unblock`, {});
+      toast(tr('remoto.folders.unblocked', { folder: c.nome, name: v.nome || tr('remoto.confirm.unnamed') }));
     } catch (e) { toast(tr('remoto.folders.title'), erroreRemoto(e).messaggio); }
     void aggiornaRemoto();
   }
@@ -4221,7 +4268,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       return;
     }
     /* R5.12 (23/10): una cartella consentita o tolta dalla chat atterra anche nella schermata (Impostazioni › Dispositivi collegati) */
-    if (info.nome === 'remote_phone_folder_allow' || info.nome === 'remote_phone_folder_revoke') {
+    if (info.nome === 'remote_phone_folder_allow' || info.nome === 'remote_phone_folder_revoke' || info.nome === 'remote_phone_folder_unblock') {
       if (info.nome === 'remote_phone_folder_revoke' && / Full access: done without asking the person\./u.test(testo)) {
         const { nome, cartella } = nomiDallEsitoRevocaCartella(testo);
         segnaRevocaSenzaCarta({ riga: info.article, corpo: info.detail, nome, onApri: apriTelefoniCollegati,
@@ -5282,6 +5329,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     try {
       const data = await apiGet('/api/v1/local-models');
       state.modelLab.installed = Array.isArray(data?.items) ? data.items : [];
+      if (registraModelliLocali(state.modelLab.installed)) aggiornaPiedeChatDaStato(); // 27/10: nomi dal file del modello
     } catch (error) {
       state.modelLab.installedError = error;
       state.modelLab.installed = [];
@@ -6116,7 +6164,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * a parte chiesta da D13: vale SEMPRE, mentre i permessi valgono per sessione.
    */
   /* 18/10/2026 — «Telefoni collegati» subito dopo «Sicurezza e privacy» (owner 17/10, mockup v4-v5 del controllo remoto). */
-  const SETTINGS_SECTIONS = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'telefoni', 'models', 'costi', 'workspace', 'account'];
+  const SETTINGS_SECTIONS = ['appearance', 'chat', 'tools', 'memoria', 'privacy', 'telefoni', 'models', 'costi', 'workspace', 'account', 'aggiornamenti']; // 29/10/2026: «Aggiornamenti» a sé, solo nell'app (schema.ts, soloApp)
   const SETTINGS_SECTION_STORAGE_KEY = 'talos.harness.desktop.settings.section.v1';
 
   /** List-detail Settings: una sola categoria visibile e un solo punto di verità per il tab attivo. */
@@ -6143,6 +6191,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       [tr('app.settings.facts.messageStyle'), etichetta('messageStyle', a.messageStyle)],
       [tr('app.settings.facts.responseAnimation'), etichetta('streamingAnimation', a.streamingAnimation)],
       [tr('app.settings.facts.fullWidthChat'), a.chatFullWidth ? tr('app.settings.facts.yes') : tr('app.settings.facts.no')],
+      [tr('app.settings.facts.fullWidthQuestions'), a.userBubbleFullWidth ? tr('app.settings.facts.yes') : tr('app.settings.facts.no')],
       [tr('app.settings.facts.reasoningOpen'), state.mostraRagionamento ? tr('app.settings.facts.yes') : tr('app.settings.facts.no')],
     ]);
     const regole = Object.keys(state.permessiPerAttrezzo || impostazioni.chat.permessiPerAttrezzo || {}).length;
@@ -6976,7 +7025,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.hooks.noSession')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.hooks.loading')));
+    mount.replaceChildren(elementoCaricamento('p', 'board-empty', tr('app.board.hooks.loading'), 'bacheca:hooks'));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/hooks`);
@@ -7010,7 +7059,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.noActiveSession')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.delegations.loading')));
+    mount.replaceChildren(elementoCaricamento('p', 'board-empty', tr('app.board.delegations.loading'), 'bacheca:delegations'));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/children`);
@@ -7207,7 +7256,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const mount = $('#toolsListMount', sheetBody);
     if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
     const conSessione = Boolean(state.realSession.id);
-    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.tools.loading')));
+    mount.replaceChildren(elementoCaricamento('p', 'board-empty', tr('app.board.tools.loading'), 'bacheca:tools'));
     let dati;
     try {
       dati = await apiGet(conSessione ? `/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/tools` : '/api/v1/tools');
@@ -7375,7 +7424,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.mcp.noSession')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.mcp.loading')));
+    mount.replaceChildren(elementoCaricamento('p', 'board-empty', tr('app.board.mcp.loading'), 'bacheca:mcp'));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/mcp`);
@@ -7408,7 +7457,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.skills.noSession')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.skills.loading')));
+    mount.replaceChildren(elementoCaricamento('p', 'board-empty', tr('app.board.skills.loading'), 'bacheca:skills'));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/skills`);
@@ -7488,7 +7537,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       } else {
         mount.setAttribute('role', voci.length ? 'list' : 'group');
         mount.replaceChildren(...voci.map(rigaVoceLibreria));
-        if (!voci.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? tr('app.board.library.loading') : tr('app.board.library.none'))));
+        if (!voci.length) mount.append(caricamento && !errore ? elementoCaricamento('p', 'board-empty', tr('app.board.library.loading'), 'bacheca:library') : textElement('p', 'board-empty', errore || tr('app.board.library.none')));
       }
     }
     if (embeddedDemoOnly()) { mostra([], { errore: tr('app.board.noBackend') }); return; }
@@ -7518,7 +7567,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   async function caricaPannelloNote() {
     const mount = $('#notesListMount', sheetBody);
     if (!mount) return; // il foglio "capabilities" non è (più) quello aperto
-    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.notes.loading')));
+    mount.replaceChildren(elementoCaricamento('p', 'board-empty', tr('app.board.notes.loading'), 'bacheca:notes'));
     let dati;
     try {
       dati = await apiGet(indirizzoArchivioPersonale('notes'));
@@ -7588,7 +7637,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       } else {
         mount.setAttribute('role', attivita.length ? 'list' : 'group');
         mount.replaceChildren(...attivita.map(rigaAttivita));
-        if (!attivita.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? tr('app.board.tasks.loading') : tr('app.board.tasks.none'))));
+        if (!attivita.length) mount.append(caricamento && !errore ? elementoCaricamento('p', 'board-empty', tr('app.board.tasks.loading'), 'bacheca:tasks') : textElement('p', 'board-empty', errore || tr('app.board.tasks.none')));
       }
     }
     if (embeddedDemoOnly()) { mostra([], { errore: tr('app.board.noBackend') }); return; }
@@ -7638,7 +7687,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       } else {
         mount.setAttribute('role', memorie.length ? 'list' : 'group');
         mount.replaceChildren(...memorie.map(rigaMemoria));
-        if (!memorie.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? tr('app.board.memory.loading') : tr('app.board.memory.none'))));
+        if (!memorie.length) mount.append(caricamento && !errore ? elementoCaricamento('p', 'board-empty', tr('app.board.memory.loading'), 'bacheca:memory') : textElement('p', 'board-empty', errore || tr('app.board.memory.none')));
       }
     }
     if (embeddedDemoOnly()) { mostra([], { errore: tr('app.board.noBackend') }); return; }
@@ -7700,7 +7749,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       } else {
         mount.setAttribute('role', ricerche.length ? 'list' : 'group');
         mount.replaceChildren(...ricerche.map(rigaRicerca));
-        if (!ricerche.length) mount.append(textElement('p', 'board-empty', errore || (caricamento ? tr('app.board.research.loading') : tr('app.board.research.none'))));
+        if (!ricerche.length) mount.append(caricamento && !errore ? elementoCaricamento('p', 'board-empty', tr('app.board.research.loading'), 'bacheca:research') : textElement('p', 'board-empty', errore || tr('app.board.research.none')));
       }
     }
     if (embeddedDemoOnly()) { mostra([], { errore: tr('app.board.noBackend') }); return; }
@@ -7775,7 +7824,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       else {
         mount.setAttribute('role', 'group');
         mount.replaceChildren(...strumenti.map(s => rigaToolForgiato(s, azioni)));
-        if (!strumenti.length) mount.append(textElement('p', 'board-empty', vista.errore || (vista.caricamento ? tr('app.board.workshop.loading') : tr('app.board.workshop.none'))));
+        if (!strumenti.length) mount.append(vista.caricamento && !vista.errore ? elementoCaricamento('p', 'board-empty', tr('app.board.workshop.loading'), 'bacheca:workshop') : textElement('p', 'board-empty', vista.errore || tr('app.board.workshop.none')));
         if (vista.erroreAzione) { const errore = textElement('p', 'board-empty', vista.erroreAzione); errore.setAttribute('role', 'alert'); mount.prepend(errore); }
       }
     }
@@ -7886,7 +7935,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.plugins.noSession')));
       return;
     }
-    mount.replaceChildren(textElement('p', 'board-empty', tr('app.board.plugins.loading')));
+    mount.replaceChildren(elementoCaricamento('p', 'board-empty', tr('app.board.plugins.loading'), 'bacheca:plugins'));
     let dati;
     try {
       dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/plugins`);
@@ -8240,6 +8289,30 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     let aperto = false;
     let caricato = false;
     const gruppiAperti = new Set();
+    /*
+     * Owner 28/10/2026 (dal Mobile, «quando apro il selettore non vedo selezionato e centrato il modello in uso»; sul 4174 lo stesso):
+     *   all'apertura la riga del modello in uso va al CENTRO della lista. Come Hermes (`apps/desktop/src/app/shell/model-catalog-menu.tsx`,
+     *   copia del 22/10: la riga attiva è quella in uso, righe 516-533, e si porta in vista, riga 669), ma al centro, accordato col Mobile.
+     *   Si muove solo `listEl`, che scorre da sé (`.model-picker-list{overflow-y:auto}`): `scrollIntoView` sposterebbe anche il foglio
+     *   e la pagina. Una volta per apertura (`daCentrare`): le ridisegnate dopo (la ricerca, un gruppo aperto a mano) non tirano la lista.
+     *   Nessuna animazione: è un posto di partenza, non un movimento.
+     */
+    let gruppoInUsoAperto = false;
+    let daCentrare = true;
+    let tentativiDiCentratura = 0;
+    function centraRigaInUso() {
+      if (!daCentrare || panel.hidden) return;
+      /* il foglio che si apre da solo (`apriSubito`) disegna la lista PRIMA di essere attaccato alla pagina: misure a zero. Si riprova al
+         fotogramma dopo, al più dieci volte (un selettore mai attaccato non gira per sempre). */
+      if (!listEl.isConnected) { if (tentativiDiCentratura++ < 10) requestAnimationFrame(centraRigaInUso); return; }
+      tentativiDiCentratura = 0;
+      const riga = listEl.querySelector('.model-picker-option[aria-selected="true"]');
+      if (!riga) return;
+      daCentrare = false;
+      const lista = listEl.getBoundingClientRect();
+      const posto = riga.getBoundingClientRect();
+      listEl.scrollTop += (posto.top - lista.top) - (lista.height - posto.height) / 2;
+    }
 
     function aggiornaTriggerLabel() {
       triggerLabel.textContent = valoreScelto || etichettaVuota;
@@ -8452,6 +8525,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         }
       }
       listEl.replaceChildren(...pezzi);
+      centraRigaInUso();
     }
 
     /**
@@ -8590,7 +8664,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       if (diretta) {
         pezzi.push(...filtrati.map(rigaModello));
         listEl.replaceChildren(...pezzi);
+        centraRigaInUso();
         return;
+      }
+      /* owner 28/10/2026 (dal Mobile; foto del 4174: gruppi tutti chiusi, il modello in uso invisibile): alla prima lista con dentro il
+         modello in uso si apre il gruppo del suo autore. UNA volta: se poi la persona lo chiude, resta chiuso. */
+      if (!gruppoInUsoAperto && !cercando) {
+        const inUso = filtrati.find((m) => m.id === valoreScelto);
+        if (inUso) { gruppiAperti.add(inUso.provider); gruppoInUsoAperto = true; }
       }
       for (const [provider, modelli] of raggruppaPerProvider(filtrati)) {
         const aprireGruppo = cercando || gruppiAperti.has(provider);
@@ -8617,6 +8698,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         pezzi.push(...modelli.map(rigaModello));
       }
       listEl.replaceChildren(...pezzi);
+      centraRigaInUso();
     }
 
     /**
@@ -8666,7 +8748,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      */
     function caricaLocali() {
       return apiGet('/api/v1/local-models')
-        .then((locali) => { modelliLocali = Array.isArray(locali?.items) ? locali.items : []; erroreLocali = null; })
+        .then((locali) => { modelliLocali = Array.isArray(locali?.items) ? locali.items : []; erroreLocali = null; if (registraModelliLocali(modelliLocali)) aggiornaPiedeChatDaStato(); })
         .catch((e) => { modelliLocali = null; erroreLocali = e?.message || tr('app.modelPicker.readFailed'); })
         .finally(() => { renderFonti(); if (fonteScelta === 'locali') renderListaLocali(); });
     }
@@ -8743,7 +8825,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       aperto = true;
       panel.hidden = false;
       trigger.setAttribute('aria-expanded', 'true');
+      daCentrare = true; // owner 28/10: la riga in uso al centro, a ogni apertura
       if (!caricato) carica();
+      else renderLista();
       window.setTimeout(() => searchInput.focus(), 0);
     }
     function chiudi() {
@@ -9576,7 +9660,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const { nome: nomeUnico, cambiato: doppioneEvitato } = nomeUnicoSessione(nuovoNome, idBersaglio);
     if (idBersaglio) {
       try {
-        await apiPost(`/api/v1/sessions/${encodeURIComponent(idBersaglio)}/rename`, { nome: nomeUnico });
+        const rinominata = await apiPost(`/api/v1/sessions/${encodeURIComponent(idBersaglio)}/rename`, { nome: nomeUnico });
+        if (rinominata?.istantanea) applicaIstantaneaImpostazioni(rinominata.istantanea, idBersaglio); // owner 27/10/2026
       } catch (error) {
         toast(tr('app.common.renameFailed'), messaggioErroreUtente(error));
         return { ok: false, motivo: messaggioErroreUtente(error, tr('app.errors.retryShortly')) };
@@ -10579,7 +10664,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
 
   function aggiornaPillolaModello() {
     const span = $('[data-open-sheet="model"] span');
-    const label = piedeDelMockup() ? (nomePillolaModello(state.model) || tr('app.modelPicker.choose')) : (state.model || tr('app.modelPicker.select')); // 05/9 Fase 2: il chip mostra il nome breve
+    /* 05/9 Fase 2: il chip mostra il nome breve. Owner 28/10/2026: SOLO il nome — da dove arriva lo dice il logo della via d'accesso
+       (`chat-foot.js`, `viaDelModello`), che supera «Gemini · …» del 13/10 (L3-10) */
+    const label = piedeDelMockup() ? (nomeModelloBreve(state.model) || tr('app.modelPicker.choose')) : (state.model || tr('app.modelPicker.select'));
     if (span) span.textContent = label;
     const activeModel = $('#modelLabActiveModel');
     /* ⛔ 19/09 — L'ID GREZZO E CHI LO SERVE, accanto al nome: è ciò che la banda del laboratorio
@@ -11135,7 +11222,31 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * grafo, non una lista). Il nostro fork È già una sessione: l'albero lo dichiara invece di inventarne
    * un secondo modello.
    */
-  function nodoAlbero({ titolo, sotto, token, giri, stato = 'done', qui = false, onApri = null, azione = null }) {
+  /*
+   * ⛔ Owner 27/10/2026 («ogni riga in corso animata e col contatore dei secondi», bozzetto approvato): un nodo vivo dell'albero aveva un
+   *   pallino fermo e nessun tempo. Ora pulsa (`talos-pulse`, fermo col movimento ridotto) e dice «da 1m 35s», che scorre: l'inizio è
+   *   `inizioGiroAlle` della riga dell'elenco (l'istante del RunStarted, `session-registry.mjs`), MAI quando il nodo compare. Senza
+   *   quell'istante (una delega che non lo porta) il tempo non si inventa: resta il pallino.
+   */
+  const segnaDurataAlbero = (nodoTempo) => {
+    const da = Number(nodoTempo.dataset.alberoDa);
+    if (!Number.isFinite(da)) return;
+    const testo = tr('app.branches.liveFor', { t: durataBreveRigaViva(Math.max(0, Math.floor(Date.now() - da))) });
+    if (nodoTempo.textContent !== testo) nodoTempo.textContent = testo;
+  };
+  let orologioAlbero = null;
+  function accendiOrologioAlbero(contenitore) {
+    if (orologioAlbero || !contenitore?.querySelector?.('[data-albero-da]')) return;
+    orologioAlbero = window.setInterval(() => {
+      /* Revisione del blocco 12 (RV-REV-03): il velo chiuso resta nel DOM (`#veloAlbero`, nascosto), quindi `isConnected` non basta —
+         l'orologio si ferma anche a velo chiuso (`checkVisibility`, Chrome 105+), e `disegnaAlberoIn` lo riaccende alla prossima apertura. */
+      const aperto = contenitore.isConnected && contenitore.checkVisibility?.() !== false;
+      const tempi = aperto ? [...contenitore.querySelectorAll('[data-albero-da]')] : [];
+      if (!tempi.length) { window.clearInterval(orologioAlbero); orologioAlbero = null; return; }
+      for (const nodoTempo of tempi) segnaDurataAlbero(nodoTempo);
+    }, 1000);
+  }
+  function nodoAlbero({ titolo, sotto, token, giri, stato = 'done', qui = false, onApri = null, azione = null, daAlle = null }) {
     const nodo = document.createElement('div');
     nodo.className = `talos-tree__node${qui ? ' talos-tree__node--current' : ''}${onApri ? ' talos-tree__node--branch' : ''}`;
     nodo.setAttribute('role', 'treeitem');
@@ -11147,6 +11258,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const testo = document.createElement('span'); testo.className = 'talos-tree__text';
     testo.append(textElement('span', 'talos-tree__title', titolo), textElement('span', 'talos-tree__sub', sotto));
     const aside = document.createElement('span'); aside.className = 'talos-tree__aside';
+    const inizioMs = stato === 'live' && typeof daAlle === 'string' ? Date.parse(daAlle) : NaN;
+    if (Number.isFinite(inizioMs)) {
+      const tempo = textElement('span', 'talos-mono talos-measure talos-tree__tempo', '');
+      tempo.dataset.alberoDa = String(inizioMs);
+      tempo.setAttribute('aria-hidden', 'true'); // i secondi non si annunciano uno per uno
+      segnaDurataAlbero(tempo);
+      aside.append(tempo);
+    }
     if (token) aside.append(textElement('span', 'talos-mono talos-measure', token));
     if (Number.isFinite(giri) && giri > 0) aside.append(textElement('span', 'talos-mono talos-muted', trn('app.branches.turnsOne', 'app.branches.turnsMany', giri)));
     if (qui) aside.append(textElement('span', 'talos-badge talos-badge--accent talos-badge--sm', tr('app.branches.here')));
@@ -11199,6 +11318,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       token: soloToken(usoSessione),
       giri: usoSessione?.giri,
       stato: mia && !mia.conclusa && !mia.interrotta ? 'live' : 'done',
+      daAlle: mia?.inizioGiroAlle ?? null,
       qui: true,
     }));
     const rami = elenco.filter((v) => v.forkDa === state.realSession.id);
@@ -11209,11 +11329,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         token: soloToken(ramo.usageSessione),
         giri: ramo.usage?.giri,
         stato: !ramo.conclusa && !ramo.interrotta ? 'live' : 'done',
+        daAlle: ramo.inizioGiroAlle ?? null,
         onApri: () => { passaASessione(ramo.sessionId, ramo.taskId, ramo.nome, ramo.modello); chiudiVeloMockup('veloAlbero'); },
         azione: tr('app.branches.reopen'),
       }));
     }
     nodi.replaceChildren(...pezzi);
+    accendiOrologioAlbero(nodi);
     if (riassunto) {
       // ⛔ 07/9, misurato: dentro un ramo il piede diceva ancora «Nessun ramo» — vero alla lettera
       //    (questo ramo non ha figli) e disorientante, perché il ramo era proprio quello aperto.
@@ -11234,9 +11356,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         token: soloToken(figlio.usageSessione),
         giri: figlio.usage?.giri,
         stato: !figlio.conclusa && !figlio.interrotta ? 'live' : 'done',
+        daAlle: figlio.inizioGiroAlle ?? null,
         onApri: () => { passaASessione(figlio.sessionId, figlio.sessionId, nomeDellAgente(figlio) || figlio.sessionId); chiudiVeloMockup('veloAlbero'); },
       }));
     }
+    accendiOrologioAlbero(nodi);
     const nota = $('#veloAlberoNota .talos-scope__text', radice);
     if (nota && !rami.length && !figli.length && mia?.forkDa) {
       nota.textContent = tr('app.branches.noteLeaf');
@@ -11706,7 +11830,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
 
       latenzaMs: latenzaPrimoTokenMs(),
       costo: null,
-      modello: nomePillolaModello(state.model || state.realSession.currentRunModel), // il modello del giro se non ne e' scelto uno; L3-10: un diretto dice da dove arriva
+      /* il modello del giro se non ne e' scelto uno. Owner 28/10/2026: nella pillola SOLO il nome; l'origine la dice il logo della via
+         d'accesso (supera L3-10 del 13/10 per la pillola; il menu del ragionamento, senza logo, la scrive ancora) */
+      modello: nomeModelloBreve(state.model || state.realSession.currentRunModel),
       permesso: state.permissions,
       tema: testiTema,
     });
@@ -12020,6 +12146,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   let ultimoEventoGrafoMadre = null;
   let giroPianoProposto = false;
   let legacyPlanCard = null;
+  /* il testo di ogni scheda di piano mostrata: serve a «Cosa è cambiato» quando arriva la revisione dopo (owner 27/10/2026) */
+  const testiDeiPiani = new WeakMap();
   const GRAFO_APERTO_KEY = 'talos.grafo.aperto.v1';
   const GRAFO_TIPO_KEY = 'talos.grafo.tipo.v1:';
 
@@ -12074,7 +12202,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       : esitoMadre.type === 'RunStarted' ? nota.interrotta === true && !runRealeAttivo()
         : esitoMadre.type === 'RunError' && esitoMadre.code === 'fermato';
     return {
-      corrente: { ...nota, ultimoEsito: esitoMadre ? (esitoMadre.type === 'RunError' ? 'errore' : esitoMadre.type === 'RunFinished' ? 'concluso' : null) : nota.ultimoEsito, interrotta: interrottaMadre, motivoChiusura: esitoMadre ? (esitoMadre.code === 'fermato' ? 'fermata' : esitoMadre.code === 'in-pausa' ? 'in-pausa' : null) : nota.motivoChiusura, attivita: { chiamate, attrezzoCorrente: operazione, passi: passiMadre }, sessionId: state.realSession.id, nome: state.session || tr('app.sessions.currentFallback'), cartella: state.realSession.cartellaAssoluta || nota.cartella, conclusa: !runRealeAttivo(), inAttesaApprovazione: state.realSession.approvazioniPendenti.size, usageSessione: state.realSession.usageSessione || nota.usageSessione },
+      corrente: { ...nota, ultimoEsito: esitoMadre ? (esitoMadre.type === 'RunError' ? 'errore' : esitoMadre.type === 'RunFinished' ? 'concluso' : null) : nota.ultimoEsito, interrotta: interrottaMadre, motivoChiusura: esitoMadre ? (esitoMadre.code === 'fermato' ? 'fermata' : esitoMadre.code === 'in-pausa' ? 'in-pausa' : null) : nota.motivoChiusura, attivita: { chiamate, attrezzoCorrente: operazione, passi: passiMadre }, sessionId: state.realSession.id, nome: state.session || tr('app.sessions.currentFallback'), cartella: state.realSession.cartellaAssoluta || nota.cartella, conclusa: !runRealeAttivo(), inAttesaApprovazione: state.realSession.approvazioniPendenti.size > 0 /* revisione a blocco 3 (24/10, S3 vecchio): un NUMERO copriva il `true` del server e la madre diceva «In corso» invece di «Aspetta te» */, usageSessione: state.realSession.usageSessione || nota.usageSessione },
       sessioni: [...state.sessionSelection.available.values(), ...agentiInDiretta.values()].filter(a => a?.passoWorkflow == null), figli: state.realSession.figli || [],
       errore: figliErrore, aggiornato: figliAggiornati,
       // una richiesta senza ora (la storia non l'ha ancora detta) non divide niente: si aspetta
@@ -12099,6 +12227,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (typeof agente.padreId !== 'string' || agente.padreId !== value.parentId || agente.sessionId === id) return;
     figliLettura++; // uno snapshot HTTP partito prima dell'evento non può cancellarlo
     agentiInDiretta.set(agente.sessionId, agente);
+    syncRunComposerState(); // owner 29/10/2026: lo Stop a chat ferma segue gli agenti vivi
     if (agente.padreId === id) {
       const indice = state.realSession.figli.findIndex(a => a.sessionId === agente.sessionId);
       if (indice < 0) state.realSession.figli.push(agente); else state.realSession.figli[indice] = agente;
@@ -12933,6 +13062,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         for (const a of figli) agentiInDiretta.set(a.sessionId, { ...a, padreId: parentId });
       }
       state.realSession.figli = dati.figli;
+      syncRunComposerState(); // owner 29/10/2026: lo Stop a chat ferma segue gli agenti vivi
       figliErrore = null; figliAggiornati = new Date().toISOString();
       riprendiCarteDelleFiglie(); // C2-08: una figlia che aspetta ancora ritrova la sua carta qui
     } catch (error) {
@@ -13011,6 +13141,17 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     sendButton.title = senzaContatto ? tr('app.composer.serverDownStop') : attivo ? tr('app.composer.stopNow') : tr('app.composer.send');
     if (use) use.setAttribute('href', attivo ? '#i-stop' : '#i-send');
     redirectRunButton.hidden = !mostraPulsanteReindirizzo({ giroAttivo: attivo, haTesto });
+    /* Owner 29/10/2026 sera, «Stop anche a chat ferma» (bozzetto approvato): la chat ha risposto ma i suoi agenti lavorano ancora — il caso
+       più comune, visto dal vivo, in cui lo Stop spariva e «Ferma tutto» non si raggiungeva. A giro attivo decide lo Stop di sempre. */
+    if (fermaAgentiButton) {
+      const agentiVivi = attivo ? 0 : agentiViviDellaChat();
+      fermaAgentiButton.hidden = agentiVivi === 0;
+      if (agentiVivi > 0) {
+        const etichetta = trn('app.stopMenu.stopAgentsOne', 'app.stopMenu.stopAgentsMany', agentiVivi);
+        fermaAgentiButton.setAttribute('aria-label', etichetta);
+        fermaAgentiButton.title = etichetta;
+      }
+    }
     redirectRunButton.disabled = redirectOccupato || uploadAllegatiInCorso();
     redirectRunButton.setAttribute('aria-label', tr('app.composer.redirectWithText'));
     aggiornaParoleCodaAVista(); // ⭐ 14/09: l'azione sulla coda segue il giro — «Indirizza ora» vivo, «Invia ora» fermo
@@ -13360,6 +13501,21 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       impostaTonoUltimoTick(spine, null);
       aggiungiGiroAllaSpine(spine, { n, tick: 1, tono: 'current' });
     }
+    /*
+     * ⛔ Owner 27/10/2026 (con la foto): «la riga di ragionamento e tool attuale va prima delle risposte dei sotto-agenti, la possiamo fare
+     *   che va sempre sotto nel turno attuale?». Una NOTA che arriva mentre la riga del lavoro in corso di questo turno è ancora aperta
+     *   (la risposta di un sotto-agente, l'esito di una delega, un avviso) si mette SOPRA quella riga: la riga resta l'ultima, e gli
+     *   attrezzi che seguono continuano a confluire in lei. Come l'indicatore di Codex, che vive in fondo (`codex-rs/tui/src/bottom_pane/
+     *   mod.rs:322`, `status: Option<StatusIndicatorWidget>`) mentre tutto il resto entra nella storia sopra di lui.
+     *   La rigiocata della storia passa di qui con lo stesso segmento aperto: dopo una ricarica l'ordine è lo stesso.
+     */
+    const segmento = state.realSession.segmentoAttivo;
+    const testaDelSegmento = segmento?.turno === turno ? (segmento.wrapper?.card ?? segmento.voci?.[0]?.card ?? null) : null;
+    if (testaDelSegmento?.parentElement === messaggio && elemento !== testaDelSegmento && elemento.classList?.contains('real-session-status')
+      && !segmento.voci.some((voce) => voce.card === elemento)) {
+      messaggio.insertBefore(elemento, testaDelSegmento);
+      return elemento;
+    }
     // l'attesa resta sempre in fondo al messaggio
     const attesa = messaggio.querySelector(':scope > .talos-waiting');
     if (attesa && elemento !== attesa) messaggio.insertBefore(elemento, attesa); else messaggio.append(elemento);
@@ -13503,7 +13659,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       const bubble = articolo.querySelector('.message-bubble');
       if (bubble && (!bubble.textContent.trim() || FRASI_SOLO_IMMAGINE.has(bubble.textContent.trim()))) bubble.hidden = true;
     }
-    const chip = chipDegliAllegati(allegati.filter(a => !immagini.includes(a)), state.model);
+    const chip = chipDegliAllegati(allegati.filter(a => !immagini.includes(a)), state.model, { radice: state.realSession.cartellaAssoluta || '', base: state.realSession.cartellaBase || '' });
     if (!chip.length) return null; // ⛔ nessun allegato, nessuna riga: mai un contenitore vuoto
     const riga = document.createElement('div');
     chipDelMessaggio.set(messaggioDelleImmagini, riga); // 24/10 sera (REV4-R4): la modifica in linea la nasconde mentre mostra i suoi chip
@@ -13515,11 +13671,29 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       uno.className = 'talos-allegati-chip__uno';
       uno.setAttribute('role', 'listitem');
       if (c.titolo) uno.title = c.titolo;
-      uno.append(
+      /* owner 26/10/2026 («il file ordini dal pad si deve poter aprire se ci clicco sopra»): un allegato dentro la cartella della
+         sessione è un pulsante che lo apre nel lettore dei file, come dall'albero; il resto (pagine, percorsi fuori) resta un'etichetta */
+      const corpo = c.apribile ? document.createElement('button') : uno;
+      if (c.apribile) {
+        const nomeFile = c.apribile.split('/').pop();
+        corpo.type = 'button';
+        corpo.className = 'talos-allegati-chip__apri';
+        /* il nome accessibile CONTIENE il testo visibile (WCAG 2.5.3, revisione del blocco): «Apri file ordini.csv ~20 token» */
+        corpo.setAttribute('aria-label', tr('app.attachments.open', { file: [c.genere, c.nome, c.costo].filter(Boolean).join(' ') }));
+        /* revisione A-F2: il relativo si calcola AL CLIC, contro la radice di adesso (un permesso cambiato a sessione aperta la sposta) */
+        corpo.addEventListener('click', () => {
+          const relativo = relativoNellaRadice(c.apribile, state.realSession.cartellaAssoluta || '');
+          if (!relativo) { toast(tr('app.attachments.outsideFolderTitle'), tr('app.attachments.outsideFolder', { file: nomeFile })); return; }
+          void apriFileAlbero(relativo, nomeFile);
+        });
+        uno.classList.add('talos-allegati-chip__uno--apribile');
+        uno.append(corpo);
+      }
+      corpo.append(
         textElement('span', 'talos-allegati-chip__genere', c.genere),
         textElement('span', 'talos-allegati-chip__nome', c.nome),
       );
-      if (c.costo) uno.append(textElement('span', 'talos-allegati-chip__costo', c.costo));
+      if (c.costo) corpo.append(textElement('span', 'talos-allegati-chip__costo', c.costo));
       riga.append(uno);
     }
     articolo.append(riga);
@@ -13931,7 +14105,20 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    */
   function chiediSeFermareIlGiro() {
     const velo = $('#veloFermaGiro');
-    if (!velo) { stopRealSession(); return; }
+    /* owner 29/10/2026: con sotto-agenti al lavoro anche Esc chiede «tutto o solo la chat» (o segue la scelta ricordata) */
+    const agentiVivi = agentiViviDellaChat();
+    const decisione = decidiStop({ agentiVivi, preferenza: leggiImpostazioniDesktop().appearance.stopWithAgents });
+    if (!velo) { void stopRealSession(decisione.figlie); return; }
+    velo.dataset.figlie = decisione.figlie ?? '';
+    const agenti = $('#fermaGiroAgenti', velo);
+    if (agenti) {
+      agenti.hidden = !decisione.chiedi;
+      agenti.textContent = decisione.chiedi ? trn('app.stopMenu.titleOne', 'app.stopMenu.titleMany', agentiVivi) : '';
+    }
+    for (const [id, visibile] of [['#fermaGiroConferma', !decisione.chiedi], ['#fermaGiroTutto', decisione.chiedi], ['#fermaGiroSoloChat', decisione.chiedi]]) {
+      const bottone = $(id, velo);
+      if (bottone) bottone.hidden = !visibile;
+    }
     const nome = $('#fermaGiroNome', velo);
     if (nome) nome.textContent = state.session || tr('app.sessions.running');
     const errore = $('#fermaGiroErrore', velo);
@@ -14102,6 +14289,42 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const sequenza = Number(/^giro:(\d+)$/u.exec(riferimento ?? '')?.[1]);
     if (!sessionId || !Number.isSafeInteger(sequenza)) return;
     void creaAnnullaFile({ api: apiAnnullaFile(sessionId), toast }).apri({ sequenza, testoMessaggio: testo });
+  }
+
+  /*
+   * ⭐ «Segnala un problema» (owner 29/10/2026, due porte) — qui solo le chiamate; la finestra e la carta le disegna
+   *   `components/segnala-problema.js`. La diagnostica la costruisce e la ripulisce il server (`GET /api/v1/diagnostica-segnalazione`);
+   *   «Apri su GitHub» apre il browser del sistema (nel guscio `setWindowOpenHandler` → `shell.openExternal`, desktop/main.mjs).
+   * ⛔ Solo dichiarazioni di funzione, come per «Annulla»: chi le chiama può partire prima di queste righe.
+   */
+  function apriSegnalazione({ bozza = null } = {}) {
+    const sessionId = state.realSession.id ?? null;
+    return creaSegnalaProblema({
+      leggiDiagnostica: (sid) => apiGet(`/api/v1/diagnostica-segnalazione${sid ? `?sessionId=${encodeURIComponent(sid)}` : ''}`),
+      apriIndirizzo: (url) => { window.open(url, '_blank', 'noopener,noreferrer'); },
+      copia: (testo) => navigator.clipboard.writeText(testo),
+    }).apri({ bozza, sessionId });
+  }
+  /* «Scarta» resta scartata anche ricaricando la conversazione: una comodità di chi guarda (localStorage), mai uno stato del server */
+  function bozzeScartate() {
+    try { const v = JSON.parse(localStorage.getItem('talos.segnalazione.scartate.v1') ?? '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
+  }
+  function ricordaBozzaScartata(chiave) {
+    try { localStorage.setItem('talos.segnalazione.scartate.v1', JSON.stringify([...bozzeScartate().filter((x) => x !== chiave), chiave].slice(-200))); } catch { /* sandbox */ }
+  }
+  /** La carta della bozza preparata dal modello (`talos.segnalazione-bozza`): una per chiamata, anche rigiocando la storia. */
+  function mostraBozzaSegnalazione(valore) {
+    const conversazione = $('#conversation');
+    const sessionId = state.realSession.id;
+    if (!conversazione || !sessionId || typeof valore?.title !== 'string') return;
+    const idChiamata = String(valore.toolCallId ?? valore.at ?? '');
+    if ([...conversazione.querySelectorAll('[data-segnalazione-bozza]')].some((n) => n.dataset.segnalazioneBozza === idChiamata)) return;
+    const chiave = `${sessionId}|${idChiamata}`;
+    nellaChat(creaCartaBozza(document, { ...valore, toolCallId: idChiamata }, {
+      scartata: bozzeScartate().includes(chiave),
+      onRivedi: () => { void apriSegnalazione({ bozza: valore }); },
+      onScarta: () => ricordaBozzaScartata(chiave),
+    }));
   }
 
   async function eliminaMessaggioReale({ riferimento, nodo, quale }) {
@@ -14814,6 +15037,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const scheda = evento.target?.closest?.('.real-reasoning-note');
     if (scheda) chiediDisegnoRagionamento(scheda);
   });
+  /* «Segnala un problema», la prima porta (owner 29/10/2026): la voce del menu della finestra (`desktop/segnalazione.mjs`) lancia questo
+     evento nella pagina; si apre la finestra vuota, con la diagnostica della conversazione aperta (se c'è) */
+  window.addEventListener('talos:segnala-problema', () => { void apriSegnalazione(); });
 
   function segmentoVivo(segmento) {
     return Boolean(segmento) && segmento === state.realSession.segmentoAttivo
@@ -15116,6 +15342,49 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     return trn('app.activity.runningOne', 'app.activity.runningMany', totale);
   }
 
+  /*
+   * ⛔ Owner 27/10/2026 («ogni riga in corso animata e col contatore dei secondi», e «Sì, tutte e due» per le righe fuori dal bozzetto):
+   *   la testa di un gruppo d'attività in corso («Esecuzione di 1 comando…») non diceva da quanto. Ora dice «· 23s», come la riga del
+   *   riassunto, contati dall'attrezzo in corso più VECCHIO del gruppo (`avviatoAlle`, l'istante vero), e sparisce quando non c'è più
+   *   niente in corso. Un orologio solo per tutta la chat, che si spegne da sé quando non ha più niente da contare.
+   */
+  function segnaDurataAttivita(nodoTempo) {
+    const da = Number(nodoTempo.dataset.attivitaDa);
+    if (!Number.isFinite(da)) return;
+    const testo = `· ${durataBreveRigaViva(Math.max(0, Math.floor(Date.now() - da)))}`;
+    if (nodoTempo.textContent !== testo) nodoTempo.textContent = testo;
+  }
+  let orologioAttivita = null;
+  function accendiOrologioAttivita() {
+    if (orologioAttivita) return;
+    orologioAttivita = window.setInterval(() => {
+      const tempi = $$('[data-attivita-da]');
+      if (!tempi.length) { window.clearInterval(orologioAttivita); orologioAttivita = null; return; }
+      for (const nodoTempo of tempi) segnaDurataAttivita(nodoTempo);
+    }, 1000);
+  }
+  function segnaTempoBatch(batch) {
+    const inCorso = Object.values(batch.inCorso || {}).reduce((a, n) => a + (Number(n) || 0), 0);
+    let da = Infinity;
+    /* Revisione del blocco 12 (RV-REV-02): una sessione che il server dice chiusa (conclusa o INTERROTTA da un riavvio, che non lascia
+       evento terminale) non ha niente in corso, anche se la sua storia finisce con una chiamata aperta: nessun contatore. */
+    if (inCorso > 0 && !state.realSession.chiusaDalServer) {
+      for (const info of state.realSession.toolCallNomi.values()) {
+        if (info?.batch === batch && info.stato === 'running' && Number.isFinite(info.avviatoAlle)) da = Math.min(da, info.avviatoAlle);
+      }
+    }
+    if (!Number.isFinite(da)) { batch.tempoInCorso?.remove(); batch.tempoInCorso = null; return; }
+    if (!batch.tempoInCorso) {
+      const nodoTempo = textElement('span', 'talos-mono talos-measure talos-activity__tempo-vivo', '');
+      nodoTempo.setAttribute('aria-hidden', 'true'); // i secondi non si annunciano uno per uno
+      batch.summaryText.after(nodoTempo);
+      batch.tempoInCorso = nodoTempo;
+    }
+    batch.tempoInCorso.dataset.attivitaDa = String(da);
+    segnaDurataAttivita(batch.tempoInCorso);
+    accendiOrologioAttivita();
+  }
+
   /**
    * Il riepilogo testuale a elenco run-on ("Letto 3 file, modificato 2
    * file, eseguito 20 comandi (2 errori)...") — RICALCOLATO per intero
@@ -15123,6 +15392,21 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * sommare in giro): più semplice da tenere corretto, il costo è
    * trascurabile (poche decine di tool-call per batch, non migliaia.
    */
+  /** 29/10/2026: la chiamata che aspetta la carta del consenso, legata alla SUA richiesta (una risposta vecchia non libera la nuova). */
+  function segnaConsensoDellaChiamata(toolCallId, requestId) {
+    const info = typeof toolCallId === 'string' ? state.realSession.toolCallNomi.get(toolCallId) : null;
+    if (!info?.batch || typeof requestId !== 'string') return;
+    info.richiestaConsenso = requestId;
+    aggiornaRiassuntoBatch(info.batch);
+  }
+  function liberaConsensoDellaRichiesta(requestId) {
+    for (const info of state.realSession.toolCallNomi.values()) {
+      if (info?.richiestaConsenso !== requestId) continue;
+      info.richiestaConsenso = null;
+      if (info.batch) aggiornaRiassuntoBatch(info.batch);
+    }
+  }
+
   function aggiornaRiassuntoBatch(batch) {
     aggiornaPiedeChatDaStato(); // 05/9 Fase 2: ChatFooter
     const c = batch.contatori;
@@ -15148,14 +15432,34 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     for (const [nome, n] of nomi?.falliti || []) parti.push(fraseSpecie(`altro:${nome}`, n, { fallito: true }));
     if (c.falliti - nominati(nomi?.falliti) > 0) parti.push(formattaConteggioAttivita('fallito', c.falliti - nominati(nomi?.falliti)));
     if (c.interrotti > 0) parti.push(trn('app.activity.interruptedOne', 'app.activity.interruptedMany', c.interrotti)); // 26/09, difetto (2)
-    for (const categoria of ['letto', 'cercato', 'elencato', 'comando', 'scrittura', 'modifica', 'ricerca-web', 'pagina']) {
-      if (batch.inCorso[categoria] > 0) parti.push(formattaAttivitaInCorso(categoria, batch.inCorso[categoria]));
+    /*
+     * ⛔ 29/10/2026 (foto della sonda della prova di luna): un comando che aspetta la carta del consenso NON è in esecuzione, e la testa
+     *   diceva «Esecuzione di 1 comando… · 0 s» mentre la scheda Processi diceva già «Aspetta il tuo consenso» (owner 02/10). Il kernel
+     *   manda l'id della chiamata in ogni domanda (`azione.toolCallId`, tutti i cancelli): quella chiamata si conta a parte, con le stesse
+     *   parole dei Processi, finché `ApprovalResolved` non la libera.
+     */
+    const inConsenso = { categorie: {}, nomi: new Map(), totale: 0 };
+    for (const info of state.realSession.toolCallNomi.values()) {
+      if (info?.batch !== batch || info.stato !== 'running' || !info.richiestaConsenso) continue;
+      inConsenso.totale += 1;
+      inConsenso.categorie[info.categoria] = (inConsenso.categorie[info.categoria] || 0) + 1;
+      if (info.categoria === 'altro') inConsenso.nomi.set(info.nome, (inConsenso.nomi.get(info.nome) || 0) + 1);
     }
-    for (const [nome, n] of nomi?.inCorso || []) parti.push(`${nomeLeggibileAttrezzo(nome)}${n > 1 ? ` ×${n}` : ''}…`);
-    if (batch.inCorso.altro - nominati(nomi?.inCorso) > 0) parti.push(formattaAttivitaInCorso('altro', batch.inCorso.altro - nominati(nomi?.inCorso)));
+    for (const categoria of ['letto', 'cercato', 'elencato', 'comando', 'scrittura', 'modifica', 'ricerca-web', 'pagina']) {
+      const n = (batch.inCorso[categoria] || 0) - (inConsenso.categorie[categoria] || 0);
+      if (n > 0) parti.push(formattaAttivitaInCorso(categoria, n));
+    }
+    for (const [nome, tutti] of nomi?.inCorso || []) {
+      const n = tutti - (inConsenso.nomi.get(nome) || 0);
+      if (n > 0) parti.push(`${nomeLeggibileAttrezzo(nome)}${n > 1 ? ` ×${n}` : ''}…`);
+    }
+    const altriInCorso = (batch.inCorso.altro || 0) - nominati(nomi?.inCorso) - ((inConsenso.categorie.altro || 0) - nominati(inConsenso.nomi));
+    if (altriInCorso > 0) parti.push(formattaAttivitaInCorso('altro', altriInCorso));
+    if (inConsenso.totale > 0) parti.push(tr('app.activity.awaitingConsent'));
     batch.summaryText.textContent = parti.length > 0
       ? `${parti[0].charAt(0).toUpperCase()}${parti[0].slice(1)}${parti.slice(1).map((p) => `, ${p}`).join('')}`
       : tr('app.activity.label');
+    segnaTempoBatch(batch); // owner 27/10/2026: la testa in corso dice da quanto
     // ⛔ SOLO se il batch ha scritto qualcosa — un batch di sole letture/ricerche/comandi non mostra un diff totale (spec owner, screenshot 1).
     if (c.diffAgg > 0 || c.diffRim > 0) impostaDiffAttivita(batch.testa, c.diffAgg, c.diffRim); // 05/9 Fase 2: «+18 −2» nella testa del bundle
     aggiornaRiassuntoSegmento(batch.segmento);
@@ -16153,7 +16457,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       const riga = document.createElement('div');
       riga.className = 'tool-arg-row';
       const testoValore = typeof valore === 'string' ? valore : JSON.stringify(valore);
-      riga.appendChild(textElement('span', 'tool-arg-key', `${chiave}:`));
+      riga.appendChild(textElement('span', 'tool-arg-key', `${etichettaArgomento(chiave)}:`)); // 27/10: il nome del campo nella lingua dell'interfaccia
       /*
        * ⛔ 06/9, owner con lo screenshot: un `html` di duemila caratteri finiva a schermo per intero,
        * su una riga sola scorrevole — illeggibile, e per giunta era il valore MENO utile della
@@ -16231,8 +16535,19 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           /* ⭐ F5 (onda 2), 24/09/2026 — K8: il consiglio «Compatta il contesto» (`errori.js:332`) era parole
              davanti a un pulsante che non funzionava. Ora è la porta: la stessa `compactSession`, che sul
              legacy chiama la rotta vera. */
+          /* L1 1.3 (owner 26/10/2026, bozzetto approvato): la carta del contesto pieno arriva quando la finestra si è già allargata da
+             sola o il riassunto è già stato provato ⇒ l'unica strada che resta è un altro modello. «Chiedimi» ha le sue due strade. */
+          /* Revisione blocco 4 (A-8): solo per un modello LOCALE; in cloud resta «Compatta ora», come prima del bozzetto. */
+          /* §4.2, regola N (bozzetto 29/10): un solo pulsante, e solo se c'è qualcosa da allegare e il testo esatto da rimandare (dal
+             vivo; rigiocata, la carta dice cosa è successo e basta) */
+          : spiegazione.id === 'richiesta-troppo-grande'
+            ? (spiegazione.allegabile && spiegazione.testoNonInviato ? [[tr('chat.tooLarge.sendAsAttachment'), () => { void inviaComeAllegato(spiegazione); }]] : [])
           : spiegazione.id === 'contesto-pieno'
-            ? [[tr('app.contextManager.compactNow'), () => { void compactSession(); }]]
+            ? (spiegazione.locale
+              ? [[tr('app.localWindow.chooseModel'), () => { openSheet('model', { ancoraAlComposer: true }); }]]
+              : [[tr('app.contextManager.compactNow'), () => { void compactSession(); }]])
+          : spiegazione.id === 'finestra-da-scegliere'
+            ? [[tr('app.localWindow.enlarge'), () => { void allargaFinestraDallaCarta(spiegazione); }], [tr('app.localWindow.summarize'), () => { void compactSession(); }]]
             /* 14/10/2026, owner («Sì, così»): l'indirizzo della chiave da scegliere ⇒ una porta, la modale «Configura» di QUEL
                fornitore. Il server lo nomina (la sua etichetta): l'id si cerca nella lista dei fornitori, che dalla chat spesso
                non è ancora caricata — per questo per nome, dentro l'attesa della lista. */
@@ -16307,6 +16622,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       return typeof azione.cartella === 'string' && azione.cartella.trim()
         ? tr('app.approval.wantsStartAgentIn', { cartella: azione.cartella }) : tr('app.approval.wantsStartAgent');
     }
+    /* Owner 29/10/2026 («Ferma tutto», due porte): fermare, mettere in pausa o riprendere gli agenti — uno, o tutti con `childId: "all"`.
+       Prima cadevano nel ripiego generico qui sotto, che non diceva né cosa né quanti. */
+    const CONTROLLO_FIGLIE = {
+      stop_child: ['app.approval.wantsStopAgent', 'app.approval.wantsStopAllAgents'],
+      pause_child: ['app.approval.wantsPauseAgent', 'app.approval.wantsPauseAllAgents'],
+      resume_child: ['app.approval.wantsResumeAgent', 'app.approval.wantsResumeAllAgents'],
+    };
+    if (Object.hasOwn(CONTROLLO_FIGLIE, azione?.tipo ?? '')) return tr(CONTROLLO_FIGLIE[azione.tipo][azione.childId === 'all' ? 1 : 0]);
     /* A13 (owner 10/10/2026, «Sì, come nella CLI»): la 5ª chiamata identica col risultato identico — si chiede se continuare. */
     if (azione?.tipo === 'giri-in-tondo') {
       return trn('app.approval.wantsGoOnRepeatingOne', 'app.approval.wantsGoOnRepeatingMany', Number(azione.volte) || 5, { strumento: nomeUmanoAttrezzo(azione.strumento || '') }); // LINGUA-7: il plurale col suo numero
@@ -16473,9 +16796,38 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           : typeof a === 'string' && a === b;
       });
     };
+    /*
+     * ⭐ Anteprima nelle domande (owner 29/10/2026, bozzetto approvato; «attenzione a formattare documenti tipo pdf md html»): come si
+     *   disegna l'anteprima di una scelta, coi pezzi che l'app ha già. Un documento del progetto (una riga, un percorso relativo) col
+     *   lettore dei file, chiesto «per il modello» (il server applica la regola dei segreti della lettura); l'HTML da solo, in una
+     *   cornice senza script, file né rete; tutto il resto Markdown, come in chat. Ritorna chi smonta il lettore.
+     */
+    const rendiAnteprima = (testo, contenitore) => {
+      const percorso = percorsoDiAnteprima(testo);
+      if (!percorso || !sessionId) { contenitore.append(renderizzaMarkdownSemplice(testo)); return null; }
+      const fonte = fonteDaCartella({ sessionId, percorso, perIlModello: true });
+      if (/\.html?$/iu.test(percorso)) {
+        const cornice = document.createElement('iframe');
+        cornice.className = 'talos-question-card__anteprima-html';
+        cornice.title = tr('chat.question.previewHtmlTitle', { name: fonte.nome });
+        cornice.setAttribute('sandbox', '');
+        cornice.setAttribute('csp', POLITICA_HTML_ANTEPRIMA);
+        cornice.setAttribute('referrerpolicy', 'no-referrer');
+        contenitore.append(cornice);
+        let vivo = true;
+        fonte.leggiByte()
+          .then((byte) => { if (vivo) cornice.srcdoc = htmlDiAnteprima(new TextDecoder().decode(byte)); })
+          .catch((errore) => { if (vivo) cornice.replaceWith(Object.assign(document.createElement('p'), { className: 'talos-question-card__anteprima-vuota', textContent: messaggioErroreUtente(errore, tr('chat.question.noPreview')) })); });
+        return () => { vivo = false; };
+      }
+      const istanza = creaLettore({ fonte, opzioni: { bloccoCodice: bloccoCodiceDelLettore, lettoreOffice: lettoreOfficeDelLettore, copia: (t) => { void copyText(t, tr('app.files.contentCopied')); } } });
+      contenitore.append(istanza.elemento);
+      return () => istanza.distruggi?.();
+    };
     const controller = mountUserQuestionDock({
       root,
       composer,
+      rendiAnteprima,
       question: { sessionId, requestId, questions, ...(meta.at ? { at: meta.at } : {}), ...(meta.origine ? { origine: meta.origine } : {}) },
       // ⛔ 23/09/2026 D1 — dal vivo la domanda si ANNUNCIA (regione viva educata), non si prende il fuoco:
       // vedi il commento in testa a user-question-dock.js. In rigiocata non si annuncia niente.
@@ -16635,6 +16987,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (azione?.tipo === 'remote_phone_revoke' && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_REVOCA_TELEFONO);
     if (azione?.tipo === 'remote_phone_folder_allow' && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_CONSENTI_CARTELLA);
     if (azione?.tipo === 'remote_phone_folder_revoke' && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_TOGLI_CARTELLA);
+    if (azione?.tipo === 'remote_phone_folder_unblock' && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_SBLOCCA_CARTELLA);
     /* R5.13 corsa 2 (24/10/2026, bozzetti 2b e 3a): mandare un file a un dispositivo — «Invia» / «Non inviare» */
     if (azione?.tipo === 'remote_device_send_file' && !figlia) return appendCartaAutomazione(requestId, azione, CARTA_INVIO_FILE);
     /*
@@ -16654,7 +17007,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        catena fotografato dal server alla richiesta). Senza una politica nota (un server più vecchio, o permessi illeggibili:
        `permessi: null`) restano le sole frasi vere del kernel — mai la politica della sessione aperta, mai una inventata. */
     const politicaNota = typeof figlia?.politica?.permessi === 'string' && figlia.politica.permessi;
-    const motivo = !figlia ? motivoRichiestaApprovazione(azione)
+    /* Owner 27/10/2026: la carta della sessione stessa si spiega col permesso del SUO giro (`permessiDelGiro`, da RunStarted); senza
+       quel dato, solo le frasi vere del kernel, come per la figlia senza politica nota. */
+    const permessiDelGiro = state.realSession.permessiDelGiro ?? null;
+    const motivo = !figlia ? motivoRichiestaApprovazione(azione, { permessi: permessiDelGiro, perAttrezzo: state.permessiPerAttrezzo || {} }, { senzaPolitica: !permessiDelGiro })
       : motivoRichiestaApprovazione(azione, { permessi: politicaNota ? figlia.politica.permessi : null, perAttrezzo: figlia.politica?.perAttrezzo || {} }, { senzaPolitica: !politicaNota });
     const scheda = creaApprovazione({ badge, bersaglio, perche: descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo, nota: tr('app.approval.appliesOnce') });
     const article = scheda.scheda;
@@ -16846,6 +17202,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     pulsanti: { approva: () => tr('remoto.consent.allow'), nega: () => tr('remoto.consent.notNow') } });
   const CARTA_TOGLI_CARTELLA = Object.freeze({ testi: testiCartaCartella, modificabile: () => false, blocco: creaBloccoCartaCartella, dato: 'cartaTelefoni',
     pulsanti: { approva: () => tr('remoto.folders.revoke'), nega: () => tr('remoto.chat.folderRevokeCard.keep') } });
+  /* owner 27/10/2026: sbloccare una cartella bloccata — «Sblocca» / «Lasciala bloccata» */
+  const CARTA_SBLOCCA_CARTELLA = Object.freeze({ testi: testiCartaCartella, modificabile: () => false, blocco: creaBloccoCartaCartella, dato: 'cartaTelefoni',
+    pulsanti: { approva: () => tr('remoto.folders.unblock'), nega: () => tr('remoto.chat.folderUnblockCard.keep') } });
   /* R5.13 corsa 2 (24/10/2026, bozzetti 2b e 3a): la carta dell'invio di un file — la scheda del file e la riga del dispositivo, come la
      revoca; con più dispositivi la frase dice «uno dei tuoi N» e la nota come cambiarlo (D3) */
   const CARTA_INVIO_FILE = Object.freeze({ testi: testiCartaInvioFile, modificabile: () => false, blocco: creaBloccoCartaInvioFile, dato: 'cartaTelefoni',
@@ -18388,6 +18747,113 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     } });
     return browserUi;
   }
+  /*
+   * Owner 29/10/2026 (`local_page`, due consigliate): il modello apre la pagina nella STESSA scheda Browser che vede la persona, ma la vista
+   *   non si sposta da sola — in chat una riga coi pezzi di «Server pronto» (bozzetto A1 del 27/10): «Pagina guardata dal modello ·
+   *   localhost:5173/about — Apri nel Browser». Dopo il SEGMENTO delle attività, che di serie è chiuso (come i blocchi dei dispositivi).
+   *   L'indirizzo si rifà da porta e percorso della chiamata, mai dall'esito, e si apre solo su loopback.
+   */
+  function montaPaginaLocaleInChat(info, evento) {
+    if (!/^LOCAL PAGE :\d+/u.test(String(evento.content ?? ''))) return;
+    let argomenti = {};
+    try { argomenti = info.argomentiParsati ?? JSON.parse(info.argomenti || '{}'); } catch { argomenti = {}; }
+    const numero = Number(argomenti?.port);
+    if (!Number.isInteger(numero) || numero < 1 || numero > 65535) return;
+    const percorso = typeof argomenti?.path === 'string' && argomenti.path.startsWith('/') && !argomenti.path.startsWith('//') && !/[\\@]/u.test(argomenti.path) ? argomenti.path : '/';
+    const riga = document.createElement('div');
+    riga.className = 'talos-server-locale real-session-status';
+    riga.dataset.paginaLocale = '';
+    const separatore = document.createElement('div');
+    separatore.className = 'talos-context-separator';
+    separatore.setAttribute('role', 'group');
+    const testo = document.createElement('span');
+    const porta = document.createElement('span');
+    porta.className = 'talos-server-locale__porta';
+    porta.textContent = `localhost:${numero}${percorso === '/' ? '' : percorso}`;
+    testo.append(`${tr('app.localServers.pageSeen')} · `, porta);
+    const apri = document.createElement('button');
+    apri.type = 'button';
+    apri.className = 'talos-button talos-button--ghost talos-button--sm';
+    apri.textContent = tr('app.localServers.openInBrowser');
+    apri.addEventListener('click', () => {
+      setView('browser'); // come «Server pronto»: si passa alla scheda Browser solo al clic della persona
+      apriPaginaVivaBrowser(`http://localhost:${numero}${percorso}`).catch((errore) => browserUi?.avvisa(messaggioErroreUtente(errore, tr('app.browser.cannotOpenAddress'))));
+    });
+    separatore.append(testo, apri);
+    riga.append(separatore);
+    /* nel flusso della chat come la riga «Server pronto» (`nellaChat`), non accanto alla riga dell'attrezzo: misurato 29/10, con due
+       chiamate di fila la riga dell'attrezzo vive dentro l'elenco del gruppo (chiuso di serie) e quando il gruppo si ricompone i nodi
+       messi accanto alle sue righe spariscono. */
+    nellaChat(riga);
+  }
+  /* ⭐ Owner 27/10/2026: la riga «Server pronto · localhost:5173 · Vite — Apri nel Browser» (bozzetto A1), una per server, aggiornata in posto. */
+  function mostraServerLocale(server) {
+    const rs = state.realSession;
+    rs.serverLocali ??= new Map();
+    rs.righeServerLocali ??= new Map();
+    rs.serverLocali.set(server.porta, { porta: server.porta, origine: server.origine ?? null, framework: server.framework ?? null, stato: server.stato, toolCallId: server.toolCallId ?? null,
+      toccatoAlle: performance.now() }); // per `aggiornaServerLocali`: un evento più nuovo della lettura vince
+    const chiave = `${server.toolCallId ?? ''}:${server.porta}`;
+    let riga = rs.righeServerLocali.get(chiave);
+    if (!riga?.isConnected) {
+      riga = document.createElement('div');
+      riga.className = 'talos-server-locale real-session-status';
+      riga.dataset.porta = String(server.porta);
+      const separatore = document.createElement('div');
+      separatore.className = 'talos-context-separator';
+      separatore.setAttribute('role', 'group');
+      const testo = document.createElement('span');
+      const apri = document.createElement('button');
+      apri.type = 'button';
+      apri.className = 'talos-button talos-button--ghost talos-button--sm';
+      apri.textContent = tr('app.localServers.openInBrowser');
+      apri.addEventListener('click', () => {
+        setView('browser'); // come i link della chat aperti in TALOS (12/10): si passa subito alla scheda Browser
+        apriPaginaVivaBrowser(`http://localhost:${server.porta}/`).catch((errore) => browserUi?.avvisa(messaggioErroreUtente(errore, tr('app.browser.cannotOpenAddress'))));
+      });
+      separatore.append(testo, apri);
+      riga.append(separatore);
+      rs.righeServerLocali.set(chiave, riga);
+      nellaChat(riga);
+    }
+    const pronto = server.stato === 'pronto';
+    riga.dataset.stato = server.stato;
+    const [testo, apri] = riga.firstElementChild.children;
+    const punto = document.createElement('span');
+    punto.className = pronto ? 'talos-dot talos-dot--success' : 'talos-dot';
+    punto.setAttribute('aria-hidden', 'true');
+    const porta = document.createElement('span');
+    porta.className = 'talos-server-locale__porta';
+    porta.textContent = `localhost:${server.porta}`;
+    const parti = [punto, `${tr(pronto ? 'app.localServers.ready' : 'app.localServers.stopped')} · `, porta];
+    if (server.framework) {
+      const sotto = document.createElement('span');
+      sotto.className = 'talos-server-locale__sotto';
+      sotto.textContent = ` · ${server.framework}`;
+      parti.push(sotto);
+    }
+    testo.replaceChildren(...parti);
+    riga.firstElementChild.setAttribute('aria-label', tr(pronto ? 'app.localServers.readyAt' : 'app.localServers.stoppedAt', { porta: server.porta }));
+    apri.hidden = !pronto;
+    if (!state.realSession.inRigiocata) renderizzaBrowser();
+  }
+  /* Owner 27/10/2026: lo stato VIVO dei server (dopo la rigiocata, o al cambio di conversazione): la storia può dire «pronto» di un server
+     che un riavvio ha spento. Solo la mappa della striscia; le righe in chat restano la storia. */
+  async function aggiornaServerLocali() {
+    const sessionId = state.realSession.id;
+    if (!sessionId) return;
+    /* La risposta è lo stato al momento della RICHIESTA: un evento arrivato mentre era in viaggio è più nuovo, e vince (trovato dalla
+       prova SL-UI-01: la lettura partita al confine arrivava dopo il «pronto» e lo cancellava). */
+    const partita = performance.now();
+    let dati;
+    try { dati = await apiGet(`/api/v1/sessions/${encodeURIComponent(sessionId)}/local-servers`); } catch { return; }
+    if (sessionId !== state.realSession.id || !Array.isArray(dati?.server)) return;
+    const rs = state.realSession;
+    const vivi = new Map(dati.server.filter((s) => Number.isInteger(s?.porta)).map((s) => [s.porta, s]));
+    for (const [porta, s] of rs.serverLocali ?? []) if ((s.toccatoAlle ?? 0) > partita) vivi.set(porta, s);
+    rs.serverLocali = vivi;
+    renderizzaBrowser();
+  }
   function renderizzaBrowser() {
     const ui = uiBrowser(); if (!ui) return;
     const rs = state.realSession;
@@ -18397,7 +18863,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        `lettura-7` è un numero di nascita, non più una posizione nell'elenco. Leggerlo come indice
        avrebbe puntato alla pagina sbagliata appena una lettura viene chiusa. */
     rs.browserIndice = rs.browserPagine.findIndex((p, i) => idDiLettura(p, i) === rs.browserAttiva);
-    ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta, annotazioni: rs.browserAnnotazioni, annotaAttivo: rs.browserAnnotaAttivo });
+    ui.aggiorna({ schede, attiva: rs.browserAttiva, note: noteBrowser(), richiesta: rs.browserRichiesta, annotazioni: rs.browserAnnotazioni, annotaAttivo: rs.browserAnnotaAttivo,
+      serverLocali: [...(rs.serverLocali?.values() ?? [])].sort((a, b) => a.porta - b.porta) }); // owner 27/10/2026
     /* ⛔ La vista viva si mostra SOLO sulla sua scheda. Senza questa riga restava incollata addosso
        a tutte le altre (owner, 08/9). Non si smonta: si nasconde, così tornando indietro la pagina
        è ancora quella, viva, senza ricaricare niente. */
@@ -20018,7 +20485,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     zona.append(testata);
 
     if (!dati) {
-      zona.append(textElement('p', 'ft-outside-empty', tr('app.common.loading')));
+      zona.append(elementoCaricamento('p', 'ft-outside-empty', tr('app.common.loading')));
       return zona;
     }
     if (dati.parent) {
@@ -20099,6 +20566,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        da Aspetto, e da quel momento il timbro lo rende definitivo. */
     themePresetVersione: 0, sceneOverrideVersione: 0, backgroundMotionVersione: 0,
     themePreset: 'forge', colorMode: 'system', sceneOverride: 'follow-theme', // tema di serie: Forge (owner 24/09/2026 sera: «tema default forge»); una scelta timbrata v2 resta com'è
+    replyLanguage: 'auto', // owner 28/10/2026: la lingua delle risposte e della dettatura, Automatica di serie
     uiDensity: 'compatta', uiLanguage: 'sistema', // 06/9 B8: densità delle liste (mockup `data-densita`) e lingua dei menu (H21)
     /* ⛔ Owner 02/10/2026: «di default la grandezza dell'interfaccia deve essere su predefinita». Era 'large' dalla candidata
        0.1.19 (`14086c7b4`), senza una decisione registrata. Il salvataggio è rado (`salvaImpostazioniDesktop`: si scrive solo
@@ -20106,7 +20574,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     uiFontScale: 'default', chatFontScale: 'balanced', composerShape: 'standard',
     composerPlus: 'drawer', messageStyle: 'sections', streamingAnimation: 'fade',
     windowPresentation: 'drawer', immersiveHeader: false, chatFullWidth: false, reducedMotion: false,
+    userBubbleFullWidth: false, // 27/10/2026 (owner, «come Hermes»): la bolla della persona a tutta larghezza, spenta di serie
     askTimeout: 'none', // 24/09/2026, decisione owner 35: la scadenza delle domande di TALOS, spenta di serie
+    stopWithAgents: 'chiedi', // owner 29/10/2026: lo Stop con sotto-agenti al lavoro — chiedi | tutte | solo-chat
     /*
      * ⛔⛔⛔ 11/09, MATTINA — `backgroundMotion` era stato SPENTO di serie. Owner, guardando la sua
      *   chat: «correggi subito questa porcata di sfondo giallognolo nella chat». Le due macchie
@@ -20141,8 +20611,21 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      *   acceso (Hermes: otto skin statiche, letto nel suo codice l'11/09). Chi l'aveva già acceso
      *   con timbro (`backgroundMotionVersione: 2`) lo tiene: questa riga è solo il valore di chi
      *   non ha mai scelto.
+     *
+     * ⭐ 28/10/2026, SERA — ACCESO DI SERIE, decisione dell'owner («Acceso su tutti», desktop e mobile), insieme al Calm B «Respiro e
+     *   luce» (bozzetto approvato, `desktop-scenes.js`). Come sopra, è solo il valore di chi non ha mai scelto: una scelta timbrata
+     *   resta, e il movimento ridotto del sistema continua a fermarlo.
+     *
+     * ⛔ 28/10/2026, NOTTE — DI NUOVO SPENTO, FINCHÉ FORGE NON È LEGGIBILE (decisione dell'owner, AskUserQuestion): il tema di serie è
+     *   Forge, e la sua scena accesa portava nei punti peggiori anche il testo PRINCIPALE a 2,92:1 (scuro) e 4,24:1 (chiaro), sotto il
+     *   4,5:1 di WCAG (W3C F83, 11 foto in 33 s sotto la colonna della chat). Si rende leggibile Forge (bozzetto prima), poi si riaccende.
+     *   Il Calm B leggero resta pronto: chi accende lo sfondo col Calm lo trova leggibile (≥ 4,64:1).
+     *
+     * ⭐ 28/10/2026, NOTTE TARDA — DI NUOVO ACCESO: Forge è leggibile col «Corridoio velato» scelto dall'owner sul bozzetto
+     *   (`desktop-background.js`, VELO_DELLE_SCENE). Misurato nell'app, caso peggiore sotto la colonna: 1920 scuro 15,90 / 7,49,
+     *   chiaro 14,40 / 5,21; 1024 scuro 15,75 / 7,42, chiaro 14,32 / 5,18. Lo tiene la prova SFONDO-LEGGIBILE-01.
      */
-    backgroundMotion: false, interfaceMotion: true, motionMode: 'adaptive',
+    backgroundMotion: true, interfaceMotion: true, motionMode: 'adaptive',
     motionQuality: 'balanced', motionSpeed: 100, motionIntensity: 20,
     motionGlow: 10, motionDensity: 100, motionDepth: 92, motionTrails: 50,
     motionContrast: 80, motionParallax: 20, pauseWhenHidden: true,
@@ -20231,9 +20714,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     }
     safe.uiDensity = enumValue(record.uiDensity, ['comoda', 'compatta'], safe.uiDensity);
     safe.uiLanguage = enumValue(record.uiLanguage, [...LINGUE_MENU], safe.uiLanguage);
+    safe.replyLanguage = enumValue(record.replyLanguage, [...VALORI_LINGUA_DELLE_RISPOSTE], safe.replyLanguage); // owner 28/10
     safe.uiFontScale = enumValue(record.uiFontScale, Object.keys(UI_FONT_SCALE_FACTORS), safe.uiFontScale);
     safe.chatFontScale = enumValue(record.chatFontScale, Object.keys(CHAT_FONT_SCALE_SIZES), safe.chatFontScale);
     safe.askTimeout = enumValue(record.askTimeout, ['none', '60', '300', '600'], safe.askTimeout);
+    safe.stopWithAgents = enumValue(record.stopWithAgents, ['chiedi', 'tutte', 'solo-chat'], safe.stopWithAgents); // owner 29/10
     // DESK-COMPOSER-STANDARD: la forma e' fissa nel Desktop. Un valore storico
     // importato o salvato resta leggibile, ma non torna operativo.
     safe.composerShape = 'standard';
@@ -20246,7 +20731,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     safe.motionProfile = enumValue(record.motionProfile, MOTION_PROFILE_IDS, safe.motionProfile);
     safe.motionEasing = enumValue(record.motionEasing, MOTION_EASING_IDS, safe.motionEasing);
     for (const [key, range] of Object.entries(MOTION_RANGE_DEFS)) safe[key] = numberValue(record[key], range, safe[key]);
-    for (const key of ['immersiveHeader', 'chatFullWidth', 'reducedMotion', 'backgroundMotion', 'interfaceMotion', 'pauseWhenHidden', 'respectDataSaver', 'motionWindows', 'motionSurfaces', 'motionNavigation', 'motionComposer', 'motionMessages', 'motionFeedback']) safe[key] = boolValue(record[key], safe[key]);
+    for (const key of ['immersiveHeader', 'chatFullWidth', 'userBubbleFullWidth', 'reducedMotion', 'backgroundMotion', 'interfaceMotion', 'pauseWhenHidden', 'respectDataSaver', 'motionWindows', 'motionSurfaces', 'motionNavigation', 'motionComposer', 'motionMessages', 'motionFeedback']) safe[key] = boolValue(record[key], safe[key]);
     return safe;
   }
   function normalizzaPreferenzeChatDesktop(value) {
@@ -20558,6 +21043,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     host.dataset.talosWindowPresentation = safe.windowPresentation;
     host.classList.toggle('immersive-header', safe.immersiveHeader);
     host.classList.toggle('chat-full-width', safe.chatFullWidth);
+    host.classList.toggle('user-bubble-full-width', safe.userBubbleFullWidth); // 27/10/2026: `domanda-appiccicata.css`, parte 2
     /* 06/9 B8 — densità: il mockup la esprime con `data-densita="compatta"` sulla radice (token delle righe); lingua: `lang` + i soli elementi marcati. */
     const root = document.documentElement;
     if (!host.classList.contains('talos-embedded')) workspacePreferences.adoptLegacyDensity(safe.uiDensity);
@@ -20575,14 +21061,30 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (ui) ui.value = safe.uiFontScale;
     if (chat) chat.value = safe.chatFontScale;
     const scadenzaDomande = $('#askTimeoutSelect'); if (scadenzaDomande) scadenzaDomande.value = safe.askTimeout;
+    const stopConAgenti = $('#stopWithAgentsSelect'); if (stopConAgenti) stopConAgenti.value = safe.stopWithAgents; // owner 29/10
     for (const [key, id] of Object.entries({ themePreset: 'themePresetSelect', colorMode: 'colorModeSelect', composerPlus: 'composerPlusSelect', messageStyle: 'messageStyleSelect', streamingAnimation: 'streamingAnimationSelect', windowPresentation: 'windowPresentationSelect' })) { const input = $(`#${id}`); if (input) input.value = safe[key]; }
     const immersive = $('#immersiveHeaderToggle'); if (immersive) immersive.checked = safe.immersiveHeader;
     const fullWidth = $('#chatFullWidthToggle'); if (fullWidth) fullWidth.checked = safe.chatFullWidth;
+    const bollePiene = $('#userBubbleFullWidthToggle'); if (bollePiene) bollePiene.checked = safe.userBubbleFullWidth;
     aggiornaBackgroundDesktop();
   }
   /** I due selettori nascono con la schermata Impostazioni (dopo il primo `applicaAspettoDesktop`): si allineano qui, e di nuovo dopo il montaggio. */
+  /* Owner 28/10/2026: le lingue del selettore «Lingua delle risposte e della dettatura», coi nomi nella lingua dei menu di adesso
+     (`Intl.DisplayNames`, `lingue-delle-risposte.js`); si rifanno a ogni allineamento, così un cambio della lingua dei menu le rinomina. */
+  function riempiLingueDelleRisposte(safe) {
+    const sel = $('#setting-replyLanguageSelect');
+    if (!sel) return;
+    const lingua = linguaCorrenteDiT();
+    if (sel.dataset.lingueIn !== lingua) {
+      for (const vecchia of [...sel.querySelectorAll('option:not([value="auto"])')]) vecchia.remove();
+      for (const { codice, nome } of opzioniLingueDelleRisposte(lingua)) sel.append(new Option(nome, codice));
+      sel.dataset.lingueIn = lingua;
+    }
+    sel.value = safe.replyLanguage ?? 'auto';
+  }
   function sincronizzaSelettoriDensitaLingua(safe) {
     const selDensita = $('#setting-uiDensitySelect'); if (selDensita) selDensita.value = HOST().classList.contains('talos-embedded') ? safe.uiDensity : (workspacePreferences.read().density === 'compact' ? 'compatta' : 'comoda');
+    riempiLingueDelleRisposte(safe);
     const selLingua = $('#setting-uiLanguageSelect');
     if (!selLingua) return;
     selLingua.value = safe.uiLanguage;
@@ -20737,8 +21239,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     childUl.hidden = false;
     iconEl.classList.add('ft-open');
     iconEl.replaceChildren(iconaSvgAlbero('i-folder-open'));
-    if (childUl.childElementCount > 0) return; // già caricata in questa sessione
-    childUl.appendChild(textElement('li', 'ft-loading', tr('app.common.loading')));
+    /* Owner 28/10/2026: una cartella chiusa il cui contenuto è cambiato sul disco non si rilegge mentre è chiusa (nessuno la
+       guarda): si segna vecchia, e si rilegge qui, quando la persona la riapre — lei o una cartella aperta dentro di lei. */
+    if (listeAlberoVecchie.has(childUl)) { await rileggiLivelloSulPosto(childUl, percorsoCompleto, profondita); return; }
+    if (childUl.childElementCount > 0) { await rileggiLivelliVecchiSotto(childUl); return; } // già caricata in questa sessione
+    childUl.appendChild(elementoCaricamento('li', 'ft-loading', tr('app.common.loading')));
     let voci;
     try {
       voci = await caricaLivelloAlbero(percorsoCompleto);
@@ -20938,6 +21443,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     childUl.hidden = true;
     li.appendChild(childUl);
     row.addEventListener('click', () => {
+      /* Owner 28/10/2026: se un ridisegno si sta costruendo fuori schermo, questo clic cambia `treeOpen` sotto di lui — si rifà
+         con lo stato nuovo, o metterebbe a schermo la cartella com'era prima del clic. */
+      if (treeRenderInFlight) treeRenderNeedsRerun = true;
       if (li.classList.contains('ft-open')) chiudiCartellaAlbero(li, icon);
       else apriCartellaAlbero(li, icon, childUl, percorsoCompleto, profondita);
       impostaFocusRigaAlbero(row.closest('.ft-tree'), row);
@@ -21229,8 +21737,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   const EVIDENZIA_NEL_LETTORE_FINO_A = 150_000;
   let lettoreFile = null; // { istanza, percorso, nome, sessionId, schermoIntero }
 
-  function bloccoCodiceDelLettore(testo, lingua) {
-    return costruisciBloccoCodice(testo, lingua, String(testo ?? '').length <= EVIDENZIA_NEL_LETTORE_FINO_A);
+  /* ⛔ revisione F11 (23/10): «senza colori» e «ancora in arrivo» erano la stessa leva (`chiuso`), e sopra i 150 KB il blocco nasceva
+     «aperto» per sempre: Copia «Incoming…» e «⋯» spenti. Un file aperto nel lettore è intero: chiuso sempre, i colori a parte.
+     E il nome vero del file va allo scaricamento (fra virgolette: un nome con spazi resta intero). */
+  function bloccoCodiceDelLettore(testo, lingua, nome = '', infoRecinto = '') {
+    const senzaColori = String(testo ?? '').length > EVIDENZIA_NEL_LETTORE_FINO_A;
+    /* un file intero porta il suo nome; un recinto dentro la prosa di un .md porta la sua riga d'apertura (revisione R2) */
+    const info = typeof nome === 'string' && nome ? infoDelFile(nome, lingua) : String(infoRecinto ?? '');
+    return costruisciBloccoCodice(testo, lingua, true, { info, senzaColori });
   }
 
   function scaricaFileDellaCartella(percorsoCompleto, nome) {
@@ -21933,24 +22447,35 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      * zona è aperta. Zona chiusa (lo stato di sempre): zero elementi in
      * più, stessa identica struttura di prima di oggi.
      */
-    if (state.realSession.fuoriSessioneAperto) {
-      /*
-       * ⛔ 03/9, trovato dal vivo: bordo/fondo d'accento da soli (34%/14% di
-       * opacità) sono troppo deboli su un tema chiaro già caldo — non
-       * bastano a "mai confondere le due cose a schermo". Un'etichetta
-       * esplicita, simmetrica a quella della zona esterna, è il segnale
-       * vero: le parole, non solo il colore.
-       */
-      const vaultLabel = document.createElement('div');
-      vaultLabel.className = 'ft-session-boundary-head';
-      vaultLabel.append(iconaSvgAlbero('i-shield'), textElement('span', '', tr('app.files.vaultLabel')));
-      const vault = document.createElement('div');
-      vault.className = 'ft-session-boundary';
-      vault.append(vaultLabel, radice, ul);
-      contenitore.replaceChildren(costruisciZonaFuoriSessione(), vault);
-    } else {
-      contenitore.replaceChildren(radice, ul);
-    }
+    const mettiASchermo = () => {
+      if (state.realSession.fuoriSessioneAperto) {
+        /*
+         * ⛔ 03/9, trovato dal vivo: bordo/fondo d'accento da soli (34%/14% di
+         * opacità) sono troppo deboli su un tema chiaro già caldo — non
+         * bastano a "mai confondere le due cose a schermo". Un'etichetta
+         * esplicita, simmetrica a quella della zona esterna, è il segnale
+         * vero: le parole, non solo il colore.
+         */
+        const vaultLabel = document.createElement('div');
+        vaultLabel.className = 'ft-session-boundary-head';
+        vaultLabel.append(iconaSvgAlbero('i-shield'), textElement('span', '', tr('app.files.vaultLabel')));
+        const vault = document.createElement('div');
+        vault.className = 'ft-session-boundary';
+        vault.append(vaultLabel, radice, ul);
+        contenitore.replaceChildren(costruisciZonaFuoriSessione(), vault);
+      } else {
+        contenitore.replaceChildren(radice, ul);
+      }
+    };
+    /*
+     * ⛔⛔ Owner 28/10/2026: «la tab file a destra flickera come se si aggiornasse ogni tot». Qui la lista NUOVA andava a schermo
+     *   VUOTA e si riempiva una riga per volta, fra un'attesa e l'altra: per qualche fotogramma l'albero era a zero righe
+     *   (misurato: `FILE-SFARFALLIO-05`, minimo 0). Se un albero è già a schermo, il nuovo si costruisce fuori e prende il suo posto
+     *   in un colpo solo, a lavoro finito — fuoco, riga scelta e scorrimento compresi (`scambiaAlberoConservando`).
+     *   La prima volta (niente a schermo) va su subito come prima: c'è solo da guadagnare a vedere la radice.
+     */
+    const sostituisce = Boolean(contenitore.querySelector('.ft-tree'));
+    if (!sostituisce) mettiASchermo();
 
     let voci;
     try {
@@ -21968,6 +22493,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       ul.appendChild(textElement('li', 'ft-loading', sparita
         ? tr('app.files.folderGone', { dove: dove ? ` (${dove})` : '' })
         : tr('app.files.loadFailed')));
+      if (sostituisce && generation === state.realSession.generation) scambiaAlberoConservando(contenitore, mettiASchermo, ul);
       return;
     }
     if (generation !== state.realSession.generation) return;
@@ -21975,9 +22501,154 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       // eslint-disable-next-line no-await-in-loop -- vedi la nota gemella in apriCartellaAlbero
       await costruisciNodoAlbero(voce.nome, voce.nome, Boolean(voce.cartella), 1, ul);
     }
+    if (generation !== state.realSession.generation) return; // costruito per un'altra conversazione: non va a schermo
     const prima = ul.querySelector('.ft-row');
     if (prima) prima.tabIndex = 0;
+    if (sostituisce) scambiaAlberoConservando(contenitore, mettiASchermo, ul);
     filtraAlberoReale($('#fileTreeFilter')?.value || '');
+  }
+
+  /** Il nodo dell'albero di quel percorso, senza passare dai selettori CSS (un nome di file può contenere virgolette). */
+  function nodoAlberoDi(radice, percorso) {
+    return [...radice.querySelectorAll('.ft-node')].find((li) => li.dataset.percorso === percorso) ?? null;
+  }
+
+  /**
+   * Owner 28/10/2026 — il nuovo albero prende il posto del vecchio in un colpo solo, e la persona non deve accorgersene: la riga
+   * col fuoco (o il suo «⋯») resta col fuoco, la riga scelta resta scelta, lo scorrimento resta dov'era. Prima ogni ridisegno
+   * portava il fuoco sul `body` e toglieva la riga scelta, e succedeva ogni secondo.
+   */
+  function scambiaAlberoConservando(contenitore, mettiASchermo, ul) {
+    const vecchio = contenitore.querySelector('.ft-tree');
+    const attivo = document.activeElement;
+    const nodoAttivo = attivo && vecchio?.contains(attivo) ? attivo.closest('.ft-node') : null;
+    const fuoco = nodoAttivo ? { percorso: nodoAttivo.dataset.percorso, sulMenu: attivo.classList.contains('ft-actions-btn') } : null;
+    const scelta = vecchio?.querySelector('.ft-row.ft-selected')?.closest('.ft-node')?.dataset.percorso ?? null;
+    /* Lo scorrimento non si tocca: lo scambio è uno solo, senza un disegno in mezzo, e il browser lo conserva da sé (misurato:
+       `FILE-SFARFALLIO-06`, e il mutante che ne toglieva il ripristino sopravviveva). Il fuoco si rimette senza scorrere. */
+    mettiASchermo();
+    const rigaDi = (percorso) => { const li = nodoAlberoDi(ul, percorso); return li ? $(':scope > .ft-row', li) : null; };
+    if (scelta !== null) rigaDi(scelta)?.classList.add('ft-selected');
+    if (fuoco) {
+      const riga = rigaDi(fuoco.percorso);
+      if (riga) {
+        ul.querySelectorAll('.ft-row').forEach((r) => { r.tabIndex = -1; });
+        riga.tabIndex = 0;
+        (fuoco.sulMenu ? $(':scope > .ft-actions-btn', riga) ?? riga : riga).focus({ preventScroll: true });
+      }
+    }
+  }
+
+  /**
+   * ⛔⛔ Owner 28/10/2026: «la tab file a destra flickera come se si aggiornasse ogni tot». Ogni `WorkspaceChanged` buttava TUTTA
+   *   la cache e ridisegnava l'albero intero; sul 4174, una conversazione sulla cartella Desktop con un file che cambiava DENTRO
+   *   una cartella chiusa faceva 1.896 mutazioni in 34 s. Ora, come VS Code (`explorerService.ts`, letto il 28/10/2026):
+   *   1. i percorsi si raccolgono in una finestra di 500 ms, armata una volta sola (`RunOnceScheduler`, «only if not scheduled»):
+   *      una raffica continua fa un controllo ogni mezzo secondo, mai uno per evento;
+   *   2. si guarda solo ciò che tocca un livello GIÀ LETTO (`albero-cambiamenti.js`): se è a vista si rilegge e si confronta, se è
+   *      chiuso si dimentica e si rilegge quando la persona lo riapre;
+   *   3. ⭐ un passo oltre VS Code: un livello a vista che risulta IDENTICO (un file cambiato dentro, non aggiunto né tolto) non
+   *      tocca l'albero — zero mutazioni. Solo un elenco davvero diverso ridisegna, e il ridisegno non passa più dal vuoto.
+   * La prima volta (radice mai letta in questa conversazione) non c'è niente da confrontare: si disegna come sempre.
+   */
+  function accodaCambiamentiAlbero(percorsi) {
+    if (!state.realSession.treeCache.has('')) {
+      state.realSession.treeCache.clear();
+      programmaRenderAlberoReale();
+      return;
+    }
+    const generation = state.realSession.generation;
+    if (!cambiamentiAlbero || cambiamentiAlbero.generation !== generation) cambiamentiAlbero = { generation, percorsi: new Set() };
+    for (const percorso of Array.isArray(percorsi) ? percorsi : ['.']) cambiamentiAlbero.percorsi.add(percorso);
+    if (cambiamentiAlberoTimer !== null) return;
+    cambiamentiAlberoTimer = window.setTimeout(() => { cambiamentiAlberoTimer = null; void verificaCambiamentiAlbero(); }, RITARDO_CAMBIAMENTI_ALBERO_MS);
+  }
+
+  async function verificaCambiamentiAlbero() {
+    if (verificaAlberoInVolo) { // un controllo alla volta: ciò che è arrivato nel frattempo aspetta il prossimo giro
+      if (cambiamentiAlbero && cambiamentiAlberoTimer === null) {
+        cambiamentiAlberoTimer = window.setTimeout(() => { cambiamentiAlberoTimer = null; void verificaCambiamentiAlbero(); }, RITARDO_CAMBIAMENTI_ALBERO_MS);
+      }
+      return;
+    }
+    const lotto = cambiamentiAlbero;
+    cambiamentiAlbero = null;
+    if (!lotto || lotto.generation !== state.realSession.generation || !state.realSession.id) return;
+    verificaAlberoInVolo = (async () => {
+      const generation = lotto.generation;
+      const cache = state.realSession.treeCache;
+      if (!cache.has('')) { cache.clear(); programmaRenderAlberoReale(); return; }
+      const { daRicontrollare, daDimenticare } = livelliToccatiDalCambiamento([...lotto.percorsi], cache.keys(), state.realSession.treeOpen);
+      for (const livello of daDimenticare) segnaLivelloVecchio(livello);
+      if (!daRicontrollare.length) return;
+      // ⛔ BC-42: nessuno guarda la scheda File ⇒ nessuna lettura; si dimentica, e il debito si salda quando la scheda si apre
+      if (!schedaFileAVista()) {
+        for (const livello of daRicontrollare) cache.delete(livello);
+        programmaRenderAlberoReale();
+        return;
+      }
+      let cambiato = false;
+      for (const livello of daRicontrollare) {
+        const prima = cache.get(livello);
+        if (!prima) continue; // tolto nel frattempo da un'azione della persona: lo rilegge il suo ridisegno
+        let dopo;
+        try {
+          // eslint-disable-next-line no-await-in-loop -- pochi livelli (solo quelli a vista), uno per volta: niente raffiche di fetch
+          dopo = await caricaLivelloAlbero(livello, true);
+        } catch {
+          if (generation !== state.realSession.generation) return;
+          cache.delete(livello); // sparito o illeggibile: lo dice il ridisegno, come alla prima apertura
+          cambiato = true;
+          continue;
+        }
+        if (generation !== state.realSession.generation) return;
+        if (stessoLivello(prima, dopo)) continue;
+        cambiato = true;
+        for (const vecchio of livelliSottoCartelleSparite(livello, prima, dopo, [...cache.keys()])) cache.delete(vecchio);
+      }
+      if (cambiato) programmaRenderAlberoReale();
+    })().finally(() => { verificaAlberoInVolo = null; });
+    return verificaAlberoInVolo;
+  }
+
+  /** Un livello letto ma non a vista è cambiato sul disco: si toglie dalla cache e la sua lista a schermo (nascosta) si segna
+   *  vecchia, così riaprendo la cartella si rilegge invece di mostrare il contenuto di prima. Il segno sta in un `WeakSet`, non in
+   *  un attributo: scriverlo nel DOM sarebbe già una mutazione, per una cosa che nessuno vede. */
+  function segnaLivelloVecchio(livello) {
+    state.realSession.treeCache.delete(livello);
+    const albero = $('#inspector-files .ft-tree');
+    const li = albero ? nodoAlberoDi(albero, livello) : null;
+    const lista = li ? $(':scope > ul', li) : null;
+    if (lista && lista.childElementCount > 0) listeAlberoVecchie.add(lista);
+  }
+
+  /** Riaprendo una cartella già letta: le cartelle APERTE dentro di lei segnate vecchie mentre erano nascoste si rileggono ora. */
+  async function rileggiLivelliVecchiSotto(lista) {
+    for (const vecchia of [...lista.querySelectorAll('ul')].filter((u) => listeAlberoVecchie.has(u))) {
+      const li = vecchia.parentElement;
+      if (!vecchia.isConnected || !li?.classList.contains('ft-open')) continue;
+      // eslint-disable-next-line no-await-in-loop -- l'ordine delle righe è quello del disco, una cartella per volta
+      await rileggiLivelloSulPosto(vecchia, li.dataset.percorso, Number(li.getAttribute('aria-level')) || 1);
+    }
+  }
+
+  /** Rilegge una cartella segnata vecchia e ne sostituisce le righe in un colpo solo: la vecchia lista resta finché la nuova
+   *  non è pronta (niente «Caricamento…» in mezzo a una cartella che la persona sta già guardando). */
+  async function rileggiLivelloSulPosto(lista, percorso, profondita) {
+    listeAlberoVecchie.delete(lista);
+    let voci;
+    try {
+      voci = await caricaLivelloAlbero(percorso);
+    } catch {
+      lista.replaceChildren(textElement('li', 'ft-loading', tr('app.files.unreadable')));
+      return;
+    }
+    const nuove = document.createDocumentFragment();
+    for (const voce of voci) {
+      // eslint-disable-next-line no-await-in-loop -- vedi la nota gemella in apriCartellaAlbero
+      await costruisciNodoAlbero(voce.nome, `${percorso}/${voce.nome}`, Boolean(voce.cartella), profondita + 1, nuove);
+    }
+    lista.replaceChildren(nuove);
   }
 
   /** Aggiorna SOLO i pallini di stato dei file già a schermo — nessuna richiesta di rete, reviewFiles è già aggiornato. */
@@ -22346,11 +23017,37 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      */
     const compattazione = interpretaEventoCompattazione(evento);
     if (compattazione) { applicaEventoCompattazioneLegacy(compattazione, evento); return; }
+    /* L1 1.3 (owner 26/10/2026, bozzetto approvato): la finestra del modello locale allargata da sola — una riga, come il riassunto,
+       nello stesso posto (`inserisciRigaCompattazione`); idempotente per `at`, quindi la rigiocata non la raddoppia */
+    if (evento.type === 'CUSTOM' && evento.name === EVENTO_FINESTRA_LOCALE) {
+      const colonna = colonnaConversazione(ROOT());
+      if (colonna && state.realSession.id) aggiornaRigaFinestraLocale(colonna, evento.value, { sessionId: state.realSession.id, document, inserisci: inserisciRigaCompattazione });
+      return;
+    }
     /* owner 17/10/2026 («Avviso in chat + stato in Estensioni»): un server MCP che non parte, detto una volta finché l'esito non cambia */
+    /* «Segnala un problema», la seconda porta (owner 29/10/2026): la bozza di `report_problem`, già ripulita dal server, diventa la carta
+       nel turno di TALOS; idempotente per chiamata, quindi la rigiocata della storia non la raddoppia */
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.segnalazione-bozza') {
+      mostraBozzaSegnalazione(evento.value);
+      return;
+    }
     if (evento.type === 'CUSTOM' && evento.name === EVENTO_MCP_AVVIO) {
       /* nel turno di TALOS come ogni nota del giro (`nellaChat`): rigiocando, l'evento arriva prima del primo testo e fuori dal turno
          la nota aveva un'altra larghezza e un altro corpo (revisione D, bugfixer 17/10/2026) */
       for (const esito of nuoviServerNonPartiti(avvisiMcpDetti, state.realSession.id, evento.value)) nellaChat(creaNotaMcpNonPartito(esito, { document }));
+      return;
+    }
+    /* Owner 29/10/2026, «Ferma tutto»: il server dice quante figlie ha fermato e chi (persona, modello, sistema). L'evento è durevole:
+       la stessa riga anche rigiocando la storia, e sul telefono. */
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.figlie-fermate') {
+      const quante = Number(evento.value?.quante) || 0;
+      if (quante > 0) {
+        /* owner 29/10/2026 sera: a chat ferma si sono fermati SOLO gli agenti — «Fermati N agenti», senza «anche» */
+        /* e quando li ferma il MODELLO: il suo giro va avanti, quindi niente «anche» neppure lì (trovato dal Mobile, 29/10 sera) */
+        const soloAgenti = evento.value?.chatFerma === true || evento.value?.da === 'modello';
+        nellaChat(creaNotaSistema({ tipo: 'info', badge: tr('app.common.note'), titolo: soloAgenti ? trn('app.stopMenu.lineAgentsOnlyOne', 'app.stopMenu.lineAgentsOnlyMany', quante) : trn('app.stopMenu.lineOne', 'app.stopMenu.lineMany', quante),
+          testo: evento.value?.da === 'modello' ? tr('app.stopMenu.lineByModel') : tr('app.stopMenu.lineByYou') }, { document }));
+      }
       return;
     }
     /* R5.8 (owner 18/10/2026, «Ferma e libera tutto»): la sessione è stata chiusa — dal telefono, con la sua origine. La nota resta
@@ -22389,6 +23086,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       }
     }
     if (evento.type === 'CUSTOM' && evento.name === 'talos.fine-rigiocata') void aggiornaAvvisoSogliaContesto({ forza: true });
+    if (evento.type === 'CUSTOM' && evento.name === 'talos.fine-rigiocata') void aggiornaServerLocali(); // owner 27/10/2026: lo stato vivo dei server
     if (evento.type === 'CUSTOM' && evento.name === 'talos.fine-rigiocata') void disegnaFrecceDeiRami(); // 24/10: le versioni ‹ n / N ›, a storia disegnata
     /* R5.11: al confine si fissa l'ultima sequenza della storia — un evento con una sequenza più alta è dal vivo (il toast «Rifai») */
     /* ⛔ Una sola istruzione, senza graffa: le prove A1BIS-05/B1-05 cercano il blocco del confine con `… 'talos.fine-rigiocata') {` */
@@ -22483,12 +23181,15 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (evento.type === 'CUSTOM' && evento.name === 'talos.plan') {
       const fact = parsePlanEvent(evento.value, state.realSession.id);
       if (!fact) return;
-      const existing = [...document.querySelectorAll('#conversation [data-c="PlanArtifact"][data-source="journal"]')]
-        .find((node) => node.dataset.planId === fact.planId);
+      const schedeDelPiano = [...document.querySelectorAll('#conversation [data-c="PlanArtifact"][data-source="journal"]')]
+        .filter((node) => node.dataset.planId === fact.planId);
+      /* owner 27/10/2026: le revisioni superate restano nella chat, chiuse nella loro riga; quella corrente è l'unica senza `data-sostituito` */
+      const existing = schedeDelPiano.find((node) => !('sostituito' in node.dataset)) ?? null;
       /* ⛔ 24/09/2026, decisioni owner 36-39 — la SCELTA sul piano (o la chiusura senza scelta) scrive la ricevuta sulla scheda
          della stessa revisione: la scrive l'evento del server, così è uguale in ogni finestra e dopo un ricaricamento. */
       if (fact.status !== 'proposed' && fact.status !== 'unavailable') {
-        if (existing) applicaDecisionePiano(existing, fact, { document, onApriSessione: (id) => passaASessione(id, id) });
+        const dellaRevisione = schedeDelPiano.find((node) => Number(node.dataset.revision) === fact.revision) ?? existing;
+        if (dellaRevisione) applicaDecisionePiano(dellaRevisione, fact, { document, onApriSessione: (id) => passaASessione(id, id) });
         if (!state.realSession.inRigiocata) { void aggiornaElencoSessioniReali(); syncRunComposerState(); } // la riga smette di dire «aspetta te»
         return;
       }
@@ -22499,18 +23200,28 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         planId: fact.planId, revision: fact.revision,
         ...(fact.requestId ? { requestId: fact.requestId, hash: fact.hash, onDecisione: (corpo) => inviaDecisionePiano(sessionePiano, corpo) } : {}),
       });
+      if (card && fact.status === 'proposed') testiDeiPiani.set(card, fact.text);
       const fallback = legacyPlanCard?.isConnected && legacyPlanCard.dataset.source === 'legacy' ? legacyPlanCard : null;
       if (existing) {
-        existing.replaceWith(card);
+        /* ⛔⛔ owner 27/10/2026, «gravissima»: «quando un piano viene modificato, mi porta al piano originale in cima alla conversazione…
+           è impensabile». Supera D4 del 24/09 (scheda aggiornata in loco + «Vai al piano»): la revisione nuova nasce IN FONDO, dove
+           la persona sta leggendo, con «Cosa è cambiato»; la vecchia si chiude nella sua riga, al suo posto, e si rilegge a richiesta.
+           Uguale dal vivo e in rigiocata: la storia si legge nell'ordine in cui è successa. Bozzetto B approvato («Sì, così»). */
+        const testoPrima = testiDeiPiani.get(existing);
+        const revisionePrima = Number(existing.dataset.revision) || fact.revision - 1;
+        const genitore = existing.parentNode;
+        const dopo = existing.nextSibling;
+        const riga = creaRigaPianoSostituito({ document, card: existing, revisione: revisionePrima, revisioneNuova: fact.revision });
+        genitore?.insertBefore(riga, dopo);
         fallback?.remove();
+        nellaChat(card);
+        if (typeof testoPrima === 'string' && fact.status === 'proposed') {
+          aggiungiCosaECambiato({ document, card, ops: differenzeDelPiano(testoPrima, fact.text), revisionePrima });
+        }
       } else if (fallback) fallback.replaceWith(card);
       else nellaChat(card);
       legacyPlanCard = null;
-      /* ⭐ D4, 24/09/2026 — decisione owner: card UNICA aggiornata in loco + avviso sopra il composer quando
-         arriva una REVISIONE dal vivo (ricerca `.claude/RICERCA-10x4-REVISIONE-PIANO-2026-09-23.md`: dieci
-         concorrenti, tutti un solo piano aggiornato in loco). In rigiocata niente avviso: la storia si legge. */
-      if (existing && !state.realSession.inRigiocata) mostraAvvisoPiano(card, fact.revision);
-      else nascondiAvvisoPiano();
+      nascondiAvvisoPiano();
       // 24/09/2026: un piano che aspetta la scelta fa dire «aspetta te» alla riga della sessione, come una domanda.
       if (fact.requestId && !state.realSession.inRigiocata) { void aggiornaElencoSessioniReali(); syncRunComposerState(); segnalaRigaSessioneViva(); }
       return;
@@ -22519,9 +23230,24 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        RESTA): dal vivo la pagina li rilegge da qui. In RIGIOCATA no: la verità di adesso è il contratto della sessione, già
        applicato all'apertura (`applicaImpostazioniSessione`), e un cambio fatto DOPO a mano non deve tornare indietro. */
     if (evento.type === 'CUSTOM' && evento.name === 'talos.impostazioni-sessione') {
-      registraCambioPianoRichiesto(evento.value);
-      if (state.realSession.inRigiocata) return;
       const valore = evento.value ?? {};
+      /* Revisione del blocco 12 (RV-REV-01): il kernel rilegge i permessi a OGNI attrezzo (`permessiCorrentiFn`), quindi un cambio a metà
+         giro (Piano approvato, selettore toccato mentre lavora) vale per le carte che nascono DOPO. Il permesso «in vigore» del giro si
+         aggiorna qui, dal vivo e nella rigiocata (prima del `return` della rigiocata): la carta resta spiegata col permesso del momento
+         in cui è nata, mai con quello di oggi. */
+      const permessiInVigore = valore.istantanea?.permessi ?? valore.permessi;
+      if (PERMESSI_SESSIONE_VALIDI.includes(permessiInVigore)) state.realSession.permessiDelGiro = permessiInVigore;
+      /* owner 27/10/2026: un cambio qualunque (modello, ragionamento, titolo…) non è una richiesta di Piano: la fascia la tocca solo il
+         Piano. Il modo, quando cambia, lo rimette `applicaImpostazioniSessione` qui sotto. */
+      if (!['impostazioni', 'nome', 'cambio-fornitore'].includes(valore.motivo)) registraCambioPianoRichiesto(valore);
+      if (state.realSession.inRigiocata) return;
+      /* ⭐ owner 27/10/2026 («sul pc devono essere visibili subito come modello, ragionamento etc»): la fotografia INTERA, come Codex
+         `thread/settings/updated` — e, come il suo client (tui/src/app/agents_overview_threads.rs:169-185), mai sopra una scelta di
+         questa finestra ancora in viaggio: arriverà con la sua risposta. */
+      if (valore.istantanea) {
+        trattieniOApplicaIstantanea(valore.istantanea, state.realSession.id);
+        return;
+      }
       if (['normale', 'piano'].includes(valore.modalitaOperativa)) state.modalitaOperativa = valore.modalitaOperativa;
       if (['Read only', 'Workspace write', 'On request', 'Full access'].includes(valore.permessi)) state.permissions = valore.permessi;
       salvaPreferenzeChatDesktop();
@@ -22589,6 +23315,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     }
     /* C1 (owner 10/10/2026, «Sì, resta tolta»): una riga tolta dalla scheda Processi (`talos.processo-tolto`, durevole). Arriva
        anche a giro finito, e alla rigiocata: la colonna si ridisegna qui, come per l'uscita di uno sfondato. */
+    /*
+     * ⭐ Owner 27/10/2026 — UN SERVER LOCALE della conversazione (`talos.server-locale`, durevole): «pronto» o «fermato», col nome del
+     *   framework quando si sa. La riga in chat (bozzetto A1) è una per server e si aggiorna in posto; la striscia del Browser legge la
+     *   stessa mappa. Alla rigiocata la storia ridisegna le righe; lo stato VIVO lo rilegge `aggiornaServerLocali` al confine.
+     */
+    else if (evento.type === 'CUSTOM' && evento.name === 'talos.server-locale' && Number.isInteger(evento.value?.porta)) {
+      mostraServerLocale(evento.value);
+    }
     else if (evento.type === 'CUSTOM' && evento.name === 'talos.processo-tolto' && typeof evento.value?.toolCallId === 'string') {
       state.realSession.eventiAttrezzi.push({ type: 'ProcessoTolto', ...(Number.isFinite(evento._sequenza) ? { _sequenza: evento._sequenza } : {}), toolCallId: evento.value.toolCallId });
       aggiornaInspectorDaStato();
@@ -22730,11 +23464,21 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         break;
       }
       case 'RunStarted': {
+        /* Owner 27/10/2026 (carta dei permessi): il permesso DI QUESTO GIRO, dal vivo e nella rigiocata. Il perché della carta si spiega
+           con lui, non col permesso attuale della sessione (una carta di ieri in una sessione oggi su «Accesso pieno» diceva il falso).
+           Un giro che non lo porta (un server più vecchio) ⇒ null ⇒ la carta non dice la frase sulla politica. */
+        state.realSession.permessiDelGiro = PERMESSI_SESSIONE_VALIDI.includes(evento.contesto?.permessi) ? evento.contesto.permessi : null;
         /* 26/09, difetto (2): un giro nuovo mentre il vecchio aveva ancora chiamate aperte vuol dire che il vecchio si è
            fermato senza evento terminale (riavvio del server). Le sue chiamate si dicono interrotte e il suo gruppo si
            chiude: prima restava «lettura di 1 file…» per sempre, e la ripresa finiva DENTRO il gruppo del giro vecchio. */
         if (chiudiAttrezziInterrotti() > 0) chiudiBatchTool();
         chiudiSegmentoAttivo();
+        /* 26/10/2026 (allegati apribili, prova ALL-APRI-B03): la radice si sa PRIMA di disegnare la bolla — i chip degli allegati con un
+           percorso assoluto dentro la cartella si aprono solo se la conoscono; `aggiornaPannelloAmbiente` la scrive più sotto e a fotogramma
+           rimandato, cioè dopo i chip del primo giro. Stesso valore, solo prima. */
+        if (evento.contesto?.cartella) state.realSession.cartellaAssoluta = evento.contesto.cartella;
+        /* revisione A-F1: la cartella di PARTENZA, dove stanno i file della chat (il server la dice solo quando non è la radice) */
+        if (evento.contesto?.cartella) state.realSession.cartellaBase = evento.contesto.cartellaBase || evento.contesto.cartella;
         /*
          * ⛔⛔⛔ 16/09/2026 (P0, punto 6) — QUI C'ERA IL RIARMO, ED È STATO TOLTO.
          *
@@ -22760,9 +23504,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
          *   rigiocata, che è la stessa fonte da cui la chat ridisegna le bolle.
          */
         const domandaDelGiro = typeof evento.input?.consegna === 'string' ? evento.input.consegna : evento.input?.consegnaCorta;
-        if (evento.input?.origine !== 'delega' && evento.input?.origine !== 'workflow' && evento.input?.origine !== 'sfondo' && evento.input?.origine !== 'obiettivo' && !eDialogoAgente(evento.input) && typeof domandaDelGiro === 'string' && domandaDelGiro.trim() !== '') {
-          state.realSession.ultimaDomanda = domandaDelGiro;
-        }
+        const giroDellaPersona = evento.input?.origine !== 'delega' && evento.input?.origine !== 'workflow' && evento.input?.origine !== 'sfondo' && evento.input?.origine !== 'obiettivo' && !eDialogoAgente(evento.input) && typeof domandaDelGiro === 'string' && domandaDelGiro.trim() !== '';
+        if (giroDellaPersona) state.realSession.ultimaDomanda = domandaDelGiro;
+        /* revisione del blocco 19 (REV-ALLEGA-01): «Invia come allegato» vale solo per un giro partito da un messaggio della PERSONA */
+        state.realSession.giroDellaPersona = giroDellaPersona;
         contextMonitor?.setRunning(true);
         /*
          * ⛔⛔⛔ 06/9, CB-04 — QUI è il confine fra due invii: il consumo
@@ -23170,6 +23915,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           comandoDellaPersona: rigaDiComandoMio,
           iniziatoA: Date.now(),
           iniziatoDalVivo: !state.realSession.inRigiocata, // 02/10/2026: un'ora presa durante la rigiocata non misura niente
+          /* owner 27/10/2026 (righe vive): da quando l'attrezzo è partito DAVVERO — `avviatoA` del server (`agui-events.mjs` toolCallStart),
+             poi l'ora dell'evento (`at`, timbrata dal registro); senza nessuna delle due, l'ora di adesso solo dal vivo. Mai inventata. */
+          avviatoAlle: Number.isFinite(evento.avviatoA) ? evento.avviatoA
+            : Number.isFinite(Date.parse(evento.at ?? '')) ? Date.parse(evento.at)
+              : state.realSession.inRigiocata ? null : Date.now(),
           stato: 'running',
           ...bubble,
         };
@@ -23331,6 +24081,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           apri: (id) => { setView('automations'); if (apriAutomazioneNelPannello($('#schermoAutomazioni'), id)) mostraAutomazioni(); } });
         // R5.12: i telefoni collegati dalla chat — elenco, QR, remoto spento, revoca senza carta (dopo il dettaglio della riga, che lo sovrascriverebbe)
         if (info?.article && /^remote_(?:phone|device)/u.test(String(info.nome ?? ''))) montaTelefoniInChat(info, evento, { fallito }); // R5.13: + remote_device_send_file
+        if (info?.article && info.nome === 'local_page' && !fallito) montaPaginaLocaleInChat(info, evento); // owner 29/10/2026
         /* C2 R6 (08/10/2026): una regola di un ANTENATO ha coperto questa chiamata senza domanda — la ricevuta lo dice, la riga pure. */
         if (evento.receipt?.consentitoDa && info?.article) {
           segnaConsentitoDa({ riga: info.article, corpo: info.detail, consentitoDa: evento.receipt.consentitoDa, nomeSessione: nomeVivoDellaSessione });
@@ -23554,6 +24305,23 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           }
         }
         info?.outputReader?.monta(info.detail);
+        /*
+         * view_image (contratto 27/10/2026, punto 8): l'immagine che il modello ha guardato, come miniatura nel corpo aperto della riga — il
+         *   riquadro degli allegati (`creaAnteprimaImmagine`: un clic la apre grande). La copia SALVATA, cioè ciò che il modello ha visto
+         *   davvero (Hermes la rilegge dal file, che nel frattempo può essere cambiato: `fallback.tsx:690`, clone del 22/10). Il campo è
+         *   tipato e già filtrato dal server (`agui-events.mjs` toolCallResult); qui si controlla di nuovo la forma dell'indirizzo.
+         */
+        if (info?.detail && Array.isArray(evento.images) && evento.images.length) {
+          let nome = '';
+          try { nome = String((info.argomentiParsati ?? JSON.parse(info.argomenti || '{}'))?.path ?? '').split(/[\\/]/u).pop(); } catch { nome = ''; }
+          for (const immagine of evento.images.slice(0, 4)) {
+            const riquadro = creaAnteprimaImmagine({ url: `/api/v1/chat-images/${immagine?.id}`, nome: nome || tr('chat.image.label', { nome: '' }).replace(/[:\s]+$/u, ''),
+              larghezza: immagine?.width, altezza: immagine?.height }, { compatta: true });
+            if (!riquadro) continue;
+            riquadro.classList.add('talos-tool-row__immagine');
+            info.detail.appendChild(riquadro);
+          }
+        }
         if (info?.batch && info.stato === 'running') {
           const { batch, categoria } = info;
           info.esito = testoEsito; // R4 (24/09): l'esito resta con la voce (per `exit N` nella riga del segmento)
@@ -23676,10 +24444,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
          * cache e si ri-renderizza da capo, come un vero file manager
          * che si accorge di un `git checkout`: silenzioso, nessuna nota
          * in chat (non è un'azione dell'agente, non deve sembrarlo).
+         *
+         * ⛔⛔ Owner 28/10/2026: «la tab file a destra flickera come se si aggiornasse ogni tot». Invalidare TUTTO a ogni evento
+         *   voleva dire rifare l'albero intero ogni secondo per un file che cambiava in una cartella chiusa (misurato sul 4174:
+         *   1.896 mutazioni in 34 s). Ora i percorsi si raccolgono e si guarda solo ciò che la persona vede — `accodaCambiamentiAlbero`.
          */
         if (state.realSession.id) {
-          state.realSession.treeCache.clear();
-          programmaRenderAlberoReale();
+          accodaCambiamentiAlbero(evento.percorsi);
           if (!state.realSession.inRigiocata) programmaSchedaGithubPresto(); // C34: i file sono cambiati, lo stato git anche
         }
         break;
@@ -23850,6 +24621,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         nascondiAttesaRisposta();
         const card = appendApprovalCard(evento.requestId, evento.azione);
         state.realSession.approvazioniPendenti.set(evento.requestId, card);
+        segnaConsensoDellaChiamata(evento.azione?.toolCallId, evento.requestId); // 29/10/2026: la testa del gruppo dice che aspetta te
         /*
          * ⛔ 04/9, trovato guardando gli screenshot della corsa `qa-file-di-controllo`:
          * la riga della sessione nella sidebar restava «in corso · live» mentre a
@@ -23879,6 +24651,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           else segnaEsitoApprovazione(card, { approvato: Boolean(evento.approvato), altrove: rispostaDaUnAltraFinestra(card, evento), ambito: evento.ambito, motivo: evento.motivo }); // F4-03: ambito e motivo, se il server li manda; 03/10: l'evento decide un invio senza prova
           state.realSession.approvazioniPendenti.delete(evento.requestId);
         }
+        liberaConsensoDellaRichiesta(evento.requestId); // 29/10/2026: deciso il consenso, la chiamata torna «in esecuzione» (o finisce)
         aggiornaElencoSessioniReali(); // ⛔ 04/9 — l'altro verso: risolta l'approvazione, la riga deve smettere di dire «in attesa»
         aggiornaInspectorDaStato(); // 02/10/2026: dato il consenso il comando parte, e la sua riga torna «In corso» con lo Stop
         break;
@@ -23971,9 +24744,30 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
          * ⛔ Letto PRIMA della riga che lo consuma qui sotto: dopo sarebbe sempre stato nullo, e la
          *   cura sarebbe risultata verde restando inerte.
          */
-        const spiegazione = spiegaErrore(testoDelCampo(evento, 'message'), evento.code, provenienzaDelGiroFinito({
-          reindirizzamentoInVolo: Boolean(state.realSession.redirectPendingId),
-        }));
+        /* ⛔ Revisione del blocco 19 (REV-ALLEGA-01): un giro che NON è partito da un messaggio della persona (il risultato di una figlia,
+           un passo del Workflow, una ripresa in sottofondo, l'obiettivo) può sforare anche lui — il kernel conta come «richiesta nuova»
+           anche il risultato di una figlia. Lì non c'è un testo della persona da rimandare: niente pulsante, niente bolla «Non inviato»,
+           niente casella riempita con la sua domanda VECCHIA (che partiva pagata, col segno, al clic). */
+        const delGiroDellaPersona = state.realSession.giroDellaPersona !== false;
+        const spiegazione = spiegaErrore(testoDelCampo(evento, 'message'), evento.code, {
+          ...provenienzaDelGiroFinito({ reindirizzamentoInVolo: Boolean(state.realSession.redirectPendingId) }),
+          allegabile: evento.allegabile === true && delGiroDellaPersona, // §4.2, regola N: dato del server, mai dedotto qui
+        });
+        /*
+         * ⭐ §4.2, regola N (owner 22/10/2026; bozzetto «Invia come allegato» approvato il 29/10): il messaggio da solo non entrava e il
+         *   server si è fermato prima di pagare. La bolla della persona lo dice («Non inviato», anche rigiocata: è la storia vera); dal vivo
+         *   il testo torna nella casella se è vuota (mai sopra ciò che la persona sta già scrivendo) e la carta offre «Invia come
+         *   allegato» col testo ESATTO che era partito (`ultimaDomanda`, che `appendUserFollowUp` ricorda dove il testo passa davvero).
+         */
+        if (evento.code === 'REQUEST_TOO_LARGE' && delGiroDellaPersona) {
+          segnaUltimaBollaNonInviata();
+          const testoNonInviato = state.realSession.inRigiocata ? '' : String(state.realSession.ultimaDomanda ?? '');
+          spiegazione.testoNonInviato = testoNonInviato;
+          if (testoNonInviato && !composerInput.value.trim()) {
+            composerInput.value = testoNonInviato;
+            composerInput.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
         if (guida) spiegazione.rimedi = [guida.replace(/^\s*—\s*/, ''), ...spiegazione.rimedi];
         appendStatusNote('', true, { spiegazione });
         spegniGiriInCorso($('#conversation')); // ⛔ BC-41: anche un giro FALLITO e' un giro finito — `appendStatusNote` segna `danger` solo sull'ultimo turno
@@ -24209,6 +25003,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       state.realSession.domandePendenti = new Map();
       state.realSession.richiesteMcpPendenti = new Map(); // le card sono già sparite con replaceChildren(), la mappa le segue
       state.realSession.cartellaAssoluta = null; // Fase 3 — una sessione nuova non conosce ancora la propria radice finché RunStarted non arriva
+      state.realSession.cartellaBase = null; // revisione A-F1: la base di una sessione non passa alla successiva
       state.realSession.codaMessaggi = []; // FASE D — una sessione nuova non eredita la coda di quella precedente
       state.realSession.codaInPausa = false; // ⭐ 14/09 — né la sua pausa: la vera arriva col flusso degli eventi
       state.realSession.obiettivo = null; // /goal G6 — né il suo obiettivo: arriva col flusso, subito dopo la storia
@@ -24272,9 +25067,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       const corpo = state.model ? { taskId: task.id, modello: state.model, client } : { taskId: task.id, client };
       corpo.modalitaOperativa = state.modalitaOperativa;
       if (client === 'desktop') corpo.linguaInterfaccia = linguaInterfacciaPerIlServer(); // K3b: il primo giro la sa già
+      if (client === 'desktop') corpo.linguaDelleRisposte = linguaDelleRispostePerIlServer(); // owner 28/10
       const data = await apiPost('/api/v1/sessions', corpo);
       sessionId = data.sessionId;
-      if (client === 'desktop') linguaDettaAlServer.set(sessionId, corpo.linguaInterfaccia);
+      if (client === 'desktop') { linguaDettaAlServer.set(sessionId, corpo.linguaInterfaccia); linguaRisposteDettaAlServer.set(sessionId, corpo.linguaDelleRisposte); }
     } catch (error) {
       if (generation !== state.realSession.generation) return;
       nascondiAttesaRisposta();
@@ -24290,15 +25086,74 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     aggiornaElencoSessioniReali();
   }
 
-  async function stopRealSession() {
+  /*
+   * ⭐ Owner 29/10/2026 sera: «se fermo la chat i sub agenti non si fermano, bisogna mettere un avviso se stoppare solo la chat o anche i
+   *   sub agenti». Bozzetto approvato («Sì, procedi»), contratto CONTRATTO-FERMA-TUTTE-2026-10-29: con figlie al lavoro lo Stop apre
+   *   un piccolo menu sopra di sé (menu-stop.js); senza, resta immediato come sempre.
+   *   Le figlie al lavoro si contano dalla stessa sorgente del pannello Agenti (`/children` + gli agenti in diretta): ogni discendente
+   *   raggiungibile dalla sessione aperta, non concluso e non interrotto.
+   */
+  function agentiViviDellaChat() {
+    const radice = state.realSession.id;
+    if (!radice) return 0;
+    const perId = new Map();
+    for (const a of [...(state.realSession.figli || []).map((f) => ({ padreId: radice, ...f })), ...agentiInDiretta.values()]) {
+      if (typeof a?.sessionId === 'string') perId.set(a.sessionId, { ...perId.get(a.sessionId), ...a });
+    }
+    const raggiungibili = new Set([radice]);
+    let aggiunti;
+    do {
+      aggiunti = false;
+      for (const a of perId.values()) if (raggiungibili.has(a.padreId) && !raggiungibili.has(a.sessionId)) { raggiungibili.add(a.sessionId); aggiunti = true; }
+    } while (aggiunti);
+    return [...perId.values()].filter((a) => a.sessionId !== radice && raggiungibili.has(a.sessionId) && a.conclusa === false && !a.interrotta).length;
+  }
+  /* Il clic sullo Stop: la decisione (menu, o la scelta ricordata) e poi lo stop. Il menu è quello comune dell'app, ancorato allo Stop;
+     si chiude con Esc, col clic fuori o scegliendo, e chiuderlo senza scegliere non ferma niente. */
+  function fermaDalPulsante() {
+    const agentiVivi = agentiViviDellaChat();
+    const decisione = decidiStop({ agentiVivi, preferenza: leggiImpostazioniDesktop().appearance.stopWithAgents });
+    if (!decisione.chiedi) { void stopRealSession(decisione.figlie); return; }
+    const f = fermaDalPulsante;
+    if (f.smetti) { f.smetti(); f.smetti = null; }
+    const menu = creaMenuContestuale(document.body, { id: 'menuStop' });
+    const chiudi = () => {
+      menu.hidden = true; menu.replaceChildren();
+      sendButton.setAttribute('aria-expanded', 'false');
+      if (f.smetti) { f.smetti(); f.smetti = null; }
+    };
+    apriMenuStop(menu, {
+      ancora: sendButton, agentiVivi, finestra: window, chiudi,
+      onScelta: ({ figlie, ricorda }) => {
+        chiudi();
+        if (ricorda) aggiornaAspettoDesktop({ stopWithAgents: figlie === 'tutte' ? 'tutte' : 'solo-chat' });
+        void stopRealSession(figlie);
+      },
+    });
+    /* sopra il compositore, non sopra lo Stop: a giro in corso nel compositore può esserci testo, e il menu non lo copre; il bordo
+       destro sta su quello dello Stop, dentro la finestra */
+    const compositore = composerForm.getBoundingClientRect(), stop = sendButton.getBoundingClientRect();
+    menu.style.top = `${Math.max(8, compositore.top - menu.offsetHeight - 8)}px`;
+    menu.style.left = `${Math.max(8, Math.min(stop.right - menu.offsetWidth, window.innerWidth - menu.offsetWidth - 8))}px`;
+    sendButton.setAttribute('aria-expanded', 'true');
+    const fuori = (ev) => { if (!menu.contains(ev.target) && ev.target !== sendButton && !sendButton.contains(ev.target)) chiudi(); };
+    /* in cattura sul documento: Esc chiude il menu e non arriva alla scorciatoia globale, che chiederebbe di fermare il giro */
+    const esc = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); ev.preventDefault(); chiudi(); sendButton.focus(); } };
+    window.setTimeout(() => { document.addEventListener('pointerdown', fuori, true); document.addEventListener('keydown', esc, true); }, 0);
+    f.smetti = () => { document.removeEventListener('pointerdown', fuori, true); document.removeEventListener('keydown', esc, true); };
+  }
+
+  /* `figlie`: 'tutte' | 'nessuna' | null (null = il corpo di sempre, senza il campo) */
+  async function stopRealSession(figlie = null) {
     if (!state.realSession.id) { toast(tr('app.composer.noRealSession')); return; }
     const redirectId = state.realSession.redirectRequestIntentId || state.realSession.redirectPendingId;
     if (redirectId) state.realSession.redirectInvalidatedIds.add(redirectId);
     sendButton.disabled = true;
     sendButton.setAttribute('aria-busy', 'true');
     try {
-      await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/stop`, redirectId ? { redirectId } : {});
-      toast(tr('app.run.stopped'), tr('app.run.stoppedBody'));
+      const vivi = figlie === 'nessuna' ? agentiViviDellaChat() : 0;
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/stop`, { ...(redirectId ? { redirectId } : {}), ...(figlie ? { figlie } : {}) });
+      toast(tr('app.run.stopped'), vivi > 0 ? trn('app.stopMenu.agentsKeepGoingOne', 'app.stopMenu.agentsKeepGoingMany', vivi) : tr('app.run.stoppedBody'));
     } catch (error) {
       toast(tr('app.run.stopFailed'), error.message);
     } finally {
@@ -24333,14 +25188,24 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    */
   const linguaInterfacciaPerIlServer = () => (linguaCorrenteDiT() === 'en' ? 'en' : 'it');
   const linguaDettaAlServer = new Map(); // sessionId → lingua che il server conosce
+  /* Owner 28/10/2026: la lingua delle risposte viaggia allo stesso modo — all'avvio nel corpo, poi prima di ogni giro solo se è
+     cambiata (`linguaRisposteDettaAlServer`). «auto» = Automatica: il nucleo segue la lingua di chi scrive o parla. */
+  const linguaDelleRispostePerIlServer = () => leggiImpostazioniDesktop().appearance.replyLanguage ?? 'auto';
+  const linguaRisposteDettaAlServer = new Map(); // sessionId → lingua delle risposte che il server conosce
   async function allineaLinguaDellaSessione(sessionId) {
     if (!sessionId || window.__talosHarnessApiBase) return;
     const lingua = linguaInterfacciaPerIlServer();
-    if (linguaDettaAlServer.get(sessionId) === lingua) return;
+    const risposte = linguaDelleRispostePerIlServer();
+    const cambi = {
+      ...(linguaDettaAlServer.get(sessionId) === lingua ? {} : { linguaInterfaccia: lingua }),
+      ...(linguaRisposteDettaAlServer.get(sessionId) === risposte ? {} : { linguaDelleRisposte: risposte }),
+    };
+    if (Object.keys(cambi).length === 0) return;
     try {
-      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/settings`, { linguaInterfaccia: lingua });
-      linguaDettaAlServer.set(sessionId, lingua);
-    } catch { /* la descrizione dei comandi resta nella lingua di prima: non vale un giro fermo */ }
+      await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/settings`, cambi);
+      if ('linguaInterfaccia' in cambi) linguaDettaAlServer.set(sessionId, lingua);
+      if ('linguaDelleRisposte' in cambi) linguaRisposteDettaAlServer.set(sessionId, risposte);
+    } catch { /* la descrizione dei comandi e la lingua delle risposte restano quelle di prima: non vale un giro fermo */ }
   }
 
   async function reindirizzaSessioneReale(testo) {
@@ -24446,6 +25311,48 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     }
   }
 
+  /*
+   * §4.2, regola N (owner 22/10/2026; bozzetto 29/10): la bolla della persona che il server non ha inviato. Stessa grammatica della
+   *   testata («· dal telefono …»): un pezzo in più nella testata, e la bolla attenuata come nel bozzetto. L'ultima bolla della persona
+   *   è quella del giro appena fermato: il server si ferma prima di ogni altra riga del giro.
+   */
+  function segnaUltimaBollaNonInviata() {
+    const bolle = $$('#conversation .talos-message--user');
+    const bolla = bolle[bolle.length - 1];
+    if (!bolla || bolla.classList.contains('talos-message--non-inviato')) return;
+    bolla.classList.add('talos-message--non-inviato');
+    const stato = document.createElement('span');
+    stato.className = 'talos-message__stato';
+    stato.textContent = tr('chat.message.notSent');
+    bolla.querySelector('.talos-message__head')?.append(stato);
+  }
+  /*
+   * «Invia come allegato»: una volta sola per carta; parte col segno per il server.
+   * ⛔ Revisione del blocco 19 (REV-ALLEGA-02): la casella si svuotava e il pulsante si spegneva PRIMA dell'esito, e un invio rifiutato
+   *   lasciava la persona senza testo e senza pulsante. ⇒ Il segno «già mandato» si mette subito (il doppio clic resta una volta sola),
+   *   ma si TOGLIE se l'invio non è arrivato.
+   * ⛔ Seconda verifica (REV2-ALLEGA-02): svuotare SOLO dopo l'arrivo lasciava il testo lungo nella casella mentre la richiesta era in
+   *   volo, e un Invio lo mandava una seconda volta. ⇒ La casella si svuota SUBITO (se c'è ancora quel testo, mai la bozza nuova) e il
+   *   testo TORNA se l'invio non è arrivato, solo se nel frattempo la casella è rimasta vuota.
+   */
+  async function inviaComeAllegato(spiegazione) {
+    if (spiegazione.allegatoMandato) return;
+    spiegazione.allegatoMandato = true;
+    const testo = spiegazione.testoNonInviato;
+    const svuotata = composerInput.value === testo;
+    if (svuotata) {
+      composerInput.value = '';
+      composerInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    const arrivato = await resumeSession(testo, [], { allegaSeTroppoGrande: true });
+    if (arrivato === true) return;
+    spiegazione.allegatoMandato = false;
+    if (svuotata && !composerInput.value.trim()) {
+      composerInput.value = testo;
+      composerInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }
+
   /**
    * ⭐ Resume reale quando c'è una sessione reale CONCLUSA attiva. A
    * differenza del fork, torna LO STESSO sessionId: riprende un giro in più
@@ -24458,7 +25365,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * turno di chat reale — vedi submitPrompt(), unico chiamante di questo
    * secondo caso. Stesso endpoint, stessa funzione: nessuna duplicazione.
    */
-  async function resumeSession(messaggioFollowUp, immagini = [], { viaCodaId = null, bolla = null } = {}) {
+  async function resumeSession(messaggioFollowUp, immagini = [], { viaCodaId = null, bolla = null, allegaSeTroppoGrande = false } = {}) {
     if (!state.realSession.id) { toast(tr('app.run.noSessionToResume')); return; }
     const sessionId = state.realSession.id;
     const taskId = state.realSession.taskId;
@@ -24489,7 +25396,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/queue/invia`, { id: viaCodaId });
       } else {
         await allineaLinguaDellaSessione(sessionId); // K3b
-        await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp, ...(immagini.length ? { immagini: payloadImmagini(immagini) } : {}), ...(bolla ? { bolla } : {}) } : {});
+        const linguaDettata = messaggioFollowUp ? linguaDelMessaggioDettato(messaggioFollowUp) : null; // owner 28/10
+        await apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/resume`, messaggioFollowUp ? { messaggio: messaggioFollowUp, ...(linguaDettata ? { linguaDelMessaggio: linguaDettata } : {}), ...(allegaSeTroppoGrande === true ? { allegaSeTroppoGrande: true } : {}), ...(immagini.length ? { immagini: payloadImmagini(immagini) } : {}), ...(bolla ? { bolla } : {}) } : {});
+        if (messaggioFollowUp) dimenticaDettato();
       }
       if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
       segnaTappaLatenza('postRisposta');
@@ -24551,6 +25460,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       collegaEventiSessione(sessionId, generation);
       aggiornaElencoSessioniReali();
       if (!messaggioFollowUp) toast(tr('app.run.resumed'), tr('app.run.resumedBody'));
+      return true; // revisione del blocco 19: chi manda e deve sapere se è arrivato («Invia come allegato») lo legge da qui
     } catch (error) {
       if (sessionId !== state.realSession.id || generationAtSend !== state.realSession.generation) return;
       nascondiAttesaRisposta();
@@ -24788,6 +25698,27 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       if (sessionId === state.realSession.id) apriDialogoContesto(sessionId);
     }
   }
+  /* L1 1.3 (owner 26/10/2026) — «Allarga la finestra» dalla carta di «Chiedimi»: la persona l'ha chiesto, il server riapre il motore
+     locale con la finestra detta nella carta (`POST /api/v1/local-engine/window/enlarge`), e la conversazione riprende col prossimo
+     messaggio. Se non si può (memoria, motore occupato), lo dice e lascia le altre strade. */
+  async function allargaFinestraDallaCarta(spiegazione) {
+    /* Revisione blocco 4 (A-8): il modello del GIRO che si è fermato (`currentRunModel`, dal suo RunStarted), non quello del selettore,
+       che la persona può aver cambiato prima del clic; il selettore solo se il giro non l'ha detto. */
+    const delGiro = typeof state.realSession.currentRunModel === 'string' ? state.realSession.currentRunModel.trim() : '';
+    const modello = delGiro.startsWith('local:') ? delGiro : (typeof state.model === 'string' ? state.model.trim() : '');
+    const modelId = modello.startsWith('local:') ? modello.slice('local:'.length) : '';
+    if (!modelId || !Number.isSafeInteger(spiegazione?.servono)) { toast(tr('app.localWindow.notEnlarged'), tr('app.localWindow.notEnlargedWhy')); return; }
+    try {
+      const risposta = await fetchSorvegliata(API('/api/v1/local-engine/window/enlarge'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify({ modelId, servono: spiegazione.servono }),
+      });
+      const dati = await risposta.json().catch(() => null);
+      if (!risposta.ok || dati?.data?.ok !== true) { toast(tr('app.localWindow.notEnlarged'), tr('app.localWindow.notEnlargedWhy')); return; }
+      toast(tr('app.localWindow.enlarged', { finestra: conToken(dati.data.dopo) }), tr('app.localWindow.enlargedNext'));
+    } catch {
+      toast(tr('app.localWindow.notEnlarged'), tr('app.localWindow.notEnlargedWhy'));
+    }
+  }
   async function compactSession() {
     const sessionId = state.realSession.id;
     if (!sessionId) { toast(tr('app.contextManager.compact'), tr('app.contextManager.compactNoConversation')); return; }
@@ -24819,7 +25750,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (turnoAperto) nellaChat(riga); else colonna.append(riga);
   }
   /* B1 (owner 21/10/2026): la riga viva del riassunto atteso, con «Salta» (contratto §5) e «Ferma» (lo stesso Stop del compositore) */
-  const opzioniRigaViva = (sessionId) => ({ sessionId, inserisci: inserisciRigaCompattazione, onSalta: () => saltaRiassuntoInCorso(sessionId), onFerma: () => { void stopRealSession(); } });
+  const opzioniRigaViva = (sessionId) => ({ sessionId, inserisci: inserisciRigaCompattazione, onSalta: () => saltaRiassuntoInCorso(sessionId), onFerma: () => fermaDalPulsante() }); // revisione blocco 20: lo stesso Stop del compositore (con agenti al lavoro chiede, o la scelta ricordata)
   async function saltaRiassuntoInCorso(sessionId) {
     try {
       const esito = await saltaRiassuntoLegacy({ fetchFn: fetchSorvegliata, base: API('/api/v1'), sessionId });
@@ -25121,14 +26052,48 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
 
   let catenaAggiornamentiSessione = Promise.resolve();
+  /* owner 27/10/2026: le scelte di questa finestra ancora in viaggio, e l'ultima versione delle impostazioni applicata per sessione.
+     Stato PIGRO, come `statoFasciaPianoRichiesto`: chi lo legge può girare prima di questa riga (avvio), e una `let` qui non c'è ancora. */
+  function statoImpostazioniDalVivo() {
+    state.impostazioniDalVivo ??= { inVolo: new Map(), trattenute: new Map(), versioni: new Map() };
+    return state.impostazioniDalVivo;
+  }
+  /*
+   * ⛔ Revisione blocco 11 (D-R1, 27/10/2026): una fotografia che arriva mentre una scelta di QUESTA finestra per la stessa sessione è
+   *   in viaggio non si butta: si TRATTIENE la più nuova, e si applica quando la richiesta finisce, bene o male. Prima la si scartava, e
+   *   si perdeva così il cambio più nuovo del dispositivo (arrivato con una versione più alta della risposta, o mentre la richiesta
+   *   falliva) — e il contatore era unico per la finestra, quindi in volo per A buttava anche i cambi di B. Contratto §F.3 punto 5;
+   *   Codex fa lo stesso per thread (`pending_server_profiles`, tui/src/app/agents_overview_threads.rs:169-185). Applicare dopo è
+   *   sicuro: `applicaIstantaneaImpostazioni` scarta da sé una versione non più nuova di quella già applicata.
+   */
+  function trattieniOApplicaIstantanea(istantanea, sessionId) {
+    if (!sessionId) return;
+    const st = statoImpostazioniDalVivo();
+    if (!(st.inVolo.get(sessionId) > 0)) { applicaIstantaneaImpostazioni(istantanea, sessionId); return; }
+    const versione = Number.isSafeInteger(istantanea?.versione) ? istantanea.versione : 0;
+    const gia = st.trattenute.get(sessionId);
+    if (!gia || versione >= (Number.isSafeInteger(gia.versione) ? gia.versione : 0)) st.trattenute.set(sessionId, istantanea);
+  }
+  function fineSceltaInVolo(sessionId) {
+    const st = statoImpostazioniDalVivo();
+    const resto = Math.max(0, (st.inVolo.get(sessionId) ?? 0) - 1);
+    if (resto) { st.inVolo.set(sessionId, resto); return; }
+    st.inVolo.delete(sessionId);
+    const trattenuta = st.trattenute.get(sessionId);
+    st.trattenute.delete(sessionId);
+    if (trattenuta) applicaIstantaneaImpostazioni(trattenuta, sessionId);
+  }
   function sincronizzaImpostazioniSessione(patch) {
     salvaPreferenzeChatDesktop();
     const sessionId = state.realSession.id;
     if (!sessionId || !patch || Object.keys(patch).length === 0) return Promise.resolve({ locale: true });
+    const inVolo = statoImpostazioniDalVivo().inVolo;
+    inVolo.set(sessionId, (inVolo.get(sessionId) ?? 0) + 1);
     const richiesta = catenaAggiornamentiSessione
       .catch(() => undefined)
       .then(() => apiPost(`/api/v1/sessions/${encodeURIComponent(sessionId)}/settings`, patch))
       .then((esito) => {
+        if (esito?.istantanea) applicaIstantaneaImpostazioni(esito.istantanea, sessionId); // la base nuova, versione compresa
         const sessione = state.sessionSelection.available.get(sessionId);
         if (sessione) {
           Object.assign(sessione, patch);
@@ -25142,6 +26107,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         return esito;
       });
     catenaAggiornamentiSessione = richiesta.catch(() => undefined);
+    richiesta.finally(() => fineSceltaInVolo(sessionId)).catch(() => {}); // D-R1: la fotografia trattenuta, se più nuova, arriva adesso
     richiesta.catch((error) => {
       toast(tr('app.settings.preferenceNotSaved'), messaggioErroreUtente(error, tr('app.settings.choiceNotSaved')));
     });
@@ -25222,22 +26188,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
   /*
    * ⭐ D4, 24/09/2026 — L'AVVISO «PIANO AGGIORNATO» (sorella della fascia del modo, qui sotto).
-   *   `mostraAvvisoPiano(card, n)`: se la card aggiornata NON è già in vista, scrive la frase (regione viva)
-   *   e mostra la riga; «Vai al piano» porta la card al centro dello scorrimento, le dà il fuoco e spegne il
-   *   segui-fondo dello streaming (è la persona che naviga: HOLD); la chiusura spegne e basta. Se la card
-   *   torna in vista da sola (la persona scorre), l'avviso si spegne (IntersectionObserver).
+   *   ⛔ Superato dall'owner il 27/10/2026: la revisione nuova nasce in fondo e la vecchia si chiude in una riga
+   *   (`components/piano-rivisto.js`), quindi l'avviso non si accende più. Resta l'elemento, ancora delle due sorelle
+   *   (avviso del contesto, fascia dell'obiettivo), e il suo spegnimento al cambio di sessione.
    */
   let osservatoreAvvisoPiano = null;
-  function cardPianoInVista(card) {
-    const q = card.getBoundingClientRect();
-    const testata = card.querySelector('.talos-plan-artifact__heading')?.getBoundingClientRect() ?? q;
-    let cima = 0, fondo = window.innerHeight;
-    for (let n = card.parentElement; n; n = n.parentElement) {
-      const st = getComputedStyle(n);
-      if (/(auto|scroll)/.test(st.overflowY) && n.scrollHeight > n.clientHeight) { const r = n.getBoundingClientRect(); cima = Math.max(0, r.top); fondo = Math.min(window.innerHeight, r.bottom); break; }
-    }
-    return testata.top >= cima - 1 && testata.bottom <= fondo + 1;
-  }
   function nascondiAvvisoPiano() {
     const avviso = $('#avvisoPiano');
     if (!avviso) return;
@@ -25246,44 +26201,6 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     avviso.hidden = true;
     const testo = avviso.querySelector('[data-avviso-piano-testo]');
     if (testo) testo.textContent = '';
-    misuraPilaToast();
-  }
-  function mostraAvvisoPiano(card, revisione) {
-    const avviso = $('#avvisoPiano');
-    if (!avviso || !card?.isConnected) { nascondiAvvisoPiano(); return; }
-    /* ⛔ La visibilità NON si misura adesso: il testo del giro arriva in streaming e si disegna nel fotogramma
-       dopo (rAF), quindi in questo istante la card sembra in vista anche quando fra un attimo non lo sarà più.
-       Si mostra, e si decide DOPO il disegno: doppio rAF per il caso «era in vista davvero», osservatore per
-       tutto il resto. */
-    const testo = avviso.querySelector('[data-avviso-piano-testo]');
-    if (testo) testo.textContent = tr('app.plan.updated', { n: revisione });
-    avviso.hidden = false;
-    osservatoreAvvisoPiano?.disconnect();
-    /* ⛔ Niente controllo a TEMPO (misurato: un doppio rAF cadeva prima del disegno del testo in streaming, la cui
-       cadenza adattiva arriva a 250 ms, e spegneva l'avviso su una card che un attimo dopo era fuori vista).
-       L'osservatore si aggancia al PRIMO scorrimento del contenitore: da lì spegne l'avviso solo se la card è
-       davvero visibile per almeno il 60%. Un avviso in più su una card già in vista è un fastidio; un avviso
-       spento su una card fuori vista è il difetto D4 che si sta curando. */
-    let contenitore = null;
-    for (let n = card.parentElement; n; n = n.parentElement) { const st = getComputedStyle(n); if (/(auto|scroll)/.test(st.overflowY)) { contenitore = n; break; } }
-    if (typeof IntersectionObserver === 'function' && contenitore) {
-      const osservatore = new IntersectionObserver((voci) => { if (voci.some((v) => v.intersectionRatio >= 0.6)) nascondiAvvisoPiano(); }, { root: contenitore, threshold: [0.6] });
-      osservatoreAvvisoPiano = osservatore;
-      /* ⛔ 22/10/2026 (streaming fluido) — il primo scorrimento A TESTO IN PARI, non il primo e basta. Col ritmo
-         (`components/ritmo-streaming.js`) il testo del giro esce fino a 260 ms dopo il suo arrivo: lo scorrimento che segue il
-         testo parte mentre la card sta ancora in vista, e l'osservatore agganciato lì spegneva l'avviso subito (MDN,
-         `IntersectionObserver.observe`: «the callback will always fire the first render cycle after observe() is called»,
-         letto il 22/10/2026) — su una card che un attimo dopo era fuori vista (R4-PLAN-VIEWPORT-VISIBILITY). Si aspetta il
-         primo scorrimento con tutto il testo a schermo: la card è al suo posto e la misura dice il vero. */
-      const allaPrimaVistaStabile = () => {
-        if (osservatoreAvvisoPiano !== osservatore || !card.isConnected) { contenitore.removeEventListener('scroll', allaPrimaVistaStabile); return; }
-        if (testoStreamingIndietro()) return;
-        contenitore.removeEventListener('scroll', allaPrimaVistaStabile);
-        osservatore.observe(card);
-      };
-      contenitore.addEventListener('scroll', allaPrimaVistaStabile, { passive: true });
-    }
-    avviso.dataset.planId = card.dataset.planId || '';
     misuraPilaToast();
   }
   $('#avvisoPiano')?.addEventListener('click', (event) => {
@@ -25373,7 +26290,48 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     }
   }
 
+  /*
+   * ⭐ Owner 27/10/2026 — LA FOTOGRAFIA DELLE IMPOSTAZIONI, da qualunque parte arrivi (questa finestra, un'altra, un dispositivo
+   *   collegato, la CLI). Contratto con Mobile e CLI: handoff `CENSIMENTO-PARITA-REMOTO-2026-10-23.md` §F.
+   *   · `versione` cresce a ogni cambio salvato: una fotografia non più nuova di quella già applicata a QUESTA sessione si scarta
+   *     (il ripasso di un flusso, due cambi incrociati);
+   *   · si aggiorna sempre la riga dell'elenco (modello, permesso, titolo), e i comandi della chat solo se è la sessione aperta.
+   */
+  function applicaIstantaneaImpostazioni(istantanea, sessionId = state.realSession.id) {
+    if (!istantanea || typeof istantanea !== 'object' || !sessionId) return false;
+    const versione = Number.isSafeInteger(istantanea.versione) ? istantanea.versione : 0;
+    if (versione && versione <= (statoImpostazioniDalVivo().versioni.get(sessionId) ?? 0)) return false;
+    if (versione) statoImpostazioniDalVivo().versioni.set(sessionId, versione);
+    const riga = state.sessionSelection.available.get(sessionId);
+    const modelloCambiato = riga && normalizzaModelloSessione(riga) !== normalizzaModelloSessione(istantanea);
+    if (riga) {
+      Object.assign(riga, { modello: istantanea.modello, modelId: istantanea.modelId ?? istantanea.modello, reasoning: istantanea.reasoning,
+        permessi: istantanea.permessi, modalitaOperativa: istantanea.modalitaOperativa, permessiPerAttrezzo: istantanea.permessiPerAttrezzo,
+        ...(versione ? { versioneImpostazioni: versione } : {}), ...(istantanea.nome ? { nome: istantanea.nome } : {}) });
+    }
+    if (sessionId === state.realSession.id) {
+      applicaImpostazioniSessione(istantanea, sessionId);
+      state.realSession.doveGiranoIComandi = istantanea.doveGiranoIComandi ?? null;
+      state.realSession.comandiNellaConversazione = istantanea.comandiNellaConversazione === true;
+      if (typeof istantanea.nome === 'string' && istantanea.nome && istantanea.nome !== state.session) {
+        state.session = istantanea.nome;
+        sessionTitle.textContent = state.session; aggiornaTestataSessione();
+        $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
+        const attiva = $('.talos-session-item[aria-current="true"] .talos-session-item__title');
+        if (attiva) scriviNomeConNumero(attiva, state.session);
+      }
+      if (modelloCambiato) void Promise.resolve(contextMonitor?.refresh()).finally(() => { if (sessionId === state.realSession.id) void aggiornaAvvisoSogliaContesto(); });
+    }
+    if (modelloCambiato || (riga && istantanea.nome && sessionId !== state.realSession.id)) void aggiornaElencoSessioniReali();
+    return true;
+  }
+
   function applicaImpostazioniSessione(sessione, sessionId = sessione?.sessionId ?? null) {
+    /* owner 27/10/2026: la versione delle impostazioni con cui la sessione si apre è la base contro cui si giudicano quelle in arrivo */
+    if (sessionId && Number.isSafeInteger(sessione?.versioneImpostazioni ?? sessione?.versione)) {
+      const v = sessione.versioneImpostazioni ?? sessione.versione;
+      if (v > (statoImpostazioniDalVivo().versioni.get(sessionId) ?? 0)) statoImpostazioniDalVivo().versioni.set(sessionId, v);
+    }
     const reasoning = sessione?.reasoning && typeof sessione.reasoning === 'object' ? sessione.reasoning : null;
     state.model = normalizzaModelloSessione(sessione);
     state.effort = typeof reasoning?.effort === 'string' ? reasoning.effort : null;
@@ -27702,6 +28660,30 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         button.addEventListener('click', () => caricaWorkspaceChooser(item.path, { select: true, focusTree: true, projectId: item.projectId }));
         return button;
       }));
+      /*
+       * 29/10/2026 — I DISCHI (owner: «prevedi anche computer con più dischi non solo il C»). Il server dice tutti i dischi presenti
+       *   (`roots`, `workspace-browser.mjs`, `elencaDischi`); con più di uno compaiono qui in fondo. Toccarne uno porta DENTRO quel disco,
+       *   senza sceglierlo come progetto: un'unità intera non è una cartella di lavoro. Il disco aperto adesso è segnato come attivo.
+       */
+      const dischi = local.current?.roots || [];
+      if (dischi.length > 1) {
+        const radiceAttuale = pathKey(local.current?.root);
+        shortcuts.append(...dischi.map((disco) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'workspace-chooser-shortcut workspace-chooser-shortcut--disco';
+          button.dataset.workspaceDisco = disco.path;
+          const attivo = pathKey(disco.path) === radiceAttuale;
+          button.classList.toggle('active', attivo);
+          button.setAttribute('aria-pressed', String(attivo));
+          button.title = disco.path;
+          button.innerHTML = `${icon('i-folder')}<span><strong></strong><small></small></span>`;
+          button.querySelector('strong').textContent = disco.label;
+          button.querySelector('small').textContent = tr('app.workspace.kindDisk');
+          button.addEventListener('click', () => caricaWorkspaceChooser(disco.path, { focusTree: true }));
+          return button;
+        }));
+      }
     }
 
     async function caricaWorkspaceChooser(path, { select = false, focusTree = false, projectId = null } = {}) {
@@ -28329,10 +29311,14 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       }
       segnaTappaLatenza('postInviata');
       if (client === 'desktop') corpo.linguaInterfaccia = linguaInterfacciaPerIlServer(); // K3b: il primo giro la sa già
+      if (client === 'desktop') corpo.linguaDelleRisposte = linguaDelleRispostePerIlServer(); // owner 28/10
+      const linguaDettata = linguaDelMessaggioDettato(consegna); // owner 28/10: la lingua del primo messaggio, se dettato
+      if (linguaDettata) corpo.linguaDelMessaggio = linguaDettata;
       const data = await apiPost('/api/v1/sessions/custom', corpo);
+      dimenticaDettato();
       segnaTappaLatenza('postRisposta');
       sessionId = data.sessionId;
-      if (client === 'desktop') linguaDettaAlServer.set(sessionId, corpo.linguaInterfaccia);
+      if (client === 'desktop') { linguaDettaAlServer.set(sessionId, corpo.linguaInterfaccia); linguaRisposteDettaAlServer.set(sessionId, corpo.linguaDelleRisposte); }
     } catch (error) {
       if (generation !== state.realSession.generation) return;
       nascondiAttesaRisposta();
@@ -28344,8 +29330,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
          non ha scritto altro. Prima delle immagini, che altrimenti riempirebbero il campo con la consegna intera. */
       if (ripristino) {
         state.pendingCustomSession = state.pendingCustomSession ?? ripristino.pendente;
-        for (const a of ripristino.allegati ?? []) if (a?.tipo !== 'immagine' && !allegatiComposer.some(b => b.id === a.id)) aggiungiAllegato(a);
-        if (!composerInput.value.trim() && typeof ripristino.testo === 'string') { composerInput.value = ripristino.testo; autoGrowTextarea(); }
+        rimettiNelCompositore(ripristino);
       }
       /* AVVIO-REV-02 (revisione del bugfixer): col ripristino il testo è quello della persona — una foto senza parole non mette nel
          campo la consegna per il modello («Describe the attached image.») */
@@ -28854,6 +29839,20 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      * parte). Se una cartella è stata scelta e non c'è ancora nessuna
      * sessione reale, questo primo messaggio la avvia per davvero.
      */
+    /*
+     * ⛔⛔ 29/10/2026 (dal coordinatore, misurato sul 4174) — IL PRIMO MESSAGGIO SENZA MODELLO NON SPARISCE. La chat in attesa di «Nuova
+     *   sessione» nasce col modello scelto: senza, il server non ha niente da usare (regola dell'owner dell'11/09, «nessun modello
+     *   predefinito»). Prima l'Invio svuotava il compositore lo stesso e il testo spariva. Ora il testo RESTA (`false` ⇒ il compositore
+     *   non si svuota), TALOS lo dice con parole che ha già e apre la scelta del modello, come Hermes su un modello mancante («Choose a
+     *   model» apre il selettore: `apps/desktop/src/components/assistant-ui/thread/assistant-message.tsx:936-953`,
+     *   `lib/error-surface.ts:283`). La chat in attesa resta in attesa: scelto il modello, lo stesso Invio la fa nascere.
+     */
+    if (state.pendingCustomSession && !modelloScelto()) {
+      state.realSession.bollaDaMostrare = null; // la bolla di questo invio non è partita: il prossimo non la ripesca
+      toast(tr('home.noModelSelected'), tr('home.chooseAModel'), { chiave: 'primo-messaggio-senza-modello' });
+      openSheet('model');
+      return false;
+    }
     if (state.pendingCustomSession) {
       const { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modelloPlanner } = state.pendingCustomSession;
       /*
@@ -28909,23 +29908,62 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      * SCARTATO" più sotto in questo file: due test pretendono ZERO
      * chiamate di rete al mount.
      */
-    avviaSessioneImplicitaSeUnaSolaCartella(value, immagini);
+    /*
+     * ⛔⛔ 29/10/2026 (coordinatore) — LA STESSA GARANZIA DELLA CHAT IN ATTESA, SULLA STRADA IMPLICITA. Anche qui l'Invio svuotava il
+     *   compositore prima di sapere se la chat sarebbe nata, e nessun fallimento rimetteva il testo. Ora:
+     *   · senza modello il testo RESTA (`false`): con una cartella sola TALOS dice «Nessun modello selezionato» e apre la scelta del
+     *     modello, come sopra; con zero o più cartelle dice, come prima, che manca la sessione;
+     *   · se l'avvio non riesce per qualunque altro motivo (cartelle da scegliere, elenco illeggibile, POST rifiutata) il testo e gli
+     *     allegati TORNANO nel compositore, solo se nel frattempo la persona non ha scritto altro — lo stesso `ripristino` della
+     *     chat in attesa (`startCustomSession`, ramo catch), senza una chat in attesa da rimettere.
+     */
+    if (!modelloScelto()) {
+      state.realSession.bollaDaMostrare = null; // questo invio non parte: il prossimo non ripesca la sua bolla
+      void avvisaModelloMancanteSenzaSessione();
+      return false;
+    }
+    avviaSessioneImplicitaSeUnaSolaCartella(value, immagini, { pendente: null, testo: mostra ?? value, allegati: [...allegati] });
     return true;
   }
 
-  async function avviaSessioneImplicitaSeUnaSolaCartella(consegna, immagini = []) {
-    let progetti;
+  function modelloScelto() {
+    return typeof state.model === 'string' && state.model.trim() !== '';
+  }
+
+  async function progettiConfigurati() {
     try {
-      progetti = await apiGet('/api/v1/projects').then((r) => r.items);
+      const r = await apiGet('/api/v1/projects');
+      return Array.isArray(r?.items) ? r.items : [];
     } catch {
-      progetti = [];
+      return [];
     }
+  }
+
+  async function avvisaModelloMancanteSenzaSessione() {
+    const progetti = await progettiConfigurati();
     if (progetti.length !== 1) {
       toast(tr('app.common.noActiveSession'), tr('app.composer.noSessionBody'));
       return;
     }
+    toast(tr('home.noModelSelected'), tr('home.chooseAModel'), { chiave: 'primo-messaggio-senza-modello' });
+    openSheet('model');
+  }
+
+  /* Rimette nel compositore ciò che la persona aveva scritto e allegato, se non ha già scritto altro (vedi `startCustomSession`). */
+  function rimettiNelCompositore(ripristino) {
+    for (const a of ripristino.allegati ?? []) if (a?.tipo !== 'immagine' && !allegatiComposer.some(b => b.id === a.id)) aggiungiAllegato(a);
+    if (!composerInput.value.trim() && typeof ripristino.testo === 'string') { composerInput.value = ripristino.testo; autoGrowTextarea(); }
+  }
+
+  async function avviaSessioneImplicitaSeUnaSolaCartella(consegna, immagini = [], ripristino = null) {
+    const progetti = await progettiConfigurati();
+    if (progetti.length !== 1) {
+      toast(tr('app.common.noActiveSession'), tr('app.composer.noSessionBody'));
+      if (ripristino) { rimettiNelCompositore(ripristino); ripristinaImmagini(immagini, ''); }
+      return;
+    }
     const [{ id: cartellaId, nome: nomeCartella }] = progetti;
-    startCustomSession({ cartellaId, nomeCartella, consegna, immagini, modello: state.model, effort: state.effort });
+    startCustomSession({ cartellaId, nomeCartella, consegna, immagini, ripristino, modello: state.model, effort: state.effort });
   }
 
   function announceComposerAction(action) {
@@ -29311,17 +30349,35 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const recognition = new Ctor();
     recognition.continuous = true; // push-to-talk: resta in ascolto finché il tasto è premuto, non un singolo comando breve
     recognition.interimResults = true; // testo parziale VISIBILE mentre si parla — stessa disciplina "lo stato si vede" di ogni altra fase
-    recognition.lang = localeUI();
+    recognition.lang = linguaDellaDettatura(leggiImpostazioniDesktop().appearance.replyLanguage, localeUI()); // owner 28/10: la lingua scelta, o quella dei menu
     return recognition;
   }
 
   const riconoscimentoVocale = creaRiconoscimentoVocale();
-  const statoVoce = { registrando: false, testoBase: '' };
+  const statoVoce = { registrando: false, testoBase: '', linguaDiQuestaDettatura: null, dettato: null };
+  /*
+   * Owner 28/10/2026 (contratto col Mobile, `linguaDelMessaggio`): un messaggio DETTATO è nella lingua del riconoscitore, quindi il PC la
+   * sa e la dice al server. Solo se il testo dettato è ancora nel messaggio che parte e la dettatura è cominciata su un campo vuoto (o
+   * continuava una dettatura): un testo scritto a mano non porta nessuna lingua, e il modello la deduce da sé (regola «Automatica»).
+   */
+  /* Revisione del blocco 13 (S4): il dettato si DIMENTICA solo dopo un invio riuscito — se l'invio fallisce e la persona rimanda lo
+     stesso testo, la lingua resta. */
+  function linguaDelMessaggioDettato(messaggio) {
+    const dettato = statoVoce.dettato;
+    if (!dettato?.testo || typeof messaggio !== 'string' || !messaggio.includes(dettato.testo)) return null;
+    return dettato.lingua;
+  }
+  function dimenticaDettato() { statoVoce.dettato = null; }
 
   function avviaRegistrazioneVoce() {
     if (!riconoscimentoVocale || statoVoce.registrando) return;
     statoVoce.registrando = true;
     statoVoce.testoBase = composerInput.value;
+    /* la lingua si rilegge a ogni dettatura: fissata all'apertura dell'app, non seguiva un cambio dell'impostazione */
+    riconoscimentoVocale.lang = linguaDellaDettatura(leggiImpostazioniDesktop().appearance.replyLanguage, localeUI());
+    const base = statoVoce.testoBase.trim();
+    statoVoce.linguaDiQuestaDettatura = base === '' || (statoVoce.dettato?.testo === base && statoVoce.dettato.lingua === riconoscimentoVocale.lang)
+      ? riconoscimentoVocale.lang : null;
     composerMic.classList.add('recording');
     composerMic.setAttribute('aria-pressed', 'true');
     try {
@@ -29357,6 +30413,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       }
       const separatore = statoVoce.testoBase && !/\s$/.test(statoVoce.testoBase) ? ' ' : '';
       composerInput.value = statoVoce.testoBase + separatore + finale + interim;
+      statoVoce.dettato = statoVoce.linguaDiQuestaDettatura ? { lingua: statoVoce.linguaDiQuestaDettatura, testo: composerInput.value.trim() } : null;
       autoGrowTextarea();
     };
     riconoscimentoVocale.onerror = (event) => {
@@ -30028,6 +31085,9 @@ ${testo}`;
    * primo secondo, non solo dopo il primo click su una sessione.
    */
   void aggiornaSchedaCapability();
+  /* 27/10/2026 (owner, «LFM2 5 · 24B»): i nomi dei modelli locali vengono dal file del catalogo (`registraModelliLocali`, chat-foot.js).
+     Si legge all'avvio, così la pastiglia del compositore dice «LFM2.5» da subito; se il catalogo non risponde resta il nome dall'id. */
+  void apiGet('/api/v1/local-models').then((dati) => { if (registraModelliLocali(dati?.items)) aggiornaPiedeChatDaStato(); }).catch(() => {});
 
   $$('[data-file-entry]').forEach((button) => button.addEventListener('click', () => {
     $$('[data-file-entry]').forEach((entry) => entry.classList.toggle('active', entry === button));
@@ -30263,9 +31323,19 @@ ${testo}`;
     }
   });
 
+  /* Owner 29/10/2026 sera: ferma SUBITO gli agenti della chat ferma — la stessa rotta di «Ferma tutto» (`figlie: 'tutte'`), che a chat
+     ferma ferma solo loro e non li lascia riaprire la chat; la riga «Fermati N agenti» arriva dall'evento `talos.figlie-fermate`. */
+  fermaAgentiButton?.addEventListener('click', async () => {
+    if (!state.realSession.id) return;
+    fermaAgentiButton.disabled = true;
+    try { await apiPost(`/api/v1/sessions/${encodeURIComponent(state.realSession.id)}/stop`, { figlie: 'tutte' }); }
+    catch (error) { toast(tr('app.run.stopFailed'), error.message); }
+    finally { fermaAgentiButton.disabled = false; syncRunComposerState(); }
+  });
+
   sendButton.addEventListener('click', () => {
     if (runRealeAttivo()) {
-      stopRealSession();
+      fermaDalPulsante(); // owner 29/10/2026: con sotto-agenti al lavoro chiede «tutto o solo la chat»
       return;
     }
     composerForm.requestSubmit();
@@ -30335,8 +31405,10 @@ ${testo}`;
   });
   $('#fermaGiroConferma')?.addEventListener('click', async () => {
     chiudiVeloMockup('veloFermaGiro');
-    await stopRealSession();
+    await stopRealSession($('#veloFermaGiro')?.dataset.figlie || null); // la scelta ricordata, se c'è (chiediSeFermareIlGiro)
   });
+  $('#fermaGiroTutto')?.addEventListener('click', async () => { chiudiVeloMockup('veloFermaGiro'); await stopRealSession('tutte'); });
+  $('#fermaGiroSoloChat')?.addEventListener('click', async () => { chiudiVeloMockup('veloFermaGiro'); await stopRealSession('nessuna'); });
 
   /* ⭐⭐ 14/09 — «Togli» toglie il messaggio che la persona VEDE (il primo), per id: prima toglieva l'ultimo accodato, che
      poteva non essere quello scritto nel banner. La coda che resta la dice il server. */
@@ -30445,7 +31517,8 @@ ${testo}`;
     motionDurationRange: 'motionDuration', motionUiIntensityRange: 'motionUiIntensity', motionStaggerRange: 'motionStagger',
     motionWindowsToggle: 'motionWindows', motionSurfacesToggle: 'motionSurfaces', motionNavigationToggle: 'motionNavigation',
     motionComposerToggle: 'motionComposer', motionMessagesToggle: 'motionMessages', motionFeedbackToggle: 'motionFeedback',
-    immersiveHeaderToggle: 'immersiveHeader', chatFullWidthToggle: 'chatFullWidth', askTimeoutSelect: 'askTimeout',
+    immersiveHeaderToggle: 'immersiveHeader', chatFullWidthToggle: 'chatFullWidth', userBubbleFullWidthToggle: 'userBubbleFullWidth', askTimeoutSelect: 'askTimeout', stopWithAgentsSelect: 'stopWithAgents',
+    'setting-replyLanguageSelect': 'replyLanguage', // owner 28/10/2026
     'setting-uiDensitySelect': 'uiDensity', 'setting-uiLanguageSelect': 'uiLanguage', // 06/9 B8: righe nate nel mockup, senza un controllo legacy dietro
   };
   for (const [id, key] of Object.entries(appearanceControlMap)) {
@@ -30580,8 +31653,11 @@ ${testo}`;
     hostResizeObserver = new ResizeObserver(syncHostLayout);
     hostResizeObserver.observe(HOST());
   }
+  let domandaAppiccicata = null; // 27/10/2026: collegata più sotto, accanto alla spina (`collegaDomandaAppiccicata`)
   window.__talosHarnessUiRuntime = {
     selectSession,
+    /* 27/10/2026: la domanda ferma in cima — per le prove (quale, quanti ricalcoli) e per staccarla in un A/B */
+    domandaAppiccicata: () => domandaAppiccicata,
     /* /goal G6 (15/10/2026): la chat NUOVA con la cartella già scelta, per le prove di `/goal` in una chat che nasce ferma */
     avviaSessionePendente,
     /* B1 (10/10/2026): le chat pronte, per le prove (quali, quanti nodi, l'esito dell'ultimo parcheggio) */
@@ -31022,13 +32098,18 @@ ${testo}`;
     if (vaia?.dataset.vaia === 'impostazioni') { setView('settings'); setSettingsSection('appearance'); return; }
     if (vaia && VISTA_PER_VAIA[vaia.dataset.vaia]) { setView(VISTA_PER_VAIA[vaia.dataset.vaia]); return; }
     const apre = event.target.closest?.('[data-apre-velo]');
+    /* 27/10/2026 (trovato scrivendo RV-04b): l'albero dei rami si DISEGNA solo passando dal foglio (`openSheet` ⇒ `preparaVeloDaFoglio`);
+       aperto col velo nudo mostrava il segnaposto del ponte anche con i rami veri. Il pulsante della testata il ponte lo rimappa già
+       (`bridge/legacy-dom.js`, `open-sheet`); quello del pannello Agenti arrivava qui. Le due porte ora aprono lo stesso albero. */
+    if (apre?.dataset.apreVelo === 'veloAlbero') { openSheet('sessionTree'); return; }
     if (apre) { apriVeloMockup(apre.dataset.apreVelo); return; }
     const chiude = event.target.closest?.('[data-chiudi]');
     if (chiude) { chiudiVeloMockup(chiude.dataset.chiudi); return; }
     const velo = event.target.closest?.('.overlay-layer');
     if (velo && event.target === velo) { chiudiVeloMockup(velo.id); return; }
     const disclosure = event.target.closest?.('[aria-expanded][aria-controls]');
-    if (disclosure && !disclosure.matches('[role="tab"]')) {
+    /* 27/10/2026: un pulsante che apre/chiude da sé (`data-disclosure-propria`, es. «Rileggi» del piano sostituito) non si inverte due volte */
+    if (disclosure && !disclosure.matches('[role="tab"], [data-disclosure-propria]')) {
       const c = $(`#${disclosure.getAttribute('aria-controls')}`);
       if (c) { const aperto = disclosure.getAttribute('aria-expanded') === 'true'; disclosure.setAttribute('aria-expanded', String(!aperto)); c.hidden = aperto; }
     }
@@ -31098,6 +32179,7 @@ ${testo}`;
       requestAnimationFrame(() => { inCoda = false; aggiornaPiedeChatDaStato(); });
     }, { passive: true });
   })();
+  domandaAppiccicata = collegaDomandaAppiccicata(colonnaConversazione(ROOT())); // 27/10/2026 (owner, «come Hermes»): la domanda resta in cima mentre si legge la sua risposta
   collegaNavigazioneSpina(colonnaConversazione(ROOT()), { suCimaRaggiunta: suCimaRaggiuntaSpina }); // ⭐ BUG-24, D4: la spina porta anche l'osservatore di backfill — la prima riga montata in vista prepone la pagina vecchia
   collegaCronologia($('#schermoChat .talos-cronologia'), $('#conversation')); // 06/9: barra a sinistra, lente, fumetto, clic che porta al messaggio // 06/9: la spina dei giri si naviga, come una barra di cronologia della conversazione
   segnaTurniDisegnati($('#conversation')); // 22/10/2026: `content-visibility` solo sui turni già disegnati una volta (altezza vera ricordata)

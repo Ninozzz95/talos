@@ -50,7 +50,8 @@ import { ID_CATALOGO_IN_UI, REGISTRO_FORNITORI } from './provider-registry.mjs';
 import { cartelleFrequenti as cartelleFrequentiReale } from './frequent-dirs.mjs';
 import { CustomTaskError, validaCartellaLibera } from './custom-task.mjs'; // automazioni a due porte (08/10/2026): la cartella si verifica alla creazione
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA, parseBootstrapEnvelope } from './runtime-contract.mjs';
-import { getDiagnosticProblem, paramsPubblici, toPublicProblem } from './public-problem.mjs';
+import { codiciDiagnosticiRecenti, getDiagnosticProblem, paramsPubblici, toPublicProblem } from './public-problem.mjs';
+import { raccogliDiagnosticaSegnalazione } from './segnalazione-problema.mjs'; // «Segnala un problema» (owner 29/10/2026)
 import { createSseSession } from './http-lifecycle.mjs';
 import { eventoDiRichiesta } from './remoto/cartelle-dispositivi.mjs'; // R2.1 (24/10/2026): la carta del consenso spinta alla finestra
 import { iscriviConRigiocata } from './iscrizione-sessione.mjs';
@@ -83,6 +84,21 @@ import { hostAmmesso, origineDellaFinestra, rifiutoScritturaDaAltroSito } from '
    nessuna estensione e nessun `Content-Type` sono scritti in questo file. */
 import { FORMATI_ESPORTAZIONE, costruisciEsportazione } from './research/esportazioni.mjs';
 import { puntoDelRamo } from './punto-del-ramo.mjs'; // 24/10/2026: il fork «prima del giro» dalla finestra e dal dispositivo
+import { linguaDelTesto } from './lingua-del-testo.mjs'; // owner 28/10/2026 sera: la lingua dei messaggi scritti (ELD)
+
+/*
+ * La lingua di un messaggio SCRITTO che arriva senza `linguaDelMessaggio` (accordo con il Mobile, 28/10/2026 notte). Il server la riconosce
+ * (ELD) solo se:
+ *   - il riconoscitore è acceso su questo server (`TALOS_HARNESS_UI_TEXT_LANGUAGE`, acceso di serie sul desktop). Il profilo del dispositivo
+ *     lo spegne e ELD non si carica MAI: sul Pad i suoi ~45 MB pesano sulla stessa memoria dei modelli locali;
+ *   - la richiesta NON arriva da un dispositivo collegato. Il dispositivo la dice già (dettatura, `TextClassifier` di Android); quando non
+ *     la sa (meno di 4 lettere, confidenza bassa) il testo è troppo corto anche per ELD ⇒ nessuna nota, resta la regola di Automatica.
+ * Funzione esportata per le prove: la strada del dispositivo si prova senza un ponte vero.
+ */
+export async function linguaScrittaDellaRichiesta(req, testo, { acceso = true, riconosci = linguaDelTesto } = {}) {
+  if (!acceso || req?.[ORIGINE_REMOTA] || typeof testo !== 'string') return null;
+  return riconosci(testo);
+}
 
 export const API_SCHEMA = 'talos.harness-ui.api.v1';
 
@@ -185,6 +201,15 @@ const API_ERROR_CODES = new Set([
   'CATALOG_UNREACHABLE',
   'CATALOG_UPSTREAM_ERROR',
   'CATALOG_CONFIGURATION_REQUIRED', // P-K-bis/P-L-bis: configurazione mancante, non guasto interno.
+  'PROVIDER_KEY_MISSING', // 27/10/2026 (CLI dal vivo col Pad): un avvio senza chiave del fornitore usciva come 500 «Internal error»
+  // 27/10/2026 (inventario dei codici del registro non dichiarati): quattro che una rotta porta, prima 500 «Internal error»
+  'DELEGATION_READ_ONLY',
+  'FORGE_INVALID',
+  'HISTORY_RECOVERY_AMBIGUOUS',
+  'START_OPERATION_CONFLICT',
+  // 27/10/2026 (revisione del blocco 10, B-R2): due codici del remoto che arrivavano alla finestra come 500 «Internal error»
+  'FOLDER_BLOCKED',
+  'REMOTE_STORE_BUSY',
   'INTERNAL_ERROR',
   /* ⭐ 27/8 — le quattro azioni sul file dell'albero (owner: rinomina, apri, rivela in Esplora File, elimina), vedi workspace-files.mjs. */
   'FILE_NOT_FOUND',
@@ -249,6 +274,7 @@ const API_ERROR_CODES = new Set([
   'APPROVAL_ANSWER_FORBIDDEN',
   /* ⛔ C2-Q (08/10/2026) — la stessa cosa per la DOMANDA di una figlia alla persona. */
   'QUESTION_ANSWER_FORBIDDEN',
+  'PREVIEW_FILE_SECRET', // anteprima nelle domande (owner 29/10/2026): un file del modello che la lettura tratterebbe da segreto
   /* ⛔ F3-10, 23/09/2026 — il modo Workflow è ritirato (400). */
   'MODE_WORKFLOW_RETIRED',
   /* RA-03, 20/10/2026 — dal telefono una cartella qualsiasi del PC no: solo quelle ammesse (403). */
@@ -282,6 +308,8 @@ const API_ERROR_CODES = new Set([
   'SEARCH_SOURCE_INVALID', 'SEARCH_KEY_REQUIRED', 'SEARCH_KEY_INVALID', 'SEARCH_ENDPOINT_INVALID', 'SEARCH_STORE_UNAVAILABLE', 'SEARCH_NOT_READY', 'SEARCH_BLOCKED', 'SEARCH_UNREACHABLE', 'SEARCH_FAILED',
   'WSL_STORE_UNAVAILABLE', // F009 (01/10/2026): la preferenza dell'utente di WSL
   'CONTEXT_SETTINGS_UNAVAILABLE', // C1 (09/10/2026): l'interruttore del motore del contesto
+  'COMMAND_SETTINGS_UNAVAILABLE', // owner 27/10/2026: dove girano i comandi, di serie
+  'LOCAL_RUNTIME_NOT_CONFIGURED', // 27/10/2026: «Allarga la finestra» senza motore locale (prima un 500)
   // ⭐ 04/9, W1-10 — token di loopback della shell Electron: /api/* senza il cookie talos_token.
   'AUTH_REQUIRED',
   'CHAT_FILE_ORIGIN_FORBIDDEN',
@@ -368,6 +396,8 @@ const API_ERROR_CODES = new Set([
   'REMOTE_ORIGIN_FORBIDDEN',
   'FILE_GONE', // R5.13 corsa 2 (24/10/2026): un file cambiato fra il menu e l'invio
 ]);
+/** 27/10/2026: i codici dichiarati, per la prova che OGNUNO abbia una frase pubblica e mai la copia dell'errore interno (revisione del blocco 10, A-R1). */
+export const CODICI_DI_ERRORE_DICHIARATI = Object.freeze([...API_ERROR_CODES]);
 
 const STATUS_BY_CODE = Object.freeze({
   NOT_ALLOWED_REMOTELY: 403, // RA-03 (20/10/2026): una cartella qualsiasi del PC si sceglie solo dal PC
@@ -572,6 +602,14 @@ const STATUS_BY_CODE = Object.freeze({
   CATALOG_UNREACHABLE: 503,
   CATALOG_UPSTREAM_ERROR: 503,
   CATALOG_CONFIGURATION_REQUIRED: 422,
+  PROVIDER_KEY_MISSING: 422,
+  // 27/10/2026: stato della risorsa (409) o dato non valido (422), mai un guasto del server
+  DELEGATION_READ_ONLY: 409,
+  FORGE_INVALID: 422,
+  HISTORY_RECOVERY_AMBIGUOUS: 409,
+  START_OPERATION_CONFLICT: 409,
+  FOLDER_BLOCKED: 409,
+  REMOTE_STORE_BUSY: 503,
   INTERNAL_ERROR: 500,
   FILE_NOT_FOUND: 404,
   /** ⭐ 27/8 — stesso status di PAYLOAD_LIMIT: un'anteprima troppo grande è la stessa famiglia di "contenuto oltre il limite". */
@@ -649,6 +687,8 @@ const STATUS_BY_CODE = Object.freeze({
   APPROVAL_ANSWER_FORBIDDEN: 403,
   /** C2-Q (08/10/2026): la stessa regola per la domanda di una figlia alla persona. */
   QUESTION_ANSWER_FORBIDDEN: 403,
+  /** Anteprima nelle domande (owner 29/10/2026): un file indicato dall'anteprima del MODELLO che la lettura tratterebbe come segreto. */
+  PREVIEW_FILE_SECRET: 403,
   /** ⛔ F3-10, 23/09/2026 — un valore ritirato è una richiesta sbagliata; Piano con figlie vive è lo stato che la blocca. */
   MODE_WORKFLOW_RETIRED: 400,
   /** ⛔ CTX-D2, 23/09/2026 — stesso 500 di SESSION_STORE_HEADER_FAILED/DELETE_FAILED: il salvataggio non è riuscito e l'esito è definitivo (la domanda è chiusa), ripetere non lo cambia. */
@@ -684,6 +724,8 @@ const STATUS_BY_CODE = Object.freeze({
   SEARCH_STORE_UNAVAILABLE: 503,
   WSL_STORE_UNAVAILABLE: 503,
   CONTEXT_SETTINGS_UNAVAILABLE: 503,
+  COMMAND_SETTINGS_UNAVAILABLE: 503,
+  LOCAL_RUNTIME_NOT_CONFIGURED: 503,
   SEARCH_NOT_READY: 409,
   SEARCH_BLOCKED: 502,
   SEARCH_UNREACHABLE: 502,
@@ -794,6 +836,8 @@ export const MESSAGE_BY_CODE = Object.freeze({
   SEARCH_STORE_UNAVAILABLE: 'Search keychain not available',
   WSL_STORE_UNAVAILABLE: 'WSL preferences not available',
   CONTEXT_SETTINGS_UNAVAILABLE: 'Context engine settings not available',
+  COMMAND_SETTINGS_UNAVAILABLE: 'The default for where commands run is not available',
+  LOCAL_RUNTIME_NOT_CONFIGURED: 'The local engine is not installed on this computer',
   SEARCH_NOT_READY: 'The search source is not ready',
   SEARCH_BLOCKED: 'The search source rejected the request',
   SEARCH_UNREACHABLE: 'The search source is unreachable',
@@ -908,6 +952,31 @@ export const MESSAGE_BY_CODE = Object.freeze({
   CATALOG_UNREACHABLE: 'Model catalog unreachable',
   CATALOG_UPSTREAM_ERROR: 'Model catalog unavailable',
   CATALOG_CONFIGURATION_REQUIRED: 'Set up the models or the external agent in Providers and access',
+  PROVIDER_KEY_MISSING: "No key for this model's provider on this computer: add it, or choose another model",
+  DELEGATION_READ_ONLY: "This delegation is read-only. To make changes, start a new explicit delegation from the parent session.",
+  FORGE_INVALID: "The tool manifest is not valid: fix it before enabling the tool",
+  HISTORY_RECOVERY_AMBIGUOUS: "The conversation history cannot be put back together with certainty. No data was changed.",
+  START_OPERATION_CONFLICT: "This operation was already used to start a different session",
+  FOLDER_BLOCKED: "This folder is blocked for the device: unblock it in Connected devices first.",
+  REMOTE_STORE_BUSY: "Another TALOS window is changing the devices: try again in a moment.",
+  // 27/10/2026 (revisione del blocco 10, A-R1 per classe): codici dichiarati che non avevano NESSUNA frase pubblica — la busta diceva
+  // «Operation failed» con la copia dell'errore interno. Le frasi vengono dai messaggi che il codice dà all'origine.
+  DOVE_NON_VALIDO: "Invalid choice: expected \"wsl2\", \"windows\" or null.",
+  SCELTA_NON_VALIDA: "Invalid choice: expected true or false.",
+  SESSION_STORE_BUSY: "The conversation is being saved: try again in a moment.",
+  SERVER_SHUTTING_DOWN: "The server is shutting down: try again in a few seconds, once it is back.",
+  COMPACTION_NOT_FOUND: "No compaction with this identifier to cancel",
+  WORKFLOW_REVISION_INVALID: "Only the limits of a Workflow can be changed.",
+  WORKFLOW_REVISION_EMPTY: "Nothing to change: these limits are the ones of this version.",
+  WORKFLOW_VERSION_NOT_LATEST: "A newer version of this Workflow exists: reload it.",
+  WORKFLOW_ALREADY_STARTED: "This version has already started: its limits can no longer change.",
+  WORKFLOW_VERSION_SUPERSEDED: "A newer approved version of this Workflow exists: start that one. Nothing was started.",
+  WORKFLOW_DEFINITION_INVALID: "The Workflow plan is not valid.",
+  PROVIDER_POOL_FULL: "This provider already has the most keys it can hold: remove one before adding another.",
+  PROVIDER_KEY_NOT_FOUND: "This key is no longer saved for the provider.",
+  PROVIDER_FALLBACK_INVALID: "Check the providers and models chosen to continue the session.",
+  PROVIDER_FALLBACK_TOOLS_UNSUPPORTED: "The fallback model does not declare support for the session tools.",
+  LOCAL_RUNTIME_PROBE_MISCONFIGURED: "The local engine check is not set up correctly in this version of TALOS.",
   INTERNAL_ERROR: 'Internal error',
   FILE_NOT_FOUND: 'File not found',
   FILE_TOO_LARGE: 'File too large for the preview',
@@ -959,6 +1028,7 @@ export const MESSAGE_BY_CODE = Object.freeze({
   APPROVAL_ANSWER_FORBIDDEN: 'This permission request can be answered only from the session that asked or from one that started it',
   QUESTION_NOT_PENDING: 'This question is no longer pending: the session has moved on',
   QUESTION_ANSWER_FORBIDDEN: 'This question can be answered only from the session that asked or from one that started it',
+  PREVIEW_FILE_SECRET: 'This file is kept out of previews because it may hold a secret. Open it yourself from the Files tab if you need it',
   QUESTION_ANSWER_NOT_SAVED: 'The answer was not saved: the question was closed without an answer',
   PLAN_NOT_PENDING: 'This plan no longer waits for a choice: the session has moved on',
   PLAN_STALE: 'The plan on screen is no longer the latest: read the updated version and choose on that one',
@@ -1246,7 +1316,7 @@ function erroreDelRegistro(esito) {
 function errorEnvelope(code, clock, context = {}) {
 const { errore = null, ...restoContesto } = context;
 const daMostrare = errore && (errore.code === code || !errore.code) ? errore : { code };
-const problem = toPublicProblem(daMostrare, restoContesto);
+const problem = toPublicProblem(daMostrare, { ...restoContesto, messaggioDelCodice: MESSAGE_BY_CODE[code] ?? '', statoDelCodice: STATUS_BY_CODE[code] ?? 0 }); // A-R1 = D-R1 (27/10/2026): mai la copia dell'errore interno per un codice dichiarato
 const motivo = motivoPubblico(daMostrare);
 return {
 ok: false,
@@ -1729,8 +1799,15 @@ function parseModelsQuery(url) {
 }
 
 /** ⛔ Un'allowlist di UNA chiave sola, come le altre query di questo file — la validazione FINE (niente "..", niente assoluto) resta in workspace-tree.leggiAlberoWorkspace(), qui si controlla solo la FORMA. */
-function parseTreeQuery(url) {
-  const allowed = new Set(['percorso']);
+function parseTreeQuery(url, { conOrigine = false } = {}) {
+  /* Anteprima nelle domande (owner 29/10/2026): le due rotte del lettore accettano anche `origine=modello` — il file l'ha indicato il
+     modello, non la persona, e passa dalla regola dei segreti della lettura. Un altro valore è una richiesta sbagliata. */
+  const allowed = new Set(conOrigine ? ['percorso', 'origine'] : ['percorso']);
+  if (conOrigine && url.searchParams.has('origine') && url.searchParams.get('origine') !== 'modello') {
+    const error = new Error('Invalid query');
+    error.code = 'QUERY_INVALID';
+    throw error;
+  }
   const query = {};
   for (const [key, value] of url.searchParams) {
     if (!allowed.has(key) || Object.hasOwn(query, key) || value.length > 1024) {
@@ -1791,6 +1868,21 @@ function parseEsportaRicercaQuery(url) {
  *   impostazioni) lo validano QUI, in un punto solo: prima erano tre copie con `workflow` dentro. Un modo
  *   ritirato ha il suo codice, perché chi lo manda sappia cosa scegliere invece.
  */
+/* Owner 28/10/2026, la lingua delle risposte: 'auto' (Automatica) o un codice di lingua BCP 47. Il nucleo traduce il codice nel nome
+   della lingua (`Intl.DisplayNames`), quindi qui basta la forma: niente testo libero arriva al prompt. */
+export const FORMA_LINGUA_DELLE_RISPOSTE = /^(?:auto|[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,3})$/u;
+function requireLinguaDelleRisposte(body) {
+  for (const campo of ['linguaDelleRisposte', 'linguaDelMessaggio']) {
+    if (!(campo in body)) continue;
+    const valore = body[campo];
+    if (typeof valore !== 'string' || valore.length > 35 || !FORMA_LINGUA_DELLE_RISPOSTE.test(valore)) {
+      const errore = new Error(`${campo} must be "auto" or a BCP 47 language tag`);
+      errore.code = 'QUERY_INVALID';
+      throw errore;
+    }
+  }
+}
+
 function requireModalitaOperativa(body) {
   if (!('modalitaOperativa' in body) || ['normale', 'piano'].includes(body.modalitaOperativa)) return;
   const ritirato = body.modalitaOperativa === 'workflow';
@@ -1918,6 +2010,8 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/tools', metodi: ['GET'] },
   { schema: '/api/v1/setup/stato', metodi: ['GET'] },
   { schema: '/api/v1/doctor', metodi: ['GET'] },
+  // «Segnala un problema» (owner 29/10/2026): la diagnostica della segnalazione, già ripulita nel server — sola lettura
+  { schema: '/api/v1/diagnostica-segnalazione', metodi: ['GET'] },
   { schema: '/api/v1/workspace-info', metodi: ['GET'] },
   { schema: '/api/v1/browser/incorniciabile', metodi: ['GET'] },
   { schema: '/api/v1/browser/proxy', metodi: ['GET'] },
@@ -1936,7 +2030,10 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/browser/vivo/stato', metodi: ['GET'] },
   { schema: '/api/v1/search-source', metodi: ['GET'] },
   { schema: '/api/v1/wsl', metodi: ['GET', 'POST'] }, // F009 (01/10/2026): i fatti di WSL e la preferenza dell'utente normale
+  { schema: '/api/v1/local-engine/window-policy', metodi: ['GET', 'POST'] },
+  { schema: '/api/v1/local-engine/window/enlarge', metodi: ['POST'] }, // L1 1.3: «Enlarge the window» chiesto dalla persona // L1 1.3 (26/10/2026): quando la finestra di un modello locale si riempie // C1 (09/10/2026): l'interruttore del motore del contesto
   { schema: '/api/v1/context-settings', metodi: ['GET', 'POST'] }, // C1 (09/10/2026): l'interruttore del motore del contesto
+  { schema: '/api/v1/command-settings', metodi: ['GET', 'POST'] }, // owner 27/10/2026: dove girano i comandi, di serie
   { schema: '/api/v1/sessions', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/assistenza', metodi: ['POST'] },
   { schema: '/api/v1/automations', metodi: ['GET', 'POST'] },
@@ -1965,6 +2062,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/processes$/, metodi: ['GET'] },
   /* C1 (owner 10/10/2026): CPU e memoria dei comandi vivi, misurate solo quando la scheda le chiede. Sola lettura. */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/processes\/resources$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/local-servers$/, metodi: ['GET'] }, // owner 27/10/2026: i server locali per la striscia del Browser
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/metrics$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/status$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/branch$/, metodi: ['GET'] },
@@ -2314,7 +2412,7 @@ function requireFallbackProviders() {
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
   // ⭐⭐⭐ 29/8 — FASE K: modelloPlanner riusa la STESSA validazione di modello (modelloRichiestaValido) — è lo stesso formato OpenRouter, mai un secondo validatore.
-  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'provider', 'runtimeId', 'modelId', 'fallbackConsent', 'fallbackProviders', 'linguaInterfaccia'];
+  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'provider', 'runtimeId', 'modelId', 'fallbackConsent', 'fallbackProviders', 'linguaInterfaccia', 'linguaDelleRisposte', 'linguaDelMessaggio'];
   const soloAmmesse = chiavi.length > 0 && chiavi.length <= chiaviAmmesse.length && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
   if (
     !soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0
@@ -2358,8 +2456,11 @@ function requireTaskIdBody(body) {
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
+  requireLinguaDelleRisposte(body);
   return {
     linguaInterfaccia: 'linguaInterfaccia' in body ? body.linguaInterfaccia : null,
+    linguaDelleRisposte: 'linguaDelleRisposte' in body ? body.linguaDelleRisposte : null,
+    linguaDelMessaggio: 'linguaDelMessaggio' in body ? body.linguaDelMessaggio : null,
     taskId: body.taskId,
     modello: 'modello' in body && body.modello !== undefined ? body.modello : null,
     modelloPlanner: 'modelloPlanner' in body && body.modelloPlanner !== undefined ? body.modelloPlanner : null,
@@ -2440,7 +2541,8 @@ function requireCustomTaskBody(body) {
   // ⭐⭐⭐ 29/8 — FASE K: stesso principio di requireTaskIdBody, modelloPlanner riusa modelloRichiestaValido.
   // /goal G6 (owner 15/10/2026, «chat nuova ferma»): `ferma: true` apre la conversazione SENZA un giro — la persona ha scritto
   // `/goal <testo>` in una chat nuova, e il lavoro parte solo dal suo «Avvia» sulla carta dei controlli
-  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'fallbackProviders', 'linguaInterfaccia', 'ferma'];
+  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'fallbackProviders', 'linguaInterfaccia', 'linguaDelleRisposte', 'linguaDelMessaggio', 'ferma',
+    'allegaSeTroppoGrande']; // §4.2, regola N (owner 22/10/2026): «Invia come allegato» per questa consegna
   const chiavi = Object.keys(body ?? {});
   const haCartellaId = 'cartellaId' in body && body.cartellaId !== undefined;
   const haCartellaLibera = 'cartellaLibera' in body && body.cartellaLibera !== undefined;
@@ -2454,6 +2556,7 @@ function requireCustomTaskBody(body) {
     || (haWorkspaceLaunchId && (typeof body.workspaceLaunchId !== 'string' || !/^[A-Za-z0-9_-]{32}$/.test(body.workspaceLaunchId)))
     || ('client' in body && body.client !== 'desktop' && body.client !== 'mobile')
     || ('ferma' in body && body.ferma !== true && body.ferma !== false)
+    || ('allegaSeTroppoGrande' in body && typeof body.allegaSeTroppoGrande !== 'boolean')
   ) {
     const errore = new Error('Invalid body: expected {cartellaId XOR cartellaLibera XOR workspaceLaunchId, consegna, comandoProva?, modello?, modelloPlanner?, reasoning?, client?, permessi?, permessiPerAttrezzo?, ferma?}');
     errore.code = 'QUERY_INVALID';
@@ -2490,8 +2593,11 @@ function requireCustomTaskBody(body) {
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
+  requireLinguaDelleRisposte(body);
   return {
     ...('linguaInterfaccia' in body ? { linguaInterfaccia: body.linguaInterfaccia } : {}), // K3b
+    ...('linguaDelleRisposte' in body ? { linguaDelleRisposte: body.linguaDelleRisposte } : {}), // owner 28/10: la lingua delle risposte
+    ...('linguaDelMessaggio' in body ? { linguaDelMessaggio: body.linguaDelMessaggio } : {}), // e la lingua di questo messaggio
     ...(haCartellaId ? { cartellaId: body.cartellaId } : {}),
     ...(haCartellaLibera ? { cartellaLibera: body.cartellaLibera } : {}),
     ...(haWorkspaceLaunchId ? { workspaceLaunchId: body.workspaceLaunchId } : {}),
@@ -2506,6 +2612,7 @@ function requireCustomTaskBody(body) {
     permessiPerAttrezzo: 'permessiPerAttrezzo' in body && body.permessiPerAttrezzo !== undefined ? body.permessiPerAttrezzo : null,
     modalitaOperativa: 'modalitaOperativa' in body ? body.modalitaOperativa : null,
     ...(body.ferma === true ? { ferma: true } : {}), // /goal G6: la chat nuova che nasce ferma
+    ...(body.allegaSeTroppoGrande === true ? { allegaSeTroppoGrande: true } : {}), // §4.2, regola N
   };
 }
 
@@ -2746,7 +2853,7 @@ function requireMemoriaBody(body, { creazione }) {
 function requireSessionSettingsBody(body) {
   // C2 «Per questa sessione» sul server (08/10/2026): `unisciPermessiPerAttrezzo` si unisce alle scelte vere, invece di sostituirle
   // C2-R7 (08/10/2026 sera): `rispettaNega` — il gesto della carta non scrive sopra un «nega» (vedi `aggiornaImpostazioniOra`)
-  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo', 'unisciPermessiPerAttrezzo', 'rispettaNega', 'fallbackProviders', 'modalitaOperativa', 'linguaInterfaccia'];
+  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo', 'unisciPermessiPerAttrezzo', 'rispettaNega', 'fallbackProviders', 'modalitaOperativa', 'linguaInterfaccia', 'linguaDelleRisposte'];
   const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
   if (chiavi.length === 0 || chiavi.some((chiave) => !ammesse.includes(chiave))) {
     const errore = new Error('Invalid body: at least one recognized session preference is expected');
@@ -2795,6 +2902,7 @@ function requireSessionSettingsBody(body) {
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
+  requireLinguaDelleRisposte(body);
   return Object.fromEntries(chiavi.map((chiave) => [chiave, chiave === 'fallbackProviders' ? requireFallbackProviders(body[chiave]) : body[chiave]]));
 }
 
@@ -2969,7 +3077,10 @@ function requireAbilitaForgeBody(body) {
  */
 function requireQueueBody(body) {
   const chiavi = Object.keys(body ?? {});
-  if (chiavi.length !== 1 || chiavi[0] !== 'messaggio' || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0) {
+  /* §4.2, regola N (owner 22/10/2026, bozzetto 29/10): `allegaSeTroppoGrande` può accompagnare il messaggio, mai da solo */
+  const ammesse = chiavi.every((k) => k === 'messaggio' || k === 'allegaSeTroppoGrande');
+  if (!ammesse || !chiavi.includes('messaggio') || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0
+    || ('allegaSeTroppoGrande' in body && typeof body.allegaSeTroppoGrande !== 'boolean')) {
     const errore = new Error('Invalid body: expected {messaggio}');
     errore.code = 'QUERY_INVALID';
     throw errore;
@@ -3014,7 +3125,12 @@ function requireResumeBody(body) {
   }
   const chiavi = Object.keys(body);
   if (chiavi.length === 0) return null;
-  if (chiavi.length !== 1 || chiavi[0] !== 'messaggio' || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0) {
+  /* owner 28/10/2026: la lingua di QUESTO messaggio può accompagnarlo (mai da sola); la forma la controlla `requireLinguaDelleRisposte`.
+     §4.2, regola N (owner 22/10, bozzetto 29/10): così anche `allegaSeTroppoGrande`, un booleano, solo col messaggio. */
+  const ammesse = chiavi.every((k) => k === 'messaggio' || k === 'linguaDelMessaggio' || k === 'allegaSeTroppoGrande');
+  if (ammesse && chiavi.includes('linguaDelMessaggio')) requireLinguaDelleRisposte(body);
+  if (!ammesse || !chiavi.includes('messaggio') || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0
+    || ('allegaSeTroppoGrande' in body && typeof body.allegaSeTroppoGrande !== 'boolean')) {
     const errore = new Error('Invalid body: expected {messaggio?}');
     errore.code = 'QUERY_INVALID';
     throw errore;
@@ -3083,15 +3199,21 @@ function requireRedirectBody(body) {
 }
 
 /** Stop resta compatibile con il corpo vuoto e può tombstonare un redirect in volo. */
+/* «Ferma tutto» (owner 29/10/2026, contratto CONTRATTO-FERMA-TUTTE §1): `figlie` è facoltativo e solo 'tutte' | 'nessuna'; assente,
+   lo Stop resta quello di sempre (solo la sessione), così nessun client vecchio cambia. */
 function requireStopBody(body) {
   const chiavi = Object.keys(body ?? {});
-  if (chiavi.length === 0) return null;
-  if (chiavi.length !== 1 || chiavi[0] !== 'redirectId') {
-    const errore = new Error('Invalid body: expected {redirectId?}');
+  const invalido = () => {
+    const errore = new Error("Invalid body: expected {redirectId?, figlie?: 'tutte' | 'nessuna'}");
     errore.code = 'QUERY_INVALID';
-    throw errore;
-  }
-  return requireRedirectId(body.redirectId);
+    return errore;
+  };
+  if (chiavi.some((chiave) => chiave !== 'redirectId' && chiave !== 'figlie')) throw invalido();
+  if ('figlie' in (body ?? {}) && body.figlie !== 'tutte' && body.figlie !== 'nessuna') throw invalido();
+  return {
+    redirectId: 'redirectId' in (body ?? {}) ? requireRedirectId(body.redirectId) : null,
+    figlie: body?.figlie ?? null,
+  };
 }
 
 /*
@@ -3263,6 +3385,10 @@ export function createHttpApp({
   preferenzeWslStore = null,
   // C1 (owner 09/10/2026 sera): «Motore del contesto» in Impostazioni → Contesto (`impostazioni-contesto.mjs`).
   impostazioniContesto = null,
+  finestraPiena = null, // L1 1.3: { scelta(), salvaScelta(v) } di `finestra-che-cresce.mjs`
+  /* M 28/10/2026 notte: il riconoscitore della lingua dei messaggi scritti (ELD); spento nel profilo del dispositivo (`linguaScrittaDellaRichiesta`) */
+  riconosciLinguaScritta = true,
+  impostazioniComandi = null, // owner 27/10/2026: dove girano i comandi delle conversazioni nuove
   cartellaAssistenza = CARTELLA_ASSISTENZA_PREDEFINITA, cercaAssistenzaFn = cercaAssistenza,
   // ⭐ 04/9, W1-10 — token di loopback (config.token): quando c'è, /api/* vuole il cookie talos_token; `GET /?token=<t>` lo imposta e rimanda a `/`.
   token = null,
@@ -3373,6 +3499,18 @@ export function createHttpApp({
   /* 18/10/2026 — il controllo remoto (`remoto/index.mjs`). Una FUNZIONE che lo restituisce: il remoto chiama questo stesso gestore
      in processo per le operazioni del telefono, quindi nasce dopo di lui (server.mjs). Assente: le rotte rispondono 503. */
   remotoFn = () => null,
+  /* «Segnala un problema» (owner 29/10/2026): `() => ({versione, installata})`, la versione dell'app desktop per la diagnostica (il guscio
+     la passa al figlio; da sorgente è quella di `desktop/package.json`). Assente: la diagnostica la dice «non nota». */
+  versioneDesktopFn = null,
+  /*
+   * ⛔⛔ 27/10/2026 (contratto cartelle bloccate, giro 2, revisione 1; richiesta della CLI) — DIFESA IN PROFONDITÀ. La CLI federa: una
+   *   scrittura di un dispositivo su una conversazione che esiste gira nella finestra che la possiede, dove il remoto non c'è e il
+   *   cancello del consenso qui sotto saltava (lo copre l'ospite, `federation.ts` `checkForwardedWrite`). Con questa funzione il
+   *   cancello gira anche lì: un coordinatore delle cartelle (`creaCartelleDeiDispositivi`) con gli STESSI file e la stessa
+   *   configurazione dell'ospite — si rilegge quando i file cambiano, quindi vede revoche e blocchi dell'altro processo. Solo
+   *   `consentita` si chiama. Il desktop ha sempre il remoto e non la passa: per lui non cambia niente.
+   */
+  cartelleDispositiviFn = null,
   // 11/10/2026: il token del piano e il conteggio nostro, per le chiamate al modello che NON passano dal trasporto dei giri («Migliora prompt»)
   leggiTokenDelPianoFn = null,
   registraUsoDelPianoFn = null,
@@ -3622,7 +3760,7 @@ export function createHttpApp({
         || (pezzi.length === 7 && pezzi[5] === 'delegation' && pezzi[6] === 'pause');
       const scrittura = pezzi.length >= 6 && pezzi[1] === 'api' && pezzi[2] === 'v1' && pezzi[3] === 'sessions' && pezzi[4] !== ''
         && !fermare;
-      const cartelleDisp = scrittura ? (remotoFn()?.cartelle ?? null) : null;
+      const cartelleDisp = scrittura ? (remotoFn()?.cartelle ?? (typeof cartelleDispositiviFn === 'function' ? cartelleDispositiviFn() : null) ?? null) : null;
       if (cartelleDisp) {
         /* ⛔ Chiuso a guasto: solo una sessione che NON esiste passa (la rotta risponderà 404). Una sessione vera la cui cartella non
            si risolve (spostata, cancellata, illeggibile) è una scrittura senza consenso verificabile, e si rifiuta. */
@@ -4388,7 +4526,7 @@ export function createHttpApp({
         if (esito?.dati !== undefined) { sendJson(res, esito.stato, successEnvelope(esito.dati, clock), method); return; }
         const codice = esito?.stato === 404 ? 'NOT_FOUND' : esito?.stato === 405 ? 'METHOD_NOT_ALLOWED' : esito?.errore?.code;
         const extra = { ...(esito?.allow ? { Allow: esito.allow } : {}), ...(Number.isFinite(esito?.retryAfterMs) ? { 'Retry-After': String(Math.ceil(esito.retryAfterMs / 1000)) } : {}) };
-        sendJson(res, esito?.stato ?? 404, errorEnvelope(API_ERROR_CODES.has(codice) ? codice : 'INTERNAL_ERROR', clock), method, Object.keys(extra).length ? extra : undefined);
+        sendJson(res, esito?.stato ?? 404, errorEnvelope(API_ERROR_CODES.has(codice) ? codice : 'INTERNAL_ERROR', clock, { errore: esito?.errore ?? null }), method, Object.keys(extra).length ? extra : undefined); // B-R2 (27/10): la frase vera del modulo arriva
       } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
       return;
     }
@@ -4639,8 +4777,8 @@ export function createHttpApp({
       try {
         let sessionId;
         try { sessionId = decodeURIComponent(anteprimaFileMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
-        const percorso = parseTreeQuery(url);
-        const esito = await sessionRegistry.scaricaFile(sessionId, percorso);
+        const percorso = parseTreeQuery(url, { conOrigine: true });
+        const esito = await sessionRegistry.scaricaFile(sessionId, percorso, { perIlModello: url.searchParams.get('origine') === 'modello' });
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -4728,8 +4866,8 @@ export function createHttpApp({
     if (scaricoMatch) {
       try {
         const sessionId = decodeURIComponent(scaricoMatch[1]);
-        const percorso = parseTreeQuery(url);
-        const esito = await sessionRegistry.scaricaFile(sessionId, percorso);
+        const percorso = parseTreeQuery(url, { conOrigine: true });
+        const esito = await sessionRegistry.scaricaFile(sessionId, percorso, { perIlModello: url.searchParams.get('origine') === 'modello' });
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -5840,10 +5978,12 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo, modalitaOperativa, provider, runtimeId, modelId, fallbackConsent, fallbackProviders, linguaInterfaccia } = requireTaskIdBody(corpo);
+        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo, modalitaOperativa, provider, runtimeId, modelId, fallbackConsent, fallbackProviders, linguaInterfaccia, linguaDelleRisposte, linguaDelMessaggio } = requireTaskIdBody(corpo);
         const opzioniSessione = {
           ...(fallbackProviders !== undefined ? { fallbackProviders } : {}),
           ...(linguaInterfaccia ? { linguaInterfaccia } : {}), // K3b: additivo, come gli altri opzionali
+          ...(linguaDelleRisposte ? { linguaDelleRisposte } : {}), // owner 28/10: la lingua delle risposte
+          ...(linguaDelMessaggio ? { linguaDelMessaggio } : {}), // e la lingua di questo messaggio
           modelloScelto: modello, modelloPlannerScelto: modelloPlanner, reasoningScelto: reasoning, mobile,
           permessiScelto: permessi, permessiPerAttrezzoScelto: permessiPerAttrezzo, modalitaOperativaScelta: modalitaOperativa,
         };
@@ -5949,6 +6089,67 @@ export function createHttpApp({
      * C1 (owner 09/10/2026 sera) — «Motore del contesto»: 'engine' (di serie) o 'legacy' per le conversazioni NUOVE. Stessa
      * disciplina della preferenza di WSL: corpo col SOLO campo atteso, errori con codice dichiarato, risposta con lo stato.
      */
+    /*
+     * L1 1.3 (owner 26/10/2026, bozzetto approvato) — «Quando la finestra di un modello locale si riempie»: 'allarga' (di serie),
+     * 'riassumi', 'chiedi'. Stessa disciplina del motore del contesto: corpo col SOLO campo atteso, errori col codice.
+     */
+    /* L1 1.3 — «Enlarge the window» dalla carta di «Chiedimi»: l'ha chiesto la persona, quindi la scelta di serie non conta (`forza`);
+       restano i limiti veri (massimo addestrato, memoria, motore occupato). Corpo: { modelId, servono }. */
+    if (method === 'POST' && url.pathname === '/api/v1/local-engine/window/enlarge') {
+      try {
+        requireNoQuery(url);
+        if (!finestraPiena?.allarga) { const error = new Error('Local engine not configured'); error.code = 'LOCAL_RUNTIME_NOT_CONFIGURED'; throw error; }
+        const body = await leggiCorpoJson(req, 4 * 1024);
+        const keys = Object.keys(body || {}).sort().join(',');
+        /* Revisione blocco 4 (A-8): `servono` ha un tetto (16.777.216 token, oltre ogni contesto addestrato di oggi); il resto lo decide il
+           massimo del modello (`oltre-il-massimo`, e senza massimo noto non si allarga) */
+        if (keys !== 'modelId,servono' || typeof body.modelId !== 'string' || !body.modelId || !Number.isSafeInteger(body.servono) || body.servono <= 0
+          || body.servono > 16_777_216) {
+          const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error;
+        }
+        const esito = await finestraPiena.allarga({ modelId: body.modelId, servono: body.servono, forza: true });
+        sendJson(res, 200, successEnvelope({ ok: esito?.ok === true, motivo: esito?.motivo ?? null, prima: esito?.prima ?? null, dopo: esito?.dopo ?? null, massimo: esito?.massimo ?? null, memoriaInPiu: esito?.memoriaInPiu ?? null }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/api/v1/local-engine/window-policy') {
+      try {
+        requireNoQuery(url);
+        if (!finestraPiena) { const error = new Error('Local engine not configured'); error.code = 'LOCAL_RUNTIME_NOT_CONFIGURED'; throw error; }
+        const body = await leggiCorpoJson(req, 4 * 1024);
+        const keys = Object.keys(body || {});
+        if (keys.length !== 1 || !['allarga', 'riassumi', 'chiedi'].includes(body.scelta)) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+        sendJson(res, 200, successEnvelope({ scelta: await finestraPiena.salvaScelta(body.scelta) }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * Owner 27/10/2026 — dove girano i comandi delle conversazioni NUOVE: null (automatico), 'windows' o 'wsl2'. Stessa disciplina
+     * del motore del contesto: corpo col SOLO campo atteso, errori con codice dichiarato, risposta con lo stato salvato.
+     */
+    if (method === 'POST' && url.pathname === '/api/v1/command-settings') {
+      try {
+        requireNoQuery(url);
+        if (!impostazioniComandi) { const error = new Error('Command settings not configured'); error.code = 'COMMAND_SETTINGS_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req, 4 * 1024);
+        const keys = Object.keys(body || {});
+        if (keys.length !== 1 || ![null, 'windows', 'wsl2'].includes(body.doveDiSerie)) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+        sendJson(res, 200, successEnvelope(await impostazioniComandi.scrivi({ doveDiSerie: body.doveDiSerie }), clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     if (method === 'POST' && url.pathname === '/api/v1/context-settings') {
       try {
         requireNoQuery(url);
@@ -6608,6 +6809,13 @@ export function createHttpApp({
         if (immagini.length) richiesta.immagini = immagini;
         const bolla = bollaConOrigine(bollaDelClient, origine, richiesta.consegna);
         if (bolla) richiesta.bolla = bolla;
+        /* owner 27/10/2026: il dispositivo che apre la sessione — le sue cartelle bloccate valgono nei giri che manda (`dispositivoDelGiroDi`) */
+        if (typeof req[ORIGINE_REMOTA]?.dispositivoId === 'string') richiesta.dispositivoDelGiro = req[ORIGINE_REMOTA].dispositivoId;
+        /* owner 28/10 sera: il primo messaggio scritto, senza lingua detta da chi lo manda ⇒ la riconosce il server */
+        if (!richiesta.linguaDelMessaggio && typeof richiesta.consegna === 'string') {
+          const riconosciuta = await linguaScrittaDellaRichiesta(req, richiesta.consegna, { acceso: riconosciLinguaScritta });
+          if (riconosciuta) richiesta.linguaDelMessaggio = riconosciuta;
+        }
         const esito = sessionRegistry.avviaLibero(richiesta, origineDellaRichiesta(req));
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
@@ -6825,12 +7033,13 @@ export function createHttpApp({
         }
         const corpo = await leggiCorpoJson(req);
         const nome = requireNomeBody(corpo);
-        const esito = await sessionRegistry.rinomina(sessionId, nome);
+        const esito = await sessionRegistry.rinomina(sessionId, nome, { origine: req[ORIGINE_REMOTA] ? { tipo: 'dispositivo', dispositivoId: req[ORIGINE_REMOTA].dispositivoId ?? null } : { tipo: 'pc' } }); // revisione blocco 11: chi ha cambiato
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ ok: true }, clock), method);
+        const istantanea = sessionRegistry.impostazioniCorrenti?.(sessionId) ?? null; // owner 27/10/2026
+        sendJson(res, 200, successEnvelope({ ok: true, ...(istantanea ? { istantanea } : {}) }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -7111,6 +7320,25 @@ export function createHttpApp({
      *   persistente su Windows, uno `sh` per distro in WSL, /proc su Linux: `risorse-processi.mjs`) si accende alla prima richiesta e si spegne da solo dopo 30 s
      *   senza. Sola lettura. ⇒ `{ metodo, misuratoAlle, processi: [{ toolCallId, cpuPercento|null, memoriaByte|null, processi|null }] }`.
      */
+    /* ⭐ Owner 27/10/2026: i server locali della conversazione per la striscia «Server locali» della scheda Browser. Sola lettura. */
+    const serverLocaliMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.serverLocali === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/local-servers$/.exec(url.pathname);
+    if (serverLocaliMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(serverLocaliMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const server = sessionRegistry.serverLocali(sessionId);
+        if (server === null) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        sendJson(res, 200, successEnvelope({ server }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const risorseProcessiMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.pidDeiComandi === 'function'
       && /^\/api\/v1\/sessions\/([^/]+)\/processes\/resources$/.exec(url.pathname);
     if (risorseProcessiMatch) {
@@ -7251,14 +7479,16 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const redirectId = requireStopBody(await leggiCorpoJson(req));
-        const fermata = sessionRegistry.ferma(sessionId, redirectId ? { redirectId } : {});
-        if (!fermata) {
+        const { redirectId, figlie } = requireStopBody(await leggiCorpoJson(req));
+        const esito = figlie === 'tutte'
+          ? sessionRegistry.fermaTutto(sessionId, redirectId ? { redirectId } : {})
+          : { fermata: sessionRegistry.ferma(sessionId, redirectId ? { redirectId } : {}) };
+        if (!esito.fermata) {
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ stopped: true }, clock), method);
+        sendJson(res, 200, successEnvelope(figlie === 'tutte' ? { stopped: true, figlieFermate: esito.figlieFermate } : { stopped: true }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -7319,7 +7549,7 @@ export function createHttpApp({
         const { body, immagini } = await imageInput(corpoRedirect);
         const { messaggio, redirectId } = requireRedirectBody(body);
         const bolla = bollaConOrigine(bollaDelClient, origine, messaggio);
-        const esito = sessionRegistry.reindirizza(sessionId, messaggio, { ...(redirectId ? { redirectId } : {}), ...(immagini.length ? { immagini } : {}), ...(bolla ? { bolla } : {}) });
+        const esito = sessionRegistry.reindirizza(sessionId, messaggio, { ...(redirectId ? { redirectId } : {}), ...(immagini.length ? { immagini } : {}), ...(bolla ? { bolla } : {}), dispositivoDelGiro: typeof req[ORIGINE_REMOTA]?.dispositivoId === 'string' ? req[ORIGINE_REMOTA].dispositivoId : null });
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -7409,11 +7639,15 @@ export function createHttpApp({
         const { corpo: corpoRipresa, bolla: bollaDelClient, origine } = separaBolla(await leggiCorpoJson(req), req);
         const { body, immagini } = await imageInput(corpoRipresa);
         const nuovoMessaggioUtente = requireResumeBody(body);
+        /* owner 28/10: la lingua di questo messaggio la dice chi lo ha dettato; uno scritto la riconosce il server (`lingua-del-testo.mjs`) */
+        const linguaDelMessaggio = !nuovoMessaggioUtente ? null
+          : typeof body?.linguaDelMessaggio === 'string' ? body.linguaDelMessaggio : await linguaScrittaDellaRichiesta(req, nuovoMessaggioUtente, { acceso: riconosciLinguaScritta });
         if (!nuovoMessaggioUtente && immagini.length) throw Object.assign(new Error('Write a message to send the images.'), { code: 'QUERY_INVALID' });
         /* REV-SESSION-READY v2: come per il fork, la finestra di chiusura si aspetta. */
         if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
         const bolla = bollaConOrigine(bollaDelClient, origine, nuovoMessaggioUtente);
-        const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente, immagini, ...(bolla && nuovoMessaggioUtente ? [{ bolla }] : []));
+        /* owner 27/10/2026: chi manda il messaggio (un dispositivo, o il PC) — solo col messaggio della persona */
+        const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente, immagini, ...(nuovoMessaggioUtente ? [{ ...(bolla ? { bolla } : {}), linguaDelMessaggio, ...(body?.allegaSeTroppoGrande === true ? { allegaSeTroppoGrande: true } : {}), dispositivoDelGiro: typeof req[ORIGINE_REMOTA]?.dispositivoId === 'string' ? req[ORIGINE_REMOTA].dispositivoId : null }] : []));
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -7461,20 +7695,28 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const { linguaInterfaccia, ...patch } = requireSessionSettingsBody(await leggiCorpoJson(req));
+        const { linguaInterfaccia, linguaDelleRisposte, ...patch } = requireSessionSettingsBody(await leggiCorpoJson(req));
         /* K3b (03/10/2026): la lingua dell'interfaccia non è una preferenza della conversazione: si tiene a parte, e può arrivare da sola. */
         if (linguaInterfaccia !== undefined) {
           const lingua = sessionRegistry.impostaLinguaInterfaccia(sessionId, linguaInterfaccia);
           if ('erroreAvvio' in lingua) throw erroreDelRegistro(lingua);
         }
-        const esito = Object.keys(patch).length ? await sessionRegistry.aggiornaImpostazioni(sessionId, patch) : { aggiornate: true };
+        /* owner 28/10/2026: anche la lingua delle risposte è dello schermo di chi scrive (PC o dispositivo), come quella dell'interfaccia */
+        if (linguaDelleRisposte !== undefined) {
+          const lingua = sessionRegistry.impostaLinguaDelleRisposte(sessionId, linguaDelleRisposte);
+          if ('erroreAvvio' in lingua) throw erroreDelRegistro(lingua);
+        }
+        /* owner 27/10/2026: chi ha cambiato (il PC o un dispositivo collegato) viaggia con la fotografia delle impostazioni */
+        const origineCambio = req[ORIGINE_REMOTA] ? { tipo: 'dispositivo', dispositivoId: req[ORIGINE_REMOTA].dispositivoId ?? null } : { tipo: 'pc' };
+        const esito = Object.keys(patch).length ? await sessionRegistry.aggiornaImpostazioni(sessionId, patch, { origine: origineCambio }) : { aggiornate: true };
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
         if (req.aborted || res.destroyed) return;
         // C2-R7: chi è rimasto «nega» (con `rispettaNega`), solo se qualcuno — senza salti la risposta è quella di sempre
         const nonUniti = Array.isArray(esito?.nonUniti) && esito.nonUniti.length ? { nonUniti: esito.nonUniti } : {};
-        sendJson(res, 200, successEnvelope({ updated: true, ...nonUniti }, clock), method);
+        const istantanea = sessionRegistry.impostazioniCorrenti?.(sessionId) ?? null; // owner 27/10/2026: la base di chi ha cambiato
+        sendJson(res, 200, successEnvelope({ updated: true, ...nonUniti, ...(istantanea ? { istantanea } : {}) }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -7977,7 +8219,7 @@ export function createHttpApp({
         try { sessionId = decodeURIComponent(doveMatch[1]); }
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const corpo = await leggiCorpoJson(req);
-        const esito = await sessionRegistry.doveGiranoIComandi(sessionId, corpo?.dove ?? null);
+        const esito = await sessionRegistry.doveGiranoIComandi(sessionId, corpo?.dove ?? null, { origine: req[ORIGINE_REMOTA] ? { tipo: 'dispositivo', dispositivoId: req[ORIGINE_REMOTA].dispositivoId ?? null } : { tipo: 'pc' } });
         if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, dove: esito.dove }, clock), method);
@@ -8030,7 +8272,7 @@ export function createHttpApp({
         try { sessionId = decodeURIComponent(conversazioneMatch[1]); }
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const corpo = await leggiCorpoJson(req);
-        const esito = await sessionRegistry.comandiNellaConversazione(sessionId, corpo?.acceso);
+        const esito = await sessionRegistry.comandiNellaConversazione(sessionId, corpo?.acceso, { origine: req[ORIGINE_REMOTA] ? { tipo: 'dispositivo', dispositivoId: req[ORIGINE_REMOTA].dispositivoId ?? null } : { tipo: 'pc' } });
         if ('erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, acceso: esito.acceso }, clock), method);
@@ -8157,7 +8399,7 @@ export function createHttpApp({
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         // 32 KiB: il feedback arriva a 4.000 caratteri, fino a 6 byte ciascuno una volta scritto in JSON.
         const corpo = await leggiCorpoJsonCon(req, Math.min(limiteCorpoByte, 32_768));
-        const esito = await sessionRegistry.rispondiPiano(sessionId, corpo);
+        const esito = await sessionRegistry.rispondiPiano(sessionId, corpo, { origine: req[ORIGINE_REMOTA] ? { tipo: 'dispositivo', dispositivoId: req[ORIGINE_REMOTA].dispositivoId ?? null } : { tipo: 'pc' } });
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -8425,7 +8667,7 @@ export function createHttpApp({
            aspetta che il giro sia chiuso, poi il registro decide come sempre (conclusa ⇒ «usa resume»). */
         if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
         const bolla = bollaConOrigine(bollaDelClient, origine, messaggio);
-        const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio, immagini, ...(bolla ? [{ bolla }] : []));
+        const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio, immagini, { ...(bolla ? { bolla } : {}), ...(body?.allegaSeTroppoGrande === true ? { allegaSeTroppoGrande: true } : {}), dispositivoDelGiro: typeof req[ORIGINE_REMOTA]?.dispositivoId === 'string' ? req[ORIGINE_REMOTA].dispositivoId : null });
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -8530,7 +8772,8 @@ export function createHttpApp({
           esito = sessionRegistry.statoObiettivo(sessionId);
         } else if (!goalMatch[2]) {
           const { testo, criteri } = requireGoalBody(await leggiCorpoJson(req));
-          esito = await sessionRegistry.impostaObiettivo(sessionId, testo, criteri === undefined ? {} : { criteri });
+          const autore = (req[ORIGINE_REMOTA] ? { tipo: 'dispositivo', dispositivoId: req[ORIGINE_REMOTA].dispositivoId ?? null } : { tipo: 'pc' }); // revisione blocco 11 (A-R3): chi guida l'obiettivo
+          esito = await sessionRegistry.impostaObiettivo(sessionId, testo, criteri === undefined ? { autore } : { criteri, autore });
         } else if (goalMatch[2] === 'contratto' || goalMatch[2] === 'criteri') {
           // G2: il contratto intero (togliere o cambiare vuole `conferma: true`) oppure criteri in più (liberi)
           const { criteri, conferma } = requireGoalContractBody(await leggiCorpoJson(req), { conConferma: goalMatch[2] === 'contratto' });
@@ -8543,8 +8786,8 @@ export function createHttpApp({
           }
           /* G3 (14/10/2026): `verifica` esegue le prove del contratto (può durare minuti: è la richiesta della persona che aspetta). */
           esito = await (goalMatch[2] === 'pausa' ? sessionRegistry.pausaObiettivo(sessionId)
-            : goalMatch[2] === 'riprendi' ? sessionRegistry.riprendiObiettivo(sessionId)
-              : goalMatch[2] === 'verifica' ? sessionRegistry.verificaObiettivo(sessionId) : sessionRegistry.togliObiettivo(sessionId));
+            : goalMatch[2] === 'riprendi' ? sessionRegistry.riprendiObiettivo(sessionId, { autore: (req[ORIGINE_REMOTA] ? { tipo: 'dispositivo', dispositivoId: req[ORIGINE_REMOTA].dispositivoId ?? null } : { tipo: 'pc' }) })
+              : goalMatch[2] === 'verifica' ? sessionRegistry.verificaObiettivo(sessionId, { autore: (req[ORIGINE_REMOTA] ? { tipo: 'dispositivo', dispositivoId: req[ORIGINE_REMOTA].dispositivoId ?? null } : { tipo: 'pc' }) }) : sessionRegistry.togliObiettivo(sessionId));
         }
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
@@ -8898,6 +9141,16 @@ export function createHttpApp({
         requireNoQuery(url);
         if (!preferenzeWslStore) { const error = new Error('WSL preferences not configured'); error.code = 'WSL_STORE_UNAVAILABLE'; throw error; }
         data = await preferenzeWslStore.stato();
+      } else if (url.pathname === '/api/v1/local-engine/window-policy') {
+        /* L1 1.3 — la scelta per la finestra piena dei modelli locali (Impostazioni → Modelli). */
+        requireNoQuery(url);
+        if (!finestraPiena) { const error = new Error('Local engine not configured'); error.code = 'LOCAL_RUNTIME_NOT_CONFIGURED'; throw error; }
+        data = { scelta: await finestraPiena.scelta() };
+      } else if (url.pathname === '/api/v1/command-settings') {
+        /* Owner 27/10 — Impostazioni → Strumenti e permessi, «Dove girano i comandi»: la scelta di serie. */
+        requireNoQuery(url);
+        if (!impostazioniComandi) { const error = new Error('Command settings not configured'); error.code = 'COMMAND_SETTINGS_UNAVAILABLE'; throw error; }
+        data = await impostazioniComandi.leggi();
       } else if (url.pathname === '/api/v1/context-settings') {
         /* C1 — l'interruttore del motore del contesto (Impostazioni → Contesto). */
         requireNoQuery(url);
@@ -8932,6 +9185,34 @@ export function createHttpApp({
          * peggio di nessun riferimento: manda la persona a cercare una risposta che non c'e.
          */
         data = { reference, code: detail.code, operation: detail.operation, requestId: detail.requestId, detail: detail.detail || '' };
+      } else if (url.pathname === '/api/v1/diagnostica-segnalazione') {
+        /*
+         * ⭐ «Segnala un problema» (owner 29/10/2026, «come nel bozzetto»): ciò che la finestra mostra per intero prima di aprire GitHub.
+         *   Si costruisce e si RIPULISCE qui, non nel browser (`segnalazione-problema.mjs`): solo codici, versioni e interruttori, mai
+         *   percorsi, testo dei messaggi, chiavi o nomi. Un solo parametro facoltativo, `sessionId` (la conversazione aperta): una
+         *   sessione che non c'è vale «nessuna sessione», mai un errore — la finestra si apre comunque.
+         */
+        const chiavi = [...url.searchParams.keys()];
+        const sessionIdChiesto = url.searchParams.get('sessionId');
+        if (chiavi.some((k) => k !== 'sessionId') || chiavi.length > 1 || (chiavi.length === 1 && (!sessionIdChiesto || sessionIdChiesto.length > 200))) {
+          throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
+        }
+        const sessionId = sessionIdChiesto && typeof sessionRegistry?.esiste === 'function' && sessionRegistry.esiste(sessionIdChiesto) ? sessionIdChiesto : null;
+        data = await raccogliDiagnosticaSegnalazione({
+          sessionId,
+          versione: versioneDesktopFn,
+          riga: (id) => sessionRegistry?.elenca?.().find((r) => r?.sessionId === id) ?? null,
+          schede: (id) => { const esito = terminalRegistry?.elenca?.(id); return Array.isArray(esito?.items) ? esito.items : undefined; },
+          /* gli errori della conversazione (i suoi RunError) e quelli delle richieste a questo server: solo il codice e l'ora */
+          errori: (id) => [...(id && typeof sessionRegistry?.erroriPerSegnalazione === 'function' ? sessionRegistry.erroriPerSegnalazione(id) : []), ...codiciDiagnosticiRecenti()],
+          motoreLocale: async () => {
+            const motore = localRuntimes?.['llama.cpp'];
+            if (typeof motore?.detect !== 'function') return undefined;
+            const stato = await motore.detect('llama.cpp');
+            return ['loading', 'ready', 'stopping'].includes(stato?.runtimeState);
+          },
+          remoto: async () => (await remotoFn()?.stato?.()) ?? undefined,
+        });
       } else if (url.pathname === '/api/v1/sessions') {
         requireNoQuery(url);
         /* ⛔ Elenco vuoto, non un errore, se sessionRegistry non è configurato — stesso principio già seguito per le altre rotte di sessione. */

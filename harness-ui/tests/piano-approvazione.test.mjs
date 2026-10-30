@@ -100,8 +100,10 @@ test('PLAN-APPROVE-EXACT-HASH: un\'impronta diversa è rifiutata; «accettando l
   assert.equal(decisione.decisione, 'procedi-accetta-modifiche');
   assert.equal(decisione.da, 'persona');
   assert.equal(typeof decisione.at, 'string');
-  assert.deepEqual(registro.esporta(sessionId).eventi.findLast((e) => e.name === 'talos.impostazioni-sessione')?.value,
-    { modalitaOperativa: 'normale', permessi: 'Workspace write', motivo: 'piano-approvato' }, 'l\'interfaccia aggiorna modo e permesso');
+  // owner 27/10/2026: accanto ai campi di sempre, la fotografia intera delle impostazioni (contratto §F)
+  const { istantanea, ...campiDiSempre } = registro.esporta(sessionId).eventi.findLast((e) => e.name === 'talos.impostazioni-sessione')?.value ?? {};
+  assert.deepEqual(campiDiSempre, { modalitaOperativa: 'normale', permessi: 'Workspace write', motivo: 'piano-approvato' }, 'l\'interfaccia aggiorna modo e permesso');
+  assert.equal(istantanea?.permessi, 'Workspace write');
 });
 
 test('PLAN-APPROVE-WITH-CONFIRMATIONS: «chiedendo conferma» porta a Normale con ogni scrittura da confermare', async () => {

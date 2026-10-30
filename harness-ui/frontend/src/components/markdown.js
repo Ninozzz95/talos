@@ -318,12 +318,14 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
       // ⭐ 02/9 — l'identificatore di linguaggio dopo i backtick di apertura
       // (```python) veniva SCARTATO: era l'unico posto dove il modello ci dice
       // di che linguaggio si tratta, e lo buttavamo via.
-      const linguaggioDichiarato = riga.trim().slice(3).trim().split(/\s+/)[0] || '';
+      /* 23/10/2026: anche la riga d'apertura INTERA (```python sync.py): il nome del file che il «⋯» del blocco scarica viene da lì */
+      const infoRecinto = riga.trim().slice(3).trim();
+      const linguaggioDichiarato = infoRecinto.split(/\s+/)[0] || '';
       const righeCodice = [];
       i += 1;
       while (i < righe.length && !/^```/.test(righe[i].trim())) { righeCodice.push(righe[i]); i += 1; }
       const chiuso = i < righe.length; // il fence ha trovato la sua riga di chiusura
-      frammento.appendChild(bloccoCodice(righeCodice.join('\n'), linguaggioDichiarato, chiuso));
+      frammento.appendChild(bloccoCodice(righeCodice.join('\n'), linguaggioDichiarato, chiuso, infoRecinto));
       i += 1; // salta la riga di chiusura ```
       continue;
     }

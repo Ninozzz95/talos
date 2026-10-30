@@ -41,6 +41,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
+import { percorsoTaskkill } from '../taskkill-di-sistema.mjs'; // G-R5 (revisione del blocco 10, 27/10/2026)
 import { promisify } from 'node:util';
 
 const eseguiGitGrezzo = promisify(execFile);
@@ -62,7 +63,8 @@ function chiudiAlbero(figlio) {
   return new Promise((ok) => {
     /* l'ambiente minimo che serve a taskkill, mai quello intero del server (cancello SPAWN-AMBIENTE-01) */
     const minimo = Object.fromEntries(['SystemRoot', 'windir', 'PATH'].filter((k) => typeof process.env[k] === 'string').map((k) => [k, process.env[k]]));
-    try { execFile('taskkill', ['/PID', String(figlio.pid), '/T', '/F'], { windowsHide: true, timeout: 2_000, env: minimo }, () => ok()); } catch { ok(); }
+    /* G-R5 (revisione del blocco 10, 27/10/2026): per percorso intero, mai per nome (`taskkill-di-sistema.mjs`) */
+    try { execFile(percorsoTaskkill(process.env.SystemRoot), ['/PID', String(figlio.pid), '/T', '/F'], { windowsHide: true, timeout: 2_000, env: minimo }, () => ok()); } catch { ok(); }
   });
 }
 /** Esportato per la prova dell'albero chiuso (revisione 7, F2); il blocco dei fatti lo usa quando nessuno inietta `eseguiGit`. */

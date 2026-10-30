@@ -1114,6 +1114,8 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     runRealeAttivo: () => false, interpretaEventoCompattazione: () => null,
     // 17/10/2026 (owner, «Avviso in chat + stato in Estensioni»): il server MCP che non parte, detto dal gestore degli eventi
     EVENTO_MCP_AVVIO: 'talos.mcp-avvio', avvisiMcpDetti: new Map(), nuoviServerNonPartiti: () => [], creaNotaMcpNonPartito: () => null,
+    // L1 1.3 (26/10/2026): la riga della finestra del modello locale allargata da sola, disegnata dal gestore degli eventi
+    EVENTO_FINESTRA_LOCALE: 'talos.finestra-locale', aggiornaRigaFinestraLocale: () => null,
     aggiornaAvvisoSogliaContesto() {}, accendiRagionamentiApertiDopoLaStoria() {},
     disegnaTestiRimastiNellaStoria: () => { counts.testiRimasti = (counts.testiRimasti ?? 0) + 1; }, // TESTO-PERSO: il testo rimasto indietro, al confine
     aggiornaRiassuntoSegmento() {}, disegnaFasciaPianoRichiesto() {},
@@ -1130,6 +1132,7 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     caricaCacheSessioneDalRegistro() {}, EVENTI_DELLE_SCHEDE_AGENTE: new Set(),
     segnalaRigaSessioneViva() {}, chiudiAttrezziInterrotti: () => 0,
     chiudiBatchTool() {}, chiudiSegmentoAttivo() {}, contextMonitor: null,
+    aggiornaServerLocali: async () => {}, // owner 27/10/2026: al confine della storia si rilegge lo stato vivo dei server locali
     sommaUsage: () => ({}), aggiornaUsageSessione() {},
     giroPianoProposto: false, legacyPlanCard: null, svuotaSuggerimentoComposer() {},
     syncRunComposerState() {}, segnaTappaLatenza() {}, mostraRisultatoDelega: () => false, mostraDialogoAgente: () => false, eDialogoAgente: () => false,
@@ -1139,6 +1142,8 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     disegnaFrecceDeiRami: async () => {}, segnaGiroDellaDomanda() {},
     // 24/10/2026 sera (REV4-R4/R5): il testo per il modello e la bolla di ogni messaggio, per «Riprova» e «Modifica e rimanda»
     consegnaDelMessaggio: new WeakMap(),
+    // owner 27/10/2026: RunStarted ricorda il permesso del SUO giro (la carta si spiega con quello); l'elenco è letto dal sorgente vero
+    PERMESSI_SESSIONE_VALIDI: JSON.parse(/const PERMESSI_SESSIONE_VALIDI = (\[[^\]]*\]);/u.exec(APP)[1].replaceAll("'", '"')),
     // C09 (10/10/2026): la bolla della persona in rigiocata, con la funzione vera (intestazione d'esempio: nessuna nelle fixture)
     bollaRigiocata: (bolla, consegna, immagini) => bollaPerLaRigiocata({ bolla, consegna, immagini, lingue: { intestazioni: ['Attachments of this message:'], prefissiFile: ['attached file: '] } }),
   };

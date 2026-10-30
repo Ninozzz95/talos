@@ -115,8 +115,13 @@ export function creaAccessoLocaleOspite({ cartella = null, fs = {}, richiesta = 
           if (senzaCorpo) res.resume();
           risolvi(new Response(senzaCorpo ? null : Readable.toWeb(res), { status: res.statusCode, statusText: res.statusMessage ?? '', headers: h }));
         });
-        /* il messaggio di rete non porta mai la chiave: si dice solo che il motore non risponde */
-        req.on('error', (e) => rifiuta(e?.name === 'AbortError' ? e : errore('The local engine in the app does not answer.', 'LOCAL_RUNTIME_NOT_READY')));
+        /* il messaggio di rete non porta mai la chiave: si dice solo che il motore non risponde.
+           ⛔ 26/10/2026 (D-0146-1 del Mobile): era LOCAL_RUNTIME_NOT_READY, che l'app traduce «Nessun modello locale è aperto» — falso
+           quando il modello è aperto e il socket è morto (R8 nelle 0.1.44/0.1.45). Codice suo: l'app rifà il motore al prossimo invio
+           (il suo `Custode`) e spinge il percorso nuovo, quindi basta rimandare. Nessun reinvio dentro il giro: il percorso vecchio è
+           ancora quello che r4 conosce. */
+        req.on('error', (e) => rifiuta(e?.name === 'AbortError' ? e
+          : errore('The on-device engine in the app did not answer: send the message again, the app reopens it.', 'LOCAL_GUEST_UNREACHABLE')));
         req.end(corpo ?? undefined);
       });
     },

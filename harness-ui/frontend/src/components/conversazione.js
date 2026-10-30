@@ -36,6 +36,7 @@ import { scorrevoleConversazione } from '../bridge/conversazione-dom.js';
  */
 import { apriMenuContestuale, creaMenuContestuale } from './schede.js';
 import { pezziConIndirizzi } from './link-esterni.js';
+import { fileDelCodice, scaricaFile, linguaSenzaVersione, eFormatoEseguibileComeTesto, estensioneDi } from './codice-esporta.js'; // 23/10/2026: il «⋯» del blocco di codice esporta il codice come file
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -117,8 +118,13 @@ export function collegaNavigazioneSpina(conversazione, opzioni = {}) {
     if (!collegata) return;
     const tick = evento.target.closest?.('.talos-turn-spine__tick');
     if (!tick) return;
-    const turno = tick.closest('.talos-turn');
+    let turno = tick.closest('.talos-turn');
     if (!turno) return;
+    /* 27/10/2026 — la domanda resta in cima mentre si legge la sua risposta (`domanda-appiccicata.js`): portando in cima la RISPOSTA,
+       la sua domanda le si fermerebbe sopra e ne coprirebbe l'inizio. Si porta in cima la coppia domanda + risposta, come il salto
+       della cronologia di Hermes (`timeline.tsx:209`, `node.closest('[data-slot="aui_turn-pair"]')`). */
+    const domanda = turno.previousElementSibling;
+    if (turno.dataset?.turno !== 'utente' && domanda?.classList?.contains('talos-turn') && domanda.dataset?.turno === 'utente') turno = domanda;
     const ridotto = finestra.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
       || documentObj.body?.classList.contains('reduce-motion');
     const top = scorrevole.scrollTop + turno.getBoundingClientRect().top
@@ -652,6 +658,12 @@ const NOMI_LINGUAGGIO = Object.freeze({
   py: 'Python', python: 'Python', sh: 'Bash', bash: 'Bash', shell: 'Shell', json: 'JSON', yaml: 'YAML', yml: 'YAML',
   sql: 'SQL', html: 'HTML', xml: 'XML', css: 'CSS', rust: 'Rust', go: 'Go', java: 'Java', c: 'C', cpp: 'C++',
   'c++': 'C++', csharp: 'C#', 'c#': 'C#', markdown: 'Markdown', md: 'Markdown', vue: 'Vue', php: 'PHP',
+  es6: 'JavaScript', es2015: 'JavaScript', ecmascript: 'JavaScript', // revisione 24/10: si salvano come .js, si chiamano JavaScript
+  /* revisione a blocco 3 (24/10/2026, S4): i nomi delle estensioni che il salvataggio capisce già (`codice-esporta.js`), così una
+     lingua versionata («lua5.4», «ruby3») o col suo alias («golang», «pwsh») si chiama come il file che diventa */
+  lua: 'Lua', perl: 'Perl', pl: 'Perl', ruby: 'Ruby', rb: 'Ruby', rs: 'Rust', golang: 'Go', kotlin: 'Kotlin', kt: 'Kotlin',
+  haskell: 'Haskell', hs: 'Haskell', elixir: 'Elixir', ex: 'Elixir', erlang: 'Erlang', erl: 'Erlang',
+  powershell: 'PowerShell', pwsh: 'PowerShell', ps1: 'PowerShell', cs: 'C#',
 });
 
 /** La chiave della grammatica per Prism (`py` → `python`); stringa vuota se il fence non dichiara niente. */
@@ -664,9 +676,19 @@ export function chiaveLinguaggio(dichiarato) {
 /** Il nome da mostrare nell'intestazione: quello dichiarato dal modello, non quello interno di Prism. */
 export function etichettaLinguaggio(dichiarato) {
   const pulito = String(dichiarato || '').trim();
-  if (!pulito) return '';
-  return NOMI_LINGUAGGIO[pulito.toLowerCase()] || pulito;
+  /* «text», «plain», «plaintext», «txt» non sono una lingua: come nessuna lingua, così l'etichetta è quella tradotta («testo») e
+     il menu dice «Code · 2 lines», mai «text code» (visto sul Mobile, 24/10) */
+  const minuscolo = pulito.toLowerCase();
+  /* revisione 24/10 (riserva S4): un formato che si salva come .txt (`url`, `hta`…) si mostra come testo; «html5», «c99» col nome
+     della lingua (HTML, C), come l'estensione che già li toglieva */
+  if (!pulito || LINGUE_SEMPLICI.has(minuscolo) || eFormatoEseguibileComeTesto(minuscolo)) return '';
+  /* revisione a blocco 3 (24/10/2026, S4): «python3», «c++17», «lua5.4» — l'estensione l'aveva già capita (.py, .cpp, .lua) e
+     l'etichetta restava grezza; quando la lingua dichiarata non ha un nome, si usa quello della sua estensione */
+  const daEstensione = estensioneDi(minuscolo);
+  return NOMI_LINGUAGGIO[minuscolo] || NOMI_LINGUAGGIO[linguaSenzaVersione(minuscolo)]
+    || (daEstensione !== minuscolo && daEstensione !== 'txt' ? NOMI_LINGUAGGIO[daEstensione] : undefined) || pulito;
 }
+const LINGUE_SEMPLICI = new Set(['text', 'plain', 'plaintext', 'txt']);
 
 /**
  * Le parti vive di un blocco, per poterlo aggiornare sul posto mentre arriva.
@@ -742,11 +764,197 @@ function aggiornaBottone(bottone, chiuso) {
   if (bottone.textContent !== testo) bottone.textContent = testo;
 }
 
-/**
- * Un blocco di codice della chat: UN contenitore, con la barra del linguaggio e «Copia» dentro, e il
- * codice sotto. `chiuso` è falso finché il fence non ha trovato i backtick di chiusura.
+/*
+ * ⭐ 23/10/2026 sera (owner, bozzetto approvato: `Downloads/handoff-talos-2026-09-27/mockup-blocchi-codice-2026-10-23/`) — «come fa
+ *   ChatGPT e Claude»: sul codice lungo la barra (lingua, «Copia», «⋯») resta ferma in cima alla chat finché il blocco è a schermo
+ *   (`position:sticky` in `index.css`, col blocco in `overflow:clip`), e il «⋯» esporta il codice come file (del linguaggio, Markdown,
+ *   testo: `codice-esporta.js`), più «Comprimi» sopra le 40 righe. Un'azione visibile, il resto nel menu e nel tasto destro sulla barra
+ *   (regola del 10/09: mai bottoni in fila), e il menu è quello del progetto (`schede.js`).
+ * Ricerca del 23/10/2026 (`RICERCA-BLOCCHI-CODICE-2026-10-23.md`): fra dodici concorrenti letti nel codice, la barra ferma in CSS ce
+ *   l'ha solo Open WebUI (`CodeBlock.svelte:447` overflow-clip, `:473` sticky); LibreChat e Roo la inseguono in JS; Hermes non ha barra.
  */
-export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true } = {}, opzioni = {}) {
+const RIGHE_PER_COMPRIMERE = 40;
+const ID_MENU_CODICE = 'menuBloccoCodice';
+
+function contaRighe(testo) {
+  const s = String(testo ?? '');
+  if (!s) return 0;
+  return s.split('\n').length - (s.endsWith('\n') ? 1 : 0);
+}
+
+/** Il «⋯»: spento mentre il blocco arriva (come «Copia»), e il suo nome dice di quale codice si parla. */
+function aggiornaAltro(parti) {
+  const { altro } = parti;
+  if (!altro) return;
+  if (altro.disabled !== !parti.chiuso) altro.disabled = !parti.chiuso;
+  const etichetta = etichettaLinguaggio(parti.linguaggio);
+  const nome = etichetta ? t('chat.code.more', { language: etichetta }) : t('chat.code.morePlain');
+  if (altro.getAttribute('aria-label') !== nome) altro.setAttribute('aria-label', nome);
+}
+
+/*
+ * «A capo / Una riga» (owner 23/10/2026, «dopo», dal bozzetto dei blocchi di codice; Cline `forceWrap`): le righe lunghe vanno a capo
+ *   dentro il blocco invece di scorrere di lato. Vale per QUEL blocco, finché resta a schermo: niente impostazione da ricordare. La copia e
+ *   gli scaricamenti restano il testo grezzo (il ritorno a capo è solo del disegno, `white-space: pre-wrap`).
+ */
+function impostaACapo(parti, aCapo) {
+  parti.aCapo = aCapo;
+  parti.blocco.classList.toggle('code-block--a-capo', aCapo);
+}
+
+/** Compresso: le prime righe, una sfumatura, e «Mostra tutte le N righe» sotto (che lo riapre). */
+function impostaCompresso(parti, compresso) {
+  parti.compresso = compresso;
+  parti.blocco.classList.toggle('code-block--compresso', compresso);
+  if (!compresso) {
+    parti.espandi?.remove?.();
+    return;
+  }
+  if (!parti.espandi) {
+    const riga = el(parti.documento, 'div', 'code-block-espandi');
+    const pulsante = el(parti.documento, 'button', 'code-block-espandi__pulsante');
+    pulsante.type = 'button';
+    pulsante.addEventListener('click', () => { impostaCompresso(parti, false); parti.pre.focus?.({ preventScroll: true }); });
+    riga.append(pulsante);
+    parti.espandi = riga;
+    parti.espandiPulsante = pulsante;
+  }
+  const righe = contaRighe(parti.testo);
+  parti.espandiPulsante.textContent = tn('chat.code.showAllOne', 'chat.code.showAllMany', righe, { count: righe });
+  parti.blocco.append(parti.espandi);
+  /* chi comprime da metà blocco (la barra ferma in cima) resterebbe sopra il vuoto: il blocco torna in vista */
+  parti.blocco.scrollIntoView?.({ block: 'nearest' });
+}
+
+/**
+ * Le voci del «⋯» di un blocco (le stesse del tasto destro sulla barra): `[{ chiave, testo, fai }]`; vuoto mentre il blocco arriva.
+ * `scarica(file)` e `ora()` li passa chi prova; di serie lo scaricamento del browser e l'ora di adesso.
+ */
+export function vociBloccoCodice(blocco, { scarica = null, ora = () => new Date() } = {}) {
+  const parti = PARTI_DEL_BLOCCO.get(blocco);
+  if (!parti || !parti.chiuso) return [];
+  const consegna = scarica || ((file) => scaricaFile(parti.documento, file));
+  const file = (formato) => fileDelCodice(formato, { testo: parti.testo, linguaggio: parti.linguaggio, info: parti.info, ora: ora() });
+  /* l'estensione detta nella voce è quella del file che parte davvero (`sync.py` del modello, o quella della lingua) */
+  const ext = /\.([^.]+)$/u.exec(file('sorgente').nome ?? '')?.[1] ?? 'txt';
+  /* quando il file della lingua è già un .txt («Download as .txt») la voce sarebbe il doppione di «Download as text (.txt)»: resta
+     solo quest'ultima (d'accordo col Mobile, 24/10) */
+  /* revisione 24/10 (riserva S4): lo stesso per il .md — quando il file della lingua è già un .md (```markdown, ```text notes.md) la voce
+     «Markdown (.md)» avrebbe lo STESSO nome e il contenuto chiuso in un recinto (il secondo scaricamento diventava «notes (1).md»).
+     Resta il .md GREZZO: un testo che è già Markdown si salva com'è (LibreChat, `client/src/utils/downloadFile.ts`
+     `getCodeBlockFilename`, clone del 23/10: ```markdown ⇒ `code.md` grezzo) */
+  const estensione = ext.toLowerCase();
+  const voci = [
+    ...(estensione === 'txt' ? [] : [{ chiave: 'sorgente', testo: t('chat.code.downloadAs', { ext }), fai: () => consegna(file('sorgente')) }]),
+    ...(estensione === 'md' ? [] : [{ chiave: 'md', testo: t('chat.code.downloadMarkdown'), fai: () => consegna(file('md')) }]),
+    { chiave: 'txt', testo: t('chat.code.downloadText'), fai: () => consegna(file('txt')) },
+  ];
+  /* ⛔ revisione F4: dove il `<pre>` ha già un tetto suo (la conversazione figlia, `.talos-figlia__corpo pre{max-height:320px}`)
+     «Comprimi» non cambierebbe niente e aggiungerebbe solo la sfumatura e «Mostra tutte» sotto un blocco uguale: non si offre */
+  /* «A capo» solo quando cambierebbe qualcosa: una riga più larga del blocco, o il blocco che va già a capo (per tornare a «Una riga») */
+  const lunghe = Boolean(parti.pre) && parti.pre.scrollWidth > parti.pre.clientWidth + 1;
+  if (parti.aCapo || lunghe) {
+    voci.push({ chiave: 'a-capo', testo: t(parti.aCapo ? 'chat.code.noWrap' : 'chat.code.wrap'), fai: () => impostaACapo(parti, !parti.aCapo) });
+  }
+  const finestra = parti.documento?.defaultView;
+  const tetto = !parti.compresso && typeof finestra?.getComputedStyle === 'function' ? finestra.getComputedStyle(parti.pre).maxHeight : 'none';
+  if (parti.compresso || (contaRighe(parti.testo) > RIGHE_PER_COMPRIMERE && (!tetto || tetto === 'none'))) {
+    voci.push({ chiave: 'comprimi', testo: t(parti.compresso ? 'chat.code.expand' : 'chat.code.collapse'), fai: () => impostaCompresso(parti, !parti.compresso) });
+  }
+  return voci;
+}
+
+/* le parti del blocco che ha il menu aperto: un secondo clic sullo stesso «⋯» lo chiude */
+let bloccoColMenu = null;
+
+/** Il menu del progetto (`schede.js`): dal «⋯» sotto il pulsante e allineato al suo bordo destro; dal tasto destro dove sta il puntatore. */
+function apriMenuCodice(parti, { x = null, y = null } = {}) {
+  const doc = parti.documento;
+  const finestra = doc.defaultView ?? globalThis;
+  const menu = creaMenuContestuale(doc.body, { id: ID_MENU_CODICE, etichetta: t('chat.code.menuLabel') });
+  /* il nodo del menu è uno solo e nasce una volta: il nome si riscrive a ogni apertura, o dopo un cambio di lingua resta il vecchio (F9) */
+  menu.setAttribute('aria-label', t('chat.code.menuLabel'));
+  const chiudi = () => {
+    menu.hidden = true;
+    menu.replaceChildren();
+    bloccoColMenu?.altro?.setAttribute('aria-expanded', 'false');
+    bloccoColMenu = null;
+  };
+  if (!menu.dataset.chiusuraCodice) {
+    menu.dataset.chiusuraCodice = '1';
+    doc.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target) && !e.target?.closest?.('.code-block-more')) chiudi(); }, true);
+    doc.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || menu.hidden) return;
+      const da = bloccoColMenu?.altro;
+      chiudi();
+      da?.focus?.();
+      e.stopPropagation();
+    }, true);
+    finestra.addEventListener?.('resize', () => { if (!menu.hidden) chiudi(); });
+    /* il modello ARIA del menu (W3C APG, «Menu Button»): le frecce, Inizio e Fine muovono il fuoco fra le voci; Tab chiude e riparte
+       dal «⋯», così il fuoco prosegue dalla barra e il menu non resta aperto dietro (revisione F8) */
+    menu.addEventListener('keydown', (e) => {
+      const voci = [...menu.querySelectorAll('[role=menuitem]:not([disabled])')];
+      if (!voci.length) return;
+      const qui = voci.indexOf(doc.activeElement);
+      const vai = { ArrowDown: qui + 1, ArrowUp: qui - 1, Home: 0, End: voci.length - 1 }[e.key];
+      if (vai !== undefined) {
+        e.preventDefault();
+        voci[(vai + voci.length) % voci.length].focus();
+        return;
+      }
+      if (e.key === 'Tab') {
+        const da = bloccoColMenu?.altro;
+        chiudi();
+        da?.focus?.();
+      }
+    });
+  }
+  if (!menu.hidden && bloccoColMenu === parti) { chiudi(); return; }
+  if (!menu.hidden) chiudi();
+  const voci = vociBloccoCodice(parti.blocco);
+  if (!voci.length) return;
+  const righe = contaRighe(parti.testo);
+  const etichetta = etichettaLinguaggio(parti.linguaggio);
+  const titolo = etichetta
+    ? tn('chat.code.menuTitleOne', 'chat.code.menuTitleMany', righe, { language: etichetta, count: righe })
+    : tn('chat.code.menuTitlePlainOne', 'chat.code.menuTitlePlainMany', righe, { count: righe });
+  const prima = parti.altro.getBoundingClientRect();
+  /* dopo una voce il fuoco torna dove ha senso, mai su BODY (revisione F6): dopo «Comprimi» su «Mostra tutte», altrimenti sul «⋯» */
+  const eDopo = (v) => () => {
+    v.fai();
+    const dove = v.chiave === 'comprimi' && parti.compresso ? parti.espandiPulsante : parti.altro;
+    dove?.focus?.({ preventScroll: true });
+  };
+  apriMenuContestuale(menu, { titolo, voci: voci.map((v) => [v.testo, eDopo(v), true]), x: x ?? prima.left, y: y ?? prima.bottom + 6, chiudi, finestra });
+  /* «A capo» e «Comprimi» sono un'altra famiglia di azioni (come si VEDE il blocco, non cosa se ne fa): una riga la separa; e sotto, una
+     nota dice che il tasto destro sulla barra apre lo stesso */
+  const iComprimi = voci.findIndex((v) => v.chiave === 'a-capo' || v.chiave === 'comprimi');
+  if (iComprimi > 0) {
+    const separatore = el(doc, 'div', 'talos-context-menu__sep');
+    separatore.setAttribute('role', 'separator');
+    menu.querySelectorAll('[role=menuitem]')[iComprimi]?.before(separatore);
+  }
+  menu.append(el(doc, 'p', 'talos-context-menu__nota', t('chat.code.menuHint')));
+  bloccoColMenu = parti;
+  parti.altro.setAttribute('aria-expanded', 'true');
+  /* ⛔ misurato DOPO l'apertura (il fuoco sulla prima voce può far scorrere la pagina: lezione del menu dei messaggi, 17/09), e
+     contro i bordi: un blocco ferma in fondo alla finestra apre il menu sopra il «⋯» */
+  const larghezza = menu.offsetWidth || 240;
+  const altezza = menu.offsetHeight || 200;
+  const r = parti.altro.getBoundingClientRect();
+  const sinistra = x === null ? r.right - larghezza : x;
+  const sopra = y === null ? r.bottom + 6 : y;
+  menu.style.left = `${Math.round(Math.max(8, Math.min(sinistra, (finestra.innerWidth ?? 0) - larghezza - 8)))}px`;
+  menu.style.top = `${Math.round(sopra + altezza > (finestra.innerHeight ?? Infinity) - 8 ? Math.max(8, (y === null ? r.top - 6 : y) - altezza) : sopra)}px`;
+}
+
+/**
+ * Un blocco di codice della chat: UN contenitore, con la barra del linguaggio, «Copia» e «⋯» dentro, e il
+ * codice sotto. `chiuso` è falso finché il fence non ha trovato i backtick di chiusura. `info` è la riga d'apertura
+ * intera del recinto (```python sync.py): il nome del file da scaricare viene da lì, se il modello lo scrive.
+ */
+export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true, info = '' } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
   const etichetta = etichettaLinguaggio(linguaggio);
 
@@ -757,7 +965,16 @@ export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true } 
   const nome = el(documentObj, 'span', 'code-block-lang', etichetta || t('chat.code.plainText'));
   const bottone = el(documentObj, 'button', 'code-block-copy');
   bottone.type = 'button';
-  intestazione.append(nome, bottone);
+  const altro = el(documentObj, 'button', 'code-block-more');
+  altro.type = 'button';
+  altro.setAttribute('aria-haspopup', 'menu');
+  altro.setAttribute('aria-expanded', 'false');
+  /* l'icona dello sprite (un documento senza SVG, nelle prove, la salta: il nome del pulsante sta in `aria-label`) */
+  if (typeof documentObj.createElementNS === 'function') altro.append(simbolo(documentObj, 'i', 'i-more'));
+  /* l'ombra della barra quando è ferma (`@container scroll-state(stuck: top)` in `index.css`): un figlio, perché la query stila i discendenti */
+  const ombra = el(documentObj, 'span', 'code-block-head__ombra');
+  ombra.setAttribute('aria-hidden', 'true');
+  intestazione.append(nome, bottone, altro, ombra);
 
   const pre = el(documentObj, 'pre');
   pre.setAttribute('tabindex', '0');
@@ -767,8 +984,12 @@ export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true } 
   pre.append(code);
 
   const parti = {
-    pre, code, bottone, nome,
+    pre, code, bottone, nome, altro,
     chiave: chiaveLinguaggio(linguaggio),
+    linguaggio: String(linguaggio ?? ''),
+    info: String(info ?? ''),
+    documento: documentObj,
+    compresso: false,
     evidenzia: opzioni.evidenzia || evidenziaConPrism,
     copia: opzioni.copia || copiaDiSerie,
     testo: String(testo ?? ''),
@@ -777,6 +998,23 @@ export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true } 
     rinvia: typeof opzioni.rinvia === 'function' ? opzioni.rinvia : null, // B1: vedi `scriviCodice`
   };
   PARTI_DEL_BLOCCO.set(blocco, parti);
+
+  altro.addEventListener('click', () => { if (parti.chiuso) apriMenuCodice(parti); });
+  /*
+   * Il tasto destro sulla BARRA apre lo stesso menu del «⋯». Sul codice resta il tasto destro del messaggio (quello della risposta,
+   *   che c'era già): l'app desktop non ha un menu di sistema sul testo, e toglierlo lascerebbe il gesto muto.
+   * ⛔ Revisione del 23/10 (F1): l'evento NON deve salire al messaggio. Saliva, e si aprivano due menu insieme col fuoco su «Ask
+   *   again» della risposta: un Invio faceva partire un giro nuovo. La barra è del blocco sempre, anche mentre arriva (lì non apre niente).
+   */
+  intestazione.addEventListener('contextmenu', (e) => {
+    e.stopPropagation?.();
+    e.preventDefault?.();
+    if (!parti.chiuso) return;
+    /* dal tasto menu o da Maiusc+F10 l'evento arriva sul pulsante a fuoco, con le SUE coordinate (non zero, revisione F7): sopra
+       un pulsante della barra il menu si apre sotto il «⋯»; altrove nella barra, dove sta il puntatore */
+    const suUnPulsante = e.target?.closest?.('.code-block-more, .code-block-copy');
+    apriMenuCodice(parti, suUnPulsante ? {} : { x: e.clientX, y: e.clientY });
+  });
 
   bottone.addEventListener('click', async () => {
     if (!parti.chiuso) return;
@@ -791,6 +1029,7 @@ export function creaBloccoCodice({ testo = '', linguaggio = '', chiuso = true } 
 
   if (!parti.chiuso) blocco.classList.add('code-block-in-arrivo');
   aggiornaBottone(bottone, parti.chiuso);
+  aggiornaAltro(parti);
   scriviCodice(parti, parti.testo, parti.chiuso);
   blocco.append(intestazione, pre);
   return blocco;
@@ -829,9 +1068,11 @@ export function aggiornaBloccoCodice(blocco, { testo, linguaggio, chiuso } = {})
   const nuovaChiave = linguaggio === undefined ? parti.chiave : chiaveLinguaggio(linguaggio);
   if (nuovoTesto === parti.testo && nuovoChiuso === parti.chiuso && nuovaChiave === parti.chiave) return false;
 
+  const altroDaRifare = nuovaChiave !== parti.chiave || nuovoChiuso !== parti.chiuso;
   if (nuovaChiave !== parti.chiave) {
     const etichetta = etichettaLinguaggio(linguaggio);
     parti.chiave = nuovaChiave;
+    parti.linguaggio = String(linguaggio ?? '');
     parti.nome.textContent = etichetta || t('chat.code.plainText');
     parti.pre.setAttribute('aria-label', [t('chat.code.block'), etichetta].filter(Boolean).join(' '));
     blocco.dataset.lingua = nuovaChiave;
@@ -840,6 +1081,7 @@ export function aggiornaBloccoCodice(blocco, { testo, linguaggio, chiuso } = {})
   parti.chiuso = nuovoChiuso;
   blocco.classList.toggle('code-block-in-arrivo', !nuovoChiuso); // con la forza: nessuna scrittura se non cambia
   aggiornaBottone(parti.bottone, nuovoChiuso);
+  if (altroDaRifare) aggiornaAltro(parti); // a ogni fotogramma dello streaming no: solo quando cambia lingua o il recinto si chiude
   scriviCodice(parti, nuovoTesto, nuovoChiuso);
   return true;
 }
@@ -852,10 +1094,10 @@ export const ICONA_ATTREZZO = Object.freeze({
   // ⛔ BC-59 (17/09): `file_edit` scriveva sul disco e nella riga attività arrivava senza icona
   //    propria (ripiego `i-bolt`) e senza nome. Stessa icona di `scrivi`: è la stessa cosa al file.
   scrivi: 'i-code', file_edit: 'i-code', naviga: 'i-globe', web_search: 'i-globe', delega_sottotask: 'i-user',
-  memory_write: 'i-brain', artifact_create: 'i-doc', artifact_update: 'i-doc', document_create: 'i-doc', generate_image: 'i-doc',
+  memory_write: 'i-brain', artifact_create: 'i-doc', artifact_update: 'i-doc', document_create: 'i-doc', generate_image: 'i-doc', view_image: 'i-eye',
   time_now: 'i-clock', research_start: 'i-globe',
   remote_phones: 'i-phone', remote_phone_pair: 'i-phone', remote_phone_revoke: 'i-phone', // R5.12 (18/10/2026)
-  remote_phone_folders: 'i-phone', remote_phone_folder_allow: 'i-phone', remote_phone_folder_revoke: 'i-phone', // R5.12 cartelle (23/10/2026)
+  remote_phone_folders: 'i-phone', remote_phone_folder_allow: 'i-phone', remote_phone_folder_revoke: 'i-phone', remote_phone_folder_unblock: 'i-phone', // R5.12 cartelle (23/10/2026)
   remote_device_send_file: 'i-phone', // R5.13 (24/10/2026): mandare un file a un dispositivo
   remote_control: 'i-phone', // R5.14 (24/10/2026)
 });

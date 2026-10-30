@@ -13,7 +13,10 @@ test('ERRORI-CONTESTO: il JSON crudo diventa una frase, coi numeri veri dentro',
   assert.match(s.perche, /17\.993/); // i numeri dell'errore si usano, non si buttano
   assert.match(s.perche, /16\.384/);
   assert.ok(s.rimedi.length >= 3);
-  assert.match(s.rimedi[0], /Compatta/); // prima si compatta: il contesto non azzerato dà lo stesso 400 anche su prompt corti
+  /* L1 1.3 (owner 26/10/2026, bozzetto approvato): la carta arriva DOPO che la finestra si è allargata da sola o il riassunto è già
+     stato provato in automatico ⇒ il primo rimedio non è più «Compatta» (già fatto) ma cosa resta da fare a chi legge. */
+  assert.match(s.rimedi[0], /allegalo come file/);
+  assert.doesNotMatch(s.rimedi.join(' '), /--ctx-size|--parallel/u, "niente nomi tecnici né gesti che dall'app non si fanno");
   assert.equal(s.tecnico, grezzo); // il testo del server non sparisce mai
 });
 
@@ -21,6 +24,15 @@ test('ERRORI-CONTESTO senza numeri: la frase regge lo stesso', () => {
   const s = spiegaErrore('context length exceeded', 'internal-error');
   assert.equal(s.id, 'contesto-pieno');
   assert.doesNotMatch(s.perche, /Servivano/);
+});
+
+/* Revisione blocco 4 (A-8): la carta del bozzetto («Choose another model») è dei modelli LOCALI; in cloud resta «Compatta ora» */
+test('ERRORI-CONTESTO-LOCALE: la carta sa se il contesto pieno viene dal motore locale o da un fornitore in cloud', () => {
+  assert.equal(spiegaErrore('request (17993 tokens) exceeds the available context size (16384 tokens), try increasing it', 'internal-error').locale, true);
+  assert.equal(spiegaErrore('LOCAL_CONTEXT_EXCEEDED: the conversation does not fit', 'internal-error').locale, true);
+  const cloud = spiegaErrore('{"error":{"code":"context_length_exceeded","message":"This model\'s maximum context length is 128000 tokens"}}', 'internal-error');
+  assert.equal(cloud.id, 'contesto-pieno');
+  assert.equal(cloud.locale, false, 'un fornitore in cloud: la carta tiene «Compatta ora»');
 });
 
 test('ERRORI-VUOTO: «flusso SSE senza contenuto» diventa cosa, perché e tre cose da fare', () => {

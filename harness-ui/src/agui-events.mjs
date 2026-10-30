@@ -216,7 +216,7 @@ export function toolCallOutput({ toolCallId, delta }) {
  *   non poteva sapere CHE COSA e' stato eseguito ne' DOVE. Per `shell` `cwd` e' la cartella
  *   EFFETTIVA (quella che il comando ha visto davvero), non quella richiesta.
  */
-export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal }) {
+export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal, images }) {
     const evento = { type: 'ToolCallResult', messageId, toolCallId, content, role }
     // Optional TALOS extension, using MCP's boolean semantics. Never infer it from content.
     if (typeof isError === 'boolean') evento.isError = isError
@@ -279,6 +279,18 @@ export function toolCallResult({ messageId, toolCallId, content, role = 'tool', 
        Solo se c'è un codice valido: senza, l'evento resta identico a prima. */
     if (refusal && typeof refusal.code === 'string' && /^[A-Z][A-Z0-9_]*$/u.test(refusal.code)) {
         evento.refusal = { code: refusal.code, ...(typeof refusal.retryable === 'boolean' ? { retryable: refusal.retryable } : {}), reason: typeof refusal.reason === 'string' ? refusal.reason : '' }
+    }
+    /* view_image (contratto 27/10/2026, punto 8): le immagini che il modello ha guardato, per la miniatura — solo un riferimento valido dello
+       store delle immagini della chat (64 esadecimali, servito da `/api/v1/chat-images/<id>`), un formato immagine e misure intere; mai byte.
+       Nessuna valida ⇒ niente campo, e l'evento resta identico a prima. */
+    if (Array.isArray(images)) {
+        const valide = images.filter((i) => i && typeof i.id === 'string' && /^[a-f0-9]{64}$/u.test(i.id)).slice(0, 4).map((i) => ({
+            id: i.id,
+            ...(typeof i.mimeType === 'string' && /^image\/[a-z0-9.+-]+$/u.test(i.mimeType) ? { mimeType: i.mimeType } : {}),
+            ...(Number.isSafeInteger(i.width) && i.width > 0 ? { width: i.width } : {}),
+            ...(Number.isSafeInteger(i.height) && i.height > 0 ? { height: i.height } : {}),
+        }))
+        if (valide.length) evento.images = valide
     }
     return evento
 }
@@ -511,14 +523,14 @@ export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoG
  * talosLavora mette in `messaggi.push({role:'tool', tool_call_id,
  * content})`, talosHarness.mjs riga ~836) a ToolCallResult.
  */
-export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal }) {
+export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal, images }) {
     /* ⭐ OSS-1/OSS-2 — inoltro puro: la decisione su COSA entra nell'evento sta tutta in
        `toolCallResult` qui sopra, un posto solo. Chi non passa i tre campi ottiene l'oggetto
        identico di prima, byte per byte.
        ⛔ BLOCCO 7 (B4): stessa regola per i due flussi e per il codice d'uscita — l'inoltro non
          decide niente, e la guardia «solo se non vuoti» vive in `toolCallResult`.
        ⛔ BUG-14: e stessa regola per i tre campi dello sfondo (`inSfondo`/`fileSfondo`/`sfondoDa`). */
-    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal })
+    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal, images })
 }
 
 /**

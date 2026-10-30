@@ -162,3 +162,42 @@ test('CD-09 — due cartelle recenti con lo stesso nome portano `dettaglio`: la 
   assert.deepEqual(app.map((r) => r.dettaglio).sort(), ['clienteA', 'clienteB']);
   assert.equal(elenco.find((r) => r.nome === 'altro').dettaglio, undefined);
 });
+
+test('CD-10 — E-R1 (revisione blocco 7, 27/10/2026): una cartella consentita ATTRAVERSO una giunzione si trova (e si revoca) con lo stesso percorso della giunzione; una cartella sparita si trova ancora col testo; AL CONTRARIO una giunzione verso una cartella non consentita non trova niente', async () => {
+  /* Il consenso salva il percorso VERO (realpath); prima della cura `consensoDi` confrontava solo il TESTO, e revocare col percorso
+     della giunzione rispondeva «non consentita» mentre il dispositivo ci lavorava ancora (CLI `--revoke`, attrezzo
+     `remote_phone_folder_revoke`). Giunzioni VERE sotto una cartella temporanea, tolta nel finally. */
+  const radice = realpathSync.native(cartellaDiProva('talos-cartelle-giunz-'));
+  try {
+    const crea = (...parti) => { const p = join(radice, ...parti); mkdirSync(p, { recursive: true }); return p; };
+    const vera = crea('progetti', 'talos');
+    const altra = crea('progetti', 'altra');
+    const sparisce = crea('sparisce');
+    const passaggio = join(radice, 'scorciatoia');
+    symlinkSync(vera, passaggio, 'junction');
+    const versoAltra = join(radice, 'verso-altra');
+    symlinkSync(altra, versoAltra, 'junction');
+    const c = creaCartelleDeiDispositivi({ fileConsensi: join(radice, 'dati', 'remoto', 'consensi.json'), fileSegreto: join(radice, 'dati', 'remoto', 'segreto-cartelle') });
+
+    const { cartellaId } = await c.consentiInAnticipo('d', passaggio);
+    assert.equal((await c.consensiDi('d'))[0].percorso, vera, 'premessa: il consenso salva il percorso vero, non quello della giunzione');
+
+    const trovata = await c.consensoDi('d', passaggio);
+    assert.deepEqual(trovata && [trovata.cartellaId, trovata.percorso], [cartellaId, vera], `col percorso della giunzione ${passaggio} il consenso su ${vera} si trova`);
+    if (process.platform === 'win32') {
+      assert.equal((await c.consensoDi('d', passaggio.toUpperCase()))?.cartellaId, cartellaId, 'su Windows le maiuscole non contano, come prima');
+    }
+    assert.equal(await c.consensoDi('d', versoAltra), null, 'AL CONTRARIO: una giunzione verso una cartella mai consentita non trova il consenso di un\'altra');
+    assert.equal(await c.consensoDi('altro-dispositivo', passaggio), null, 'AL CONTRARIO: il consenso è per dispositivo');
+
+    await c.revoca('d', trovata.cartellaId);
+    assert.deepEqual(await c.consensiDi('d'), [], 'revocata davvero: il dispositivo non ci lavora più');
+
+    /* controllo (REV-B7-E2): una cartella sparita dal disco non ha un percorso vero, e si trova ancora col testo */
+    const sparita = await c.consentiInAnticipo('d', sparisce);
+    rmdirSync(sparisce); // vuota: nata qui sopra
+    assert.equal((await c.consensoDi('d', sparisce))?.cartellaId, sparita.cartellaId, 'sparita dal disco: si trova col suo percorso');
+  } finally {
+    rimuoviCartellaDiProva(radice);
+  }
+});

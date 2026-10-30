@@ -15,8 +15,9 @@
  */
 import { ESCLUSI_DI_SERIE, modelloBase, vociDiSerie } from './esclusi-di-serie.mjs';
 import { ESCLUSI_MASSIMI } from './provider-credential-store.mjs';
+import { finestraDaAprire } from './finestra-che-cresce.mjs';
 
-export const ATTREZZI_FORNITORI_OSPITE = Object.freeze(['provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account']);
+export const ATTREZZI_FORNITORI_OSPITE = Object.freeze(['provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', 'local_model_window']);
 const FORMA_SLUG = /^[a-z0-9][a-z0-9._-]{0,47}(?:\/[a-z0-9][a-z0-9._-]{0,47})?$/u;
 const rifiuto = (messaggio) => ({ ok: false, messaggio });
 
@@ -24,7 +25,42 @@ const rifiuto = (messaggio) => ({ ok: false, messaggio });
  * @param {{ providerStore, slugDelFornitoreFn?: ({fornitore, modello}) => Promise<string> }} servizi
  * @returns la fabbrica di `onFornitoriFn` per una sessione: `({ automazioneDelGiro })`.
  */
-export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, accessoChatgpt = null }) {
+export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, accessoChatgpt = null, finestraLocale = null }) {
+  /*
+   * L1 1.3 (owner 26/10/2026) — `local_model_window`: la seconda porta della finestra che cresce. «status» libero; «enlarge» con la
+   *   carta (prima → dopo, memoria): la stessa misura di `finestra-che-cresce.mjs` (`finestraDaAprire`), quindi la carta dice la
+   *   cifra che poi si apre davvero. `finestraLocale` = `creaFinestraCheCresce(...)`; senza (la CLI), l'attrezzo dice che non c'è.
+   */
+  const SCELTE_IN_INGLESE = { allarga: 'it is enlarged by itself (when memory allows), otherwise summarised', riassumi: 'the older part is summarised', chiedi: 'the person is asked each time' };
+  async function finestra(argomenti, fase) {
+    const azione = typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : '';
+    if (azione !== 'status' && azione !== 'enlarge') return rifiuto('local_model_window needs action "status" or "enlarge".');
+    const stato = finestraLocale ? await finestraLocale.statoAttuale() : null;
+    if (!stato) {
+      if (azione === 'status' && fase === 'anteprima') return { ok: true, carta: false };
+      return azione === 'status' ? { ok: true, testo: 'No local model is running on this computer: the window applies only to a local model loaded in TALOS.' }
+        : rifiuto('no local model is running on this computer, so there is no window to enlarge.');
+    }
+    const massimoTesto = stato.massimo ? `${stato.massimo} tokens` : 'unknown';
+    if (azione === 'status') {
+      return fase === 'anteprima' ? { ok: true, carta: false }
+        : { ok: true, testo: `${stato.nome} runs with a ${stato.finestra} token window; it was trained for up to ${massimoTesto}. When the window fills up, ${SCELTE_IN_INGLESE[stato.scelta] ?? SCELTE_IN_INGLESE.allarga}.` };
+    }
+    const tokens = Number.isSafeInteger(argomenti?.tokens) && argomenti.tokens > 0 ? argomenti.tokens : (stato.finestra ?? 0) + 1;
+    if (stato.massimo && tokens > stato.massimo) return rifiuto(`${stato.nome} cannot read more than ${stato.massimo} tokens: no window can hold ${tokens}. Split the work, or use a model that reads more.`);
+    /* ci sta già: `finestraDaAprire` cresce sempre di almeno un passo, quindi il «non serve» si decide qui (trovato da FC-ATTR-03) */
+    const dopo = stato.finestra && tokens <= stato.finestra ? null : finestraDaAprire({ servono: tokens, prima: stato.finestra, massimo: stato.massimo ?? 0 });
+    if (dopo === null) return fase === 'anteprima' ? { ok: true, carta: false } : { ok: true, testo: `Nothing to do: the window (${stato.finestra} tokens) already holds ${tokens} tokens, or it is already at the model maximum (${massimoTesto}).` };
+    if (fase === 'anteprima') return { ok: true, carta: true, azione: { modello: stato.nome, prima: stato.finestra, dopo } };
+    const esito = await finestraLocale.allarga({ modelId: stato.modelId, servono: tokens, forza: true });
+    if (esito?.ok) return { ok: true, testo: `Done. ${stato.nome} was reopened with a ${esito.dopo} token window (it was ${esito.prima}).` };
+    const perche = { memoria: 'there is not enough memory for it, so the previous window was kept', 'motore-occupato': 'the model is busy with another request; try again in a moment', 'gia-al-massimo': 'it is already at the model maximum', 'oltre-il-massimo': 'the model cannot read that much',
+      'massimo-ignoto': 'the model file does not say how much it can read, so it is not reopened blind' }; // revisione blocco 4
+    /* revisione blocco 4 (A-2): nemmeno il ritorno a com'era è riuscito — il motore riparte da solo al prossimo messaggio, e lo si dice */
+    if (esito?.spento) return rifiuto('the window was not enlarged, and the model could not be reopened as it was: it starts again with the next message.');
+    return rifiuto(`the window was not enlarged: ${perche[esito?.motivo] ?? 'the model could not be reopened, so the previous window was kept'}.`);
+  }
+
   /* 11/10/2026 — `chatgpt_account`: lo stato dell'accesso col piano ChatGPT e lo scollegamento con la carta. Mai un token nel testo. */
   function statoChatgpt() {
     if (!accessoChatgpt) return { ok: true, testo: 'A ChatGPT account cannot be connected on this computer: the system keyring is not available.' };
@@ -124,6 +160,10 @@ export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, 
     return async function onFornitoriFn(nome, argomenti = {}, { fase = 'esegui' } = {}) {
       try {
         if (nome === 'provider_exclusions_list') return fase === 'anteprima' ? { ok: true, carta: false } : lista();
+        if (nome === 'local_model_window') {
+          if (perchéNo && String(argomenti?.action ?? '').trim().toLowerCase() === 'enlarge') return rifiuto(`${perchéNo} cannot enlarge the local model window: nobody could approve it.`);
+          return finestra(argomenti ?? {}, fase);
+        }
         if (nome === 'chatgpt_account') {
           const azione = typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : '';
           if (azione === 'status') return fase === 'anteprima' ? { ok: true, carta: false } : statoChatgpt();

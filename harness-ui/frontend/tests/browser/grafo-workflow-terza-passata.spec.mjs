@@ -75,7 +75,7 @@ test('TERZA-WF-01 — vista Tempo del WORKFLOW, dal vivo: un passo che ha APPENA
 
 for (const [lingua, parole] of [
   ['it', { run: 'In esecuzione', annullato: 'Annullato', cerca: 'Cerca agenti o fasi…', mai: /Interrott|Nessun agente avviato|lott[oi]\b/u, ancora: 'in corso' }],
-  ['en', { run: 'Running', annullato: 'Cancelled', cerca: 'Search agents or phases…', mai: /Stopped|No agents started|batch/u, ancora: 'running' }],
+  ['en', { run: 'In progress', annullato: 'Cancelled', cerca: 'Search agents or phases…', mai: /Stopped|No agents started|batch/u, ancora: 'in progress' }], // owner 29/10/2026: «In progress»
 ]) {
   test(`TERZA-WF-02 [REGGE] (${lingua}) — il diagramma del Workflow tiene le SUE parole: un passo annullato è «${parole.annullato}» (non «Interrotto»/«Stopped»), la ricerca parla di fasi, niente dello stato vuoto delle deleghe; un passo annullato senza ora di fine dice solo quando è partito, uno al lavoro dice ancora «→ ${parole.ancora}»`, async ({ page }) => {
     const errori = []; page.on('pageerror', (e) => errori.push(e.message));

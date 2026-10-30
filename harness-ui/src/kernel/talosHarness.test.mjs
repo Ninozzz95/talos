@@ -109,12 +109,18 @@ it('CTX-KERNEL-NO-HOOKS-8000 without Context Engine a long tool result keeps hea
     })
     assert.equal(corto.messaggiFinali.find(m => m.role === 'tool').content, 'breve ULTIMO VALORE')
 })
-it('CTX-KERNEL-PERSIST-GATE failed archival prevents the next model request and tool effects', async (t) => {
+/* 29/10/2026: the gate is reversed on purpose. Owner rule of 12/10 (a failing support service of the turn never stops the chat) and the
+   shape agreed with the CLI: the desktop shell already fell open here; prepare re-syncs the originals on the next request. See
+   tests/capture-nativo-non-ferma.test.mjs. */
+it('CTX-KERNEL-PERSIST-GATE failed archival is said once and the turn goes on (fall open, like the desktop shell)', async (t) => {
     const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
     t.after(() => rmSync(cartella, { recursive: true, force: true }))
     let requests = 0
-    await assert.rejects(talosLavora({ cartella, task: { consegna: 'continua' }, modello: 'x', chiave: 'y', contextHooks: { capture: async () => { throw Object.assign(new Error('disk full'), { code: 'CTX_PERSISTENCE_FAILED' }) }, prepare: async ({ messages }) => ({ messages }) }, fetchDiRete: async () => { requests++; throw new Error('must not run') } }), { code: 'CTX_PERSISTENCE_FAILED' })
-    assert.equal(requests, 0)
+    const giri = []
+    const esito = await talosLavora({ cartella, task: { consegna: 'continua' }, modello: 'x', chiave: 'y', onGiro: (e) => giri.push(e), contextHooks: { capture: async () => { throw Object.assign(new Error('disk full'), { code: 'CTX_PERSISTENCE_FAILED' }) }, prepare: async ({ messages }) => ({ messages }) }, fetchDiRete: async () => { requests++; return { ok: true, status: 200, json: async () => ({ choices: [{ message: { role: 'assistant', content: 'fatto' }, finish_reason: 'stop' }] }), text: async () => '' } } })
+    assert.equal(requests, 1)
+    assert.equal(esito.comeFinita, 'concluso')
+    assert.deepEqual(giri.filter((e) => e.motivo === 'ripiego').map((e) => e.codice), ['CTX_PERSISTENCE_FAILED'])
 })
 it('CTX-KERNEL-STOP-ARCHIVE persists the result for every cancelled pending tool', async (t) => {
     const cartella = mkdtempSync(join(tmpdir(), 'tcec-kernel-'))
@@ -159,7 +165,10 @@ import {
     leggiLibreriaStandardTs,
     togliConfiniDati, // F-027: il contenuto esterno arriva dentro il confine — queste prove guardano il contenuto
     ISTRUZIONE_CONFINE_DATI, // F-027, estensione: una sessione ripresa SENZA la frase del confine la riceve in coda
+    rigaLinguaDelleRisposte, // owner 28/10: una sessione ripresa senza la regola della lingua la riceve in coda (come il confine)
 } from './talosHarness.mjs'
+/* 28/10/2026: le prove di parità confrontano due esiti di due corse; lo stato della cache porta l'ORA dell'ultima richiesta (cache, punto 2) */
+const senzaOraDellaCache = (esito) => (esito?.statoCache ? { ...esito, statoCache: { ...esito.statoCache, at: 0 } } : esito)
 import { etichettaSandbox } from './etichetta-sandbox.mjs'
 
 /*
@@ -857,7 +866,7 @@ describe('talosLavora — il ciclo intero, con una rete finta', () => {
             onGiro: () => {}, onScrittura: () => {},
         })
 
-        assert.deepEqual(conHookInerti, senzaHook,
+        assert.deepEqual(senzaOraDellaCache(conHookInerti), senzaOraDellaCache(senzaHook),
             'aggiungere ascoltatori non deve toccare un solo campo del risultato')
     })
 
@@ -958,7 +967,7 @@ describe('talosLavora — il ciclo intero, con una rete finta', () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(CONCLUSO_SUBITO)
         const storiaDiRipresa = [
-            { role: 'system', content: `istruzioni\n\n${ISTRUZIONE_CONFINE_DATI}` }, // F-027: una sessione nata col confine
+            { role: 'system', content: `istruzioni\n\n${ISTRUZIONE_CONFINE_DATI}\n\n${rigaLinguaDelleRisposte()}` }, // F-027 e owner 28/10: una sessione nata col confine e con la regola della lingua
             { role: 'user', content: 'il compito originale' },
             { role: 'assistant', content: 'riassunto di una sessione precedente' },
         ]
@@ -1155,7 +1164,7 @@ describe('talosLavora — il ciclo intero, con una rete finta', () => {
         const cartella = cartellaVuota(it)
         const rete = reteDiRisposte(CONCLUSO_SUBITO)
         const storiaDiRipresa = [
-            { role: 'system', content: `istruzioni\n\n${ISTRUZIONE_CONFINE_DATI}` }, // F-027: una sessione nata col confine
+            { role: 'system', content: `istruzioni\n\n${ISTRUZIONE_CONFINE_DATI}\n\n${rigaLinguaDelleRisposte()}` }, // F-027 e owner 28/10: una sessione nata col confine e con la regola della lingua
             { role: 'user', content: 'il compito originale' },
             { role: 'assistant', content: 'riassunto di una sessione precedente' },
         ]
@@ -2499,7 +2508,7 @@ describe('talosLavora — web_search, artifact_create, document_create e time_no
             cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: reteB.fetch,
             strumentiEstesi: undefined, ricercaWeb: undefined, onArtefatto: undefined, richiediRicercaFn: undefined, orologioFn: undefined, onDocumento: undefined, onImmagine: undefined,
         })
-        assert.deepEqual(conParametriAssenti, senzaNulla)
+        assert.deepEqual(senzaOraDellaCache(conParametriAssenti), senzaOraDellaCache(senzaNulla))
     })
 
     it('⛔⛔⛔ AL CONTRARIO — senza strumentiEstesi, il modello non vede MAI web_search/artifact_create/document_create/time_now, e la lista è bit-per-bit quella di sempre', async () => {
@@ -2942,7 +2951,7 @@ describe('talosLavora — codaMessaggiFn (FASE D, coda su una sessione in corso)
         const reteB = reteDiRisposte(CONCLUSO_SUBITO)
         const senzaNulla = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: reteA.fetch })
         const conParametroAssente = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: reteB.fetch, codaMessaggiFn: undefined })
-        assert.deepEqual(conParametroAssente, senzaNulla)
+        assert.deepEqual(senzaOraDellaCache(conParametroAssente), senzaOraDellaCache(senzaNulla))
         assert.equal(reteA.chiamate.length, 1, 'un solo giro: nessuna coda, il modello conclude e basta')
     })
 
@@ -3247,7 +3256,7 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
             cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: reteB.fetch,
             livelloAccesso: undefined, chiediApprovazioneFn: undefined,
         })
-        assert.deepEqual(conParametriAssenti, senzaNulla)
+        assert.deepEqual(senzaOraDellaCache(conParametriAssenti), senzaOraDellaCache(senzaNulla))
     })
 
     it('⛔⛔⛔ livelloAccesso:\'lettura\' rifiuta scrivi — REFUSED, il file NON esiste sul disco', async () => {
@@ -4042,7 +4051,7 @@ describe('talosLavora — hookFn (pre_tool_call/post_tool_call/session_start/ses
         const reteB = reteDiRisposte(CONCLUSO_SUBITO)
         const senzaHook = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: reteA.fetch })
         const conHookAssente = await talosLavora({ cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: reteB.fetch, hookFn: undefined })
-        assert.deepEqual(conHookAssente, senzaHook)
+        assert.deepEqual(senzaOraDellaCache(conHookAssente), senzaOraDellaCache(senzaHook))
     })
 
     it('⛔⛔⛔ pre_tool_call che rifiuta scrivi — REFUSED, il file NON esiste sul disco', async () => {

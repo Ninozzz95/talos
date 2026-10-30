@@ -13,6 +13,7 @@ import {
     ATTREZZI_OPENAI, ELENCA_PAGINA_CARATTERI, ELENCA_TETTO_INTERO, elencaDaCartella, parametriDiElenca, talosLavora,
 } from '../src/kernel/talosHarness.mjs'
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs'
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 /** Un disco finto: le chiavi sono i file; una chiave che finisce con «/» è una cartella vuota. Ordine = ordine di inserimento. */
 function discoFinto(file) {
@@ -160,7 +161,7 @@ test('C5-ELENCA-08: through the kernel, the data fence wraps only the entries; t
     await talosLavora({
         cartella, task: { consegna: 'elenca' }, modello: 'f', chiave: 'k', giriMassimi: 3,
         fetchDiRete: async (_url, init) => {
-            corpi.push(JSON.parse(init.body))
+            corpi.push(corpoSenzaMarcatori(init.body))
             const message = n++ === 0
                 ? { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name: 'elenca', arguments: JSON.stringify({ percorso: 'dati' }) } }] }
                 : { role: 'assistant', content: 'fatto' }
@@ -193,7 +194,7 @@ async function giroCheSfoglia(t, passi, { primaDi = () => {} } = {}) {
         cartella, task: { consegna: 'elenca' }, modello: 'f', chiave: 'k', giriMassimi: passi.length + 2,
         hookFn: async (e) => { if (e.tipo === 'pre_tool_call') primaDi(n - 1, cartella); return undefined },
         fetchDiRete: async (_url, init) => {
-            const messaggi = JSON.parse(init.body).messages
+            const messaggi = corpoSenzaMarcatori(init.body).messages
             const ultimo = messaggi.filter((m) => m.role === 'tool').at(-1)?.content ?? ''
             if (n > 0) risposte.push(ultimo)
             const passo = passi[n]

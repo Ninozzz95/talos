@@ -574,7 +574,17 @@ export function raccogliErrori(cdp, sessionId) {
   const disdette = [];
   let vivo = true;
 
-  const aggiungi = (voce) => { if (vivo && errori.length < MASSIMO_ERRORI) errori.push(voce); };
+  /* revisione avversaria del blocco 20 (R2): `errori` (le prime 20, per l'annotazione) resta com'era; `recenti` tiene le ULTIME 20 e
+     `totale` le conta tutte, così chi legge «da un certo punto in poi» (`local_page`) non diventa cieco dopo le prime 20 */
+  const recenti = [];
+  let totale = 0;
+  const aggiungi = (voce) => {
+    if (!vivo) return;
+    totale += 1;
+    recenti.push(voce);
+    if (recenti.length > MASSIMO_ERRORI) recenti.shift();
+    if (errori.length < MASSIMO_ERRORI) errori.push(voce);
+  };
   /*
    * ⛔ Il secondo argomento di un ascolto NON ha una forma sola. Il client CDP di `browser-vivo.mjs`
    * (M2, letto il 07/09/2026) chiama `cb(params, { sessionId, metodo })` — un OGGETTO — mentre un
@@ -626,6 +636,8 @@ export function raccogliErrori(cdp, sessionId) {
 
   return {
     errori,
+    recenti,
+    get totale() { return totale; },
     smetti() {
       if (!vivo) return;
       vivo = false;

@@ -29,6 +29,7 @@ import { ricostruisciStoriaDaRecord } from '../src/session-registry.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 /* Il fornitore finto risponde `prompt_tokens` = stima dei soli messaggi: lo scarto che il registro misurerebbe su di lui è 0 (vedi
    `riassunto-utile-verdetto-cli-22-10.test.mjs`) */
@@ -47,7 +48,7 @@ function fornitore(passo = () => 'OK') {
   const corpi = [];
   let riassunti = 0;
   const fetchDiRete = async (_u, o) => {
-    const corpo = JSON.parse(o.body);
+    const corpo = corpoSenzaMarcatori(o.body);
     if (!corpo.tools?.length) { riassunti += 1; return rispostaFinta({ role: 'assistant', content: '## Riassunto\nfatto' }); }
     const n = corpi.length;
     corpi.push(corpo);

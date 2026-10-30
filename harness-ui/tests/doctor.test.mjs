@@ -47,11 +47,13 @@ test('⭐ diagnosi() aggiunge il controllo cartelle solo quando riceve la config
     eseguiComandoSandboxatoFn: async () => ({ enforcement: 'none' }),
     spawnSyncFn: () => ({ status: 0 }),
   });
+  /* 29/10/2026: zero cartelle fisse è lo stato voluto dell'app installata (la cartella si sceglie a ogni sessione), non un avviso */
   assert.deepEqual(risultato.cartelleProgetto, {
     disponibili: false,
     conteggio: 0,
-    dettaglio: 'No project folder has been set up in the allowed list.',
-    dettaglioChiave: 'server.doctor.folders.none',
+    sceltaPerSessione: true,
+    dettaglio: 'No fixed project folder: you choose the folder when you start a new session.',
+    dettaglioChiave: 'server.doctor.folders.choosePerSession',
   });
   /* e con le cartelle: una chiave sola, il numero nei valori (l'interfaccia sceglie singolare o plurale) */
   const due = await diagnosi({ chiaveConfigurata: false, cartelleProgetto: [{ id: 'a', nome: 'A' }, { id: 'b', nome: 'B' }], eseguiComandoSandboxatoFn: async () => ({ enforcement: 'none' }), spawnSyncFn: () => ({ status: 0 }) });
