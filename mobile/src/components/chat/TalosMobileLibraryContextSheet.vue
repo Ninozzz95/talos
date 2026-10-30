@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Check, Database } from '@lucide/vue'
+import { Check, Library } from '@lucide/vue'
 import TalosThemedFilter from '@/components/talos/ui/TalosThemedFilter.vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import TalosMobileLibraryFileGlyph from '@/components/talos/library/TalosMobileLibraryFileGlyph.vue'
@@ -165,7 +165,7 @@ function setFileState(fileId: string, state: 'automatic' | 'included' | 'exclude
                 @update:model-value="chooseMode"
             >
                 <template #option="{ option, selected }">
-                    <Database class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
+                    <Library class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                     <span class="min-w-0 flex-1">{{ option.label }}</span>
                     <Check v-if="selected" class="size-4 shrink-0 text-[var(--talos-accent)]" aria-hidden="true" />
                 </template>

@@ -123,7 +123,7 @@ const rigaInterruttore = 'flex min-h-14 cursor-pointer items-start justify-betwe
                 :aria-busy="controllo || undefined"
                 @click="controllaOra"
             >
-                <RefreshCw class="size-4 motion-safe:transition-transform" :class="controllo ? 'motion-safe:animate-spin' : ''" aria-hidden="true" />
+                <RefreshCw class="size-4 motion-safe:transition-transform" :class="controllo ? 'animate-spin' : ''" aria-hidden="true" />
                 {{ controllo ? t('updates.checking') : t('updates.checkNow') }}
             </button>
             <p

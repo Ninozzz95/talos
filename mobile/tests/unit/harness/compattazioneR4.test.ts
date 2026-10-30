@@ -90,7 +90,7 @@ describe('RV — la riga viva', () => {
         expect(storto.tratti).toEqual({ cache: 100, letto: 0 })
         const italiano = descriviRigaVivaR4({ tipo: 'progresso', fase: 'lettura', letti: 6_200, inCache: 0, totale: 10_000, trascorsoMs: 192_000, tentativo: 2, tentativi: 3 }, it_.t, it_.lingua)
         expect(italiano.etichetta).toBe('Riassumo il contesto')
-        expect(italiano.titolo).toBe('10.000 token da leggere · 3 min 12 s trascorsi · tentativo 2 di 3')
+        expect(italiano.titolo).toBe('10.000 token da leggere · 3m 12s trascorsi · tentativo 2 di 3')
     })
 
     it('RV-05 mentre scrive il riassunto: i token scritti al posto del percento', () => {
@@ -109,7 +109,9 @@ describe('RV — la riga viva', () => {
         expect(stimaBreveR4(600, it_.t)).toBe('~10 min')
         expect(durataBreveR4(5_400, en.t)).toBe('5s')
         expect(durataBreveR4(192_000, en.t)).toBe('3m 12s')
-        expect(durataBreveR4(192_000, it_.t)).toBe('3 min 12 s')
+        // owner 29/10 (mockup «Caricamenti vivi» v6): i secondi «12s · 1m 4s» uguali in italiano e in inglese
+        expect(durataBreveR4(192_000, it_.t)).toBe('3m 12s')
+        expect(durataBreveR4(5_400, it_.t)).toBe('5s')
         expect(durataBreveR4(-1, en.t)).toBe('')
     })
 })

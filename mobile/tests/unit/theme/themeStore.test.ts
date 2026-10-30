@@ -127,6 +127,30 @@ describe('useThemeStore', () => {
             onError: expect.any(Function),
         }))
     })
+
+    /*
+     * ⛔ Dal Pad (27/10/2026, revisione del blocco 9 (a)): dopo un cambio di configurazione dello schermo (rotazione, piegevole, finestra
+     * divisa; sul Pad la prova col formato telefono) Android rimetteva le icone di sistema BIANCHE su fondo chiaro, e l'app non le
+     * riapplicava: misurato, l'ora passava da RGB 72 a 732 su 765 e tornava scura solo cambiando tema. La barra si riapplica quando cambia
+     * la LARGHEZZA; non quando cambia solo l'altezza (la tastiera), che arriva a ogni battuta.
+     */
+    it('BARRA-01 la larghezza della finestra cambia ⇒ la barra di sistema si riapplica col tema di adesso; ⛔ solo l’altezza no', async () => {
+        const store = useThemeStore()
+        await store.setMode('light')
+        nativeFraming.configure.mockClear()
+        const dimensioni = (larghezza: number, altezza: number) => {
+            Object.defineProperty(window, 'innerWidth', { configurable: true, value: larghezza })
+            Object.defineProperty(window, 'innerHeight', { configurable: true, value: altezza })
+            window.dispatchEvent(new Event('resize'))
+        }
+        dimensioni(window.innerWidth, 500)
+        await new Promise((ok) => setTimeout(ok, 300))
+        expect(nativeFraming.configure).not.toHaveBeenCalled()
+        dimensioni(window.innerWidth + 200, 900)
+        await new Promise((ok) => setTimeout(ok, 300))
+        expect(nativeFraming.configure).toHaveBeenCalledOnce()
+        expect(nativeFraming.configure).toHaveBeenCalledWith(expect.objectContaining({ scheme: 'light' }))
+    })
 })
 
 // F3-T1 (owner #9): installs that persisted the PRE-calm default ('telemetry')

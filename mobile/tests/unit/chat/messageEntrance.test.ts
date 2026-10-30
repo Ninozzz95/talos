@@ -11,11 +11,11 @@ const cancel = vi.fn()
 const animate = vi.fn(() => ({ finished: new Promise(() => {}), cancel }))
 const disconnect = vi.fn(() => observed.clear())
 const Host = defineComponent({
-    props: { count: { default: 1 }, content: { default: '' }, state: { default: 'persisted' } },
+    props: { count: { default: 1 }, content: { default: '' }, state: { default: 'persisted' }, dalloStreaming: { default: false } },
     setup(props) {
         const entrance = useTalosMessageEntrance()
         return () => h('div', Array.from({ length: props.count }, (_, index) => withDirectives(
-            h('article', { key: index }, props.content), [[entrance, props.state]],
+            h('article', { key: index, ...(props.dalloStreaming ? { 'data-dallo-streaming': 'true' } : {}) }, props.content), [[entrance, props.state]],
         )))
     },
 })
@@ -39,6 +39,16 @@ afterEach(() => {
 })
 
 describe('M10 messaggi persistiti', () => {
+    // DISS-03 (dal vivo, 28/10): il messaggio finito che prende il posto dello streaming GIÀ VISIBILE non rientra da opacità 0
+    // (contratto owner 27/07 «fading again once it has arrived is the bug»): misurato sul Pad, 0 → 1 in ~250 ms, la risposta lampeggiava
+    it('DISS-03 a row that replaces a visible streaming reply is never animated', () => {
+        const wrapper = mount(Host, { props: { dalloStreaming: true }, attachTo: document.body })
+        // non si osserva nemmeno: nessuna entrata da consegnare, nessuna animazione
+        expect(observed.size).toBe(0)
+        expect(animate).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
     it('animates visible rows once at 220 ms and does not repeat on content updates', async () => {
         const wrapper = mount(Host, { attachTo: document.body })
         deliver([...observed].map((target) => ({ target, isIntersecting: true })))

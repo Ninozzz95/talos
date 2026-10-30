@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { cartaApprovazioneR4, chiChiedeR4, corpoApprovazioneR4, esitoApprovazioneR4, politicaDellaFigliaR4 } from '@/lib/harness/r4/approvazioniR4'
+import { cartaApprovazioneR4, chiChiedeR4, corpoApprovazioneR4, descriviAzioneApprovazioneR4, esitoApprovazioneR4, politicaDellaFigliaR4 } from '@/lib/harness/r4/approvazioniR4'
+import appApprovazione from '@/lib/harness/r4/testi/app-approvazione-r4.json'
 
 /*
  * ⛔ K3-AP1 (ledger `LEDGER-K3-APPROVAZIONI-2026-10-16.md`; owner 16/10 «Carta nella conversazione»). Il golden è calcolato dalle
@@ -66,5 +67,23 @@ describe('la carta d\'approvazione del Codice su r4 (K3-AP1)', () => {
             expect(chiChiedeR4('   ', lingua)).toEqual({ prima: golden[lingua].chi.senza, nome: null, dopo: '' })
         }
         expect(golden.figlie.map((f: { nome: string }) => f.nome)).toEqual(['figlia-shell', 'figlia-senza-politica', 'figlia-permessi-illeggibili', 'figlia-cancello', 'figlia-segreto-senza-politica'])
+    })
+
+    /*
+     * pin r4 4cee78f33 (owner 29/10 «Ferma tutto», `descriviAzioneApprovazione` `CONTROLLO_FIGLIE` di legacy/app.js): fermare, mettere in
+     * pausa o riprendere gli agenti — uno, o tutti con `childId: "all"` — si dice; prima cadeva nel ripiego generico.
+     */
+    it('APR-07 fermare, mettere in pausa o riprendere un agente o tutti: la frase del desktop, non il ripiego', () => {
+        const casi: [string, unknown, string][] = [
+            ['stop_child', 'figlia-1', 'approval.wantsStopAgent'], ['stop_child', 'all', 'approval.wantsStopAllAgents'],
+            ['pause_child', 'figlia-1', 'approval.wantsPauseAgent'], ['pause_child', 'all', 'approval.wantsPauseAllAgents'],
+            ['resume_child', undefined, 'approval.wantsResumeAgent'], ['resume_child', 'all', 'approval.wantsResumeAllAgents'],
+        ]
+        for (const lingua of ['it', 'en'] as const) {
+            for (const [tipo, childId, chiave] of casi) {
+                expect(descriviAzioneApprovazioneR4({ tipo, childId }, lingua), `${lingua} ${tipo} ${String(childId)}`).toBe((appApprovazione[lingua] as Record<string, string>)[chiave])
+            }
+        }
+        expect(descriviAzioneApprovazioneR4({ tipo: 'toString' }, 'it')).toBe((appApprovazione.it as Record<string, string>)['approval.wantsChangeSomething'])
     })
 })

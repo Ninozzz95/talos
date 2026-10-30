@@ -6,9 +6,11 @@
  * Pin r4 701c6c0d2 (L3-17, `rigaFiglio` del desktop): la delega si chiama col nome dell'agente (`nomeDellAgenteR4`); senza, l'id.
  */
 import { onMounted, ref } from 'vue'
-import { CircleCheck, GitBranch, List, LoaderCircle } from '@lucide/vue'
+import { CircleCheck, GitBranch, List } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
+import TalosRigaInCorso from '@/components/chat/TalosRigaInCorso.vue'
 import type { FiglioR4 } from '@/composables/useConversazioneR4'
+import { useTalosSogliaSecondi } from '@/composables/useTalosSogliaSecondi'
 import { nomeDellAgenteR4 } from '@/lib/harness/r4/agentiR4'
 import './codiceR4.css'
 
@@ -20,6 +22,7 @@ const emit = defineEmits<{ close: [], apri: [sessionId: string] }>()
 
 const stato = ref<'carica' | 'pronto' | 'guasto'>('carica')
 const deleghe = ref<FiglioR4[]>([])
+const { inizio: inizioAttesa, chiave: chiaveAttesa } = useTalosSogliaSecondi({ attivo: () => stato.value === 'carica' })
 
 onMounted(async () => {
     const figli = await props.carica()
@@ -43,8 +46,10 @@ onMounted(async () => {
                     </span>
                 </div>
             </li>
-            <li v-if="stato === 'carica'" class="talos-codice-r4-nota" role="status">
-                <LoaderCircle class="inline size-4 animate-spin" aria-hidden="true" /> {{ $t('harness.r4Loading') }}
+            <!-- owner 29/10 sera (mockup «Caricamenti vivi» v6): la rotella arancione accanto al testo, i secondi dopo 2 s; la regione
+                 `status` è quella della riga -->
+            <li v-if="stato === 'carica'" class="talos-codice-r4-nota">
+                <TalosRigaInCorso :key="chiaveAttesa" compatta segno="giro" :testo="$t('harness.r4Loading')" :inizio="inizioAttesa" />
             </li>
             <li v-else-if="stato === 'guasto'" class="talos-codice-r4-nota" role="alert">{{ $t('harness.r4LoadFailed') }}</li>
             <li v-else-if="deleghe.length === 0" class="talos-codice-r4-nota">{{ $t('harness.r4NoDelegations') }}</li>

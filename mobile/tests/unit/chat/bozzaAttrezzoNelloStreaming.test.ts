@@ -47,7 +47,9 @@ describe('difetto 1: la riga dice l’attrezzo che il modello sta scrivendo', ()
         expect(bozza.text()).toContain('Making an interactive visual…')
         expect(bozza.text()).toContain('11.7 KB written')
         expect(bozza.text()).not.toContain('artifact_create')
-        // `tool_details` non è più «in corso»: è una riga conclusa del giro prima
+        // `tool_details` non è più «in corso»: è una riga conclusa del giro prima. ⛔ La riga sta nel turno, che si carica pigro e
+        // non insieme alla bozza (ESITO-RIGA, 27/10: con le parole dell'esito arrivava dopo il primo sguardo): si aspetta anche lei.
+        await vi.waitFor(() => expect(w.find('[data-testid="talos-tool-trail"]').exists()).toBe(true))
         expect(w.find('[data-testid="talos-tool-activity"]').exists()).toBe(false)
         expect(w.get('[data-testid="talos-tool-trail"]').text()).toContain('Looking up how to do that')
         // la bozza sta DOPO la riga conclusa, dove comparirà la riga vera

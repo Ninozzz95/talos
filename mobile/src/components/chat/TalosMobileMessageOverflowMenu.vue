@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { CornerUpLeft, EllipsisVertical, Info, RefreshCcw, Share2, TextSelect, Trash2 } from '@lucide/vue'
+import { CornerUpLeft, EllipsisVertical, Info, RotateCcw, Share2, TextSelect, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import { TALOS_AZIONI_MESSAGGIO_TUTTE, type TalosAzioneMessaggio, type TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
@@ -97,7 +97,7 @@ function pickDelete(message: TalosMobileMessageView): void { open.value = false;
                         :aria-label="$t('chat.resendMessage')"
                         @click="pickResend(message)"
                     >
-                        <RefreshCcw class="talos-message-sheet-icon" aria-hidden="true" />
+                        <RotateCcw class="talos-message-sheet-icon" aria-hidden="true" />
                         <span>{{ $t('chat.resendMessage') }}</span>
                     </button>
                 </li>

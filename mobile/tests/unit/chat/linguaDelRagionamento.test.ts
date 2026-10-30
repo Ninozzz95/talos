@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildTalosSystemPrompt } from '@/lib/tone'
+import { rigaLinguaDelleRisposte } from '@/lib/chat/linguaDelleRisposte'
 
 /*
  * ⛔ La riga si controlla per CONTENUTO e non importandone la costante: quella
@@ -144,5 +145,38 @@ describe('⛔ la lingua della RISPOSTA, detta per nome', () => {
     it('⛔ non tocca il ramo del motore locale, che ha un tetto di 600 caratteri', () => {
         const locale = buildTalosSystemPrompt('neutral', { provider: 'local', model: 'qwen3-1.7b' }, 'en')
         expect(locale.length).toBeLessThan(600)
+    })
+})
+
+/**
+ * TONE-LINGUA-01..03 — la lingua delle risposte (owner 28/10/2026: «se parlo in persiano a Talos mi risponde in inglese»). Con
+ * l'impostazione «Lingua» arrivata il prompt NON ordina più la lingua dell'app: dice la riga del nucleo r4 (Automatica: la lingua di chi
+ * scrive o parla, anche con memoria e attrezzi in un'altra lingua; ripiego sulla lingua dell'interfaccia). Le regole dell'owner su
+ * questo prompt restano: il ragionamento nella stessa lingua, il locale sotto 600 caratteri, nessuna parola in maiuscolo.
+ */
+describe('TONE-LINGUA la riga del nucleo al posto della lingua dell\'app', () => {
+    const AUTOMATICA = 'Always reply in the same language the person writes or speaks in, even when documents, memory or tool output are in another language, unless they ask for another one. If you cannot tell which language that is, reply in English.'
+    it('TONE-LINGUA-01 a chiave, Automatica: la riga del nucleo; mai più «Write your reply … in English»', () => {
+        const prompt = buildTalosSystemPrompt('neutral', { provider: 'deepseek', model: 'deepseek-v4' }, 'en', rigaLinguaDelleRisposte({ lingua: 'auto', linguaInterfaccia: 'en' }))
+        expect(prompt).toContain(AUTOMATICA)
+        expect(prompt).not.toContain('Write your reply and your reasoning in')
+        expect(prompt).toContain(RIGA)
+    })
+
+    it('TONE-LINGUA-02 locale, Automatica: la stessa riga, il ragionamento con lei, sotto 600 e senza maiuscole', () => {
+        const locale = buildTalosSystemPrompt('neutral', { provider: 'local', model: 'qwen3-1.7b' }, 'it', rigaLinguaDelleRisposte({ lingua: 'auto', linguaInterfaccia: 'it' }))
+        expect(locale).toContain('Always reply in the same language the person writes or speaks in')
+        expect(locale).toContain('reply in Italian.')
+        expect(locale).toContain('your reasoning is shown to them')
+        expect(locale).not.toContain('Reply and think in Italian')
+        expect((locale.match(/\b[A-Z]{3,}\b/g) ?? []).filter((p) => !['TALOS', 'AVM'].includes(p))).toEqual([])
+        // ⛔ owner 28/10/2026: il tetto passa da 600 a 800 per la riga del nucleo (identica sulle tre app), SOLO dopo la prova sul Pad
+        // col modello locale più piccolo e altri 4 (nessuno deve ripetere il protocollo); misurato: 772 caratteri
+        expect(locale.length).toBeLessThan(800)
+    })
+
+    it('TONE-LINGUA-03 una lingua scelta comanda, a chiave e in locale', () => {
+        expect(buildTalosSystemPrompt('neutral', { provider: 'openai', model: 'gpt' }, 'it', rigaLinguaDelleRisposte({ lingua: 'fa-IR' }))).toContain('Always reply in Persian (Iran), unless the person asks for another language.')
+        expect(buildTalosSystemPrompt('neutral', { provider: 'local', model: 'lfm' }, 'it', rigaLinguaDelleRisposte({ lingua: 'fa' }))).toContain('Always reply in Persian, unless the person asks for another language.')
     })
 })

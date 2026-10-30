@@ -50,7 +50,8 @@ describe('eventi di r4 → messaggi della chat (K3-A)', () => {
         expect(messaggi[1].state).toBe('persisted')
         const sequenza = messaggi[1].sequenza as { tipo: string, attrezzi?: { name: string, detail: string | null }[] }[]
         expect(sequenza.map((s) => s.tipo)).toEqual(['ragionamento', 'attrezzi', 'ragionamento', 'testo'])
-        expect(sequenza[1].attrezzi).toEqual([{ name: 'leggi', detail: 'NOTA.md' }])
+        // T8: la riga porta anche il corpo (argomenti e risultato)
+        expect(sequenza[1].attrezzi).toEqual([{ name: 'leggi', detail: 'NOTA.md', argomenti: expect.any(String), risultato: { contenuto: expect.any(String) } }])
         expect(messaggi[2].content).toBe('Riassumi in una riga')
         expect(messaggi[3].content).toBe('In una riga: la nota chiede `slugify` entro **venerdì**.')
     })
@@ -82,9 +83,9 @@ describe('eventi di r4 → messaggi della chat (K3-A)', () => {
         expect(c.inCorso!.testo).toContain('## Cosa dice la nota')
         expect(c.inCorso!.confini).toHaveLength(1)
         // il risultato di `leggi` è già arrivato: la chiamata lo dice (R4EV-14, owner 22/10)
-        expect(c.inCorso!.confini[0].attrezzi).toEqual([{ name: 'leggi', detail: 'NOTA.md', finita: true }])
+        expect(c.inCorso!.confini[0].attrezzi).toEqual([{ name: 'leggi', detail: 'NOTA.md', finita: true, argomenti: expect.any(String), risultato: { contenuto: expect.any(String) } }])
         const soloAttrezzo = parziale.slice(0, parziale.findIndex((e) => e.type === 'ToolCallArgs') + 1)
-        expect(conversazioneDaEventi(soloAttrezzo).inCorso!.attivi).toEqual([{ name: 'leggi', detail: 'NOTA.md' }])
+        expect(conversazioneDaEventi(soloAttrezzo).inCorso!.attivi).toEqual([{ name: 'leggi', detail: 'NOTA.md', argomenti: expect.any(String) }])
     })
 
     /* Owner 22/10/2026 (foto, «che casino»): due chiamate senza testo in mezzo stanno nello stesso confine; la prima, col suo
@@ -103,6 +104,100 @@ describe('eventi di r4 → messaggi della chat (K3-A)', () => {
         expect(prima).toMatchObject({ name: 'scrivi', finita: true })
         expect(seconda.name).toBe('shell')
         expect(seconda.finita).not.toBe(true)
+    })
+
+    /* Pad, 27/10/2026, prova dal vivo con la CLI: la scrittura nella cartella bloccata è stata rifiutata dal PC, ma la riga
+       «Scrittura di un file» sul dispositivo era identica a una riuscita, perché l'esito si buttava. Desktop 27/10, parità col PC
+       (`app.js:23388`): prima la ricevuta (denied | consentito false | failed; succeeded vince sul testo; effect_unknown no), poi
+       `isError`, poi il contratto del testo del kernel (oggi i rifiuti in anticipo portano solo «REFUSED.»). L'esito resta anche nel
+       salvato: deve reggere al ricaricamento. */
+    it('R4EV-16 la chiamata dice com\'è andata, come il PC, anche dopo il salvataggio', () => {
+        const chiamata = (id: string, risultato: Record<string, unknown>, nome = 'scrivi') => [
+            { type: 'ToolCallStart', toolCallId: id, toolCallName: nome },
+            { type: 'ToolCallArgs', toolCallId: id, delta: `{"percorso":"${id}.txt"}` },
+            { type: 'ToolCallResult', toolCallId: id, role: 'tool', ...risultato },
+        ]
+        const eventi = [
+            { type: 'RunStarted', runId: 'g', input: { consegna: 'x' } },
+            ...chiamata('negata', { content: 'REFUSED. Nothing was written', receipt: { status: 'denied', consentito: false, via: 'cartella-bloccata' } }),
+            ...chiamata('nonconsentita', { content: 'no', receipt: { status: 'succeeded', consentito: false } }),
+            ...chiamata('fallita', { content: 'disk full', receipt: { status: 'failed', consentito: true } }),
+            ...chiamata('errore', { content: 'boom', isError: true }),
+            ...chiamata('riuscita', { content: 'REFUSED. but the receipt says it went', receipt: { status: 'succeeded', consentito: true } }),
+            ...chiamata('solotesto', { content: 'REFUSED. Nothing was written: …\\sub\\blocked.txt is inside a folder the person blocked' }),
+            ...chiamata('ignota', { content: 'x', receipt: { status: 'effect_unknown' } }),
+            ...chiamata('ignotarifiutata', { content: 'NOT FOUND. no such file', receipt: { status: 'effect_unknown' } }),
+            ...chiamata('doppia', { content: 'ok', duplicate: true }),
+            ...chiamata('fermata', { content: 'exit 130 [sandbox: none]\npartial' }, 'shell'),
+            ...chiamata('senzasuite', { content: 'NOT RUN: no test suite found' }, 'prova'),
+        ]
+        const atteso = [
+            { name: 'scrivi', detail: 'negata.txt', esito: 'errore' },
+            { name: 'scrivi', detail: 'nonconsentita.txt', esito: 'errore' },
+            { name: 'scrivi', detail: 'fallita.txt', esito: 'errore' },
+            { name: 'scrivi', detail: 'errore.txt', esito: 'errore' },
+            { name: 'scrivi', detail: 'riuscita.txt' },
+            { name: 'scrivi', detail: 'solotesto.txt', esito: 'errore' },
+            { name: 'scrivi', detail: 'ignota.txt' },
+            { name: 'scrivi', detail: 'ignotarifiutata.txt', esito: 'errore' },
+            { name: 'scrivi', detail: 'doppia.txt', esito: 'doppione' },
+            { name: 'shell', detail: 'fermata.txt', esito: 'interrotta' },
+            { name: 'prova', detail: 'senzasuite.txt', esito: 'non-eseguita' },
+        ]
+        // T8: la riga porta anche argomenti e risultato (il corpo); qui conta com'è andata
+        const riga = ({ name, detail, esito, finita }: Record<string, unknown>) => ({ name, detail, ...(esito ? { esito } : {}), ...(finita ? { finita } : {}) })
+        const vivo = conversazioneDaEventi(eventi)
+        expect(vivo.inCorso!.confini[0].attrezzi.map(riga)).toEqual(atteso.map((a) => ({ ...a, finita: true })))
+
+        const finito = conversazioneDaEventi([
+            ...eventi,
+            { type: 'TextMessageStart', messageId: 'm', role: 'assistant' },
+            { type: 'TextMessageContent', messageId: 'm', delta: 'Done: wrote the file.' },
+            { type: 'TextMessageEnd', messageId: 'm' },
+            { type: 'RunFinished', runId: 'g' },
+        ]).messaggi.find((m) => m.role === 'assistant')!
+        const sequenza = finito.metadata[TALOS_METADATA_SEQUENZA] as { tipo: string; attrezzi?: Record<string, unknown>[] }[]
+        expect(sequenza.find((s) => s.tipo === 'attrezzi')!.attrezzi!.map(riga)).toEqual(atteso)
+    })
+
+    /* T8 (censimento «Avvisi ed errori», punto c): la riga si apre come sul PC; per farlo deve tenere gli argomenti e il risultato
+       (il testo del kernel, e i due flussi quando ci sono), dal vivo e nel giro finito. Un risultato senza testo resta un testo vuoto. */
+    it('R4EV-18 la chiamata tiene argomenti e risultato, per il corpo della riga', () => {
+        const eventi = [
+            { type: 'RunStarted', runId: 'g', input: { consegna: 'x' } },
+            { type: 'ToolCallStart', toolCallId: 'a', toolCallName: 'shell' },
+            { type: 'ToolCallArgs', toolCallId: 'a', delta: '{"comando":"npm test"}' },
+            { type: 'ToolCallResult', toolCallId: 'a', role: 'tool', content: 'exit 1 [sandbox: wsl2]\nfail', stdout: 'fail', stderr: 'warn' },
+            { type: 'ToolCallStart', toolCallId: 'b', toolCallName: 'leggi' },
+            { type: 'ToolCallArgs', toolCallId: 'b', delta: '{"percorso":"a.txt"}' },
+            { type: 'ToolCallResult', toolCallId: 'b', role: 'tool', content: 42 },
+            { type: 'ToolCallStart', toolCallId: 'c', toolCallName: 'leggi' },
+        ]
+        const vivo = conversazioneDaEventi(eventi).inCorso!.confini[0].attrezzi
+        expect(vivo[0]).toMatchObject({ argomenti: '{"comando":"npm test"}', risultato: { contenuto: 'exit 1 [sandbox: wsl2]\nfail', stdout: 'fail', stderr: 'warn' } })
+        expect(vivo[1]).toMatchObject({ argomenti: '{"percorso":"a.txt"}', risultato: { contenuto: '' } })
+        expect(vivo[1]!.risultato).not.toHaveProperty('stdout')
+        // in corso: niente risultato, niente argomenti vuoti
+        expect(vivo[2]).not.toHaveProperty('risultato')
+        expect(vivo[2]).not.toHaveProperty('argomenti')
+        const finito = conversazioneDaEventi([...eventi.slice(0, -1), { type: 'RunFinished', runId: 'g' }]).messaggi.find((m) => m.role === 'assistant')!
+        const sequenza = finito.metadata[TALOS_METADATA_SEQUENZA] as { tipo: string; attrezzi?: Record<string, unknown>[] }[]
+        expect(sequenza.find((s) => s.tipo === 'attrezzi')!.attrezzi![0]).toMatchObject({ risultato: { stderr: 'warn' } })
+    })
+
+    /* IMPOSTAZIONI-DAL-VIVO (owner 27/10/2026, r4 f573cdc93): `talos.impostazioni-sessione` porta la fotografia intera, anche nella
+       storia (decide la versione, non il «dal vivo»); un evento di un PC più vecchio resta com'era, e uno con la sola fotografia conta. */
+    it('R4EV-17 l\'evento delle impostazioni porta la fotografia; senza, resta com\'era', () => {
+        const istantanea = { modello: 'm', reasoning: { effort: 'high' }, permessi: 'Full access', permessiPerAttrezzo: {}, modalitaOperativa: 'normale', nome: 'n', versione: 7 }
+        const conFoto = applicaEventoR4(creaConversazioneR4(), { type: 'CUSTOM', name: 'talos.impostazioni-sessione', value: { modalitaOperativa: 'normale', permessi: 'Full access', motivo: 'impostazioni', istantanea } })
+        expect(conFoto.impostazioni).toMatchObject({ modalitaOperativa: 'normale', permessi: 'Full access', motivo: 'impostazioni', dalVivo: false })
+        expect(conFoto.impostazioni!.istantanea).toMatchObject({ modello: 'm', reasoning: { effort: 'high' }, nome: 'n', versione: 7 })
+        const vecchio = applicaEventoR4(creaConversazioneR4(), { type: 'CUSTOM', name: 'talos.impostazioni-sessione', value: { modalitaOperativa: 'piano', permessi: 'On request', motivo: 'piano-richiesto-dal-modello' } })
+        expect(vecchio.impostazioni).toMatchObject({ modalitaOperativa: 'piano', permessi: 'On request', istantanea: null })
+        const soloFoto = applicaEventoR4(creaConversazioneR4(), { type: 'CUSTOM', name: 'talos.impostazioni-sessione', value: { istantanea } })
+        expect(soloFoto.impostazioni?.istantanea?.versione).toBe(7)
+        const storta = applicaEventoR4(creaConversazioneR4(), { type: 'CUSTOM', name: 'talos.impostazioni-sessione', value: { istantanea: { ...istantanea, versione: 'x' } } })
+        expect(storta.impostazioni).toBeUndefined()
     })
 
     /* Decisione owner 22/10/2026 («Ragionamento dentro il gruppo»: a fine «Ha lavorato per X · N passi»): il messaggio del giro si
@@ -481,5 +576,17 @@ describe('i file nella bolla della persona (K3-C Allegati A3)', () => {
             consegna: 'x\n\nAttachments of this message:\n- a.md (/w/a.md)', bolla: { testo: 'x', allegati: [{ tipo: 'file', nome: 'a.md', percorso: '/w/a.md', caratteri: 812 }, { tipo: 'file', nome: 'b.md', caratteri: -1 }, null, { tipo: 'immagine', nome: 'foto.png' }] },
         } }]).messaggi[0]
         expect(conCaratteri.attachments?.map((a) => [a.display_name, a.percorso ?? null, a.caratteri ?? null])).toEqual([['a.md', '/w/a.md', 812], ['b.md', null, null]])
+    })
+
+    // ⛔ Allegati apribili (owner 26/10; r4 7d1d3d7dd, revisione A-F1): la radice della sessione e la cartella di PARTENZA arrivano
+    // col `RunStarted` che disegna la bolla, quindi sono note PRIMA che il chip si disegni (al desktop il primo giro le perdeva)
+    it('ALL-APRI-M07 RunStarted porta la radice e la cartella di partenza; senza base la base è la radice', () => {
+        const con = applicaEventoR4(creaConversazioneR4(), { type: 'RunStarted', runId: 'g1', input: { consegna: 'ciao' }, contesto: { cartella: 'C:/', cartellaBase: 'C:/Progetti/Demo' } })
+        expect(con.cartelle).toEqual({ radice: 'C:/', base: 'C:/Progetti/Demo' })
+        const senza = applicaEventoR4(creaConversazioneR4(), { type: 'RunStarted', runId: 'g1', input: { consegna: 'ciao' }, contesto: { cartella: '/w' } })
+        expect(senza.cartelle).toEqual({ radice: '/w', base: '/w' })
+        // un giro senza contesto (sessioni salvate prima) non cancella quelle già note
+        expect(applicaEventoR4(con, { type: 'RunStarted', runId: 'g2', input: { consegna: 'ancora', seguito: true } }).cartelle).toEqual(con.cartelle)
+        expect(applicaEventoR4(creaConversazioneR4(), { type: 'RunStarted', runId: 'g1', contesto: { cartella: 42 } }).cartelle).toBeUndefined()
     })
 })

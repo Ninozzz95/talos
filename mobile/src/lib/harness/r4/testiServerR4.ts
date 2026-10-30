@@ -48,6 +48,13 @@ function nellaLingua(chiave: string, lingua: string, valori: Record<string, unkn
     return interpola(propria(tabella, nome) ?? propria(TESTI_SERVER_R4.en, nome) ?? '', valori)
 }
 
+/*
+ * pin r4 4cee78f33 (`testo-server.js` `QUANTITA_DI_TOKEN`, 29/10): le QUANTITÀ di token si dicono col separatore delle migliaia della
+ * lingua; solo i parametri che lo sono per nome (`tokens…`, `…Tokens`, `finestra`, `riserva`) e solo se interi: una porta o un id restano.
+ */
+const QUANTITA_DI_TOKEN = /^(?:tokens[A-Z]\w*|\w+Tokens|finestra|riserva)$/u
+const numeroNellaLingua = (n: number, lingua: string) => n.toLocaleString(italiano(lingua) ? 'it-IT' : 'en-US')
+
 function valoriDellaFrase(params: unknown, lingua: string): Record<string, unknown> | undefined {
     if (!params || typeof params !== 'object') return undefined
     const dentro = params as Record<string, unknown>
@@ -55,7 +62,9 @@ function valoriDellaFrase(params: unknown, lingua: string): Record<string, unkno
     for (const [nome, valore] of Object.entries(dentro)) {
         if (nome.endsWith('Chiave') && nome.length > 'Chiave'.length) continue
         const chiaveDelNome = dentro[`${nome}Chiave`]
-        fuori[nome] = typeof chiaveDelNome === 'string' && voce(chiaveDelNome) !== undefined ? nellaLingua(chiaveDelNome, lingua, undefined) : valore
+        fuori[nome] = typeof chiaveDelNome === 'string' && voce(chiaveDelNome) !== undefined ? nellaLingua(chiaveDelNome, lingua, undefined)
+            : QUANTITA_DI_TOKEN.test(nome) && Number.isSafeInteger(valore) ? numeroNellaLingua(valore as number, lingua)
+                : valore
     }
     return fuori
 }

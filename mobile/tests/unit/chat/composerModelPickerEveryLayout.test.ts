@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest'
-import { talosComposerFlags } from '@/lib/composerStyle'
 
 /**
  * Il selettore del modello si raggiunge in OGNI forma del compositore.
@@ -25,24 +24,8 @@ import { talosComposerFlags } from '@/lib/composerStyle'
  * capacità**. La forma è una preferenza di aspetto.
  */
 describe('la forma del compositore non toglie il selettore del modello', () => {
-    /**
-     * Le tre forme esistenti, e cosa producono. Se domani ne nasce una quarta,
-     * questo test non la conosce — ma il controllo qui sotto sul sorgente sì.
-     */
-    it.each([
-        ['classic', 'menu'],
-        ['drawer', 'menu'],
-        ['compact', 'menu'],
-    ] as const)('la forma %s produce una combinazione gestita', (shape, plus) => {
-        const flags = talosComposerFlags(shape as never, plus as never)
-        // Ogni forma cade in uno dei due rami del template: quello a cassetto
-        // (`drawerMode`) o quello classico. Nessuna forma resta senza riga.
-        expect(typeof flags.drawerMode).toBe('boolean')
-        expect(typeof flags.immersiveComposer).toBe('boolean')
-        // `compact` è l'unica immersiva, ed è quella che collassa A RIPOSO.
-        expect(flags.immersiveComposer).toBe(shape === 'compact')
-    })
-
+    // Owner 27/10/2026, «Unico, tolgo le forme»: le tre forme e la loro traduzione in prop non esistono più (FORMA-01..04 in
+    // formaUnica.test.ts). Resta il fatto che conta: la forma unica porta il selettore, e uno solo.
     /**
      * Il controllo che avrebbe evitato l'errore: **entrambi** i rami del
      * template portano lo stesso gancio. Guarda il sorgente perché è lì che il

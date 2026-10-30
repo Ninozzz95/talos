@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/modello.js",
-    "sha256": "8e11b2cf43c281fd77a35bc620ec348775935aea39fb8682736d5def14505590",
+    "sha256": "d56fd5241d7260892d982a30a9703f9f100e85b4ca4c39e800ae1129a62aced3",
     "prefisso": [
       "permissions.howMuchTalosCan",
       "permissions.permissionsTheyApplyTo",

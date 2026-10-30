@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { CircleAlert, Info, ShieldAlert } from '@lucide/vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
@@ -28,6 +28,9 @@ const titleKeys: Record<TalosMobileControlledFaultLayer, string> = {
     network: 'chat.networkFailure', worker: 'chat.workerFailure', system: 'chat.executionFailure',
 }
 const title = computed(() => t(fault.value ? titleKeys[fault.value.layer] : 'chat.systemNotice'))
+// ASS-148 (owner 29/10 «Frase + pulsante»): la rete locale tolta si risolve con un gesto, e il gesto sta qui, sotto la frase (a richiesta)
+const apreIPermessi = computed(() => testo.value?.diagnostic === 'TALOS_PROVIDER_LOCAL_NETWORK_BLOCKED')
+const ApriIPermessi = defineAsyncComponent(() => import('@/components/chat/TalosMobileFaultOpenPermissions.vue'))
 /**
  * A LOCAL model's id is its file path on the device: on the Pad (12/09/2026)
  * the card closed with «local / /storage/emulated/0/…/talos-prova-gemma.gguf».
@@ -71,6 +74,7 @@ const providerLabel = computed(() => {
                     <div class="text-2xs font-semibold uppercase text-[var(--talos-danger)]">{{ $t('chat.nextAction') }}</div>
                     <p data-testid="talos-mobile-fault-next" class="mt-1 break-words text-xs leading-5 [overflow-wrap:anywhere]">{{ testo.nextAction }}</p>
                 </div>
+                <ApriIPermessi v-if="apreIPermessi" />
                 <div class="mt-3 flex flex-wrap items-center gap-2 text-2xs text-[var(--talos-muted)]">
                     <span v-if="providerLabel">{{ providerLabel }}</span>
                     <span v-if="fault.status">HTTP {{ fault.status }}</span>

@@ -2,6 +2,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 /**
  * ⭐⭐⭐ FASE 2 — L'ULTIMO PONTE.
@@ -127,5 +129,44 @@ describe('FASE-2 — la riga compare nella lista dei messaggi', () => {
         await attendiIlPigro()
 
         expect(vista.find(SELETTORE).exists()).toBe(false)
+    })
+
+    /*
+     * ⛔ Pad, 27/10/2026, prova dal vivo con la CLI: una risposta del modello locale nella Chat, poi la risposta di una sessione
+     * del PC nel Codice remoto — e sotto quella del PC compariva «Velocità di questa risposta su questo dispositivo 26.4 token
+     * al secondo». La misura sta in una coda unica e se la prendeva la prima lista che vedeva comparire una risposta. Il Codice
+     * non genera mai con l'adattatore locale (il kernel genera da sé, locale o sul PC): la sua lista non lega e non consuma.
+     */
+    it('PONTE-03 la lista del Codice non si prende la misura della Chat, e la lascia alla Chat', async () => {
+        const vista = mount(TalosMobileMessageList, {
+            props: { messages: [messaggio('u1', 'user')], sending: false, senzaMisureLocali: true },
+        })
+        await flushPromises()
+        const misura = {
+            traceId: 't-chat', finishedAt: Date.now(), firstVisibleMs: 351, tokensPerSecond: 26.4, msPerToken: 37.9,
+            producedTokens: 42, promptTokens: 120, prefillMs: 300, engineFirstTokenMs: 351, reusedTokens: 0,
+            partialTrimRefused: false, prefixOutcome: 'reused' as const,
+        }
+        talosRegistraMisuraLocale(misura)
+        await vista.setProps({ messages: [messaggio('u1', 'user'), messaggio('a1', 'assistant')] })
+        await attendiIlPigro()
+
+        expect(vista.find(SELETTORE).exists()).toBe(false)
+        vista.unmount()
+
+        // La Chat, quando la sua risposta compare, la trova ancora.
+        const chat = mount(TalosMobileMessageList, { props: { messages: [messaggio('u2', 'user')], sending: false } })
+        await flushPromises()
+        await chat.setProps({ messages: [messaggio('u2', 'user'), messaggio('a2', 'assistant')] })
+        await attendiIlPigro()
+        expect(chat.find(SELETTORE).text()).toContain('26.4 tokens/sec')
+    })
+})
+
+describe('PONTE-03b — il Codice monta la lista senza misure locali', () => {
+    it('CodiceR4Screen passa senza-misure-locali alla sua lista', () => {
+        const sorgente = readFileSync(resolve(__dirname, '..', '..', '..', 'src', 'screens', 'CodiceR4Screen.vue'), 'utf8')
+        const lista = sorgente.match(/<TalosMobileMessageList[\s\S]*?>/)?.[0] ?? ''
+        expect(lista).toMatch(/\ssenza-misure-locali\s/)
     })
 })

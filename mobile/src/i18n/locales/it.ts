@@ -745,6 +745,7 @@ export const TALOS_IT_MESSAGES = {
         queueHintPaused: 'In pausa dallo Stop: parte solo se la invii tu.',
         queueHintOtherChat: 'Parte quando finisce l’altra chat.',
         queueHintIdle: 'Parte appena TALOS è libero.',
+        queueHintNextMessage: 'Restano in coda e partono col tuo prossimo messaggio.',
         queueHintSteer: 'Parte quando TALOS finisce di rispondere. «Indirizza ora» la fa entrare al prossimo passo fra gli attrezzi.',
         queueHintStopRestart: 'Parte quando TALOS finisce di rispondere. «Ferma e riparti» ferma la risposta, tiene quello già scritto e riparte con questo.',
         queueSteerNow: 'Indirizza ora',
@@ -886,8 +887,8 @@ export const TALOS_IT_MESSAGES = {
                 tipToReadMany: '{n} token da leggere',
                 tipCached: '{c} già in cache',
                 tipElapsed: '{t} trascorsi',
-                durationSeconds: '{s} s',
-                durationMinutes: '{m} min {s} s',
+                durationSeconds: '{s}s',
+                durationMinutes: '{m}m {s}s',
                 tipAttempt: 'tentativo {n}',
                 tipAttemptOf: 'tentativo {n} di {m}',
                 skip: 'Salta',
@@ -1018,6 +1019,9 @@ export const TALOS_IT_MESSAGES = {
         removeFailedFiles: 'Rimuovi i file che non è stato possibile aggiungere prima dell’invio',
         improvingPrompt: 'Miglioramento prompt',
         stopResponse: 'Interrompi risposta',
+        // «Stop anche a chat ferma» (owner 29/10/2026 sera, parole del PC): lo Stop a chat ferma con agenti al lavoro
+        stopAgentsOne: "Ferma l'agente",
+        stopAgentsMany: 'Ferma i {n} agenti',
         discardDictation: 'Annulla la dettatura',
         stopDictation: 'Interrompi dettatura',
         dictate: 'Detta',
@@ -1045,6 +1049,7 @@ export const TALOS_IT_MESSAGES = {
         browseWeb: 'Naviga sul web',
         improvePrompt: 'Migliora il messaggio',
         chooseModel: 'Scegli modello',
+        modelActiveOf: '{totali} ({attivi} attivi)',
         chooseModelProfile: 'Scegli profilo modello',
         chooseReasoningEffort: 'Scegli livello di ragionamento',
         effortValue: 'Impegno: {effort}',
@@ -1057,6 +1062,9 @@ export const TALOS_IT_MESSAGES = {
         reasoningEffortLevels: 'Livelli di ragionamento',
         noReasoningSetting: 'Questo modello funziona senza un’impostazione di ragionamento.',
         modelAndReasoning: 'Modello e ragionamento',
+        // owner 27/10/2026, foglio «Modello e ragionamento»: le schede dei fornitori
+        providerTabs: 'Fornitori',
+        chosenModelIsHere: 'Il modello scelto è qui',
         // J3 (24/10/2026, owner): il foglio del modello è solo «Modello»; il ragionamento ha una pillola sua (desktop c6d1cbff2)
         modelSheetTitle: 'Modello',
         reasoningPillTitle: 'Ragionamento',
@@ -1326,6 +1334,13 @@ export const TALOS_IT_MESSAGES = {
         localSpeedOpeningTooLarge: 'non posso mettere da parte le istruzioni: occuperebbero troppo spazio',
         localSpeedOpeningUnavailable: 'non posso mettere da parte le istruzioni: non riesco a capire dove finiscono',
         localSpeedOpeningCheckFailed: 'non so dire se le istruzioni siano state messe da parte: il controllo non è riuscito',
+        // R4 (bozzetto approvato il 28/10): la prima parola. La scala è quella del desktop (`app.wait.*`, legacy/app.js:14031), parola per parola
+        waitSentComputer: 'Messaggio inviato, aspetto il computer',
+        waitSent: 'Messaggio inviato',
+        waitProcessing: 'TALOS sta elaborando la risposta…',
+        waitStillWorking: 'Il modello ci sta ancora lavorando…',
+        waitLonger: 'Ci sta mettendo più del solito — resta in attesa…',
+        writing: 'Sta scrivendo',
         receivingResponse: 'Ricezione risposta',
         // Owner 20/10/2026: quanto è cresciuta la chiamata che il modello sta scrivendo, e più righe di attrezzi in una.
         toolDraftSize: '{size} KB scritti',
@@ -1428,6 +1443,9 @@ export const TALOS_IT_MESSAGES = {
         faultNoChatTemplate: 'Questo modello non porta con sé le istruzioni su come parlargli, quindi TALOS non sa in che forma fargli la domanda.',
         faultNoChatTemplateNext: 'Scegli un altro modello locale dal selettore: le varianti pronte alla conversazione hanno di solito «instruct» o «it» nel nome.',
         faultProviderRefused: 'Il servizio del modello ha rifiutato la richiesta senza spiegare perché.',
+        faultLocalNetworkBlocked: 'TALOS non può raggiungere il tuo server sulla rete di casa: hai tolto il permesso Rete locale.',
+        faultLocalNetworkBlockedNext: 'Riattiva «Rete locale» nei permessi di TALOS, poi riprova.',
+        openAppPermissions: 'Apri i permessi',
         faultProviderKeyMissing: 'Per questo modello manca la chiave del provider.',
         faultProviderCatalogMissing: 'Il catalogo dei modelli di questo provider non è ancora stato caricato.',
         faultModelMismatch: 'Il modello scelto non appartiene al provider selezionato.',
@@ -1498,6 +1516,9 @@ export const TALOS_IT_MESSAGES = {
         editMessageUnavailable: "Attendi la fine della risposta e delle richieste di autorizzazione prima di modificare il messaggio.",
         messageInterrupted: "Interrotta. Il testo è conservato.",
         openAttachmentPreview: "Apri anteprima",
+        openAttachment: "Apri {name}",
+        remoteFileGone: "Questo file non è più sul computer.",
+        remotePreviewUnavailable: "Questo file non si può mostrare qui. Resta sul computer.",
         attachmentPreviewUnavailable: "Anteprima non disponibile. Il file resta nella Libreria.",
     },
     messageMarkdown: {
@@ -1561,6 +1582,24 @@ export const TALOS_IT_MESSAGES = {
         // ⛔ F4 (14/10/2026): la notifica mentre un giro del Codice lavora con l'app in secondo piano.
         keeperWorking: 'Il Codice sta lavorando',
         emptyBody: 'Nessuna sessione ancora. Tocca "Nuova", oppure scrivi qui sotto per cominciare.',
+        // Owner 29/10 sera (mockup «Caricamenti vivi» v6, D3): mentre l'elenco si legge, la carta della Chat.
+        // E2 (owner 29/10 notte): senza i puntini, come «Caricamento chat» e «Caricamento Libreria»
+        loadingSessions: 'Caricamento sessioni',
+        // ⛔ UI-111 «Liste coerenti» (mockup v2.1 approvato dall'owner il 29/10 sera): l'elenco del Codice nella grammatica delle Chat
+        subtitle: 'Le tue sessioni di codice, qui e sui tuoi computer.',
+        search: 'Cerca sessioni',
+        options: 'Opzioni delle sessioni',
+        optionsActive: 'Opzioni delle sessioni, {count} filtro acceso | Opzioni delle sessioni, {count} filtri accesi',
+        filterLabel: 'Stato delle sessioni',
+        // le schede sono gli stati veri; «Tutte», «In corso» e «Concluse» vengono dalle Chat (`chats.filter`)
+        filter: { waitingForYou: 'Aspettano te', toResume: 'Da riprendere', interrupted: 'Interrotte' },
+        // «Ordina» come la Board del PC (owner 29/10 sera: «Più recenti / Meno recenti»)
+        sortLabel: 'Ordina',
+        sort: { recent: 'Più recenti', oldest: 'Meno recenti' },
+        // una scheda, una ricerca o «Dove» che non lasciano niente: un'assenza diversa dall'elenco vuoto
+        noMatches: 'Nessuna sessione qui.',
+        // E3 (owner 29/10 notte): sul tablet, finita l'apertura senza rimando, l'elenco sta nella colonna
+        pickFromList: "Scegli una sessione dall'elenco.",
         draftHint: 'Scrivi il primo messaggio per avviare la sessione.',
         openingMockup: 'Apertura di Codice…',
         unavailable: 'Codice non è disponibile in questa build.',
@@ -1641,6 +1680,13 @@ export const TALOS_IT_MESSAGES = {
         // K4-E (owner 17/10 «il vecchio come ripiego»): r4 non è partito e si apre il Codice di prima
         r4Fallback: 'Il Codice nuovo non è partito su questo dispositivo: si apre il Codice classico.',
         r4ListFailed: 'Le sessioni non si sono caricate: {detail}',
+        // GFR-12 (27/10): il computer ha smesso di rispondere durante un giro; si riprende da dove il dispositivo era rimasto
+        r4ConnectionLostAction: 'Riconnetti',
+        // R3 (bozzetto approvato il 28/10, scena 9): la linea è caduta a metà giro e si riapre; poi «Ricollegato» per 2 s
+        r4ConnectionRetrying: 'Connessione persa · riprovo',
+        r4Reconnected: 'Ricollegato',
+        r4OtherCopy: 'un’altra app TALOS su questo dispositivo sta usando il Codice. Chiudila da Impostazioni › App e riprova.',
+        r4Refused: 'il motore del Codice ha rifiutato la richiesta. Riprova.',
         r4Unreachable: 'Il Codice non risponde ancora. Riprova fra poco.',
         r4RenameTitle: 'Rinomina la sessione',
         r4RenameField: 'Nome della sessione',
@@ -1858,14 +1904,21 @@ export const TALOS_IT_MESSAGES = {
         floatWorking: 'Sto accoppiando. Cerco il dispositivo sulla rete e apro il collegamento: può volerci qualche secondo.',
         floatFailed: 'Non è riuscito. La finestrella di sistema mostra un codice nuovo ogni volta: riaprila e scrivi quello.',
         floatReady: 'Trovato. Scrivi adesso le sei cifre che vedi: il collegamento parte da solo.',
+        // ASS-149 (29/10): le sei cifre erano giuste, quindi la frase non parla di cifre
+        floatPairedNotConnected: 'Accoppiato. Manca solo il collegamento: il dispositivo non ha annunciato la sua porta. Spegni e riaccendi Debug wireless, poi apri TALOS e tocca «Ricollega».',
         fallbackNote: 'Oppure, se preferisci non dare quel permesso: il codice va scritto qui sotto — ma la finestrella di sistema si chiude quando esci da Impostazioni, e allora l’accoppiamento non riesce.',
         reasonOverlayNotAllowed: 'Manca il permesso di disegnare sopra le altre app. Senza, il campo non può comparire sopra Impostazioni.',
         openDeveloper: 'Apri le opzioni sviluppatore',
+        // ASS-148 (owner 28/10): la causa vera, con l'azione che la risolve
+        openAppPermissions: 'Apri i permessi',
+        republishAction: 'Spegni e riaccendi il Debug wireless',
         codeLabel: 'Codice a sei cifre',
         reasonNotificationNotShown: 'TALOS non può mostrare la notifica col campo. Attiva le notifiche di TALOS e riprova.',
+        reasonLocalNetworkBlocked: 'TALOS non può vedere la rete di casa: hai tolto il permesso Rete locale. Riattivalo dai permessi dell\'app, poi riprova.',
         reasonPairingNotAnnounced: 'TALOS non sente l\'annuncio dell\'accoppiamento. Controlla che la finestrella col codice sia ancora aperta — dura poco — e che il dispositivo sia sul Wi-Fi.',
-        reasonConnectNotAnnounced: 'L\'accoppiamento è riuscito ma TALOS non trova la porta del collegamento. Riprova fra qualche secondo: il dispositivo la annuncia poco dopo.',
+        reasonConnectNotAnnounced: 'TALOS non trova la porta del collegamento: il dispositivo non la sta annunciando. Spegni e riaccendi Debug wireless, poi torna qui: TALOS si ricollega da solo.',
         reasonBadCode: 'Il codice è di sei cifre.',
+        reasonPairedNotConnected: 'Accoppiato: quel passo è riuscito e resta valido. Manca solo il collegamento, perché il dispositivo non ha annunciato la sua porta. Spegni e riaccendi Debug wireless, poi torna qui: TALOS si ricollega da solo.',
         reasonConnectRefused: 'Il dispositivo ha rifiutato il collegamento. Di solito vuol dire che il Debug wireless è stato spento nel frattempo.',
         reasonTimeout: 'Il ponte non ha risposto in tempo. Riprova.',
         reasonGeneric: 'Il ponte non ce l\'ha fatta. Riprova, e se insiste riaccendi il Debug wireless.',
@@ -2601,6 +2654,8 @@ export const TALOS_IT_MESSAGES = {
         title: 'Libreria',
         contextVault: 'Archivio contesto',
         acrossEveryChat: '{count} in tutte le chat',
+        // ⛔ UI-111 (owner 29/10 sera, «69 file»): il conteggio come le altre sezioni a elenco («91 chat», «1 appunto»)
+        countFiles: '{count} file | {count} file',
         globalContextMode: 'Contesto Libreria globale',
         contextModeOff: 'Disattivato',
         contextState: 'Contesto: {state}',
@@ -3623,7 +3678,16 @@ export const TALOS_IT_MESSAGES = {
         pairedHint: 'Ora puoi scrivere a TALOS, rispondere alle sue domande e dare i permessi da qui.',
         done: 'Fatto',
         retry: 'Riprova',
+        // QR scaduto (revisione del Desktop 27/10/2026): riprovare lo stesso link non serve; si apre lo scanner per uno nuovo
+        scanNewQr: 'Scansiona un QR nuovo',
         unnamed: 'Computer',
+        // R2 (bozzetto approvato, 28/10/2026): si apre una sessione di un computer, mentre risponde
+        connectingTo: 'Mi collego a {name}',
+        attempt: 'tentativo {n}',
+        waitingToWrite: 'Aspetto il computer: appena risponde puoi scrivere.',
+        notAnswering: 'Il computer non risponde',
+        notAnsweringHint: 'Controlla che sia acceso, collegato a internet e con TALOS aperto.',
+        backToComputer: 'Torna al computer',
         listLabel: 'Computer collegati',
         pairedOn: 'Collegato il {when}',
         // mockup remoto approvato il 23/10, tavola 1: il riquadro di un PC
@@ -3653,6 +3717,8 @@ export const TALOS_IT_MESSAGES = {
         checking: 'Controllo…',
         online: 'In linea',
         offline: 'Non in linea',
+        /** Owner 27/10/2026: il computer ha risposto NOT_PAIRED o REVOKED. Dice solo ciò che si sa. */
+        removed: 'Tolto dal computer',
         path: 'Percorso',
         pathDirect: 'Diretto · {ms} ms',
         pathRelay: 'Attraverso un relay · {ms} ms',
@@ -3661,6 +3727,8 @@ export const TALOS_IT_MESSAGES = {
         forget: 'Dimentica questo computer',
         forgetTitle: 'Dimenticare {name}?',
         forgetBody: 'Questo dispositivo non potrà più comandarlo. Per tornare a farlo serve un QR nuovo.',
+        // il PC ha già tolto questo dispositivo: resta solo da toglierlo anche da qui (Desktop, 27/10/2026)
+        forgetRemovedBody: 'Lo togli anche da questo dispositivo.',
         forgetConfirm: 'Dimentica',
         newSessionOnPc: 'Per una sessione nuova scegli la cartella del computer: «Nuova sessione su …», qui sotto.',
         newSession: 'Nuova sessione',
@@ -3676,6 +3744,7 @@ export const TALOS_IT_MESSAGES = {
         noFileExchange: 'Questo computer non riceve ancora file: aggiorna TALOS sul computer.',
         fileNeedsConsent: 'Serve il consenso del PC per questa cartella',
         fileBusy: 'Il computer sta ricevendo troppi file: riprova fra poco.',
+        fileSaveFailed: 'Il computer non è riuscito a salvare il file. Riprova.',
         fileWaiting: 'Il computer è occupato con altri file: aspetto un posto libero…',
         imageEmpty: 'L’immagine è vuota.',
         imagesUnavailable: 'Questo computer non riceve ancora immagini per il modello: aggiorna TALOS sul computer.',
@@ -3693,11 +3762,16 @@ export const TALOS_IT_MESSAGES = {
         // D-MOCK-11 (24/10/2026, contratto R5.12): il permesso che il PC dà al dispositivo per una cartella, chiesto da qui
         consent: {
             firstTime: 'La prima volta il PC ti chiede il permesso',
+            // cartelle bloccate (owner 27/10/2026): tolta a questo dispositivo, raggiungibile da un'altra; si sblocca dal PC
+            blocked: 'Bloccata dal computer',
             waitingTitle: 'Conferma sul computer',
             waitingBody: 'Il PC chiede se questo dispositivo può lavorare in questa cartella. Rispondi lì.',
-            ask: 'Chiedi al PC',
-            required: 'Per scrivere qui serve il permesso del PC',
-            denied: 'Il PC ha detto di no per questa cartella',
+            ask: 'Chiedi al computer',
+            required: 'Per scrivere qui serve il permesso del computer',
+            // il PC non salva mai un rifiuto dalla carta: `negata` vale per questa richiesta (Desktop, 27/10/2026)
+            denied: 'Il PC non l’ha consentita, per ora. Puoi chiederla di nuovo.',
+            // l'unico no che dura: cartella bloccata dopo una revoca (`FOLDER_BLOCKED`, 409)
+            folderBlocked: 'Questa cartella è bloccata sul PC: si sblocca dal PC.',
             expired: 'Il PC non ha risposto',
             folderNotListed: 'Questa cartella non c’è più sul PC',
             rateLimited: 'Ci sono già 3 richieste in attesa sul PC: rispondi lì',
@@ -3724,7 +3798,7 @@ export const TALOS_IT_MESSAGES = {
         errors: {
             rejected: 'Il computer ha rifiutato il collegamento. Se non eri tu, nessun problema: non è stato scambiato niente.',
             expired: 'Il QR è scaduto. Chiedine uno nuovo sul PC.',
-            tokenInvalid: 'Questo QR è già stato usato o non vale più. Chiedine uno nuovo sul PC.',
+            tokenInvalid: 'Questo QR è già stato usato o è scaduto. Chiedine uno nuovo sul PC.',
             locked: 'Il computer non accetta nuovi dispositivi per un po’. Riprova fra 15 minuti.',
             codeMismatch: 'Il numero sul PC non coincideva con questo dispositivo, quindi il collegamento è stato annullato. Non è stato scambiato niente.',
             revoked: 'Il computer ha revocato questo dispositivo. Per comandarlo di nuovo serve un QR nuovo.',
@@ -3734,6 +3808,8 @@ export const TALOS_IT_MESSAGES = {
             badCode: 'Questo non è un QR del controllo remoto di TALOS.',
             scannerUnavailable: 'Lo scanner non è disponibile su questo dispositivo in questo momento.',
             generic: 'Qualcosa è andato storto nel collegamento col computer.',
+            // REMOTE_STORE_BUSY (503): il PC sta già scrivendo i suoi consensi; non è un guasto del collegamento (revisione del blocco 10)
+            busy: 'Il computer è occupato: riprova fra un momento.',
             // RA-12: il PC non ha risposto entro il tetto della schermata
             timeout: 'Il computer non ha risposto in tempo.',
         },
@@ -4038,6 +4114,10 @@ export const TALOS_IT_MESSAGES = {
         failedDownloadTitle: 'Aggiornamento non arrivato',
         failedSignature: 'Il file non è firmato da TALOS',
         failedSignatureBody: 'Il pacchetto scaricato per la {version} non corrisponde alla firma pubblicata. Non l’ho installato e l’ho cancellato. Sul dispositivo resta la {installed}, intatta.',
+        failedNotTalos: 'Il file è un’altra app',
+        failedNotTalosBody: 'Il file scaricato per la {version} non è TALOS: non è stato installato ed è stato cancellato. Sul dispositivo resta la {installed}, intatta.',
+        failedNotNewer: 'Niente di più nuovo da installare',
+        failedNotNewerBody: 'La {version} non è più nuova della {installed} che hai sul dispositivo: non c’è niente da installare. Il file scaricato è stato cancellato.',
         failedOther: 'Non è stato possibile installare l’aggiornamento',
         failedDownload: 'Non è stato possibile scaricare l’aggiornamento',
         failedOtherBody: '{reason} Sul dispositivo resta la {installed}, intatta.',

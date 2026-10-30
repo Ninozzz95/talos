@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "b000e725325cf4d9d1fa1266a43805e86029e7bc",
     "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
-    "sha256": "1c54a18f9f27f84ede0f86ae64f563433dd8e64f5222f9d336c30b40790fba44",
+    "sha256": "33c13319b8ed7522ef4345804ce6429d38e2af89df7b89b398b7e3fb5ab82200",
     "prefisso": [
       "PROCESS_NOT_RUNNING.",
       "PROCESS_STILL_RUNNING.",

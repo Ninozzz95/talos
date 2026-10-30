@@ -64,10 +64,13 @@ vi.mock('@/lib/remoto/computerRemoti', async (originale) => {
 
 import HarnessScreen from '@/screens/HarnessScreen.vue'
 import { doveDelCodice } from '@/lib/remoto/doveDelCodice'
+import { talosCambiSessioniR4 } from '@/lib/harness/r4/avvisiSessioniR4'
 
 const UFFICIO = { pcId: '31ab0001', nome: 'UFFICIO', relay: null, accoppiatoAlle: 1 }
 
 beforeEach(() => {
+    // revisione del blocco 10, F-R3 (MF10-10 sopravviveva): l'annuncio è un valore del modulo e restava da una prova all'altra
+    talosCambiSessioniR4.value = { n: 0, id: null, nome: null, eliminata: false }
     stato.routerPush.mockReset()
     stato.routerReplace.mockReset()
     stato.route = reactive({ name: 'harness', params: {}, query: {} })
@@ -88,11 +91,19 @@ async function monta(props: Record<string, unknown> = {}) {
     return w
 }
 const righe = (w: Awaited<ReturnType<typeof monta>>) => w.findAll('[data-testid="talos-harness-row"]')
+/** UI-111 (mockup v2.1, 29/10 sera): nella pagina «Dove» sta nel foglio «Opzioni»; si apre e si legge la voce scelta lì. */
+async function apriOpzioni(w: Awaited<ReturnType<typeof monta>>): Promise<void> {
+    await w.get('[data-testid="talos-harness-options"]').trigger('click')
+    await flushPromises()
+}
+const voceDove = (valore: string) => document.body.querySelector<HTMLElement>(`[data-testid="talos-codice-dove-${valore}"]`)
 
 describe('Codice, tavola 3: il filtro «Dove»', () => {
     it('DOVE-01 senza PC collegati il filtro non c\'è e la lista è quella di sempre', async () => {
         const w = await monta()
-        expect(w.find('[data-testid="talos-codice-dove"]').exists()).toBe(false)
+        // UI-111: nella pagina «Dove» è un gruppo del foglio «Opzioni»; senza PC il gruppo non c'è
+        await apriOpzioni(w)
+        expect(document.body.querySelector('[data-testid="talos-codice-group-dove"]')).toBeNull()
         expect(righe(w).map((r) => r.attributes('data-harness-session-id'))).toEqual(['qui-1'])
     })
 
@@ -100,7 +111,8 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         stato.pcs = [UFFICIO]
         stato.righeDelPc[UFFICIO.pcId] = [riga('pc-1', 'Correggi il report degli ordini', NOW, { conclusa: false }, 'TALOS-prova-remoto')]
         const w = await monta()
-        expect(w.get('[data-testid="talos-codice-dove"]').text()).toContain('Where:All')
+        await apriOpzioni(w)
+        expect(voceDove('tutte')?.getAttribute('aria-checked')).toBe('true')
         expect(righe(w).map((r) => r.attributes('data-harness-session-id'))).toEqual(['pc-1', 'qui-1'])
         expect(righe(w)[0]!.get('[data-testid="talos-harness-row-pc"]').text()).toContain('UFFICIO')
         expect(righe(w)[1]!.find('[data-testid="talos-harness-row-pc"]').exists()).toBe(false)
@@ -111,10 +123,13 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         stato.righeDelPc[UFFICIO.pcId] = [riga('pc-1', 'Correggi il report', NOW, { conclusa: false }, 'TALOS-prova-remoto')]
         stato.route = reactive({ name: 'harness', params: {}, query: { dove: UFFICIO.pcId } })
         const w = await monta()
-        expect(w.get('[data-testid="talos-codice-dove"]').text()).toContain('UFFICIO')
+        await apriOpzioni(w)
+        expect(voceDove(UFFICIO.pcId)?.getAttribute('aria-checked')).toBe('true')
+        expect(voceDove(UFFICIO.pcId)?.textContent).toContain('UFFICIO')
         expect(righe(w).map((r) => r.attributes('data-harness-session-id'))).toEqual(['pc-1'])
         const meta = righe(w)[0]!.get('[data-testid="talos-harness-row-status"]').text()
-        expect(meta).toContain('Running')
+        // owner 29/10 sera: «In progress» ovunque in inglese
+        expect(meta).toContain('In progress')
         expect(meta).toContain('TALOS-prova-remoto')
         // filtrati su UFFICIO, ripetere UFFICIO su ogni riga sarebbe rumore
         expect(righe(w)[0]!.find('[data-testid="talos-harness-row-pc"]').exists()).toBe(false)
@@ -124,7 +139,8 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         stato.pcs = [UFFICIO]
         stato.righeDelPc[UFFICIO.pcId] = [riga('pc-1', 'Del PC', NOW)]
         const w = await monta()
-        await w.get('[data-testid="talos-codice-dove-qui"]').trigger('click')
+        await apriOpzioni(w)
+        voceDove('qui')!.click()
         await flushPromises()
         expect(righe(w).map((r) => r.attributes('data-harness-session-id'))).toEqual(['qui-1'])
         expect(stato.routerReplace).toHaveBeenCalledWith({ name: 'harness', query: { dove: 'qui' } })
@@ -163,9 +179,10 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         localStorage.clear()
     })
 
-    /* D-MOCK-9 (4177, 24/10, foto 173-185): «Nuova sessione su DESKTOP-BJ9I7OU · 27ba · di prova» andava su tre righe. Il pulsante e il
+    /* D-MOCK-9 (4177, 24/10, foto 173-185): «Nuova sessione su DESKTOP-ESEMPIO · 27ba · di prova» andava su tre righe. Il pulsante e il
        titolo del dialogo nominano il PC col nome e, se serve, il codice breve; «di prova» resta su righe, filtro e schede. Due righe al
        massimo: il testo del pulsante si ferma a due righe e si tronca. */
+    // E4 (owner 29/10 notte, «Col nome, come sul tablet»): sul telefono, con «Dove» su un PC, il «+» è il pulsante col testo del tablet
     it('DOVE-17 il pulsante e il titolo della sessione nuova non dicono «di prova»; il pulsante non va oltre due righe', async () => {
         const { ricordaEffimero } = await import('@/lib/remoto/ricordiDelPc')
         localStorage.clear()
@@ -176,17 +193,21 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         stato.righeDelPc[PROVA.pcId] = [riga('pc-2', 'Della prova', NOW)]
         stato.route = reactive({ name: 'harness', params: {}, query: { dove: PROVA.pcId } })
         const w = await monta()
-        // il filtro lo dice ancora
-        expect(w.get('[data-testid="talos-codice-dove"]').text()).toContain('UFFICIO · 27ba · test')
-        const nuova = w.get('[data-testid="talos-new-chat-fab"]')
+        const nuova = w.get('[data-testid="talos-harness-new"]')
         expect(nuova.text()).toBe('New session on UFFICIO · 27ba')
-        expect(nuova.get('[data-testid="talos-new-chat-fab-label"]').classes()).toEqual(expect.arrayContaining(['line-clamp-2', 'min-w-0']))
+        expect(nuova.get('[data-testid="talos-harness-new-label"]').classes()).toEqual(expect.arrayContaining(['line-clamp-2', 'min-w-0']))
         await nuova.trigger('click')
         await flushPromises()
         const titolo = document.body.querySelector('[role="dialog"] h2, [role="alertdialog"] h2')?.textContent ?? document.body.textContent ?? ''
         expect(titolo).toContain('New session on UFFICIO · 27ba')
         expect(titolo).not.toContain('test')
         w.unmount()
+        // il filtro lo dice ancora (UI-111: nel foglio «Opzioni»); letto dopo, perché anche il foglio è un dialogo col suo titolo
+        document.body.innerHTML = ''
+        const conFoglio = await monta()
+        await apriOpzioni(conFoglio)
+        expect(voceDove(PROVA.pcId)?.textContent).toContain('UFFICIO · 27ba · test')
+        conFoglio.unmount()
         // la colonna del tablet: lo stesso nome, e anche lì al più due righe
         const c = await monta({ embedded: true })
         const nuovaColonna = c.get('[data-testid="talos-harness-new"]')
@@ -224,6 +245,8 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         await flushPromises()
         expect(stato.rinomina).toHaveBeenCalledWith(UFFICIO.pcId, 'pc-1', 'Nome nuovo')
         expect(righe(w)[0]!.text()).toContain('Nome nuovo')
+        // dal Pad, prova della CLI (27/10/2026): la testata della conversazione aperta restava col nome vecchio. Come in locale, si annuncia
+        expect(talosCambiSessioniR4.value).toMatchObject({ id: 'pc-1', nome: 'Nome nuovo', eliminata: false })
     })
 
     it('DOVE-13 «Elimina» su una sessione del PC chiede conferma, passa dal PC e la riga se ne va', async () => {
@@ -347,7 +370,7 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         document.body.querySelector<HTMLElement>('[data-testid="talos-harness-delete-confirm"]')!.click()
         await flushPromises()
         const blocco = w.find('[data-testid="talos-harness-consenso"]')
-        expect(blocco.text()).toContain('The PC must allow this device to write here')
+        expect(blocco.text()).toContain('The computer must allow this device to write here')
         let consenti: (v: unknown) => void = () => {}
         stato.consenso.mockImplementation(async (_pc, _c, o) => { o?.inAttesa?.({ richiestaId: 'rq-12345678', scadeAlle: Date.now() + 120_000 }); return new Promise((ok) => { consenti = ok }) })
         stato.elimina.mockImplementation(async () => { stato.righeDelPc[UFFICIO.pcId] = [] })
@@ -376,7 +399,7 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         stato.consenso.mockResolvedValue({ esito: 'negata' })
         await w.find('[data-testid="talos-harness-consenso-chiedi"]').trigger('click')
         await flushPromises()
-        expect(w.find('[data-testid="talos-harness-consenso"]').text()).toContain('The PC said no for this folder')
+        expect(w.find('[data-testid="talos-harness-consenso"]').text()).toContain('The computer didn’t allow it, for now. You can ask again.')
         expect(stato.rinomina).toHaveBeenCalledTimes(1)
         // «Il PC non ha risposto» ⇒ «Riprova» richiede per la stessa cartella, poi rinomina col nome scritto
         stato.consenso.mockResolvedValue({ esito: 'scaduta' })
@@ -387,6 +410,8 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         await w.find('[data-testid="talos-harness-consenso-chiedi"]').trigger('click')
         await flushPromises()
         expect(stato.rinomina).toHaveBeenLastCalledWith(UFFICIO.pcId, 'pc-1', 'Nome nuovo')
+        // la rinomina rifatta dopo il «Consenti» si annuncia anche lei alla testata (prova della CLI, 27/10/2026)
+        expect(talosCambiSessioniR4.value).toMatchObject({ id: 'pc-1', nome: 'Nome nuovo', eliminata: false })
     })
 
     /* D-MOCK-14 (4177, 24/10/2026, foto 192-199): «Elimina sessione» su una riga del PC diceva «verrà eliminata dal dispositivo». */
@@ -422,8 +447,9 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         stato.cartelle = [{ id: 'r4-remoto', nome: 'r4 remoto' }, { id: 'altra', nome: 'Altra' }]
         stato.route = reactive({ name: 'harness', params: {}, query: { dove: UFFICIO.pcId } })
         const w = await monta()
-        const nuova = w.get('[data-testid="talos-new-chat-fab"]')
-        expect(nuova.text()).toContain('New session on UFFICIO')
+        // UI-111: la pillola è diventata il «+» della testa; il nome del PC lo dice il suo nome per chi ascolta
+        const nuova = w.get('[data-testid="talos-harness-new"]')
+        expect(nuova.attributes('aria-label')).toContain('New session on UFFICIO')
         await nuova.trigger('click')
         await flushPromises()
         // la cartella della sessione più recente del PC è già scelta (R-M4 Q2), come nel dettaglio del computer di prima
@@ -437,8 +463,9 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         stato.pcs = [UFFICIO]
         stato.righeDelPc[UFFICIO.pcId] = []
         const w = await monta()
-        const nuova = w.get('[data-testid="talos-new-chat-fab"]')
-        expect(nuova.text()).not.toContain('New session on')
+        // UI-111: la pillola è diventata il «+» della testa
+        const nuova = w.get('[data-testid="talos-harness-new"]')
+        expect(nuova.attributes('aria-label')).not.toContain('New session on')
         await nuova.trigger('click')
         expect(stato.routerPush).toHaveBeenCalledWith({ name: 'codice-r4' })
     })
@@ -479,5 +506,148 @@ describe('Codice, tavola 3: il filtro «Dove»', () => {
         stato.route = reactive({ name: 'harness', params: {}, query: { dove: UFFICIO.pcId } })
         const w = await monta()
         expect(righe(w)[0]!.text()).toContain('Untitled session')
+    })
+
+    /*
+     * ⛔ D-0147-COD-1 (Pad, 27/10, PC 0632 della 4178): sessione nuova sul PC aperta dal Codice, primo messaggio mandato; la colonna
+     * del tablet restava «0 sessioni · Nessuna sessione ancora» finché non si usciva e si rientrava. La bozza che diventa sessione vera
+     * cambia solo `:id` della rotta del PC, e l'elenco rileggeva i PC solo tornando su `harness`.
+     */
+    it('DOVE-22 la bozza sul PC che diventa sessione vera compare nella colonna senza uscire', async () => {
+        stato.pcs = [UFFICIO]
+        stato.righeDelPc[UFFICIO.pcId] = []
+        stato.route = reactive({ name: 'computer-codice', params: { pcId: UFFICIO.pcId }, query: { dove: UFFICIO.pcId } })
+        const w = await monta({ embedded: true })
+        expect(righe(w)).toHaveLength(0)
+        // il primo messaggio crea la sessione sul PC: la rotta prende il suo id
+        stato.righeDelPc[UFFICIO.pcId] = [riga('pc-nuova', 'Dopo il riavvio', NOW)]
+        stato.route.params = { pcId: UFFICIO.pcId, id: 'pc-nuova' }
+        await flushPromises()
+        await flushPromises()
+        expect(righe(w).map((r) => r.attributes('data-harness-session-id'))).toEqual(['pc-nuova'])
+    })
+})
+
+/*
+ * D-0145-6(b) (Desktop 26/10): lo scarto d'orologio del PC vale per OGNI ora che viene da lui, anche nella lista del Codice;
+ * altrimenti la stessa sessione direbbe «adesso» dentro e un'ora di 2 minuti prima fuori.
+ */
+describe('Codice: le ore di un PC con l\'orologio sfasato (D-0145-6)', () => {
+    const ora = (iso: string) => new Intl.DateTimeFormat('en', { hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
+    const quando = (w: Awaited<ReturnType<typeof monta>>, id: string) =>
+        w.get(`[data-harness-session-id="${id}"]`).get('[data-testid="talos-harness-row-status"]').text()
+
+    it('DOVE-SCARTO-01 un PC 2 min indietro: la riga dice l\'ora del dispositivo; senza scarto misurato, l\'ora del PC', async () => {
+        const { annotaOraDelPc, dimenticaScartoDelPc } = await import('@/lib/remoto/scartoOrologioPc')
+        const adesso = Date.now()
+        const delPc = new Date(adesso - 118_000).toISOString()
+        stato.pcs = [UFFICIO]
+        stato.righeDelPc[UFFICIO.pcId] = [riga('pc-1', 'Del PC', delPc)]
+        const senza = await monta()
+        expect(quando(senza, 'pc-1')).toContain(ora(delPc))
+        senza.unmount()
+        annotaOraDelPc(UFFICIO.pcId, adesso - 118_000, adesso)
+        try {
+            const con = await monta()
+            const meta = quando(con, 'pc-1')
+            expect(meta).toContain(ora(new Date(adesso).toISOString()))
+            expect(meta).not.toContain(ora(delPc))
+            // la riga del dispositivo non si sposta
+            expect(quando(con, 'qui-1')).toContain(ora(PRIMA))
+        } finally {
+            dimenticaScartoDelPc(UFFICIO.pcId)
+        }
+    })
+})
+
+describe('Codice, tavola 3: lo stato vivo delle sessioni del PC si aggiorna', () => {
+    /*
+     * ⛔ 27/10/2026, trovato cercando il «ancora al lavoro» dell'owner (giro finito in errore sul PC, «da riprendere», 2 in coda).
+     * Il battito di REV-ELENCO-10 guardava solo le sessioni del
+     * dispositivo e rileggeva solo quelle: una riga del PC letta a giro vivo restava «In corso» finché non si cambiava pagina (sul
+     * tablet la colonna resta a schermo accanto alla sessione). Come il desktop: la riga del PC si rilegge anche lei.
+     */
+    it('DOVE-VIVO-01 ⛔ una sessione del PC «In corso» che il PC chiude in errore diventa «To resume» entro 5 s, senza cambiare pagina', async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+        try {
+            stato.pcs = [UFFICIO]
+            stato.righeDelPc[UFFICIO.pcId] = [riga('pc-1', 'Correggi il report', NOW, { conclusa: false, ultimoEsito: null })]
+            const w = await monta()
+            const statoRiga = () => righe(w).find((r) => r.attributes('data-harness-session-id') === 'pc-1')!.get('[data-testid="talos-harness-row-status"]').text()
+            expect(statoRiga()).toContain('In progress')
+            stato.righeDelPc[UFFICIO.pcId] = [riga('pc-1', 'Correggi il report', NOW, { conclusa: true, ultimoEsito: 'errore' })]
+            vi.advanceTimersByTime(5000)
+            await flushPromises()
+            await flushPromises()
+            expect(statoRiga()).not.toContain('In progress')
+            expect(statoRiga()).toContain('To resume')
+            w.unmount()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    it('DOVE-VIVO-02 con le righe del PC tutte ferme, o con l’app nascosta, il PC non si rilegge', async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+        try {
+            stato.pcs = [UFFICIO]
+            stato.righeDelPc[UFFICIO.pcId] = [riga('pc-1', 'Lavora', NOW, { conclusa: false, ultimoEsito: null })]
+            const w = await monta()
+            const { useComputerRemoti } = await import('@/lib/remoto/computerRemoti')
+            const riepilogo = useComputerRemoti()!.riepilogo as ReturnType<typeof vi.fn>
+            const aggiorna = useComputerRemoti()!.aggiorna as ReturnType<typeof vi.fn>
+            // la lettura più leggera (Desktop 27/10): solo l'elenco del PC al lavoro, mai l'elenco dei PC
+            const pcPrima = aggiorna.mock.calls.length
+            const sommariPrima = riepilogo.mock.calls.length
+            vi.advanceTimersByTime(5000)
+            await flushPromises()
+            expect(aggiorna.mock.calls.length).toBe(pcPrima)
+            expect(riepilogo.mock.calls.slice(sommariPrima)).toEqual([[UFFICIO.pcId]])
+            Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+            const nascosta = riepilogo.mock.calls.length
+            vi.advanceTimersByTime(15000)
+            await flushPromises()
+            expect(riepilogo.mock.calls.length).toBe(nascosta)
+            Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+            stato.righeDelPc[UFFICIO.pcId] = [riga('pc-1', 'Finita', NOW)]
+            vi.advanceTimersByTime(5000)
+            await flushPromises()
+            await flushPromises()
+            const ferme = riepilogo.mock.calls.length
+            vi.advanceTimersByTime(15000)
+            await flushPromises()
+            expect(riepilogo.mock.calls.length).toBe(ferme)
+            w.unmount()
+        } finally {
+            vi.useRealTimers()
+            Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+        }
+    })
+
+    it('DOVE-VIVO-03 un PC lento non accumula letture: con la sua ancora in volo, i battiti dopo lo saltano', async () => {
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] })
+        try {
+            stato.pcs = [UFFICIO]
+            stato.righeDelPc[UFFICIO.pcId] = [riga('pc-1', 'Lavora', NOW, { conclusa: false, ultimoEsito: null })]
+            const w = await monta()
+            const { useComputerRemoti } = await import('@/lib/remoto/computerRemoti')
+            const riepilogo = useComputerRemoti()!.riepilogo as ReturnType<typeof vi.fn>
+            let rispondi: (r: unknown) => void = () => {}
+            riepilogo.mockImplementationOnce(() => new Promise((fatto) => { rispondi = fatto }))
+            const prima = riepilogo.mock.calls.length
+            vi.advanceTimersByTime(5000)
+            await flushPromises()
+            vi.advanceTimersByTime(5000)
+            await flushPromises()
+            expect(riepilogo.mock.calls.length).toBe(prima + 1)
+            rispondi({ inLinea: true, conteggi: { totale: 1, inCorso: 0, aspettaTe: 0 }, righe: [riga('pc-1', 'Lavora', NOW, { conclusa: false, ultimoEsito: null })] })
+            await flushPromises()
+            vi.advanceTimersByTime(5000)
+            await flushPromises()
+            expect(riepilogo.mock.calls.length).toBe(prima + 2)
+            w.unmount()
+        } finally {
+            vi.useRealTimers()
+        }
     })
 })

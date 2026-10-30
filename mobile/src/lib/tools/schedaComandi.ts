@@ -132,9 +132,10 @@ export async function talosMandaFileDaScheda(
  * profilo propri, mai il ponte Capacitor) — vedi il commento in testa a
  * `TalosArtifactActivity.kt` per la catena intera, verificata sul Pad.
  */
-export async function talosApriArtefattoDaScheda(id: string): Promise<boolean> {
-    const { TalosArtifactBridge } = await import('@/lib/device/artifactPlugin')
-    return TalosArtifactBridge.open({ id }).then((r) => r.opened === true, () => false)
+export async function talosApriArtefattoDaScheda(id: string, titolo: string): Promise<boolean> {
+    // UI-108: la testata nativa porta il titolo della scheda
+    const { talosApriArtefatto } = await import('@/lib/device/apriArtefatto')
+    return talosApriArtefatto(id, titolo).catch(() => false)
 }
 
 export async function talosApriImpostazioniDaScheda(azione: string): Promise<boolean> {

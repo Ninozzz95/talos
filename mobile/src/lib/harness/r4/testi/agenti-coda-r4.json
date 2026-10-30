@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/agenti.js",
-    "sha256": "c2701df3e85991e4c685e34d27622fb1ec9f68d066db5b7449f4fcee423972c1",
+    "sha256": "f663423d2c615e14b26e2ec5492913fcdade3fd0198e0589945ed156955007c7",
     "prefisso": "workflow.runState."
   },
   "it": {
@@ -22,7 +22,7 @@
   },
   "en": {
     "workflow.runState.created": "Created",
-    "workflow.runState.running": "Running",
+    "workflow.runState.running": "In progress",
     "workflow.runState.paused": "Paused",
     "workflow.runState.needsAttention": "Needs attention",
     "workflow.runState.succeeded": "Succeeded",

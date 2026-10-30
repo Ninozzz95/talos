@@ -56,4 +56,36 @@ describe('il fornitore `computer` (anomalia 3 di Marco)', () => {
         expect(titolo).toContain('Sul computer')
         expect(titolo.replace('Sul computer', '')).not.toContain('computer')
     })
+
+    /*
+     * ⛔ D-0145-4 (Desktop, prova dal vivo 25/10 notte, sessione del PC): sotto ogni modello ChatGPT del PC «mai provato» (anche luna 6
+     * usato più volte) e l'id grezzo «chatgpt:gpt-6-luna» sotto il nome. Lo stato «untested» lo inventava il telefono
+     * (`modelliDelPc.ts`: il dispositivo non prova niente sul PC) e l'id del PC non è una parola per la persona.
+     */
+    it('D0145-4 un modello del PC non dice «mai provato» né il suo id grezzo; il nome resta', async () => {
+        await lingua('it')
+        const luna: TalosMobileModelProfileView = {
+            id: 'pc:chatgpt:gpt-6-luna', provider: 'chatgpt', model: 'chatgpt:gpt-6-luna', display_name: 'GPT-6 Luna',
+            status: 'untested', has_secret: true, effort_levels: ['low', 'high'], supports_thinking: true, show_in_composer: true, capabilities: null, probe_ok: null,
+        }
+        const w = mount(TalosMobileComposerModelPicker, { props: { modelProfiles: [luna, dalPc], selectedModelProfileId: luna.id } })
+        expect(w.text()).toContain('GPT-6 Luna')
+        expect(w.text()).not.toContain('mai provato')
+        expect(w.text()).not.toContain('chatgpt:gpt-6-luna')
+        expect(w.text()).not.toContain('local:qwen3-4b')
+    })
+
+    /*
+     * Il fratello di D-0145-4 (revisione del Desktop 26/10): il modello di una sessione del Codice che l'app non elenca più (fornitore
+     * tolto, modello sparito: `profiloDelModelloR4`, ripiego in rete) aveva come NOME l'id grezzo e «mai provato» inventato.
+     */
+    it('D0145-4b un modello del Codice non più in elenco: nome leggibile, niente id grezzo né «mai provato»', async () => {
+        await lingua('it')
+        const { profiloDelModelloR4 } = await import('@/lib/harness/r4/modelloR4')
+        const sparito = profiloDelModelloR4('openrouter:z-ai/glm-4.7', [])!
+        const w = mount(TalosMobileComposerModelPicker, { props: { modelProfiles: [sparito], selectedModelProfileId: sparito.id } })
+        expect(w.text()).toContain('z-ai/glm-4.7')
+        expect(w.text()).not.toContain('openrouter:z-ai/glm-4.7')
+        expect(w.text()).not.toContain('mai provato')
+    })
 })

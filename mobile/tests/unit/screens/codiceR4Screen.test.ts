@@ -157,13 +157,11 @@ describe('il Codice su r4 coi pezzi della chat (K3-B2)', () => {
         stato.params = { id: 's1' }
         const w = await schermata()
         const { default: TalosMobileComposer } = await import('@/components/chat/TalosMobileComposer.vue')
-        const { talosComposerFlags } = await import('@/lib/composerStyle')
         const compositore = w.findComponent(TalosMobileComposer)
-        const forma = talosComposerFlags('calm', 'dropdown')
         expect(compositore.props('dictationSupported')).toBe(true)
-        expect(compositore.props('immersiveComposer')).toBe(forma.immersiveComposer)
-        expect(compositore.props('drawerMode')).toBe(forma.drawerMode)
-        expect(compositore.props('plusDropdown')).toBe(forma.plusDropdown)
+        // Owner 27/10/2026, «Unico, tolgo le forme»: la forma della chat è l'unica, quindi è la stessa senza prop da passare
+        // (FORMA-02/03). A riposo è compatto come in chat.
+        expect(compositore.get('[data-testid="talos-mobile-composer"]').attributes('data-talos-composer-compact')).toBe('true')
         w.unmount()
     })
 
@@ -240,6 +238,30 @@ describe('il Codice su r4 coi pezzi della chat (K3-B2)', () => {
             annunciaCambioSessioneR4({ id: 's1', eliminata: true })
             await flushPromises()
             expect(stato.replace).toHaveBeenCalledWith({ name: 'codice-r4' })
+        } finally {
+            w.unmount()
+        }
+    })
+
+    /*
+     * Revisione del blocco 10, F-R3 (MF10-9 sopravviveva): `ritrovata()` era provata da sola, non il filo della schermata. Dal Pad (prova
+     * della CLI, 27/10): il PC riavviato dava 404 sul flusso, l'avviso «sessione non trovata» restava anche quando la colonna la rinominava.
+     */
+    it('RITROVATA-01 404 sul flusso ⇒ l’avviso; la colonna rinomina la sessione aperta ⇒ l’avviso se ne va e il flusso riparte', async () => {
+        const { annunciaCambioSessioneR4 } = await import('@/lib/harness/r4/avvisiSessioniR4')
+        stato.params = { id: 's1' }
+        const w = await schermata()
+        try {
+            const primo = stato.flussi.at(-1)!.id
+            for (const a of stato.ascoltatori.r4Errore ?? []) a({ id: primo, motivo: 'HTTP 404' })
+            await flushPromises()
+            expect(w.find('[data-testid="talos-codice-r4-errore"]').exists()).toBe(true)
+            const flussiPrima = stato.flussi.length
+            annunciaCambioSessioneR4({ id: 's1', nome: 'Ritrovata' })
+            await flushPromises()
+            expect(w.find('[data-testid="talos-codice-r4-errore"]').exists()).toBe(false)
+            expect(stato.flussi).toHaveLength(flussiPrima + 1)
+            expect(stato.flussi.at(-1)!.percorso).toContain('/api/v1/sessions/s1/events')
         } finally {
             w.unmount()
         }

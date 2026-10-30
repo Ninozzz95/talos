@@ -4,7 +4,7 @@ import { talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
 import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
 import { useTalosI18n } from '@/i18n'
 import {
-    BookMarked, BookOpen, CheckSquare, FlaskConical, MessageSquareText,
+    BookMarked, Library, ListTodo, MessageSquareText, Telescope,
     Check, Code2, Cpu, Laptop, MonitorSmartphone, Search, Settings, StickyNote, Stethoscope, Wrench, X,
 } from '@lucide/vue'
 import { useRoute } from 'vue-router'
@@ -171,14 +171,14 @@ const { t } = useTalosI18n()
 const harnessAvailable = talosHarnessUiAvailable()
 
 /** Le sezioni, nell'ordine del mockup; le voci gated restano gated. */
-const sezioni = computed<Array<{ route: TalosMobileRouteName, key: string, icon: typeof BookOpen }>>(() => [
-    { route: 'tasks', key: 'navigation.tasks', icon: CheckSquare },
-    { route: 'context', key: 'navigation.library', icon: BookOpen },
+const sezioni = computed<Array<{ route: TalosMobileRouteName, key: string, icon: typeof Library }>>(() => [
+    { route: 'tasks', key: 'navigation.tasks', icon: ListTodo },
+    { route: 'context', key: 'navigation.library', icon: Library },
     // U-6 (owner 11/09): «Modelli» in sidebar come nel mockup — sostituisce
     // F2-RED-20 (Laboratorio modelli solo sotto Impostazioni). La schermata
     // resta quella: il hub dei modelli sotto Impostazioni.
     { route: 'settings-models', key: 'navigation.models', icon: Cpu },
-    { route: 'research', key: 'navigation.research', icon: FlaskConical },
+    { route: 'research', key: 'navigation.research', icon: Telescope },
     { route: 'memory', key: 'navigation.memory', icon: BookMarked },
     { route: 'notes', key: 'navigation.notes', icon: StickyNote },
     // ⛔ REGRESSIONE del refactor (11/09): copiando le voci del mockup questa

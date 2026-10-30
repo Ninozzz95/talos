@@ -64,6 +64,8 @@ const FRASI: Readonly<Record<string, string>> = Object.freeze({
     CONSENT_DENIED: 'computer.consent.denied',
     CONSENT_EXPIRED: 'computer.consent.expired',
     FOLDER_NOT_LISTED: 'computer.consent.folderNotListed',
+    // cartelle bloccate (contratto del Desktop rev.1, 27/10/2026): tolta a questo dispositivo, si sblocca solo dal PC
+    FOLDER_BLOCKED: 'computer.consent.folderBlocked',
 })
 
 /** La chiave i18n di un esito del consenso, o null se l'errore non è del consenso. */

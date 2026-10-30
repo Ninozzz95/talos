@@ -1,0 +1,893 @@
+{
+  "origine": {
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
+    "file": {
+      "inspector.js": "48aedcc99e9f53e3fffb8448cfe74c3a64945ae229fabf109d6385b74285c348",
+      "contesto-scheda.js": "264194ec25188f7f15de24a929e0c7b412f690a4067c8ed54da1ccfdfa71e51d",
+      "consumo-sessione.js": "cf869f1aec744308a2842306d7526ecedd0b882e79f40d8ce4af3369bac05688",
+      "review.js": "c2bf967512d03a3ebc84a39b49d2e513006f57f205657f3239abd32a2942a962"
+    }
+  },
+  "casi": {
+    "ambiente": [
+      null,
+      {
+        "progetto": "workspace",
+        "cartella": "/w",
+        "branch": null,
+        "worktree": null,
+        "repoAnnidati": []
+      },
+      {
+        "branch": "main",
+        "worktree": "wt-1",
+        "nonSalvate": 2,
+        "repoAnnidati": [
+          "a"
+        ]
+      },
+      {
+        "nonSalvate": 1
+      }
+    ],
+    "limite": [
+      {
+        "politica": {
+          "triggerTokens": 200000,
+          "windowTokens": null,
+          "source": "fallback"
+        }
+      },
+      {
+        "politica": {
+          "triggerTokens": 96000,
+          "windowTokens": 128000,
+          "source": "route-minimum"
+        }
+      },
+      {
+        "budget": {
+          "triggerTokens": 150000,
+          "windowTokens": 200000
+        }
+      },
+      {
+        "politica": {
+          "triggerTokens": 0,
+          "source": "fallback"
+        }
+      }
+    ],
+    "finestraSulLimite": [
+      {
+        "usage": {
+          "prompt_tokens": 4321,
+          "completion_tokens": 0
+        },
+        "limite": {
+          "soglia": 200000,
+          "finestra": null,
+          "fonte": "fallback"
+        },
+        "cacheSessione": null
+      },
+      {
+        "usage": {
+          "prompt_tokens": 250000,
+          "completion_tokens": 0
+        },
+        "limite": {
+          "soglia": 96000,
+          "finestra": 128000,
+          "fonte": "route-minimum"
+        },
+        "ripartizione": {
+          "categorie": [
+            {
+              "id": "tools",
+              "tokens": 5200
+            },
+            {
+              "id": "system",
+              "tokens": 1200
+            },
+            {
+              "id": "ignoto",
+              "tokens": 9
+            }
+          ]
+        },
+        "cacheSessione": {
+          "percentuale": 85,
+          "giriMisurati": 11
+        }
+      },
+      {
+        "usage": null,
+        "limite": {
+          "soglia": 150000,
+          "finestra": 200000,
+          "fonte": "motore"
+        },
+        "cacheSessione": {
+          "percentuale": 40,
+          "giriMisurati": 1
+        }
+      },
+      {
+        "usage": {
+          "prompt_tokens": 900,
+          "completion_tokens": 0,
+          "stimato": true
+        },
+        "limite": {
+          "soglia": 200000,
+          "finestra": null,
+          "fonte": "fallback"
+        },
+        "storiaInCaricamento": true
+      }
+    ],
+    "finestra": [
+      [
+        null,
+        null,
+        null,
+        null
+      ],
+      [
+        {
+          "prompt_tokens": 52947,
+          "completion_tokens": 0
+        },
+        200000,
+        null,
+        {
+          "percentuale": 70,
+          "giriMisurati": 3
+        }
+      ]
+    ],
+    "giri": [
+      [],
+      [
+        {
+          "numero": 1,
+          "titolo": "Leggi NOTA.md e dimmi",
+          "tu": true
+        },
+        {
+          "numero": 2,
+          "titolo": "Cosa dice la nota",
+          "attrezzi": 1
+        },
+        {
+          "numero": 3,
+          "titolo": "",
+          "attrezzi": 2
+        },
+        {
+          "numero": 4,
+          "tu": true
+        },
+        {
+          "numero": 5,
+          "inCorso": true
+        },
+        {
+          "numero": 6,
+          "titolo": "Fatto",
+          "token": 12345
+        }
+      ]
+    ],
+    "file": [
+      [],
+      [
+        {
+          "path": "slugify.mjs",
+          "aggiunte": 4,
+          "rimozioni": 1
+        },
+        {
+          "path": "docs/nuovo.md",
+          "aggiunte": 3,
+          "rimozioni": 0
+        }
+      ],
+      [
+        {
+          "path": "a.txt",
+          "aggiunte": 1,
+          "rimozioni": 0
+        }
+      ]
+    ]
+  },
+  "esiti": [
+    {
+      "lingua": "it",
+      "ambiente": [
+        [
+          [
+            "Ramo",
+            "—"
+          ],
+          [
+            "Worktree",
+            "—"
+          ],
+          [
+            "Non salvate",
+            "—"
+          ],
+          [
+            "Repo annidati",
+            "—"
+          ]
+        ],
+        [
+          [
+            "Ramo",
+            "—"
+          ],
+          [
+            "Worktree",
+            "—"
+          ],
+          [
+            "Non salvate",
+            "—"
+          ],
+          [
+            "Repo annidati",
+            "nessuno"
+          ]
+        ],
+        [
+          [
+            "Ramo",
+            "main"
+          ],
+          [
+            "Worktree",
+            "wt-1"
+          ],
+          [
+            "Non salvate",
+            "2 file"
+          ],
+          [
+            "Repo annidati",
+            "1 · fiducia separata"
+          ]
+        ],
+        [
+          [
+            "Ramo",
+            "—"
+          ],
+          [
+            "Worktree",
+            "—"
+          ],
+          [
+            "Non salvate",
+            "1 file"
+          ],
+          [
+            "Repo annidati",
+            "—"
+          ]
+        ]
+      ],
+      "limite": [
+        {
+          "soglia": 200000,
+          "finestra": null,
+          "fonte": "fallback"
+        },
+        {
+          "soglia": 96000,
+          "finestra": 128000,
+          "fonte": "route-minimum"
+        },
+        {
+          "soglia": 150000,
+          "finestra": 200000,
+          "fonte": "motore"
+        },
+        null
+      ],
+      "perche": [
+        {
+          "chiave": "processi.inspector.limitWhyUnverified",
+          "soglia": 200000,
+          "finestra": null
+        },
+        {
+          "chiave": "processi.inspector.limitWhyWindow",
+          "soglia": 96000,
+          "finestra": 128000
+        },
+        {
+          "chiave": "processi.inspector.limitWhyEngine",
+          "soglia": 150000,
+          "finestra": 200000
+        },
+        null
+      ],
+      "finestraSulLimite": [
+        {
+          "titoloDestra": "~200k",
+          "righe": [
+            [
+              "In uso (misurato)",
+              "4,3k · 2,1%"
+            ],
+            [
+              "Prima della compattazione",
+              "195,7k"
+            ],
+            [
+              "Riusato dalla cache",
+              "non misurato",
+              "a-capo"
+            ]
+          ],
+          "fette": [],
+          "perche": "Finestra del modello non verificata: TALOS compatta oltre 200k.",
+          "anteprima": "4,3k / ~200k"
+        },
+        {
+          "titoloDestra": "96k",
+          "righe": [
+            [
+              "Sistema",
+              "1,2k · 1,2%",
+              "stima"
+            ],
+            [
+              "Attrezzi",
+              "5,2k · 5,4%",
+              "stima"
+            ],
+            [
+              "In uso (misurato)",
+              "250k · 260,4%"
+            ],
+            [
+              "Prima della compattazione",
+              "oltre di 154k"
+            ],
+            [
+              "Riusato dalla cache",
+              "85 % · su 11 richieste al modello",
+              "a-capo"
+            ]
+          ],
+          "fette": [
+            {
+              "id": "system",
+              "percentuale": 1.25
+            },
+            {
+              "id": "tools",
+              "percentuale": 5.416666666666667
+            }
+          ],
+          "perche": "TALOS compatta oltre 96k, il 75% della finestra del modello (128k).",
+          "anteprima": "250k / 96k"
+        },
+        {
+          "titoloDestra": "150k",
+          "righe": [
+            [
+              "In uso (misurato)",
+              "—"
+            ],
+            [
+              "Prima della compattazione",
+              "—"
+            ],
+            [
+              "Riusato dalla cache",
+              "40 % · su 1 richiesta al modello",
+              "a-capo"
+            ]
+          ],
+          "fette": [],
+          "perche": "Il motore del contesto riassume oltre 150k: la finestra del modello (200k) meno lo spazio per la risposta e un margine.",
+          "anteprima": "— / 150k"
+        },
+        {
+          "titoloDestra": "~200k",
+          "righe": [
+            [
+              "In uso (stimato)",
+              "0,9k · 0,4%",
+              "stima"
+            ],
+            [
+              "Prima della compattazione",
+              "199,1k"
+            ],
+            [
+              "Riusato dalla cache",
+              "—",
+              "a-capo"
+            ]
+          ],
+          "fette": [],
+          "perche": "Finestra del modello non verificata: TALOS compatta oltre 200k.",
+          "anteprima": "~0,9k / ~200k"
+        }
+      ],
+      "finestra": [
+        {
+          "titoloDestra": "finestra non dichiarata",
+          "righe": [
+            [
+              "Conversazione",
+              "—"
+            ],
+            [
+              "Libera",
+              "—"
+            ],
+            [
+              "Riusato dalla cache",
+              "non misurato",
+              "a-capo"
+            ]
+          ],
+          "anteprima": "—"
+        },
+        {
+          "titoloDestra": "200k",
+          "righe": [
+            [
+              "Conversazione",
+              "52,9k · 26,4%",
+              ""
+            ],
+            [
+              "Libera",
+              "147,1k · 73,6%"
+            ],
+            [
+              "Riusato dalla cache",
+              "70 % · su 3 richieste al modello",
+              "a-capo"
+            ]
+          ],
+          "anteprima": "52,9k / 200k"
+        }
+      ],
+      "cache": [
+        "non misurato",
+        "85 % · su 11 richieste al modello",
+        "100 % · su 1 richiesta al modello",
+        "non misurato"
+      ],
+      "giri": [
+        [],
+        [
+          [
+            "1 · Leggi NOTA.md e dimmi",
+            "tuo messaggio",
+            ""
+          ],
+          [
+            "2 · Cosa dice la nota",
+            "1 attrezzo",
+            ""
+          ],
+          [
+            "3 · Giro",
+            "2 attrezzi",
+            ""
+          ],
+          [
+            "4 · Messaggio",
+            "tuo messaggio",
+            ""
+          ],
+          [
+            "5 · Giro",
+            "in corso",
+            "accent"
+          ],
+          [
+            "6 · Fatto",
+            "12,3k",
+            ""
+          ]
+        ]
+      ],
+      "anteprimaGiri": [
+        "",
+        "4 giri · 2 messaggi"
+      ],
+      "file": [
+        [],
+        [
+          [
+            "slugify.mjs",
+            "+4 −1"
+          ],
+          [
+            "docs/nuovo.md",
+            "+3"
+          ]
+        ],
+        [
+          [
+            "a.txt",
+            "+1"
+          ]
+        ]
+      ],
+      "riassuntoFile": [
+        "Nessuna modifica in questa sessione",
+        "2 file modificati · +7 −1",
+        "1 file modificato · +1 −0"
+      ],
+      "kilo": [
+        "0k",
+        "0,4k",
+        "41,2k",
+        "200k",
+        "—",
+        "—"
+      ],
+      "percento": [
+        "3,7%",
+        "33,3%",
+        null
+      ]
+    },
+    {
+      "lingua": "en",
+      "ambiente": [
+        [
+          [
+            "Branch",
+            "—"
+          ],
+          [
+            "Worktree",
+            "—"
+          ],
+          [
+            "Unsaved",
+            "—"
+          ],
+          [
+            "Nested repos",
+            "—"
+          ]
+        ],
+        [
+          [
+            "Branch",
+            "—"
+          ],
+          [
+            "Worktree",
+            "—"
+          ],
+          [
+            "Unsaved",
+            "—"
+          ],
+          [
+            "Nested repos",
+            "none"
+          ]
+        ],
+        [
+          [
+            "Branch",
+            "main"
+          ],
+          [
+            "Worktree",
+            "wt-1"
+          ],
+          [
+            "Unsaved",
+            "2 files"
+          ],
+          [
+            "Nested repos",
+            "1 · separate trust"
+          ]
+        ],
+        [
+          [
+            "Branch",
+            "—"
+          ],
+          [
+            "Worktree",
+            "—"
+          ],
+          [
+            "Unsaved",
+            "1 file"
+          ],
+          [
+            "Nested repos",
+            "—"
+          ]
+        ]
+      ],
+      "limite": [
+        {
+          "soglia": 200000,
+          "finestra": null,
+          "fonte": "fallback"
+        },
+        {
+          "soglia": 96000,
+          "finestra": 128000,
+          "fonte": "route-minimum"
+        },
+        {
+          "soglia": 150000,
+          "finestra": 200000,
+          "fonte": "motore"
+        },
+        null
+      ],
+      "perche": [
+        {
+          "chiave": "processi.inspector.limitWhyUnverified",
+          "soglia": 200000,
+          "finestra": null
+        },
+        {
+          "chiave": "processi.inspector.limitWhyWindow",
+          "soglia": 96000,
+          "finestra": 128000
+        },
+        {
+          "chiave": "processi.inspector.limitWhyEngine",
+          "soglia": 150000,
+          "finestra": 200000
+        },
+        null
+      ],
+      "finestraSulLimite": [
+        {
+          "titoloDestra": "~200k",
+          "righe": [
+            [
+              "In use (measured)",
+              "4.3k · 2.1%"
+            ],
+            [
+              "Before compaction",
+              "195.7k"
+            ],
+            [
+              "Reused from cache",
+              "not measured",
+              "a-capo"
+            ]
+          ],
+          "fette": [],
+          "perche": "Model window not verified: TALOS compacts above 200k.",
+          "anteprima": "4.3k / ~200k"
+        },
+        {
+          "titoloDestra": "96k",
+          "righe": [
+            [
+              "System",
+              "1.2k · 1.2%",
+              "stima"
+            ],
+            [
+              "Tools",
+              "5.2k · 5.4%",
+              "stima"
+            ],
+            [
+              "In use (measured)",
+              "250k · 260.4%"
+            ],
+            [
+              "Before compaction",
+              "over by 154k"
+            ],
+            [
+              "Reused from cache",
+              "85 % · over 11 model requests",
+              "a-capo"
+            ]
+          ],
+          "fette": [
+            {
+              "id": "system",
+              "percentuale": 1.25
+            },
+            {
+              "id": "tools",
+              "percentuale": 5.416666666666667
+            }
+          ],
+          "perche": "TALOS compacts above 96k, 75% of the model window (128k).",
+          "anteprima": "250k / 96k"
+        },
+        {
+          "titoloDestra": "150k",
+          "righe": [
+            [
+              "In use (measured)",
+              "—"
+            ],
+            [
+              "Before compaction",
+              "—"
+            ],
+            [
+              "Reused from cache",
+              "40 % · over 1 model request",
+              "a-capo"
+            ]
+          ],
+          "fette": [],
+          "perche": "The context engine summarizes above 150k: the model window (200k) minus room for the answer and a margin.",
+          "anteprima": "— / 150k"
+        },
+        {
+          "titoloDestra": "~200k",
+          "righe": [
+            [
+              "In use (estimate)",
+              "0.9k · 0.4%",
+              "stima"
+            ],
+            [
+              "Before compaction",
+              "199.1k"
+            ],
+            [
+              "Reused from cache",
+              "—",
+              "a-capo"
+            ]
+          ],
+          "fette": [],
+          "perche": "Model window not verified: TALOS compacts above 200k.",
+          "anteprima": "~0.9k / ~200k"
+        }
+      ],
+      "finestra": [
+        {
+          "titoloDestra": "window not declared",
+          "righe": [
+            [
+              "Conversation",
+              "—"
+            ],
+            [
+              "Free",
+              "—"
+            ],
+            [
+              "Reused from cache",
+              "not measured",
+              "a-capo"
+            ]
+          ],
+          "anteprima": "—"
+        },
+        {
+          "titoloDestra": "200k",
+          "righe": [
+            [
+              "Conversation",
+              "52.9k · 26.4%",
+              ""
+            ],
+            [
+              "Free",
+              "147.1k · 73.6%"
+            ],
+            [
+              "Reused from cache",
+              "70 % · over 3 model requests",
+              "a-capo"
+            ]
+          ],
+          "anteprima": "52.9k / 200k"
+        }
+      ],
+      "cache": [
+        "not measured",
+        "85 % · over 11 model requests",
+        "100 % · over 1 model request",
+        "not measured"
+      ],
+      "giri": [
+        [],
+        [
+          [
+            "1 · Leggi NOTA.md e dimmi",
+            "your message",
+            ""
+          ],
+          [
+            "2 · Cosa dice la nota",
+            "1 tool",
+            ""
+          ],
+          [
+            "3 · Turn",
+            "2 tools",
+            ""
+          ],
+          [
+            "4 · Message",
+            "your message",
+            ""
+          ],
+          [
+            "5 · Turn",
+            "in progress",
+            "accent"
+          ],
+          [
+            "6 · Fatto",
+            "12.3k",
+            ""
+          ]
+        ]
+      ],
+      "anteprimaGiri": [
+        "",
+        "4 turns · 2 messages"
+      ],
+      "file": [
+        [],
+        [
+          [
+            "slugify.mjs",
+            "+4 −1"
+          ],
+          [
+            "docs/nuovo.md",
+            "+3"
+          ]
+        ],
+        [
+          [
+            "a.txt",
+            "+1"
+          ]
+        ]
+      ],
+      "riassuntoFile": [
+        "No changes in this session",
+        "2 files changed · +7 −1",
+        "1 file changed · +1 −0"
+      ],
+      "kilo": [
+        "0k",
+        "0.4k",
+        "41.2k",
+        "200k",
+        "—",
+        "—"
+      ],
+      "percento": [
+        "3.7%",
+        "33.3%",
+        null
+      ]
+    }
+  ]
+}

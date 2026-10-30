@@ -20,10 +20,12 @@
     is weakening everyone's, so the app-level rule is a tested contract rather
     than a comment: see tests/unit/lib/localEndpointPolicy.test.ts.
 
-    The platform is not out of the picture either. From Android 17, reaching a
-    local network address requires the ACCESS_LOCAL_NETWORK runtime permission,
-    which the user grants and can revoke at any time — an OS-level gate this
-    file cannot override.
+    The platform is not out of the picture either. For apps targeting SDK 37 or
+    higher, reaching a local network address requires the ACCESS_LOCAL_NETWORK
+    runtime permission, which the user grants and can revoke at any time — an
+    OS-level gate this file cannot override. Below 37 access is granted
+    implicitly through INTERNET, and the permission must NOT be declared
+    (ASS-144, 28/10/2026: declaring it on Android 17 blocked the bridge).
 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true">

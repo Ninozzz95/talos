@@ -2,15 +2,17 @@
 /**
  * K3-RISDEL, K3-AP1 e K3-AP2: le righe di sistema che solo il Codice su r4 produce, dietro un solo componente pigro della lista della chat
  * (che parte all'avvio: un caricatore in meno nel pacchetto d'avvio). Il risultato di un sotto-agente, la carta d'approvazione, quella delle domande o la nota dello Stop;
- * la carta del piano (K3 piano); una voce storta resta la riga di stato della chat, com'era prima.
+ * la carta del piano (K3 piano); la riga «Fermati anche N agenti» («Ferma tutto», 29/10); una voce storta resta la riga di stato della
+ * chat, com'era prima.
  */
 import { computed } from 'vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
-import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
+import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessagePigra.vue'
 import TalosCodiceR4RisultatoDelega from '@/components/codice/TalosCodiceR4RisultatoDelega.vue'
 import TalosCodiceR4Approvazione from '@/components/codice/TalosCodiceR4Approvazione.vue'
 import TalosCodiceR4Domanda from '@/components/codice/TalosCodiceR4Domanda.vue'
 import TalosCodiceR4Fermato from '@/components/codice/TalosCodiceR4Fermato.vue'
+import TalosCodiceR4FiglieFermate from '@/components/codice/TalosCodiceR4FiglieFermate.vue'
 import TalosCodiceR4Piano from '@/components/codice/TalosCodiceR4Piano.vue'
 import TalosCodiceR4CartaAutomazione from '@/components/codice/TalosCodiceR4CartaAutomazione.vue'
 import { eCartaAutomazioneR4, eCartaFornitoriR4 } from '@/lib/harness/r4/automazioniR4'
@@ -18,6 +20,8 @@ import { TALOS_METADATA_RISULTATO_DELEGA, type VoceRisultatoDelegaR4 } from '@/l
 import { TALOS_METADATA_APPROVAZIONE, type VoceApprovazioneR4 } from '@/lib/harness/r4/approvazioneChiave'
 import { TALOS_METADATA_DOMANDA, type VoceDomandaR4 } from '@/lib/harness/r4/domandaChiave'
 import { TALOS_METADATA_FERMATO, type VoceFermatoR4 } from '@/lib/harness/r4/fermatoChiave'
+import { TALOS_METADATA_FIGLIE_FERMATE } from '@/lib/harness/r4/figlieFermateChiave'
+import type { VoceFiglieFermateR4 } from '@/lib/harness/r4/fermaTuttoR4'
 import { TALOS_METADATA_PIANO, type VocePianoR4 } from '@/lib/harness/r4/pianoChiave'
 
 const props = defineProps<{ message: TalosMobileMessageView }>()
@@ -38,6 +42,11 @@ const fermato = computed(() => {
     const voce = props.message.metadata?.[TALOS_METADATA_FERMATO] as VoceFermatoR4 | undefined
     return voce && typeof voce === 'object' && typeof voce.tecnico === 'string' ? voce : null
 })
+// «Ferma tutto» (owner 29/10/2026): la riga «Fermati anche N agenti» dall'evento `talos.figlie-fermate` (voce già letta da `eventiR4.ts`)
+const figlieFermate = computed(() => {
+    const voce = props.message.metadata?.[TALOS_METADATA_FIGLIE_FERMATE] as VoceFiglieFermateR4 | undefined
+    return voce && typeof voce === 'object' && Number.isSafeInteger(voce.quante) && voce.quante > 0 ? voce : null
+})
 // K3 automazioni e fornitori: la carta della bozza al posto di quella generica (come `legacy/app.js:15382-15384`); mai per una figlia
 const cartaAutomazione = computed(() => Boolean(approvazione.value && !approvazione.value.figlia
     && (eCartaAutomazioneR4(approvazione.value.azione) || eCartaFornitoriR4(approvazione.value.azione))))
@@ -54,6 +63,7 @@ const piano = computed(() => {
     <TalosCodiceR4Approvazione v-else-if="approvazione" :voce="approvazione" />
     <TalosCodiceR4Domanda v-else-if="domanda" :voce="domanda" />
     <TalosCodiceR4Fermato v-else-if="fermato" :voce="fermato" />
+    <TalosCodiceR4FiglieFermate v-else-if="figlieFermate" :voce="figlieFermate" />
     <TalosCodiceR4Piano v-else-if="piano" :voce="piano" />
     <TalosMobileStatusMessage v-else :message="message" />
 </template>

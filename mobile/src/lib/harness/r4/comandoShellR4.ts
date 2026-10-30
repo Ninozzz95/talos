@@ -2,7 +2,7 @@
  * ⛔ K3-C3b-2a (ledger `LEDGER-K3-CODICE-COME-LA-CHAT-2026-10-15.md`): leggere una riga di comando per la scheda Processi.
  * COPIA FISSATA di `harness-ui/frontend/src/components/comando-shell.js` @ r4 `fc5e25d62` (`analizzaComando`, `FAMIGLIE`,
  * `nomeEseguibile`, `famigliaDaEseguibile`, la raffinazione per sottocomando), provata contro il golden calcolato dalla funzione
- * vera (`tests/fixtures/r4/processi-fc5e25d62.json`, `analisi`).
+ * vera (`tests/fixtures/r4/processi-4cee78f33.json`, `analisi`, invariata da fc5e25d62).
  * Il parser è `shell-quote` 1.10.0 (MIT) dal pacchetto npm fissato, lo stesso che il desktop tiene copiato nel suo repo. Si importa
  * `shell-quote/parse` e non l'ingresso del pacchetto: i tipi dell'ingresso ridichiarano `Array.join` per tutto il progetto.
  * Le icone e il disegno a segmenti sono del componente (`TalosCodiceR4Processi.vue`), non di qui.

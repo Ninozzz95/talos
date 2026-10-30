@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
+import { BRIGHTNESS, SCREEN_TIMEOUT } from '@/lib/device/unitaImpostazioni'
 
 /**
  * T2 — le capacità che finora costavano «un viaggio nelle impostazioni», e che
@@ -35,7 +36,7 @@ import { defineTalosTool, type TalosToolDefinition } from '@/lib/tools/registry'
  * privilegio. Chiamarlo `shell` avrebbe detto una cosa falsa proprio nel campo
  * che esiste per non dire cose false.
  */
-interface Esito { done: boolean, via: 'shell' | 'native' | 'panel' | 'none', output?: string, reason?: string }
+interface Esito { done: boolean, via: 'shell' | 'native' | 'panel' | 'none', output?: string, reason?: string, detail?: string }
 
 export interface TalosPrivilegedToolSources {
     wifi(on: boolean): Promise<Esito>
@@ -112,7 +113,8 @@ function esitoDi(
     }
     return {
         ok: false,
-        content: sources.reasonOf(r.reason),
+        // ASS-145: il dettaglio dice l'unità e il valore giusto, che il motivo generico non sa
+        content: r.detail ? `${r.detail} ${sources.reasonOf(r.reason)}` : sources.reasonOf(r.reason),
         code: `TALOS_PRIVILEGE_${(r.reason ?? 'failed').toUpperCase().replace(/-/g, '_')}`,
     }
 }
@@ -175,7 +177,7 @@ export function createTalosPrivilegedTools(
             input: z.object({ on: z.boolean() }),
             async run(input) {
                 const r = await sources.powerSaving(input.on)
-                return esitoDi(sources, r, input.on ? 'Battery saver on.' : 'Battery saver off.', { tool: 'device_power_saving', acceso: input.on })
+                return esitoDi(sources, r, r.output ?? (input.on ? 'Battery saver on.' : 'Battery saver off.'), { tool: 'device_power_saving', acceso: input.on })
             },
         }) as TalosToolDefinition<never>,
 
@@ -223,8 +225,9 @@ export function createTalosPrivilegedTools(
             title: 'Read or change a phone setting',
             description: [
                 'Read a phone setting, or change it. Send value to change it, leave it out',
-                'to read. brightness is 0-255, screen_timeout is in seconds, auto_rotate is',
-                '0 or 1. Nothing else is accepted.',
+                `to read. brightness is a percent from ${BRIGHTNESS.minP} to ${BRIGHTNESS.maxP}, like the slider (if auto-brightness is on`,
+                'TALOS turns it off first and says so). screen_timeout is in seconds, from',
+                `${SCREEN_TIMEOUT.minS} to ${SCREEN_TIMEOUT.maxS} (30 minutes). auto_rotate is 0 or 1. Nothing else is accepted.`,
             ].join(' '),
             input: z.object({
                 setting: z.enum(['brightness', 'screen_timeout', 'auto_rotate']),
@@ -232,9 +235,10 @@ export function createTalosPrivilegedTools(
             }),
             async run(input) {
                 const r = await sources.systemSetting(input.setting, input.value)
-                return esitoDi(sources, r, input.value === undefined
-                    ? `${input.setting} is ${r.value ?? r.output ?? 'unknown'}.`
-                    : `${input.setting} set to ${input.value}.`)
+                // il testo lo scrive la sorgente, che conosce l'unità e il valore riletto
+                return esitoDi(sources, r, r.output ?? (input.value === undefined
+                    ? `${input.setting} is ${r.value ?? 'unknown'}.`
+                    : `${input.setting} set to ${input.value}.`))
             },
         }) as TalosToolDefinition<never>,
 

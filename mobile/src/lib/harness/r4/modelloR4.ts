@@ -16,10 +16,18 @@
 import type { TalosMobileModelProfileView, TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
 import type { TalosR4ClientePonte } from './clienteR4'
 import erroriModello from './testi/errori-modello-r4.json'
+// i codici generici del server (INTERNAL_ERROR, NOT_FOUND, QUERY_INVALID…), con le parole del desktop già estratte per il piano
+import erroriGenerici from './testi/errori-piano-r4.json'
+// revisione del blocco 10, F-R1: i codici del PC coi motivi; FRASI-UNICHE (27/10/2026): estratti di nuovo a r4 79ea996de, ora anche coi .message
+import erroriDelPc from './testi/errori-generici-r4.json'
 import erroriChatgpt from './testi/errori-chatgpt-r4.json'
 import erroriLocale from './testi/errori-locale-r4.json'
-import erroriKernelLocale from './testi/errori-kernel-locale-r4.json'
+import erroriKernel from './testi/errori-kernel-r4.json'
+// IMPOSTAZIONE-RIFIUTATA (Pad, 27/10/2026): i rifiuti di una sessione (SESSION_NOT_READY col motivo…), già estratti per la lista del
+// Codice: un cambio di modo durante un giro diceva «Session not ready for this action» in inglese con l'app in italiano
+import erroriSessioni from './testi/errori-sessioni-r4.json'
 import { testoApprovazioneR4 } from './approvazioniR4'
+import { fraseDelMotivoR4, fraseErroreR4 } from './fraseErroreR4'
 
 export const FORNITORI_DEL_CODICE_R4: ReadonlySet<TalosMobileProviderId> = new Set<TalosMobileProviderId>(['openai', 'chatgpt', 'deepseek', 'anthropic', 'gemini', 'openrouter', 'ollama', 'local'])
 
@@ -89,9 +97,13 @@ export function profiloDelModelloR4(
             effort_levels: [], supports_thinking: false, show_in_composer: true, capabilities: null, probe_ok: null,
         }
     }
+    const fonte = fornitoreDelModelloR4(modello)
+    // ⛔ D-0145-4b (Desktop 26/10): il nome è il modello senza la fonte («z-ai/glm-4.7», non «openrouter:z-ai/glm-4.7»): la fonte la
+    // dice già il gruppo; l'id intero resta in `model`, che è ciò che torna a r4
+    const nome = modello.startsWith(`${fonte}:`) ? modello.slice(`${fonte}:`.length) : modello
     return {
         // la fonte come la legge r4 (`lmstudio`…): l'icona del fornitore ricade da sé su quella generica per un id che l'app non ha
-        id: `r4:${modello}`, provider: fornitoreDelModelloR4(modello) as TalosMobileProviderId, model: modello, display_name: modello, status: 'untested', has_secret: true,
+        id: `r4:${modello}`, provider: fonte as TalosMobileProviderId, model: modello, display_name: nome, status: 'untested', has_secret: true,
         effort_levels: [], supports_thinking: false, show_in_composer: true, capabilities: null, probe_ok: null,
     }
 }
@@ -123,35 +135,49 @@ const FRASI_DEL_MOTORE_OSPITE: Record<string, string> = {
     LOCAL_ENGINE_BUSY: 'kernel.motoreOspiteOccupato',
     LOCAL_RUNTIME_NOT_READY: 'kernel.motoreOspiteNonAperto',
     LOCAL_MODEL_CHANGED: 'kernel.motoreOspiteCambiato',
+    // D-0146-1, lato r4 (`3b5009de6`): il socket del motore dell'app che non risponde non è più «nessun modello aperto»
+    LOCAL_GUEST_UNREACHABLE: 'kernel.motoreOspiteNonRisponde',
+}
+
+/** I testi `kernel.*` del desktop nella lingua dell'app. */
+const testiDelKernel = (lingua: string) => (italiano(lingua) ? erroriKernel.it : erroriKernel.en) as Record<string, string>
+
+/**
+ * I parametri delle voci coi numeri, come `parametri` del desktop (`components/errori.js:955-959` @ 5bccc25a8): il resto della voce
+ * (chiave, espressione, ordine) viene dalla tabella estratta, non da qui. MOD-20 vuole gli stessi nomi del desktop.
+ */
+const PARAMETRI_DEL_KERNEL: Readonly<Record<string, (m: RegExpExecArray, lingua: string) => Record<string, string>>> = {
+    'errori.kernel.inattivoPerSecondi': (m) => ({ secondi: m[1] }),
+    'errori.kernel.nessunaRispostaEntro': (m) => ({ secondi: m[1] }),
+    'errori.kernel.rispostaHttp': (m) => ({ stato: m[1] }),
+    'errori.kernel.nonRispondeStato': (m, lingua) => ({
+        stato: /^(?:unknown|sconosciuto)$/u.test(m[1]) ? testiDelKernel(lingua)['kernel.statoSconosciuto'] : m[1], dettaglio: m[2],
+    }),
+    'errori.kernel.finestraLocale': (m, lingua) => {
+        const quanti = (n: string | undefined) => (n ? testiDelKernel(lingua)['kernel.quantiToken'].replace('{n}', n) : '')
+        return { conversazione: quanti(m[1]), finestra: quanti(m[2]) }
+    },
 }
 
 /**
- * Le frasi del kernel sul motore locale, riconosciute e tradotte come il desktop (`components/errori.js` @ c4d42649a, stesse
- * espressioni; testi copiati in `testi/errori-kernel-locale-r4.json`):
- * - :956 la conversazione che non entra nella finestra (`ContestoLocalePienoError`): i numeri solo se r4 li manda;
- * - :913 il motore locale che rifiuta la richiesta anche senza attrezzi (`MotoreLocaleRifiutaError`, p.es. un template di chat
- *   che non accetta la conversazione, SERV-26).
- * `null` se non è una di queste frasi.
+ * ⛔ D-0147-ERR-2 (Pad, 27/10/2026; Desktop: «una tabella sola»): K3 scrive i messaggi del kernel in INGLESE e il desktop li dice nella
+ * lingua dell'interfaccia con `MESSAGGI_DEL_KERNEL` (`components/errori.js:908-959`). La tabella del telefono È quella: chiavi,
+ * espressioni e ordine estratti dallo stesso commit (`testi-server-r4.mjs --area errori-kernel`, `testi/errori-kernel-r4.json`);
+ * qui solo i parametri. Prima erano due voci copiate a mano, e «Credit not available at the provider.» restava in inglese.
  */
-const FRASI_DEL_KERNEL_LOCALE: ReadonlyArray<{ chiave: string; re: RegExp; numeri?: true }> = [
-    {
-        chiave: 'kernel.finestraLocale', numeri: true,
-        re: /^(?:The conversation|La conversazione)(?: \((\d+) tokens?\))? (?:does not fit in the local model’s window|non entra nella finestra del modello locale)(?: \((\d+) tokens?\))?\.$/u,
-    },
-    {
-        chiave: 'kernel.motoreLocaleRifiuta',
-        re: /^(?:The local engine did not accept this request, not even as a plain chat\.|Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi\.)$/u,
-    },
-]
-function fraseDelKernelLocale(messaggio: string, lingua: string): string | null {
+export const MESSAGGI_DEL_KERNEL_R4: ReadonlyArray<{ chiave: string; re: RegExp; parametri?: (m: RegExpExecArray, lingua: string) => Record<string, string> }> =
+    erroriKernel.regole.map((r) => ({ chiave: r.chiave, re: new RegExp(r.sorgente, r.flag), parametri: PARAMETRI_DEL_KERNEL[r.chiave] }))
+
+/** Il messaggio del kernel nella lingua dell'app (`messaggioDelKernelNellaLingua` del desktop), o `null` se non è uno di quelli noti. */
+function messaggioDelKernelNellaLingua(messaggio: string, lingua: string): string | null {
     const testo = String(messaggio ?? '').trim()
-    const testi = (italiano(lingua) ? erroriKernelLocale.it : erroriKernelLocale.en) as Record<string, string>
-    for (const voce of FRASI_DEL_KERNEL_LOCALE) {
+    for (const voce of MESSAGGI_DEL_KERNEL_R4) {
         const m = voce.re.exec(testo)
         if (!m) continue
-        if (!voce.numeri) return testi[voce.chiave]
-        const quanti = (n: string | undefined) => (n ? testi['kernel.quantiToken'].replace('{n}', n) : '')
-        return testi[voce.chiave].replace('{conversazione}', quanti(m[1])).replace('{finestra}', quanti(m[2]))
+        const frase = testiDelKernel(lingua)[voce.chiave.replace(/^errori\./u, '')]
+        if (typeof frase !== 'string') return null
+        const valori = voce.parametri ? voce.parametri(m, lingua) : {}
+        return frase.replace(/\{(\w+)\}/gu, (tutto, k: string) => (typeof valori[k] === 'string' ? valori[k] : tutto))
     }
     return null
 }
@@ -162,20 +188,25 @@ function fraseDelKernelLocale(messaggio: string, lingua: string): string | null 
  * loro `<CODICE>.message`. Un codice che il dizionario non porta resta con le parole di r4, mai una chiave grezza.
  * Dal pin 701c6c0d2 il desktop dice la chiave che manca con `fraseDelMotivo` (#44): sulla busta vera la frase è la stessa (MOT-R4-03).
  */
-export function messaggioErroreModelloR4(errore: { code: string; message: string; reason?: string; params?: Record<string, unknown> }, lingua: string): string {
+export function messaggioErroreModelloR4(errore: { code: string; message: string; reason?: string; params?: Record<string, unknown>; explanation?: string }, lingua: string): string {
     // ⛔ CHATGPT NEL CODICE: accanto, i codici del piano che r4 manda (`testi/errori-chatgpt-r4.json`)
     // ⛔ CODICE COL MOTORE LOCALE: e quelli della fonte `locale-ospite` e del motore dell'app (`testi/errori-locale-r4.json`)
     // ⛔ le frasi del kernel sul motore locale (Pad 22/10/2026, in inglese con l'app in italiano): le regole del desktop
-    const delKernel = fraseDelKernelLocale(errore.message, lingua)
+    const delKernel = messaggioDelKernelNellaLingua(errore.message, lingua)
     if (delKernel) return delKernel
-    const tabelle = (italiano(lingua) ? [erroriModello.it, erroriChatgpt.it, erroriLocale.it] : [erroriModello.en, erroriChatgpt.en, erroriLocale.en]) as Record<string, string>[]
+    // ⛔ dal Pad, 27/10/2026: «Internal error» in inglese con l'app in italiano. I generici per ultimi: le tabelle sopra vincono
+    const tabelle = (italiano(lingua)
+        ? [erroriModello.it, erroriChatgpt.it, erroriLocale.it, erroriDelPc.it, erroriSessioni.it, erroriGenerici.it]
+        : [erroriModello.en, erroriChatgpt.en, erroriLocale.en, erroriDelPc.en, erroriSessioni.en, erroriGenerici.en]) as Record<string, string>[]
     const dalDizionario = (chiave: string) => tabelle.find((t) => Object.hasOwn(t, chiave))?.[chiave]
+    // la chiave che manca (la frase col nome del fornitore) e i rifiuti del motore locale hanno la loro frase fissa, come il desktop
     const motivo = errore.code === 'CONFIG_INVALID' && (errore.reason === 'provider-key-missing' || errore.reason === 'provider-key-missing-named')
         ? dalDizionario(`CONFIG_INVALID.${errore.reason.replace(/-/gu, '_')}`)
         : Object.hasOwn(FRASI_DEL_MOTORE_OSPITE, errore.code) ? dalDizionario(FRASI_DEL_MOTORE_OSPITE[errore.code]) : undefined
-    const frase = motivo ?? dalDizionario(`${errore.code}.message`)
-    if (!frase) return errore.message
-    return frase.replace(/\{(\w+)\}/gu, (tutto, k: string) => (errore.params && typeof errore.params[k] === 'string' ? String(errore.params[k]) : tutto))
+    if (motivo) return motivo.replace(/\{(\w+)\}/gu, (tutto, k: string) => (errore.params && typeof errore.params[k] === 'string' ? String(errore.params[k]) : tutto))
+    // ⛔ FRASI-UNICHE (censimento G, punto b; Desktop 27/10/2026): il resto con la regola del desktop, la stessa dei fogli e degli avvisi,
+    // nell'ordine di `messaggioErroreUtente` (`legacy/app.js:3491` @ 79ea996de): prima la frase del motivo (la `explanation` precisa)
+    return fraseDelMotivoR4(errore, lingua) || fraseErroreR4(errore, lingua) || errore.message
 }
 
 export interface ErroreDelFornitoreR4 extends Error {

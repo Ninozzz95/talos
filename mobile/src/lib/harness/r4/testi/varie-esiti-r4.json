@@ -1,0 +1,31 @@
+{
+  "origine": {
+    "commit": "c5ce4e453e1e9841b3d52bac10491abd23e80a56",
+    "percorso": "harness-ui/frontend/src/i18n/testi/varie.js",
+    "sha256": "e43befdeb530a1b801c3c160a5888861926600d967b8d3a85d372370dcf4d240",
+    "prefisso": [
+      "tools.kind.reading.failedOne",
+      "tools.kind.search.failedOne",
+      "tools.kind.listing.failedOne",
+      "tools.kind.writing.failedOne",
+      "tools.kind.command.failedOne",
+      "tools.kind.page.failedOne"
+    ]
+  },
+  "it": {
+    "tools.kind.reading.failedOne": "{n} lettura non riuscita",
+    "tools.kind.search.failedOne": "{n} ricerca non riuscita",
+    "tools.kind.listing.failedOne": "{n} elenco non riuscito",
+    "tools.kind.writing.failedOne": "{n} scrittura non riuscita",
+    "tools.kind.command.failedOne": "{n} comando non riuscito",
+    "tools.kind.page.failedOne": "{n} pagina non aperta"
+  },
+  "en": {
+    "tools.kind.reading.failedOne": "{n} read failed",
+    "tools.kind.search.failedOne": "{n} search failed",
+    "tools.kind.listing.failedOne": "{n} listing failed",
+    "tools.kind.writing.failedOne": "{n} write failed",
+    "tools.kind.command.failedOne": "{n} command failed",
+    "tools.kind.page.failedOne": "{n} page not opened"
+  }
+}

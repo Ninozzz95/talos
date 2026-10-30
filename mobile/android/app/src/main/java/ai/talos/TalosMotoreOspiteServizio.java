@@ -25,8 +25,13 @@ import org.json.JSONObject;
  *   sul motore va all'ATTORE (`TalosLlamaEngine.soloAttore`); il lettore dello streaming gira dentro quel lavoro e si aspetta prima
  *   che finisca, così una chiusura in coda sull'attore non arriva a metà.
  * - r4 che chiude la connessione ⇒ la generazione si annulla e il motore torna libero.
+ * - `POST /apply-template` come llama-server (contratto «sistema piegato», Desktop 26/10/2026): il prompt reso dal template del GGUF,
+ *   senza generare, con lo stesso giro di chiave, presa e attore di `/tokenize`.
  */
 final class TalosMotoreOspiteServizio {
+
+    /** Cosa si fa col corpo di una chat completion: il giro vero, solo contare i token (`/tokenize`), solo rendere il prompt. */
+    private enum Uso { GIRO, CONTA, TEMPLATE }
 
     /** Il motore, visto da qui. In produzione è il `TalosLlamaEngine` aperto dalla chat. */
     interface MotoreDaServire {
@@ -49,6 +54,8 @@ final class TalosMotoreOspiteServizio {
     }
 
     private static final SecureRandom CASO = new SecureRandom();
+    /** SERV-26 e `/apply-template`: r4 riconosce il rifiuto dal codice; la frase è fissa, il testo del Jinja resta in logcat. */
+    private static final String TEMPLATE_RIFIUTATO = "This model's chat template does not accept the conversation.";
 
     /*
      * D-MO-10 (giro 16 sul Pad, 21/10 17:30): le richieste di QUESTO socket che tengono il motore adesso. Il socket ha un solo cliente,
@@ -123,13 +130,19 @@ final class TalosMotoreOspiteServizio {
                 case "/chat/completions":
                 case "/v1/chat/completions":
                     if (!"POST".equals(r.metodo)) rispondi(out, 405, "METHOD_NOT_ALLOWED", "Use POST.");
-                    else completa(r, in, out, false);
+                    else completa(r, in, out, Uso.GIRO);
                     return;
                 // D-MO-11: i token ESATTI del prompt, per il controllo della finestra di r4 (contratto vLLM `/tokenize`)
                 case "/tokenize":
                 case "/v1/tokenize":
                     if (!"POST".equals(r.metodo)) rispondi(out, 405, "METHOD_NOT_ALLOWED", "Use POST.");
-                    else completa(r, in, out, true);
+                    else completa(r, in, out, Uso.CONTA);
+                    return;
+                // il prompt reso dal template vero del GGUF, senza generare: r4 sonda così i system che il template rifiuta o scarta
+                case "/apply-template":
+                case "/v1/apply-template":
+                    if (!"POST".equals(r.metodo)) rispondi(out, 405, "METHOD_NOT_ALLOWED", "Use POST.");
+                    else completa(r, in, out, Uso.TEMPLATE);
                     return;
                 default:
                     rispondi(out, 404, "NOT_FOUND", "Unknown path.");
@@ -174,7 +187,9 @@ final class TalosMotoreOspiteServizio {
         rispondi(out, 503, "LOCAL_RUNTIME_NOT_READY", "No on-device model is loaded.");
     }
 
-    private void completa(TalosMotoreOspiteHttp.Richiesta r, InputStream in, OutputStream out, boolean conta) throws IOException {
+    private void completa(TalosMotoreOspiteHttp.Richiesta r, InputStream in, OutputStream out, Uso uso) throws IOException {
+        // `/tokenize` e `/apply-template` non generano: niente `max_tokens`, niente stream
+        final boolean conta = uso != Uso.GIRO;
         final TalosMotoreOspiteHttp.Domanda d;
         try {
             d = TalosMotoreOspiteHttp.domanda(r.corpo, conta);
@@ -254,7 +269,8 @@ final class TalosMotoreOspiteServizio {
         final AtomicBoolean iniziata = new AtomicBoolean(giaAperto);
         try {
             motore.sullAttore(() -> {
-                if (conta) conta(d, out);
+                if (uso == Uso.CONTA) conta(d, out);
+                else if (uso == Uso.TEMPLATE) template(d, out);
                 else giro(d, in, out, iniziata, giaAperto);
                 return null;
             });
@@ -271,6 +287,29 @@ final class TalosMotoreOspiteServizio {
         int n = motore.promptTokens(motore.chatPrompt(d.messaggiJson, d.attrezziJson, d.pensa));
         try {
             out.write(TalosMotoreOspiteHttp.risposta(200, new JSONObject().put("count", n).put("max_model_len", motore.finestra()).toString()));
+            out.flush();
+        } catch (JSONException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * Sull'attore: il prompt che il motore genererebbe, e basta. Un prompt vuoto è il Jinja che ha rifiutato la conversazione (il suo
+     * testo resta in logcat, `nativeApplyChatTemplate`): lo stesso codice e la stessa frase di SERV-26. Il template di un ALTRO modello
+     * darebbe una sonda falsa: si dice che il modello è cambiato, come il giro.
+     */
+    private void template(TalosMotoreOspiteHttp.Domanda d, OutputStream out) throws IOException {
+        if (!d.modello.isEmpty() && !d.modello.equalsIgnoreCase(motore.modello())) {
+            rispondi(out, 409, "LOCAL_MODEL_CHANGED", "Another on-device model is open now; choose it again in Code.");
+            return;
+        }
+        String prompt = motore.chatPrompt(d.messaggiJson, d.attrezziJson, d.pensa);
+        if (prompt == null || prompt.isEmpty()) {
+            rispondi(out, 400, "CHAT_TEMPLATE_FAILED", TEMPLATE_RIFIUTATO);
+            return;
+        }
+        try {
+            out.write(TalosMotoreOspiteHttp.risposta(200, new JSONObject().put("prompt", prompt).toString()));
             out.flush();
         } catch (JSONException e) {
             throw new IllegalStateException(e);
@@ -294,7 +333,7 @@ final class TalosMotoreOspiteServizio {
         // accettato questa richiesta», Desktop 22/10): mai CONTEXT_LENGTH_EXCEEDED, che darebbe la colpa alla lunghezza.
         if (promptToken <= 0) {
             iniziata.set(true);
-            rifiuta(out, intestazioneMandata, 400, "CHAT_TEMPLATE_FAILED", "This model's chat template does not accept the conversation.");
+            rifiuta(out, intestazioneMandata, 400, "CHAT_TEMPLATE_FAILED", TEMPLATE_RIFIUTATO);
             return;
         }
         if (resto <= 0) {

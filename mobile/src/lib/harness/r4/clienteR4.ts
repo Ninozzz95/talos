@@ -4,7 +4,7 @@
  * `talos_token` messo dal nativo: la pagina il token non lo vede mai.
  */
 import { registerPlugin } from '@capacitor/core'
-import type { StatoFileRemoto } from '@/lib/remoto/fileRemoti'
+import type { AnteprimaDalPc, StatoFileRemoto } from '@/lib/remoto/fileRemoti'
 
 export interface TalosR4ClientePonte {
     /**
@@ -38,6 +38,12 @@ export interface TalosR4ClientePonte {
      * pausa. La ricevuta remota NON ha `assoluto`: il percorso assoluto del PC non esce mai dal PC. Il nativo locale li ignora.
      */
     allegaFile?(opzioni: { uri: string; nome: string; testo: boolean; sessionId?: string; onStato?: (s: StatoFileRemoto) => void; segnale?: AbortSignal }): Promise<{ tipo: string; nome: string; percorso: string; bytes: number; assoluto?: string; testo?: string }>
+    /**
+     * ⛔ Owner 26/10 (allegati apribili): solo dal ponte remoto, l'anteprima in sola lettura di un file allegato alla sessione del PC
+     * (`file.list` + `file.read`, `anteprimaDalPc`); il nome è l'ultimo segmento del percorso del chip. Il nativo locale non ce l'ha:
+     * in locale il chip apre l'anteprima della scheda File.
+     */
+    anteprimaFile?(opzioni: { sessionId: string; nome: string }): Promise<AnteprimaDalPc>
     /** A3: un'immagine scelta come file (`content://`), letta dal nativo fino a 5 MiB, perché la pagina quei byte non li legge. */
     immagineScelta?(opzioni: { uri: string }): Promise<{ tipo: string; base64: string }>
     addListener(

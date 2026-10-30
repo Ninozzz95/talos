@@ -3,8 +3,8 @@
  *
  * The shadcn `destructive` variant assumes `--destructive` is a saturated red
  * meant to be a solid fill: it draws `text-destructive` over `bg-destructive/20`.
- * In TALOS that token is the opposite kind of thing — a light red TEXT colour,
- * `#fee2e2`, guaranteed legible ON `--talos-danger-soft` and checked there by
+ * In TALOS that token is the opposite kind of thing — a red TEXT colour (a readable red in dark since 26/10/2026, see
+ * `rossoLeggibile` in talosThemes.ts; `#fee2e2` before), guaranteed legible ON `--talos-danger-soft` and checked there by
  * `talosContrast.ts`. Put it over 20% of itself and you get pale pink on a pale
  * wash: seen on the tablet 2026-08-03, where "Delete permanently" was
  * indistinguishable from a secondary button.

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
+import { reactive } from 'vue'
 
 const writeText = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 vi.mock('@/services/clipboard', () => ({ writeTalosClipboardText: writeText }))
@@ -16,11 +17,23 @@ vi.mock('@/stores/chatController', () => ({
             activeSession: { value: { id: 's1', title: 'A' } },
         },
         toolActivity: { value: [] as Array<{ name: string; detail: string | null }> },
+        // l'anteprima di un allegato della chat (ALL-APRI-M05): il testo dal vault del dispositivo
+        attachments: { hydrateText: vi.fn(async () => 'id,pezzi\n1,4\n'), previewBytes: vi.fn(async () => null) },
     }),
 }))
 
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
 import type { TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
+import { percorsoApribileR4 } from '@/lib/harness/r4/allegatoApribileR4'
+
+/*
+ * Il chip di un file è pigro (`TalosMobileMessageFileChip`, owner 26/10, allegati apribili): la prima importazione a freddo può
+ * superare il secondo di `vi.waitFor` e il test che lo aspetta per primo falliva a caso (2 volte su 3 da solo, 26/10). Si carica
+ * qui, una volta, prima di tutti: l'attesa nei test resta quella del componente, non dell'import.
+ */
+beforeAll(async () => {
+    await import('@/components/chat/TalosMobileMessageFileChip.vue')
+}, 30_000)
 
 const messages: TalosMobileMessageView[] = [
     {
@@ -94,7 +107,8 @@ describe('TalosMobileMessageList', () => {
                 }],
             },
         })
-        await flushPromises()
+        // il chip è pigro come la bolla-immagine (owner 26/10, allegati apribili): si aspetta che arrivi
+        await vi.waitFor(() => expect(wrapper.find('[data-message-attachment-id="r4file:0:/w/allegati/NOTA.md"]').exists()).toBe(true))
         const testo = wrapper.get('[data-message-attachment-id="r4file:0:/w/allegati/NOTA.md"]')
         expect(testo.text()).toContain('NOTA.md')
         expect(testo.text()).toContain('~203 token')
@@ -103,6 +117,61 @@ describe('TalosMobileMessageList', () => {
         expect(binario.text().trim()).toBe('dati.bin')
         expect(binario.attributes('title')).toBe('/w/allegati/dati.bin')
         expect(wrapper.text()).not.toContain('0 B')
+    })
+
+    /*
+     * ⛔ Owner 26/10/2026: «dalla chat il file ordini dal pad si deve poter aprire se ci clicco sopra, come qualunque altro file sia
+     * su mobile che su desktop». Il chip sotto il messaggio della persona diventa un pulsante quando il file si sa dove sta: nel
+     * Codice un percorso dentro la cartella della sessione (si apre con l'anteprima dell'albero), nella chat un file del vault.
+     */
+    describe('allegati della persona apribili', () => {
+        const base = { grant_id: '', vault_file_id: '', media_type: 'application/octet-stream', size_bytes: 0, permissions: ['model.read'] as const, grant_status: 'active' as const }
+        const conChip = (attachments: TalosMobileMessageView['attachments']): TalosMobileMessageView[] => [{
+            id: 'user-a', role: 'user', content: 'Guarda', state: 'persisted', created_at: '2026-10-26T12:00:00.000Z',
+            model_profile_id: null, run_id: 'r', metadata: {}, attachments,
+        }]
+
+        it('ALL-APRI-M04 nel Codice un percorso dentro la cartella è un pulsante che chiede di aprire quel file', async () => {
+            const wrapper = mount(TalosMobileMessageList, {
+                attachTo: document.body,
+                props: {
+                    sending: false, apriPercorso: (p: string) => percorsoApribileR4(p, '/w'),
+                    messages: conChip([
+                        { ...base, id: 'r4file:0:allegati/ordini-dal-pad.csv', display_name: 'ordini-dal-pad.csv', percorso: 'allegati/ordini-dal-pad.csv' },
+                        { ...base, id: 'r4file:1:/w/allegati/NOTA.md', display_name: 'NOTA.md', percorso: '/w/allegati/NOTA.md' },
+                        { ...base, id: 'r4file:2:../segreti.txt', display_name: 'segreti.txt', percorso: '../segreti.txt' },
+                        { ...base, id: 'r4file:3:/altro/x.md', display_name: 'x.md', percorso: '/altro/x.md' },
+                    ]),
+                },
+            })
+            await vi.waitFor(() => expect(wrapper.find('[data-message-attachment-id="r4file:3:/altro/x.md"]').exists()).toBe(true))
+            const relativo = wrapper.get('[data-message-attachment-id="r4file:0:allegati/ordini-dal-pad.csv"]')
+            expect(relativo.element.tagName).toBe('BUTTON')
+            expect(relativo.attributes('type')).toBe('button')
+            expect(relativo.attributes('aria-label')).toBe('Open ordini-dal-pad.csv')
+            await relativo.trigger('click')
+            await wrapper.get('[data-message-attachment-id="r4file:1:/w/allegati/NOTA.md"]').trigger('click')
+            expect(wrapper.emitted('apriAllegato')).toEqual([['allegati/ordini-dal-pad.csv'], ['allegati/NOTA.md']])
+            // fuori dalla cartella: un'etichetta, come prima
+            expect(wrapper.get('[data-message-attachment-id="r4file:2:../segreti.txt"]').element.tagName).toBe('SPAN')
+            expect(wrapper.get('[data-message-attachment-id="r4file:3:/altro/x.md"]').element.tagName).toBe('SPAN')
+        })
+
+        it('ALL-APRI-M05 nella chat un file del vault si apre nell\'anteprima, e la chiude', async () => {
+            const wrapper = mount(TalosMobileMessageList, {
+                attachTo: document.body,
+                props: {
+                    sending: false,
+                    messages: conChip([{ ...base, id: 'b-1', vault_file_id: 'vault-9', display_name: 'ordini.csv', media_type: 'text/csv', size_bytes: 20 }]),
+                },
+            })
+            await vi.waitFor(() => expect(wrapper.find('[data-message-attachment-id="b-1"]').exists()).toBe(true))
+            const chip = wrapper.get('[data-message-attachment-id="b-1"]')
+            expect(chip.element.tagName).toBe('BUTTON')
+            await chip.trigger('click')
+            await vi.waitFor(() => expect(document.body.querySelector('[data-testid="talos-message-attachment-preview-text"]')?.textContent).toBe('id,pezzi\n1,4\n'))
+            expect(wrapper.emitted('apriAllegato')).toBeUndefined()
+        })
     })
 
     it('renders role/state/metadata and safe assistant Markdown without page overflow classes', async () => {
@@ -115,6 +184,8 @@ describe('TalosMobileMessageList', () => {
             // Both async chunks (content + browser activity) must land before
             // the assertions - their resolution order is not guaranteed.
             expect(wrapper.find('[data-testid="talos-mobile-browser-activity"]').exists()).toBe(true)
+            // la scheda d'errore arriva a richiesta (29/10, tetto d'avvio): si aspetta quella vera, non la riga minima
+            expect(wrapper.find('[data-testid="talos-mobile-controlled-fault"]').exists()).toBe(true)
         })
 
         expect(wrapper.get('[data-message-id="user-1"]').attributes('data-message-kind')).toBe('user')
@@ -156,12 +227,42 @@ describe('TalosMobileMessageList', () => {
         expect(wrapper.get('[role="status"][data-testid="talos-mobile-message-action-status"]').text()).toBe('Message copied.')
     })
 
-    it('uses the neutral Processing status with no mojibake while a turn is running', async () => {
+    // R4 delle righe in corso (owner 27-28/10): lo stato neutro dell'attesa è la scala del desktop (`app.wait.processing`, a 0 s), a
+    // schermo coi secondi e non più solo per lo screen reader; resta neutro (nessun fatto inventato) e senza mojibake
+    it('uses the neutral desktop processing status with no mojibake while a turn is running', async () => {
         const wrapper = mount(TalosMobileMessageList, { props: { messages: [messages[0]!], sending: true } })
         await vi.waitFor(() => {
-            expect(wrapper.get('[data-testid="talos-mobile-typing"]').text()).toContain('Processing')
+            expect(wrapper.get('[data-testid="talos-mobile-typing"]').text()).toContain('TALOS is processing the response…')
         })
         expect(wrapper.text()).not.toContain('â')
+    })
+
+    // DISS-04 (dal vivo, 28/10): il messaggio di Talos che arriva DOPO uno streaming visibile ne prende il posto e non rientra in
+    // dissolvenza (lo segna `data-dallo-streaming`, lo legge `useTalosMessageEntrance`); uno che compare senza streaming sì
+    it('DISS-04 marks the assistant message that replaces a visible streaming reply, and only that one', async () => {
+        const nuovo = { ...messages[1]!, id: 'assistant-new' }
+        const conStreaming = mount(TalosMobileMessageList, { props: { messages: [messages[0]!], sending: true } })
+        await conStreaming.setProps({ messages: [messages[0]!, nuovo], sending: false })
+        expect(conStreaming.get('[data-message-id="assistant-new"]').attributes('data-dallo-streaming')).toBe('true')
+        expect(conStreaming.get('[data-message-id="user-1"]').attributes('data-dallo-streaming')).toBeUndefined()
+        conStreaming.unmount()
+        // l'ordine inverso (prima `sending` falso, poi il messaggio) vale lo stesso
+        const alRovescio = mount(TalosMobileMessageList, { props: { messages: [messages[0]!], sending: true } })
+        await alRovescio.setProps({ sending: false })
+        await alRovescio.setProps({ messages: [messages[0]!, nuovo] })
+        expect(alRovescio.get('[data-message-id="assistant-new"]').attributes('data-dallo-streaming')).toBe('true')
+        alRovescio.unmount()
+        // la Chat aggiunge nello STESSO array (dal vivo, vc339: il finale della Chat non era segnato e rientrava da 0)
+        const stessoArray = reactive([messages[0]!]) as TalosMobileMessageView[]
+        const inPosto = mount(TalosMobileMessageList, { props: { messages: stessoArray, sending: true } })
+        stessoArray.push({ ...nuovo, id: 'assistant-push' })
+        await inPosto.setProps({ sending: false })
+        expect(inPosto.get('[data-message-id="assistant-push"]').attributes('data-dallo-streaming')).toBe('true')
+        inPosto.unmount()
+        const senza = mount(TalosMobileMessageList, { props: { messages: [messages[0]!], sending: false } })
+        await senza.setProps({ messages: [messages[0]!, nuovo] })
+        expect(senza.get('[data-message-id="assistant-new"]').attributes('data-dallo-streaming')).toBeUndefined()
+        senza.unmount()
     })
 })
 
@@ -451,5 +552,39 @@ describe('⛔ il microfono: sul dettato, non sulla risposta letta', () => {
 
         expect(classi).toContain('text-current')
         expect(classi).not.toContain('--talos-muted')
+    })
+})
+
+/*
+ * D-0145-6(b) (Desktop 26/10): nella sessione di un PC con l'orologio 2 min indietro, il messaggio appena scritto diceva «2 min fa».
+ * La schermata del Codice passa `oraMostrata` (l'ora del PC portata sul dispositivo); senza, l'ora resta com'è (la chat).
+ */
+describe('le ore di un PC con l\'orologio sfasato (D-0145-6)', () => {
+    afterEach(() => { document.body.innerHTML = '' })
+    const appena = (scartoMs: number): TalosMobileMessageView[] => [{
+        ...messages[0], attachments: [], created_at: new Date(Date.now() - scartoMs).toISOString(),
+    }]
+
+    it('ORA-PC-01 con lo scarto del PC il messaggio appena scritto dice «just now»; senza, l\'ora com\'è', async () => {
+        const senza = mount(TalosMobileMessageList, { props: { sending: false, messages: appena(150_000) } })
+        await flushPromises()
+        expect(senza.text()).toContain('2m ago')
+        senza.unmount()
+        const con = mount(TalosMobileMessageList, {
+            props: { sending: false, messages: appena(150_000), oraMostrata: (iso: string) => new Date(Date.parse(iso) + 118_000).toISOString() },
+        })
+        await flushPromises()
+        expect(con.text()).toContain('just now')
+        expect(con.text()).not.toContain('2m ago')
+        con.unmount()
+    })
+
+    it('ORA-PC-02 lo scarto che arriva DOPO ridice le righe già disegnate (la funzione nuova passa il v-memo)', async () => {
+        const w = mount(TalosMobileMessageList, { props: { sending: false, messages: appena(150_000) } })
+        await flushPromises()
+        expect(w.text()).toContain('2m ago')
+        await w.setProps({ oraMostrata: (iso: string) => new Date(Date.parse(iso) + 118_000).toISOString() })
+        expect(w.text()).toContain('just now')
+        w.unmount()
     })
 })

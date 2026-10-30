@@ -1,7 +1,7 @@
 /**
- * Compatibilità dal 12/09/2026: la forma Calm ignora i tre flag restituiti
- * qui. Valori salvati, validazione e migrazioni restano leggibili; i selettori
- * in Impostazioni non cambiano più TalosMobileComposer (neppure il foglio +).
+ * ⭐ Owner 27/10/2026, «Unico, tolgo le forme»: il compositore ha UNA forma e il «+» apre sempre il cassetto. Qui resta solo la
+ * LETTURA dei valori salvati (tipi, validazione, migrazioni): un salvataggio vecchio non si rompe, e un revert ritrova la scelta di
+ * chi l'aveva fatta. `talosComposerFlags` e `talosComposerHasPlus`, che traducevano la forma in prop, non esistono più (FORMA-04).
  * Segue la documentazione del formato precedente, conservato per la lettura.
  *
  * The composer, as TWO settings — because there are two questions.
@@ -61,34 +61,6 @@ export function talosComposerShapeExists(value: unknown): value is TalosComposer
 
 export function talosComposerPlusExists(value: unknown): value is TalosComposerPlusSurface {
     return typeof value === 'string' && TALOS_COMPOSER_PLUS_SURFACES.includes(value as TalosComposerPlusSurface)
-}
-
-/**
- * Whether the "+" exists at all. False for the classic bar, which carries its
- * own controls — so the surface setting has nothing to decide and the screen
- * should say that instead of offering a live-looking control that is inert.
- */
-export function talosComposerHasPlus(shape: TalosComposerShape): boolean {
-    return shape !== 'classic'
-}
-
-/**
- * What the composer is actually handed. The three flags stay as the composer's
- * own vocabulary — this is the one place that decides which arrangements exist,
- * so the component never has to defend itself against a nonsense one again.
- */
-export function talosComposerFlags(
-    shape: TalosComposerShape,
-    plus: TalosComposerPlusSurface,
-): { drawerMode: boolean; plusDropdown: boolean; immersiveComposer: boolean } {
-    return {
-        drawerMode: shape !== 'classic',
-        immersiveComposer: shape === 'compact',
-        // Never true for the classic bar: `plusDropdown && !drawerMode` is what
-        // draws a leading "+" inside the field, and there it would only
-        // duplicate the row already under it.
-        plusDropdown: talosComposerHasPlus(shape) && plus === 'menu',
-    }
 }
 
 /**

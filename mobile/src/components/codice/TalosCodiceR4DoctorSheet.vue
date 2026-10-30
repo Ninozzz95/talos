@@ -5,8 +5,10 @@
  * riga, voci ordinate per gravità (Guasto, Avviso, Nota, OK), «Ricontrolla». Sul telefono la shell è «sul dispositivo».
  */
 import { computed, onMounted, ref } from 'vue'
-import { CircleAlert, CircleCheck, Info, LoaderCircle, TriangleAlert } from '@lucide/vue'
+import { CircleAlert, CircleCheck, Info, TriangleAlert } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
+import TalosRigaInCorso from '@/components/chat/TalosRigaInCorso.vue'
+import { useTalosSogliaSecondi } from '@/composables/useTalosSogliaSecondi'
 import { useTalosI18n } from '@/i18n'
 import { ErroreDoctorR4, controlliDoctorR4, esitoDoctorR4, gravitaDoctorR4, testoDoctorR4, type GravitaDoctorR4, type VoceDoctorR4 } from '@/lib/harness/r4/doctorR4'
 import './codiceR4.css'
@@ -18,6 +20,8 @@ const { locale } = useTalosI18n()
 const stato = ref<'carica' | 'pronto' | 'guasto' | 'non-valida'>('carica')
 const risposta = ref<unknown>(null)
 const motivo = ref('')
+// «Ricontrolla» rimette `carica`: l'attesa ricomincia da zero
+const { inizio: inizioAttesa, chiave: chiaveAttesa } = useTalosSogliaSecondi({ attivo: () => stato.value === 'carica' })
 
 /** Le voci nella lingua di adesso: se la lingua cambia, il Doctor la segue senza rileggere r4. */
 const voci = computed<VoceDoctorR4[]>(() => {
@@ -52,9 +56,11 @@ onMounted(controlla)
 <template>
     <TalosMobileComposerSheet :title="$t('harness.r4Doctor')" testid="talos-codice-r4-doctor-foglio" @close="emit('close')">
         <div class="flex flex-col gap-2 pb-2">
-            <p v-if="stato === 'carica'" class="talos-codice-r4-nota" role="status">
-                <LoaderCircle class="inline size-4 animate-spin" aria-hidden="true" /> {{ testoDoctor('varie.doctor.summary.checking') }}
-            </p>
+            <!-- owner 29/10 sera (mockup «Caricamenti vivi» v6): la rotella arancione accanto al testo, i secondi dopo 2 s; la regione
+                 `status` è quella della riga (un `div`: la riga è un blocco e non sta dentro un `p`) -->
+            <div v-if="stato === 'carica'" class="talos-codice-r4-nota">
+                <TalosRigaInCorso :key="chiaveAttesa" compatta segno="giro" :testo="testoDoctor('varie.doctor.summary.checking')" :inizio="inizioAttesa" />
+            </div>
             <p v-else-if="stato === 'guasto'" class="talos-codice-r4-nota" role="alert">{{ $t('harness.r4LoadFailed') }}</p>
             <p v-else-if="stato === 'non-valida'" class="talos-codice-r4-nota" role="alert">{{ motivo }}</p>
             <p v-else class="talos-codice-r4-nota" role="status">{{ esito }}</p>

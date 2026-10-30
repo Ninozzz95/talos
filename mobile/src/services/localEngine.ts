@@ -806,7 +806,8 @@ export async function talosLocalEngineStatus(): Promise<TalosLocalEngineStatus> 
         return {
             available: status.available,
             backends: status.backends,
-            loadedPath: status.loadedPath,
+            // ⛔ B3 (27/10/2026): senza modello aperto il nativo toglieva la chiave (`put(chiave, null)`): `undefined` passava `!== null`
+            loadedPath: typeof status.loadedPath === 'string' ? status.loadedPath : null,
             shape: talosModelShapeOf(status.shape, status.kvCacheType),
             kvCacheType: typeof status.kvCacheType === 'string' ? status.kvCacheType : null,
             contextTokens: integerOf(status.contextTokens),

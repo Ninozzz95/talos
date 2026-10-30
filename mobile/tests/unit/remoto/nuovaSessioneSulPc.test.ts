@@ -11,7 +11,7 @@ import { ATTESA_CONTROLLO_MS } from '@/lib/remoto/computerRemoti'
  */
 vi.setConfig({ testTimeout: 30_000 })
 const push = vi.fn()
-const stato = vi.hoisted(() => ({ cartelle: [] as Array<{ id: string, nome: string, dettaglio?: string | null, usataAlle?: string | null, consentita?: boolean }>, mute: false }))
+const stato = vi.hoisted(() => ({ cartelle: [] as Array<{ id: string, nome: string, dettaglio?: string | null, usataAlle?: string | null, consentita?: boolean, bloccata?: boolean }>, mute: false, guasto: null as string | null }))
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push, replace: vi.fn(), back: vi.fn() }), useRoute: () => ({ params: {}, query: {} }) }))
 vi.mock('@/i18n', () => ({
@@ -23,7 +23,8 @@ vi.mock('@/i18n', () => ({
 }))
 vi.mock('@/lib/remoto/computerRemoti', async (originale) => {
     const remoti = {
-        cartelle: vi.fn(() => (stato.mute ? new Promise(() => {}) : Promise.resolve({ ok: true, cartelle: stato.cartelle }))),
+        cartelle: vi.fn(() => (stato.mute ? new Promise(() => {})
+            : Promise.resolve(stato.guasto ? { ok: false, code: stato.guasto } : { ok: true, cartelle: stato.cartelle }))),
     }
     return { ...(await originale<typeof import('@/lib/remoto/computerRemoti')>()), useComputerRemoti: () => remoti }
 })
@@ -42,6 +43,7 @@ beforeEach(() => {
     push.mockReset()
     stato.cartelle = [{ id: 'r4-remoto', nome: 'r4 remoto', consentita: true }, { id: 'altra', nome: 'Altra', consentita: true }]
     stato.mute = false
+    stato.guasto = null
     document.body.innerHTML = ''
 })
 
@@ -107,6 +109,54 @@ describe('una sessione nuova sul PC', () => {
         expect(righe.map((r) => r.querySelector('.truncate')?.textContent?.replace(/\s+/gu, ' ').trim())).toEqual(['talos progetti', 'talos vecchi'])
         // il catalogo qui restituisce la chiave (`@/i18n` finto, sopra)
         expect(righe.map((r) => r.querySelector('[data-testid="talos-computer-folder-first-time"]')?.textContent ?? null)).toEqual([null, 'computer.consent.firstTime'])
+        w.unmount()
+    })
+
+    /*
+     * Cartelle bloccate (owner 27/10/2026, contratto del Desktop rev.1, parole proposte dal Mobile e accettate): la riga si vede, dice
+     * «Bloccata dal computer», non si sceglie (aria-disabled, nessun radio) e non ha azioni: si sblocca dal PC.
+     */
+    it('CART-BLOC-02 una cartella bloccata si vede ma non si sceglie: niente radio, aria-disabled, la sua frase; mai preselezionata', async () => {
+        stato.cartelle = [
+            { id: 'c-blocco', nome: 'Documenti', consentita: false, bloccata: true },
+            { id: 'c-libera', nome: 'Utenti', consentita: true },
+        ]
+        const { w } = await monta('Documenti')
+        const bloccata = $('[data-testid="talos-computer-folder-blocked"]')!
+        expect(bloccata.getAttribute('aria-disabled')).toBe('true')
+        expect(bloccata.getAttribute('role')).not.toBe('radio')
+        expect(bloccata.textContent).toContain('Documenti')
+        expect(bloccata.textContent).toContain('computer.consent.blocked')
+        expect(bloccata.textContent).not.toContain('computer.consent.firstTime')
+        expect(bloccata.querySelector('button')).toBeNull()
+        // la sessione più recente era nella bloccata: niente preselezione, «Apri» spento
+        const radio = $$('[role="radio"]')
+        expect(radio.map((r) => r.textContent?.trim())).toEqual(['Utenti'])
+        expect(radio[0]!.getAttribute('aria-checked')).toBe('false')
+        expect(radio[0]!.getAttribute('tabindex')).toBe('0')
+        expect($('[data-testid="talos-computer-open-session"]')!.hasAttribute('disabled')).toBe(true)
+        bloccata.click()
+        await flushPromises()
+        expect($('[data-testid="talos-computer-open-session"]')!.hasAttribute('disabled')).toBe(true)
+        w.unmount()
+    })
+
+    it("CART-BLOC-03 ⛔ verso contrario: tutte bloccate ⇒ nessun radio, «Apri» spento, «Annulla» c'è", async () => {
+        stato.cartelle = [{ id: 'c-blocco', nome: 'Documenti', consentita: false, bloccata: true }]
+        const { w } = await monta(null)
+        expect($$('[role="radio"]')).toHaveLength(0)
+        expect($('[data-testid="talos-computer-open-session"]')!.hasAttribute('disabled')).toBe(true)
+        expect($('[data-testid="talos-computer-folders-cancel"]')).not.toBeNull()
+        w.unmount()
+    })
+
+    /* Revisione del blocco 10, F-R1 (F6): il lucchetto dei consensi del PC diventava «Qualcosa è andato storto nel collegamento». */
+    it('CART-BUSY-01 il PC occupato (REMOTE_STORE_BUSY) dice di riprovare fra un momento, con «Riprova»; ⛔ non il guasto generico', async () => {
+        stato.guasto = 'REMOTE_STORE_BUSY'
+        const { w } = await monta(null)
+        expect(document.body.textContent).toContain('computer.errors.busy')
+        expect(document.body.textContent).not.toContain('computer.errors.generic')
+        expect($('[data-testid="talos-computer-folders-retry"]')).not.toBeNull()
         w.unmount()
     })
 })

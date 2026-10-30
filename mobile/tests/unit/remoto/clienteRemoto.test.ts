@@ -63,6 +63,21 @@ describe('il canale di lavoro, lato telefono', () => {
         expect(e2.params).toEqual({ ok: 'Gemini', limite: '32', attivo: 'true' })
     })
 
+    it('CLI-R-12b FRASI-UNICHE (27/10/2026): la frase precisa per la persona (`explanation`) arriva; vuota o più lunga di 240 no', async () => {
+        const f = trasportoFinto()
+        const c = creaClienteRemoto(f.t)
+        const [p1, p2, p3] = [0, 1, 2].map(() => c.richiesta('session.settings', { corpo: {} }).catch((e: unknown) => e as { explanation?: unknown }))
+        await attesa()
+        const [a, b, d] = f.inviati as { n: string }[]
+        const precisa = 'The working mode is changed between turns, not while the model is working'
+        f.arriva({ v: 1, t: 'res', n: a.n, ok: false, code: 'SESSION_NOT_READY', message: 'Session not ready for this action', reason: 'mode-change-while-running', explanation: precisa })
+        f.arriva({ v: 1, t: 'res', n: b.n, ok: false, code: 'SESSION_NOT_READY', message: 'x', explanation: 'z'.repeat(241) })
+        f.arriva({ v: 1, t: 'res', n: d.n, ok: false, code: 'SESSION_NOT_READY', message: 'x', explanation: '   ' })
+        expect((await p1).explanation).toBe(precisa)
+        expect((await p2).explanation).toBeUndefined()
+        expect((await p3).explanation).toBeUndefined()
+    })
+
     it('CLI-R-13 RA-14 (revisione 21/10): un codice che non è un identificatore diventa OPERATION_FAILED; il motivo come la regola del PC', async () => {
         const f = trasportoFinto()
         const c = creaClienteRemoto(f.t)

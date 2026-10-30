@@ -7,10 +7,21 @@
  * attrezzo in corso, ora d'avvio, figli, quello che ha fatto, le collisioni. Tocco = apre la conversazione della delega.
  * Scelte dell'owner (15/10, «Elenco a gruppi»): ricerca e filtro per stato solo oltre 10 agenti; il menu «…» della delega e il
  * diagramma dopo. Le regole stanno in `agentiR4.ts`.
+ * ⛔ «Ferma» nella scheda (owner 29/10 notte; `mockup/ferma-agente/pezzi/SCHEDA-DI-CONSEGNA.md`, voce 3 e «Correzioni»): la riga è un
+ * contenitore — il pulsante che apre la conversazione (lo stesso contenuto, `data-sessione-figlia` e `data-stato` dove stavano) e accanto
+ * i tre puntini dell'app (`TalosRowActions`, come le righe del Codice, `HarnessScreen.vue`), solo sui vivi e con la sola voce «Ferma
+ * questa delega»; sotto, la conferma nella riga e l'esito (`TalosCodiceR4FermaAgente`). Pausa/Riprendi/Riprova restano rimandati.
+ * Una sezione con una conferma aperta (o «Lo fermo…») non si richiude da sola (`sezioneApertaR4`). Le regole: `fermaAgenteR4.ts`.
  */
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { Bot, ChevronDown, ChevronRight } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
+import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
+import TalosCodiceR4FermaAgente from './TalosCodiceR4FermaAgente.vue'
+import {
+    RIGA_A_RIPOSO_R4, aggiornaConAgenteR4, annullaConfermaR4, apriConfermaR4, confermaFermaR4, esitoFermaR4, sezioneApertaR4, tieneApertaR4,
+    vociMenuAgenteR4, type StatoRigaAgenteR4,
+} from '@/lib/harness/r4/fermaAgenteR4'
 import {
     contoDellaRichiestaR4, conteggioAgentiR4, conteggioInteroR4, etichettaDelegaR4, gruppiAgentiR4, nomeDellAgenteR4, nomeDiRipiegoAttrezzoR4, nomeUmanoAttrezzoR4, oraBreveR4,
     pluraleAgentiR4, senzaInganniSuPiuRigheR4, statoDelegaR4, testoAgentiR4, troncaR4,
@@ -22,6 +33,11 @@ const props = defineProps<{
     agenti: AgenteDelPannelloR4[]
     /** Il perché dell'ultima lettura non riuscita (gli agenti restano quelli di prima), o `null`. */
     errore: string | null
+    /**
+     * Lo Stop di UNA figlia (`POST /api/v1/sessions/<figlia>/stop` con `{ figlie: 'tutte' }`, `useConversazioneR4.fermaFiglia`), dal
+     * pannello. Senza, niente tre puntini: la scheda resta quella di prima.
+     */
+    ferma?: (sessionId: string) => Promise<{ ok: true } | { ok: false; messaggio?: string | null }>
 }>()
 const emit = defineEmits<{ apri: [sessionId: string] }>()
 const { locale } = useTalosI18n()
@@ -50,7 +66,29 @@ const filtrati = computed(() => {
 })
 const cercando = computed(() => conFiltri.value && (Boolean(cerca.value.trim()) || valore.value !== 'tutti'))
 const raggruppati = computed(() => gruppiAgentiR4(props.agenti, filtrati.value))
-const aperta = (id: string) => cercando.value || (richiesteAperte.has(id) ? richiesteAperte.get(id)! : id === raggruppati.value?.piuRecente)
+// lo stato delle righe (la conferma e l'esito), per agente; un agente cambiato (finito da solo) chiude la sua conferma
+const righe = reactive(new Map<string, StatoRigaAgenteR4>())
+const statoDi = (a: AgenteDelPannelloR4) => righe.get(a.sessionId!) ?? RIGA_A_RIPOSO_R4
+watch(() => props.agenti, (agenti) => {
+    for (const a of agenti) { const s = righe.get(a.sessionId!); if (s) righe.set(a.sessionId!, aggiornaConAgenteR4(s, a)) }
+}, { deep: true })
+const vociMenu = (a: AgenteDelPannelloR4) => (props.ferma && a.sessionId ? vociMenuAgenteR4(a, locale.value) : [])
+function scegli(a: AgenteDelPannelloR4, voce: string): void {
+    if (voce === 'ferma') righe.set(a.sessionId!, apriConfermaR4(statoDi(a), a))
+}
+async function conferma(a: AgenteDelPannelloR4): Promise<void> {
+    const via = confermaFermaR4(statoDi(a), a, Date.now())
+    if (!via || !props.ferma) return
+    righe.set(a.sessionId!, via)
+    if (via.esito?.tipo !== 'in-corso') return
+    let risposta: Awaited<ReturnType<NonNullable<typeof props.ferma>>>
+    try { risposta = await props.ferma(a.sessionId!) } catch { risposta = { ok: false, messaggio: null } }
+    righe.set(a.sessionId!, esitoFermaR4(statoDi(a), risposta, locale.value))
+}
+const conConferma = (id: string) => props.agenti.some((a) => a.richiesta?.id === id && tieneApertaR4(righe.get(a.sessionId!)))
+const aperta = (id: string) => sezioneApertaR4({
+    id, sceltaDellaPersona: richiesteAperte.get(id), piuRecente: raggruppati.value?.piuRecente ?? null, cercando: cercando.value, conConfermaAperta: conConferma(id),
+})
 /** Le righe che si vedono (gli agenti di una richiesta ripiegata non occupano pagine), poi la pagina. */
 const visibili = computed(() => (raggruppati.value ? filtrati.value.filter((a) => aperta(a.richiesta!.id)) : filtrati.value))
 const ultimaPagina = computed(() => Math.max(0, Math.ceil(visibili.value.length / PER_PAGINA) - 1))
@@ -97,6 +135,7 @@ function collisione(a: AgenteDelPannelloR4): string | null {
     return file.length === 1 ? tr('processi.agents.collisionOne', { file: file[0] }) : tr('processi.agents.collisionMany', { file: file.join(', ') })
 }
 const etichettaApri = (a: AgenteDelPannelloR4) => tr('processi.agents.openConversationOf', { nome: nomeDellAgenteR4(a) || tr('processi.agents.noTaskShort') })
+const etichettaAzioni = (a: AgenteDelPannelloR4) => `${tr('agenti.delegations.agentActions')}: ${nomeDellAgenteR4(a)}`
 </script>
 
 <template>
@@ -151,26 +190,39 @@ const etichettaApri = (a: AgenteDelPannelloR4) => tr('processi.agents.openConver
                 </span>
             </button>
             <ul v-if="!blocco.richiesta || aperta(blocco.richiesta.id)" role="list" class="flex flex-col gap-2 px-3">
-                <li v-for="a in blocco.agenti.filter((x) => inPagina.has(x))" :key="a.sessionId">
-                    <button
-                        type="button"
-                        class="talos-codice-r4-agente"
-                        :data-sessione-figlia="a.sessionId"
-                        :data-stato="statoDelegaR4(a)"
-                        :aria-label="etichettaApri(a)"
-                        @click="a.sessionId && emit('apri', a.sessionId)"
-                    >
-                        <span class="talos-codice-r4-agente-testa">
-                            <Bot class="talos-codice-r4-processo-famiglia" aria-hidden="true" />
-                            <b class="min-w-0 flex-1">{{ nome(a) }}</b>
-                            <span class="talos-codice-r4-agente-stato" :data-tono="tono(a)">{{ etichettaDelegaR4(a, locale) }}</span>
-                            <ChevronRight class="size-4 flex-none text-[var(--talos-muted)]" aria-hidden="true" />
-                        </span>
-                        <span v-if="descrizione(a)" class="talos-codice-r4-agente-compito">{{ descrizione(a) }}</span>
-                        <span v-if="meta(a).length" class="talos-codice-r4-processo-meta"><span v-for="m in meta(a)" :key="m">{{ m }}</span></span>
-                        <span v-if="fatto(a)" class="talos-codice-r4-kv"><span>{{ tr('processi.agents.rowDone') }}</span><span class="font-mono">{{ fatto(a) }}</span></span>
-                        <span v-if="collisione(a)" class="talos-codice-r4-processo-fermo">{{ collisione(a) }}</span>
-                    </button>
+                <li v-for="a in blocco.agenti.filter((x) => inPagina.has(x))" :key="a.sessionId" class="talos-codice-r4-agente">
+                    <div class="flex items-start gap-1">
+                        <button
+                            type="button"
+                            class="talos-pressable flex min-w-0 flex-1 flex-col gap-1.5 text-left"
+                            :data-sessione-figlia="a.sessionId"
+                            :data-stato="statoDelegaR4(a)"
+                            :aria-label="etichettaApri(a)"
+                            @click="a.sessionId && emit('apri', a.sessionId)"
+                        >
+                            <span class="talos-codice-r4-agente-testa">
+                                <Bot class="talos-codice-r4-processo-famiglia" aria-hidden="true" />
+                                <b class="min-w-0 flex-1">{{ nome(a) }}</b>
+                                <span class="talos-codice-r4-agente-stato" :data-tono="tono(a)">{{ etichettaDelegaR4(a, locale) }}</span>
+                                <ChevronRight class="size-4 flex-none text-[var(--talos-muted)]" aria-hidden="true" />
+                            </span>
+                            <span v-if="descrizione(a)" class="talos-codice-r4-agente-compito">{{ descrizione(a) }}</span>
+                            <span v-if="meta(a).length" class="talos-codice-r4-processo-meta"><span v-for="m in meta(a)" :key="m">{{ m }}</span></span>
+                            <span v-if="fatto(a)" class="talos-codice-r4-kv"><span>{{ tr('processi.agents.rowDone') }}</span><span class="font-mono">{{ fatto(a) }}</span></span>
+                            <span v-if="collisione(a)" class="talos-codice-r4-processo-fermo">{{ collisione(a) }}</span>
+                        </button>
+                        <TalosRowActions
+                            v-if="vociMenu(a).length"
+                            :test-id="`talos-codice-r4-agente-azioni-${a.sessionId}`"
+                            :label="etichettaAzioni(a)"
+                            :items="vociMenu(a)"
+                            @select="(voce: string) => scegli(a, voce)"
+                        />
+                        <!-- un agente senza azioni non ha i tre puntini (una voce spenta fa chiedere perché, `TalosRowActions.vue` in testa);
+                             il posto resta, così i nomi stanno in colonna -->
+                        <span v-else-if="ferma" class="size-12 shrink-0" aria-hidden="true" />
+                    </div>
+                    <TalosCodiceR4FermaAgente :stato="statoDi(a)" :nome="nomeDellAgenteR4(a)" @annulla="righe.set(a.sessionId!, annullaConfermaR4(statoDi(a)))" @conferma="void conferma(a)" />
                 </li>
             </ul>
         </template>

@@ -233,12 +233,13 @@ describe('TalosMobileComposer stop control (F2-T4)', () => {
      * Owner 2026-09-13: a riposo il comando dipende dal testo — microfono
      * finche' il campo e' vuoto, invio appena c'e' qualcosa da mandare.
      */
-    it('a riposo mostra il microfono a campo vuoto, e l invio appena c e del testo', async () => {
+    // owner 27/10/2026 (mockup approvato): microfono e invio sono due comandi; l'invio è spento a campo vuoto
+    it('a riposo il microfono e l invio spento a campo vuoto; l invio si accende appena c e del testo', async () => {
         const wrapper = mountComposer(false)
         expect(wrapper.find('button[aria-label="Dictate"]').exists()).toBe(true)
-        expect(wrapper.find('button[aria-label="Send message"]').exists()).toBe(false)
+        expect(wrapper.get('button[aria-label="Send message"]').attributes('disabled')).toBeDefined()
         await wrapper.setProps({ prompt: 'una domanda' })
-        expect(wrapper.find('button[aria-label="Send message"]').exists()).toBe(true)
+        expect(wrapper.get('button[aria-label="Send message"]').attributes('disabled')).toBeUndefined()
         expect(wrapper.find('button[aria-label="Stop response"]').exists()).toBe(false)
     })
 })

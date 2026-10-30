@@ -27,19 +27,23 @@ function mountComposer(profile: TalosMobileModelProfileView) {
     })
 }
 
-// J3 (owner 24/10/2026): il comando del livello è la pillola del ragionamento nel compositore, non più il cursore del foglio
+// owner 27/10/2026 (mockup approvato): il comando del livello è il cursore nel piede del foglio «Modello e ragionamento»; il chip lo dice
 describe('TalosMobileComposer effort visibility (F3-T1)', () => {
     it('shows the effort control when the model has real effort levels', async () => {
         const wrapper = mountComposer(profileWith(['low', 'medium', 'high']))
-        expect(wrapper.find('[data-testid="talos-composer-reasoning-pill"]').exists()).toBe(true)
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await wrapper.get('[data-testid="talos-composer-prompt"]').trigger('focus')
+        expect(wrapper.find('[data-testid="talos-composer-model-level"]').exists()).toBe(true)
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await vi.dynamicImportSettled()
-        expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(false)
+        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(true))
     })
 
     it('hides the effort control entirely when the model only has off', async () => {
         const wrapper = mountComposer(profileWith(['off']))
-        expect(wrapper.find('[data-testid="talos-composer-reasoning-pill"]').exists()).toBe(false)
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await wrapper.get('[data-testid="talos-composer-prompt"]').trigger('focus')
+        expect(wrapper.find('[data-testid="talos-composer-model-level"]').exists()).toBe(false)
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await vi.dynamicImportSettled()
         expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(false)
@@ -55,6 +59,8 @@ describe('TalosMobileComposer effort visibility (F3-T1)', () => {
                 sendDisabledReason: '',
             },
         })
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await wrapper.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await vi.dynamicImportSettled()
         expect(wrapper.find('[data-testid="talos-mobile-effort-slider"]').exists()).toBe(false)

@@ -26,6 +26,7 @@ import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLib
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
 import TalosMobileLibraryFileTile from '@/components/talos/library/TalosMobileLibraryFileTile.vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
+import TalosAttesaCarta from '@/components/chat/TalosAttesaCarta.vue'
 import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
 import { talosLibraryFilePresentation } from '@/lib/libraryFilePresentation'
 import TalosMobileImageViewer from '@/components/talos/library/TalosMobileImageViewer.vue'
@@ -101,6 +102,7 @@ const query = ref('')
 const typeFilterOptions = computed(() => typeTabs.value.map((tab) => ({
     value: tab.value,
     label: tab.label,
+    count: tab.count,
     testId: `talos-library-type-${tab.value}`,
 })))
 
@@ -114,11 +116,15 @@ const typeFilterOptions = computed(() => typeTabs.value.map((tab) => ({
  * come una grammatica sola.
  *
  * ⛔ `relative` c'è perché il filo è in posizione assoluta dentro il bottone;
- * `min-h-12 min-w-12` perché 48 px è il bersaglio Android, e il vestito non è
+ * `min-h-touch` perché 48 px è il bersaglio Android, e il vestito non è
  * una ragione per rimpicciolire un bersaglio.
+ *
+ * ⛔ UI-111 «Liste coerenti» (mockup v2.1 approvato dall'owner il 29/10 sera): la
+ * scheda delle Chat (`ChatsScreen.vue:905-912`), carattere per carattere — `text-xs`
+ * e il numero accanto all'etichetta, come nel Codice e nelle Chat.
  */
 function typeFilterOptionClass(selected: boolean): string {
-    const base = 'talos-pressable relative inline-flex min-h-12 min-w-12 shrink-0 items-center justify-center gap-[var(--talos-space-inline)] whitespace-nowrap rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-sm'
+    const base = 'talos-pressable talos-wave-host relative inline-flex min-h-touch shrink-0 items-center gap-[var(--talos-space-inline)] whitespace-nowrap rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-xs'
     return selected
         ? `${base} text-[var(--talos-text)]`
         : `${base} text-[var(--talos-muted)]`
@@ -129,15 +135,22 @@ function chooseTypeFilter(value: string): void {
     if (found) typeFilter.value = found.value
 }
 
-const typeTabs = computed<Array<{ value: typeof typeFilter.value; label: string }>>(() => [
+/** UI-111: quanti elementi ha ogni scheda. Contano i file, non la ricerca (come le Chat, dove le schede contano il foglio). */
+function quantiNellaScheda(tab: typeof typeFilter.value): number {
+    if (tab === 'all') return logicalLibraryItemCount.value
+    if (tab === 'links') return allLinkRows.value.length
+    return attachments.vaultFiles.filter((file) => matchesTalosLibrarySurfaceTab(file, tab)).length
+}
+
+const typeTabs = computed<Array<{ value: typeof typeFilter.value; label: string; count: number }>>(() => [
     // Owner 14/09/2026: Tutto · File · Immagini · Link, in quest'ordine.
-    { value: 'all', label: t('library.tabAll') },
-    { value: 'files', label: t('library.files') },
-    { value: 'images', label: t('library.images') },
+    { value: 'all', label: t('library.tabAll'), count: quantiNellaScheda('all') },
+    { value: 'files', label: t('library.files'), count: quantiNellaScheda('files') },
+    { value: 'images', label: t('library.images'), count: quantiNellaScheda('images') },
     // Owner 2026-07-27: the pages a search read are kept as markdown, which is
     // right for an answer that must still be auditable in six months — but it
     // meant the ADDRESS was prose. Here they are links again.
-    { value: 'links', label: t('library.links') },
+    { value: 'links', label: t('library.links'), count: quantiNellaScheda('links') },
 ])
 
 function isImage(file: TalosLocalVaultFile): boolean {
@@ -372,7 +385,9 @@ async function renderArtifactFile(file: TalosLocalVaultFile): Promise<void> {
         const { TalosArtifactBridge } = await import('@/lib/device/artifactPlugin')
         const titolo = file.display_name.replace(/\.html?$/i, '')
         const { id } = await TalosArtifactBridge.create({ title: titolo, html })
-        const { opened } = await TalosArtifactBridge.open({ id })
+        // UI-108: la testata nativa porta il titolo
+        const { talosApriArtefatto } = await import('@/lib/device/apriArtefatto')
+        const opened = await talosApriArtefatto(id, titolo)
         if (!opened) openError.value = t('library.viewAsPageFailed', { name: file.display_name })
     } catch {
         openError.value = t('library.viewAsPageFailed', { name: file.display_name })
@@ -1172,7 +1187,7 @@ useTalosSheetTitle(() => t('library.title'))
                     type="search"
                     inputmode="search"
                     data-testid="talos-library-search"
-                    :placeholder="isTablet ? t('library.searchLibrary') : t('common.search')"
+                    :placeholder="t('library.searchLibrary')"
                     :aria-label="t('library.searchLibrary')"
                     class="min-h-12 w-full rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] bg-[var(--talos-panel)] pl-9 pr-3 text-sm text-[var(--talos-text)] outline-none placeholder:text-[var(--talos-muted)] focus:border-[var(--talos-accent)]"
                 >
@@ -1311,6 +1326,8 @@ useTalosSheetTitle(() => t('library.title'))
             >
                 <template #option="{ option, selected }">
                     <span>{{ option.label }}</span>
+                    <!-- UI-111: il numero della scheda, come nelle Chat (`ChatsScreen.vue:914`) -->
+                    <small class="text-2xs tabular-nums">{{ (option as { count?: number }).count }}</small>
                     <span
                         v-if="selected"
                         data-talos-indicator
@@ -1330,7 +1347,8 @@ useTalosSheetTitle(() => t('library.title'))
             data-testid="talos-library-count"
             class="flex min-h-12 items-center text-xs text-[var(--talos-muted)]"
         >
-            {{ t('library.acrossEveryChat', { count: logicalLibraryItemCount }) }}
+            <!-- UI-111 (owner 29/10 sera, «69 file»): il conteggio come le altre sezioni a elenco -->
+            {{ t('library.countFiles', { count: logicalLibraryItemCount }) }}
         </p>
 
         <div v-if="attachments.vaultError.value" role="alert" class="mb-3 flex items-center gap-2 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
@@ -1345,9 +1363,12 @@ useTalosSheetTitle(() => t('library.title'))
             which is exactly why `All` never got the grouping or the grid while
             the `Links` chip did. Links are entries in the one section loop now.
         -->
-        <div v-if="attachments.vaultLoading.value && attachments.vaultFiles.length === 0" role="status" class="flex items-center gap-2 py-8 text-sm text-[var(--talos-muted)]">
-            <LoaderCircle class="size-4 motion-safe:animate-spin" aria-hidden="true" /> {{ t('library.loadingLibrary') }}
-        </div>
+        <!-- owner 29/10 sera (mockup «Caricamenti vivi» v6, «Quella della Chat ovunque»): la Libreria che aspetta vuota ha la carta della Chat -->
+        <TalosAttesaCarta
+            v-if="attachments.vaultLoading.value && attachments.vaultFiles.length === 0"
+            testid="talos-library-loading"
+            :testo="t('library.loadingLibrary')"
+        />
 
         <!--
             ⛔ DUE ASSENZE DIVERSE, DUE FRASI DIVERSE — e solo la seconda si può
@@ -1781,7 +1802,7 @@ useTalosSheetTitle(() => t('library.title'))
         <template #footer>
             <Button type="button" variant="outline" :disabled="actionBusy" class="min-h-12" @click="bulkDeleteOpen = false">{{ t('common.cancel') }}</Button>
             <Button type="button" data-testid="talos-library-bulk-delete-confirm" :disabled="actionBusy" class="min-h-12 border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] text-[var(--talos-danger)]" @click="confirmBulkDelete">
-                <LoaderCircle v-if="actionBusy" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+                <LoaderCircle v-if="actionBusy" class="size-4 animate-spin" aria-hidden="true" />
                 {{ actionBusy ? t('chat.deleting') : t('common.delete') }}
             </Button>
         </template>

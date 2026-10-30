@@ -27,7 +27,7 @@
  * è andata (il rifiuto si dice qui, sul campo), quindi arriva come funzione che restituisce l'esito dello store.
  */
 import { computed, nextTick, ref, watch } from 'vue'
-import { ChevronDown, CornerDownLeft, Pencil, Play, RotateCcw, ShipWheel, Trash2 } from '@lucide/vue'
+import { ChevronDown, CornerDownLeft, Pencil, Play, SkipForward, CornerDownRight, Trash2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosI18n } from '@/i18n'
@@ -55,6 +55,8 @@ const props = defineProps<{
      * Hermes `beginQueuedEdit`). Di serie la modifica in linea della chat.
      */
     modifica?: 'in-linea' | 'riporta'
+    /** UI-113 (owner 29/10): nel Codice su r4, a chat ferma i risultati degli agenti fermati partono col prossimo messaggio. */
+    partonoColProssimo?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -90,7 +92,7 @@ const spiegazioni = computed(() => {
     if (props.altraChatInCorso) righe.push(t('chat.queueHintOtherChat'))
     else if (props.azione === 'indirizza') righe.push(t('chat.queueHintSteer'))
     else if (props.azione === 'ferma-e-riparti') righe.push(t('chat.queueHintStopRestart'))
-    else if (!props.inPausa) righe.push(t('chat.queueHintIdle'))
+    else if (!props.inPausa) righe.push(t(props.partonoColProssimo ? 'chat.queueHintNextMessage' : 'chat.queueHintIdle'))
     return righe
 })
 
@@ -101,8 +103,8 @@ const spiegazioni = computed(() => {
 const mostraPrincipale = computed(() => !props.altraChatInCorso)
 /** L'icona dell'azione principale sul telefono: «Invia ora» ↵ come Hermes (`queue-panel.tsx`), il timone per indirizzare. */
 const iconaPrincipale = computed(() => {
-    if (props.azione === 'indirizza') return ShipWheel
-    if (props.azione === 'ferma-e-riparti') return RotateCcw
+    if (props.azione === 'indirizza') return CornerDownRight
+    if (props.azione === 'ferma-e-riparti') return SkipForward
     return CornerDownLeft
 })
 const etichettaPrincipale = computed(() => {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { AlertTriangle, Download, Pause, Play, Trash2, X } from '@lucide/vue'
+import { AlertTriangle, Download, Pause, Play, CircleX, X } from '@lucide/vue'
 import {
     PopoverContent,
     PopoverPortal,
@@ -120,7 +120,7 @@ async function cancel(id: string): Promise<void> {
                 <Download class="size-[var(--talos-icon-size)]" aria-hidden="true" />
                 <span
                     class="absolute right-0 top-0 grid min-h-[var(--talos-space-section)] min-w-[var(--talos-space-section)] place-items-center rounded-full bg-[var(--talos-accent)] px-[calc(var(--talos-space-inline)/2)] font-mono text-3xs font-semibold text-[var(--talos-accent-contrast)]"
-                    :class="talosModelTransfers.active ? 'motion-safe:animate-pulse' : ''"
+                    :class="talosModelTransfers.active ? 'animate-pulse' : ''"
                     aria-hidden="true"
                 >{{ items.length }}</span>
             </button>
@@ -204,7 +204,7 @@ async function cancel(id: string): Promise<void> {
                                     class="talos-pressable grid min-h-touch min-w-touch place-items-center rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] text-[var(--talos-danger)] disabled:opacity-50"
                                     @click="confirmingCancelId = item.id"
                                 >
-                                    <Trash2 class="size-[var(--talos-icon-size)]" aria-hidden="true" />
+                                    <CircleX class="size-[var(--talos-icon-size)]" aria-hidden="true" />
                                 </button>
                             </div>
                         </div>

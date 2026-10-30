@@ -96,7 +96,10 @@ describe('RV-UI — il posto nella schermata del Codice', () => {
         expect(annuncio).toBeGreaterThan(0)
         expect(dock.slice(annuncio - 80, annuncio)).toContain('role="status"')
         expect(dock.slice(annuncio - 200, annuncio)).not.toContain('v-if')
-        expect(schermata).toMatch(/@ferma="void conversazione\?\.ferma\(\)"/)
+        // «Ferma tutto» (owner 29/10/2026, scheda voce 3): il «Ferma» della riga viva passa da `decidiStopR4` come lo Stop del compositore
+        // (`suStop`); senza agenti vivi resta lo Stop di oggi (`conversazione.ferma()`, corpo `{}`, FT-SCR-03)
+        expect(schermata).toMatch(/<TalosCodiceR4RigaViva[\s\S]*?@ferma="suStop"/)
+        expect(schermata).toMatch(/if \(d\.tipo === 'immediato'\) void fermaConLaScelta\(null\)/)
     })
 })
 

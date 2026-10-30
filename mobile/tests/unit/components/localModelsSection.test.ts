@@ -329,6 +329,34 @@ async function searchScreen() {
     return wrapper
 }
 
+/*
+ * Owner 29/10 sera, mockup «Caricamenti vivi» v6 («Quella della Chat ovunque»): la ricerca sull'Hub aspetta con la carta della Chat
+ * (classe A); la misura del dispositivo sta nella sua carta e ha la rotella piccola arancione accanto al testo (classe B, Desktop).
+ */
+describe('MODELLI-ATTESA-01 le attese dei Modelli', () => {
+    it('MODELLI-ATTESA-01 la ricerca che gira mostra la carta della Chat con «Searching…»', async () => {
+        const wrapper = await searchScreen()
+        expect(wrapper.find('[data-testid="talos-models-searching"]').exists()).toBe(false)
+        ;(store.state as { searching: boolean }).searching = true
+        await flushPromises()
+        const carta = wrapper.get('[data-testid="talos-models-searching"]')
+        expect(carta.get('[data-talos-attesa-carta]').exists()).toBe(true)
+        expect(carta.get('[role="status"]').attributes('aria-label')).toBe('Searching…')
+    })
+
+    it('MODELLI-ATTESA-01 la misura del dispositivo: la rotella piccola arancione accanto al testo, niente anello a bordo', async () => {
+        store.state = baseState({
+            catalogue: { state: 'measuring', ageDays: null, fromCache: false, refusal: null, recommended: [], rejected: [] },
+        }) as never
+        const wrapper = await screen()
+        const carta = wrapper.get('[data-testid="talos-models-measuring"]')
+        const rotella = carta.get('b svg')
+        expect(rotella.classes()).toEqual(expect.arrayContaining(['size-[var(--talos-icon-size)]', 'animate-spin', 'text-[var(--talos-accent)]']))
+        expect(carta.findAll('.animate-spin')).toHaveLength(1)
+        expect(carta.find('.rounded-full').exists()).toBe(false)
+    })
+})
+
 /**
  * Owner 2026-08-03, on this panel: «compattare ed economizzare gli spazi, per
  * renderlo più navigabile». Not a coat of paint — a row that costs five lines

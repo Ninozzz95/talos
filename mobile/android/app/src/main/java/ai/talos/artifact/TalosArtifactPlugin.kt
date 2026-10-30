@@ -64,6 +64,16 @@ class TalosArtifactPlugin : Plugin() {
         }
         val intent = Intent(context, TalosArtifactActivity::class.java)
         intent.putExtra(TalosArtifactActivity.EXTRA_ARTIFACT_ID, id)
+        // UI-108: titolo e colori del tema attivo per la testata; li valida e li ripulisce `TalosArtifactChrome`, qui si copiano soltanto
+        call.getString("title")?.let { intent.putExtra(TalosArtifactActivity.EXTRA_TITLE, it) }
+        call.getObject("chrome")?.let { c ->
+            c.getString("scheme")?.let { intent.putExtra(TalosArtifactActivity.EXTRA_SCHEME, it) }
+            c.getString("header")?.let { intent.putExtra(TalosArtifactActivity.EXTRA_COLOR_HEADER, it) }
+            c.getString("background")?.let { intent.putExtra(TalosArtifactActivity.EXTRA_COLOR_BACKGROUND, it) }
+            c.getString("text")?.let { intent.putExtra(TalosArtifactActivity.EXTRA_COLOR_TEXT, it) }
+            c.getString("border")?.let { intent.putExtra(TalosArtifactActivity.EXTRA_COLOR_BORDER, it) }
+            c.getString("ring")?.let { intent.putExtra(TalosArtifactActivity.EXTRA_COLOR_RING, it) }
+        }
         activity.startActivity(intent)
         val payload = JSObject()
         payload.put("opened", true)

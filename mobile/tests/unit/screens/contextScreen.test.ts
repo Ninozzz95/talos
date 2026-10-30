@@ -95,6 +95,85 @@ beforeEach(() => {
 })
 afterEach(() => { document.body.innerHTML = '' })
 
+/*
+ * ⛔ UI-111 «Liste coerenti» (mockup v2.1 approvato dall'owner il 29/10 sera, voce 6): la Libreria nella grammatica delle Chat. Le
+ * schede di tipo hanno i numeri e la classe delle schede delle Chat; il conteggio dice «N file» come le altre sezioni («2 chat»);
+ * la ricerca dice cosa cerca anche sul telefono.
+ */
+describe('LIBRERIA-LISTE la Libreria come le Chat', () => {
+    const SCHEDA_DELLE_CHAT = 'talos-pressable talos-wave-host relative inline-flex min-h-touch shrink-0 items-center gap-[var(--talos-space-inline)] whitespace-nowrap rounded-[var(--talos-radius-control)] px-[var(--talos-space-control)] text-xs'
+
+    it('LIBRERIA-LISTE-01 le schede di tipo portano i loro numeri e la classe delle schede delle Chat', async () => {
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        const testi = ['all', 'files', 'images', 'links'].map((id) => wrapper.get(`[data-testid="talos-library-type-${id}"]`).text())
+        expect(testi).toEqual(['All2', 'Files1', 'Images1', 'Links0'])
+        expect(wrapper.get('[data-testid="talos-library-type-images"] small').classes()).toEqual(['text-2xs', 'tabular-nums'])
+        const tutto = wrapper.get('[data-testid="talos-library-type-all"]')
+        expect([...tutto.classes()].sort()).toEqual([...SCHEDA_DELLE_CHAT.split(' '), 'text-[var(--talos-text)]'].sort())
+        expect([...wrapper.get('[data-testid="talos-library-type-files"]').classes()].sort()).toEqual([...SCHEDA_DELLE_CHAT.split(' '), 'text-[var(--talos-muted)]'].sort())
+        // i numeri contano i file, non la ricerca (come le Chat: le schede contano il foglio)
+        await wrapper.get('[data-testid="talos-library-search"]').setValue('architecture')
+        expect(wrapper.get('[data-testid="talos-library-type-all"]').text()).toBe('All2')
+    })
+
+    it('LIBRERIA-LISTE-02 il conteggio dice «N file» e la ricerca «Cerca nella Libreria» anche sul telefono', async () => {
+        __resetTalosTabletLayoutForTests()
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(wrapper.get('[data-testid="talos-library-count"]').text()).toBe('2 files')
+        expect(wrapper.get('[data-testid="talos-library-search"]').attributes('placeholder')).toBe('Search the Library')
+        mockState.controller = makeController()
+        ;(mockState.controller as ReturnType<typeof makeController>).attachments.vaultFiles.splice(1)
+        const uno = mount(ContextScreen)
+        await flushPromises()
+        expect(uno.get('[data-testid="talos-library-count"]').text()).toBe('1 file')
+    })
+
+    // revisione del Desktop (M11): la scheda «Link» conta i link veri (le righe logiche), non solo zero
+    it('REV-11 la scheda «Link» porta il numero dei link salvati', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.push({
+            ...file('vault-source'),
+            display_name: 'Ricerca energia.md',
+            media_type: 'text/markdown',
+            metadata: {
+                origin: 'generated',
+                kind: 'web_source',
+                source_links: [
+                    { url: 'https://www.reuters.com/energy', title: 'Energy report' },
+                    { url: 'https://example.org/markets', title: 'Markets report' },
+                ],
+            },
+        } as ReturnType<typeof file>)
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        expect(wrapper.get('[data-testid="talos-library-type-links"]').text()).toBe('Links2')
+        expect(wrapper.get('[data-testid="talos-library-type-all"]').text()).toBe('All4')
+    })
+})
+
+// Owner 29/10 sera, mockup «Caricamenti vivi» v6 («Quella della Chat ovunque»): la Libreria che aspetta vuota ha la carta della Chat
+describe('LIBRERIA-ATTESA-01 la Libreria che si legge', () => {
+    it('LIBRERIA-ATTESA-01 vuota e in lettura: la carta della Chat con «Loading Library»; con dei file a schermo, niente velo', async () => {
+        const controller = makeController()
+        controller.attachments.vaultFiles.splice(0)
+        controller.attachments.vaultLoading.value = true
+        mockState.controller = controller
+        const wrapper = mount(ContextScreen)
+        await flushPromises()
+        const carta = wrapper.find('[data-testid="talos-library-loading"]')
+        expect(carta.exists()).toBe(true)
+        expect(carta.get('[data-talos-attesa-carta]').exists()).toBe(true)
+        expect(carta.get('[role="status"]').attributes('aria-label')).toBe('Loading Library')
+
+        controller.attachments.vaultFiles.push(file('vault-ready'))
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-library-loading"]').exists()).toBe(false)
+    })
+})
+
 describe('ContextScreen Library gallery', () => {
     function manyFiles(total = 80) {
         const controller = makeController()
@@ -281,8 +360,8 @@ describe('ContextScreen Library gallery', () => {
             expect(wrapper.get(`[data-testid="${id}"]`).classes()).toContain('min-h-12')
         }
         expect(wrapper.get('[data-testid="talos-library-options"]').classes()).toContain('min-w-12')
-        expect(wrapper.get('[data-testid="talos-library-type-all"]').classes())
-            .toEqual(expect.arrayContaining(['min-h-12', 'min-w-12']))
+        // UI-111: la scheda ha la classe delle Chat, `min-h-touch` (48 px, `--talos-touch-target`), come le altre sezioni a elenco
+        expect(wrapper.get('[data-testid="talos-library-type-all"]').classes()).toContain('min-h-touch')
 
         await wrapper.get('[data-testid="talos-library-view-grid"]').trigger('click')
         expect(wrapper.get('[data-testid="talos-library-actions-vault-ready"]').classes()).toContain('size-12')
@@ -712,7 +791,8 @@ describe('ContextScreen Library gallery', () => {
 
         // Two ordinary files plus two logical links. The one backing dossier is
         // storage, not a fifth user-facing item.
-        expect(wrapper.text()).toContain('4 across every chat')
+        // UI-111: il conteggio dice «N file» come le altre sezioni a elenco
+        expect(wrapper.text()).toContain('4 files')
         expect(wrapper.find('[data-vault-file-id="vault-ready"]').exists()).toBe(true)
         expect(wrapper.find('[data-vault-file-id="vault-image"]').exists()).toBe(true)
         expect(wrapper.find('[data-vault-file-id="vault-source"]').exists()).toBe(false)
@@ -722,7 +802,8 @@ describe('ContextScreen Library gallery', () => {
         expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(1)
         expect(wrapper.find('[data-vault-file-id="vault-image"]').exists()).toBe(true)
         expect(wrapper.findAll('[data-talos-saved-link-row]')).toHaveLength(0)
-        expect(wrapper.text()).toContain('4 across every chat')
+        // UI-111: il conteggio dice «N file» come le altre sezioni a elenco
+        expect(wrapper.text()).toContain('4 files')
 
         await wrapper.get('[data-testid="talos-library-type-files"]').trigger('click')
         expect(wrapper.findAll('[data-vault-file-id]')).toHaveLength(1)
@@ -896,7 +977,8 @@ describe('ContextScreen Library gallery', () => {
         await flushPromises()
 
         expect(artifactBridge.create).toHaveBeenCalledWith({ title: 'Orologio', html: '<h1>Ciao</h1>' })
-        expect(artifactBridge.open).toHaveBeenCalledWith({ id: 'artifact-1' })
+        // UI-108: la testata nativa porta anche il titolo (e i colori del tema, quando si leggono); un import a richiesta in più
+        await vi.waitFor(() => expect(artifactBridge.open).toHaveBeenCalledWith(expect.objectContaining({ id: 'artifact-1', title: 'Orologio' })))
         // The code view is still there underneath, untouched.
         const viewer = document.body.querySelector('[data-testid="talos-library-doc"]')
         expect(viewer!.textContent).toContain('Ciao')

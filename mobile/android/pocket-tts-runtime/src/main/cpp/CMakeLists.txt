@@ -75,3 +75,11 @@ target_include_directories(
 )
 target_link_libraries(talos_pocket_sentencepiece PRIVATE sentencepiece-static samplerate log)
 target_compile_options(talos_pocket_sentencepiece PRIVATE -Wall -Wextra -Werror)
+# REL-083: pubbliche solo le funzioni JNI; la libc++ statica e sentencepiece restano locali (vedi talos_pocket_jni.map.txt)
+target_link_options(
+    talos_pocket_sentencepiece
+    PRIVATE
+    -Wl,--version-script,${CMAKE_CURRENT_LIST_DIR}/talos_pocket_jni.map.txt
+    -Wl,--no-undefined-version
+)
+set_property(TARGET talos_pocket_sentencepiece APPEND PROPERTY LINK_DEPENDS ${CMAKE_CURRENT_LIST_DIR}/talos_pocket_jni.map.txt)

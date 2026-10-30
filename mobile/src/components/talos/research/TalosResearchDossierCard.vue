@@ -156,7 +156,7 @@ function openSource(index: number): void {
                         <Check v-if="props.selected" class="size-3.5" />
                     </span>
                     <template v-else>
-                        <Loader2 class="size-3.5 shrink-0 animate-spin" aria-hidden="true" />
+                        <Loader2 class="size-3.5 shrink-0 animate-spin text-[var(--talos-accent)]" aria-hidden="true" />
                         <span class="truncate">{{ t('research.runningNotSelectable') }}</span>
                     </template>
                 </template>
@@ -319,7 +319,7 @@ function openSource(index: number): void {
                 <span aria-hidden="true">·</span>
                 <span>{{ props.dateLabel }}</span>
                 <span v-if="props.busy" class="inline-flex items-center gap-1 text-[var(--talos-accent)]">
-                    <Loader2 class="size-3 animate-spin" aria-hidden="true" />
+                    <Loader2 class="size-3 animate-spin text-[var(--talos-accent)]" aria-hidden="true" />
                     {{ t('research.working') }}
                 </span>
             </span>

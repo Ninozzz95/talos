@@ -260,7 +260,7 @@ export function talosNativeSpeechSynth(): TalosSpeechSynth | null {
     const plugin = registerPlugin<{
         speak(options: { text: string, rate?: number, pitch?: number, queue?: 'flush' | 'add' }): Promise<{ spoken: boolean, reason?: string }>
         stop(): Promise<unknown>
-        voices(): Promise<{ available: boolean, voices?: TalosVoceDispositivo[], current?: string | null }>
+        voices(): Promise<{ available: boolean, voices?: TalosVoceDispositivo[], current?: string | null, engine?: string | null }>
         setVoice(options: { name: string }): Promise<{ done: boolean, reason?: string }>
         addListener(evento: string, cb: () => void): Promise<unknown>
     }>('TalosSpeech')

@@ -6,7 +6,7 @@
  * scrive SOLO r4 (`ApprovalResolved`): un clic blocca i pulsanti, non chiude la carta da sé.
  */
 import { computed, inject, onMounted, ref } from 'vue'
-import { ShieldAlert } from '@lucide/vue'
+import { ShieldQuestionMark } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { useTalosI18n } from '@/i18n'
 import type { VoceApprovazioneR4 } from '@/lib/harness/r4/approvazioneChiave'
@@ -80,7 +80,7 @@ onMounted(() => { if (nataInAttesa && ponte && !props.voce.figlia) void ponte.le
     >
         <TalosCodiceR4ChiChiede v-if="voce.figlia" :figlia="voce.figlia" />
         <p class="flex min-w-0 items-center gap-1.5 text-2xs leading-4" :class="voce.esito ? 'text-[var(--talos-muted)]' : 'text-[var(--talos-warning)]'">
-            <ShieldAlert class="size-3.5 shrink-0" aria-hidden="true" />
+            <ShieldQuestionMark class="size-3.5 shrink-0" aria-hidden="true" />
             <span class="shrink-0">{{ carta.badge }}</span>
             <span v-if="carta.bersaglio" data-parte="bersaglio" class="min-w-0 truncate font-mono text-[var(--talos-text)]">{{ carta.bersaglio }}</span>
         </p>

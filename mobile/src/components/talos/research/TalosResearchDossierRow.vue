@@ -108,7 +108,7 @@ function onContextMenu(event: Event): void {
             </span>
             <Loader2
                 v-else-if="props.selectionMode"
-                class="size-4 animate-spin text-[var(--talos-muted)]"
+                class="size-4 animate-spin text-[var(--talos-accent)]"
                 :aria-label="t('research.runningNotSelectable')"
             />
             <Search v-else class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />

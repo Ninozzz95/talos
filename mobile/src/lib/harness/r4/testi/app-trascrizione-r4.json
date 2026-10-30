@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
-    "sha256": "19b9eb9d26356513c31bf08c83b6fff039cd0db16e2d8d6337613df34dca046d",
+    "sha256": "3520e3b597a275ab341a6976bf50c5f7492fbc8e78c53c64a192462a80ecd124",
     "prefisso": [
       "transcript.",
       "sessions.export",
@@ -51,6 +51,7 @@
     "transcript.error": "> ⛔ **ERRORE{codice}:** {messaggio}",
     "transcript.unknownEvent": "_Evento non riconosciuto `{tipo}`:_",
     "transcript.servedVia": "_Servita da {fornitore} su OpenRouter._",
+    "transcript.internalOmitted": "_Eventi interni non mostrati qui (consumo di token, misure del contesto, uscita dei comandi): {n}. L’esportazione JSON li contiene tutti._",
     "sessions.exportCountOne": "{n} sessione in un file Markdown.",
     "sessions.exportCountMany": "{n} sessioni in un file Markdown.",
     "sessions.exported": "Sessione esportata",
@@ -107,6 +108,7 @@
     "transcript.error": "> ⛔ **ERROR{codice}:** {messaggio}",
     "transcript.unknownEvent": "_Unrecognized event `{tipo}`:_",
     "transcript.servedVia": "_Served by {fornitore} on OpenRouter._",
+    "transcript.internalOmitted": "_Internal events not shown here (token usage, context measurements, command output): {n}. The JSON export contains all of them._",
     "sessions.exportCountOne": "{n} session in one Markdown file.",
     "sessions.exportCountMany": "{n} sessions in one Markdown file.",
     "sessions.exported": "Session exported",

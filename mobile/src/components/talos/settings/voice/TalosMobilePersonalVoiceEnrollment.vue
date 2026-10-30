@@ -5,6 +5,7 @@ import { useTalosI18n, useTalosLocalization } from '@/i18n'
 import { ArrowLeft, Check, Mic, Pause, Play, RefreshCw, Volume1, Volume2, VolumeX } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMicWaveform from '@/components/brand/TalosMicWaveform.vue'
+import TalosAttesaCarta from '@/components/chat/TalosAttesaCarta.vue'
 import {
     talosBuildVoiceEnrollmentProfile,
     talosCaptureVoiceEnrollmentPhrase,
@@ -506,11 +507,12 @@ const tierLabel = computed(() => {
                 <p v-if="buildError" role="alert" class="mt-3 text-sm text-[var(--talos-danger)]">{{ buildError }}</p>
             </template>
 
+            <!-- owner 29/10 notte («La carta della Chat, senza velo»): la carta della Chat al posto dell'anello a bordo, ma SENZA il velo su
+                 tutto: «Annulla» resta toccabile e la promessa sulla privacy resta sotto (revisione del Desktop: coprirli era un passo indietro) -->
             <template v-else-if="stage === 'process'">
                 <div class="flex flex-1 flex-col items-center justify-center text-center">
-                    <div class="size-10 animate-spin rounded-full border-[3px] border-[var(--talos-border)] border-t-[var(--talos-accent)]" />
-                    <h2 class="mt-6 text-xl font-semibold">{{ t('personalVoice.processTitle') }}</h2>
-                    <p class="mt-2 text-sm text-[var(--talos-muted)]">{{ t('personalVoice.processBody') }}</p>
+                    <TalosAttesaCarta inline testid="talos-personal-voice-processing" :testo="t('personalVoice.processTitle')" />
+                    <p data-testid="talos-personal-voice-process-body" class="mt-4 text-sm text-[var(--talos-muted)]">{{ t('personalVoice.processBody') }}</p>
                 </div>
             </template>
 

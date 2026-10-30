@@ -50,6 +50,19 @@ describe('la sezione «Computer»', () => {
         expect(c.elenco.value).toEqual([{ pcId: 'pc-uno', nome: 'Studio', relay: null, accoppiatoAlle: 1_760_000_000_000 }])
     })
 
+    /*
+     * ⛔ D-0147-NAV-1 (Pad, 27/10/2026, vc303, accoppiato a un PC col QR senza `relay=`): `JSObject.put("relay", null)` di Android TOGLIE
+     * la chiave, quindi la voce arrivava senza `relay` (undefined, non null) e `ponteDi` faceva `undefined.trim()`: la sezione Computer
+     * e il Codice restavano vuoti. Al confine col nativo ogni voce prende la sua forma: `relay` e `nome` sono testo o null, mai assenti.
+     */
+    it('RCM-01b una voce del nativo senza `relay` né `nome` (chiavi tolte da Android) diventa relay null e nome null', async () => {
+        const f = pluginFinto()
+        f.plugin.elenco = vi.fn(async () => ({ computer: [{ pcId: 'pc-due', accoppiatoAlle: 1_760_000_000_000 } as never] }))
+        const c = creaComputerRemoti(f.plugin)
+        await c.aggiorna()
+        expect(c.elenco.value).toEqual([{ pcId: 'pc-due', nome: null, relay: null, accoppiatoAlle: 1_760_000_000_000 }])
+    })
+
     it('RCM-02 accoppia: collego → conferma (col codice e il nome del telefono nel saluto) → fatto, e l\'elenco si rilegge', async () => {
         const f = pluginFinto()
         const c = creaComputerRemoti(f.plugin, { ora: () => 1_900_000_000_000 })
@@ -240,7 +253,7 @@ describe('la sezione «Computer»', () => {
         })
         const esito = await creaComputerRemoti(f.plugin).cartelle('pc-uno')
         // D-MOCK-12: una forma sola; un PC vecchio dà l'allowlist, che vale come consentita (contratto, parte 1, punto 1)
-        expect(esito).toEqual({ ok: true, cartelle: [{ id: 'r4-remoto', nome: 'r4 remoto', dettaglio: null, usataAlle: null, consentita: true }] })
+        expect(esito).toEqual({ ok: true, cartelle: [{ id: 'r4-remoto', nome: 'r4 remoto', dettaglio: null, usataAlle: null, consentita: true, bloccata: false }] })
         expect(f.inviati.some((x) => x.m.op === 'projects.list')).toBe(true)
         expect(f.plugin.chiudi).toHaveBeenCalledWith({ canale: 'c2' })
 
@@ -271,9 +284,9 @@ describe('la sezione «Computer»', () => {
             { cartellaId: 'Qq1_w-7OiJkL2nOpQrStUvWx11223344', nome: 'note', usataAlle: '2026-10-19T09:00:00.000Z', consentita: false },
         ] } }) })
         await expect(creaComputerRemoti(f.plugin).cartelle('pc-uno')).resolves.toEqual({ ok: true, cartelle: [
-            { id: 'Ab3_x-9QkLmN0pQrStUvWxYz12345678', nome: 'talos', dettaglio: 'progetti', usataAlle: '2026-10-24T09:00:00.000Z', consentita: true },
-            { id: 'Zz9_y-8PjKlM1oPqRsTuVwXy87654321', nome: 'talos', dettaglio: 'vecchi', usataAlle: '2026-10-20T09:00:00.000Z', consentita: false },
-            { id: 'Qq1_w-7OiJkL2nOpQrStUvWx11223344', nome: 'note', dettaglio: null, usataAlle: '2026-10-19T09:00:00.000Z', consentita: false },
+            { id: 'Ab3_x-9QkLmN0pQrStUvWxYz12345678', nome: 'talos', dettaglio: 'progetti', usataAlle: '2026-10-24T09:00:00.000Z', consentita: true, bloccata: false },
+            { id: 'Zz9_y-8PjKlM1oPqRsTuVwXy87654321', nome: 'talos', dettaglio: 'vecchi', usataAlle: '2026-10-20T09:00:00.000Z', consentita: false, bloccata: false },
+            { id: 'Qq1_w-7OiJkL2nOpQrStUvWx11223344', nome: 'note', dettaglio: null, usataAlle: '2026-10-19T09:00:00.000Z', consentita: false, bloccata: false },
         ] })
     })
 
@@ -285,7 +298,26 @@ describe('la sezione «Computer»', () => {
             { cartellaId: 'ok-2', nome: '   ' },
         ] } }) })
         await expect(creaComputerRemoti(f.plugin).cartelle('pc-uno')).resolves.toEqual({ ok: true, cartelle: [
-            { id: 'ok-1', nome: 'buona', dettaglio: null, usataAlle: null, consentita: false },
+            { id: 'ok-1', nome: 'buona', dettaglio: null, usataAlle: null, consentita: false, bloccata: false },
+        ] })
+    })
+
+    /*
+     * Cartelle bloccate (owner 27/10/2026, contratto del Desktop rev.1): una cartella tolta a questo dispositivo ma ancora raggiungibile da
+     * un'altra consentita diventa BLOCCATA, e il divieto vince. `projects.list` la manda con `consentita: false, bloccata: true`.
+     */
+    it('CART-BLOC-01 una riga `bloccata: true` arriva bloccata e mai consentita (il divieto vince); un PC più vecchio non blocca niente', async () => {
+        const f = pcCheRisponde({ 'projects.list': () => ({ data: { items: [
+            { cartellaId: 'blocco-1', nome: 'Documenti', dettaglio: 'Utenti', consentita: false, bloccata: true },
+            { cartellaId: 'blocco-2', nome: 'storta', consentita: true, bloccata: true },
+            { cartellaId: 'libera-1', nome: 'Utenti', consentita: true, bloccata: 'sì' },
+            { id: 'vecchia-1', nome: 'allowlist' },
+        ] } }) })
+        await expect(creaComputerRemoti(f.plugin).cartelle('pc-uno')).resolves.toEqual({ ok: true, cartelle: [
+            { id: 'blocco-1', nome: 'Documenti', dettaglio: 'Utenti', usataAlle: null, consentita: false, bloccata: true },
+            { id: 'blocco-2', nome: 'storta', dettaglio: null, usataAlle: null, consentita: false, bloccata: true },
+            { id: 'libera-1', nome: 'Utenti', dettaglio: null, usataAlle: null, consentita: true, bloccata: false },
+            { id: 'vecchia-1', nome: 'allowlist', dettaglio: null, usataAlle: null, consentita: true, bloccata: false },
         ] })
     })
 
@@ -350,5 +382,7 @@ describe('le frasi degli errori del controllo remoto', () => {
         expect(new Set(['PAIR_REJECTED', 'PAIR_EXPIRED', 'CODE_MISMATCH'].map(fraseErroreRemoto)).size).toBe(3)
         expect(fraseErroreRemoto('CANCELLED')).toBeNull()
         expect(fraseErroreRemoto('QUALCOSA')).toBe('computer.errors.generic')
+        // revisione del blocco 10, F-R1: il lucchetto dei consensi del PC (503) non è un guasto del collegamento
+        expect(fraseErroreRemoto('REMOTE_STORE_BUSY')).toBe('computer.errors.busy')
     })
 })

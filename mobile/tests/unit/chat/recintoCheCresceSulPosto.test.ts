@@ -233,9 +233,10 @@ describe('il blocco di codice aperto cresce sul posto (#24, parità con il deskt
         expect(document.body.querySelector('[data-talos-copy-code][disabled]')).toBeNull()
         // il giro dopo parte pulito: un blocco solo, col codice nuovo e non con quello del giro troncato
         giro.testo = 'Altro.\n\n```js\nuno()\n'
-        await vi.waitFor(() => expect(w.find('[data-testid="talos-stream-fence"]').exists()).toBe(true), { timeout: 5000 })
+        // il recinto nasce col codice VUOTO e il rivelatore lo riempie nei fotogrammi dopo: il codice si aspetta, non si legge una
+        // volta sola (rosso nella CI della desktop 0.1.38 il 26/10, run 40284783220: «expected '' to be 'uno()\n'»)
+        await vi.waitFor(() => expect(w.find('[data-testid="talos-stream-fence"] code').element?.textContent).toBe('uno()\n'), { timeout: 5000 })
         expect(w.findAll('[data-testid="talos-stream-fence"]')).toHaveLength(1)
-        expect(w.get('[data-testid="talos-stream-fence"] code').element.textContent).toBe('uno()\n')
         w.unmount()
     }, 20_000)
 })

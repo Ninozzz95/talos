@@ -1289,7 +1289,7 @@ function act(
             <template #footer>
                 <Button type="button" variant="ghost" :disabled="actionBusy" @click="bulkDeleteOpen = false"><X class="size-4" aria-hidden="true" /> {{ t('common.cancel') }}</Button>
                 <Button type="button" variant="destructive" :class="TALOS_DANGER_ACTION_CLASS" data-testid="talos-chats-bulk-delete-confirm" :disabled="actionBusy" @click="confirmBulkDelete">
-                    <LoaderCircle v-if="actionBusy" class="size-4 motion-safe:animate-spin" aria-hidden="true" />
+                    <LoaderCircle v-if="actionBusy" class="size-4 animate-spin" aria-hidden="true" />
                     <Trash2 v-else class="size-4" aria-hidden="true" />
                     {{ actionBusy ? t('chat.deleting') : t('common.delete') }}
                 </Button>

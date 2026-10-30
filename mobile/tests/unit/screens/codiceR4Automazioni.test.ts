@@ -186,6 +186,8 @@ describe('le carte delle automazioni e dei fornitori nel Codice su r4', () => {
 
 describe('la Coordinazione nel foglio «Quanto può fare TALOS qui»', () => {
     const apriFoglio = async (w: W) => {
+        // owner 27/10/2026, forma unica: compatto a riposo, lo scudo del permesso c'è col fuoco (FORMA-01, NUOVO)
+        await w.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         await w.get('[data-testid="talos-codice-r4-permesso"]').trigger('click')
         await asciuga()
         return () => w.get('[data-testid="talos-codice-r4-modo-foglio"] [data-testid="talos-codice-r4-coordinazione"]')

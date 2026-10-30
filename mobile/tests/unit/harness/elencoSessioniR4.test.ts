@@ -128,3 +128,26 @@ describe('ELENCO-R4: lettura, rinomina ed eliminazione sulle rotte di r4', () =>
             .rejects.toThrow('Workflow in corso')
     })
 })
+
+/*
+ * ⛔ «Ferma tutto», «Elenco» (owner 29/10/2026 sera; scheda `mockup/ferma-tutto/pezzi/SCHEDA-DI-CONSEGNA.md`, voce 8; contratto §6): le
+ * deleghe si contano PRIMA di toglierle dalle righe (`figlieAlLavoroR4` su tutto l'elenco, tutto l'albero), così una sessione finita
+ * con agenti vivi sotto lo può dire. Vivo = non concluso e non interrotto: chi aspetta conta, chi è in pausa no.
+ */
+describe('ELENCO-AGENTI: gli agenti al lavoro di ogni sessione principale', () => {
+    it('ELENCO-AGENTI-00 la riga porta quanti agenti vivi ha sotto (anche le nipoti); assente a zero', () => {
+        const righe = righeElencoSessioniR4([
+            voce('a'),
+            voce('a1', { padreId: 'a', profonditaDelega: 1, conclusa: false }),
+            voce('a2', { padreId: 'a', profonditaDelega: 1, conclusa: false, inAttesaApprovazione: true }),
+            voce('a11', { padreId: 'a1', profonditaDelega: 2, conclusa: false }),
+            voce('a3', { padreId: 'a', profonditaDelega: 1, conclusa: true }),
+            voce('a4', { padreId: 'a', profonditaDelega: 1, conclusa: false, interrotta: true }),
+            voce('a5', { padreId: 'a', profonditaDelega: 1, conclusa: true, esitoDelega: 'in-pausa' }),
+            voce('b'),
+            voce('b1', { padreId: 'b', profonditaDelega: 1, conclusa: true }),
+        ])
+        expect(righe.map((r) => [r.id, r.agentiAlLavoro])).toEqual([['a', 3], ['b', undefined]])
+        expect(righe[1]).not.toHaveProperty('agentiAlLavoro')
+    })
+})

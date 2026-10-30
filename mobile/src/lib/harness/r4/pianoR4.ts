@@ -11,10 +11,9 @@
 import chatPiano from './testi/chat-piano-r4.json'
 import appPiano from './testi/app-piano-r4.json'
 import modelloPermessi from './testi/modello-permessi-r4.json'
-import erroriPiano from './testi/errori-piano-r4.json'
-import erroriMotivi from './testi/errori-motivi-r4.json'
 import type { DecisionePianoFattaR4, DecisionePianoR4, PropostaPianoR4 } from './pianoChiave'
 import { leggiEventoPianoR4 } from './pianoEventoR4'
+import { fraseErroreR4 } from './fraseErroreR4'
 
 type Tabella = { it: Record<string, string>; en: Record<string, string> }
 const AREE: Record<string, Tabella[]> = { chat: [chatPiano], app: [appPiano], modello: [modelloPermessi] }
@@ -160,25 +159,7 @@ export function ricevutaPianoR4(proposta: PropostaPianoR4, esito: DecisionePiano
     }
 }
 
-/* ---- l'errore della scelta: `testoErroreServer` (`errori.js:1075-1161`), parte `message` ---- */
-const ERRORI: Tabella[] = [erroriPiano, erroriMotivi]
-const PARTI_DEL_PROBLEMA = new Set(['message', 'title', 'explanation', 'action'])
-const voceErrore = (chiave: string, lingua: string): string | undefined => {
-    for (const t of ERRORI) {
-        const v = propria(italiano(lingua) ? t.it : t.en, chiave) ?? propria(t.en, chiave)
-        if (v !== undefined) return v
-    }
-    return undefined
-}
-/** `chiaviDeiMotivi`: le voci dei motivi del codice (`<CODICE>.<motivo_con_trattini_bassi>`), quella del motivo dato per prima. */
-function chiaviDeiMotivi(codice: string, motivo: string): string[] {
-    const prefisso = `${codice}.`
-    const tutte = [...new Set(ERRORI.flatMap((t) => Object.keys(t.en)))]
-        .filter((k) => k.startsWith(prefisso) && !k.slice(prefisso.length).includes('.') && !PARTI_DEL_PROBLEMA.has(k.slice(prefisso.length)))
-    if (!motivo) return tutte
-    const sua = `${codice}.${motivo.replace(/-/g, '_')}`
-    return [sua, ...tutte.filter((k) => k !== sua)]
-}
+/* ---- l'errore della scelta: `testoErroreServer` del desktop, parte `message`, ora in `fraseErroreR4.ts` (una regola sola) ---- */
 
 /**
  * Il messaggio di un rifiuto del server nella lingua dell'app: la voce del dizionario sostituisce la frase del server SOLO se la sua
@@ -186,19 +167,9 @@ function chiaviDeiMotivi(codice: string, motivo: string): string[] {
  * server. Senza frase del server, la voce del codice.
  */
 export function messaggioErroreServerR4(errore: unknown, lingua: string): string {
-    const e = (errore && typeof errore === 'object' ? errore : {}) as Record<string, unknown>
-    const problema = (e.problem && typeof e.problem === 'object' ? e.problem : e) as Record<string, unknown>
-    const codice = String(problema.code ?? e.code ?? '')
-    const params = problema.params && typeof problema.params === 'object' ? problema.params as Record<string, unknown> : undefined
-    const motivo = typeof (problema.reason ?? e.reason) === 'string' ? String(problema.reason ?? e.reason) : ''
-    const server = String(problema.message ?? e.message ?? '').trim()
-    const suaDelCodice = codice ? `${codice}.message` : null
-    const candidate = codice ? [...chiaviDeiMotivi(codice, motivo), `${codice}.message`] : []
-    if (server) {
-        const chiave = candidate.find((k) => voceErrore(k, 'en') !== undefined && interpola(voceErrore(k, 'en') as string, params) === server)
-        return chiave ? interpola(voceErrore(chiave, lingua) as string, params) : server
-    }
-    return suaDelCodice && voceErrore(suaDelCodice, 'en') !== undefined ? interpola(voceErrore(suaDelCodice, lingua) as string, params) : ''
+    // ⛔ FRASI-UNICHE (censimento G, punto b; Desktop 27/10/2026): la stessa regola della riga d'errore e degli avvisi, su tutte le tabelle.
+    // Qui la regola c'era già, ma su due sole tabelle: un SESSION_NOT_READY nel foglio del modo restava in inglese.
+    return fraseErroreR4(errore, lingua)
 }
 
 /** La riga d'errore della carta (`creaScelte`, `invia`): il motivo del server, o «riprova.» se non c'è (r4 irraggiungibile). */

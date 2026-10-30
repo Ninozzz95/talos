@@ -117,7 +117,8 @@ describe('TalosMobileMessageList calm thread (F2-T2)', () => {
         expect(typing.findAll('.talos-line-loader-node')).toHaveLength(0)
         expect(typing.findAll('.talos-typing-dot')).toHaveLength(0)
         expect(typing.attributes('role')).toBe('status')
-        expect(typing.text()).toContain('Processing')
+        // R4 (owner 27-28/10): sotto l'orb la frase della scala del desktop coi secondi, senza un secondo segno animato
+        expect(typing.text()).toContain('TALOS is processing the response…')
         wrapper.unmount()
     })
 })

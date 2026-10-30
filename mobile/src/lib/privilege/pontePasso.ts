@@ -228,13 +228,35 @@ export function talosCodiceValido(codice: string): boolean {
  */
 export function talosPonteMotivo(reason: string | undefined): string {
     switch (reason) {
+        case 'local-network-blocked': return 'ponte.reasonLocalNetworkBlocked'
         case 'pairing-not-announced': return 'ponte.reasonPairingNotAnnounced'
         case 'connect-not-announced': return 'ponte.reasonConnectNotAnnounced'
         case 'bad-code': return 'ponte.reasonBadCode'
+        case 'paired-not-connected': return 'ponte.reasonPairedNotConnected'
         case 'connect-refused': return 'ponte.reasonConnectRefused'
         case 'bridge-not-packaged': return 'ponte.unavailableBody'
         case 'bridge-timeout': return 'ponte.reasonTimeout'
         case 'notification-not-shown': return 'ponte.reasonNotificationNotShown'
         default: return 'ponte.reasonGeneric'
     }
+}
+
+/**
+ * ASS-149 (owner 29/10, foto dal Pad): dopo un accoppiamento RIUSCITO, un collegamento mancato non è colpa delle sei cifre. Si dice
+ * «accoppiato, manca il collegamento»; resta solo la rete locale tolta, che ha la sua causa e il suo pulsante.
+ */
+export function talosPonteMotivoDopoAccoppiamento(reason: string | undefined): string {
+    return reason === 'local-network-blocked' ? reason : 'paired-not-connected'
+}
+
+/**
+ * ASS-148 (owner 28/10: «Messaggio chiaro + pulsante»): il motivo che si risolve con un gesto porta il suo pulsante. Oggi uno solo: la
+ * rete locale tolta su Android 17 si riattiva dai permessi dell'app (`open({ target: 'app-permissions' })`).
+ */
+export function talosPonteAzioneDelMotivo(reason: string | undefined): 'app-permissions' | 'developer-republish' | null {
+    if (reason === 'local-network-blocked') return 'app-permissions'
+    // ASS-149 cura 2 (owner 29/10 «solo quando premi il pulsante»): la scoperta è fallita perché il dispositivo non annuncia la porta.
+    // Misurato sul Pad (M9): spento e riacceso il Debug wireless, l'annuncio torna in meno di 1 s. Il gesto lo fa la persona.
+    if (reason === 'connect-not-announced' || reason === 'paired-not-connected') return 'developer-republish'
+    return null
 }

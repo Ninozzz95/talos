@@ -140,6 +140,8 @@ const FRASI: Readonly<Record<string, { readonly messaggio: string, readonly azio
 
     // ── Provider a chiave ───────────────────────────────────────────────────
     TALOS_PROVIDER_HTTP_FAILED: { messaggio: 'chat.faultProviderRefused' },
+    // ASS-148 (owner 29/10 «Frase + pulsante»): il pulsante lo mette la scheda d'errore (TalosMobileStatusMessage)
+    TALOS_PROVIDER_LOCAL_NETWORK_BLOCKED: { messaggio: 'chat.faultLocalNetworkBlocked', azione: 'chat.faultLocalNetworkBlockedNext' },
     TALOS_CHAT_PROVIDER_KEY_REQUIRED: { messaggio: 'chat.faultProviderKeyMissing', azione: 'chat.updateProviderCredential' },
     TALOS_CHAT_PROVIDER_CATALOG_REQUIRED: { messaggio: 'chat.faultProviderCatalogMissing', azione: 'chat.refreshProviderCatalog' },
     TALOS_CHAT_PROVIDER_MODEL_MISMATCH: { messaggio: 'chat.faultModelMismatch', azione: 'chat.faultPickModelAgain' },

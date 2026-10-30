@@ -511,7 +511,19 @@ function talosThemeFontStyle(preset: TalosThemePreset): Record<string, string> {
     }
 }
 
-function talosStatusStyle(mode: TalosResolvedThemeMode, background: string): Record<string, string> {
+/**
+ * ⛔ Dal Pad, 26/10/2026 (tema «calm» scuro): le righe d'errore della pagina erano BIANCHE. `--talos-danger` era il colore leggibile
+ * SOPRA `--talos-danger-soft` (#fee2e2 nel tema scuro, croma 0,11), ma ~143 righe d'errore lo usano da sole sul fondo. Nel tema
+ * scuro è il primo ROSSO che regge 4,5:1 sul fondo, sul pannello e sul rosa tenue dei chip (revisione del Desktop: proposta 1); il
+ * rosa pallido solo se nessun rosso ci riesce. Il desktop ha un rosso fisso (`tokens.css` #e18383 scuro).
+ */
+const ROSSI_DI_PERICOLO_SCURO = ['#f87171', '#fca5a5'] as const
+
+function rossoLeggibile(fondi: readonly string[]): string | null {
+    return ROSSI_DI_PERICOLO_SCURO.find((rosso) => fondi.every((fondo) => talosContrastRatio(rosso, fondo) >= 4.5)) ?? null
+}
+
+function talosStatusStyle(mode: TalosResolvedThemeMode, background: string, panel: string = background): Record<string, string> {
     const light = mode === 'light'
     const surfaceTarget = light ? '#ffffff' : background
     const successSoft = mixColor(light ? '#16a34a' : '#22c55e', light ? 10 : 15, surfaceTarget)
@@ -522,7 +534,9 @@ function talosStatusStyle(mode: TalosResolvedThemeMode, background: string): Rec
     const borderWeight = light ? 44 : 45
     const success = talosReadableForeground(successSoft, '#14532d', '#dcfce7')
     const warning = talosReadableForeground(warningSoft, '#713f12', '#fef3c7')
-    const danger = talosReadableForeground(dangerSoft, '#7f1d1d', '#fee2e2')
+    // il testo SUL rosa tenue (il riempimento d'errore della chat): resta il più leggibile dei due
+    const dangerOnSoft = talosReadableForeground(dangerSoft, '#7f1d1d', '#fee2e2')
+    const danger = light ? dangerOnSoft : rossoLeggibile([background, panel, dangerSoft]) ?? dangerOnSoft
     const info = talosReadableForeground(infoSoft, '#1e3a8a', '#dbeafe')
 
     return {
@@ -541,7 +555,7 @@ function talosStatusStyle(mode: TalosResolvedThemeMode, background: string): Rec
         '--talos-system': warningSoft,
         '--talos-system-text': warning,
         '--talos-chat-error': dangerSoft,
-        '--talos-chat-error-text': danger,
+        '--talos-chat-error-text': dangerOnSoft,
     }
 }
 
@@ -592,7 +606,9 @@ export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResol
             : preset.id === 'calm' ? '#f1f2f4' : mixColor(accent, 5, '#f8fafc')
         const panel = mixColor(background, 92, '#ffffff')
         const text = '#111827'
-        const muted = mixColor(text, 68, background)
+        // owner 28/10 («B più leggera + grigio un filo più scuro»): col Calm B il secondario in chiaro scendeva a 4,09:1; lo stesso grigio
+        // del desktop (`temi.css`, 10e6f7adb), 5,97:1 sul fondo. Solo il Calm chiaro: gli altri temi restano derivati.
+        const muted = preset.id === 'calm' ? '#5a5c62' : mixColor(text, 68, background)
         const user = mixColor(accent, 88, '#ffffff')
 
         return talosEffectiveAreaFallbackStyle({
@@ -647,7 +663,7 @@ export function talosThemeModeVariantStyle(theme: TalosThemeId, mode: TalosResol
 
     return talosEffectiveAreaFallbackStyle({
         ...talosThemeFontStyle(preset),
-        ...talosStatusStyle(mode, background),
+        ...talosStatusStyle(mode, background, panel),
         '--talos-background': background,
         '--talos-sidebar': mixColor(background, 92, '#02060b'),
         '--talos-header': mixColor(background, 90, '#02060b'),

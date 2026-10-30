@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/processi.js",
-    "sha256": "afba7a02a05b1117ce23d870cce46f051589e3c48da41fefdabb0759c7909647",
+    "sha256": "09ef202e4605a0c56dad338af2d45c0fd5a830a8b20a79d70a1726dbf6874559",
     "prefisso": "inspector."
   },
   "it": {
@@ -153,7 +153,7 @@
     "inspector.windowUndeclared": "window not declared",
     "inspector.turnYourMessage": "your message",
     "inspector.turnNoContact": "no contact",
-    "inspector.turnRunning": "running",
+    "inspector.turnRunning": "in progress",
     "inspector.turnToolsOne": "{n} tool",
     "inspector.turnToolsMany": "{n} tools",
     "inspector.turnMessage": "Message",

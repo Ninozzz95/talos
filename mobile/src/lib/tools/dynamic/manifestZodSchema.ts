@@ -134,6 +134,10 @@ export const jsonSchemaSubsetSchema: z.ZodType<JsonSchemaSubset> = z.lazy(() => 
     maxLength: z.number().optional(),
     minimum: z.number().optional(),
     maximum: z.number().optional(),
+    // ⛔ FORGE-DESCR-01 (owner 28/10, rapporto dal dispositivo): `tool_create` accetta e chiede una `description` per ogni campo
+    // d'ingresso (forgeCreateTool.ts:84-89); qui mancava e ogni tool col campo descritto cadeva in FORGE_MANIFEST_STRUCTURE. Come il
+    // desktop (src/forge-contract.mjs:63, talosHarness.mjs:3964). Il resto resta stretto (FORGE-DESCR-02).
+    description: z.string().optional(),
 }))
 
 const forgeTriggerSchema = z.strictObject({

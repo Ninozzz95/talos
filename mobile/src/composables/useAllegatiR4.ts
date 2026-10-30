@@ -97,6 +97,8 @@ export function useAllegatiR4(opzioni: OpzioniAllegatiR4) {
         // B9-4: senza codice passa solo una frase dell'app (`fraseDellApp`); un TypeError o un lancio del nativo è la frase generica
         if (!codice) return (guasto as { fraseDellApp?: unknown } | null)?.fraseDellApp === true && guasto instanceof Error ? guasto.message : opzioni.t('chat.attachmentErrors.generic')
         if (g?.reason === 'images-unavailable') return opzioni.t('computer.imagesUnavailable')
+        // r4 173c755b3: il PC ha ricevuto il file ma non è riuscito a scriverlo (`OPERATION_FAILED`, `save-failed`)
+        if (g?.reason === 'save-failed') return opzioni.t('computer.fileSaveFailed')
         if (codice === 'PAYLOAD_LIMIT' || codice === 'FILE_TOO_LARGE') return dice('fileTooLargeBody')
         if (codice === 'FILE_NO_CONVERSATION') return dice('fileNoConversation')
         if (codice === 'CONSENT_REQUIRED') return opzioni.t('computer.fileNeedsConsent')

@@ -52,7 +52,8 @@ describe('composer icon buttons', () => {
             expect(button, button).not.toContain('variant="outline"')
             expect(button, button).toContain('variant="ghost"')
         }
-        const regola = regolaCss('.talos-composer-field-row .talos-plus-btn')
+        // owner 27/10/2026 (mockup approvato): il microfono, ora un comando suo, veste come il «+»
+        const regola = regolaCss('.talos-composer-field-row .talos-plus-btn, .talos-composer-field-row .talos-mic-btn')
         expect(regola).toContain('border-radius: var(--talos-radius-control);')
         expect(regola).toContain('background: transparent;')
         expect(regola).not.toContain('border-radius: 50%')
@@ -77,15 +78,25 @@ describe('composer icon buttons', () => {
      * Cambia il vestito: fondo accento, e il raggio preso dal token del
      * CONTENITORE, misurato identico sul Pad (12px su entrambi).
      */
-    it('owner 2026-09-13: un comando solo a destra, in un contenitore accento', async () => {
+    /*
+     * ⛔ QUINTO giro, owner 27/10/2026 («Approvato», mockup del compositore v6/v7): il microfono torna un comando SUO, sola
+     * icona come il «+», sempre accanto all'invio; l'invio (o Ferma) resta l'unico pieno accento, ora TONDO. Resta vero:
+     * un microfono solo (niente «append-mic») e un invio solo.
+     */
+    it('owner 27/10/2026: microfono suo, sola icona; a destra un comando solo, tondo e accento', async () => {
         const source = await composerSource()
         expect(buttonsLabelled(source, 'microphoneLabel')).toHaveLength(0)
         expect(source).not.toContain('talos-composer-append-mic')
-        const send = buttonsLabelled(source, 'rightActionLabel')[0]
-        expect(send).toContain('talos-send-btn')
+        const microfoni = buttonsLabelled(source, "$t('chat.dictate')")
+        expect(microfoni).toHaveLength(1)
+        expect(microfoni[0]).toContain('talos-mic-btn')
+        expect(microfoni[0]).not.toContain('talos-send-btn')
+        const send = buttonsLabelled(source, 'rightActionLabel')
+        expect(send).toHaveLength(1)
+        expect(send[0]).toContain('talos-send-btn')
         const regola = regolaCss('.talos-calm-composer .talos-send-btn')
         expect(regola).toContain('background: var(--talos-accent);')
-        expect(regola).toContain('border-radius: var(--talos-radius-card);')
+        expect(regola).toContain('border-radius: 50%;')
         expect(regola).toContain('justify-content: center;')
         // ⛔ Il verso contrario: il fondo trasparente del terzo giro non deve
         //    sopravvivere nella regola di base, o la cura sarebbe inerte.
@@ -231,17 +242,17 @@ describe('composer icon buttons', () => {
      * giusto (stesso token del contenitore, 12px misurati su entrambi sul Pad):
      * qui si guarda il FONDO, che era trasparente.
      */
-    it('il comando di destra vive in un contenitore accento, col raggio del compositore', () => {
+    it('il comando di destra vive in un contenitore accento, tondo (owner 27/10/2026, mockup approvato)', () => {
         const regola = regolaCss('.talos-calm-composer .talos-send-btn')
         expect(regola).toContain('background: var(--talos-accent);')
         expect(regola).toContain('color: var(--talos-accent-text);')
-        // il raggio viene dal token del CONTENITORE, non da un numero scritto a mano
-        expect(regola).toContain('border-radius: var(--talos-radius-card);')
+        expect(regola).toContain('border-radius: 50%;')
+        // e il compositore ha un raggio suo, fisso: su due righe resta uno «stadio»
+        expect(regolaCss('.talos-calm-composer')).toContain('border-radius: 1.5rem;')
         expect(regola).not.toContain('background: transparent;')
-        // ⛔ Il verso contrario: spento, NON deve sembrare acceso.
+        // ⛔ Il verso contrario: spento, NON deve sembrare acceso — accento sbiadito, come nel mockup approvato (owner 27/10/2026)
         const spento = regolaCss('.talos-calm-composer .talos-send-btn:disabled')
-        expect(spento).toContain('background: transparent;')
-        expect(spento).toContain('opacity: .5;')
+        expect(spento).toContain('opacity: .4;')
     })
 
     it('le regole di sorvolo dei due comandi non valgono al tocco', () => {
@@ -250,10 +261,11 @@ describe('composer icon buttons', () => {
         expect(css).toContain('@media (hover: hover) and (pointer: fine) {\n    .talos-calm-composer .talos-send-btn:hover')
     })
 
-    it('la forma COMPATTA esiste e vale una riga a riposo', async () => {
+    // owner 27/10/2026, «Unico, tolgo le forme»: la forma compatta è l'unica; non c'è più un flag di forma (FORMA-01..04)
+    it('la forma COMPATTA è l\'unica e vale una riga a riposo', async () => {
         const source = await composerSource()
-        // lo stato dipende dal flag di forma, dal fuoco, dal testo e dagli allegati
-        expect(source).toContain('props.immersiveComposer')
+        // lo stato dipende solo dal fuoco e dagli allegati
+        expect(source).not.toContain('props.immersiveComposer')
         expect(source).toContain('composerFocused')
         // a riposo la riga degli strumenti NON si disegna
         expect(source).toContain('v-if="!composerCompact"')

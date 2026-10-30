@@ -11,7 +11,7 @@
 import { computed } from 'vue'
 import TalosMobileCodaDelGiro from '@/components/chat/TalosMobileCodaDelGiro.vue'
 import { useTalosI18n } from '@/i18n'
-import { azioneCodaR4, vociDellaStrisciaR4, type StatoCodaR4 } from '@/lib/harness/r4/codaR4'
+import { azioneCodaR4, partonoColProssimoR4, vociDellaStrisciaR4, type StatoCodaR4 } from '@/lib/harness/r4/codaR4'
 
 const props = defineProps<{ coda: StatoCodaR4; giroVivo: boolean; sessioneId: string | null }>()
 const emit = defineEmits<{ invia: [id: string]; togli: [id: string]; riporta: [id: string] }>()
@@ -21,6 +21,7 @@ const { locale } = useTalosI18n()
 const ORA = new Date(0).toISOString()
 const voci = computed(() => vociDellaStrisciaR4(props.coda, { sessioneId: props.sessioneId, lingua: locale.value, ora: ORA }))
 const azione = computed(() => azioneCodaR4(props.giroVivo))
+const partonoColProssimo = computed(() => partonoColProssimoR4(props.coda, props.giroVivo))
 // la modifica in linea non c'è (r4 non ha una rotta per modificare): la striscia usa `riporta`, mai questa funzione
 const nessunaModifica = async () => ({ ok: false as const, rifiuto: 'nessuna-chat' })
 </script>
@@ -32,6 +33,7 @@ const nessunaModifica = async () => ({ ok: false as const, rifiuto: 'nessuna-cha
         :in-pausa="coda.inPausa"
         :azione="azione"
         :altra-chat-in-corso="false"
+        :partono-col-prossimo="partonoColProssimo"
         :salva-modifica="nessunaModifica"
         modifica="riporta"
         @principale="(id) => emit('invia', id)"

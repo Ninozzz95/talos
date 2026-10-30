@@ -99,7 +99,11 @@ vi.mock('@/services/chatgptAccesso', () => ({
     talosChatgpt: () => ({ accessoValido: async () => { stato.accessi += 1; return { accessToken: 'tok-telefono', scadeAlle: 1_900_000_000_000 } } }),
 }))
 vi.mock('@/lib/chat/providers/localAdapter', () => ({ talosApriPerIlCodice: async () => { stato.aperture += 1; return { esito: 'aperto', nCtx: 32768 } } }))
-vi.mock('@/services/localEngine', () => ({ talosMotoreOspite: async () => ({ pronto: true, socketPath: '/x', chiave: 'c'.repeat(64), modello: 'gemma.gguf', nCtx: 32768 }) }))
+vi.mock('@/services/localEngine', () => ({
+    talosMotoreOspite: async () => ({ pronto: true, socketPath: '/x', chiave: 'c'.repeat(64), modello: 'gemma.gguf', nCtx: 32768 }),
+    // GFR-12-UI fa passare 220 s: la risposta in corso chiede l'avanzamento del modello locale (`TalosMobileStreamingReply.vue:144`)
+    talosLocalModelLoadState: async () => ({ fraction: null, preparingGpu: false }),
+}))
 vi.mock('@/services/chatgptConsumi', () => ({ talosConsumiChatgpt: () => ({ registra: (token: number | null) => { stato.registrati.push(token) } }) }))
 vi.mock('@/components/chat/TalosMobileChatgptPastiglia.vue', async () => {
     const { h } = await import('vue')
@@ -195,6 +199,24 @@ describe('il Codice sulla sessione di un PC', () => {
             w.unmount()
             await asciuga()
         }
+    })
+
+    /* Owner 27/10/2026 («come Codex, ma mai più caro», deciso nel server: `reasoningAlCambioDiModello` @ r4 6a4fc5e2b): cambiando il
+       modello di una sessione del PC il dispositivo manda SOLO il modello; il livello lo adatta il PC e torna con la fotografia. */
+    it('REM-02b in remoto il cambio di modello manda solo il modello: il livello lo decide il PC', async () => {
+        azzera()
+        const w = await schermata()
+        await vi.waitFor(() => {
+            const ids = (w.getComponent(TalosMobileComposer).props('modelProfiles') as TalosMobileModelProfileView[]).map((p) => p.id)
+            if (!ids.includes('pc:anthropic:claude-pc')) throw new Error('modelli del PC non ancora letti')
+        })
+        // la sessione del PC ha «high»: prima il dispositivo lo regolava sul modello nuovo e lo mandava; ora lo adatta il PC
+        w.getComponent(TalosMobileComposer).vm.$emit('selectModelProfile', 'pc:anthropic:claude-pc')
+        await asciuga()
+        const scritture = stato.remote.filter((r) => r.metodo === 'POST' && r.percorso === `/api/v1/sessions/${SESSIONE}/settings`)
+        expect(scritture).toHaveLength(1)
+        expect(JSON.parse(scritture[0]!.corpo ?? '{}')).toEqual({ modello: 'anthropic:claude-pc' })
+        w.unmount()
     })
 
     // mockup remoto del 23/10, tavola 3: la cartella di una sessione nuova si sceglie dalla lista del Codice filtrata sul PC
@@ -363,6 +385,8 @@ describe('il Codice sulla sessione di un PC', () => {
 
     /** Il foglio dei modelli aperto dalla pastiglia del compositore, come lo apre chi tocca (compositore → foglio → selettore). */
     async function apriIlFoglio(w: Awaited<ReturnType<typeof schermata>>) {
+        // owner 27/10/2026, forma unica: compatto a riposo, il chip del modello c'è col fuoco (FORMA-01)
+        await w.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         await w.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await asciuga()
     }
@@ -448,12 +472,119 @@ describe('il Codice sulla sessione di un PC', () => {
         expect(stato.remote.filter((r) => r.percorso.includes('/events'))).toEqual([])
     })
 
-    it('REM-03 il PC non si raggiunge: si torna al dettaglio del computer, il client del telefono resta muto', async () => {
+    // ⛔ Riscritto il 28/10/2026 (R2, bozzetto approvato dall'owner): prima si tornava DA SOLI al dettaglio del computer con un avviso
+    // volante; ora resta sul posto una carta con «Riprova» e «Torna al computer» (COLL-05). Il client del telefono resta muto come prima.
+    it('REM-03 il PC non si raggiunge: carta sul posto, nessun ritorno automatico; il client del telefono resta muto', async () => {
         azzera()
         stato.remotoGuasto = true
         const w = await schermata()
-        expect(stato.sostituzioni).toContainEqual({ name: 'computer-item', params: { pcId: 'pc-uno' } })
+        expect(w.find('[data-testid="talos-codice-r4-collegamento-fallito"]').exists()).toBe(true)
+        expect(stato.sostituzioni).toEqual([])
         expect(stato.locali).toEqual([])
+        w.unmount()
+    })
+})
+
+/**
+ * COLL-01..07 — R2 delle righe in corso (owner 27/10/2026: «Quella scritta avvio del codice non ti sembra estremamente brutta?» e
+ * «nulla deve fare sembrare la ui bloccata»; bozzetto approvato il 28/10, `.claude/mockup/righe-in-corso-approvato-2026-10-28/`, scena 1).
+ * Al posto del grigio «Avvio del Codice…»: testata vera subito, «Mi collego a <PC> · Ns» (la riga comune di R1), «tentativo N» solo dal
+ * secondo, compositore spento col perché; se il PC non risponde una carta sul posto con Riprova sopra e Torna al computer sotto.
+ */
+describe('COLL il collegamento al computer', () => {
+    const riga = async (w: ReturnType<typeof mount>) => {
+        const { default: TalosRigaInCorso } = await import('@/components/chat/TalosRigaInCorso.vue')
+        return w.findComponent(TalosRigaInCorso)
+    }
+    function inSospeso(): () => void {
+        let apri: () => void = () => undefined
+        stato.attesaPonte = new Promise<void>((ok) => { apri = ok })
+        return () => { stato.attesaPonte = null; apri() }
+    }
+
+    it('COLL-01 mentre si collega: la testata vera subito, con indietro e il nome del computer', async () => {
+        azzera()
+        const libera = inSospeso()
+        const w = await schermata()
+        const zona = w.get('[data-testid="talos-codice-r4-collegamento"]')
+        expect(zona.text()).toContain('pc-u')
+        await zona.get('[aria-label="Back"]').trigger('click')
+        expect(stato.spinte.length).toBe(1)
+        libera(); await asciuga(); w.unmount()
+    })
+
+    it('COLL-02 la riga «Mi collego a <PC>» conta dall\'apertura, col segno della linea', async () => {
+        azzera()
+        const libera = inSospeso()
+        const prima = Date.now()
+        const w = await schermata()
+        const r = await riga(w)
+        expect(r.props('testo')).toBe('Connecting to Computer · pc-u')
+        expect(r.props('segno')).toBe('linea')
+        expect(r.props('inizio')).toBeGreaterThanOrEqual(prima)
+        expect(r.props('inizio')).toBeLessThanOrEqual(Date.now())
+        libera(); await asciuga(); w.unmount()
+    })
+
+    it('COLL-03/04 «tentativo» non c\'è al primo; il compositore è spento e dice perché', async () => {
+        azzera()
+        const libera = inSospeso()
+        const w = await schermata()
+        expect((await riga(w)).props('dettaglio')).toBe('')
+        const zona = w.get('[data-testid="talos-codice-r4-collegamento"]')
+        expect(zona.text()).toContain('Waiting for the computer: as soon as it answers you can write.')
+        expect(zona.get('[data-testid="talos-codice-r4-collegamento-compositore"]').attributes('inert')).toBeDefined()
+        libera(); await asciuga(); w.unmount()
+    })
+
+    it('COLL-05 non risponde: carta con la spiegazione, Riprova sopra e Torna al computer sotto; niente salto automatico', async () => {
+        azzera()
+        stato.remotoGuasto = true
+        const w = await schermata()
+        const carta = w.get('[data-testid="talos-codice-r4-collegamento-fallito"]')
+        expect(carta.attributes('role')).toBe('alert')
+        expect(carta.text()).toContain('The computer is not answering')
+        const pulsanti = carta.findAll('button').map((b) => b.text())
+        expect(pulsanti).toEqual(['Retry', 'Back to the computer'])
+        expect(stato.sostituzioni).toEqual([])
+        await carta.findAll('button')[1]!.trigger('click')
+        expect(stato.sostituzioni).toContainEqual({ name: 'computer-item', params: { pcId: 'pc-uno' } })
+        w.unmount()
+    })
+
+    it('COLL-08 l\'elenco dei computer arriva dopo: la riga passa da «Computer · pc-u» al nome vero (revisione del Desktop, 28/10)', async () => {
+        azzera()
+        const { useComputerRemoti } = await import('@/lib/remoto/computerRemoti')
+        const elenco = useComputerRemoti()!.elenco
+        elenco.value = []
+        const libera = inSospeso()
+        const w = await schermata()
+        expect((await riga(w)).props('testo')).toBe('Connecting to Computer · pc-u')
+        elenco.value = [{ pcId: 'pc-uno', nome: 'UFFICIO' } as (typeof elenco.value)[number]]
+        await asciuga()
+        expect((await riga(w)).props('testo')).toBe('Connecting to UFFICIO · pc-u')
+        expect(w.get('[data-testid="talos-codice-r4-collegamento"]').text()).toContain('UFFICIO · pc-u')
+        elenco.value = []
+        libera(); await asciuga(); w.unmount()
+    })
+
+    it('COLL-06/07 Riprova è un tentativo nuovo (tentativo 2, conto da capo); riuscito, la riga se ne va e la sessione si apre', async () => {
+        azzera()
+        stato.remotoGuasto = true
+        const w = await schermata()
+        stato.remotoGuasto = false
+        const libera = inSospeso()
+        const prima = Date.now()
+        await w.get('[data-testid="talos-codice-r4-collegamento-fallito"]').findAll('button')[0]!.trigger('click')
+        await asciuga()
+        const r = await riga(w)
+        expect(r.props('dettaglio')).toBe('attempt 2')
+        expect(r.props('inizio')).toBeGreaterThanOrEqual(prima)
+        libera()
+        await asciuga()
+        expect(w.find('[data-testid="talos-codice-r4-collegamento"]').exists()).toBe(false)
+        expect(w.find('[data-testid="talos-codice-r4-dock"]').exists()).toBe(true)
+        expect(stato.flussiRemoti.some((f) => f.percorso.startsWith(`/api/v1/sessions/${SESSIONE}/events`))).toBe(true)
         w.unmount()
     })
 })
@@ -503,10 +634,13 @@ describe('il Codice sulla sessione di un PC: revisione avversariale R-M4', () =>
         stato.modelloSessione = 'chatgpt:gpt-5'
         const w = await schermata()
         expect(w.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(false)
+        // D-0147-UI-2: nemmeno il puntino e la riga del selettore: il piano del telefono non è quello del PC
+        expect(w.getComponent(TalosMobileComposer).props('pianoChatgpt')).toBeNull()
         // un rifiuto del piano detto dal PC si legge con le parole del PC (i suoi Fornitori), non con quelle del telefono («Modelli, sotto OpenAI»)
-        rifiutoDelResume({ code: 'CHATGPT_NON_COLLEGATO', message: 'x' })
+        // il testo letterale del PC (`chatgpt-accesso.mjs:242` @ r4 79ea996de): FRASI-UNICHE, in inglese resta identico
+        rifiutoDelResume({ code: 'CHATGPT_NON_COLLEGATO', message: 'No ChatGPT account is connected.' })
         await inviaDalCompositore(w, 'ciao')
-        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('No ChatGPT account is connected: use “Continue with ChatGPT” in Providers')
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('No ChatGPT account is connected.')
         // un giro dal vivo sul PC: due chiamate al modello, poi un'altra; nel conto del piano del telefono non entra niente
         manda(['data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":{}}', 'data: {"type":"RunStarted","runId":"r1","input":{}}', uso(2, 3000), uso(3, 4000), ''].join(String.fromCharCode(10, 10)))
         await asciuga()
@@ -550,17 +684,19 @@ describe('il Codice sulla sessione di un PC: revisione avversariale R-M4', () =>
         w.unmount()
     })
 
-    it('RRV-11b ⛔ RA-11: ⌘ e «•••» spengono duplica, esporta e condividi col perché; le altre voci restano', async () => {
+    /* CENSIMENTO G (a), Desktop 27/10: «Duplica» si accende anche in remoto. RA-11 l'aveva spenta perché il PC non aveva l'operazione;
+       da r4 c6aff0362 c'è (`session.fork`, `operazioni.mjs:207`, col consenso della cartella) e il ponte del dispositivo ora la porta. */
+    it('RRV-11b ⛔ RA-11: ⌘ e «•••» spengono esporta e condividi col perché; duplica e le altre voci restano', async () => {
         azzera()
         const w = await schermata()
         w.getComponent(TalosCodiceR4Header).vm.$emit('comandi')
         await asciuga()
-        for (const id of ['duplica', 'esporta', 'condividi']) {
+        for (const id of ['esporta', 'condividi']) {
             const voce = w.get(`[data-comando="${id}"]`)
             expect(voce.attributes('disabled'), id).toBeDefined()
             expect(voce.text(), id).toContain(SOLO_DAL_PC)
         }
-        for (const id of ['rinomina', 'riprendi', 'compatta', 'albero', 'hook', 'doctor']) {
+        for (const id of ['rinomina', 'duplica', 'riprendi', 'compatta', 'albero', 'hook', 'doctor']) {
             expect(w.get(`[data-comando="${id}"]`).attributes('disabled'), id).toBeUndefined()
             expect(w.get(`[data-comando="${id}"]`).text(), id).not.toContain(SOLO_DAL_PC)
         }
@@ -574,6 +710,22 @@ describe('il Codice sulla sessione di un PC: revisione avversariale R-M4', () =>
             expect(voce.text(), id).toContain(SOLO_DAL_PC)
         }
         expect(w.get('[data-testid="talos-codice-r4-hook"]').attributes('disabled')).toBeUndefined()
+        w.unmount()
+    })
+
+    it('RRV-11d CENSIMENTO G (a): «Duplica» in remoto chiede `/fork` al PC dal ponte e apre la sessione nuova sullo stesso PC', async () => {
+        azzera()
+        const NUOVA = '44444444-4444-4444-8444-444444444444'
+        stato.rispondi = ((r: { metodo: string; percorso: string }) => (r.percorso === `/api/v1/sessions/${SESSIONE}/fork`
+            ? { stato: 200, corpo: JSON.stringify({ ok: true, data: { sessionId: NUOVA } }) } : null)) as typeof stato.rispondi
+        const w = await schermata()
+        w.getComponent(TalosCodiceR4Header).vm.$emit('comandi')
+        await asciuga()
+        w.getComponent(TalosCodiceR4ComandiSheet).vm.$emit('comando', 'duplica')
+        await asciuga()
+        expect(stato.remote.some((r) => r.metodo === 'POST' && r.percorso === `/api/v1/sessions/${SESSIONE}/fork`)).toBe(true)
+        expect(stato.locali).toEqual([])
+        expect(stato.spinte.at(-1)).toEqual({ name: 'computer-codice', params: { pcId: 'pc-uno', id: NUOVA } })
         w.unmount()
     })
 
@@ -682,6 +834,21 @@ describe('il Codice sulla sessione di un PC: revisione avversariale R-M4', () =>
         expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('The key is missing on the computer: connect it on the PC.')
         w.unmount()
     })
+
+    /* Revisione del blocco 10, F-R1: PROVIDER_KEY_MISSING (422) arrivava con la frase inglese del server; REMOTE_STORE_BUSY (503, il
+       lucchetto dei consensi del PC) con la frase inglese o come guasto del collegamento. Decisione del Desktop: la chiave del PC si dice
+       come D-RM4-8; il PC occupato chiede di riprovare fra un momento. */
+    it('RRV-D8b PROVIDER_KEY_MISSING ⇒ la chiave che manca sul computer; REMOTE_STORE_BUSY ⇒ riprova fra un momento', async () => {
+        azzera()
+        const w = await schermata()
+        rifiutoDelResume({ code: 'PROVIDER_KEY_MISSING', message: "No key for this model's provider on this computer: add it, or choose another model" })
+        await inviaDalCompositore(w, 'ciao')
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('The key is missing on the computer: connect it on the PC.')
+        rifiutoDelResume({ code: 'REMOTE_STORE_BUSY', message: 'Remote store busy' })
+        await inviaDalCompositore(w, 'ancora')
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('The computer is busy: try again in a moment.')
+        w.unmount()
+    })
 })
 
 /**
@@ -731,7 +898,7 @@ describe('il consenso del PC nel Codice remoto (D-MOCK-11)', () => {
         }) as typeof stato.rispondi
         const w = await schermata()
         await scrivi(w, 'rifai il README')
-        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('The PC said no for this folder')
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('The computer didn’t allow it, for now. You can ask again.')
         expect((w.get('[data-testid="talos-composer-prompt"]').element as HTMLTextAreaElement).value).toBe('rifai il README')
         stato.params.id = SESSIONE
         w.unmount()
@@ -751,7 +918,7 @@ describe('il consenso del PC nel Codice remoto (D-MOCK-11)', () => {
         }) as typeof stato.rispondi
         const w = await schermata()
         await scrivi(w, 'aggiungi i test')
-        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toContain('The PC must allow this device to write here')
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toContain('The computer must allow this device to write here')
         await w.get('[data-testid="talos-codice-r4-consenso-chiedi"]').trigger('click')
         await asciuga()
         expect(JSON.parse(stato.remote.find((r) => r.percorso === '/api/v1/remote/consent/request')!.corpo!)).toEqual({ cartellaId: 'c-1' })
@@ -784,7 +951,7 @@ describe('il consenso del PC nel Codice remoto (D-MOCK-11)', () => {
         expect(allegati).toEqual([SESSIONE])
         const vassoio = () => w.getComponent(TalosMobileComposer).props('attachments') as Array<{ status: string; error: string | null }>
         expect(vassoio()[0]).toMatchObject({ status: 'failed', error: 'File not attached · This folder needs the computer’s consent' })
-        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toContain('The PC must allow this device to write here')
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toContain('The computer must allow this device to write here')
         await w.get('[data-testid="talos-codice-r4-consenso-chiedi"]').trigger('click')
         await asciuga()
         expect(JSON.parse(stato.remote.find((r) => r.percorso === '/api/v1/remote/consent/request')!.corpo!)).toEqual({ cartellaId: 'c-1' })
@@ -899,6 +1066,173 @@ describe('una sessione nuova sul PC con il canale lento (D-MOCK-16)', () => {
         } finally {
             stato.remotoGuasto = false
             stato.params.id = SESSIONE
+        }
+    })
+})
+
+/**
+ * ⛔ IMPOSTAZIONE-RIFIUTATA (Pad, 27/10/2026, prova dal vivo sulla 4177; mockup approvato dal Desktop). Scelto un modello dal foglio,
+ * il PC rifiuta la scrittura (CONSENT_REQUIRED): l'errore finiva nella riga della conversazione DIETRO il foglio aperto, e sembrava
+ * che il tocco non facesse niente. Come il PC (`sincronizzaImpostazioniSessione`): il rifiuto è un avviso SOPRA tutto, «Preference
+ * not saved» col motivo, e il valore resta quello di prima; per il consenso l'avviso porta «Ask the computer». Il foglio resta aperto
+ * (decisione owner 27/07: scegliere non lo chiude), e l'avviso gli sta sopra. Owner 27/10: ogni errore del PC anche sul dispositivo.
+ */
+describe('una scelta delle impostazioni rifiutata dal PC (IMPOSTAZIONE-RIFIUTATA)', () => {
+    const busta = (stato: number, code: string, message: string, extra: Record<string, unknown> = {}) =>
+        ({ stato, corpo: JSON.stringify({ ok: false, error: { code, message, ...extra } }) })
+    const ok = (d: unknown) => ({ stato: 200, corpo: JSON.stringify({ ok: true, data: d }) })
+
+    it('IMP-RIF-01 il consenso che manca: avviso sopra il foglio aperto con «Ask the computer», niente riga dietro, il modello resta', async () => {
+        azzera()
+        const { useTalosMobileToasts, __resetToastsForTests } = await import('@/stores/toasts')
+        __resetToastsForTests()
+        stato.rispondi = ((r: { metodo: string; percorso: string }) => {
+            if (r.percorso === `/api/v1/sessions/${SESSIONE}/settings`) {
+                return busta(403, 'CONSENT_REQUIRED', 'The computer must allow this device to write in this folder.', { reason: 'consent-required', params: { cartellaId: 'c-1', nome: 'talos' } })
+            }
+            if (r.percorso === '/api/v1/remote/consent/request') return ok({ stato: 'attesa-consenso', richiestaId: 'rq-12345678', scadeAlle: '2026-10-27T15:02:00.000Z', attesaMs: 120_000 })
+            return null
+        }) as typeof stato.rispondi
+        const w = await schermata()
+        const composer = w.getComponent(TalosMobileComposer)
+        const prima = composer.props('selectedModelProfileId')
+        // owner 27/10/2026, forma unica: compatto a riposo, il chip del modello c'è col fuoco (FORMA-01)
+        await w.get('[data-testid="talos-composer-prompt"]').trigger('focus')
+        await w.get('[data-testid="talos-composer-model-chip"]').trigger('click')
+        await asciuga()
+        composer.vm.$emit('selectModelProfile', 'pc:anthropic:claude-pc')
+        await asciuga()
+
+        const avvisi = useTalosMobileToasts().items.value
+        expect(avvisi).toHaveLength(1)
+        expect(avvisi[0]!.message).toBe('Preference not saved. The computer must allow this device to write here')
+        expect(avvisi[0]!.action?.label).toBe('Ask the computer')
+        // niente errore nella conversazione dietro il foglio: l'avviso è l'unico posto
+        expect(w.find('[data-testid="talos-codice-r4-errore"]').exists()).toBe(false)
+        expect(composer.props('selectedModelProfileId')).toBe(prima)
+        // il foglio resta aperto (owner 27/07) e l'avviso gli sta sopra: lo strato della regione degli avvisi è più alto di quello del foglio
+        // il foglio vero del compositore (`TalosMobileComposerSheet`) è ancora aperto, con le righe dei modelli
+        const foglio = w.findAll('div').find((d) => /(^|\s)z-\[\d+\](\s|$)/u.test(d.attributes('class') ?? '') && d.find('[data-testid="talos-mobile-model-option"]').exists())
+        expect(foglio, 'il foglio dei modelli è aperto').toBeTruthy()
+        const zFoglio = Number(/z-\[(\d+)\]/u.exec(foglio!.attributes('class') ?? '')?.[1])
+        expect(zFoglio).toBeGreaterThan(0)
+        const { default: Regione } = await import('@/components/shell/TalosMobileToastRegion.vue')
+        const regione = mount(Regione)
+        const zAvvisi = Number(/z-\[(\d+)\]/u.exec((document.body.querySelector('[data-testid="talos-mobile-toasts"]')?.className ?? ''))?.[1])
+        expect(zAvvisi).toBeGreaterThan(zFoglio)
+        regione.unmount()
+
+        // «Ask the computer» chiede il consenso per la cartella del rifiuto, e PRIMA chiude il foglio dei modelli: la carta «Confirm on
+        // the computer» nasce nella conversazione e col foglio aperto restava dietro (Pad, 27/10, vc313)
+        avvisi[0]!.action!.run()
+        await asciuga()
+        expect(w.find('[data-testid="talos-mobile-model-option"]').exists(), 'il foglio si è chiuso').toBe(false)
+        expect(JSON.parse(stato.remote.find((r) => r.percorso === '/api/v1/remote/consent/request')!.corpo!)).toEqual({ cartellaId: 'c-1' })
+        w.unmount()
+    })
+
+    it('IMP-RIF-02 un altro rifiuto: «Preference not saved» col motivo del PC nella lingua dell’app, il livello resta, nessuna azione', async () => {
+        azzera()
+        const { useTalosMobileToasts, __resetToastsForTests } = await import('@/stores/toasts')
+        __resetToastsForTests()
+        stato.rispondi = ((r: { metodo: string; percorso: string }) => (r.percorso === `/api/v1/sessions/${SESSIONE}/settings`
+            // la busta HTTP vera (`errorEnvelope` @ r4 79ea996de): la frase precisa del motivo sta in `explanation`
+            ? busta(409, 'SESSION_NOT_READY', 'Session not ready for this action', { reason: 'mode-change-while-running',
+                explanation: 'The working mode is changed between turns, not while the model is working' }) : null)) as typeof stato.rispondi
+        const w = await schermata()
+        const composer = w.getComponent(TalosMobileComposer)
+        const prima = composer.props('selectedEffort')
+        composer.vm.$emit('selectEffort', 'low')
+        await asciuga()
+        const avvisi = useTalosMobileToasts().items.value
+        expect(avvisi).toHaveLength(1)
+        expect(avvisi[0]!.message).toBe('Preference not saved. The working mode is changed between turns, not while the model is working')
+        expect(avvisi[0]!.action).toBeUndefined()
+        expect(w.find('[data-testid="talos-codice-r4-errore"]').exists()).toBe(false)
+        expect(composer.props('selectedEffort')).toBe(prima)
+        w.unmount()
+    })
+})
+
+/*
+ * ⛔ GFR-12 (Desktop 27/10, dopo la prova dal vivo sulla 4177 col flusso muto): quando il guardiano si arrende col giro visto, la
+ * schermata NON deve sembrare al lavoro — è la lamentela dell'owner. Niente «Stop response», la frase del PC e «Reconnect» nella riga
+ * d'errore che c'è già; il tocco riapre da dove il dispositivo era rimasto.
+ */
+describe('il Codice sulla sessione di un PC: il collegamento perso (GFR-12)', () => {
+    const manda = (testo: string) => {
+        const flusso = stato.flussiRemoti.at(-1)!
+        for (const a of stato.ascoltatoriRemoti.r4Pezzo ?? []) a({ id: flusso.id, testo })
+    }
+    const fermaVisibile = (w: ReturnType<typeof mount>) => w.findAll('[data-testid="talos-composer-action"]')
+        .some((b) => b.attributes('aria-label') === 'Stop response')
+
+    it('GFR-12-UI dopo il tetto: niente «Stop response», la frase del PC e «Reconnect»; il tocco riapre da `after`', async () => {
+        azzera()
+        stato.params.id = SESSIONE
+        // anche setTimeout: la riapertura aspetta l'attesa di serie (0,5 s, 1 s, 2 s) prima di aprire il flusso nuovo
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] })
+        try {
+            const w = await schermata()
+            manda('data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":{}}\n\ndata: {"type":"CUSTOM","name":"talos.battito","value":{}}\n\n'
+                + 'data: {"type":"RunStarted","threadId":"t1","runId":"r1","input":{"consegna":"Continua","seguito":true},"_sequenza":1}\n\n')
+            await asciuga()
+            expect(fermaVisibile(w)).toBe(true)
+            for (let fatti = 0; fatti < 220_000; fatti += 5000) {
+                await vi.advanceTimersByTimeAsync(5000)
+                await asciuga()
+            }
+            const aperture = stato.flussiRemoti.length
+            expect(fermaVisibile(w)).toBe(false)
+            expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toContain('The computer did not answer in time.')
+            await w.get('[data-testid="talos-codice-r4-riconnetti"]').trigger('click')
+            await vi.advanceTimersByTimeAsync(5000)
+            await asciuga()
+            expect(stato.flussiRemoti.length).toBe(aperture + 1)
+            expect(stato.flussiRemoti.at(-1)!.percorso).toBe(`/api/v1/sessions/${SESSIONE}/events?after=1`)
+            expect(w.find('[data-testid="talos-codice-r4-errore"]').exists()).toBe(false)
+            w.unmount()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+
+    // R3 (bozzetto approvato il 28/10, scena 9): la linea che cade a giro vivo si vede, coi secondi dalla caduta; l'orb si ferma, Ferma resta
+    it('RICOLL-UI la linea cade a giro vivo: «Connection lost · retrying · attempt 1 · Ns», orb fermo, Ferma resta; al ritorno «Reconnected» per 2 s', async () => {
+        azzera()
+        stato.params.id = SESSIONE
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] })
+        try {
+            const w = await schermata()
+            manda('data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":{}}\n\n'
+                + 'data: {"type":"RunStarted","threadId":"t1","runId":"r1","input":{"consegna":"Continua","seguito":true},"_sequenza":1}\n\n')
+            await asciuga()
+            const orbAlLavoro = () => w.findAll('[data-testid="talos-assistant-orb"]').some((o) => o.classes().includes('working'))
+            expect(orbAlLavoro()).toBe(true)
+            const flusso = stato.flussiRemoti.at(-1)!
+            for (const a of stato.ascoltatoriRemoti.r4Errore ?? []) a({ id: flusso.id, motivo: 'DISCONNECTED' })
+            await asciuga()
+            await vi.advanceTimersByTimeAsync(300)
+            await asciuga()
+            const zona = w.get('[data-testid="talos-codice-r4-ricollegamento"]')
+            expect(zona.get('[data-testid="talos-riga-in-corso"]').attributes('aria-label')).toBe('Connection lost · retrying, attempt 1, 0s')
+            expect(orbAlLavoro()).toBe(false)
+            expect(fermaVisibile(w)).toBe(true)
+            // il flusso si riapre (attesa di serie) e il primo pezzo riporta la linea
+            await vi.advanceTimersByTimeAsync(3000)
+            await asciuga()
+            expect(stato.flussiRemoti.length).toBeGreaterThan(1)
+            manda('data: {"type":"CUSTOM","name":"talos.battito","value":{}}\n\n')
+            await asciuga()
+            expect(w.find('[data-testid="talos-codice-r4-ricollegamento"]').exists()).toBe(false)
+            expect(w.get('[data-testid="talos-codice-r4-ricollegato"]').text()).toBe('Reconnected')
+            expect(orbAlLavoro()).toBe(true)
+            await vi.advanceTimersByTimeAsync(2100)
+            await asciuga()
+            expect(w.find('[data-testid="talos-codice-r4-ricollegato"]').exists()).toBe(false)
+            w.unmount()
+        } finally {
+            vi.useRealTimers()
         }
     })
 })

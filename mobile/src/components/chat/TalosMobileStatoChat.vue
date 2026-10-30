@@ -27,7 +27,7 @@ export { talosStatoDellaChat, talosStatoChatParla, TALOS_STATO_CHAT_CHIAVE, type
  *     del segno «bozza», colorata solo per i due toni d'attenzione.
  */
 import { computed } from 'vue'
-import { CircleDashed, Hourglass, LoaderCircle, Pause, RotateCcw, ShieldQuestion } from '@lucide/vue'
+import { CircleDashed, ListEnd, LoaderCircle, Pause, RotateCcw, ShieldQuestion } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import type { TalosStatoChat } from '@/lib/chat/statoChat'
 import { TALOS_STATO_CHAT_CHIAVE, talosStatoChatParla } from '@/lib/chat/statoDellaChat'
@@ -45,7 +45,7 @@ const { t } = useTalosI18n()
  * Le icone sono quelle GIÀ in uso per gli stessi fatti:
  *   aspetta te → ShieldQuestion (la scheda del permesso in attesa, `TalosMobileMessageList.vue:604`);
  *   in corso   → LoaderCircle che gira (le attese vive dell'app);
- *   in coda    → Hourglass (i giri che aspettano, `TalosResearchStatusPill.vue:40`);
+ *   in coda    → ListEnd (i giri che aspettano, `TalosResearchStatusPill.vue:40`);
  *   in pausa   → Pause (la pausa della memoria, `TalosMobileMemoryState.vue:40`) — CODA-PAUSA (25/09/2026, owner «in pausa»);
  *   fallita    → RotateCcw, l'icona di «Riprendi» (`TalosMobileMessageActions.vue`): owner 23/10 sera, «da riprendere» dice cosa
  *                puoi fare e non giudica la chat; tono d'attenzione come «aspetta te», niente rosso (revisione del Desktop);
@@ -54,7 +54,7 @@ const { t } = useTalosI18n()
 const ICONE = {
     'aspetta-te': ShieldQuestion,
     'in-corso': LoaderCircle,
-    'in-coda': Hourglass,
+    'in-coda': ListEnd,
     'in-pausa': Pause,
     fallita: RotateCcw,
     interrotta: CircleDashed,
@@ -114,7 +114,7 @@ const parola = computed(() => t(TALOS_STATO_CHAT_CHIAVE[props.stato] ?? ''))
         <component
             :is="icona"
             class="size-3 shrink-0"
-            :class="props.stato === 'in-corso' ? 'text-[var(--talos-accent)] motion-safe:animate-spin' : ''"
+            :class="props.stato === 'in-corso' ? 'text-[var(--talos-accent)] animate-spin' : ''"
             aria-hidden="true"
         />
         <span class="talos-stato-parola">{{ parola }}</span>

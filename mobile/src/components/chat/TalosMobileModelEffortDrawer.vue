@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import TalosMobileComposerModelPicker from '@/components/chat/TalosMobileComposerModelPicker.vue'
-import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
-import { useSettingsStore } from '@/stores/settings'
+import TalosMobileEffortPicker from '@/components/chat/TalosMobileEffortPicker.vue'
 import { Check } from '@lucide/vue'
+import { computed } from 'vue'
+import type { FiloRagionamento } from '@/lib/chat/pillolaRagionamento'
+import type { TalosMobileEffortLevel } from '@/lib/mobileEffort'
 import type {
     TalosMobileModelProfileView,
     TalosMobileRoutingProfileView,
@@ -22,24 +24,26 @@ import type {
  * principale — stessa UX di ricerca, un secondo elenco invece di un
  * controllo nuovo da imparare.
  *
- * ⭐ J3 (24/10/2026, owner; anomalia 4 di Marco: il ragionamento finiva sotto l'elenco dei modelli, fuori dallo schermo): il foglio
- * è solo «Modello», SENZA cursore del ragionamento — il livello sta nella pillola sua del compositore (`TalosMobileReasoningPill`),
- * come il desktop (`c6d1cbff2`, «Model» senza cursore). Per i modelli che un livello non lo ricevono (la pillola non c'è) restano
- * qui la riga che lo dice (`reasoningNote`, A9 `effortNotSent`) e «Ragionamento esteso», come il desktop vi tiene «Mostra
- * ragionamento».
+ * ⭐ Owner 27-28/10/2026, mockup del compositore approvato (versioni 6 e 7): il foglio torna «Modello e ragionamento».
+ *   · I fornitori sono SCHEDE a pillola (`schede` del selettore); l'elenco mostra la scheda attiva.
+ *   · Il ragionamento è il PIEDE fisso in fondo (`TalosMobileEffortPicker`, una riga): si vede sempre insieme ai modelli. Così si
+ *     risolve anche l'anomalia 4 di Marco che aveva portato al J3 (24/10: il ragionamento finiva sotto l'elenco, fuori dallo
+ *     schermo). Livelli, «Auto» e nota A9 restano quelli del J3 (`statoPillolaRagionamento`); la pillola nel compositore non c'è più:
+ *     il chip unico dice «modello livello». Divergenza voluta dall'owner dal desktop, che tiene la pillola (annotata dal Desktop).
+ *   · Altezza fissa (`alto` del foglio): cambiando scheda il foglio non salta.
  */
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
     modelProfiles: TalosMobileModelProfileView[]
     routingProfiles: TalosMobileRoutingProfileView[]
     selectedModelProfileId: string | null
     selectedRoutingProfileId: string | null
     thinking: boolean
-    /** «Ragionamento esteso» qui: solo per un modello senza la pillola del ragionamento. */
-    showThinking?: boolean
-    /** La riga A9 per un modello senza la pillola; vuota = niente. */
-    reasoningNote?: string
-    /** J3-bis: «Mostra ragionamento» (sola vista) qui, per un modello senza la pillola (decisione 3 dell'owner). */
-    showReasoningSwitch?: boolean
+    /** Il livello scelto nel lessico del telefono; `null` = nessuna scelta («Auto»). */
+    selectedEffort?: string | null
+    /** La mappa del filo (A9) quando chi monta il foglio ce l'ha. */
+    reasoningWire?: FiloRagionamento | null
+    /** Vero nella Chat: il ragionamento esteso è un comando a sé e segue il livello; nel Codice il livello basta. */
+    thinkingSeparate?: boolean
     loadingModels?: boolean
     loadingRoutes?: boolean
     refreshingModels?: boolean
@@ -54,29 +58,36 @@ withDefaults(defineProps<{
     showModelLab?: boolean
     /** Il modello che il Codice sta aprendo (22/10/2026): lo dice la sua riga del selettore. */
     openingModelProfileId?: string | null
-}>(), { showModelLab: true, openingModelProfileId: null, showThinking: false, reasoningNote: '', showReasoningSwitch: false })
+    /** D-0147-UI-2: lo stato del piano ChatGPT per la riga del selettore principale (sul telefono); mai per quello dell'esecutore. */
+    pianoChatgpt?: 'attivo' | 'limite' | null
+}>(), { showModelLab: true, openingModelProfileId: null, pianoChatgpt: null, selectedEffort: null, reasoningWire: null, thinkingSeparate: true })
 
 const emit = defineEmits<{
     close: []
     selectModelProfile: [profileId: string]
     selectModelRoutingProfile: [routingProfileId: string]
     selectThinking: [enabled: boolean]
+    selectEffort: [level: TalosMobileEffortLevel]
     refreshModels: []
     openModelLab: []
     selectExecutorModelProfile: [profileId: string | null]
 }>()
 
-const settings = useSettingsStore()
+const profilo = computed(() => props.modelProfiles.find((p) => p.id === props.selectedModelProfileId) ?? null)
+const supportsThinking = computed(() => profilo.value?.thinking_toggle ?? profilo.value?.supports_thinking ?? false)
 </script>
 
 <template>
-    <TalosMobileComposerSheet :title="$t('chat.modelSheetTitle')" testid="talos-model-drawer" @close="emit('close')">
+    <TalosMobileComposerSheet :title="$t('chat.modelAndReasoning')" testid="talos-model-drawer" alto @close="emit('close')">
         <TalosMobileComposerModelPicker
+            dentro-al-foglio
+            schede
             :model-profiles="modelProfiles"
             :show-model-lab="showModelLab"
             :routing-profiles="routingProfiles"
             :selected-model-profile-id="selectedModelProfileId"
             :opening-model-profile-id="openingModelProfileId"
+            :piano-chatgpt="pianoChatgpt"
             :selected-routing-profile-id="selectedRoutingProfileId"
             :loading-models="loadingModels"
             :loading-routes="loadingRoutes"
@@ -88,40 +99,6 @@ const settings = useSettingsStore()
             @refresh-models="emit('refreshModels')"
             @open-model-lab="emit('openModelLab')"
         />
-
-        <div
-            v-if="reasoningNote || showThinking || showReasoningSwitch"
-            data-testid="talos-model-sheet-reasoning"
-            class="space-y-2 border-t border-[var(--talos-border)] pt-3"
-        >
-            <p v-if="reasoningNote" data-testid="talos-model-sheet-reasoning-note" class="px-1 text-2xs leading-4 text-[var(--talos-muted)]">
-                {{ reasoningNote }}
-            </p>
-            <div
-                v-if="showThinking"
-                class="flex min-h-touch items-center justify-between gap-3 px-1 text-sm text-[var(--talos-text)]"
-            >
-                <span class="min-w-0">{{ $t('chat.extendedThinking') }}</span>
-                <TalosThemedSwitch
-                    test-id="talos-mobile-thinking-toggle"
-                    :model-value="thinking"
-                    :aria-label="$t('chat.extendedThinking')"
-                    @update:model-value="emit('selectThinking', $event)"
-                />
-            </div>
-            <div
-                v-if="showReasoningSwitch"
-                class="flex min-h-touch items-center justify-between gap-3 px-1 text-sm text-[var(--talos-text)]"
-            >
-                <span class="min-w-0">{{ $t('chat.showReasoning') }}</span>
-                <TalosThemedSwitch
-                    test-id="talos-model-sheet-show-reasoning"
-                    :model-value="settings.state.shell.show_reasoning !== false"
-                    :aria-label="$t('chat.showReasoning')"
-                    @update:model-value="void settings.setShell({ show_reasoning: $event })"
-                />
-            </div>
-        </div>
 
         <div v-if="showExecutorModel" data-testid="talos-executor-model-section" class="border-t border-[var(--talos-border)] pt-3">
             <p class="px-1 pb-2 text-xs font-medium uppercase tracking-wide text-[var(--talos-muted)]">
@@ -141,6 +118,7 @@ const settings = useSettingsStore()
                 <Check v-if="selectedExecutorModelProfileId === null" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
             </button>
             <TalosMobileComposerModelPicker
+                dentro-al-foglio
                 :model-profiles="executorModelProfiles ?? []"
                 :selected-model-profile-id="selectedExecutorModelProfileId"
                 :loading-models="loadingModels"
@@ -151,5 +129,31 @@ const settings = useSettingsStore()
                 @refresh-models="emit('refreshModels')"
             />
         </div>
+
+        <!-- IL PIEDE: il ragionamento, una fascia fissa del foglio FUORI dalla parte che scorre (owner 28/10/2026: da sticky dentro il
+             corpo, sul telefono la lista passava sotto di lui), sempre visibile insieme ai modelli -->
+        <template #piede>
+            <div data-testid="talos-model-sheet-foot" class="talos-model-sheet-foot">
+                <TalosMobileEffortPicker
+                    :profile="profilo"
+                    :selected-effort="selectedEffort"
+                    :wire="reasoningWire"
+                    :thinking="thinking"
+                    :supports-thinking="supportsThinking"
+                    :thinking-separate="thinkingSeparate"
+                    @select-effort="emit('selectEffort', $event)"
+                    @select-thinking="emit('selectThinking', $event)"
+                />
+            </div>
+        </template>
     </TalosMobileComposerSheet>
 </template>
+
+<style scoped>
+/* una fascia del foglio sotto la parte che scorre: il filo e l'ombra dicono che la lista continua sopra */
+.talos-model-sheet-foot {
+    padding: 0.25rem 1rem 0;
+    border-top: 1px solid var(--talos-border); background: var(--talos-window-bg);
+    box-shadow: 0 -0.75rem 1rem -0.75rem rgb(0 0 0 / 0.35);
+}
+</style>

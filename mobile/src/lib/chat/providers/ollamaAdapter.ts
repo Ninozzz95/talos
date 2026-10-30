@@ -8,6 +8,8 @@ import {
     normalizeHttpEndpoint,
     requireHttpSuccess,
     sendWithProviderRetry,
+    TalosMobileProviderError,
+    type TalosMobileProviderOperation,
 } from '@/lib/chat/providerErrors'
 
 const modelSchema = z.object({
@@ -35,6 +37,21 @@ function requestTimeouts(timeout: number | undefined): { connectTimeout: number;
     return Number.isInteger(timeout) && timeout! > 0
         ? { connectTimeout: timeout!, readTimeout: timeout! }
         : {}
+}
+
+/**
+ * ⛔ ASS-148, parte Ollama (owner 29/10 «Frase + pulsante», OK del Desktop): con «Rete locale» tolta su Android 17, Ollama sul server di
+ * casa falliva con un errore di rete qualunque. Si avvolge SOLO la chiamata di rete: una risposta HTTP arrivata (4xx/5xx) passa per
+ * `requireHttpSuccess` fuori di qui e vuol dire che la rete funziona. Si converte solo se l'indirizzo è della rete di casa e il
+ * permesso è davvero tolto; altrimenti l'errore di prima, intatto. Il pulsante lo mette la scheda d'errore della chat.
+ */
+async function conLaReteDiCasa<T>(endpoint: string, operation: TalosMobileProviderOperation, chiamata: () => Promise<T>): Promise<T> {
+    try {
+        return await chiamata()
+    } catch (errore) {
+        if (errore instanceof TalosMobileProviderError || (errore as { name?: string } | null)?.name === 'AbortError') throw errore
+        throw await (await import('@/lib/network/reteDiCasa')).talosErroreDellaReteDiCasa(errore, endpoint, operation)
+    }
 }
 
 /** Arguments travel as a JSON string internally; Ollama wants the object. */
@@ -115,11 +132,11 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
     requiresEndpoint: true,
     async listModels(credential, transport) {
         const endpoint = normalizeHttpEndpoint('ollama', 'list_models', credential.endpoint)
-        const response = await transport.request({
+        const response = await conLaReteDiCasa(endpoint, 'list_models', () => transport.request({
             method: 'GET',
             url: `${endpoint}/api/tags`,
             ...requestTimeouts(credential.timeoutMs),
-        })
+        }))
         requireHttpSuccess({ provider: 'ollama', operation: 'list_models', status: response.status, data: response.data })
         const parsed = listSchema.safeParse(response.data)
         if (!parsed.success) throw malformedProviderResponse('ollama', 'list_models', { received: response.data, issues: parsed.error.issues })
@@ -142,13 +159,13 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
         // DEBT-MOBILE-016: stesso ritenta-con-backoff degli altri adattatori
         // — un server Ollama locale sotto carico può comunque rispondere
         // 429/503, non solo i fornitori remoti.
-        const response = await sendWithProviderRetry(() => transport.request({
+        const response = await conLaReteDiCasa(endpoint, 'complete', () => sendWithProviderRetry(() => transport.request({
             method: 'POST',
             url: `${endpoint}/api/chat`,
             headers: { 'content-type': 'application/json' },
             data: ollamaCompletionData(input, false),
             ...requestTimeouts(credential.timeoutMs),
-        }))
+        })))
         requireHttpSuccess({ provider: 'ollama', operation: 'complete', status: response.status, data: response.data })
         const parsed = completionSchema.safeParse(response.data)
         if (!parsed.success) throw malformedProviderResponse('ollama', 'complete', { received: response.data, issues: parsed.error.issues })
@@ -176,7 +193,7 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
         const collected: ReturnType<typeof parseOllamaToolCalls> = []
         // CONT (25/09/2026): il motivo di fine viaggiava solo nel percorso senza streaming; la chat usa lo streaming, e l'avviso «Si è fermata qui» non poteva scattare.
         let motivoDiFine: string | null = null
-        const stream = await talosStreamText({
+        const stream = await conLaReteDiCasa(endpoint, 'complete', () => talosStreamText({
             url: `${endpoint}/api/chat`,
             headers: { 'content-type': 'application/json' },
             body: ollamaCompletionData(input, true),
@@ -196,7 +213,7 @@ export const ollamaAdapter: TalosMobileProviderAdapter = {
             },
             onChunk: handlers.onChunk,
             onReasoning: handlers.onReasoning,
-        })
+        }))
         // Ids are positional for Ollama, so they must be assigned once over the
         // whole stream rather than per line — otherwise every call is `-0`.
         const calls = collected.map((call, index) => ({ ...call, id: `${call.name}-${index}` }))

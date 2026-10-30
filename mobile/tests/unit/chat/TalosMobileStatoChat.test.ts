@@ -123,10 +123,11 @@ describe('TalosMobileStatoChat — l\'etichetta', () => {
         expect(sorgente('shell/TalosMobileSidebar.vue')).toMatch(/container:\s*talos-recenti\s*\/\s*inline-size/)
     })
 
-    it('STATO-UI-05 «in corso» gira solo se il sistema non chiede meno movimento', () => {
+    it('STATO-UI-05 «in corso» gira, e col movimento ridotto pulsa piano invece di fermarsi (CALMO, 29/10)', () => {
+        // Prima era `motion-safe:animate-spin`: col movimento ridotto la rotella restava ferma, e ferma dice «bloccato»
         const icona = monta('in-corso').get('[data-testid="talos-chat-status"] svg')
-        expect(icona.classes()).toContain('motion-safe:animate-spin')
-        expect(icona.classes()).not.toContain('animate-spin')
+        expect(icona.classes()).toContain('animate-spin')
+        expect(icona.classes()).not.toContain('motion-safe:animate-spin')
     })
 })
 

@@ -6,13 +6,14 @@
  *
  * K3-C2b: anche le chiavi `doctor.*` dell'area `varie` (i testi del Doctor), filtrate per prefisso; il prefisso entra nella provenienza.
  *
- * Uso: node scripts/kernel-r4/testi-server-r4.mjs --r4 <checkout r4> --commit <sha> --uscita <file.json> [--area server|varie-doctor|processi-inspector|varie-pannello|modello-inspector|processi-scheda|kernel-prova|errori-processi|agenti-scheda|varie-attrezzi|app-risultato-delega|chat-risultato-delega|errori-punti|app-file|errori-file|app-terminale|processi-terminale|modello-viste|app-approvazione|chat-approvazione|kernel-approvazione|chat-permessi|chat-domande|errori-domande|chat-coda|agenti-coda|errori-fermato|chat-nota|errori-modello|app-allegati|app-trascrizione|errori-motivi|chat-piano|app-piano|modello-permessi|errori-piano|sezioni-automazioni|app-coordinazione|varie-fornitori|errori-sessioni|errori-chatgpt|errori-locale]
+ * Uso: node scripts/kernel-r4/testi-server-r4.mjs --r4 <checkout r4> --commit <sha> --uscita <file.json> [--area server|varie-doctor|processi-inspector|varie-pannello|modello-inspector|processi-scheda|kernel-prova|errori-processi|agenti-scheda|varie-attrezzi|app-risultato-delega|chat-risultato-delega|errori-punti|app-file|errori-file|app-terminale|processi-terminale|modello-viste|app-approvazione|chat-approvazione|kernel-approvazione|chat-permessi|chat-domande|errori-domande|chat-coda|agenti-coda|errori-fermato|chat-nota|errori-modello|app-allegati|app-trascrizione|errori-motivi|chat-piano|app-piano|modello-permessi|errori-piano|errori-generici|varie-esiti|app-esiti|app-impostazioni|errori-remoti|sezioni-automazioni|app-coordinazione|varie-fornitori|errori-sessioni|errori-chatgpt|errori-locale|errori-kernel|errori-turno-no|chat-comando|app-attivita]
  */
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 export const PERCORSO_TESTI_SERVER = 'harness-ui/frontend/src/i18n/testi/server.js'
@@ -25,6 +26,8 @@ export const PERCORSO_TESTI_AGENTI = 'harness-ui/frontend/src/i18n/testi/agenti.
 export const PERCORSO_TESTI_APP = 'harness-ui/frontend/src/i18n/testi/app.js'
 export const PERCORSO_TESTI_CHAT = 'harness-ui/frontend/src/i18n/testi/chat.js'
 export const PERCORSO_TESTI_SEZIONI = 'harness-ui/frontend/src/i18n/testi/sezioni.js'
+/** Le regole che riconoscono i messaggi del kernel (`MESSAGGI_DEL_KERNEL`): codice, non dizionario. */
+export const PERCORSO_REGOLE_ERRORI = 'harness-ui/frontend/src/components/errori.js'
 
 const AREE = {
     server: { percorso: PERCORSO_TESTI_SERVER, prefisso: null },
@@ -103,6 +106,21 @@ const AREE = {
         'review.noFileWrittenSo', 'review.whenTalosWritesOr'] },
     'app-revisione': { percorso: PERCORSO_TESTI_APP, prefisso: ['review.', 'common.pathCopied', 'common.copyFailed'] },
     'errori-piano': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['PLAN_', 'NOT_FOUND.', 'ORIGIN_FORBIDDEN.', 'INTERNAL_ERROR.', 'QUERY_INVALID.message'] },
+    // revisione del blocco 10, F-R1: codici del PC che arrivavano al telefono in inglese (r4 1c547775e; estratti a r4 c5ce4e453, i loro .message arrivano col blocco 11)
+    'errori-generici': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['PROVIDER_KEY_MISSING.', 'DELEGATION_READ_ONLY.', 'FORGE_INVALID.', 'HISTORY_RECOVERY_AMBIGUOUS.', 'START_OPERATION_CONFLICT.'] },
+    // ESITO-RIGA (Pad, 27/10/2026, parità col PC): le parole di una riga d'attrezzo non riuscita (`riassuntoAttrezzoConcluso`, `app.js:16140`)
+    'varie-esiti': { percorso: PERCORSO_TESTI_VARIE, prefisso: ['tools.kind.reading.failedOne', 'tools.kind.search.failedOne', 'tools.kind.listing.failedOne', 'tools.kind.writing.failedOne', 'tools.kind.command.failedOne', 'tools.kind.page.failedOne'] },
+    'app-esiti': { percorso: PERCORSO_TESTI_APP, prefisso: ['activity.stepFailed', 'activity.duplicateSkipped'] },
+    // IMPOSTAZIONE-RIFIUTATA (Desktop 27/10/2026): l'avviso di una scelta delle impostazioni che il PC non ha salvato (`sincronizzaImpostazioniSessione`)
+    'app-impostazioni': { percorso: PERCORSO_TESTI_APP, prefisso: ['settings.preferenceNotSaved'] },
+    // CENSIMENTO G (b), FRASI-UNICHE (Desktop 27/10/2026): i codici che le scritture remote rendono e che arrivavano in inglese; gli ultimi otto
+    // li ha aggiunti il Desktop (r4 79ea996de, ramo cura/blocco-11), ogni voce inglese è il testo LETTERALE del server
+    'errori-remoti': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['APPROVAL_ANSWER_FORBIDDEN.', 'APPROVAL_NOT_PENDING.', 'NOT_ALLOWED_REMOTELY.', 'RUNTIME_NOT_AVAILABLE.',
+        'SESSION_CHANGED_ELSEWHERE.', 'SESSION_LEASED.', 'SESSION_STORE_AMBIGUOUS.', 'SESSION_STORE_WRITE_FAILED.', 'CONSENT_NOT_PENDING.', 'REMOTE_CONSENTS_UNREADABLE.',
+        'OUTPUT_SESSION_BUSY.', 'WORKFLOW_STORE_IO.', 'OPERATION_FAILED.', 'BAD_MESSAGE.', 'TOO_LARGE.', 'UNKNOWN_OPERATION.', 'VERSION_UNSUPPORTED.', 'REMOTE_FOLDERS_FILE.',
+        // blocco 11 del Desktop (r4 6a4fc5e2b): le voci col testo LETTERALE delle rotte del ponte remoto (guardia dei letterali, 27/10)
+        'CONSENT_REQUIRED.', 'FILE_GONE.', 'FOLDER_NOT_LISTED.', 'REMOTE_UNAVAILABLE.', 'REMOTE_STORE_BUSY.',
+        'NOT_FOUND.device_session_not_found', 'NOT_FOUND.consent_request_not_found', 'NOT_FOUND.bridge_route'] },
     // ELENCO-R4 (ledger `LEDGER-ELENCO-SESSIONI-R4-2026-10-18.md`): il perché di una rinomina o di un'eliminazione rifiutata dall'elenco
     // delle sessioni. La busta di r4 porta un `message` generico («Invalid query», «Operation failed», misurato sul Pad): conta il motivo.
     'errori-sessioni': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['SESSION_STILL_RUNNING.', 'WORKFLOW_RUN_NOT_FINISHED.', 'SESSION_NOT_READY.',
@@ -113,6 +131,17 @@ const AREE = {
     // ⛔ CODICE COL MOTORE LOCALE (ledger `LEDGER-CODICE-MOTORE-LOCALE-2026-10-18.md`, r4 0f3f90f8e): i rifiuti della fonte `locale-ospite`
     // (la spinta) e del motore dell'app durante il giro (occupato, nessun modello, modello cambiato, non risponde)
     'errori-locale': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['LOCAL_GUEST_', 'kernel.motoreOspite'] },
+    // ⛔ D-0147-ERR-2 (Pad, 27/10, Desktop: «una tabella sola»): K3 scrive i messaggi del kernel in INGLESE e il desktop li dice nella
+    // lingua dell'interfaccia (`components/errori.js` `MESSAGGI_DEL_KERNEL`). Qui TUTTE le voci `kernel.*` E le regole stesse, prese
+    // dallo stesso commit: il telefono non ne tiene una copia a mano che invecchia (sostituisce `errori-kernel-locale-r4.json`).
+    'errori-kernel': { percorso: PERCORSO_TESTI_ERRORI, prefisso: 'kernel.', regole: { percorso: PERCORSO_REGOLE_ERRORI, tabella: 'MESSAGGI_DEL_KERNEL' } },
+    // ⛔ T8, il corpo della riga d'attrezzo (ledger `LEDGER-T8-CORPO-DELLA-RIGA-2026-10-27.md`, r4 79ea996de): la frase del NO del kernel
+    // (`spiegaRifiutoAttrezzo`), il verdetto e il posto di un comando (`esito-comando.js`), le parole del corpo (`app.js` :23425-23636)
+    'errori-turno-no': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['turno.no.', 'turno.rifiuto.'] },
+    'chat-comando': { percorso: PERCORSO_TESTI_CHAT, prefisso: ['command.where.', 'command.outcome.'] },
+    'app-attivita': { percorso: PERCORSO_TESTI_APP, prefisso: ['activity.noOutput', 'activity.outputLabel', 'activity.diagnosticsLabel', 'activity.moreLinesOne',
+        'activity.moreLinesMany', 'activity.characters', 'activity.failedOne', 'activity.failedMany', 'activity.interruptedOne', 'activity.interruptedMany',
+        'activity.arg.'] },
 }
 
 /** Un dizionario d'area di r4 a quel commit (`export default { it: {…}, en: {…} }`), letto come modulo; con `prefisso` (uno o più), solo quelle chiavi. */
@@ -134,6 +163,37 @@ export async function estraiTestiR4({ r4, commit, percorso, prefisso = null }) {
     }
 }
 
+/**
+ * Una tabella di regole del desktop (`const <tabella> = [ { chiave, re, parametri? }, … ];`) a quel commit, come DATI: per ogni voce
+ * la chiave, la sorgente e i flag dell'espressione, e i nomi dei parametri che `parametri` produce. La tabella si valuta in un contesto vuoto con un `t` finto: nessun import, nessun effetto. Fallisce se la tabella non c'è o cambia forma.
+ * ⛔ Revisione del blocco 8 (Desktop, F-R2): `node:vm` NON è un confine di sicurezza; qui va bene perché il testo è un file del
+ * nostro repo a un commit fissato. Tutto (tabella E chiamate a `parametri`) gira DENTRO il contesto, sotto lo stesso tetto di 1 s,
+ * ed esce come JSON: oggetti di questo contesto, nessuna funzione che torna fuori.
+ */
+export function estraiRegoleR4({ r4, commit, percorso, tabella }) {
+    const completo = execFileSync('git', ['-C', r4, 'rev-parse', '--verify', `${commit}^{commit}`], { encoding: 'utf8' }).trim()
+    const sorgente = execFileSync('git', ['-C', r4, 'show', `${completo}:${percorso}`], { encoding: 'utf8' })
+    const testa = `const ${tabella} = [`
+    const da = sorgente.indexOf(testa)
+    if (da < 0) throw new Error(`${percorso}: manca ${tabella}`)
+    const a = sorgente.indexOf('\n];', da)
+    if (a < 0) throw new Error(`${percorso}: ${tabella} senza fine`)
+    const testoTabella = sorgente.slice(da + testa.length - 1, a + 2)
+    // i nomi dei parametri dal loro COMPORTAMENTO: la funzione su un risultato finto (il `t` finto rende la chiave)
+    const comeDati = `JSON.stringify((${testoTabella}).map((v) => ({
+        chiave: v && v.chiave, re: Object.prototype.toString.call(v && v.re) === '[object RegExp]',
+        sorgente: v && v.re && v.re.source, flag: v && v.re && v.re.flags,
+        parametri: v && typeof v.parametri === 'function' ? Object.keys(v.parametri(['', '1', '2', '3']) || {}) : [],
+    })))`
+    const voci = JSON.parse(runInNewContext(comeDati, { t: (chiave) => chiave }, { timeout: 1000 }))
+    if (!Array.isArray(voci) || voci.length === 0) throw new Error(`${percorso}: ${tabella} vuota o non è un elenco`)
+    const regole = voci.map((v, i) => {
+        if (typeof v?.chiave !== 'string' || v.re !== true) throw new Error(`${percorso}: ${tabella}[${i}] senza chiave o re`)
+        return { chiave: v.chiave, sorgente: v.sorgente, flag: v.flag, parametri: v.parametri }
+    })
+    return { origine: { commit: completo, percorso, tabella, sha256: createHash('sha256').update(sorgente).digest('hex') }, regole }
+}
+
 /** Il dizionario `server` di r4 a quel commit. */
 export function estraiTestiServerR4({ r4, commit }) {
     return estraiTestiR4({ r4, commit, percorso: PERCORSO_TESTI_SERVER })
@@ -151,7 +211,12 @@ function argomento(nome, riserva) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
     const area = AREE[argomento('area', 'server')]
     if (!area) throw new Error(`area sconosciuta: ${argomento('area')}`)
-    const testi = await estraiTestiR4({ r4: argomento('r4'), commit: argomento('commit'), ...area })
+    const { regole: tabellaRegole, ...dizionario } = area
+    const testi = await estraiTestiR4({ r4: argomento('r4'), commit: argomento('commit'), ...dizionario })
+    if (tabellaRegole) {
+        const { origine, regole } = estraiRegoleR4({ r4: argomento('r4'), commit: argomento('commit'), ...tabellaRegole })
+        Object.assign(testi, { origineRegole: origine, regole })
+    }
     writeFileSync(argomento('uscita'), `${JSON.stringify(testi, null, 2)}\n`)
     console.log(`${Object.keys(testi.it).length} voci da ${testi.origine.commit.slice(0, 9)} (sha256 ${testi.origine.sha256.slice(0, 12)}…)`)
 }

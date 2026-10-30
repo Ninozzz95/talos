@@ -107,6 +107,7 @@ export const TALOS_TOOL_LABELS: Record<string, string> = {
      * ripiega sul suo nome invece che sul nulla.
      */
     tool_details: 'Looking up how to do that',
+    tool_describe: 'Looking up how to do that',
     // A0-5 (Pad, 21/10): senza parola la riga diceva «tool_search: set alarm 7 am»
     tool_search: 'Looking for the right tool',
     tool_create: 'Creating a custom tool',
@@ -184,6 +185,9 @@ export const TALOS_TOOL_LABEL_KEYS: Record<string, string> = {
     local_model_download: 'toolActivity.localModelDownload',
     local_models_status: 'toolActivity.localModelsStatus',
     tool_details: 'toolActivity.toolDetails',
+    // D-0145-5 (Desktop 25/10): l'attrezzo di r4 che legge lo schema di un attrezzo tenuto da parte (`ponte-attrezzi.mjs`), come
+    // `tool_details`: la stessa parola, mai il nome grezzo accanto a «Cerco lo strumento giusto»
+    tool_describe: 'toolActivity.toolDetails',
     tool_search: 'toolActivity.toolSearch',
     tool_create: 'toolActivity.toolCreate',
 }
@@ -439,6 +443,7 @@ export const TALOS_TOOL_ICONS: Record<string, TalosToolIconName> = {
     local_model_download: 'download',
     local_models_status: 'tool',
     tool_details: 'tool',
+    tool_describe: 'tool',
     tool_search: 'tool',
     tool_create: 'tool',
 }

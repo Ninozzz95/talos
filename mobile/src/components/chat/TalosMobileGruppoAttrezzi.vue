@@ -17,6 +17,8 @@ defineProps<{
     riassunto: string
     /** «4 steps», già tradotto. */
     passi: string
+    /** T8: i fallimenti dentro il gruppo, già detti («2 steps failed»); assente se non ce ne sono. */
+    fallimenti?: string
     vivo: boolean
     aperto: boolean
 }>()
@@ -42,7 +44,7 @@ const idRighe = `talos-tool-group-${useId()}`
                 <slot name="icon" />
             </span>
             <span class="min-w-0 flex-1 truncate text-xs">{{ riassunto }}</span>
-            <span class="shrink-0 text-2xs opacity-70 [font-variant-numeric:tabular-nums]">{{ passi }}</span>
+            <span class="shrink-0 text-2xs opacity-70 [font-variant-numeric:tabular-nums]" data-testid="talos-tool-group-steps">{{ fallimenti ? `${passi} · ${fallimenti}` : passi }}</span>
             <ChevronRight
                 class="size-3.5 shrink-0 opacity-70 transition-transform duration-150 motion-reduce:transition-none"
                 :class="aperto ? 'rotate-90' : ''"

@@ -16,6 +16,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
+import { percorsoApribileR4 } from '@/lib/harness/r4/allegatoApribileR4'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import TalosCodiceR4Header from '@/components/codice/TalosCodiceR4Header.vue'
 import TalosCodiceR4AlberoSheet from '@/components/codice/TalosCodiceR4AlberoSheet.vue'
@@ -37,6 +38,10 @@ const TalosCodiceR4Coda = defineAsyncComponent(() => import('@/components/codice
 const TalosMobileChatgptPastiglia = defineAsyncComponent(() => import('@/components/chat/TalosMobileChatgptPastiglia.vue'))
 // K3-C Esporta: lo stesso foglio di esportazione della chat, caricato a richiesta
 const TalosMobileSessionExportSheet = defineAsyncComponent(() => import('@/components/chat/TalosMobileSessionExportSheet.vue'))
+// Allegati apribili (owner 26/10): il foglio di un file della sessione del PC, solo quando la persona tocca il chip
+const TalosMobileAttachmentPreviewSheet = defineAsyncComponent(() => import('@/components/chat/TalosMobileAttachmentPreviewSheet.vue'))
+// «Ferma tutto» (owner 29/10/2026): il foglio delle due scelte, solo quando lo Stop lo apre
+const TalosCodiceR4FermaTuttoSheet = defineAsyncComponent(() => import('@/components/codice/TalosCodiceR4FermaTuttoSheet.vue'))
 import { LARGHEZZA_VISTE_IN_TESTATA, testoTerminaleR4 } from '@/lib/harness/r4/terminaleR4'
 import { testoFileR4 } from '@/lib/harness/r4/alberoR4'
 import { conMenzioneR4 } from '@/lib/harness/r4/allegatiR4'
@@ -44,7 +49,13 @@ import { creaMemoriaPannelloR4 } from '@/lib/harness/r4/memoriaPannelloR4'
 import { chipDelPermessoR4, riassuntoSenzaChiedereR4, tonoPermessoR4 } from '@/lib/harness/r4/permessiR4'
 import { testoPianoR4 } from '@/lib/harness/r4/pianoR4'
 import { Keyboard } from '@capacitor/keyboard'
-import { ArrowDown, ClipboardList, Loader2, ShieldCheck, SquareTerminal, X } from '@lucide/vue'
+import { ArrowDown, ArrowLeft, ArrowUp, ClipboardList, Laptop, Loader2, Mic, Plus, ShieldCheck, SquareTerminal, X } from '@lucide/vue'
+import TalosRigaInCorso from '@/components/chat/TalosRigaInCorso.vue'
+import { useTalosSogliaSecondi } from '@/composables/useTalosSogliaSecondi'
+import { useAgentiViviR4 } from '@/composables/useAgentiViviR4'
+import { decidiStopR4, preferenzaDopoLaSceltaR4, pulsanteStopR4, testoFermaTuttoR4, type SceltaStopR4 } from '@/lib/harness/r4/fermaTuttoR4'
+import { useComputerRemoti } from '@/lib/remoto/computerRemoti'
+import { nomeECodice } from '@/lib/remoto/ricordiDelPc'
 import type { PluginListenerHandle } from '@capacitor/core'
 import type { TalosAzioneMessaggio } from '@/components/chat/mobileChatTypes'
 import { TALOS_SORGENTE_STREAMING, type TalosSorgenteStreaming } from '@/lib/chat/sorgenteStreaming'
@@ -63,9 +74,9 @@ import { carteAperteR4, creaSegnaleVista } from '@/lib/remoto/cartaVista'
 import { TALOS_APPROVAZIONI_R4 } from '@/lib/harness/r4/approvazioniPonte'
 import { talosR4Pronto } from '@/lib/harness/terminalePonte'
 import { ROTTA_RIPIEGO_R4 } from '@/lib/harness/r4/sceltaCodiceR4'
-import { talosComposerFlags } from '@/lib/composerStyle'
 import { resolveTalosDictationLanguageTag, talosRilevamentoAcceso } from '@/lib/dictationPolicy'
-import { useConversazioneR4 } from '@/composables/useConversazioneR4'
+import { useConversazioneR4, type ErroreR4 } from '@/composables/useConversazioneR4'
+import { avvisoImpostazioneRifiutataR4 } from '@/lib/harness/r4/avvisoImpostazioneR4'
 import { createTalosChatLiveEdge } from '@/composables/useTalosChatLiveEdge'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { talosTabletStationParent } from '@/lib/tabletLayout'
@@ -91,6 +102,7 @@ import { TALOS_BYTE_IMMAGINE } from '@/lib/chat/byteImmagine'
 import { bollaDaInviareR4, testoPerIlModelloR4 } from '@/lib/harness/r4/allegatiR4'
 import { TALOS_MOBILE_PROVIDERS, talosMobileProviderLabel } from '@/lib/mobileProviders'
 import { talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
+import { annotaOraDelPc, dimenticaScartoDelPc, oraSulDispositivo, scartoDelPc } from '@/lib/remoto/scartoOrologioPc'
 // la domanda sul consenso è quella della chat (`App.vue`), caricata solo quando serve
 const TalosMobileConfirmDialog = defineAsyncComponent(() => import('@/components/shell/TalosMobileConfirmDialog.vue'))
 
@@ -110,7 +122,7 @@ let segnaVistaRemota: ((sessionId: string) => Promise<void>) | null = null
 const clienteR4 = (): TalosR4ClientePonte => ponteRemoto ?? talosClienteR4()
 /**
  * ⛔ RA-11 (revisione avversariale R-M4, 21/10/2026; regola «no fake feature», deciso: «Solo dal computer»): in remoto ciò che il PC
- * rifiuta al telefono (allegati, duplica, esporta, condividi, albero dei file, fidare un hook, azioni sui processi) si vede spento col
+ * rifiuta al telefono (allegati, esporta, condividi, albero dei file, fidare un hook, azioni sui processi) si vede spento col
  * perché, invece di offrirlo e fallire. Vuoto in locale: i componenti restano come prima.
  */
 const soloDalPc = computed(() => (pcRemoto ? t('computer.onlyFromPc') : ''))
@@ -151,7 +163,11 @@ watch(() => talosCambiSessioniR4.value.n, () => {
     const conv = conversazione.value
     if (!conv || !cambio.id || cambio.id !== conv.sessioneId.value) return
     if (cambio.eliminata) void router.replace(rottaDellaSessione())
-    else if (cambio.nome) conv.titolo.value = cambio.nome
+    else if (cambio.nome) {
+        conv.titolo.value = cambio.nome
+        // la colonna l'ha appena rinominata: la sessione c'è, quindi un avviso «non trovata» rimasto da prima se ne va (prova CLI 27/10)
+        void conv.ritrovata()
+    }
 })
 const settings = useSettingsStore()
 const toasts = useTalosMobileToasts()
@@ -160,12 +176,76 @@ const toasts = useTalosMobileToasts()
 const AZIONI_DEL_CODICE_R4: readonly TalosAzioneMessaggio[] = ['riutilizza', 'condividi']
 
 const fase = ref<'avvio' | 'pronta' | 'assente'>('avvio')
+/**
+ * ⛔ R2 delle righe in corso (owner 27/10/2026 «quella scritta avvio del codice non ti sembra estremamente brutta?», «nulla deve fare
+ * sembrare la ui bloccata»; bozzetto approvato il 28/10, scena 1; `codiceR4Remoto.test.ts` COLL-01..07): aprendo una sessione del PC,
+ * testata vera subito, «Mi collego a <PC>» coi secondi dall'apertura, «tentativo N» dal secondo; se il PC non risponde una carta sul
+ * posto con Riprova e Torna al computer, mai più il ritorno da soli al dettaglio con un avviso volante.
+ */
+const collegamento = ref<{ stato: 'in-corso' | 'fallito', tentativo: number, dal: number, perche: string }>({ stato: 'in-corso', tentativo: 1, dal: Date.now(), perche: '' })
+// il nome come lo dice la scheda del PC; senza elenco ancora letto, «Computer · bd74» (creare il negozio non chiama il plugin), e
+// il nome vero appena l'elenco arriva (revisione del Desktop, 28/10: COLL-08)
+const computerRemoti = pcRemoto ? useComputerRemoti() : null
+const nomeDelPc = computed(() => (pcRemoto
+    ? nomeECodice(computerRemoti?.elenco.value.find((pc) => pc.pcId === pcRemoto) ?? { pcId: pcRemoto, nome: null }, t('computer.unnamed'))
+    : ''))
+let collegaAlPc: (() => Promise<void>) | null = null
+function riprovaIlCollegamento(): void {
+    collegamento.value = { stato: 'in-corso', tentativo: collegamento.value.tentativo + 1, dal: Date.now(), perche: '' }
+    void collegaAlPc?.()
+}
+function tornaAlComputer(): void {
+    if (pcRemoto) void router.replace({ name: 'computer-item', params: { pcId: pcRemoto } })
+}
 const conversazione = shallowRef<ReturnType<typeof useConversazioneR4> | null>(null)
 let scope = effectScope()
 let cartellaDiLavoro = ''
+/**
+ * ⛔ Owner 26/10 (allegati apribili): la cartella contro cui un chip assoluto si prova «dentro», nota prima del primo messaggio. Sul
+ * PC resta null: il percorso assoluto del PC non arriva mai al dispositivo, si aprono i relativi (`allegati/<nome>`).
+ */
+const radiceAllegati = ref<string | null>(null)
+/**
+ * ⛔ D-0145-6(b): le ore di una sessione del PC sull'orologio del dispositivo. Una funzione NUOVA a ogni scarto nuovo: la lista dei
+ * messaggi la tiene nel `v-memo`, così le righe già disegnate si ridicono quando lo scarto arriva.
+ */
+const oraMostrata = computed(() => {
+    const scarto = scartoDelPc(pcRemoto)
+    return scarto ? (iso: string) => oraSulDispositivo(iso, scarto) : undefined
+})
+/**
+ * ⛔ Sul PC le rotte dell'albero sono rifiutate dal ponte (`soloDalPc`: la scheda File dice «si sfogliano dal computer»), quindi il
+ * chip non passa di lì: si apre col foglio dell'anteprima, che legge dal PC in sola lettura (`ponte.anteprimaFile`: `file.list` +
+ * `file.read`, revisione del Desktop 26/10, provato sul Pad con ordini-dal-pad-2.csv).
+ */
+const percorsoDaAprire = (percorso: string): string | null => {
+    // sul PC: solo i relativi (il PC non manda mai il suo percorso assoluto); il file si trova poi per nome fra gli allegati
+    if (pcRemoto) return percorsoApribileR4(percorso, null)
+    // in locale la radice e la base arrivano col giro (r4 7d1d3d7dd); prima di un giro vale la cartella di lavoro
+    const cartelle = conversazione.value?.cartelle.value ?? null
+    return percorsoApribileR4(percorso, cartelle?.radice ?? radiceAllegati.value, cartelle?.base ?? null)
+}
+/**
+ * ⛔ Allegati apribili, sessione del PC (revisione del Desktop 26/10): il ponte remoto non dà l'albero, ma `file.list` + `file.read`
+ * leggono l'allegato in sola lettura (`ponte.anteprimaFile`); il foglio è quello della chat. In locale: la scheda File, come la Review.
+ */
+const allegatoDalPc = shallowRef<{ nome: string; percorso: string } | null>(null)
+function apriAllegatoDellaPersona(percorso: string): void {
+    if (!pcRemoto) { apriFileDallaRevisione(percorso); return }
+    const nome = percorso.split('/').pop() ?? percorso
+    allegatoDalPc.value = { nome, percorso }
+}
+function caricaAllegatoDalPc(nome: string) {
+    return () => {
+        const sessionId = conversazione.value?.sessioneId.value
+        const anteprima = ponteRemoto?.anteprimaFile
+        if (!sessionId || !anteprima) return Promise.resolve({ esito: 'non-mostrabile' as const })
+        return anteprima({ sessionId, nome })
+    }
+}
 const prompt = ref('')
 /** K3-C2/K3-C3a: i fogli dell'header. */
-const foglio = ref<'albero' | 'hook' | 'comandi' | 'rinomina' | 'doctor' | 'esporta' | 'modo' | null>(null)
+const foglio = ref<'albero' | 'hook' | 'comandi' | 'rinomina' | 'doctor' | 'esporta' | 'modo' | 'ferma-tutto' | null>(null)
 /**
  * K3-C3b-1 (owner 15/10: «Foglio sul telefono, colonna sul tablet»): ▤ apre il pannello, foglio o colonna a destra della conversazione.
  * ⛔ K3-PAN840 (owner 15/10 sera: «Foglio se il Codice è stretto»): si decide dallo spazio VERO del Codice, non dalla finestra. Sul Pad
@@ -224,6 +304,62 @@ watch(riga, (el) => {
 }, { flush: 'post' })
 /** A ogni giro finito il pannello rilegge politica di compattazione e riuso della cache. */
 const giriFiniti = computed(() => conversazione.value?.pannello.value.giri.filter((g) => !g.tu && !g.inCorso).length ?? 0)
+
+/*
+ * ⛔ «Ferma tutto» e «Stop anche a chat ferma» (owner 29/10/2026; scheda `mockup/ferma-tutto/pezzi/SCHEDA-DI-CONSEGNA.md`, voci 1, 3, 5, 7;
+ * contratto `CONTRATTO-FERMA-TUTTE-2026-10-29.md` §3 e §6). Gli agenti vivi della conversazione (il numero del contratto, tutto
+ * l'albero), anche col pannello chiuso: `useAgentiViviR4`, con le sorgenti del pannello. Lo Stop passa da `decidiStopR4`:
+ *   · senza agenti vivi: immediato, come oggi (`{}`);
+ *   · chat al lavoro con agenti e «chiedi»: il foglio delle due scelte (il numero è quello del tocco, come nel mockup);
+ *   · con la scelta ricordata: parte da sola (`figlie: 'tutte' | 'nessuna'`);
+ *   · a chat FERMA con agenti: lo Stop resta al posto dell'Invio a campo vuoto e li ferma subito (`figlie: 'tutte'`), senza foglio.
+ * Dopo uno Stop gli agenti si rileggono. Il Codice di oggi su `/harness` non passa di qui (G5).
+ */
+const agentiVivi = useAgentiViviR4({
+    radice: () => conversazione.value?.sessioneId.value ?? null,
+    inDiretta: () => conversazione.value?.pannello.value.agentiInDiretta ?? [],
+    caricaSessioni: () => conversazione.value?.sessioni() ?? Promise.resolve(null),
+    caricaFigli: () => conversazione.value?.figli() ?? Promise.resolve(null),
+    giriFiniti,
+})
+const quanteNelFoglio = ref(0)
+const pulsanteStop = computed(() => pulsanteStopR4({
+    suR4: true, chatAlLavoro: sending.value, alLavoro: agentiVivi.quanti.value, conTesto: prompt.value.trim() !== '',
+}))
+/** La riga viva sopra il compositore: chat ferma, agenti al lavoro (anche dopo «Ferma solo la chat»). I secondi solo dopo 2 s (UI-110). */
+const rigaAgenti = computed(() => fase.value === 'pronta' && !sending.value && agentiVivi.quanti.value > 0)
+const sogliaRigaAgenti = useTalosSogliaSecondi({ attivo: () => rigaAgenti.value })
+async function fermaConLaScelta(scelta: SceltaStopR4 | null): Promise<void> {
+    const conv = conversazione.value
+    if (!conv) return
+    await (scelta ? conv.ferma(scelta) : conv.ferma())
+    if (scelta === 'tutte') void agentiVivi.rileggi()
+}
+function suStop(): void {
+    const d = decidiStopR4({
+        suR4: true, alLavoro: agentiVivi.quanti.value, preferenza: settings.state.shell.stop_con_sotto_agenti, chatAlLavoro: sending.value,
+    })
+    if (d.tipo === 'immediato') void fermaConLaScelta(null)
+    else if (d.tipo === 'chiedi') { quanteNelFoglio.value = d.quante; foglio.value = 'ferma-tutto' }
+    else if (d.tipo === 'invia') void fermaConLaScelta(d.scelta)
+    else if (d.tipo === 'agenti') void fermaConLaScelta('tutte')
+}
+/** Una scelta nel foglio la manda subito; con «Ricorda la scelta» diventa la preferenza del dispositivo (le Impostazioni la cambiano). */
+function scegliFermaTutto(scelta: SceltaStopR4, ricorda: boolean): void {
+    foglio.value = null
+    const attuale = settings.state.shell.stop_con_sotto_agenti
+    const dopo = preferenzaDopoLaSceltaR4(attuale, scelta, ricorda)
+    if (dopo !== attuale) void settings.setShell({ stop_con_sotto_agenti: dopo })
+    void fermaConLaScelta(scelta)
+}
+/** «Ferma» nella scheda Agenti (owner 29/10 notte): lo Stop di UNA figlia; dopo, anche la schermata rilegge i suoi agenti. */
+async function fermaFiglia(id: string): Promise<{ ok: true } | { ok: false; messaggio: string | null }> {
+    const conv = conversazione.value
+    if (!conv) return { ok: false, messaggio: null }
+    const esito = await conv.fermaFiglia(id)
+    void agentiVivi.rileggi()
+    return esito
+}
 const composer = ref<InstanceType<typeof TalosMobileComposer> | null>(null)
 const scorrimento = ref<HTMLDivElement | null>(null)
 const dock = ref<HTMLDivElement | null>(null)
@@ -243,23 +379,45 @@ const errore = computed(() => conversazione.value?.errore.value ?? null)
 // ⛔ CHATGPT NEL CODICE: i codici del piano che il telefono dice già (la chat, «Modelli, sotto OpenAI») con le parole della chat;
 // gli altri (quelli di r4: custode, rotte) col dizionario del desktop
 /** I guasti del canale verso il PC (`sessioneRemota.ts`, il nativo) che il ponte differito riporta nella busta. */
-const CODICI_DEL_CANALE = new Set(['CONNECT_FAILED', 'NOT_PAIRED', 'REVOKED', 'DISCONNECTED'])
-const testoErrore = computed(() => {
-    if (!errore.value) return ''
+// REMOTE_STORE_BUSY (revisione del blocco 10, F-R1): il PC è occupato, la frase del controllo remoto e non quella inglese del server
+const CODICI_DEL_CANALE = new Set(['CONNECT_FAILED', 'NOT_PAIRED', 'REVOKED', 'DISCONNECTED', 'REMOTE_STORE_BUSY'])
+const testoErrore = computed(() => (errore.value ? fraseDellErrore(errore.value) : ''))
+/** La frase di un rifiuto, la stessa per la riga della conversazione e per l'avviso di un'impostazione rifiutata. */
+function fraseDellErrore(e: ErroreR4): string {
     // ⛔ D-RM4-8 (revisione avversariale R-M4, 21/10/2026): in remoto la chiave che manca è quella del COMPUTER, e si collega dal PC
     // («dalle impostazioni dei fornitori» sul telefono si leggeva come le impostazioni del telefono); in locale la frase del desktop
-    const { code, reason, params } = errore.value
+    const { code, reason, params } = e
     // D-MOCK-11: il consenso della cartella, con le parole del dispositivo (`computer.consent.*`)
-    const fraseConsenso = pcRemoto ? fraseDelConsenso(errore.value) : null
+    const fraseConsenso = pcRemoto ? fraseDelConsenso(e) : null
     if (fraseConsenso) return t(fraseConsenso)
     // D-MOCK-16: il canale verso il PC non si è aperto (ponte differito): la frase del controllo remoto, non quella di r4
     if (pcRemoto && CODICI_DEL_CANALE.has(code)) return t(fraseErroreRemoto(code) ?? 'computer.errors.unreachable')
+    // PROVIDER_KEY_MISSING (r4 1c547775e, senza il nome del fornitore): la stessa frase del PC, decisione del Desktop 27/10
+    if (pcRemoto && code === 'PROVIDER_KEY_MISSING') return t('computer.keyMissingOnPc')
     if (pcRemoto && code === 'CONFIG_INVALID' && (reason === 'provider-key-missing' || reason === 'provider-key-missing-named')) {
         return typeof params?.provider === 'string' && params.provider ? tTesto('computer.keyMissingOnPcNamed', { provider: params.provider }) : t('computer.keyMissingOnPc')
     }
     // ⛔ RA-08: le frasi del piano del TELEFONO («Modelli, sotto OpenAI») non valgono per il PC, che ha le sue (il dizionario del desktop)
-    return !pcRemoto && FRASI_DEL_PIANO.has(code) ? t(`models.chatgptErrors.${code}`) : messaggioErroreModelloR4(errore.value, locale.value)
-})
+    return !pcRemoto && FRASI_DEL_PIANO.has(code) ? t(`models.chatgptErrors.${code}`) : messaggioErroreModelloR4(e, locale.value)
+}
+
+/**
+ * IMPOSTAZIONE-RIFIUTATA (Pad, 27/10/2026; mockup approvato dal Desktop): il modello o il ragionamento rifiutati dal PC finivano
+ * nella riga della conversazione DIETRO il foglio aperto. Come il PC (`sincronizzaImpostazioniSessione`): un avviso sopra tutto (la
+ * regione degli avvisi sta sopra i fogli), «Preferenza non salvata» col motivo; il valore resta quello di prima (cambia solo quando il PC
+ * accetta). Il foglio resta aperto (owner 27/07: scegliere non lo chiude). Per il consenso l'avviso porta «Chiedi al computer».
+ */
+function avvisaImpostazioneRifiutata(e: ErroreR4): void {
+    const consenso = pcRemoto && e.code === 'CONSENT_REQUIRED'
+    toasts.push({
+        message: avvisoImpostazioneRifiutataR4(fraseDellErrore(e), locale.value),
+        ...(consenso ? { action: { label: t('computer.consent.ask'), run: () => {
+            // la carta «Conferma sul computer» nasce nella conversazione: col foglio dei modelli aperto restava dietro (Pad, 27/10, vc313)
+            void composer.value?.closeModelPicker()
+            void conversazione.value?.chiediConsenso()
+        } } } : { durationMs: 8000 }),
+    })
+}
 
 /*
  * ⛔ D-MOCK-11 (dal vivo, 24/10/2026; contratto R5.12, parte 1, punti 2-3), solo sul PC: «Conferma sul computer» mentre la persona
@@ -267,6 +425,14 @@ const testoErrore = computed(() => {
  * risposto» «Riprova» (una sessione nuova si rimanda intera: il PC aveva buttato il messaggio con la richiesta).
  */
 const attesaConsenso = computed(() => (pcRemoto ? conversazione.value?.attesaConsenso.value ?? null : null))
+/**
+ * GFR-12: il guardiano del flusso si è arreso; la riga d'errore offre «Riconnetti» (non per una sessione interrotta sul PC, BST-03).
+ * Revisione avversaria: altre azioni azzerano `errore` (compatta, riprendi, consenso); la riga resta finché il collegamento è perso,
+ * con la frase del PC.
+ */
+const riconnettibile = computed(() => conversazione.value?.riconnettibile.value === true)
+const testoRigaErrore = computed(() => testoErrore.value
+    || (riconnettibile.value ? fraseDellErrore({ code: 'OPERATION_FAILED', reason: 'timeout', message: 'The computer did not answer in time.' }) : ''))
 const azioneConsenso = computed<'chiedi' | 'riprova' | null>(() => {
     if (!pcRemoto || !errore.value) return null
     if (errore.value.code === 'CONSENT_REQUIRED' && conversazione.value?.consensoDaChiedere.value) return 'chiedi'
@@ -425,8 +591,17 @@ const sorgente: TalosSorgenteStreaming = {
     ragionamento: computed(() => conversazione.value?.sorgente.ragionamento.value ?? ''),
     confini: computed(() => conversazione.value?.sorgente.confini.value ?? []),
     attivi: computed(() => conversazione.value?.sorgente.attivi.value ?? []),
+    inPausa: computed(() => conversazione.value?.sorgente.inPausa?.value === true),
+    // R4: l'attesa della prima parola; «aspetto il computer» solo quando a lavorare è il PC
+    attesa: computed(() => {
+        const a = conversazione.value?.sorgente.attesa?.value ?? null
+        return a ? { ...a, chi: pcRemoto ? 'computer' as const : null } : null
+    }),
 }
 provide(TALOS_SORGENTE_STREAMING, sorgente)
+/** R3 (bozzetto approvato il 28/10, scena 9): la linea caduta a metà giro, coi secondi dalla caduta; poi «Ricollegato» per 2 s. */
+const ricollegamento = computed(() => conversazione.value?.ricollegamento.value ?? null)
+const ricollegato = computed(() => conversazione.value?.ricollegato.value === true)
 /** K3-AP1: la carta d'approvazione nella conversazione risponde a r4 da qui (politica della sessione e `POST /approve`). */
 provide(TALOS_APPROVAZIONI_R4, {
     politica: () => conversazione.value?.politica.value ?? { permessi: null, perAttrezzo: {} },
@@ -478,6 +653,12 @@ async function apriSessione(id: string | null): Promise<void> {
         primaDiInviare: (modello) => sincronizzaFornitore(fornitoreDelModelloR4(modello), modello),
         // ⛔ CHATGPT NEL CODICE: r4 dice che il token del piano va rinnovato ⇒ il custode della chat rinnova (forzato) e si rispinge
         rinnovaAccesso: () => sincronizzaChatgpt(true),
+        // IMPOSTAZIONE-RIFIUTATA: il modello o il ragionamento rifiutati dal PC, in un avviso sopra tutto (mai dietro il foglio)
+        suImpostazioneRifiutata: avvisaImpostazioneRifiutata,
+        // ⛔ D-0145-6(b): l'orologio del PC può essere sfasato; le sue ore dal vivo lo misurano, la riapertura lo rimisura
+        ...(pcRemoto ? { suOraDalVivo: (ms: number) => annotaOraDelPc(pcRemoto, ms), suApertura: () => dimenticaScartoDelPc(pcRemoto) } : {}),
+        // R4: l'ora del giro del PC sull'orologio del dispositivo, per i secondi dell'attesa della prima parola
+        ...(pcRemoto ? { oraDelPc: (ms: number) => ms + scartoDelPc(pcRemoto) } : {}),
         // ⛔ e i suoi giri nel conto del piano, come la chat (`chatController` N15): una riga per richiesta, i token sulla prima
         suConsumo: ({ richieste, token }) => {
             // ⛔ RA-08 (revisione avversariale R-M4): i giri di una sessione del PC non sono del piano del TELEFONO
@@ -503,13 +684,13 @@ onMounted(async () => {
         }
         // il canale di lavoro verso il PC
         const plugin = pluginRemoto()
-        const apertura = plugin
+        const apri = () => (plugin
             ? apriPonteRemoto(plugin, pcRemoto, {
                 soloDalPc: () => t('computer.onlyFromPc'),
                 // R5.13 F3: i file e le immagini verso il PC; un'immagine scelta come file la legge il client nativo del telefono
                 file: { nativo: nativoFileRemoti, immagineScelta: (o) => talosClienteR4().immagineScelta!(o) },
             })
-            : Promise.reject(Object.assign(new Error('NOT_PAIRED'), { code: 'NOT_PAIRED' }))
+            : Promise.reject(Object.assign(new Error('NOT_PAIRED'), { code: 'NOT_PAIRED' })))
         const quandoAperto = (aperto: Awaited<ReturnType<typeof apriPonteRemoto>>) => {
             chiudiPonteRemoto = aperto.chiudi
             segnaVistaRemota = aperto.segnaVista
@@ -521,6 +702,7 @@ onMounted(async () => {
             void leggiModelliDelPc(aperto.ponte, { nessunFornitore: t('computer.noProviders'), modelliIlleggibili: t('computer.modelsUnreadable') }).then((m) => { modelliDelPc.value = m })
         }
         if (!idDallaRotta()) {
+            const apertura = apri()
             /*
              * ⛔ D-MOCK-16 (dal vivo, foto 202-206): una sessione NUOVA non aspetta più la prima apertura del canale (fino a 2 × 30 s nel
              * nativo) per mostrare il compositore, e non torna mai muta alla scheda del PC. Il ponte differito inoltra al ponte vero
@@ -536,21 +718,26 @@ onMounted(async () => {
             await apriSessione(null)
             return
         }
-        // una sessione che il PC ha già: senza canale non c'è niente da mostrare, si torna al dettaglio col perché del guasto
-        try {
-            const aperto = await apertura
-            if (smontata) { await aperto.chiudi(); return }
-            ponteRemoto = aperto.ponte
-            quandoAperto(aperto)
-        } catch (guasto) {
-            fase.value = 'assente'
-            const code = typeof (guasto as { code?: unknown })?.code === 'string' ? (guasto as { code: string }).code : 'CONNECT_FAILED'
-            toasts.push({ message: t(fraseErroreRemoto(code) ?? 'computer.errors.unreachable'), durationMs: 6000 })
-            void router.replace({ name: 'computer-item', params: { pcId: pcRemoto } })
-            return
+        // una sessione che il PC ha già: senza canale non c'è niente da mostrare; R2: si resta qui, col perché e Riprova
+        collegaAlPc = async () => {
+            const tentativo = collegamento.value.tentativo
+            try {
+                const aperto = await apri()
+                if (smontata) { await aperto.chiudi(); return }
+                ponteRemoto = aperto.ponte
+                quandoAperto(aperto)
+            } catch (guasto) {
+                if (smontata || tentativo !== collegamento.value.tentativo) return
+                const code = typeof (guasto as { code?: unknown })?.code === 'string' ? (guasto as { code: string }).code : 'CONNECT_FAILED'
+                // il PC spento o lontano ha la spiegazione del bozzetto; un altro perché (revocato, non accoppiato, occupato) si dice com'è
+                const lontano = code === 'CONNECT_FAILED' || code === 'DISCONNECTED'
+                collegamento.value = { ...collegamento.value, stato: 'fallito', perche: lontano ? '' : t(fraseErroreRemoto(code) ?? 'computer.errors.generic') }
+                return
+            }
+            fase.value = 'pronta'
+            await apriSessione(idDallaRotta())
         }
-        fase.value = 'pronta'
-        await apriSessione(idDallaRotta())
+        await collegaAlPc()
         return
     }
     const stato = await talosR4Pronto()
@@ -563,6 +750,7 @@ onMounted(async () => {
         return
     }
     cartellaDiLavoro = stato.cartella
+    radiceAllegati.value = pcRemoto ? null : (stato.cartella || null)
     fase.value = 'pronta'
     await apriSessione(idDallaRotta())
 })
@@ -700,8 +888,6 @@ async function salvaNome(nome: string): Promise<void> {
     if (await conversazione.value?.rinomina(nome)) foglio.value = null
 }
 
-/** La forma del compositore della chat (`ChatScreen.vue:154`): stesse preferenze, stessa forma. */
-const forma = computed(() => talosComposerFlags(settings.state.shell.composer_shape, settings.state.shell.composer_plus))
 
 /*
  * La dettatura, filo per filo come la chat e il Codice di oggi (`HarnessSessionScreen.vue:252-292`): il dettato si compone
@@ -827,6 +1013,9 @@ const contoDelPiano = () => (contoCaricato ??= import('@/services/chatgptConsumi
 /** Il modello della sessione è del piano ChatGPT: la pastiglia lo dice, come nella chat (`pianoChatgptInUso`). */
 // ⛔ RA-08 (revisione avversariale R-M4, 21/10/2026): in remoto il piano è quello del PC, non l'account e il consumo del telefono
 const pianoInUso = computed(() => !pcRemoto && fornitoreDelModelloR4(conversazione.value?.modello.value) === 'chatgpt')
+/** ⛔ D-0147-UI-2 (owner 27/10/2026): come la chat, la pastiglia solo sul tablet; sul telefono il piano lo dice il compositore. */
+const pastigliaDelPiano = computed(() => pianoInUso.value && tabletLayout.isTablet.value)
+const pianoNelCompositore = computed<'attivo' | null>(() => (pianoInUso.value && !tabletLayout.isTablet.value ? 'attivo' : null))
 const problemiDeiModelli = computed(() => (pcRemoto ? modelliDelPc.value.problemi : chat.discoveryProblems.value))
 /**
  * ⛔ D-RM4-3 (Pad 20/10/2026, anche in locale): «Aggiorna» e «Laboratorio modelli» del foglio non facevano niente, la schermata non
@@ -934,7 +1123,10 @@ async function scegliModello(id: string): Promise<void> {
     const modello = !profilo ? null : pcRemoto ? profilo.model
         : (modelloR4DelProfilo(profilo) ?? (profilo.id === `r4:${profilo.model}` ? profilo.model : null))
     if (!conv || !profilo || !modello) return
-    const livello = profilo.effort_levels.length ? clampMobileEffortFor(profilo, livelloScelto.value) : livelloScelto.value
+    // ⛔ Owner 27/10/2026 («come Codex, ma mai più caro», deciso nel server: `reasoningAlCambioDiModello` @ r4 6a4fc5e2b): sul PC si
+    // manda SOLO il modello e il livello lo adatta il PC (torna con la fotografia). Il kernel dentro l'app è a un pin che non ha ancora
+    // la regola: lì il livello resta quello di prima, regolato sul modello come la chat.
+    const livello = pcRemoto ? null : profilo.effort_levels.length ? clampMobileEffortFor(profilo, livelloScelto.value) : livelloScelto.value
     const mia = ++aperturaCorrente
     modelloInApertura.value = profilo.id
     try {
@@ -944,7 +1136,7 @@ async function scegliModello(id: string): Promise<void> {
             rifiutoNellaRiga(guasto)
             return
         }
-        if (!(await conv.impostaModello(modello, ragionamentoR4(livello)))) return
+        if (!(await conv.impostaModello(modello, livello === null ? null : ragionamentoR4(livello)))) return
     } finally {
         if (aperturaCorrente === mia) modelloInApertura.value = null
     }
@@ -1117,7 +1309,48 @@ onBeforeUnmount(() => {
         edge-to-edge
         embedded
     >
-        <p v-if="fase === 'avvio'" data-testid="talos-codice-r4-avvio" role="status" :class="TALOS_CLASSE_COLONNA_CHAT" class="py-4 text-sm text-[var(--talos-muted)]">
+        <div v-if="fase === 'avvio' && pcRemoto" data-testid="talos-codice-r4-collegamento" class="talos-codice-r4-collegamento">
+            <header class="flex items-center gap-1 px-2 pt-[env(safe-area-inset-top)]">
+                <button
+                    type="button"
+                    class="talos-pressable inline-flex min-h-touch min-w-touch shrink-0 items-center justify-center rounded-full text-[var(--talos-text)]"
+                    :aria-label="t('harness.r4Back')"
+                    @click="indietro"
+                >
+                    <ArrowLeft class="size-5" aria-hidden="true" />
+                </button>
+                <div class="flex min-w-0 flex-1 flex-col px-1">
+                    <h1 class="talos-title min-w-0 truncate text-sm font-semibold">{{ t('harness.r4Title') }}</h1>
+                    <span class="talos-codice-r4-collegamento__pc"><Laptop class="size-3.5 shrink-0" aria-hidden="true" /><span class="truncate">{{ nomeDelPc }}</span></span>
+                </div>
+            </header>
+            <div class="flex-1" />
+            <!-- il respiro, la larghezza e la forma del compositore vero (`.talos-docked-composer`, `.talos-calm-composer`): aprendosi la
+                 sessione il compositore resta dov'era, non salta -->
+            <div class="talos-docked-composer talos-codice-r4-collegamento__sotto">
+                <TalosRigaInCorso
+                    v-if="collegamento.stato === 'in-corso'"
+                    segno="linea"
+                    :testo="t('computer.connectingTo', { name: nomeDelPc })"
+                    :dettaglio="collegamento.tentativo > 1 ? t('computer.attempt', { n: collegamento.tentativo }) : ''"
+                    :inizio="collegamento.dal"
+                />
+                <div v-else data-testid="talos-codice-r4-collegamento-fallito" role="alert" class="talos-codice-r4-collegamento__carta">
+                    <p class="font-semibold text-[var(--talos-text)]">{{ t('computer.notAnswering') }}</p>
+                    <p class="text-sm text-[var(--talos-muted)]">{{ collegamento.perche || t('computer.notAnsweringHint') }}</p>
+                    <Button class="min-h-touch w-full" @click="riprovaIlCollegamento">{{ t('common.retry') }}</Button>
+                    <Button variant="outline" class="min-h-touch w-full" @click="tornaAlComputer">{{ t('computer.backToComputer') }}</Button>
+                </div>
+                <div data-testid="talos-codice-r4-collegamento-compositore" inert class="talos-calm-composer talos-codice-r4-collegamento__compositore" aria-hidden="true">
+                    <span class="talos-codice-r4-collegamento__tondo"><Plus class="size-5" /></span>
+                    <span class="min-w-0 flex-1 truncate px-1">{{ t('chat.messagePlaceholderEllipsis') }}</span>
+                    <span class="talos-codice-r4-collegamento__tondo"><Mic class="size-5" /></span>
+                    <span class="talos-codice-r4-collegamento__tondo is-invia"><ArrowUp class="size-5" /></span>
+                </div>
+                <p class="talos-codice-r4-collegamento__perche">{{ t('computer.waitingToWrite') }}</p>
+            </div>
+        </div>
+        <p v-else-if="fase === 'avvio'" data-testid="talos-codice-r4-avvio" role="status" :class="TALOS_CLASSE_COLONNA_CHAT" class="py-4 text-sm text-[var(--talos-muted)]">
             {{ t('harness.r4Starting') }}
         </p>
         <p v-else-if="fase === 'assente'" data-testid="talos-codice-r4-assente" role="status" :class="TALOS_CLASSE_COLONNA_CHAT" class="py-4 text-sm text-[var(--talos-muted)]">
@@ -1195,6 +1428,12 @@ onBeforeUnmount(() => {
                 :carica="conversazione.doctor"
                 @close="foglio = null"
             />
+            <TalosCodiceR4FermaTuttoSheet
+                v-if="foglio === 'ferma-tutto' && conversazione"
+                :quante="quanteNelFoglio"
+                @scegli="scegliFermaTutto"
+                @close="foglio = null"
+            />
             <TalosMobileComposerSheet
                 v-if="pannelloAperto && !largo && conversazione"
                 :title="t('harness.r4Panel')"
@@ -1216,6 +1455,7 @@ onBeforeUnmount(() => {
                     :azione-file="conversazione.azioneFile"
                     :sessione-id="conversazione.sessioneId.value"
                     :solo-dal-pc="soloDalPc"
+                    :ferma-figlia="fermaFiglia"
                     @apri-delega="apriDelegaDalPannello"
                     @allega="allegaAllaChat"
                     :memoria="memoriaPannello"
@@ -1241,9 +1481,13 @@ onBeforeUnmount(() => {
                     :text-scale="settings.state.chat_layout.bubble_scale"
                     :diagnostica="settings.state.shell?.debug_diagnostics === true"
                     :azioni="AZIONI_DEL_CODICE_R4"
+                    :apri-percorso="percorsoDaAprire"
+                    :ora-mostrata="oraMostrata"
+                    senza-misure-locali
                     @reuse="riutilizza"
                     @share="condividi"
                     @undo-compaction="annullaCompattazione"
+                    @apri-allegato="apriAllegatoDellaPersona"
                 />
                 <div
                     v-else
@@ -1258,17 +1502,44 @@ onBeforeUnmount(() => {
                  ⛔ Owner 15/10: nessuna fascia dietro il compositore, «la chat si deve vedere passare dietro la banda». -->
             <div v-show="vista === 'chat'" ref="dock" data-testid="talos-codice-r4-dock" class="talos-codice-r4-dock">
                 <div class="talos-docked-composer">
+                    <div v-if="ricollegamento" data-testid="talos-codice-r4-ricollegamento" class="mb-2 px-1">
+                        <TalosRigaInCorso
+                            segno="linea"
+                            tono="avviso"
+                            :testo="t('harness.r4ConnectionRetrying')"
+                            :dettaglio="t('computer.attempt', { n: ricollegamento.tentativo })"
+                            :inizio="ricollegamento.dal"
+                        />
+                    </div>
+                    <p v-else-if="ricollegato" role="status" data-testid="talos-codice-r4-ricollegato" class="mb-2 px-1 text-sm text-[var(--talos-success)]">
+                        {{ t('harness.r4Reconnected') }}
+                    </p>
+                    <!-- «Ferma tutto» (owner 29/10): la chat è ferma e sotto lavorano degli agenti; i secondi solo dopo 2 s (UI-110) -->
+                    <div v-if="rigaAgenti" data-testid="talos-codice-r4-agenti-continuano" class="mb-2 px-1">
+                        <TalosRigaInCorso
+                            :key="sogliaRigaAgenti.chiave.value"
+                            segno="puntino"
+                            :testo="testoFermaTuttoR4('riga.continuano', locale, agentiVivi.quanti.value)"
+                            :inizio="sogliaRigaAgenti.inizio.value"
+                        />
+                    </div>
                     <div
-                        v-if="errore"
+                        v-if="testoRigaErrore"
                         role="alert"
                         data-testid="talos-codice-r4-errore"
-                        :data-codice="errore.code"
+                        :data-codice="errore?.code ?? 'OPERATION_FAILED'"
                         class="mb-2 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]"
                     >
-                        {{ testoErrore }}
+                        {{ testoRigaErrore }}
                         <div v-if="azioneConsenso" class="mt-2 flex justify-end">
                             <Button type="button" variant="outline" data-testid="talos-codice-r4-consenso-chiedi" class="talos-pressable min-h-touch" @click="chiediAlPc()">
                                 {{ azioneConsenso === 'chiedi' ? t('computer.consent.ask') : t('computer.retry') }}
+                            </Button>
+                        </div>
+                        <!-- GFR-12 (Desktop 27/10): il guardiano si è arreso; si riprende da dove il dispositivo era rimasto -->
+                        <div v-if="riconnettibile" class="mt-2 flex justify-end">
+                            <Button type="button" variant="outline" data-testid="talos-codice-r4-riconnetti" class="talos-pressable min-h-touch" @click="void conversazione?.riconnetti()">
+                                {{ t('harness.r4ConnectionLostAction') }}
                             </Button>
                         </div>
                     </div>
@@ -1279,7 +1550,7 @@ onBeforeUnmount(() => {
                         data-testid="talos-codice-r4-consenso"
                         class="mb-2 rounded-md border border-[var(--talos-border)] bg-[var(--talos-surface-2)] p-3 text-sm text-[var(--talos-text)]"
                     >
-                        <p class="flex items-center gap-2 font-medium"><Loader2 class="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> {{ t('computer.consent.waitingTitle') }}</p>
+                        <p class="flex items-center gap-2 font-medium"><Loader2 class="size-4 animate-spin text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('computer.consent.waitingTitle') }}</p>
                         <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ t('computer.consent.waitingBody') }}</p>
                         <div class="mt-2 flex justify-end">
                             <Button type="button" variant="ghost" data-testid="talos-codice-r4-consenso-annulla" class="min-h-touch" @click="conversazione?.annullaConsenso()">{{ t('common.cancel') }}</Button>
@@ -1325,7 +1596,7 @@ onBeforeUnmount(() => {
                         :azioni="rigaVivaConAzioni"
                         :saltando="saltando"
                         @salta="saltaRiassunto"
-                        @ferma="void conversazione?.ferma()"
+                        @ferma="suStop"
                     />
                     <!-- K3 piano: la fascia del Piano chiesto dal modello (`index.template.html:623`) -->
                     <div v-if="pianoRichiesto" data-testid="talos-codice-r4-fascia-piano" class="talos-codice-r4-fascia">
@@ -1371,6 +1642,7 @@ onBeforeUnmount(() => {
                         :model-profiles="profiliNelFoglio"
                         :selected-model-profile-id="profiloScelto?.id ?? null"
                         :opening-model-profile-id="modelloInApertura"
+                        :piano-chatgpt="pianoNelCompositore"
                         :discovery-problems="problemiDeiModelli"
                         :refreshing-models="rotellaDeiModelli"
                         :show-model-lab="!pcRemoto"
@@ -1381,9 +1653,6 @@ onBeforeUnmount(() => {
                         :can-send="fase === 'pronta' && !sending && !modelloInApertura"
                         :sending="sending"
                         :can-queue="puoAccodare"
-                        :drawer-mode="forma.drawerMode"
-                        :immersive-composer="forma.immersiveComposer"
-                        :plus-dropdown="forma.plusDropdown"
                         :attachments="allegati.vassoio"
                         :attachments-available="!scambioFileAssente"
                         :attachment-disabled-reason="scambioFileAssente ? t('computer.noFileExchange') : ''"
@@ -1395,13 +1664,15 @@ onBeforeUnmount(() => {
                         :dictation-starting="dettatura.status.value === 'starting'"
                         :dictation-level="dettatura.level.value"
                         :dictation-transcript="trascrizioneViva"
+                        :permesso-a-riposo="permessoVisto === 'Full access' || modalita === 'piano'"
+                        :agenti-da-fermare="pulsanteStop?.tipo === 'agenti' ? pulsanteStop.quante : 0"
                         @update:prompt="prompt = $event"
                         @send="void invia()"
                         @queue="(testo) => void accoda(testo)"
                         @select-model-profile="(id) => void scegliModello(id)"
                         @select-effort="(livello) => void scegliLivello(livello)"
                         @select-thinking="(acceso) => void (acceso ? riaccendiRagionamento() : scegliLivello('off'))"
-                        @stop="void conversazione?.ferma()"
+                        @stop="suStop"
                         @toggle-dictation="void alternaDettatura()"
                         @discard-dictation="buttaDettatura()"
                         @send-dictation="void inviaDettatura()"
@@ -1414,8 +1685,10 @@ onBeforeUnmount(() => {
                         @open-model-lab="void router.push({ name: 'settings-models' })"
                     >
                         <!-- ⛔ CHATGPT NEL CODICE: la pastiglia del piano come nella chat (`ChatScreen` N15), subito dopo il modello -->
-                        <TalosMobileChatgptPastiglia v-if="pianoInUso" />
-                        <!-- K3 piano: la pillola del permesso, accanto al modello (il chip del piede del desktop) -->
+                        <TalosMobileChatgptPastiglia v-if="pastigliaDelPiano" />
+                        <!-- K3 piano, poi owner 27/10/2026 (mockup approvato): il permesso è uno SCUDO in alto a destra del compositore,
+                             sempre da aperto e a riposo solo con «Accesso pieno» o in Piano. Il nome breve resta nel nome accessibile. -->
+                        <template #permesso>
                         <button
                             type="button"
                             data-testid="talos-codice-r4-permesso"
@@ -1425,14 +1698,15 @@ onBeforeUnmount(() => {
                             :title="chipPermesso.suggerimento"
                             aria-haspopup="dialog"
                             :aria-expanded="foglio === 'modo'"
-                            class="talos-pressable talos-mode-chip talos-codice-r4-permesso min-h-touch"
+                            class="talos-pressable talos-codice-r4-permesso inline-flex min-h-touch min-w-touch items-center justify-center rounded-full"
                             @pointerdown.prevent
                             @click="foglio = 'modo'"
                         >
-                            <ClipboardList v-if="modalita === 'piano'" class="talos-codice-r4-permesso__icona size-4 shrink-0" aria-hidden="true" />
-                            <ShieldCheck v-else class="talos-codice-r4-permesso__icona size-4 shrink-0" aria-hidden="true" />
-                            <span class="talos-codice-r4-permesso__testo">{{ chipPermesso.testo }}</span>
+                            <ClipboardList v-if="modalita === 'piano'" class="talos-codice-r4-permesso__icona size-5 shrink-0" aria-hidden="true" />
+                            <ShieldCheck v-else class="talos-codice-r4-permesso__icona size-5 shrink-0" aria-hidden="true" />
+                            <span class="sr-only">{{ chipPermesso.testo }}</span>
                         </button>
+                        </template>
                     </TalosMobileComposer>
                 </div>
             </div>
@@ -1496,6 +1770,7 @@ onBeforeUnmount(() => {
                     :azione-file="conversazione.azioneFile"
                     :sessione-id="conversazione.sessioneId.value"
                     :solo-dal-pc="soloDalPc"
+                    :ferma-figlia="fermaFiglia"
                     @apri-delega="apriDelegaDalPannello"
                     @allega="allegaAllaChat"
                     :memoria="memoriaPannello"
@@ -1536,11 +1811,76 @@ onBeforeUnmount(() => {
                     </Button>
                 </template>
             </TalosMobileConfirmDialog>
+            <TalosMobileAttachmentPreviewSheet
+                v-if="allegatoDalPc"
+                :key="allegatoDalPc.percorso"
+                :attachment="{
+                    id: `r4file:pc:${allegatoDalPc.percorso}`, vault_file_id: '', grant_id: '', display_name: allegatoDalPc.nome,
+                    media_type: 'text/plain', size_bytes: 0, permissions: ['model.read'], grant_status: 'active',
+                }"
+                :carica="caricaAllegatoDalPc(allegatoDalPc.nome)"
+                @close="allegatoDalPc = null"
+            />
         </div>
     </TalosMobileScreen>
 </template>
 
 <style scoped>
+/* R2 (bozzetto approvato il 28/10, scena 1): la testata, la riga «Mi collego…» o la carta, il compositore spento col perché. */
+.talos-codice-r4-collegamento {
+    display: flex;
+    height: 100%;
+    flex-direction: column;
+}
+.talos-codice-r4-collegamento__pc {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: var(--text-xs);
+    color: var(--talos-muted);
+}
+.talos-codice-r4-collegamento__sotto {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    --talos-sfumatura-compositore: var(--talos-window-bg);
+}
+.talos-codice-r4-collegamento__carta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    border: 1px solid var(--talos-border);
+    border-radius: 0.75rem;
+    background: var(--talos-panel);
+    padding: 0.75rem;
+}
+.talos-codice-r4-collegamento__compositore {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--talos-muted);
+    opacity: 0.5;
+}
+.talos-codice-r4-collegamento__tondo {
+    display: inline-flex;
+    flex-shrink: 0;
+    width: var(--talos-touch-target);
+    height: var(--talos-touch-target);
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+}
+.talos-codice-r4-collegamento__tondo.is-invia {
+    background: var(--talos-accent);
+    color: var(--talos-accent-text, #fff);
+}
+.talos-codice-r4-collegamento__perche {
+    padding: 0 0.25rem;
+    font-size: var(--text-xs);
+    color: var(--talos-muted);
+}
+
 .talos-codice-r4-scorrimento {
     padding-bottom: var(--talos-codice-r4-spazio, 180px);
 }

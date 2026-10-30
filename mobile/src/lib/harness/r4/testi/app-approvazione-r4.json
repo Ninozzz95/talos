@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
-    "sha256": "19b9eb9d26356513c31bf08c83b6fff039cd0db16e2d8d6337613df34dca046d",
+    "sha256": "3520e3b597a275ab341a6976bf50c5f7492fbc8e78c53c64a192462a80ecd124",
     "prefisso": "approval."
   },
   "it": {
@@ -36,6 +36,12 @@
     "approval.whyCoordinationCapOne": "Chiede perché in questa conversazione è già partito {n} agente da solo: è il massimo.",
     "approval.whyCoordinationCapMany": "Chiede perché in questa conversazione sono già partiti {n} agenti da soli: è il massimo.",
     "approval.wantsChangeSomething": "Vuole eseguire un'azione che modifica qualcosa.",
+    "approval.wantsStopAgent": "Vuole fermare un sotto-agente, e quelli che ha avviato.",
+    "approval.wantsStopAllAgents": "Vuole fermare tutti i sotto-agenti al lavoro, e quelli che hanno avviato.",
+    "approval.wantsPauseAgent": "Vuole mettere in pausa un sotto-agente: finisce l'attrezzo che sta usando, poi aspetta.",
+    "approval.wantsPauseAllAgents": "Vuole mettere in pausa tutti i sotto-agenti al lavoro: ognuno finisce l'attrezzo che sta usando, poi aspetta.",
+    "approval.wantsResumeAgent": "Vuole riprendere un sotto-agente in pausa.",
+    "approval.wantsResumeAllAgents": "Vuole riprendere tutti i sotto-agenti in pausa.",
     "approval.trifecta": "Questa chiamata chiude la trifecta: dati privati, contenuto non attendibile e un modo per farli uscire.",
     "approval.whyToolGate": "Chiede perché la regola di «{attrezzo}» è «Chiedi conferma», anche con la sessione su «{politica}».",
     "approval.whyOnRequest": "Chiede perché la sessione è su «{politica}»: ogni azione che cambia qualcosa passa da te.",
@@ -84,6 +90,12 @@
     "approval.whyCoordinationCapOne": "It asks because {n} agent has already started on its own in this conversation: that is the most allowed.",
     "approval.whyCoordinationCapMany": "It asks because {n} agents have already started on their own in this conversation: that is the most allowed.",
     "approval.wantsChangeSomething": "It wants to take an action that changes something.",
+    "approval.wantsStopAgent": "It wants to stop a sub-agent, and the ones it started.",
+    "approval.wantsStopAllAgents": "It wants to stop all the sub-agents at work, and the ones they started.",
+    "approval.wantsPauseAgent": "It wants to pause a sub-agent: it finishes the tool it is using, then waits.",
+    "approval.wantsPauseAllAgents": "It wants to pause all the sub-agents at work: each finishes the tool it is using, then waits.",
+    "approval.wantsResumeAgent": "It wants to resume a paused sub-agent.",
+    "approval.wantsResumeAllAgents": "It wants to resume all the paused sub-agents.",
     "approval.trifecta": "This call completes the trifecta: private data, untrusted content and a way to get it out.",
     "approval.whyToolGate": "It asks because the rule for “{attrezzo}” is “Ask for confirmation”, even with the session on “{politica}”.",
     "approval.whyOnRequest": "It asks because the session is on “{politica}”: every action that changes something goes through you.",

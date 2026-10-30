@@ -2,7 +2,7 @@
 import type { Component } from 'vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Check, Download, Eye, Globe2, LockKeyhole, Sparkles, Upload, X } from '@lucide/vue'
+import { Check, Download, Eye, Globe, LockKeyhole, Sparkles, Upload, X } from '@lucide/vue'
 import TalosRowActions from '@/components/talos/ui/TalosRowActions.vue'
 import TalosMobileLibraryFileRow from '@/components/talos/library/TalosMobileLibraryFileRow.vue'
 import TalosMobileSavedLinkRow from '@/components/talos/library/TalosMobileSavedLinkRow.vue'
@@ -415,7 +415,7 @@ function fileActions(file: TalosLocalVaultFile): ChatMediaAction[] {
         id: 'share',
         label: t('library.anyChatMayRead'),
         ariaLabel: t('library.letModelRead', { name: file.display_name }),
-        icon: Globe2,
+        icon: Globe,
         disabled: busy.has(file.id),
         kind: 'checkbox',
         checked: shared(file),
@@ -741,8 +741,8 @@ const mediaScope = computed(() => {
                         @open="openFile(file)"
                     >
                         <template #meta>
-                            <Sparkles v-if="parseVaultOrigin(file.metadata) === 'generated'" class="size-2.5 shrink-0 max-[639px]:hidden" aria-hidden="true" />
-                            <Upload v-else class="size-2.5 shrink-0 max-[639px]:hidden" aria-hidden="true" />
+                            <Sparkles v-if="parseVaultOrigin(file.metadata) === 'generated'" class="size-3 shrink-0 max-[639px]:hidden" aria-hidden="true" />
+                            <Upload v-else class="size-3 shrink-0 max-[639px]:hidden" aria-hidden="true" />
                             <span class="min-w-0 truncate max-[639px]:hidden">{{ provenance(file) }}</span>
                             <span class="shrink-0 max-[639px]:hidden" aria-hidden="true">·</span>
                             <!-- Keep model-context truth visible after moving
@@ -753,8 +753,8 @@ const mediaScope = computed(() => {
                                 class="inline-flex min-w-0 items-center gap-1 truncate font-medium"
                                 :class="shared(file) ? 'text-[var(--talos-accent)]' : ''"
                             >
-                                <Globe2 v-if="shared(file)" class="size-2.5 shrink-0" aria-hidden="true" />
-                                <LockKeyhole v-else class="size-2.5 shrink-0" aria-hidden="true" />
+                                <Globe v-if="shared(file)" class="size-3 shrink-0" aria-hidden="true" />
+                                <LockKeyhole v-else class="size-3 shrink-0" aria-hidden="true" />
                                 <span class="truncate">{{ $t(shared(file) ? 'library.shared' : 'library.private') }}</span>
                             </span>
                         </template>

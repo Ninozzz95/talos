@@ -133,10 +133,12 @@ describe('TalosMobileComposer — Accoda a giro vivo (B3 F4-A)', () => {
         await queue.trigger('click')
         expect(view.emitted('queue')).toEqual([['domanda per la chat B']])
         expect(view.emitted('send')).toBeUndefined()
-        // Campo vuoto: torna il microfono, e la riga del motivo resta.
+        // Campo vuoto: torna il microfono (owner 27/10/2026: un comando suo) con l'invio spento, e la riga del motivo resta.
         await view.setProps({ prompt: '' })
         expect(view.find('[data-testid="talos-composer-queue"]').exists()).toBe(false)
-        expect(view.get('[data-testid="talos-composer-action"]').attributes('data-talos-action')).toBe('mic')
+        expect(view.find('[data-testid="talos-composer-mic"]').exists()).toBe(true)
+        expect(view.get('[data-testid="talos-composer-action"]').attributes('data-talos-action')).toBe('send')
+        expect(view.get('[data-testid="talos-composer-action"]').attributes('disabled')).toBeDefined()
         expect(view.get('[data-testid="talos-composer-blocked-reason"]').text()).toBe('I am answering in another chat.')
     })
 

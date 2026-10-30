@@ -64,4 +64,18 @@ describe('stato dell\'aggiornamento', () => {
         talosApplicaStatoAggiornamenti({ scaricati: '41' as never })
         expect(talosAggiornamenti.scaricati).toBeNull()
     })
+
+    /*
+     * ⛔ B1/B2 (27/10/2026): dopo «visto()» il nativo manda lo stato INTERO con `appenaAggiornata: null` (`statoPerJs`, `JSONObject.NULL`;
+     * prima la chiave spariva e il segnale «aggiornata» restava acceso). Un `null` presente azzera; un oggetto parziale tocca solo i
+     * suoi campi.
+     */
+    it('UPD-SRV-06 un campo che torna null si azzera; un campo assente in un oggetto parziale resta com\'era', () => {
+        talosApplicaStatoAggiornamenti({ fase: 'AGGIORNATA', appenaAggiornata: '0.1.47', motivo: 'rete', versione: '0.1.47' })
+        talosApplicaStatoAggiornamenti({ fase: 'NESSUNA', appenaAggiornata: null, motivo: null })
+        expect(talosAggiornamenti.appenaAggiornata).toBeNull()
+        expect(talosAggiornamenti.motivo).toBeNull()
+        expect(talosAggiornamenti.versione).toBe('0.1.47')
+        expect(talosAggiornamentoDaMostrare(talosAggiornamenti)).toBe(false)
+    })
 })

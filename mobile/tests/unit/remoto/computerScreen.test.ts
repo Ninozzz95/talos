@@ -29,6 +29,13 @@ vi.mock('@/i18n', () => ({
     }),
 }))
 vi.mock('@/lib/remoto/pluginRemoto', () => ({ pluginRemoto: () => plugin }))
+// UI-111 (owner 29/10): sul tablet il «+» di Computer porta la parola, come «+ Aggiungi file» della Libreria
+const tablet = vi.hoisted(() => ({ valore: false }))
+vi.mock('@/composables/useTalosTabletLayout', async () => {
+    const { ref } = await import('vue')
+    const isTablet = ref(false)
+    return { useTalosTabletLayout: () => { isTablet.value = tablet.valore; return { isTablet } } }
+})
 
 function pluginFinto(): PluginComputer {
     const ascolti = new Map<string, Set<(e: never) => void>>()
@@ -96,6 +103,39 @@ describe('la sezione «Computer»', () => {
         expect(push).toHaveBeenCalledWith({ name: 'computer-item', params: { pcId: 'pc-uno' } })
     })
 
+    /*
+     * ⛔ UI-111 «Liste coerenti» (mockup v2.1 approvato dall'owner il 29/10 sera, voce 5): accanto al titolo la scritta «Collega»
+     * diventa il «+» quadrato delle altre sezioni (`ContextScreen.vue:1146-1156`), col suo nome per chi ascolta. Stesse condizioni.
+     */
+    it('COMPUTER-LISTE-01 con un elenco, accanto al titolo il «+» quadrato col nome «Collega un computer»; tocca e collega', async () => {
+        computer = [{ pcId: 'pc-uno', nome: 'Studio', relay: null, accoppiatoAlle: 1_760_000_000_000 }]
+        const v = await monta()
+        const piu = v.get('header [data-testid="talos-computer-connect"]')
+        expect(piu.attributes('aria-label')).toBe('computer.connect')
+        expect(piu.text()).toBe('')
+        expect(piu.find('svg.lucide-plus').exists()).toBe(true)
+        expect(piu.classes()).toEqual(expect.arrayContaining(['size-12', 'p-0', 'rounded-[var(--talos-radius-control)]', 'bg-[var(--talos-accent)]', 'text-[var(--talos-accent-text)]']))
+        await piu.trigger('click')
+        expect(plugin!.scansiona).toHaveBeenCalled()
+    })
+
+    it('COMPUTER-LISTE-02 sul tablet il pulsante accanto al titolo porta la parola: «+ Collega un computer», come la Libreria', async () => {
+        computer = [{ pcId: 'pc-uno', nome: 'Studio', relay: null, accoppiatoAlle: 1_760_000_000_000 }]
+        tablet.valore = true
+        try {
+            const v = await monta()
+            const piu = v.get('header [data-testid="talos-computer-connect"]')
+            expect(piu.text()).toBe('computer.connect')
+            expect(piu.find('svg.lucide-plus').exists()).toBe(true)
+            expect(piu.classes()).toEqual(expect.arrayContaining(['min-h-12', 'gap-2', 'px-5', 'text-sm', 'font-medium']))
+            expect(piu.classes()).not.toContain('size-12')
+            await piu.trigger('click')
+            expect(plugin!.scansiona).toHaveBeenCalled()
+        } finally {
+            tablet.valore = false
+        }
+    })
+
     it('CSC-03 collega: scanner → «Conferma sul computer» col numero → collegato, e il computer nell\'elenco', async () => {
         const v = await monta()
         await v.get('[data-testid="talos-computer-connect"]').trigger('click')
@@ -137,6 +177,40 @@ describe('la sezione «Computer»', () => {
         await flushPromises()
         expect(v.get('[data-testid="talos-computer-error"]').text()).toContain('computer.errors.rejected')
         expect(v.find('[data-testid="talos-computer-retry"]').exists()).toBe(true)
+    })
+
+    /*
+     * Revisione del blocco 9, B-R1 (Desktop, 27/10/2026): il PC ora manda `PAIR_EXPIRED` sul filo per un QR scaduto (prima sempre
+     * `PAIR_TOKEN_INVALID`). La frase «scaduto» compare davvero; quella del gettone che non vale resta la sua.
+     */
+    it('CSC-05b il PC dice PAIR_EXPIRED ⇒ la frase del QR scaduto, non quella del gettone', async () => {
+        const v = await monta()
+        await v.get('[data-testid="talos-computer-connect"]').trigger('click')
+        await salutato()
+        emetti('remoto-messaggio', { canale: 'c1', json: JSON.stringify({ v: 1, t: 'error', code: 'PAIR_EXPIRED' }) })
+        await flushPromises()
+        const errore = v.get('[data-testid="talos-computer-error"]').text()
+        expect(errore).toContain('computer.errors.expired')
+        expect(errore).not.toContain('computer.errors.tokenInvalid')
+        // revisione del Desktop 27/10: niente «Riprova» su un link morto; l'azione principale apre lo scanner per un QR nuovo
+        const azione = v.get('[data-testid="talos-computer-retry"]')
+        expect(azione.text()).toBe('computer.scanNewQr')
+        await azione.trigger('click')
+        await flushPromises()
+        expect(plugin!.scansiona).toHaveBeenCalledTimes(2)
+    })
+
+    it('CSC-05c ⛔ verso contrario: PAIR_TOKEN_INVALID tiene la sua frase, non quella del QR scaduto', async () => {
+        const v = await monta()
+        await v.get('[data-testid="talos-computer-connect"]').trigger('click')
+        await salutato()
+        emetti('remoto-messaggio', { canale: 'c1', json: JSON.stringify({ v: 1, t: 'error', code: 'PAIR_TOKEN_INVALID' }) })
+        await flushPromises()
+        const errore = v.get('[data-testid="talos-computer-error"]').text()
+        expect(errore).toContain('computer.errors.tokenInvalid')
+        expect(errore).not.toContain('computer.errors.expired')
+        // ⛔ verso contrario: qui l'azione resta «Riprova»
+        expect(v.get('[data-testid="talos-computer-retry"]').text()).toBe('computer.retry')
     })
 
     it('CSC-06 scanner chiuso dalla persona: nessun accoppiamento, nessun errore', async () => {
@@ -352,6 +426,25 @@ describe('la sezione «Computer»', () => {
         v = await monta()
         await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') }, { timeout: 15_000 })
         expect(v.findAll('[data-testid="talos-computer-old-entry"]').map((e) => e.attributes('data-pc-id'))).toEqual(['27ba0001', '287c0001'])
+    }, 40_000)
+
+    /*
+     * ⛔ Dal Pad, vc307 (27/10/2026): due PC veri in linea col nome e il ponte uguali (b851 e 0632, tutti DESKTOP-BJ9I7OU su n0) e una
+     * voce spenta (287c, l'identità vecchia di 0632). Nome e ponte non li distinguono: la guardia è «spenta adesso». Il Desktop: un PC
+     * vivo col nome e il ponte uguali non si propone MAI.
+     */
+    it('DOPPI-UI-16 ⛔ un altro PC vero IN LINEA col nome e il ponte uguali non è mai fra le voci vecchie; quella spenta sì', async () => {
+        computer = [
+            { pcId: 'b8510001', nome: 'Studio', relay: null, accoppiatoAlle: 3 },
+            { pcId: '06320001', nome: 'Studio', relay: null, accoppiatoAlle: 2 },
+            { pcId: '287c0001', nome: 'Studio', relay: null, accoppiatoAlle: 1 },
+        ]
+        plugin!.collega = vi.fn(async () => { throw Object.assign(new Error('x'), { code: 'UNREACHABLE' }) }) as unknown as PluginComputer['collega']
+        tornaInLinea('b8510001', '06320001')
+        const v = await monta()
+        await vi.waitFor(() => { if (!v.find('[data-testid="talos-computer-old-entries"]').exists()) throw new Error('ancora niente') }, { timeout: 15_000 })
+        expect(v.get('[data-testid="talos-computer-card"][data-pc-id="06320001"]').attributes('data-computer-stato')).toBe('inLinea')
+        expect(v.findAll('[data-testid="talos-computer-old-entry"]').map((e) => e.attributes('data-pc-id'))).toEqual(['287c0001'])
     }, 40_000)
 
     it('DOPPI-UI-08 ⛔ verso contrario: desktop accoppiato accanto alla CLI spenta dello stesso PC, nessuna proposta', async () => {

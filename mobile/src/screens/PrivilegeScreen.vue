@@ -37,8 +37,10 @@ import {
     TALOS_TENTATIVI_DOPO_CADUTA,
     TALOS_TENTATIVI_DOPO_SCOSSA,
     talosCodiceValido,
+    talosPonteAzioneDelMotivo,
     talosPonteGuida,
     talosPonteMotivo,
+    talosPonteMotivoDopoAccoppiamento,
     talosPonteRiaggancioAutomatico,
 } from '@/lib/privilege/pontePasso'
 
@@ -535,6 +537,30 @@ const ricollegamentoFallito = ref(false)
 const ponteInCorso = ref(false)
 const codice = ref('')
 const ponteMotivo = ref<string | null>(null)
+/** ASS-148: il pulsante che risolve il motivo, quando un gesto lo risolve (oggi solo la rete locale tolta). */
+const ponteAzione = ref<'app-permissions' | 'developer-republish' | null>(null)
+/** ASS-149 cura 2: la persona è uscita per spegnere e riaccendere il Debug wireless; al ritorno si ricerca da soli, senza un secondo tocco. */
+let ripubblicaInAttesa = false
+
+function premiAzioneDelMotivo(): Promise<unknown> | undefined {
+    if (ponteAzione.value === 'developer-republish') {
+        ripubblicaInAttesa = true
+        return plugin().open({ target: 'developer' })
+    }
+    if (ponteAzione.value) return plugin().open({ target: ponteAzione.value })
+    return undefined
+}
+
+/** Motivo e pulsante nascono insieme dal codice grezzo del plugin, così non possono mai disallinearsi. */
+function mostraMotivo(reason: string | undefined): void {
+    ponteMotivo.value = talosPonteMotivo(reason)
+    ponteAzione.value = talosPonteAzioneDelMotivo(reason)
+}
+
+function togliMotivo(): void {
+    ponteMotivo.value = null
+    ponteAzione.value = null
+}
 /**
  * Quanti tentativi automatici restano per l'occasione in corso.
  *
@@ -583,6 +609,7 @@ async function osservaPonte(): Promise<void> {
         ponteCollegato.value = false
     }
     if (ponteCollegato.value) {
+        togliMotivo() // ASS-149: collegato è la risposta; un motivo di prima, rimasto lì, la smentirebbe
         tentativiRimasti.value = TALOS_TENTATIVI_DOPO_CADUTA
         // Un fallimento di prima non deve tenere in vista il campo del codice a
         // ponte collegato: lo stato vivo batte la memoria.
@@ -623,7 +650,7 @@ async function leggiPonte(): Promise<void> {
 async function ricollega(): Promise<void> {
     if (ponteInCorso.value) return
     ponteInCorso.value = true
-    ponteMotivo.value = null
+    togliMotivo()
     try {
         const esito = await plugin().bridgeConnect({})
         ponteCollegato.value = esito.ok === true
@@ -642,11 +669,11 @@ async function ricollega(): Promise<void> {
 async function accoppia(): Promise<void> {
     if (ponteInCorso.value || !codiceValido.value) return
     ponteInCorso.value = true
-    ponteMotivo.value = null
+    togliMotivo()
     try {
         const paio = await plugin().bridgePair({ code: codice.value.trim() })
         if (!paio.ok) {
-            ponteMotivo.value = talosPonteMotivo(paio.reason)
+            mostraMotivo(paio.reason)
             return
         }
         // ⭐ Accoppiati: il collegamento è l'ALTRA porta, e la si cerca subito.
@@ -655,9 +682,9 @@ async function accoppia(): Promise<void> {
         codice.value = ''
         const collegato = await plugin().bridgeConnect({})
         ponteCollegato.value = collegato.ok === true
-        if (!collegato.ok) ponteMotivo.value = talosPonteMotivo(collegato.reason)
+        if (!collegato.ok) mostraMotivo(talosPonteMotivoDopoAccoppiamento(collegato.reason))
     } catch {
-        ponteMotivo.value = talosPonteMotivo(undefined)
+        mostraMotivo(undefined)
     } finally {
         ponteInCorso.value = false
     }
@@ -697,7 +724,7 @@ const identita = computed(() => {
  * niente, e non ci sarebbe più nessuno a disegnarlo.
  */
 async function apriFlottante(): Promise<void> {
-    ponteMotivo.value = null
+    togliMotivo()
     /*
      * ⭐⭐ IL CODICE SI SCRIVE NELLA TENDINA. La finestra flottante non c'è più.
      *
@@ -750,14 +777,15 @@ async function apriFlottante(): Promise<void> {
             working: t('ponte.floatWorking'),
             failed: t('ponte.floatFailed'),
             ready: t('ponte.floatReady'),
+            pairedNotConnected: t('ponte.floatPairedNotConnected'),
         })
         if (!notifica.shown) {
-            ponteMotivo.value = talosPonteMotivo('notification-not-shown')
+            mostraMotivo('notification-not-shown')
             return
         }
         await plugin().open({ target: 'developer' })
     } catch {
-        ponteMotivo.value = talosPonteMotivo(undefined)
+        mostraMotivo(undefined)
     }
 }
 
@@ -787,9 +815,8 @@ onMounted(() => {
          * chi rientrava da Impostazioni trovava «accoppia» senza sapere se
          * aveva sbagliato il codice o se non era partito niente.
          */
-        ponteMotivo.value = dati.connected === true
-            ? null
-            : talosPonteMotivo(dati.reason ?? undefined)
+        if (dati.connected === true) togliMotivo()
+        else mostraMotivo(dati.reason ?? undefined)
     })
 
     /*
@@ -869,6 +896,10 @@ function quandoTorna(): void {
     // racconta uno stato che non è mai esistito.
     void rileggi()
     void leggiPonte()
+    if (ripubblicaInAttesa) {
+        ripubblicaInAttesa = false
+        void ricollega()
+    }
 }
 
 /* ------------------------------------------------------------------------ *
@@ -1205,6 +1236,17 @@ onUnmounted(() => {
             >
                 {{ t(ponteMotivo) }}
             </p>
+            <button
+                v-if="ponteMotivo && ponteAzione"
+                type="button"
+                data-testid="talos-ponte-reason-action"
+                :data-azione="ponteAzione"
+                class="flex min-h-touch items-center justify-center gap-2 rounded-[var(--talos-radius-control)] border border-[var(--talos-border)] px-4 text-xs text-[var(--talos-text)]"
+                @click="void premiAzioneDelMotivo()"
+            >
+                {{ t(ponteAzione === 'developer-republish' ? 'ponte.republishAction' : 'ponte.openAppPermissions') }}
+                <ChevronRight class="size-4" aria-hidden="true" />
+            </button>
         </section>
 
         <!--

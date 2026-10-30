@@ -230,7 +230,8 @@ async function onDetailDeleted(): Promise<void> {
                 </div>
 
                 <!-- ⛔ Owner 2026-08-27, trovato sul dispositivo: `--talos-danger`
-                     vale `#fee2e2` (quasi bianco) — è garantito leggibile SOLO
+                     valeva `#fee2e2` (quasi bianco; dal 26/10/2026 nel tema scuro è un rosso leggibile, vedi
+                     `rossoLeggibile` in talosThemes.ts) — è garantito leggibile SOLO
                      come TESTO sopra `--talos-danger-soft`, mai come sfondo
                      proprio, nemmeno attenuato. `TalosRowActions.vue` lo
                      documenta già; qui l'avevo rifatto a mano invece di

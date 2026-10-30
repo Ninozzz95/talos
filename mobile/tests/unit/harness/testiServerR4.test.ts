@@ -39,14 +39,29 @@ describe('testi del server r4 (K3-C3a2)', () => {
 
     it('TSR4-06 il dizionario viene dal commit fissato di r4, con le stesse chiavi e gli stessi segnaposto nelle due lingue', () => {
         expect(TESTI_SERVER_R4.origine).toEqual({
-            commit: '701c6c0d2d711879b53aa21bddad5a06d33538e7',
+            commit: '4cee78f3349c5d34b4f44303a157b93542656aef',
             percorso: 'harness-ui/frontend/src/i18n/testi/server.js',
-            sha256: '17b5a67cf4314693d6fdf5ade4cb941442cda56ca78e2377930395083dd37e34',
+            sha256: '05940e721b976ce0c68a3a1bebd89cd6b724c89b336e2477e58aa7d9caf5e2eb',
         })
         const it_ = Object.keys(TESTI_SERVER_R4.it).sort()
         expect(it_).toEqual(Object.keys(TESTI_SERVER_R4.en).sort())
         expect(it_.length).toBeGreaterThan(250)
         const segnaposto = (s: string) => [...s.matchAll(/\{([a-zA-Z0-9_]+)\}/g)].map((m) => m[1]).sort()
         for (const k of it_) expect(segnaposto(TESTI_SERVER_R4.it[k]), k).toEqual(segnaposto(TESTI_SERVER_R4.en[k]))
+    })
+
+    /*
+     * pin r4 4cee78f33 (`testo-server.js` `QUANTITA_DI_TOKEN`, prova ALLEGA-UI-01 del desktop, 29/10): le quantità di token si dicono col
+     * separatore delle migliaia della lingua; solo per nome (`tokens…`, `…Tokens`, `finestra`, `riserva`) e solo se intere.
+     */
+    it('TSR4-07 le quantità di token col separatore delle migliaia, gli altri valori come arrivano', () => {
+        const params = { tokensRichiesta: 212000, finestra: 200000, tokensCornice: 4100, riserva: 8192 }
+        const it_ = testoDelServerR4('server.run.requestTooLargeReply', params, 'x', 'it')
+        expect(it_).toContain('circa 212.000 dei 200.000 token')
+        expect(it_).toContain('circa 4100 in più') // quattro cifre: `it-IT` non raggruppa, come `toLocaleString` del desktop
+        expect(testoDelServerR4('server.run.requestTooLargeReply', params, 'x', 'en')).toContain('the reply about 8,192:')
+        expect(testoDelServerR4('server.run.requestTooLarge', params, 'x', 'en')).toContain('about 212,000 of this model’s 200,000-token window')
+        expect(testoDelServerR4('server.run.requestTooLarge', { ...params, tokensRichiesta: 21200.5 }, 'x', 'en')).toContain('about 21200.5 of')
+        expect(testoDelServerR4('server.program.notOnPath', { command: 'x', example: 12345 }, 'x', 'en')).toContain('example 12345')
     })
 })

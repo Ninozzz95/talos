@@ -158,6 +158,29 @@ describe('la conversazione del Codice su r4 (K3-B2)', () => {
         await aspetta()
         expect(c.flussi).toHaveLength(1)
         expect(conv.errore.value?.code).toBe('NOT_FOUND')
+        // dal Pad, 27/10/2026: «The session no longer exists» in inglese; il motivo porta la frase del desktop (MOD-22)
+        expect(conv.errore.value?.reason).toBe('session-not-found')
+    })
+
+    /* Dal Pad, prova della CLI (27/10/2026): il PC riavviato ritrovava la sessione, ma l'avviso «sessione non trovata» restava a schermo
+       e il flusso non si riapriva più. Quando qualcuno dimostra che la sessione c'è (la colonna l'ha appena rinominata), si riparte. */
+    it("USR4-06b ritrovata(): toglie l'avviso della sessione sparita e riapre il flusso; ⛔ un altro errore resta com'è", async () => {
+        const c = clienteFinto()
+        const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 'sparita', attesaRiapertura: () => 0 })
+        await conv.apri()
+        c.errore('HTTP 404')
+        await aspetta()
+        expect(c.flussi).toHaveLength(1)
+        await conv.ritrovata()
+        await aspetta()
+        expect(conv.errore.value).toBeNull()
+        expect(c.flussi).toHaveLength(2)
+        // verso contrario: un errore che non è «sessione sparita» non si tocca, e non si apre un altro flusso
+        conv.errore.value = { code: 'RATE_LIMITED', message: 'slow down' }
+        await conv.ritrovata()
+        await aspetta()
+        expect(conv.errore.value?.code).toBe('RATE_LIMITED')
+        expect(c.flussi).toHaveLength(2)
     })
 
     // K3-C1: le due azioni del menu «•••» dell'header, sulle rotte vere di r4.
@@ -608,6 +631,57 @@ describe('la conversazione del Codice su r4 (K3-B2)', () => {
             expect(conv.coda.value).toEqual({ voci: [], inPausa: false })
         })
 
+        /*
+         * ⛔ Difetto dal vivo (owner 27/10/2026, Server-PC, piano ChatGPT): il giro finisce in errore con «2 in coda» e il PC resta
+         * fermo (la coda NON parte), ma il dispositivo collegato sembra «ancora al lavoro». Forme VERE: RunStarted e RunError
+         * PROVIDER_CREDIT_LIMIT dal registro della sessione e7ce3dea (4177, r4 6a4fc5e2b; `contesto` tolto), la coda di due voci
+         * della persona da `coda-2161afb32.sse`.
+         */
+        const avvio = 'data: {"type":"RunStarted","threadId":"bf223f9d-061b-4a77-ae5c-c358f7b839b0","runId":"c95f50ea-3c4a-4895-a72d-58cf2b534cec","input":{"consegna":"Reply with the single word: ready.","consegnaCorta":"Reply with the single word: ready.","progetto":"coda-remota-2026-10-27"},"timestamp":1793113134202,"_sequenza":1}\n\n'
+        const guasto = 'data: {"type":"RunError","message":"Credit not available at the provider.","code":"PROVIDER_CREDIT_LIMIT","classe":"credito","timestamp":1793113134812,"_sequenza":3}\n\n'
+        const dueInCoda = () => `${coda.split(/\n\n/u).filter((b) => b.includes('"talos.coda"') && b.includes('Poi aggiorna il README') && b.includes('Controlla anche i test'))[0]}\n\n`
+        const fineStoria = 'data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":{}}\n\n'
+
+        it('USR4-33 ⛔ giro finito in errore con 2 in coda e il PC fermo: il dispositivo è FERMO (nessun «al lavoro»), la coda resta con le sue 2 voci', async () => {
+            const c = clienteFinto()
+            const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0 })
+            await conv.apri()
+            c.pezzo(fineStoria)
+            c.pezzo(avvio)
+            expect(conv.sorgente.sending.value).toBe(true)
+            c.pezzo(dueInCoda())
+            c.pezzo(guasto)
+            await aspetta()
+            expect(conv.inCorso.value).toBeNull()
+            expect(conv.inviando.value).toBe(false)
+            expect(conv.sorgente.sending.value).toBe(false)
+            expect(conv.coda.value.voci.map((v) => v.testo)).toEqual(['Controlla anche i test', 'Poi aggiorna il README'])
+        })
+
+        it('USR4-34 ⛔ le 2 voci accodate DAL DISPOSITIVO mentre il giro gira, poi l’errore: fermo, la coda resta', async () => {
+            const c = clienteFinto((r) => r.percorso.endsWith('/queue') ? ok(risposte.accoda1) : { stato: 200, corpo: '{"ok":true,"data":{}}' })
+            const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0 })
+            await conv.apri()
+            c.pezzo(fineStoria)
+            c.pezzo(avvio)
+            expect(await conv.accoda('Controlla anche i test')).toBe(true)
+            c.pezzo(dueInCoda())
+            c.pezzo(guasto)
+            await aspetta()
+            expect(conv.sorgente.sending.value).toBe(false)
+            expect(conv.coda.value.voci).toHaveLength(2)
+        })
+
+        it('USR4-35 ⛔ riaperta DOPO l’errore (storia: avvio, errore; poi la coda annunciata): fermo, mai «al lavoro»', async () => {
+            const c = clienteFinto()
+            const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0 })
+            await conv.apri()
+            c.pezzo(avvio + guasto + fineStoria + dueInCoda())
+            await aspetta()
+            expect(conv.sorgente.sending.value).toBe(false)
+            expect(conv.coda.value.voci).toHaveLength(2)
+        })
+
         it('USR4-28 accoda, invia, togli e riporta: i corpi esatti di r4; la risposta aggiorna la coda; un rifiuto lo dice e non perde niente', async () => {
             const c = clienteFinto((r) => {
                 if (r.percorso.endsWith('/queue')) return JSON.parse(r.corpo!).messaggio.trim() ? ok(risposte.accoda1) : ok(risposte.vuoto)
@@ -832,7 +906,9 @@ describe('la conversazione del Codice su r4 (K3-B2)', () => {
             c.pezzo(['data: {"type":"RunStarted","runId":"r1","input":{"consegna":"Ciao"}}', 'data: {"type":"RunFinished","runId":"r1"}', ''].join(String.fromCharCode(10, 10)))
             // la ripresa senza chiave: r4 la ferma prima della rete e lo dice
             expect(await conv.invia('Ancora')).toBe(false)
-            expect(conv.errore.value).toEqual({ code: 'CONFIG_INVALID', message: 'Invalid configuration', reason: 'provider-key-missing-named', params: { provider: 'DeepSeek' } })
+            // FRASI-UNICHE (27/10/2026): anche la frase precisa per la persona che la busta vera porta in `explanation`
+            expect(conv.errore.value).toEqual({ code: 'CONFIG_INVALID', message: 'Invalid configuration', reason: 'provider-key-missing-named', params: { provider: 'DeepSeek' },
+                explanation: 'The DeepSeek key is missing: connect it from the provider settings.' })
             expect(viste).toEqual(['z-ai/glm-4.7-flash', 'z-ai/glm-4.7-flash'])
             // il passo prima rifiuta: niente parte
             rifiuta = Object.assign(new Error('Invalid body'), { code: 'QUERY_INVALID' })
@@ -924,5 +1000,75 @@ describe('Ledger LEDGER-RIGA-VIVA-CODICE-2026-10-21 — Salta, Annulla e la riga
         expect(await esito).toBeNull()
         expect(conv.rigaViva.value).toBeNull()
         expect(conv.rigaVivaAMano.value).toBe(false)
+    })
+
+    /*
+     * D-0145-6(b) (Desktop 26/10): lo scarto d'orologio del PC si misura SOLO dal vivo. La storia rigiocata porta ore vecchie (un giro
+     * di ieri non è un PC indietro di un giorno); e alla riapertura (`?after=`) gli eventi successi mentre il canale era giù arrivano
+     * prima del marcatore: dal vivo è solo ciò che segue il `talos.fine-rigiocata` del flusso CORRENTE.
+     */
+    it('USR4-SCARTO-01 le ore si danno solo dal vivo: mai dalla storia, e dopo una riapertura solo dopo il nuovo marcatore', async () => {
+        const viste: number[] = []
+        let aperture = 0
+        const c = clienteFinto()
+        const conv = monta({
+            cliente: c.ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0,
+            suOraDalVivo: (ms) => { viste.push(ms) }, suApertura: () => { aperture += 1 },
+        })
+        await conv.apri()
+        expect(aperture).toBe(1)
+        c.pezzo('data: {"type":"RunStarted","runId":"r0","threadId":"s1","timestamp":1000}\n\n')
+        c.pezzo('data: {"type":"RunFinished","runId":"r0","threadId":"s1","timestamp":2000}\n\n')
+        expect(viste).toEqual([])
+        c.pezzo('data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":null}\n\ndata: {"type":"RunStarted","runId":"r1","threadId":"s1","timestamp":3000}\n\n')
+        c.pezzo('data: {"type":"TextMessageContent","messageId":"m1","delta":"x"}\n\ndata: {"type":"RunFinished","runId":"r1","threadId":"s1","timestamp":4000}\n\n')
+        expect(viste).toEqual([3000, 4000])
+        // il canale cade e si riapre: ciò che arriva prima del nuovo marcatore è roba successa mentre non c'eravamo
+        c.errore('canale caduto')
+        await aspetta()
+        expect(aperture).toBe(2)
+        c.pezzo('data: {"type":"RunStarted","runId":"r2","threadId":"s1","timestamp":5000}\n\n')
+        expect(viste).toEqual([3000, 4000])
+        c.pezzo('data: {"type":"CUSTOM","name":"talos.fine-rigiocata","value":null}\n\ndata: {"type":"RunFinished","runId":"r2","threadId":"s1","timestamp":6000}\n\n')
+        expect(viste).toEqual([3000, 4000, 6000])
+    })
+})
+
+/*
+ * ⛔ «Ferma tutto» e «Ferma» nella scheda Agenti (owner 29/10/2026; ledger `LEDGER-FERMA-TUTTO-MOBILE-2026-10-29.md`, righe 7;
+ * contratto `CONTRATTO-FERMA-TUTTE-2026-10-29.md` §1): lo Stop porta la scelta (`figlie: 'tutte' | 'nessuna'`), senza scelta `{}` come
+ * oggi; la risposta dice quante figlie ha fermato. Una figlia sola si ferma con `{ figlie: 'tutte' }` sulla SUA rotta (lei e le sue).
+ */
+describe('lo Stop con i sotto-agenti (Ferma tutto)', () => {
+    it('USR4-FT-01 Stop senza scelta: `{}` come oggi; «tutte» e «solo la chat» col loro corpo; il numero delle figlie fermate', async () => {
+        const c = clienteFinto((r) => (r.corpo?.includes('tutte')
+            ? { stato: 200, corpo: '{"ok":true,"data":{"stopped":true,"figlieFermate":3}}' }
+            : { stato: 200, corpo: '{"ok":true,"data":{"stopped":true}}' }))
+        const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's 1', attesaRiapertura: () => 0 })
+        expect(await conv.ferma()).toBeNull()
+        expect(await conv.ferma('tutte')).toBe(3)
+        expect(await conv.ferma('solo-chat')).toBeNull()
+        expect(c.richieste.filter((r) => r.metodo === 'POST')).toEqual([
+            { metodo: 'POST', percorso: '/api/v1/sessions/s%201/stop', corpo: '{}' },
+            { metodo: 'POST', percorso: '/api/v1/sessions/s%201/stop', corpo: JSON.stringify({ figlie: 'tutte' }) },
+            { metodo: 'POST', percorso: '/api/v1/sessions/s%201/stop', corpo: JSON.stringify({ figlie: 'nessuna' }) },
+        ])
+    })
+
+    it("USR4-FT-02 «Ferma» di una figlia: la SUA rotta con `{ figlie: 'tutte' }`; un rifiuto dice il perché e non tocca l'errore della chat", async () => {
+        const c = clienteFinto((r) => (r.percorso.includes('/rotta%2Fstorta/')
+            ? { stato: 404, corpo: '{"ok":false,"error":{"code":"SESSION_NOT_FOUND","message":"Session not found"}}' }
+            : { stato: 200, corpo: '{"ok":true,"data":{"stopped":true,"figlieFermate":1}}' }))
+        const conv = monta({ cliente: c.ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0 })
+        expect(await conv.fermaFiglia('figlia 1')).toEqual({ ok: true })
+        expect(c.richieste.at(-1)).toEqual({ metodo: 'POST', percorso: '/api/v1/sessions/figlia%201/stop', corpo: JSON.stringify({ figlie: 'tutte' }) })
+        const rifiuto = await conv.fermaFiglia('rotta/storta')
+        expect(rifiuto.ok).toBe(false)
+        // il perché solo con le parole dell'app (`motivoDelRifiutoR4`, come i Processi); un codice che l'app non sa dire → null, e la riga
+        // dice «Delega non fermata» (`delegations.stopFailed`), mai l'inglese grezzo del server
+        expect((rifiuto as { messaggio: string | null }).messaggio).toBeNull()
+        expect(conv.errore.value).toBeNull()
+        const giu = monta({ cliente: clienteFinto(() => { throw new Error('giù') }).ponte, cartella: '/w', sessioneId: 's1', attesaRiapertura: () => 0 })
+        expect(await giu.fermaFiglia('f1')).toEqual({ ok: false, messaggio: null })
     })
 })

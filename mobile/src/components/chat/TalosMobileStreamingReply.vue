@@ -15,6 +15,8 @@ import { languageClass } from '@/lib/talosMessageMarkdown'
 import { aperturaDelRecinto } from '@/lib/streaming/aperturaDelRecinto'
 import { codaDaDipingere } from '@/lib/streaming/codaDaDipingere'
 import { useTalosI18n } from '@/i18n'
+import TalosRigaInCorso from '@/components/chat/TalosRigaInCorso.vue'
+import { talosTrascorsoEtichetta, useTalosTrascorso } from '@/composables/useTalosTrascorso'
 
 /**
  * R1-5 — the in-flight assistant reply, isolated. This component alone
@@ -82,6 +84,27 @@ const streamingReasoning = computed(() => sorgente.ragionamento.value.slice(sorg
 const haRagionamento = computed(() => /\S/.test(streamingReasoning.value))
 /** Only while the in-flight reply belongs to the conversation on screen (the rule lives in the source: `sorgenteStreaming.ts`). */
 const sending = sorgente.sending
+// R3: la linea col PC è caduta a metà giro (solo il Codice su r4 lo sa): l'orb non dice «al lavoro» finché non torna
+const inPausa = computed(() => sorgente.inPausa?.value === true)
+/*
+ * ⛔ R4 delle righe in corso (owner 27/10 «nulla deve fare sembrare la ui bloccata»; bozzetto approvato il 28/10, scene 3a/6/7;
+ * `primaParola.test.ts` PP-01..05). Prima della prima parola la riga dice cosa succede coi secondi dall'ora dell'evento: «Messaggio
+ * inviato, aspetto il computer» fino al via; poi la scala del desktop a 0, 5 e 12 s (`legacy/app.js:14031`), che conta dall'ora del
+ * giro e non riparte rimontando (ATTESA-DA-CAPO). Mentre il testo scorre, «Sta scrivendo · Ns» accanto al nome. Senza `attesa` la
+ * coda resta com'era; un segnale vero (ragionamento, attrezzo, testo, il modello che carica) vince sulla frase a tempo.
+ */
+const attesa = computed(() => sorgente.attesa?.value ?? null)
+const secondiDellAttesa = useTalosTrascorso(() => attesa.value?.dal ?? null)
+const fraseDellAttesa = computed(() => {
+    const a = attesa.value
+    if (!a) return ''
+    if (a.fase === 'inviato') return t(a.chi === 'computer' ? 'chat.waitSentComputer' : 'chat.waitSent')
+    const s = secondiDellAttesa.value ?? 0
+    return t(s >= 12 ? 'chat.waitLonger' : s >= 5 ? 'chat.waitStillWorking' : 'chat.waitProcessing')
+})
+const staScrivendo = computed(() => (attesa.value?.fase === 'giro' && secondiDellAttesa.value !== null
+    ? `${t('chat.writing')} · ${talosTrascorsoEtichetta(secondiDellAttesa.value)}`
+    : ''))
 
 /**
  * Owner 2026-07-26: a second way for the answer to arrive — "un'animazione più
@@ -588,7 +611,7 @@ onBeforeUnmount(() => {
              reasoning line are the SAME muted row. These used to be bordered
              chips, which sat next to a borderless reasoning row and looked like
              two different features. -->
-        <TalosMobileAssistantHeader working />
+        <TalosMobileAssistantHeader :working="!inPausa">{{ staScrivendo }}</TalosMobileAssistantHeader>
         <TalosMobileEsitiPermesso v-if="esitiEreditati.length" :esiti="esitiEreditati" />
         <TalosMobileAttivitaDelTurno
             v-if="confini.length || attivi.length || sequenzaEreditata.length"
@@ -626,8 +649,15 @@ onBeforeUnmount(() => {
              animato e lasciare solo orb con ring a scorrimento». Il segno
              dell'attesa e' UNO — l'orb del marchio con l'anello che gira
              (.talos-orb.working::after) — e sparisce alla prima lettera. -->
-        <TalosMobileAssistantHeader working />
-        <span class="sr-only">{{ $t('chat.processing') }}</span>
+        <TalosMobileAssistantHeader :working="!inPausa" />
+        <!-- owner 28/10: l'orb resta l'unico segno animato dell'attesa (regola del 13/09); la riga dice solo frase e secondi -->
+        <TalosRigaInCorso
+            v-if="fraseDellAttesa && caricoPercento === null && !gpuInPreparazione"
+            segno="nessuno"
+            :testo="fraseDellAttesa"
+            :inizio="attesa?.dal ?? null"
+        />
+        <span v-else class="sr-only">{{ $t('chat.processing') }}</span>
         <!--
             ⛔ Compare SOLO quando il motore sta davvero caricando: fuori da
             quel caso `caricoPercento` resta `null` e qui non c'e' niente. Non

@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/chat.js",
-    "sha256": "eaaf4c713de5ca18948df455c22a29386587aa815e46576a7ed166d1afc13458",
+    "sha256": "a135c9e7ee8c97461ea4f9a4b7c4e05158b8f898154022bf86de0e89463d5ea0",
     "prefisso": [
       "question.",
       "common.back"
@@ -10,6 +10,9 @@
   },
   "it": {
     "common.back": "Indietro",
+    "question.previewOf": "Anteprima · {option}",
+    "question.noPreview": "Nessuna anteprima per questa scelta.",
+    "question.previewHtmlTitle": "Anteprima di {name}, senza script, file né rete",
     "question.withoutText": "domanda senza testo",
     "question.announceOne": "TALOS chiede una decisione: {corpo}{pausa}Le risposte sono sopra il campo di scrittura.",
     "question.announceMany": "TALOS chiede {n} decisioni: {corpo}{pausa}Le risposte sono sopra il campo di scrittura.",
@@ -85,6 +88,9 @@
   },
   "en": {
     "common.back": "Back",
+    "question.previewOf": "Preview · {option}",
+    "question.noPreview": "No preview for this option.",
+    "question.previewHtmlTitle": "Preview of {name}, without scripts, files or network",
     "question.withoutText": "question without text",
     "question.announceOne": "TALOS asks for one decision: {corpo}{pausa}The answers are above the composer.",
     "question.announceMany": "TALOS asks for {n} decisions: {corpo}{pausa}The answers are above the composer.",

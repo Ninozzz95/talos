@@ -190,7 +190,7 @@ function gestisci(): void {
         <!-- In attesa del ritorno dalla scheda -->
         <template v-if="inAttesa">
             <div data-testid="talos-chatgpt-waiting" role="status" class="flex items-start gap-3 rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)] p-[var(--talos-space-card)]">
-                <Loader2 class="mt-0.5 size-5 shrink-0 animate-spin text-[var(--talos-accent)] motion-reduce:animate-none" aria-hidden="true" />
+                <Loader2 class="mt-0.5 size-5 shrink-0 animate-spin text-[var(--talos-accent)]" aria-hidden="true" />
                 <div>
                     <p class="font-medium text-[var(--talos-text)]">{{ t('chatgptPlan.waiting') }}</p>
                     <p class="mt-1 text-sm text-[var(--talos-muted)]">{{ t('chatgptPlan.waitingHint') }}</p>

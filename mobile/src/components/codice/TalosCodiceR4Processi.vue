@@ -10,8 +10,8 @@
  */
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import {
-    Brain, Check, ChevronDown, Clock, Code, Command, Download, Folder, GitBranch, Globe, Layers, LayoutGrid, LayoutTemplate, List,
-    MoreHorizontal, Play, Shield, Square, SquareCheck, Terminal, X, Zap,
+    Ban, Check, ChevronDown, CircleDashed, Clock, Code, Container, Download, EllipsisVertical, FileCode, Folder, GitBranch, Globe, Hammer,
+    Layers, ListEnd, LoaderCircle, Play, Server, Shield, Square, SquareChevronRight, Terminal, TestTubeDiagonal, X,
 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
@@ -40,12 +40,16 @@ const { t, locale } = useTalosI18n()
 const tr = (chiave: string, valori?: Record<string, unknown>) => testoProcessiR4(chiave, locale.value, valori)
 
 const ICONA_FAMIGLIA: Record<FamigliaR4, unknown> = {
-    git: GitBranch, node: Code, python: Brain, docker: LayoutGrid, test: SquareCheck, build: LayoutTemplate,
-    server: Play, rete: Globe, filesystem: Folder, install: Download, shell: Terminal, generico: Command,
+    // Owner 28/10/2026 (icone, P20, mockup su disco): ogni famiglia il suo disegno — prima python era un cervello, docker una griglia,
+    // build un modello di pagina. Le famiglie restano quelle del classificatore portato (comandoShellR4.ts, copia fissata di r4 fc5e25d62).
+    git: GitBranch, node: Code, python: FileCode, docker: Container, test: TestTubeDiagonal, build: Hammer,
+    server: Server, rete: Globe, filesystem: Folder, install: Download, shell: Terminal, generico: SquareChevronRight,
 }
 const ICONA_STATO: Record<StatoProcessoR4, unknown> = {
-    'in-coda': List, 'in-avvio': Play, 'in-corso': Zap, 'in-attesa': Clock, 'in-consenso': Shield, 'in-sfondo': Layers,
-    riuscito: Check, fallito: X, annullato: Square, ucciso: Square, perso: Layers, 'non-eseguito': Square, interrotto: Square,
+    // P20/P21: in corso la rotella che gira (non il fulmine), in coda la lista che si allunga, perso e interrotto il cerchio tratteggiato,
+    // non eseguito il divieto (prima tre stati diversi avevano lo stesso quadrato dello «stop»)
+    'in-coda': ListEnd, 'in-avvio': Play, 'in-corso': LoaderCircle, 'in-attesa': Clock, 'in-consenso': Shield, 'in-sfondo': Layers,
+    riuscito: Check, fallito: X, annullato: Square, ucciso: Square, perso: CircleDashed, 'non-eseguito': Ban, interrotto: CircleDashed,
 }
 const FERMABILI_O_SFONDO = new Set<StatoProcessoR4>(['in-corso', 'in-attesa', 'in-sfondo'])
 const STATI_FILTRO: StatoProcessoR4[] = ['in-coda', 'in-avvio', 'in-corso', 'in-attesa', 'in-consenso', 'in-sfondo', 'riuscito', 'fallito', 'annullato', 'ucciso', 'non-eseguito', 'interrotto']
@@ -217,7 +221,7 @@ const risorseDi = (p: ProcessoR4) => testoRisorseR4(p, risorse.value, locale.val
                             :aria-expanded="menuDi === p.id"
                             :disabled="Boolean(richieste.get(p.id ?? '')?.inCorso) || Boolean(soloDalPc)"
                             @click="menuDi = menuDi === p.id ? null : p.id"
-                        ><MoreHorizontal class="size-4" aria-hidden="true" /></button>
+                        ><EllipsisVertical class="size-4" aria-hidden="true" /></button>
                         <button
                             type="button"
                             data-azione="dettaglio"
@@ -230,7 +234,7 @@ const risorseDi = (p: ProcessoR4) => testoRisorseR4(p, risorse.value, locale.val
                     </div>
                     <div class="talos-codice-r4-processo-meta">
                         <span class="talos-codice-r4-processo-stato" :data-tono="p.tono || null">
-                            <component :is="ICONA_STATO[p.stato]" class="size-3" aria-hidden="true" />{{ p.etichetta }}
+                            <component :is="ICONA_STATO[p.stato]" class="size-3" :class="{ 'animate-spin': p.stato === 'in-corso' }" aria-hidden="true" />{{ p.etichetta }}
                         </span>
                         <span>{{ p.chi }}</span>
                         <span v-if="p.quando !== '—'" class="font-mono">{{ p.quando }}</span>

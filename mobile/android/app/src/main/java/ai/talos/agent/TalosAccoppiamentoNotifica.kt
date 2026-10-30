@@ -81,6 +81,7 @@ object TalosAccoppiamentoNotifica {
         val alLavoro: String,
         val fallita: String,
         val pronta: String,
+        val accoppiatoNonCollegato: String,
     )
 
     private var parole: Parole? = null
@@ -100,9 +101,10 @@ object TalosAccoppiamentoNotifica {
         alLavoro: String,
         fallita: String,
         pronta: String,
+        accoppiatoNonCollegato: String,
         quandoArriva: Ascoltatore,
     ): Boolean {
-        parole = Parole(titolo, etichettaCampo, alLavoro, fallita, pronta)
+        parole = Parole(titolo, etichettaCampo, alLavoro, fallita, pronta, accoppiatoNonCollegato)
         return posa(context, titolo, testo, etichettaCampo, false, quandoArriva)
     }
 
@@ -162,6 +164,15 @@ object TalosAccoppiamentoNotifica {
         val p = parole ?: return
         val testo = if (motivo.isNullOrBlank()) p.fallita else "${p.fallita} ($motivo)"
         posa(context, p.titolo, testo, p.etichettaCampo, false, null)
+    }
+
+    /**
+     * ASS-149 (29/10): le sei cifre erano giuste e l'accoppiamento resta; manca solo il collegamento. Niente campo: un altro codice non
+     * servirebbe a niente, e chiederlo farebbe credere alla persona di aver sbagliato.
+     */
+    fun accoppiatoNonCollegato(context: Context) {
+        val p = parole ?: return
+        posa(context, p.titolo, p.accoppiatoNonCollegato, null, false, null)
     }
 
     /**

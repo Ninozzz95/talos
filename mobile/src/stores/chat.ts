@@ -316,6 +316,11 @@ export interface ChatState {
      */
     streamingSessionId: string | null
     /**
+     * R4 delle righe in corso (bozzetto approvato il 28/10): da quando la risposta in arrivo è di questa conversazione (ms dall'epoca),
+     * per i secondi della prima parola e di «Sta scrivendo». Si mette e si toglie insieme a `streamingSessionId`.
+     */
+    streamingSince: number | null
+    /**
      * WHICH chat is generating, not merely that something is.
      *
      * `sending` alone is one flag for the whole app, so every composer read
@@ -425,6 +430,11 @@ export interface ChatStoreOptions<Runtime = undefined> {
     /** ⭐⭐ Owner 02/10 «Token veri»: i token veri della richiesta con questi turni; `null` = non si sa (si ripiega sulla stima). */
     misuraRichiesta?: (input: { sessionId: string, modelProfileId: string | null, turni: readonly ChatTurn[] }) => Promise<TalosMisuraRichiesta | null>
     finestraPerCompattazione?: (modelProfileId: string | null, sessionId: string) => TalosFinestraCompattazione | null | Promise<TalosFinestraCompattazione | null>
+    /**
+     * La lingua delle risposte (owner 28/10/2026, «come scrivi o parli»): `'auto'` o un codice scelto, l'impostazione «Lingua». In
+     * Automatica la lingua di ogni messaggio della persona entra nella storia come nota (`storiaConLeChiamate.ts`). Assente = niente note.
+     */
+    linguaDelleRisposte?: () => string | null
 }
 
 declare const TALOS_CHAT_STORE_RUNTIME: unique symbol
@@ -745,6 +755,7 @@ export function createChatStore<Runtime = undefined>(
         editingMessage: false,
         streamingText: null,
         streamingSessionId: null,
+        streamingSince: null,
         sendingSessionId: null,
         streamingReasoning: null,
         streamingConfini: null,
@@ -1713,6 +1724,7 @@ export function createChatStore<Runtime = undefined>(
             }
 
             state.streamingSessionId = owner.id
+            state.streamingSince = Date.now()
             state.sendingSessionId = owner.id
             // Il ragionamento arriva a token e non deve diventare DOM a token:
             // vedi `reasoningGate`. Uno per invio, così non sopravvive a niente.
@@ -1826,6 +1838,7 @@ export function createChatStore<Runtime = undefined>(
         } finally {
             state.streamingText = null
             state.streamingSessionId = null
+            state.streamingSince = null
             state.sendingSessionId = null
             state.streamingReasoning = null
             state.streamingConfini = null
@@ -2025,6 +2038,7 @@ export function createChatStore<Runtime = undefined>(
         const finishSend = (): void => {
             state.streamingText = null
             state.streamingSessionId = null
+            state.streamingSince = null
             state.sendingSessionId = null
             state.streamingReasoning = null
             state.streamingConfini = null
@@ -2117,6 +2131,7 @@ export function createChatStore<Runtime = undefined>(
         // From here the live reply BELONGS to this conversation. Switching chats
         // must not carry it across, and the previous behaviour did exactly that.
         state.streamingSessionId = session.id
+        state.streamingSince = Date.now()
         state.sendingSessionId = session.id
 
         // The user turn is committed — let the composer clear NOW (text +
@@ -2149,6 +2164,7 @@ export function createChatStore<Runtime = undefined>(
                 messaggi: history,
                 conAllegati: withAttachments,
                 pezziDelMessaggio: options.resolveMessageParts,
+                ...(options.linguaDelleRisposte ? { lingua: options.linguaDelleRisposte() } : {}),
             })
             /*
              * ⭐⭐ P4-ter passo 2: con una compattazione valida al modello va la PROIEZIONE (riassunto + turni nuovi alla

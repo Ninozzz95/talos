@@ -2,7 +2,7 @@
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import type { TalosRunCost } from '@/lib/chat/runCost'
 import type { TalosRunRecord } from '@/lib/chat/runDetails'
-import { ChevronRight, Eye, EyeOff, FileText, FlaskConical, MessageSquareText, MoreHorizontal, Presentation } from '@lucide/vue'
+import { ChevronRight, FileSearch, Ghost, MessageSquareText, MoreHorizontal, Presentation, Telescope } from '@lucide/vue'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosDaIntitolare } from '@/stores/chat'
 import { talosIsEphemeralSessionId } from '@/lib/chat/ephemeralSession'
@@ -10,11 +10,12 @@ import { recentChatSessions } from '@/lib/chatListGestures'
 import { talosChatDiscardedByModeSwitch } from '@/lib/chat/modeSwitch'
 import { talosTemporaryWelcome } from '@/lib/chat/temporaryWelcome'
 import { computed, defineAsyncComponent, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ArrowDown, AlertTriangle, CheckCircle2, Circle, LoaderCircle, X } from '@lucide/vue'
+import { ArrowDown, AlertTriangle, CheckCircle2, Circle, X } from '@lucide/vue'
 import { useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { talosTranslatableErrorMessage } from '@/i18n/uiErrors'
 import { Button } from '@/components/ui/button'
+import TalosAttesaCarta from '@/components/chat/TalosAttesaCarta.vue'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import TalosMobileMessageList from '@/components/chat/TalosMobileMessageList.vue'
 import { createTalosMobileComposerDraftController } from '@/composables/useTalosMobileComposerDraft'
@@ -43,7 +44,6 @@ import { useChatController } from '@/stores/chatController'
 import { useTalosGuardaChat } from '@/composables/useTalosGuardaChat'
 import { TALOS_MOBILE_ROUTES } from '@/lib/mobileRoutes'
 import { useSettingsStore } from '@/stores/settings'
-import { talosComposerFlags } from '@/lib/composerStyle'
 import { useTalosMobileToasts } from '@/stores/toasts'
 import { defineAsyncComponent as talosAsyncSheet } from 'vue'
 import { shareTalosMessageMarkdown } from '@/lib/chat/messageShare'
@@ -149,12 +149,6 @@ const attesePendenti = computed<readonly string[]>(() => [
     ...controller.toolAuthorizationRecoveries.value.map((recovery) => recovery.checkpoint_id),
 ].filter((id): id is string => typeof id === 'string' && id.length > 0))
 const settings = useSettingsStore()
-// Le preferenze precedenti restano leggibili. Il compositore Calm accetta
-// questi flag per compatibilità, ma mostra sempre la stessa forma e lo stesso +.
-const composerShape = computed(() => talosComposerFlags(
-    settings.state.shell.composer_shape,
-    settings.state.shell.composer_plus,
-))
 const {
     profiles,
     refreshingModels,
@@ -328,6 +322,12 @@ const attesaDelPianoQui = computed(() => {
     const attesa = controller.attesaDelPiano.value
     return attesa && attesa.sessionId === chat.activeSession.value?.id ? attesa : null
 })
+/**
+ * ⛔ D-0147-UI-2 (owner 27/10/2026, mockup approvato): la pastiglia resta solo sul TABLET. Sul telefono mandava il compositore su tre
+ * righe a 360-393 dp: lì il piano lo dicono il puntino sulla pillola del modello e la riga del gruppo ChatGPT nel selettore.
+ */
+const pianoNelCompositore = computed(() => (pianoChatgptInUso.value && !layoutDelTablet.isTablet.value
+    ? (attesaDelPianoQui.value ? 'limite' : 'attivo') : null))
 const enhancerModels = computed(() => controller.profiles.value.map((profile) => ({
     id: profile.id,
     label: profile.display_name || profile.model,
@@ -917,6 +917,8 @@ async function onSend(): Promise<void> {
     // e da oggi serve a due cose — leggere la risposta, e marcare il messaggio
     // col microfono. Vedi `lib/voice/messaggioDettato.ts`.
     const diVoce = voce.value?.catturaInvio() ?? false
+    // la lingua delle risposte (owner 28/10): la lingua che la dettatura ha sentito, letta PRIMA di chiudere la dettatura
+    const linguaSentita = diVoce ? dictation.linguaSentita.value : null
     // SF5-3: a live mic must not survive the send — late partials would
     // resurrect the sent text into the composer.
     dictation.cancel()
@@ -927,7 +929,10 @@ async function onSend(): Promise<void> {
     // rejoin the live edge so the message-add watch auto-scrolls (it was gated
     // when the user had scrolled up).
     rejoinLiveEdge()
-    const accepted = await controller.send(text, turnPolicy, diVoce)
+    // la lingua solo quando c'è: senza, la chiamata resta quella di sempre (le prove della schermata la tengono ferma)
+    const accepted = await (linguaSentita
+        ? controller.send(text, turnPolicy, diVoce, linguaSentita)
+        : controller.send(text, turnPolicy, diVoce))
     if (!accepted) {
         draft.updatePrompt(text)
         await draft.flush()
@@ -1466,7 +1471,7 @@ onBeforeUnmount(() => {
                         data-testid="talos-temporary-chat-badge"
                         class="mb-4 inline-flex items-center gap-2 rounded-full border border-dashed border-[var(--talos-accent)]/60 bg-[var(--talos-accent)]/10 px-3 py-1.5 text-2xs font-medium text-[var(--talos-accent)]"
                     >
-                        <EyeOff class="size-3.5" aria-hidden="true" />
+                        <Ghost class="size-3.5" aria-hidden="true" />
                         {{ t('chat.temporaryChat') }}
                     </span>
                     <span
@@ -1539,7 +1544,7 @@ onBeforeUnmount(() => {
                         class="talos-pressable mt-5 inline-flex min-h-touch items-center gap-2 rounded-full border border-[var(--talos-border)] bg-[var(--talos-panel)]/80 px-4 text-xs text-[var(--talos-muted)] backdrop-blur transition-colors duration-150 hover:text-[var(--talos-text)]"
                         @click="isTemporaryChat ? makePermanent() : makeAnonymous()"
                     >
-                        <component :is="isTemporaryChat ? Eye : EyeOff" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                        <Ghost class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
                         {{ isTemporaryChat ? t('chat.makePermanent') : t('chat.temporaryChat') }}
                     </button>
 
@@ -1650,6 +1655,7 @@ onBeforeUnmount(() => {
                             :prompt="prompt"
                             :model-profiles="profiles"
                             :selected-model-profile-id="selectedModelId"
+                            :piano-chatgpt="pianoNelCompositore"
                             :selected-effort="effort"
                             :thinking="thinking"
                             :agent-tools-enabled="agentToolsEnabled"
@@ -1676,9 +1682,6 @@ onBeforeUnmount(() => {
                             :dictation-listening="dictation.status.value === 'listening'"
                             :dictation-starting="dictation.status.value === 'starting'"
                             :dictation-level="dictation.level.value"
-                            :drawer-mode="composerShape.drawerMode"
-                            :immersive-composer="composerShape.immersiveComposer"
-                            :plus-dropdown="composerShape.plusDropdown"
                             :library-context-enabled="effectiveLibraryContextEnabled"
                             :library-context-mode="effectiveLibraryContextPolicy.mode"
                             :library-source-count="librarySelectedSourceCount"
@@ -1720,7 +1723,7 @@ onBeforeUnmount(() => {
                             @select-slash-command="selectSlashCommand"
                             @update-library-turn-override="libraryTurnOverride = $event"
                         >
-                            <TalosMobileChatgptPastiglia v-if="pianoChatgptInUso" />
+                            <TalosMobileChatgptPastiglia v-if="pianoChatgptInUso && layoutDelTablet.isTablet.value" />
                         </TalosMobileComposer>
                         </div>
                     </div>
@@ -1739,13 +1742,13 @@ onBeforeUnmount(() => {
                             <Presentation class="size-4" aria-hidden="true" />{{ t('chat.promptSlides') }}
                         </button>
                         <button type="button" data-testid="talos-prompt-analyze" class="talos-prompt-chip talos-pressable" @click="chipAnalizza">
-                            <FileText class="size-4" aria-hidden="true" />{{ t('chat.promptAnalyze') }}
+                            <FileSearch class="size-4" aria-hidden="true" />{{ t('chat.promptAnalyze') }}
                         </button>
                         <!-- Owner 12/09 20:05-20:10: «via ricerca web». Questa chip apre la Ricerca
                              approfondita (decisione 15:45): resta, con l'ampolla della stazione al
                              posto del mondo, che la faceva sembrare una ricerca sul web. -->
                         <button type="button" data-testid="talos-prompt-research" class="talos-prompt-chip talos-pressable" @click="chipRicerca">
-                            <FlaskConical class="size-4" aria-hidden="true" />{{ t('chat.promptResearch') }}
+                            <Telescope class="size-4" aria-hidden="true" />{{ t('chat.promptResearch') }}
                         </button>
                         <button type="button" data-testid="talos-prompt-more" class="talos-prompt-chip talos-pressable" @click="chipAltro">
                             <MoreHorizontal class="size-4" aria-hidden="true" />{{ t('chat.promptMore') }}
@@ -1873,22 +1876,17 @@ onBeforeUnmount(() => {
             Il velo prende i tocchi di proposito: finche' l'archivio non e'
             aperto non c'e' niente da toccare sotto, e un tasto che risponde
             senza poter fare niente e' peggio di un tasto che non risponde.
+
+            Owner 29/10 sera (mockup «Caricamenti vivi» v6, «Quella della Chat
+            ovunque»): il velo e la carta sono ora `TalosAttesaCarta`, le stesse
+            classi di qui, per tutte le pagine che aspettano vuote; dopo 2 s
+            accanto al testo compaiono i secondi.
         -->
-        <div
+        <TalosAttesaCarta
             v-if="archivioInCaricamento"
-            data-testid="talos-chat-loading"
-            role="status"
-            aria-live="polite"
-            class="fixed inset-0 z-[80] flex items-center justify-center bg-[var(--talos-background)]/75 supports-backdrop-filter:backdrop-blur-sm"
-        >
-            <div class="flex flex-col items-center gap-3 rounded-2xl border border-[var(--talos-border)] bg-[var(--talos-card)] px-7 py-6 shadow-xl">
-                <LoaderCircle
-                    class="size-7 text-[var(--talos-accent)] motion-safe:animate-spin"
-                    aria-hidden="true"
-                />
-                <p class="text-sm text-[var(--talos-muted)]">{{ t('chat.loadingChats') }}</p>
-            </div>
-        </div>
+            testid="talos-chat-loading"
+            :testo="t('chat.loadingChats')"
+        />
 
     </section>
 </template>

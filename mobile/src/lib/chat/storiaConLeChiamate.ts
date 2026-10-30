@@ -212,7 +212,14 @@ export interface TalosTurniDallaStoriaInput {
     /** Gli id dei messaggi che hanno allegati da riconsegnare. */
     readonly conAllegati: ReadonlySet<string>
     readonly pezziDelMessaggio?: (id: string) => Promise<readonly TalosMobileInputPart[]>
+    /**
+     * La lingua delle risposte (owner 28/10/2026): `'auto'` (Automatica) o un codice scelto. In Automatica la lingua sentita o
+     * riconosciuta di un messaggio (`metadata.lingua_del_messaggio`) diventa una nota in coda a quel messaggio; assente = nessuna nota.
+     */
+    readonly lingua?: string | null
 }
+
+export { TALOS_METADATA_LINGUA_DEL_MESSAGGIO } from '@/lib/chat/linguaDelleRisposte'
 
 /**
  * La storia che il modello legge, ricostruita dal disco.
@@ -246,5 +253,21 @@ export async function talosTurniDallaStoria(
             }
             return turno
         }))
+    /*
+     * ⭐ STORIA-LINGUA-01..03 (owner 28/10/2026, «come scrivi o parli»; nucleo r4 b32dfadb8): la nota sta SOLO sul messaggio di questo
+     * giro, l'ultimo della persona, e dice la sua lingua (dai metadati su disco, scritti all'invio). Le note dei giri di prima non
+     * restano: un messaggio scritto dopo uno dettato in persiano, senza lingua nota, non deve leggere «l'ultimo è in persiano».
+     * Frase del nucleo r4 (`notaLinguaDelMessaggio`).
+     */
+    if (input.lingua !== undefined && input.lingua !== null) {
+        const { notaLinguaDelMessaggio, TALOS_METADATA_LINGUA_DEL_MESSAGGIO } = await import('@/lib/chat/linguaDelleRisposte')
+        const persona = input.messaggi.filter((m) => m.role === 'user' || m.role === 'assistant' || m.role === 'tool')
+        const ultimo = persona.map((m) => m.role).lastIndexOf('user')
+        if (ultimo >= 0) {
+            const codice = persona[ultimo]!.metadata?.[TALOS_METADATA_LINGUA_DEL_MESSAGGIO]
+            const nota = notaLinguaDelMessaggio({ lingua: input.lingua, linguaDelMessaggio: typeof codice === 'string' ? codice : null })
+            if (nota) ricostruiti[ultimo] = { ...ricostruiti[ultimo]!, content: `${ricostruiti[ultimo]!.content}\n\n${nota}` }
+        }
+    }
     return talosStoriaConLeChiamate(ricostruiti)
 }

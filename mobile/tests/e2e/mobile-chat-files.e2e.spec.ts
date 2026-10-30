@@ -270,10 +270,14 @@ test('sends text and image evidence, downloads device copies, reuses Vault files
 
     // P1-CTX-UI-04: the turn layer is visibly independent from the persisted
     // chat policy, supports file-level decisions, and can return to inheritance.
-    const libraryChip = page.getByTestId('talos-composer-library-chip')
-    await expect(libraryChip).toBeVisible()
-    await expect(libraryChip).toContainText('Relevant sources only')
-    await libraryChip.click()
+    // Owner 2026-10-28: the Library is no longer a chip in the composer row. While it is on, «+» carries a dot; the turn sheet
+    // opens from the «+» drawer.
+    const plusDot = page.getByLabel('Add to chat').getByTestId('talos-composer-plus-dot')
+    await expect(plusDot).toBeVisible()
+    await page.getByLabel('Add to chat').click()
+    const libraryTurn = page.getByTestId('talos-drawer-library-turn')
+    await expect(libraryTurn).toContainText('Relevant sources only')
+    await libraryTurn.click()
     const turnSheet = page.getByTestId('talos-library-context-sheet')
     await expect(turnSheet).toBeVisible()
     await turnSheet.getByTestId('talos-library-turn-mode-agentic_on_demand_v1').click()
@@ -291,7 +295,7 @@ test('sends text and image evidence, downloads device copies, reuses Vault files
     await expect(turnSheet.getByTestId('talos-library-turn-reset')).toHaveCount(0)
     await turnSheet.getByRole('button', { name: 'Close' }).click()
     await expect(turnSheet).toHaveCount(0)
-    await expect(libraryChip).toContainText('Relevant sources only')
+    await expect(plusDot).toBeVisible()
 
     await page.getByLabel('Choose grounding context').click()
     await expect(page).toHaveURL(/\/context$/)

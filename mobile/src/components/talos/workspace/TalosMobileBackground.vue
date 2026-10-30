@@ -2,8 +2,11 @@
 import { computed, onMounted, shallowRef } from 'vue'
 import TalosProceduralBackground from '@/components/talos/workspace/TalosProceduralBackground.vue'
 import { useTalosMotionEnvironment } from '@/composables/useTalosMotionEnvironment'
+import { useTalosPausaSfondoScorrimento } from '@/composables/useTalosPausaSfondoScorrimento'
 import { resolveTalosWorkspaceMotionV6 } from '@/motion-v6/workspaceRuntime'
 import { createTalosBrowserProductSceneRegistry } from '@/motion-v6/productRegistry'
+import { velaLaScena } from '@/motion-v6/veloDelleScene'
+import { useColonnaDellaChat } from '@/composables/useColonnaDellaChat'
 import type { SceneRegistry } from '@/motion-v6/sceneRegistry'
 import type { TalosMotionRuntimeEnvironment } from '@/motion-v6/runtimePolicy'
 import { effectiveTalosThemeMode } from '@/lib/talosThemes'
@@ -50,11 +53,17 @@ const motion = computed(() => resolveTalosWorkspaceMotionV6({
     colorMode: resolvedMode.value,
     environment: runtimeEnvironment.value,
 }))
-const paused = computed(() => motion.value.decision.paused || props.paused)
+// owner 28/10: animato anche coi messaggi; fermo SOLO mentre si scorre, ripresa 220 ms dopo (come il desktop)
+const fermoPerScorrimento = useTalosPausaSfondoScorrimento()
+// Forge «Corridoio velato» (owner 28/10, desktop dc4859dd6): la colonna della chat, misurata quando cambia e letta a ogni fotogramma
+const colonna = useColonnaDellaChat()
+const paused = computed(() => motion.value.decision.paused || props.paused || fermoPerScorrimento.value)
 
 onMounted(() => {
     try {
-        registry.value = createTalosBrowserProductSceneRegistry()
+        registry.value = createTalosBrowserProductSceneRegistry(document, window, performance, {
+            afterDraw: ({ context, sceneId, width, height }) => velaLaScena(context as never, sceneId, width, height, colonna.value),
+        })
     } catch {
         registry.value = null
     }

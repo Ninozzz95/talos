@@ -123,7 +123,7 @@ describe('lo scorrimento cambia scheda nel foglio «+» (owner 13/09)', () => {
                 prompt: '', modelProfiles: [profile], routingProfiles: [],
                 selectedModelProfileId: profile.id, selectedRoutingProfileId: null,
                 selectedEffort: 'high', thinking: false, canSend: true, sending: false,
-                sendDisabledReason: '', dictationSupported: true, drawerMode: true,
+                sendDisabledReason: '', dictationSupported: true,
             },
         })
     }

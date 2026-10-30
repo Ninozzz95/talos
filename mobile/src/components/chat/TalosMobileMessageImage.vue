@@ -126,7 +126,7 @@ onBeforeUnmount(release)
                 data-testid="talos-image-provenance"
                 class="pointer-events-none absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-0.5 text-3xs font-medium leading-4 text-white/95 backdrop-blur-[2px]"
             >
-                <Sparkles class="size-2.5 shrink-0" aria-hidden="true" />
+                <Sparkles class="size-3 shrink-0" aria-hidden="true" />
                 {{ $t('chat.imageAiGenerated') }}
             </span>
         </span>

@@ -12,6 +12,7 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import java.util.concurrent.Executors
+import org.json.JSONObject
 
 /**
  * Il ponte fra l'interfaccia e l'aggiornamento automatico. Ogni cambio di stato (dal job, dai ricevitori, da qui) arriva al
@@ -108,21 +109,63 @@ class TalosAggiornamentiPlugin : Plugin() {
         val scelte = TalosStatoAggiornamento.scelte(context)
         // dopo l'installazione la versione trovata non c'è più: le novità da mostrare sono quelle della versione installata
         val trovata = TalosStatoAggiornamento.trovata(context) ?: TalosStatoAggiornamento.appenaInstallata(context)
-        return JSObject()
-            .put("fase", TalosStatoAggiornamento.fase(context).name)
-            .put("installata", BuildConfig.VERSION_NAME)
-            .put("versione", trovata?.versione)
-            .put("note", trovata?.note?.takeIf { it.isNotEmpty() }?.let { runCatching { JSObject(it) }.getOrNull() })
-            .put("pagina", trovata?.pagina?.takeIf { it.isNotEmpty() })
-            .put("dimensione", trovata?.size)
-            .put("scaricati", TalosStatoAggiornamento.scaricati(context))
-            .put("motivo", TalosStatoAggiornamento.motivo(context))
-            .put("ultimoControllo", TalosStatoAggiornamento.ultimoControllo(context).takeIf { it > 0 })
-            .put("appenaAggiornata", TalosStatoAggiornamento.appenaAggiornata(context))
-            .put("allUscita", TalosStatoAggiornamento.installaAllUscita(context))
-            .put("permessoConcesso", TalosInstallatoreAggiornamento.permessoConcesso(context))
-            .put("automatici", scelte.automatici)
-            .put("soloWifi", scelte.soloWifi)
-            .put("avvisami", scelte.avvisami)
+        return statoPerJs(TalosValoriStato(
+            fase = TalosStatoAggiornamento.fase(context).name,
+            installata = BuildConfig.VERSION_NAME,
+            versione = trovata?.versione,
+            note = trovata?.note?.takeIf { it.isNotEmpty() }?.let { runCatching { JSONObject(it) }.getOrNull() },
+            pagina = trovata?.pagina?.takeIf { it.isNotEmpty() },
+            dimensione = trovata?.size,
+            scaricati = TalosStatoAggiornamento.scaricati(context),
+            motivo = TalosStatoAggiornamento.motivo(context),
+            ultimoControllo = TalosStatoAggiornamento.ultimoControllo(context).takeIf { it > 0 },
+            appenaAggiornata = TalosStatoAggiornamento.appenaAggiornata(context),
+            allUscita = TalosStatoAggiornamento.installaAllUscita(context),
+            permessoConcesso = TalosInstallatoreAggiornamento.permessoConcesso(context),
+            automatici = scelte.automatici,
+            soloWifi = scelte.soloWifi,
+            avvisami = scelte.avvisami,
+        ))
     }
 }
+
+/** I valori dello stato già letti dalle preferenze: `statoPerJs` li mette nella busta senza toccare il contesto (provabile sulla JVM). */
+internal data class TalosValoriStato(
+    val fase: String,
+    val installata: String,
+    val versione: String?,
+    val note: JSONObject?,
+    val pagina: String?,
+    val dimensione: Long?,
+    val scaricati: Long?,
+    val motivo: String?,
+    val ultimoControllo: Long?,
+    val appenaAggiornata: String?,
+    val allUscita: Boolean,
+    val permessoConcesso: Boolean,
+    val automatici: Boolean,
+    val soloWifi: Boolean,
+    val avvisami: Boolean,
+)
+
+/**
+ * La busta dello stato per l'app, sempre INTERA. ⛔ B1/B2 (27/10/2026): `put(chiave, null)` di org.json TOGLIE la chiave e l'app,
+ * che copia solo le chiavi presenti, teneva il valore vecchio (il segnale «aggiornata» acceso dopo «visto()»). Un valore che manca
+ * va come `JSONObject.NULL`, che arriva `null`.
+ */
+internal fun statoPerJs(v: TalosValoriStato): JSObject = JSObject()
+    .put("fase", v.fase)
+    .put("installata", v.installata)
+    .put("versione", v.versione ?: JSONObject.NULL)
+    .put("note", v.note ?: JSONObject.NULL)
+    .put("pagina", v.pagina ?: JSONObject.NULL)
+    .put("dimensione", v.dimensione ?: JSONObject.NULL)
+    .put("scaricati", v.scaricati ?: JSONObject.NULL)
+    .put("motivo", v.motivo ?: JSONObject.NULL)
+    .put("ultimoControllo", v.ultimoControllo ?: JSONObject.NULL)
+    .put("appenaAggiornata", v.appenaAggiornata ?: JSONObject.NULL)
+    .put("allUscita", v.allUscita)
+    .put("permessoConcesso", v.permessoConcesso)
+    .put("automatici", v.automatici)
+    .put("soloWifi", v.soloWifi)
+    .put("avvisami", v.avvisami)

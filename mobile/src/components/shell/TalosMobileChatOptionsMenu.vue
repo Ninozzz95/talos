@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
-import { Check, Download, EllipsisVertical, Eye, EyeOff, FoldVertical, Images, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
+import { Check, Download, EllipsisVertical, FoldVertical, Ghost, Images, MessageSquarePlus, Pencil, Trash2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
 import TalosMobileDeleteChatDialog from '@/components/shell/TalosMobileDeleteChatDialog.vue'
@@ -223,7 +223,7 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                     it says, which is the whole of what a switch owes you.
                 -->
                 <button v-if="incognito || props.canGoIncognito" type="button" role="menuitem" data-testid="talos-chat-options-temporary" :disabled="props.busy" class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)] disabled:opacity-50" @click="pressSwitch">
-                    <component :is="incognito ? Eye : EyeOff" class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                    <Ghost class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
                     {{ incognito ? $t('chat.normalMode') : $t('chat.temporaryChat') }}
                 </button>
                 <button type="button" role="menuitem" class="talos-pressable flex min-h-touch w-full items-center gap-2 rounded-lg px-2 text-left text-sm text-[var(--talos-text)] hover:bg-[var(--talos-active)]" @click="openRename">
@@ -288,7 +288,7 @@ function confirmDelete(choice: { deleteMedia: boolean }): void {
                     :disabled="props.busy"
                     @click="confirmExit"
                 >
-                    <Eye class="size-4" aria-hidden="true" /> {{ $t('chat.leaveIncognitoConfirm') }}
+                    <Ghost class="size-4" aria-hidden="true" /> {{ $t('chat.leaveIncognitoConfirm') }}
                 </Button>
             </template>
         </TalosMobileConfirmDialog>

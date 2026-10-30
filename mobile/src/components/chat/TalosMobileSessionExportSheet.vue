@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Braces, Copy, Database, Download, FileJson, FileText, Share2 } from '@lucide/vue'
+import { Braces, Copy, Library, Download, FileJson, FileText, Share2 } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import {
     buildTalosMobileBenchmarkScenarioExport,
@@ -285,7 +285,7 @@ async function saveToLibrary(): Promise<void> {
                 class="talos-pressable mt-2 flex min-h-touch w-full items-center justify-center gap-2 rounded-full border border-[var(--talos-border)] text-sm text-[var(--talos-text)] disabled:opacity-60"
                 @click="saveToLibrary"
             >
-                <Database class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
+                <Library class="size-4 text-[var(--talos-accent)]" aria-hidden="true" />
                 {{ savedToLibrary ? $t('export.savedToLibrary') : $t('chat.saveToLibrary') }}
             </button>
         </section>

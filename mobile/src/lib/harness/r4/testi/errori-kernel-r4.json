@@ -1,0 +1,404 @@
+{
+  "origine": {
+    "commit": "5bccc25a866dffc7ce6c656962de77afbcc0baec",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "a48b45e5800ca56e3b5e348eaa7bd3f02fe22844e945aca8963bbe4fc0a396cc",
+    "prefisso": "kernel."
+  },
+  "it": {
+    "kernel.sseOltreLimite": "Evento SSE oltre il limite.",
+    "kernel.sseJsonNonValido": "Evento SSE con JSON non valido.",
+    "kernel.sseNonValido": "Evento SSE non valido.",
+    "kernel.flussoSenzaFine": "Flusso del fornitore concluso senza un evento finale.",
+    "kernel.motoreLocaleRifiuta": "Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi.",
+    "kernel.rispostaInutilizzabile": "Il fornitore non ha restituito una risposta utilizzabile.",
+    "kernel.rispostaIncompleta": "Il fornitore non ha completato la risposta.",
+    "kernel.inattivoOltreLimite": "OpenRouter è rimasto inattivo oltre il limite configurato.",
+    "kernel.motoreLocaleScollegato": "Il motore locale non è collegato a questo server.",
+    "kernel.motoreOspiteOccupato": "Il modello sul dispositivo è occupato con un altro lavoro (una risposta nella chat o un riassunto del contesto); riprova quando ha finito.",
+    "kernel.motoreOspiteNonAperto": "Nessun modello locale è aperto nell’app: aprine uno dal selettore dei modelli.",
+    "kernel.motoreOspiteCambiato": "Ora sul dispositivo è aperto un altro modello: sceglilo di nuovo nel Codice.",
+    "kernel.motoreOspiteNonRisponde": "Il motore sul dispositivo non ha risposto: rimanda il messaggio, l’app lo riapre.",
+    "kernel.richiestaInterrotta": "La richiesta al fornitore è stata interrotta.",
+    "kernel.fornitoreIrraggiungibile": "Non è stato possibile raggiungere il fornitore.",
+    "kernel.credenzialeNonAccettata": "Credenziale non accettata dal fornitore.",
+    "kernel.accessoNegatoCredenziale": "Accesso negato: controlla i permessi della credenziale e del modello.",
+    "kernel.modelloNonTrovato": "Modello o indirizzo non trovato: controlla la configurazione del fornitore.",
+    "kernel.troppoTraffico": "Troppo traffico presso il fornitore.",
+    "kernel.credenzialeRifiutata": "Credenziale rifiutata dal fornitore.",
+    "kernel.endpointAutenticazione": "L'endpoint richiede autenticazione: verifica indirizzo e accesso configurati.",
+    "kernel.accessoNegato": "Accesso negato dal fornitore o dal modello: verifica i permessi.",
+    "kernel.creditoNonDisponibile": "Credito non disponibile presso il fornitore.",
+    "kernel.connessioneInterrotta": "Connessione con il fornitore interrotta.",
+    "kernel.tempoMassimo": "Il fornitore ha superato il tempo massimo.",
+    "kernel.nonRisponde": "Il fornitore non risponde.",
+    "kernel.rispostaInterrotta": "La risposta del fornitore si è interrotta.",
+    "kernel.budgetOccupato": "Il budget è temporaneamente occupato da richieste in corso o appena concluse.",
+    "kernel.limiteChiave": "Il limite di spesa della chiave è stato raggiunto.",
+    "kernel.richiestaCostosa": "Il costo stimato della richiesta supera il budget disponibile.",
+    "kernel.limiteNonSpecificato": "Il servizio ha rifiutato la richiesta per un limite di spesa non specificato.",
+    "kernel.richiestaNonAccettata": "Il fornitore non ha accettato la richiesta.",
+    "kernel.contestoPienoDelFornitore": "La richiesta è più grande della finestra di contesto del modello (context_length_exceeded).",
+    "kernel.fallbackNonCollegato": "Per continuare con un altro fornitore occorrono accessi, avvisi in chat e registrazione dei consumi.",
+    "kernel.chiamataGiaInCorso": "Una chiamata di questa sessione è già in corso.",
+    "kernel.runtimeNonConfigurato": "Il runtime agente non è configurato per questa installazione.",
+    "kernel.runtimeNonDisponibile": "Il runtime agente non è disponibile. Controlla la configurazione del server.",
+    "kernel.motoreNonLeggeOutput": "Il motore di questa installazione non legge ancora gli output conservati.",
+    "kernel.motoreNonConservaOutput": "Il motore di questa installazione non conserva ancora gli output dei comandi.",
+    "kernel.motoreNonApplicaAmbiente": "Il motore di questa installazione non applica ancora la scelta dell’ambiente dei comandi.",
+    "kernel.motoreNonApplicaBarriera": "Il motore di questa installazione non applica ancora la barriera prima delle modifiche.",
+    "kernel.inattivoPerSecondi": "OpenRouter non ha inviato attività per {secondi} secondi.",
+    "kernel.nessunaRispostaEntro": "Il fornitore non ha risposto entro {secondi} secondi.",
+    "kernel.rispostaHttp": "Il fornitore ha risposto HTTP {stato}.",
+    "kernel.nonRispondeStato": "Il fornitore non risponde (stato {stato}). {dettaglio}",
+    "kernel.finestraLocale": "La conversazione{conversazione} non entra nella finestra del modello locale{finestra}.",
+    "kernel.statoSconosciuto": "sconosciuto",
+    "kernel.quantiToken": " ({n} token)"
+  },
+  "en": {
+    "kernel.sseOltreLimite": "SSE event over the size limit.",
+    "kernel.sseJsonNonValido": "SSE event with invalid JSON.",
+    "kernel.sseNonValido": "Invalid SSE event.",
+    "kernel.flussoSenzaFine": "The provider's stream finished without a final event.",
+    "kernel.motoreLocaleRifiuta": "The local engine did not accept this request, not even as a plain chat.",
+    "kernel.rispostaInutilizzabile": "The provider did not return a usable response.",
+    "kernel.rispostaIncompleta": "The provider did not complete the response.",
+    "kernel.inattivoOltreLimite": "OpenRouter stayed idle past the configured limit.",
+    "kernel.motoreLocaleScollegato": "The local engine is not connected to this server.",
+    "kernel.motoreOspiteOccupato": "The on-device model is busy with another job (a chat reply or a context summary); try again when it has finished.",
+    "kernel.motoreOspiteNonAperto": "No local model is open in the app: open one from the model picker.",
+    "kernel.motoreOspiteCambiato": "Another on-device model is open now; choose it again in Code.",
+    "kernel.motoreOspiteNonRisponde": "The on-device engine in the app did not answer: send the message again, the app reopens it.",
+    "kernel.richiestaInterrotta": "The request to the provider was interrupted.",
+    "kernel.fornitoreIrraggiungibile": "The provider could not be reached.",
+    "kernel.credenzialeNonAccettata": "Credential not accepted by the provider.",
+    "kernel.accessoNegatoCredenziale": "Access denied: check the permissions of the credential and of the model.",
+    "kernel.modelloNonTrovato": "Model or address not found: check the provider configuration.",
+    "kernel.troppoTraffico": "Too much traffic at the provider.",
+    "kernel.credenzialeRifiutata": "Credential rejected by the provider.",
+    "kernel.endpointAutenticazione": "The endpoint requires you to sign in: check the configured address and access.",
+    "kernel.accessoNegato": "Access denied by the provider or the model: check the permissions.",
+    "kernel.creditoNonDisponibile": "Credit not available at the provider.",
+    "kernel.connessioneInterrotta": "Connection with the provider interrupted.",
+    "kernel.tempoMassimo": "The provider exceeded the maximum time.",
+    "kernel.nonRisponde": "The provider is not responding.",
+    "kernel.rispostaInterrotta": "The provider response was cut off.",
+    "kernel.budgetOccupato": "The budget is temporarily taken by requests in progress or just finished.",
+    "kernel.limiteChiave": "The spending limit of the key has been reached.",
+    "kernel.richiestaCostosa": "The estimated cost of the request exceeds the available budget.",
+    "kernel.limiteNonSpecificato": "The service rejected the request because of an unspecified spending limit.",
+    "kernel.richiestaNonAccettata": "The provider did not accept the request.",
+    "kernel.contestoPienoDelFornitore": "The request is larger than the model context window (context_length_exceeded).",
+    "kernel.fallbackNonCollegato": "To continue with another provider, access, chat notices and usage recording are needed.",
+    "kernel.chiamataGiaInCorso": "A call of this session is already in progress.",
+    "kernel.runtimeNonConfigurato": "The agent runtime is not configured for this installation.",
+    "kernel.runtimeNonDisponibile": "The agent runtime is not available. Check the server configuration.",
+    "kernel.motoreNonLeggeOutput": "The engine of this installation does not read retained outputs yet.",
+    "kernel.motoreNonConservaOutput": "The engine of this installation does not retain command outputs yet.",
+    "kernel.motoreNonApplicaAmbiente": "The engine of this installation does not apply the command environment choice yet.",
+    "kernel.motoreNonApplicaBarriera": "The engine of this installation does not apply the barrier before changes yet.",
+    "kernel.inattivoPerSecondi": "OpenRouter sent no activity for {secondi} seconds.",
+    "kernel.nessunaRispostaEntro": "The provider did not respond within {secondi} seconds.",
+    "kernel.rispostaHttp": "The provider answered HTTP {stato}.",
+    "kernel.nonRispondeStato": "The provider is not responding (status {stato}). {dettaglio}",
+    "kernel.finestraLocale": "The conversation{conversazione} does not fit in the local model’s window{finestra}.",
+    "kernel.statoSconosciuto": "unknown",
+    "kernel.quantiToken": " ({n} tokens)"
+  },
+  "origineRegole": {
+    "commit": "5bccc25a866dffc7ce6c656962de77afbcc0baec",
+    "percorso": "harness-ui/frontend/src/components/errori.js",
+    "tabella": "MESSAGGI_DEL_KERNEL",
+    "sha256": "87b0486005bfe4d8a3f536172946c18f68cab4e9251f7b641703b122093e57ad"
+  },
+  "regole": [
+    {
+      "chiave": "errori.kernel.sseOltreLimite",
+      "sorgente": "^(?:SSE event over the size limit\\.|Evento SSE oltre il limite\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.sseJsonNonValido",
+      "sorgente": "^(?:SSE event with invalid JSON\\.|Evento SSE con JSON non valido\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.sseNonValido",
+      "sorgente": "^(?:Invalid SSE event\\.|Evento SSE non valido\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.flussoSenzaFine",
+      "sorgente": "^(?:The provider's stream finished without a final event\\.|Flusso del fornitore concluso senza un evento finale\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.motoreLocaleRifiuta",
+      "sorgente": "^(?:The local engine did not accept this request, not even as a plain chat\\.|Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.rispostaInutilizzabile",
+      "sorgente": "^(?:The provider did not return a usable response\\.|Il fornitore non ha restituito una risposta utilizzabile\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.rispostaIncompleta",
+      "sorgente": "^(?:The provider did not complete the response\\.|Il fornitore non ha completato la risposta\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.inattivoOltreLimite",
+      "sorgente": "^(?:OpenRouter stayed idle past the configured limit\\.|OpenRouter è rimasto inattivo oltre il limite configurato\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.motoreLocaleScollegato",
+      "sorgente": "^(?:The local engine is not connected to this server\\.|Il motore locale non è collegato a questo server\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.motoreOspiteOccupato",
+      "sorgente": "^(?:The on-device model is busy with another job \\(a chat reply or a context summary\\); try again when it has finished\\.|Il modello sul dispositivo è occupato con un altro lavoro \\(una risposta nella chat o un riassunto del contesto\\); riprova quando ha finito\\.|The local model is busy answering in the chat: one reply at a time\\. Try again when it has finished\\.|Il modello locale sta rispondendo nella chat: una risposta alla volta\\. Riprova quando ha finito\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.motoreOspiteNonAperto",
+      "sorgente": "^(?:No local model is open in the app: open one from the model picker\\.|Nessun modello locale è aperto nell’app: aprine uno dal selettore dei modelli\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.motoreOspiteCambiato",
+      "sorgente": "^(?:Another on-device model is open now; choose it again in Code\\.|Ora sul dispositivo è aperto un altro modello: sceglilo di nuovo nel Codice\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.motoreOspiteNonRisponde",
+      "sorgente": "^(?:The on-device engine in the app did not answer: send the message again, the app reopens it\\.|Il motore sul dispositivo non ha risposto: rimanda il messaggio, l’app lo riapre\\.|The local engine in the app does not answer\\.|Il motore locale dell’app non risponde\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.richiestaInterrotta",
+      "sorgente": "^(?:The request to the provider was interrupted\\.|La richiesta al fornitore è stata interrotta\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.fornitoreIrraggiungibile",
+      "sorgente": "^(?:The provider could not be reached\\.|Non è stato possibile raggiungere il fornitore\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.credenzialeNonAccettata",
+      "sorgente": "^(?:Credential not accepted by the provider\\.|Credenziale non accettata dal fornitore\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.accessoNegatoCredenziale",
+      "sorgente": "^(?:Access denied: check the permissions of the credential and of the model\\.|Accesso negato: controlla i permessi della credenziale e del modello\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.modelloNonTrovato",
+      "sorgente": "^(?:Model or address not found: check the provider configuration\\.|Modello o indirizzo non trovato: controlla la configurazione del fornitore\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.troppoTraffico",
+      "sorgente": "^(?:Too much traffic at the provider\\.|Troppo traffico presso il fornitore\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.credenzialeRifiutata",
+      "sorgente": "^(?:Credential rejected by the provider\\.|Credenziale rifiutata dal fornitore\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.endpointAutenticazione",
+      "sorgente": "^(?:The endpoint requires you to sign in: check the configured address and access\\.|L'endpoint richiede autenticazione: verifica indirizzo e accesso configurati\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.accessoNegato",
+      "sorgente": "^(?:Access denied by the provider or the model: check the permissions\\.|Accesso negato dal fornitore o dal modello: verifica i permessi\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.creditoNonDisponibile",
+      "sorgente": "^(?:Credit not available at the provider\\.|Credito non disponibile presso il fornitore\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.connessioneInterrotta",
+      "sorgente": "^(?:Connection with the provider interrupted\\.|Connessione con il fornitore interrotta\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.tempoMassimo",
+      "sorgente": "^(?:The provider exceeded the maximum time\\.|Il fornitore ha superato il tempo massimo\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.nonRisponde",
+      "sorgente": "^(?:The provider is not responding\\.|Il fornitore non risponde\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.rispostaInterrotta",
+      "sorgente": "^(?:The provider response was cut off\\.|La risposta del fornitore si è interrotta\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.budgetOccupato",
+      "sorgente": "^(?:The budget is temporarily taken by requests in progress or just finished\\.|Il budget è temporaneamente occupato da richieste in corso o appena concluse\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.limiteChiave",
+      "sorgente": "^(?:The spending limit of the key has been reached\\.|Il limite di spesa della chiave è stato raggiunto\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.richiestaCostosa",
+      "sorgente": "^(?:The estimated cost of the request exceeds the available budget\\.|Il costo stimato della richiesta supera il budget disponibile\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.limiteNonSpecificato",
+      "sorgente": "^(?:The service rejected the request because of an unspecified spending limit\\.|Il servizio ha rifiutato la richiesta per un limite di spesa non specificato\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.richiestaNonAccettata",
+      "sorgente": "^(?:The provider did not accept the request\\.|Il fornitore non ha accettato la richiesta\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.contestoPienoDelFornitore",
+      "sorgente": "^(?:The request is larger than the model context window \\(context_length_exceeded\\)(?::\\s*\\d+ input tokens requested,\\s*\\d+ maximum(?:,\\s*\\d+ output tokens)?)?\\.|La richiesta è più grande della finestra di contesto del modello \\(context_length_exceeded\\)\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.fallbackNonCollegato",
+      "sorgente": "^(?:To continue with another provider, access, chat notices and usage recording are needed\\.|Per continuare con un altro fornitore occorrono accessi, avvisi in chat e registrazione dei consumi\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.chiamataGiaInCorso",
+      "sorgente": "^(?:A call of this session is already in progress\\.|Una chiamata di questa sessione è già in corso\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.runtimeNonConfigurato",
+      "sorgente": "^(?:The agent runtime is not configured for this installation\\.|Il runtime agente non è configurato per questa installazione\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.runtimeNonDisponibile",
+      "sorgente": "^(?:The agent runtime is not available\\. Check the server configuration\\.|Il runtime agente non è disponibile\\. Controlla la configurazione del server\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.motoreNonLeggeOutput",
+      "sorgente": "^(?:The engine of this installation does not read retained outputs yet\\.|Il motore di questa installazione non legge ancora gli output conservati\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.motoreNonConservaOutput",
+      "sorgente": "^(?:The engine of this installation does not retain command outputs yet\\.|Il motore di questa installazione non conserva ancora gli output dei comandi\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.motoreNonApplicaAmbiente",
+      "sorgente": "^(?:The engine of this installation does not apply the command environment choice yet\\.|Il motore di questa installazione non applica ancora la scelta dell’ambiente dei comandi\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.motoreNonApplicaBarriera",
+      "sorgente": "^(?:The engine of this installation does not apply the barrier before changes yet\\.|Il motore di questa installazione non applica ancora la barriera prima delle modifiche\\.)$",
+      "flag": "u",
+      "parametri": []
+    },
+    {
+      "chiave": "errori.kernel.inattivoPerSecondi",
+      "sorgente": "^(?:OpenRouter sent no activity for|OpenRouter non ha inviato attività per) (\\d+) (?:seconds|secondi)\\.$",
+      "flag": "u",
+      "parametri": [
+        "secondi"
+      ]
+    },
+    {
+      "chiave": "errori.kernel.nessunaRispostaEntro",
+      "sorgente": "^(?:The provider did not respond within|Il fornitore non ha risposto entro) (\\d+) (?:seconds|secondi)\\.$",
+      "flag": "u",
+      "parametri": [
+        "secondi"
+      ]
+    },
+    {
+      "chiave": "errori.kernel.rispostaHttp",
+      "sorgente": "^(?:The provider answered|Il fornitore ha risposto) HTTP (\\d+)\\.$",
+      "flag": "u",
+      "parametri": [
+        "stato"
+      ]
+    },
+    {
+      "chiave": "errori.kernel.nonRispondeStato",
+      "sorgente": "^(?:The provider is not responding \\(status|Il fornitore non risponde \\(stato) ([^)]+)\\)\\.\\s*([\\s\\S]*)$",
+      "flag": "u",
+      "parametri": [
+        "stato",
+        "dettaglio"
+      ]
+    },
+    {
+      "chiave": "errori.kernel.finestraLocale",
+      "sorgente": "^(?:The conversation|La conversazione)(?: \\((\\d+) tokens?\\))? (?:does not fit in the local model’s window|non entra nella finestra del modello locale)(?: \\((\\d+) tokens?\\))?\\.$",
+      "flag": "u",
+      "parametri": [
+        "conversazione",
+        "finestra"
+      ]
+    }
+  ]
+}

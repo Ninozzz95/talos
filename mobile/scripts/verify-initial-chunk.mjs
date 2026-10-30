@@ -823,7 +823,13 @@ import { resolve } from 'node:path'
  * un fornitore deve esistere per forza: nel tipo e nell'elenco dei fornitori, nel registro degli adattatori, nell'icona e nelle
  * tabelle per fornitore del controller. Il resto della fetta (adattatore, token, richiesta conforme) resta a richiesta.
  */
-const DEFAULT_MAXIMUM_BYTES = 668_000
+/*
+ * ⛔ JS 668.000 → 669.000, il 27/10/2026 (D-0147-UI-2, «Piano» nel selettore sul telefono; owner 27/10, chiesto con
+ * AskUserQuestion, «Alza a 669.000»). Misurato **667.343** prima della fetta, **668.039** dopo: il puntino «chi paga» sulla pillola
+ * del modello (il compositore sta nel pezzo d'avvio) e lo stato del piano passato dalla chat. La riga del piano nel selettore è a
+ * richiesta. Il CSS non cresce: il puntino usa solo classi già nel foglio iniziale.
+ */
+const DEFAULT_MAXIMUM_BYTES = 669_000
 /*
  * ⛔ CSS 220.000 → 222.000, il 2026-09-11, sezione 1 del refactor UI (U-1).
  *

@@ -34,4 +34,12 @@ describe('i nomi degli attrezzi di r4 nella riga del giro', () => {
         expect(riga).not.toBe(conosciuto)
         expect(riga).not.toMatch(/^[A-Z][a-z]+ing a /u)
     })
+
+    // ⛔ D-0145-5 (Desktop, prova dal vivo 25/10 notte): accanto a «Cerco lo strumento giusto» il riepilogo mostrava «tool_describe»
+    // grezzo. È l'attrezzo che legge lo schema di un attrezzo tenuto da parte (r4 `ponte-attrezzi.mjs`), come il nostro `tool_details`:
+    // la stessa parola. La tabella dei nomi di r4 copiata (701c6c0d2) non lo conosceva ancora.
+    it('ANR4-02 tool_describe ha la parola di tool_details, mai il nome grezzo', async () => {
+        expect(await etichette([{ name: 'tool_search', detail: null }, { name: 'tool_describe', detail: null }]))
+            .toEqual(['Looking for the right tool', 'Looking up how to do that'])
+    })
 })

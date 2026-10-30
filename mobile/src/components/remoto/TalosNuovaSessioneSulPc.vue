@@ -8,7 +8,7 @@
  * sessione più recente del PC (`progetto`), se c'è. «Apri la sessione» porta al Codice del PC con la cartella: il primo messaggio
  * crea la sessione lì.
  */
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
@@ -50,9 +50,13 @@ async function leggi(): Promise<void> {
         return
     }
     cartelle.value = esito.cartelle
-    cartellaScelta.value = esito.cartelle.find((c) => c.nome === props.progettoRecente)?.id ?? null
+    // una cartella bloccata non si sceglie, nemmeno se la sessione più recente era lì
+    cartellaScelta.value = esito.cartelle.find((c) => !c.bloccata && c.nome === props.progettoRecente)?.id ?? null
 }
 onMounted(leggi)
+
+/** La prima riga che si può scegliere: è lei a prendere il fuoco quando non c'è ancora una scelta. */
+const primaLibera = computed(() => cartelle.value?.find((c) => !c.bloccata)?.id ?? null)
 
 function apri(): void {
     if (!cartellaScelta.value) return
@@ -81,14 +85,27 @@ async function frecce(evento: KeyboardEvent): Promise<void> {
             <template v-else>
                 <h3 id="talos-computer-folders-title" class="text-sm font-medium text-[var(--talos-text)]">{{ t('computer.folders') }}</h3>
                 <div role="radiogroup" aria-labelledby="talos-computer-folders-title" class="mt-1.5 flex flex-col gap-1.5" @keydown="frecce">
+                    <template v-for="c in cartelle" :key="c.id">
+                    <!-- Cartelle bloccate (owner 27/10/2026, contratto rev.1): si vede perché la persona la ritrovi, ma non si sceglie e non ha azioni -->
+                    <div
+                        v-if="c.bloccata"
+                        data-testid="talos-computer-folder-blocked"
+                        aria-disabled="true"
+                        class="flex min-h-touch w-full items-center gap-2.5 rounded-md border border-[var(--talos-border)] bg-[var(--talos-panel)] px-2.5 py-2 text-left text-sm text-[var(--talos-muted)]"
+                    >
+                        <span class="inline-flex size-[1.125rem] shrink-0" aria-hidden="true" />
+                        <span class="flex min-w-0 flex-1 flex-col">
+                            <span class="truncate">{{ c.nome }} <span v-if="c.dettaglio">{{ c.dettaglio }}</span></span>
+                            <span class="text-xs leading-5">{{ t('computer.consent.blocked') }}</span>
+                        </span>
+                    </div>
                     <button
-                        v-for="(c, i) in cartelle"
-                        :key="c.id"
+                        v-else
                         type="button"
                         role="radio"
                         data-testid="talos-computer-folder"
                         :aria-checked="cartellaScelta === c.id ? 'true' : 'false'"
-                        :tabindex="cartellaScelta === c.id || (!cartellaScelta && i === 0) ? 0 : -1"
+                        :tabindex="cartellaScelta === c.id || (!cartellaScelta && c.id === primaLibera) ? 0 : -1"
                         class="talos-pressable flex min-h-touch w-full items-center gap-2.5 rounded-md border px-2.5 py-2 text-left text-sm text-[var(--talos-text)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--talos-ring)]"
                         :class="cartellaScelta === c.id ? 'border-[var(--talos-accent)] bg-[color-mix(in_srgb,var(--talos-accent)_14%,var(--talos-panel))]' : 'border-[var(--talos-border)] bg-[var(--talos-panel)]'"
                         @click="cartellaScelta = c.id"
@@ -104,6 +121,7 @@ async function frecce(evento: KeyboardEvent): Promise<void> {
                             <span v-if="!c.consentita" data-testid="talos-computer-folder-first-time" class="text-xs leading-5 text-[var(--talos-muted)]">{{ t('computer.consent.firstTime') }}</span>
                         </span>
                     </button>
+                    </template>
                 </div>
             </template>
             <Button

@@ -167,7 +167,10 @@ class TalosSentinellaMdns(
                 val ospite = info?.host?.hostAddress
                 // ⛔ Solo IPv4: `adb connect` con un IPv6 senza parentesi non sa
                 // dove finisce l'indirizzo e dove comincia la porta.
-                if (porta != null && ospite != null && !ospite.contains(':')) {
+                // ASS-149 D1: solo gli annunci di QUESTO dispositivo, mai quelli di un altro telefono della rete
+                if (porta != null && ospite != null && !ospite.contains(':') &&
+                    TalosIndirizziPropri.eProprio(ospite, TalosIndirizziPropri.delDispositivo())
+                ) {
                     val indirizzo = "$ospite:$porta"
                     ultimoIndirizzo.set(indirizzo)
                     runCatching { quando.trovato(indirizzo) }

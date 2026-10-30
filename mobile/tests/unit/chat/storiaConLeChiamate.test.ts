@@ -131,3 +131,40 @@ describe('talosStoriaConLeChiamate', () => {
         expect(TALOS_ESITO_NON_CONSERVATO).toMatch(/do not restate or invent/i)
     })
 })
+
+/**
+ * STORIA-LINGUA-01..03 — la lingua delle risposte (owner 28/10/2026, «come scrivi o parli»; nucleo r4 b32dfadb8, revisione del Desktop):
+ * la lingua che il dispositivo ha sentito o riconosciuto per il messaggio di QUESTO giro (`metadata.lingua_del_messaggio`) entra come
+ * nota in coda a quel messaggio, solo in Automatica. Le note dei messaggi di prima NON restano: dopo un messaggio dettato in persiano e
+ * uno scritto senza lingua nota, il modello leggeva ancora «l'ultimo è in persiano». Ogni messaggio porta la sua lingua, o nessuna.
+ */
+describe('STORIA-LINGUA la nota della lingua del messaggio nella storia', () => {
+    const msg = (id: string, role: string, content: string, lingua?: string) => ({ id, role, content, ...(lingua ? { metadata: { lingua_del_messaggio: lingua } } : {}) })
+    const storia = [
+        msg('u1', 'user', 'سلام، حالت چطوره؟', 'fa'),
+        msg('a1', 'assistant', 'خوبم، ممنون.'),
+        msg('u2', 'user', 'Now in English please', 'en'),
+    ]
+    it('STORIA-LINGUA-01 Automatica: la nota solo sul messaggio di questo giro (l\'ultimo della persona)', async () => {
+        const { talosTurniDallaStoria } = await import('@/lib/chat/storiaConLeChiamate')
+        const turni = await talosTurniDallaStoria({ messaggi: storia, conAllegati: new Set(), lingua: 'auto' })
+        expect(turni.filter((t) => t.role === 'user').map((t) => t.content)).toEqual([
+            'سلام، حالت چطوره؟',
+            "Now in English please\n\nThe person's last message is in English: reply in English.",
+        ])
+    })
+
+    it('STORIA-LINGUA-02 l\'ultimo messaggio senza lingua nota: nessuna nota, mai quella di un messaggio di prima', async () => {
+        const { talosTurniDallaStoria } = await import('@/lib/chat/storiaConLeChiamate')
+        const turni = await talosTurniDallaStoria({ messaggi: [...storia, msg('a2', 'assistant', 'Sure.'), msg('u3', 'user', 'ok')], conAllegati: new Set(), lingua: 'auto' })
+        expect(turni.filter((t) => t.role === 'user').map((t) => t.content)).toEqual(['سلام، حالت چطوره؟', 'Now in English please', 'ok'])
+    })
+
+    it('STORIA-LINGUA-03 con una lingua scelta, o senza impostazione nota, nessuna nota', async () => {
+        const { talosTurniDallaStoria } = await import('@/lib/chat/storiaConLeChiamate')
+        for (const lingua of ['it-IT', undefined]) {
+            const turni = await talosTurniDallaStoria({ messaggi: storia, conAllegati: new Set(), ...(lingua ? { lingua } : {}) })
+            expect(turni.filter((t) => t.role === 'user').map((t) => t.content), String(lingua)).toEqual(['سلام، حالت چطوره؟', 'Now in English please'])
+        }
+    })
+})

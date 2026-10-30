@@ -269,4 +269,22 @@ describe('R5.13 F3 — allegare da una sessione sul PC', () => {
             expect(giri).toBe(1)
         }
     })
+
+    it('ALL-APRI-M12 il ponte apre un file allegato alla sessione del PC: file.list + file.read, mai un percorso', async () => {
+        const richieste: Array<{ op: string, args: Record<string, unknown> }> = []
+        const cliente: ClientePerIlPonte = {
+            async richiesta(op, args) {
+                richieste.push({ op, args })
+                if (op === 'file.list') return { items: [{ fileId: 'F'.repeat(32), nome: 'ordini-dal-pad-2.csv', dimensione: 3, mime: 'text/csv', immagine: false, origine: 'allegato', versione: 'V'.repeat(32) }] }
+                if (op === 'file.read') return { dati: Buffer.from('a,b').toString('base64url'), fine: true }
+                throw errore('OPERATION_FAILED')
+            },
+            async iscrivi() { return { sub: 's', disiscrivi: async () => {} } },
+            onChiuso() {},
+        }
+        const ponte = creaPonteRemotoR4(cliente)
+        expect(await ponte.anteprimaFile!({ sessionId: 'sessione-1', nome: 'ordini-dal-pad-2.csv' })).toEqual({ esito: 'testo', testo: 'a,b', mime: 'text/csv' })
+        expect(richieste.map((r) => r.op)).toEqual(['file.list', 'file.read'])
+        await expect(ponte.anteprimaFile!({ sessionId: '..', nome: 'x' })).rejects.toMatchObject({ code: 'FILE_NO_CONVERSATION' })
+    })
 })

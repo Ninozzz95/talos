@@ -28,23 +28,37 @@ function mountComposer(overrides: Record<string, unknown> = {}) {
     })
 }
 
+/**
+ * Owner 27/10/2026, «Unico, tolgo le forme»: il compositore ha una forma sola, compatta a riposo (FORMA-01). Il chip del modello e la
+ * riga sotto il campo ci sono quando è APERTO, cioè col fuoco nel campo — come li trova l'utente.
+ */
+async function apri(wrapper: ReturnType<typeof mountComposer>) {
+    await wrapper.get('[data-testid="talos-composer-prompt"]').trigger('focus')
+    // il nome breve arriva da un modulo caricato a parte (tetto dell'avvio, 28/10)
+    await vi.dynamicImportSettled()
+    await flushPromises()
+}
+
 describe('composer drawer mode (F3-T4bis)', () => {
     it('renders the minimal bar: add-to-chat, model chip, mic — no inline tool row', async () => {
-        const wrapper = mountComposer({ drawerMode: true })
+        const wrapper = mountComposer()
+        await apri(wrapper)
         expect(wrapper.find('[aria-label="Add to chat"]').exists()).toBe(true)
         const chip = wrapper.get('[data-testid="talos-composer-model-chip"]')
-        expect(chip.text()).toContain('Claude Opus')
-        // J3-bis: il livello lo dice la pillola del ragionamento, non più una parola nascosta nella pillola del modello
-        expect(chip.text()).not.toContain('High')
-        expect(wrapper.get('[data-testid="talos-composer-reasoning-pill"]').text()).toContain('High')
+        expect(chip.text()).toContain('claude-opus') // PILLOLA-01 (owner 28/10): il nome breve del modello
+        // owner 27/10/2026 (mockup approvato): il chip è unico, «modello livello»; la pillola del ragionamento non c'è più
+        expect(chip.get('[data-testid="talos-composer-model-level"]').text()).toBe('High')
+        expect(wrapper.find('[data-testid="talos-composer-reasoning-pill"]').exists()).toBe(false)
         expect(wrapper.find('[aria-label="Dictate"]').exists()).toBe(true)
         for (const gone of ['Choose reasoning effort', 'Attach a file', 'Improve prompt', 'Toggle extended thinking']) {
             expect(wrapper.find(`[aria-label="${gone}"]`).exists()).toBe(false)
         }
     })
 
-    it('anche con la vecchia forma classic apre allegati dal più e sforzo dal modello', async () => {
-        const wrapper = mountComposer({ drawerMode: false })
+    // owner 27/10/2026: la «vecchia forma classic» non esiste più; resta il fatto che il più apre gli allegati e, aperto, c'è il modello
+    it('il più apre gli allegati e il compositore aperto ha il chip del modello', async () => {
+        const wrapper = mountComposer()
+        await apri(wrapper)
         expect(wrapper.find('[aria-label="Add to chat"]').exists()).toBe(true)
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.dynamicImportSettled()
@@ -55,7 +69,7 @@ describe('composer drawer mode (F3-T4bis)', () => {
     })
 
     it('opens the organized drawer from "+" and forwards the tool actions', async () => {
-        const wrapper = mountComposer({ drawerMode: true })
+        const wrapper = mountComposer()
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.dynamicImportSettled()
         await flushPromises()
@@ -72,12 +86,12 @@ describe('composer drawer mode (F3-T4bis)', () => {
      * ⛔⛔⛔ Owner 6/9: "naviga sul web... non ha senso lì [nel drawer del +],
      * sparisce e basta" — sostituisce il test precedente, che verificava il
      * toggle proprio qui. Non spostato altrove: la modalità classica
-     * (drawerMode:false, dropdown) tiene la sua copia del toggle, invariata
+     * (drawerMode:false, dropdown) teneva la sua copia del toggle (forme tolte il 27/10/2026)
      * — resta l'unico modo di attivare la navigazione web quando il
      * composer è in drawer mode.
      */
     it('non mostra più il toggle "naviga sul web" nel drawer organizzato', async () => {
-        const wrapper = mountComposer({ drawerMode: true })
+        const wrapper = mountComposer()
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.dynamicImportSettled()
         await flushPromises()
@@ -101,7 +115,7 @@ describe('composer drawer mode (F3-T4bis)', () => {
      * drawer").
      */
     it('il drawer "+" NON mostra reasoning/effort: quella scelta vive solo nel drawer "Model & reasoning"', async () => {
-        const wrapper = mountComposer({ drawerMode: true })
+        const wrapper = mountComposer()
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.dynamicImportSettled()
         await flushPromises()
@@ -115,13 +129,14 @@ describe('composer drawer mode (F3-T4bis)', () => {
     })
 
     it('the model chip opens the dedicated model & reasoning drawer', async () => {
-        const wrapper = mountComposer({ drawerMode: true })
+        const wrapper = mountComposer()
+        await apri(wrapper)
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-model-drawer"]').exists()).toBe(true))
         expect(wrapper.find('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(true)
-        // J3 (owner 24/10/2026): il foglio è solo «Modello»; il livello sta nella pillola del ragionamento del compositore
-        expect(wrapper.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(false)
-        expect(wrapper.find('[data-testid="talos-composer-reasoning-pill"]').exists()).toBe(true)
+        // owner 27/10/2026 (mockup approvato): il foglio è di nuovo «Modello e ragionamento», col piede del ragionamento in fondo
+        expect(wrapper.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
+        expect(wrapper.find('[data-testid="talos-composer-reasoning-pill"]').exists()).toBe(false)
     })
 
     /**
@@ -131,7 +146,8 @@ describe('composer drawer mode (F3-T4bis)', () => {
      * mai toccato da questa feature.
      */
     it('EXECUTOR-MODEL-01 hides the executor section when the caller never asked for it (regular chat, unchanged)', async () => {
-        const wrapper = mountComposer({ drawerMode: true })
+        const wrapper = mountComposer()
+        await apri(wrapper)
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-model-drawer"]').exists()).toBe(true))
         expect(wrapper.find('[data-testid="talos-executor-model-section"]').exists()).toBe(false)
@@ -144,11 +160,11 @@ describe('composer drawer mode (F3-T4bis)', () => {
             show_in_composer: true, capabilities: null, probe_ok: true,
         }
         const wrapper = mountComposer({
-            drawerMode: true,
             showExecutorModel: true,
             executorModelProfiles: [profile, executorProfile],
             selectedExecutorModelProfileId: null,
         })
+        await apri(wrapper)
         await wrapper.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-model-drawer"]').exists()).toBe(true))
 
@@ -167,9 +183,8 @@ describe('composer drawer mode (F3-T4bis)', () => {
         expect(wrapper.emitted('selectExecutorModelProfile')).toEqual([[executorProfile.id], [null]])
     })
 
-    it('P1-CTX-UI-04 opens one-turn Library controls from a compact source chip', async () => {
+    it('P1-CTX-UI-04 opens one-turn Library controls from the «+» (a dot on the «+» while it is on)', async () => {
         const wrapper = mountComposer({
-            drawerMode: true,
             libraryContextEnabled: true,
             libraryContextMode: 'smart_relevant_v1',
             librarySourceCount: 1,
@@ -190,35 +205,25 @@ describe('composer drawer mode (F3-T4bis)', () => {
                 updated_at: '2026-07-29T12:00:00.000Z',
             }],
         })
+        await apri(wrapper)
 
-        const chip = wrapper.get('[data-testid="talos-composer-library-chip"]')
-        expect(chip.text()).toMatch(/Relevant sources only.*1 source/i)
         /**
-         * Owner 2026-07-29: "fai in modo che sia solo un icona nella pill, il
-         * Testo solo per i display grandi tipo tablet."
-         *
-         * On a phone this row holds the plus, the model chip and this one, and
-         * three labels compete for width that does not exist — the model name,
-         * the thing you actually need to read, is what gets truncated. The icon
-         * stays; the words wait for room.
-         *
-         * `md:` is 768px, which is exactly TALOS_TABLET_WIDTH_MEDIA_QUERY, so
-         * the visual breakpoint and the app's own definition of a tablet cannot
-         * drift apart.
+         * ⛔ Aggiornato il 28/10/2026 (owner, foto dal telefono, «Approvo»): la pillola-icona della Libreria (13/09) è uscita dalla riga
+         * del compositore — il suo tondo pieno, con «Molto alto», lasciava al nome del modello «G…». Accesa, è un pallino sul «+», e il
+         * modo e il numero di fonti restano a chi ascolta (aria-description del «+»); il foglio si apre dalla voce del foglio del «+».
          */
-        /**
-         * ⛔ Aggiornato il 2026-09-13: l'owner ha chiesto la pillola del
-         * contesto SOLO ICONA, accanto a quella del modello, a ogni larghezza.
-         * Le parole non spariscono: restano in sr-only e nel nome accessibile,
-         * quindi chi ascolta lo schermo sente ancora modo e numero di fonti.
-         */
-        const chipLabel = wrapper.get('[data-testid="talos-composer-library-chip-label"]')
-        expect(chipLabel.classes()).toContain('sr-only')
-        // The icon is never hidden: on a phone it is all that remains.
-        expect(chip.find('svg').exists()).toBe(true)
-        // And the accessible name still carries the whole meaning.
-        expect(chip.attributes('aria-label')).toBeTruthy()
-        await chip.trigger('click')
+        expect(wrapper.find('[data-testid="talos-composer-library-chip"]').exists()).toBe(false)
+        const piu = wrapper.get('[aria-label="Add to chat"]')
+        expect(piu.find('[data-testid="talos-composer-plus-dot"]').exists()).toBe(true)
+        expect(wrapper.get(`[id="${piu.attributes('aria-describedby')}"]`).text()).toMatch(/Relevant sources only.*1 source/i)
+        await piu.trigger('click')
+        await vi.dynamicImportSettled()
+        await flushPromises()
+        const voce = wrapper.get('[data-testid="talos-drawer-library-turn"]')
+        expect(voce.text()).toMatch(/Relevant sources only.*1 source/i)
+        await voce.trigger('click')
+        await vi.dynamicImportSettled()
+        await flushPromises()
         await vi.waitFor(() => {
             expect(wrapper.find('[data-testid="talos-library-context-sheet"]').exists()).toBe(true)
         })
@@ -231,10 +236,17 @@ describe('composer drawer mode (F3-T4bis)', () => {
     })
 })
 
-// Owner 2026-07-24 — immersive composer (compact→expand) and the "+" dropdown.
-describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
+// Owner 2026-07-24 — immersive composer (compact→expand) and the "+" dropdown. Owner 27/10/2026, «Unico, tolgo le forme»: la forma
+// compatta è l'unica e il «+» apre sempre il cassetto, quindi i casi che distinguevano le forme sono diventati uno.
+describe('composer compact at rest, "+" always the drawer', () => {
+    /*
+     * Riletti il 28/10/2026 (D2, blocco 6): il compositore ora SCORRE fra riposo e aperto (TRANS-01..07, `compositoreTransizione.test.ts`,
+     * `useTalosComposerFlip.ts`). Questi tre restano e difendono ciò che non cambia: il campo non si rimonta e tiene il fuoco, un fuoco
+     * e un blur rapidi non nascondono «+» e microfono, e il VECCHIO meccanismo (l'intento `data-talos-motion-intent` con la scheda intera
+     * spostata di `--talos-composer-layout-shift`, tolto il 12/09 perché era ancora uno scatto, solo traslato) non torna.
+     */
     it('MOTION-COMPOSER-01/02 Calm mantiene geometria e focus senza collasso', async () => {
-        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
+        const wrapper = mountComposer({ prompt: '' })
         document.body.appendChild(wrapper.element)
         const surface = wrapper.get<HTMLElement>('[data-testid="talos-mobile-composer"]')
         const field = wrapper.get<HTMLTextAreaElement>('textarea')
@@ -266,7 +278,7 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
     })
 
     it('MOTION-COMPOSER-03 focus e blur rapidi non nascondono comandi', async () => {
-        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
+        const wrapper = mountComposer({ prompt: '' })
         document.body.appendChild(wrapper.element)
         const surface = wrapper.get<HTMLElement>('[data-testid="talos-mobile-composer"]')
         const field = wrapper.get<HTMLTextAreaElement>('textarea')
@@ -299,8 +311,8 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
      * sparizione della forma compatta (12/09) e' passata inosservata per un
      * giorno: il test era verde MENTRE il difetto era a schermo.
      */
-    it('legacy immersive: a riposo una riga sola, e al fuoco tornano gli strumenti', async () => {
-        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
+    it('a riposo una riga sola, e al fuoco tornano gli strumenti', async () => {
+        const wrapper = mountComposer({ prompt: '' })
         // a riposo: niente riga strumenti
         expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
         // ma i due comandi accanto al campo restano SEMPRE
@@ -325,18 +337,24 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
         expect(source).not.toContain('useTalosMediaQuery')
     })
 
-    it('immersive: stays expanded when there is content (never collapses over a draft)', async () => {
-        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: 'hello' })
+    // owner 27/10/2026 (mockup approvato): una bozza senza fuoco resta a riposo su UNA riga, ma il campo, col suo testo, c'è sempre
+    it('a draft without focus stays on one line, and the field keeps the draft', async () => {
+        const wrapper = mountComposer({ prompt: 'hello' })
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
+        expect((wrapper.get('[data-testid="talos-composer-prompt"]').element as HTMLTextAreaElement).value).toBe('hello')
+        expect(wrapper.get('[data-testid="talos-composer-action"]').attributes('disabled')).toBeUndefined()
+    })
+
+    // Era «immersive OFF keeps the bar always visible»: owner 27/10/2026, la barra sempre aperta non esiste più.
+    it('senza nessuna prop di forma la barra è compatta a riposo', async () => {
+        const wrapper = mountComposer({ prompt: '' })
+        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
+        await apri(wrapper)
         expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
     })
 
-    it('immersive OFF keeps the bar always visible', async () => {
-        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: false, prompt: '' })
-        expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
-    })
-
-    it('legacy plus-dropdown: il più apre il foglio e allega chiudendolo', async () => {
-        const wrapper = mountComposer({ drawerMode: true, plusDropdown: true })
+    it('il più apre il foglio e allega chiudendolo', async () => {
+        const wrapper = mountComposer()
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.dynamicImportSettled()
         await flushPromises()
@@ -346,58 +364,45 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
         expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(false)
     })
 
-    it('plus-dropdown OFF: "+" opens the bottom drawer as before', async () => {
-        const wrapper = mountComposer({ drawerMode: true, plusDropdown: false })
-        await wrapper.get('[aria-label="Add to chat"]').trigger('click')
-        await vi.dynamicImportSettled()
-        await flushPromises()
-        expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true)
-        await vi.waitFor(() => expect(wrapper.find('[data-testid="talos-composer-drawer"]').exists()).toBe(true))
-    })
-
     // Owner device feedback: the compact immersive pill must be [+] input [mic]
     // [send] on one line — + and mic must NOT disappear in the compact state.
     // Owner device feedback: the compact immersive pill must be [+] input [mic]
     // on one line — + and mic must NOT disappear in the compact state.
     // ⛔ 13/09: la terza asserzione era CAPOVOLTA rispetto al proprio commento
     // («the model chip only appears once expanded») e pretendeva il contrario.
-    it('legacy compact: più e microfono restano, il modello no, a campo vuoto', async () => {
-        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
+    it('a riposo: più e microfono restano, il modello no, a campo vuoto', async () => {
+        const wrapper = mountComposer({ prompt: '' })
         expect(wrapper.find('[aria-label="Add to chat"]').exists()).toBe(true)
         expect(wrapper.find('[aria-label="Dictate"]').exists()).toBe(true)
-        // the model chip only appears once expanded (on focus/content)
+        // the model chip only appears once expanded (on focus); owner 27/10/2026: a draft alone no longer opens it
         expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
-        // …e con del testo la riga torna, senza bisogno del fuoco
-        const conTesto = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: 'ciao' })
-        expect(conTesto.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(true)
+        const conTesto = mountComposer({ prompt: 'ciao' })
+        expect(conTesto.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)
+        expect(conTesto.find('[aria-label="Dictate"]').exists()).toBe(true)
     })
     // Owner device bug: tapping "+" blurred the field and dismissed the keyboard.
     // The tap must cancel the pointerdown (Android WebView blurs on pointerdown,
     // before any mousedown handler could run).
-    it('immersive compact: tapping "+" cancels the pointerdown so the field keeps focus', async () => {
-        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, prompt: '' })
+    it('compact: tapping "+" cancels the pointerdown so the field keeps focus', async () => {
+        const wrapper = mountComposer({ prompt: '' })
         const ev = new Event('pointerdown', { bubbles: true, cancelable: true })
         wrapper.get('[aria-label="Add to chat"]').element.dispatchEvent(ev)
         expect(ev.defaultPrevented).toBe(true)
     })
 
     // SF-critic fix: aria must describe the surface the "+" actually opens.
-    it('il più annuncia un dialogo con entrambe le preferenze precedenti', async () => {
-        const on = mountComposer({ drawerMode: true, plusDropdown: true })
-        expect(on.get('[aria-label="Add to chat"]').attributes('aria-haspopup')).toBe('dialog')
-        const off = mountComposer({ drawerMode: true, plusDropdown: false })
-        expect(off.get('[aria-label="Add to chat"]').attributes('aria-haspopup')).toBe('dialog')
+    it('il più annuncia un dialogo', async () => {
+        const wrapper = mountComposer()
+        expect(wrapper.get('[aria-label="Add to chat"]').attributes('aria-haspopup')).toBe('dialog')
     })
 
     // Global review (test axis): duplicate mics with the SAME accessible name
     // shipped in R21 — the morphing right button plus a second one in each
     // control row. One control per label, in every mode.
-    it.each([
-        ['drawer', { drawerMode: true }],
-        ['classic', { drawerMode: false }],
-        ['immersive', { drawerMode: true, immersiveComposer: true }],
-    ])('exposes exactly one dictation control in %s mode', (_mode, overrides) => {
-        const wrapper = mountComposer({ ...overrides, dictationSupported: true, prompt: '' })
+    it('exposes exactly one dictation control, at rest and open', async () => {
+        const wrapper = mountComposer({ dictationSupported: true, prompt: '' })
+        expect(wrapper.findAll('[aria-label="Dictate"]')).toHaveLength(1)
+        await apri(wrapper)
         expect(wrapper.findAll('[aria-label="Dictate"]')).toHaveLength(1)
     })
 
@@ -439,7 +444,7 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
          * solo stop che esiste e' quello della barra, provato in
          * `barraDettatura.test.ts`.
          */
-        const wrapper = mountComposer({ drawerMode: true, dictationSupported: true, dictationListening: true })
+        const wrapper = mountComposer({ dictationSupported: true, dictationListening: true })
         await flushPromises()
         expect(wrapper.findAll('[data-testid="talos-composer-action"]')).toHaveLength(0)
         expect(wrapper.findAll('[aria-label="Stop dictation"]')).toHaveLength(0)
@@ -454,14 +459,14 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
     // resolved. The press must not steal focus, and activating the mic must
     // actively blur so the keyboard gets out of the way for speech.
     it('the right button does not steal focus (no layout shift mid-tap)', async () => {
-        const wrapper = mountComposer({ drawerMode: true, immersiveComposer: true, dictationSupported: true, prompt: '' })
+        const wrapper = mountComposer({ dictationSupported: true, prompt: '' })
         const ev = new Event('pointerdown', { bubbles: true, cancelable: true })
         wrapper.get('[aria-label="Dictate"]').element.dispatchEvent(ev)
         expect(ev.defaultPrevented).toBe(true)
     })
 
     it('starting dictation blurs the composer so the keyboard yields', async () => {
-        const wrapper = mountComposer({ drawerMode: true, dictationSupported: true, prompt: '' })
+        const wrapper = mountComposer({ dictationSupported: true, prompt: '' })
         const field = wrapper.get('textarea').element as HTMLTextAreaElement
         field.focus()
         await wrapper.get('[aria-label="Dictate"]').trigger('click')
@@ -469,8 +474,8 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
         expect(document.activeElement).not.toBe(field)
     })
 
-    it('legacy plus-dropdown: Escape chiude il foglio', async () => {
-        const wrapper = mountComposer({ drawerMode: true, plusDropdown: true })
+    it('Escape chiude il foglio del più', async () => {
+        const wrapper = mountComposer()
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.dynamicImportSettled()
         await flushPromises()
@@ -485,7 +490,7 @@ describe('composer immersive + plus-dropdown (owner 2026-07-24)', () => {
 // with missing prerequisites emits the REASON for the UI to surface.
 describe('enhancer visible reason (F4-#20)', () => {
     it('drawer row stays tappable with an empty prompt and explains itself', async () => {
-        const wrapper = mountComposer({ drawerMode: true })
+        const wrapper = mountComposer()
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.dynamicImportSettled()
         await flushPromises()
@@ -509,7 +514,7 @@ describe('enhancer visible reason (F4-#20)', () => {
          * Prima il tocco faceva partire la chiamata: chi voleva un modello
          * diverso scopriva di non poterlo scegliere mentre il conto correva.
          */
-        const wrapper = mountComposer({ drawerMode: true, prompt: 'Migliora questo testo' })
+        const wrapper = mountComposer({ prompt: 'Migliora questo testo' })
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.dynamicImportSettled()
         await flushPromises()
@@ -527,7 +532,7 @@ describe('enhancer visible reason (F4-#20)', () => {
     })
 
     it('classic wand stays tappable with an empty prompt and reports the reason', async () => {
-        const wrapper = mountComposer({ drawerMode: false })
+        const wrapper = mountComposer()
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.dynamicImportSettled()
         await flushPromises()
@@ -541,7 +546,7 @@ describe('enhancer visible reason (F4-#20)', () => {
 
     it('classic wand reports the model reason when no model is callable', async () => {
         const wrapper = mountComposer({
-            drawerMode: false, prompt: 'Testo', modelProfiles: [], selectedModelProfileId: null,
+            prompt: 'Testo', modelProfiles: [], selectedModelProfileId: null,
         })
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.dynamicImportSettled()
@@ -557,7 +562,7 @@ describe('enhancer visible reason (F4-#20)', () => {
 // 12/09: il foglio «+» sul mockup «Cosa vuoi fare?» — categorie, ricerca, voci vere.
 describe('foglio «+» sul mockup (categorie, ricerca, voci)', () => {
     async function apri(overrides: Record<string, unknown> = {}) {
-        const wrapper = mountComposer({ drawerMode: true, ...overrides })
+        const wrapper = mountComposer({ ...overrides })
         await wrapper.get('[aria-label="Add to chat"]').trigger('click')
         await vi.dynamicImportSettled()
         await flushPromises()

@@ -9,7 +9,7 @@
  * niente mentre la storia si carica (`null`), dove il conto salirebbe fra numeri intermedi.
  */
 import { computed } from 'vue'
-import { FileDiff, MessageSquare, SquareTerminal } from '@lucide/vue'
+import { FileDiff, MessageSquareText, SquareTerminal } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { testoTerminaleR4 } from '@/lib/harness/r4/terminaleR4'
 import { testoRevisioneR4 } from '@/lib/harness/r4/revisioneR4'
@@ -21,7 +21,7 @@ const emit = defineEmits<{ scegli: [VistaCodiceR4] }>()
 const { locale } = useTalosI18n()
 
 const viste = computed(() => [
-    { id: 'chat' as const, nome: testoTerminaleR4('modello.chat.chat', locale.value), icona: MessageSquare, numero: null },
+    { id: 'chat' as const, nome: testoTerminaleR4('modello.chat.chat', locale.value), icona: MessageSquareText, numero: null },
     { id: 'terminale' as const, nome: testoTerminaleR4('modello.chat.terminal', locale.value), icona: SquareTerminal, numero: null },
     {
         id: 'revisione' as const, nome: testoRevisioneR4('modello.review.review', locale.value), icona: FileDiff,

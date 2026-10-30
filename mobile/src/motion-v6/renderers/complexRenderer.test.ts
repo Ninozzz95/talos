@@ -161,6 +161,28 @@ describe('Complex Renderer V6', () => {
         expect(metrics[0].frameCostMs).toBe(9)
     })
 
+    it('VELO-05 calls afterDraw right after each draw, on the same context, with the scene id and viewport; a throwing hook does not fault', () => {
+        const h = harness()
+        const ordine: string[] = []
+        const visti: unknown[] = []
+        const scene = definition({ draw: () => { ordine.push('draw') } })
+        const registry = createSceneRegistry([{
+            id: 'forge',
+            kind: 'complex',
+            factory: createComplexSceneFactory(scene, h.platform, {
+                animated: false,
+                afterDraw: (frame) => { ordine.push('afterDraw'); visti.push(frame); throw new Error('velo rotto') },
+            }),
+            assets: [],
+        }])
+        const instance = registry.create('forge', 'complex', input())!
+        instance.mount({ kind: 'complex', target: {} })
+        expect(() => instance.renderOrUpdate(input())).not.toThrow()
+
+        expect(ordine).toEqual(['draw', 'afterDraw'])
+        expect(visti[0]).toEqual({ context: h.context, sceneId: 'forge', width: 1200, height: 800 })
+    })
+
     it('resets accumulated time when the FPS quality profile changes', () => {
         const update = vi.fn()
         const { frames, instance } = mounted({ scene: definition({ update }) })

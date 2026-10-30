@@ -562,6 +562,31 @@ describe('createChatStore durable sessions', () => {
             .toMatchObject({ prepared: true })
     })
 
+    // STORIA-LINGUA-04 (lingua delle risposte, owner 28/10): la lingua che `prepareSend` scrive nei metadati arriva al modello come nota
+    // in coda al turno della persona, in Automatica; il turno dopo la ridice identica (prefisso stabile)
+    it('STORIA-LINGUA-04 the language prepared for a message reaches the model as a note on that turn', async () => {
+        type Runtime = Readonly<{ marker: string }>
+        const repository = createMemoryChatRepository()
+        const lingue = ['fa', 'it']
+        const prepareSend = vi.fn(async (context) => ({ runtime: context.runtime, metadata: { lingua_del_messaggio: lingue.shift() } }))
+        const complete = vi.fn().mockResolvedValue({ text: 'ok', finishReason: 'stop' })
+        const store = createLocalizedChatStore<Runtime>(complete, {
+            repository,
+            translate: talosTestT('en'),
+            captureSendRuntime: () => Object.freeze({ marker: 'captured' }),
+            prepareSend,
+            linguaDelleRisposte: () => 'auto',
+        })
+        await store.initialize()
+        await store.send('سلام! پایتخت ایتالیا کجاست؟')
+        await store.send('Ciao! E la Francia?')
+        const turniDi = (n: number) => (complete.mock.calls[n]![0] as Array<{ role: string, content: string }>).filter((t) => t.role === 'user').map((t) => t.content)
+        const persiano = "سلام! پایتخت ایتالیا کجاست؟\n\nThe person's last message is in Persian: reply in Persian."
+        expect(turniDi(0)).toEqual([persiano])
+        // nucleo b32dfadb8: la nota del giro di prima non resta, ogni messaggio porta la sua
+        expect(turniDi(1)).toEqual(['سلام! پایتخت ایتالیا کجاست؟', "Ciao! E la Francia?\n\nThe person's last message is in Italian: reply in Italian."])
+    })
+
     // F4-#16 — export snapshot: raw session/messages/activities/attachments
     // (sha256-enriched from the vault) assembled for the local export builders.
     it('assembles an export snapshot of the active session with sha256-enriched attachments', async () => {

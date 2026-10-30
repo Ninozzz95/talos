@@ -15,7 +15,7 @@
  */
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { Laptop } from '@lucide/vue'
+import { Laptop, Plus } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import { Button } from '@/components/ui/button'
 import TalosMobilePageHeader from '@/components/talos/ui/TalosMobilePageHeader.vue'
@@ -30,12 +30,14 @@ import { talosNotify } from '@/stores/notificationCentre'
 import { fraseErroreRemoto } from '@/lib/remoto/frasiRemoto'
 import { prendiQrInAttesa, qrRemotoInAttesa } from '@/lib/remoto/linkRemoto'
 import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
+import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 
 // `tTesto` per i testi con date e nomi messi con `{{ }}`: senza, la «/» di una data diventava «&#x2F;» (dal Pad, 20/10/2026).
 const { t, tTesto, locale } = useTalosI18n()
 const router = useRouter()
 const remoti = useComputerRemoti()
 const onda = useTalosTouchWave()
+const { isTablet } = useTalosTabletLayout()
 
 const fase = computed(() => remoti?.fase.value ?? { tipo: 'inattivo' as const })
 const elenco = computed(() => remoti?.elenco.value ?? [])
@@ -86,7 +88,16 @@ function apriNelCodice(pc: ComputerRicordato): void {
     void router.push({ name: 'harness', query: { dove: pc.pcId } })
 }
 
-type StatoRiquadro = { tipo: 'leggo' } | { tipo: 'inLinea', conteggi: ConteggiSessioni } | { tipo: 'nonInLinea' }
+/**
+ * ⛔ Owner 27/10/2026 (via Desktop): `tolto` = il PC ha tolto questo dispositivo. Il telefono lo sa solo al collegamento dopo (alla
+ * revoca non c'è un canale aperto), quando il PC risponde NOT_PAIRED o REVOKED: il riquadro lo dice e offre «Dimentica». Spento o
+ * irraggiungibile resta `nonInLinea`.
+ */
+type StatoRiquadro = { tipo: 'leggo' } | { tipo: 'inLinea', conteggi: ConteggiSessioni } | { tipo: 'nonInLinea' } | { tipo: 'tolto' }
+const CODICI_DEL_PC_CHE_HA_TOLTO = new Set(['NOT_PAIRED', 'REVOKED'])
+const statoDaRiepilogo = (r: Awaited<ReturnType<NonNullable<typeof remoti>['riepilogo']>>): StatoRiquadro => (r.inLinea
+    ? { tipo: 'inLinea', conteggi: r.conteggi }
+    : CODICI_DEL_PC_CHE_HA_TOLTO.has(r.code) ? { tipo: 'tolto' } : { tipo: 'nonInLinea' })
 const riquadri = ref<Record<string, StatoRiquadro>>({})
 const ricordi = ref<Record<string, RicordoDelPc>>({})
 /** L'ordine si decide all'inizio della lettura: i riquadri non saltano di posto mentre arrivano le risposte. */
@@ -104,7 +115,7 @@ async function leggiRiquadri(): Promise<void> {
     await Promise.all(pcs.map(async (pc) => {
         const r = await remoti.riepilogo(pc.pcId)
         if (questo !== giro) return
-        riquadri.value = { ...riquadri.value, [pc.pcId]: r.inLinea ? { tipo: 'inLinea', conteggi: r.conteggi } : { tipo: 'nonInLinea' } }
+        riquadri.value = { ...riquadri.value, [pc.pcId]: statoDaRiepilogo(r) }
         ricordi.value = { ...ricordi.value, [pc.pcId]: leggiRicordo(pc.pcId) }
     }))
 }
@@ -153,7 +164,8 @@ const propostaDoppi = computed(() => {
         if (!vivo || domandaDoppiGiaFatta(pcId)) continue
         const stessi = vociVecchieDi(vivo, elenco.value, () => false)
         if (!stessi.length || stessi.some((v) => statoDi(v).tipo === 'leggo')) continue
-        const vecchie = vociVecchieDi(vivo, elenco.value, (id) => riquadri.value[id]?.tipo !== 'nonInLinea')
+        // un PC che ha tolto il dispositivo non risponde più a lui: per i doppi vale come spento
+        const vecchie = vociVecchieDi(vivo, elenco.value, (id) => !['nonInLinea', 'tolto'].includes(riquadri.value[id]?.tipo ?? 'leggo'))
         if (vecchie.length) return { vivo, vecchie }
     }
     return null
@@ -238,15 +250,23 @@ async function dimentica(): Promise<void> {
     >
         <TalosMobilePageHeader :title="t('computer.title')" :subtitle="t('computer.subtitle')">
             <template #action>
+                <!-- ⛔ UI-111 «Liste coerenti» (mockup v2.1 approvato dall'owner il 29/10 sera): la scritta «Collega» diventa il «+»
+                     quadrato delle altre sezioni (`ContextScreen.vue:1146-1156`), col suo nome per chi ascolta. Stesse condizioni.
+                     Owner 29/10: sul tablet porta la parola, «+ Collega un computer», come «+ Aggiungi file» (`ContextScreen.vue:1253-1266`). -->
                 <Button
                     v-if="remoti && elenco.length && !occupato"
                     type="button"
                     data-testid="talos-computer-connect"
-                    class="talos-pressable talos-wave-host min-h-touch shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] px-4 text-xs text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]"
+                    :aria-label="isTablet ? undefined : t('computer.connect')"
+                    :class="[
+                        'talos-pressable talos-wave-host shrink-0 rounded-[var(--talos-radius-control)] bg-[var(--talos-accent)] text-[var(--talos-accent-text)] hover:bg-[var(--talos-accent-hover)]',
+                        isTablet ? 'min-h-12 gap-2 px-5 text-sm font-medium' : 'size-12 p-0',
+                    ]"
                     @click="remoti.collegaUnComputer()"
                     @pointerdown="onda.onPointerDown"
                 >
-                    {{ t('computer.connectShort') }}
+                    <Plus class="size-5" aria-hidden="true" />
+                    <template v-if="isTablet">{{ t('computer.connect') }}</template>
                 </Button>
             </template>
         </TalosMobilePageHeader>
@@ -329,7 +349,8 @@ async function dimentica(): Promise<void> {
                         class="talos-pressable min-h-touch bg-[var(--talos-accent)] px-5 text-[var(--talos-accent-text)]"
                         @click="remoti.collegaUnComputer()"
                     >
-                        {{ t('computer.retry') }}
+                        <!-- revisione del Desktop 27/10: un QR scaduto non si riprova, se ne scansiona uno nuovo (lo stesso scanner) -->
+                        {{ t(fase.tipo === 'errore' && fase.code === 'PAIR_EXPIRED' ? 'computer.scanNewQr' : 'computer.retry') }}
                     </Button>
                     <Button type="button" variant="outline" class="talos-pressable min-h-touch" @click="remoti.riposa()">
                         {{ t('common.close') }}
@@ -469,9 +490,11 @@ async function dimentica(): Promise<void> {
                         <template v-else-if="statoDi(pc).tipo === 'inLinea'">
                             <span class="size-2 rounded-full bg-[var(--talos-success)]" aria-hidden="true" /><span class="text-[var(--talos-text)]">{{ t('computer.online') }}</span>
                         </template>
+                        <template v-else-if="statoDi(pc).tipo === 'tolto'"><span class="text-[var(--talos-text)]">{{ t('computer.removed') }}</span></template>
                         <template v-else-if="ricordi[pc.pcId]?.vistoAlle">{{ tTesto('computer.offlineSeen', { when: quandoVisto(ricordi[pc.pcId]!.vistoAlle!) }) }}</template>
                         <template v-else>{{ t('computer.offline') }}</template>
                     </p>
+                    <p v-if="statoDi(pc).tipo === 'tolto'" data-testid="talos-computer-removed-body" class="text-sm text-[var(--talos-muted)]">{{ t('computer.errors.notPaired') }}</p>
                     <p
                         v-if="numeriDi(pc)"
                         data-testid="talos-computer-card-counts"
@@ -490,7 +513,19 @@ async function dimentica(): Promise<void> {
                         >{{ t('computer.waitingCount', { count: numeriDi(pc)!.conteggi.aspettaTe }) }}</span>
                         <span v-if="numeriDi(pc)!.letteAlle !== null">{{ tTesto('computer.countsAt', { when: quando(numeriDi(pc)!.letteAlle!) }) }}</span>
                     </p>
+                    <!-- owner 27/10/2026: un PC che ha tolto il dispositivo non ha sessioni da aprire; resta solo da dimenticarlo -->
                     <Button
+                        v-if="statoDi(pc).tipo === 'tolto'"
+                        type="button"
+                        variant="outline"
+                        data-testid="talos-computer-forget-main"
+                        class="talos-pressable mt-[var(--talos-space-section)] min-h-touch w-full"
+                        @click="daDimenticare = pc"
+                    >
+                        {{ t('computer.forgetConfirm') }}
+                    </Button>
+                    <Button
+                        v-else
                         type="button"
                         variant="outline"
                         data-testid="talos-computer-open-codice"
@@ -506,11 +541,12 @@ async function dimentica(): Promise<void> {
         <TalosMobileConfirmDialog
             v-if="daDimenticare"
             :title="tTesto('computer.forgetTitle', { name: nomeConCodice(daDimenticare, elenco, t('computer.unnamed')) })"
-            :description="t('computer.forgetBody')"
+            :description="t(statoDi(daDimenticare).tipo === 'tolto' ? 'computer.forgetRemovedBody' : 'computer.forgetBody')"
             @close="dimenticando ? undefined : daDimenticare = null"
         >
+            <!-- revisione del Desktop 27/10 (b): un PC che ha già tolto il dispositivo non si «smette di comandare»; si toglie anche da qui -->
             <template #footer>
-                <Button type="button" variant="outline" :disabled="dimenticando" class="min-h-12" @click="daDimenticare = null">
+                <Button type="button" variant="outline" data-testid="talos-computer-forget-cancel" :disabled="dimenticando" class="min-h-12" @click="daDimenticare = null">
                     {{ t('common.cancel') }}
                 </Button>
                 <Button

@@ -15,6 +15,8 @@ const push = vi.fn()
 let plugin: PluginComputer
 let computer: Array<{ pcId: string, nome: string | null, relay: string | null, accoppiatoAlle: number }> = []
 const spenti = new Set<string>()
+/** PC che ha tolto il dispositivo: al collegamento risponde NOT_PAIRED (o REVOKED). */
+const tolti = new Map<string, string>()
 const sessioniDi: Record<string, unknown[]> = {}
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push, replace: vi.fn(), back: vi.fn() }), useRoute: () => ({ params: {}, query: {} }) }))
@@ -39,6 +41,7 @@ function pluginFinto(): PluginComputer {
         concludiAccoppiamento: vi.fn(async () => {}),
         collega: vi.fn(async ({ pcId }: { pcId: string }) => {
             if (spenti.has(pcId)) throw Object.assign(new Error('x'), { code: 'UNREACHABLE' })
+            if (tolti.has(pcId)) throw Object.assign(new Error('x'), { code: tolti.get(pcId) })
             const canale = `c-${pcId}-${++n}`
             canali.set(canale, pcId)
             return { canale }
@@ -79,6 +82,7 @@ beforeEach(() => {
     vi.resetModules()
     localStorage.clear()
     spenti.clear()
+    tolti.clear()
     for (const k of Object.keys(sessioniDi)) delete sessioniDi[k]
     document.body.innerHTML = ''
     avvisi.length = 0
@@ -125,6 +129,69 @@ describe('Computer, tavola 1: un riquadro per PC', () => {
         expect(numeri.text()).toContain('computer.sessionsCount{"count":1}')
         expect(numeri.text()).toContain('computer.countsAt')
     })
+
+    /*
+     * ⛔ Owner 27/10/2026 (via Desktop): un PC che ha tolto questo dispositivo lo dice. Il telefono lo sa solo al collegamento dopo
+     * (NOT_PAIRED o REVOKED: alla revoca non c'è un canale aperto): «Tolto dal computer», sotto la frase `notPaired`, e l'azione
+     * principale è «Dimentica»; «Apri le sessioni nel Codice» non c'è. Spento o irraggiungibile resta «Non in linea».
+     */
+    it('COMP-UI-08 PC che ha tolto il dispositivo: «Tolto dal computer», la frase e «Dimentica»; ⛔ spento resta «Non in linea»', async () => {
+        computer = [
+            { pcId: 'cc000001', nome: 'UFFICIO', relay: null, accoppiatoAlle: 2 },
+            { pcId: 'cc000002', nome: 'CASA', relay: null, accoppiatoAlle: 1 },
+            { pcId: 'cc000003', nome: 'STUDIO', relay: null, accoppiatoAlle: 3 },
+        ]
+        tolti.set('cc000001', 'NOT_PAIRED')
+        tolti.set('cc000003', 'REVOKED')
+        spenti.add('cc000002')
+        const v = await monta()
+        for (const pcId of ['cc000001', 'cc000003']) {
+            const r = riquadro(v, pcId)
+            expect(r.attributes('data-computer-stato')).toBe('tolto')
+            expect(r.get('[data-testid="talos-computer-card-status"]').text()).toContain('computer.removed')
+            expect(r.get('[data-testid="talos-computer-removed-body"]').text()).toBe('computer.errors.notPaired')
+            expect(r.find('[data-testid="talos-computer-open-codice"]').exists()).toBe(false)
+            expect(r.get('[data-testid="talos-computer-forget-main"]').text()).toContain('computer.forgetConfirm')
+        }
+        // «Dimentica» apre la stessa conferma del ⋯
+        await riquadro(v, 'cc000001').get('[data-testid="talos-computer-forget-main"]').trigger('click')
+        await flushPromises()
+        expect(document.querySelector('[data-testid="talos-computer-forget-confirm"]')).not.toBeNull()
+        // ⛔ verso contrario: spento è «Non in linea», con «Apri le sessioni nel Codice»
+        const spento = riquadro(v, 'cc000002')
+        expect(spento.attributes('data-computer-stato')).toBe('nonInLinea')
+        expect(spento.get('[data-testid="talos-computer-card-status"]').text()).toContain('computer.offline')
+        expect(spento.find('[data-testid="talos-computer-forget-main"]').exists()).toBe(false)
+        expect(spento.find('[data-testid="talos-computer-open-codice"]').exists()).toBe(true)
+    })
+
+    /*
+     * Revisione del Desktop, 27/10/2026 (b): per un PC che ha GIÀ tolto il dispositivo «non potrà più comandarlo» è vero ma ridondante.
+     * La conferma dice solo «Lo togli anche da questo dispositivo»; per gli altri PC resta la frase di prima.
+     */
+    it('COMP-UI-09 «Dimentica» di un PC che ha tolto il dispositivo: la frase sua; ⛔ un PC spento tiene quella di prima', async () => {
+        computer = [
+            { pcId: 'cc000001', nome: 'UFFICIO', relay: null, accoppiatoAlle: 2 },
+            { pcId: 'cc000002', nome: 'CASA', relay: null, accoppiatoAlle: 1 },
+        ]
+        tolti.set('cc000001', 'REVOKED')
+        spenti.add('cc000002')
+        const v = await monta()
+        const testoDellaConferma = () => document.body.querySelector<HTMLElement>('[data-testid="talos-computer-forget-confirm"]')
+            ?.closest<HTMLElement>('[role="dialog"],[role="alertdialog"]')?.textContent ?? ''
+        await riquadro(v, 'cc000001').get('[data-testid="talos-computer-forget-main"]').trigger('click')
+        await flushPromises()
+        expect(testoDellaConferma()).toContain('computer.forgetRemovedBody')
+        expect(testoDellaConferma()).not.toContain('computer.forgetBody')
+        document.body.querySelector<HTMLElement>('[data-testid="talos-computer-forget-cancel"]')!.click()
+        await flushPromises()
+        await riquadro(v, 'cc000002').get('[data-testid="talos-computer-actions-cc000002"]').trigger('click')
+        await flushPromises()
+        document.body.querySelector<HTMLElement>('[data-testid="talos-computer-action-forget"]')!.click()
+        await flushPromises()
+        expect(testoDellaConferma()).toContain('computer.forgetBody')
+        expect(testoDellaConferma()).not.toContain('computer.forgetRemovedBody')
+    }, 40_000)
 
     it('COMP-UI-03 PC mai visto e spento: solo «Non in linea», nessun numero inventato', async () => {
         computer = [{ pcId: 'bb000001', nome: 'CASA', relay: null, accoppiatoAlle: 1 }]
@@ -199,7 +266,7 @@ describe('Computer, tavola 1: un riquadro per PC', () => {
         expect(JSON.parse(localStorage.getItem('talos.remoto.doppi.v1') ?? '[]')).toEqual(['b8510001'])
     })
 
-    /* D-MOCK-8 (vc181, foto 172): due voci «DESKTOP-BJ9I7OU» dimenticate a PC spento davano due notifiche identiche. Il titolo dice
+    /* D-MOCK-8 (vc181, foto 172): due voci «DESKTOP-ESEMPIO» dimenticate a PC spento davano due notifiche identiche. Il titolo dice
        QUALE PC: nome e codice breve, sempre, perché la notifica resta anche quando la voce è già uscita dall'elenco. */
     it('DIM-NOT-01 ⋯ «Dimentica» a PC spento: la notifica nomina il PC col codice breve, anche senza un doppio in elenco', async () => {
         computer = [

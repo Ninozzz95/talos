@@ -89,7 +89,7 @@ function isImage(mediaType: string): boolean {
                 />
                 <LoaderCircle
                     v-else-if="item.status === 'ingesting'"
-                    class="size-4 shrink-0 motion-safe:animate-spin text-[var(--talos-accent)]"
+                    class="size-4 shrink-0 animate-spin text-[var(--talos-accent)]"
                     aria-hidden="true"
                 />
                 <Image

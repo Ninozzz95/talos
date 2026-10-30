@@ -162,16 +162,19 @@
 
 
     <!--
-        I-11 — reaching a local model server (Ollama, LM Studio) on the user's
-        own network. From Android 17 that access is gated behind a runtime
-        permission the user grants and can revoke; on earlier versions the
-        access is open and this declaration is simply inert.
+        ⛔ ACCESS_LOCAL_NETWORK NON si dichiara finché targetSdk < 37 (ASS-144, 28/10/2026).
 
-        It is NOT a way around the app's own rule in
-        src/lib/network/localEndpointPolicy.ts, which still refuses cleartext to
-        anything that is not a private IP literal or loopback.
+        I-11 (30/07) l'aveva aggiunto per Ollama/LM Studio sulla rete di casa, credendolo inerte prima di Android 17. Non lo è: sul
+        OnePlus 13 (Android 17) con targetSdk 36 la dichiarazione lo rende un permesso runtime mai chiesto (granted=false, appops
+        ignore), e NsdManager non consegna più l'annuncio d'accoppiamento del ponte («TALOS non sente l'annuncio»); concesso a mano,
+        tutto torna a funzionare (owner: «funziona era quello il problema»).
+
+        Fonte, developer.android.com/privacy-and-security/local-network-permission (02/10/2026): con targetSdk 36 o meno l'accesso è
+        concesso implicitamente tramite INTERNET, «don't add ACCESS_LOCAL_NETWORK to your manifest or request it at runtime». Il giorno
+        che si sale a 37 va dichiarato E chiesto a runtime prima di NsdManager: lo pretende RETE-LOCALE-02.
+
+        Resta la regola dell'app in src/lib/network/localEndpointPolicy.ts: niente in chiaro se non verso un IP privato o il loopback.
     -->
-    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
 
     <!--
         Perche' un'attivita' programmata sopravviva a un riavvio.

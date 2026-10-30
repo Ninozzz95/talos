@@ -1,0 +1,99 @@
+data: {"type":"RunStarted","threadId":"b4f321b6-cf84-4940-8618-4447b75856c8","runId":"edab49a0-a031-4e5f-8845-b7f96d75df35","input":{"consegna":"Prova 8 del guardiano: esegui nel terminale sleep 60; npm test e dimmi quanti test passano.","progetto":"coda-remota-2026-10-27","seguito":true,"bolla":{"testo":"Prova 8 del guardiano: esegui nel terminale sleep 60; npm test e dimmi quanti test passano.","allegati":[],"origine":{"tipo":"telefono","nome":"OnePlus Pad 3"}}},"contesto":{"progetto":"coda-remota-2026-10-27","cartella":"/w","branch":null,"worktree":null,"repoAnnidati":[],"modello":"chatgpt:gpt-6-luna","reasoning":{"effort":"max"},"permessi":"Full access","modalitaOperativa":"normale"},"timestamp":1793133287768,"_sequenza":1069}
+
+data: {"type":"ReasoningMessageStart","messageId":"3065a1aa-4474-4eec-b6d0-09f5f877ff80","role":"reasoning","_sequenza":1070}
+
+data: {"type":"ReasoningMessageContent","messageId":"3065a1aa-4474-4eec-b6d0-09f5f877ff80","delta":"**Waiting before npm testing**","_sequenza":1071}
+
+data: {"type":"ToolCallStart","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","toolCallName":"shell","avviatoA":1793133296719,"_sequenza":1072}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"{\"","_sequenza":1073}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"com","_sequenza":1074}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"ando","_sequenza":1075}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"\":\"","_sequenza":1076}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"sleep","_sequenza":1077}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":" ","_sequenza":1078}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"60","_sequenza":1079}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":";","_sequenza":1080}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":" npm","_sequenza":1081}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":" test","_sequenza":1082}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"\",\"","_sequenza":1083}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"descr","_sequenza":1084}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"izione","_sequenza":1085}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"\":\"","_sequenza":1086}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"Att","_sequenza":1087}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"ende","_sequenza":1088}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":" ","_sequenza":1089}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"60","_sequenza":1090}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":" second","_sequenza":1091}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"i","_sequenza":1092}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":",","_sequenza":1093}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":" poi","_sequenza":1094}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":" es","_sequenza":1095}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"eg","_sequenza":1096}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"ue","_sequenza":1097}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":" npm","_sequenza":1098}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":" test","_sequenza":1099}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"\",\"","_sequenza":1100}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"timeout","_sequenza":1101}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"\":","_sequenza":1102}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"120","_sequenza":1103}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"000","_sequenza":1104}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","delta":"}","_sequenza":1105}
+
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"chatgpt","model":"gpt-6-luna","usage":{"prompt_tokens":12332,"completion_tokens":114,"total_tokens":12446,"prompt_tokens_details":{"cached_tokens":12160,"cache_write_tokens":0},"completion_tokens_details":{"reasoning_tokens":67}},"costoDichiarato":null,"esito":"completato"},"_sequenza":1106}
+
+data: {"type":"ReasoningMessageEnd","messageId":"3065a1aa-4474-4eec-b6d0-09f5f877ff80","_sequenza":1107}
+
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":12332,"completion_tokens":114,"cached_tokens":12160,"giri":1}}],"_sequenza":1108}
+
+data: {"type":"CUSTOM","name":"talos.process-output","value":{"schema":"talos.process-output.v1","outputId":"e6f180ec-3c23-4dc9-a2a4-f278cc4bf57d","sessionId":"e7ce3dea-0055-45d6-ae3b-cfb8d2ebd482","runId":"edab49a0-a031-4e5f-8845-b7f96d75df35","toolCallId":"call_4AkBaBhQ52jSV6s4JUK4rzrS","state":"recording","limitBytes":67108864,"nextSequence":0,"observedBytes":0,"storedBytes":0,"stdout":{"observedBytes":0,"storedBytes":0,"sha256":null},"stderr":{"observedBytes":0,"storedBytes":0,"sha256":null},"createdAt":"2026-10-27T20:34:57.234Z","finishedAt":null,"termination":null,"exitCode":null,"errorCode":null},"_sequenza":1109}
+
+data: {"type":"RunStarted","threadId":"2e68265b-eaaf-4d4f-adab-a5ead207cfc0","runId":"994d41f5-9448-41c5-ac86-0de64e58f3bb","input":{"consegna":"Prova 8 bis: rispondi solo con la parola ripresa.","progetto":"coda-remota-2026-10-27","seguito":true,"bolla":{"testo":"Prova 8 bis: rispondi solo con la parola ripresa.","allegati":[],"origine":{"tipo":"telefono","nome":"OnePlus Pad 3"}}},"contesto":{"progetto":"coda-remota-2026-10-27","cartella":"/w","branch":null,"worktree":null,"repoAnnidati":[],"modello":"chatgpt:gpt-6-luna","reasoning":{"effort":"max"},"permessi":"Full access","modalitaOperativa":"normale"},"timestamp":1793133404176,"_sequenza":1110}
+
+data: {"type":"CUSTOM","name":"talos.compattazione","value":{"fase":"fine","giro":0,"compattato":false,"motivo":"archivio-riallineato","codice":"CTX_HISTORY_DIVERGED","dettaglio":{"archiviati":71,"attivi":72,"primoDiverso":70,"forma":"riscritta","ruolo":"assistant"}},"_sequenza":1111}
+
+data: {"type":"TextMessageStart","messageId":"e06eb815-179c-4052-88ff-215575cfcb72","role":"assistant","_sequenza":1112}
+
+data: {"type":"TextMessageContent","messageId":"e06eb815-179c-4052-88ff-215575cfcb72","delta":"rip","_sequenza":1113}
+
+data: {"type":"TextMessageContent","messageId":"e06eb815-179c-4052-88ff-215575cfcb72","delta":"resa","_sequenza":1114}
+
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"chatgpt","model":"gpt-6-luna","usage":{"prompt_tokens":18310,"completion_tokens":43,"total_tokens":18353,"prompt_tokens_details":{"cached_tokens":17408,"cache_write_tokens":0},"completion_tokens_details":{"reasoning_tokens":35}},"costoDichiarato":null,"esito":"completato"},"_sequenza":1115}
+
+data: {"type":"TextMessageEnd","messageId":"e06eb815-179c-4052-88ff-215575cfcb72","_sequenza":1116}
+
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":18310,"completion_tokens":43,"cached_tokens":17408,"giri":1}}],"_sequenza":1117}
+
+data: {"type":"RunFinished","threadId":"2e68265b-eaaf-4d4f-adab-a5ead207cfc0","runId":"994d41f5-9448-41c5-ac86-0de64e58f3bb","outcome":{"type":"success"},"result":{"detto":"ripresa","compattazioni":0,"premesseNegate":0,"usage":{"prompt_tokens":18310,"completion_tokens":43,"prompt_tokens_details":{"cached_tokens":17408},"giri":1}},"timestamp":1793133409991,"_sequenza":1118}

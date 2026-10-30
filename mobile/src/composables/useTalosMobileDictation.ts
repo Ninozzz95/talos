@@ -79,6 +79,11 @@ export interface TalosMobileDictation {
      * sicurezza»). Col riconoscitore di sistema resta falso. Torna falso a ogni dettatura nuova.
      */
     chiusaDalMotore: Ref<boolean>
+    /**
+     * La lingua che il motore dice di sentire in questa dettatura (codice BCP 47), `null` finché non la dice. L'invio la scrive nei
+     * metadati del messaggio: la lingua delle risposte (owner 28/10/2026, DETT-LINGUA-01/02). Una dettatura nuova riparte da `null`.
+     */
+    linguaSentita: Ref<string | null>
     toggle(): Promise<void>
     /** SF5-3: silent teardown (send-time cleanup) — no messages, no resurrection. */
     cancel(): void
@@ -119,6 +124,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
     // to a quiet listening floor, hard zero when the session ends.
     const level = ref(0)
     const chiusaDalMotore = ref(false)
+    const linguaSentita = ref<string | null>(null)
     const LEVEL_FLOOR = 0.12
     let decayTimer: ReturnType<typeof setInterval> | null = null
     let lastPartialLength = 0
@@ -351,6 +357,7 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
         ultimoScritto = ''
         heardAnything = false
         chiusaDalMotore.value = false
+        linguaSentita.value = null
         status.value = 'starting'
         sessionEpoch += 1
         const epoch = sessionEpoch
@@ -393,6 +400,9 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
                 ultimoScritto = capturedBase ? `${capturedBase} ${transcript}` : transcript
                 basePresa = capturedBase
                 options.onTranscript(ultimoScritto)
+            },
+            onLanguage: (tag) => {
+                if (epoch === sessionEpoch && tag) linguaSentita.value = tag
             },
             onFallback: (code) => {
                 talosDettaturaAnnota(`dett: ripiego sul sistema ${code}`)
@@ -528,5 +538,5 @@ export function useTalosMobileDictation(options: UseTalosMobileDictationOptions)
         clearTimeout(sveglia)
     }
 
-    return { supported, visible, status, error, errorCode, level, chiusaDalMotore, toggle, cancel, finisci }
+    return { supported, visible, status, error, errorCode, level, chiusaDalMotore, linguaSentita, toggle, cancel, finisci }
 }

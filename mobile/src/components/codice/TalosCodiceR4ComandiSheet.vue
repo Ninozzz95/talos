@@ -8,7 +8,7 @@
  * tocco, e il suo sottotitolo dice cosa contiene. Leggono soltanto: valgono anche mentre il giro lavora.
  */
 import { computed, nextTick, onMounted, ref, type Component } from 'vue'
-import { CopyPlus, Download, GitBranch, Pencil, Play, Plus, Share2, Shrink, Stethoscope, Zap } from '@lucide/vue'
+import { CopyPlus, Download, FoldVertical, GitBranch, Pencil, Play, Plus, Share2, Stethoscope, Webhook } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import { useTalosI18n } from '@/i18n'
 import './codiceR4.css'
@@ -35,13 +35,13 @@ const VOCI = computed<Voce[]>(() => [
     // D-RM4-11 (Pad 21/10/2026): sulla sessione di un PC la sessione nuova parte dalla scelta della cartella sul computer (Q2)
     { id: 'nuova', gruppo: 'sessione', titolo: t('harness.r4CmdNew'), sottotitolo: props.soloDalPc ? t('harness.r4CmdNewOnPcHint') : t('harness.r4CmdNewHint'), icona: Plus, diSessione: false },
     { id: 'rinomina', gruppo: 'sessione', titolo: t('harness.r4CmdRename'), sottotitolo: t('harness.r4CmdRenameHint'), icona: Pencil, diSessione: true },
-    { id: 'duplica', gruppo: 'sessione', titolo: t('harness.r4CmdDuplicate'), sottotitolo: t('harness.r4CmdDuplicateHint'), icona: CopyPlus, diSessione: true, soloSulPc: true },
+    { id: 'duplica', gruppo: 'sessione', titolo: t('harness.r4CmdDuplicate'), sottotitolo: t('harness.r4CmdDuplicateHint'), icona: CopyPlus, diSessione: true }, // CENSIMENTO G (a), 27/10: il PC ha `session.fork`, si duplica anche in remoto
     { id: 'riprendi', gruppo: 'sessione', titolo: t('harness.r4Resume'), sottotitolo: t('harness.r4CmdResumeHint'), icona: Play, diSessione: true },
-    { id: 'compatta', gruppo: 'sessione', titolo: t('harness.r4Compact'), sottotitolo: t('harness.r4CmdCompactHint'), icona: Shrink, diSessione: true },
+    { id: 'compatta', gruppo: 'sessione', titolo: t('harness.r4Compact'), sottotitolo: t('harness.r4CmdCompactHint'), icona: FoldVertical, diSessione: true },
     { id: 'esporta', gruppo: 'sessione', titolo: t('harness.r4CmdExport'), sottotitolo: t('harness.r4CmdExportHint'), icona: Download, diSessione: true, soloLettura: true, soloSulPc: true },
     { id: 'condividi', gruppo: 'sessione', titolo: t('harness.r4CmdShare'), sottotitolo: t('harness.r4CmdShareHint'), icona: Share2, diSessione: true, soloLettura: true, soloSulPc: true },
     { id: 'albero', gruppo: 'vai', titolo: t('harness.r4Tree'), sottotitolo: t('harness.r4CmdTreeHint'), icona: GitBranch, diSessione: false },
-    { id: 'hook', gruppo: 'vai', titolo: t('harness.r4Hooks'), sottotitolo: t('harness.r4CmdHooksHint'), icona: Zap, diSessione: false },
+    { id: 'hook', gruppo: 'vai', titolo: t('harness.r4Hooks'), sottotitolo: t('harness.r4CmdHooksHint'), icona: Webhook, diSessione: false },
     // K3-C2b: il Doctor di r4 non dipende dalla sessione aperta
     { id: 'doctor', gruppo: 'vai', titolo: t('harness.r4Doctor'), sottotitolo: t('harness.r4CmdDoctorHint'), icona: Stethoscope, diSessione: false },
 ])

@@ -84,19 +84,22 @@ describe('TalosMobileComposer', () => {
     it('Calm: niente chip Ragiona, ma il ragionamento resta raggiungibile dal foglio del modello', async () => {
         const view = mountComposer({ thinking: false, agentToolsEnabled: true })
 
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await view.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         expect(view.find('[data-testid="talos-composer-thinking"]').exists()).toBe(false)
         expect(view.find('[data-testid="talos-composer-agent"]').exists()).toBe(false)
         expect(view.find('[data-testid="talos-composer-browse"]').exists()).toBe(false)
 
-        // J3 (owner 24/10/2026): con un livello da offrire, «Ragionamento esteso» sta nel menu della pillola del ragionamento
-        await view.get('[data-testid="talos-composer-reasoning-pill"]').trigger('click')
-        await flushPromises()
-        // J3-bis (owner «Come il desktop»): «Ragionamento esteso» segue il livello scelto nella pillola
+        // owner 27/10/2026 (mockup approvato): il livello si sceglie nel piede del foglio «Modello e ragionamento», aperto dal chip;
+        // J3-bis resta: «Ragionamento esteso» segue il livello scelto (da «Medio» a «Basso» si accende)
+        await view.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         for (let i = 0; i < 6; i++) { await flushPromises(); await vi.dynamicImportSettled() }
-        await view.get('[data-testid="talos-reasoning-level"][data-livello="low"]').trigger('click')
+        await vi.waitFor(() => expect(view.find('[data-testid="talos-mobile-effort-slider-thumb"]').exists()).toBe(true))
+        await view.get('[data-testid="talos-mobile-effort-slider-thumb"]').trigger('keydown', { key: 'ArrowLeft' })
+        expect(view.emitted('selectEffort')?.at(-1)).toEqual(['low'])
         expect(view.emitted('selectThinking')).toEqual([[true]])
 
-        // J3-bis: la parola nascosta sulla pillola del modello non c'è più; il livello lo dice la pillola del ragionamento
+        // la parola nascosta del J3 non torna: il livello a schermo lo dice il chip unico
         expect(view.find('[data-testid="talos-composer-reasoning-label"]').exists()).toBe(false)
         expect(view.emitted('send')).toBeUndefined()
     })
@@ -106,14 +109,16 @@ describe('TalosMobileComposer', () => {
             thinking: false,
             modelProfiles: [{ ...modelProfiles[0], thinking_toggle: false }],
         })
-        // J3: il livello resta (pillola), l'interruttore no — né nel menu della pillola né nel foglio
-        await view.get('[data-testid="talos-composer-reasoning-pill"]').trigger('click')
-        await flushPromises()
-        expect(view.findAll('[data-testid="talos-reasoning-level"]').length).toBeGreaterThan(1)
-        expect(view.find('[data-testid="talos-reasoning-thinking"]').exists()).toBe(false)
+        // il livello resta (il cursore nel piede), l'interruttore no; e scegliere un livello non lo tocca
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await view.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         await view.get('[data-testid="talos-composer-model-chip"]').trigger('click')
-        await vi.dynamicImportSettled()
+        for (let i = 0; i < 6; i++) { await flushPromises(); await vi.dynamicImportSettled() }
+        await vi.waitFor(() => expect(view.find('[data-testid="talos-mobile-effort-slider-thumb"]').exists()).toBe(true))
         expect(view.find('[data-testid="talos-mobile-thinking-toggle"]').exists()).toBe(false)
+        await view.get('[data-testid="talos-mobile-effort-slider-thumb"]').trigger('keydown', { key: 'ArrowLeft' })
+        expect(view.emitted('selectEffort')?.at(-1)).toEqual(['low'])
+        expect(view.emitted('selectThinking')).toBeUndefined()
     })
 
     it('Calm: Agente spento lascia ricerca, file, foto e fotocamera utilizzabili', async () => {
@@ -145,8 +150,9 @@ describe('TalosMobileComposer', () => {
         expect(view.find('[data-testid="talos-composer-action"]').exists()).toBe(false)
         expect(view.find('[data-testid="talos-composer-prompt"]').exists()).toBe(false)
         expect(view.find('.talos-composer-field-row').exists()).toBe(false)
-        // La riga strumenti resta: modello e Ragiona non sono comandi di stop.
-        expect(view.find('[data-testid="talos-composer-tools"]').exists()).toBe(true)
+        // Owner 27/10/2026 (mockup approvato): mentre si detta c'è SOLO la barra — la fila sta nella riga del campo, e se ne va con lei.
+        expect(view.find('[data-testid="talos-composer-tools"]').exists()).toBe(false)
+        expect(view.find('[data-testid="talos-composer-mic"]').exists()).toBe(false)
         expect(view.emitted('send')).toBeUndefined()
         expect(view.emitted('discardDictation')).toBeUndefined()
     })
@@ -185,13 +191,18 @@ describe('TalosMobileComposer', () => {
 
     it('espone i controlli Calm con bersagli tattili e nome modello leggibile', async () => {
         const view = mountComposer()
+        // il nome breve arriva da un modulo caricato a parte (tetto dell'avvio, 28/10)
+        await vi.dynamicImportSettled()
+        await flushPromises()
         for (const id of ['plus', 'action']) {
+            // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+            await view.get('[data-testid="talos-composer-prompt"]').trigger('focus')
             const control = view.get('[data-testid="talos-composer-' + id + '"]')
             expect(control.classes()).toContain('min-h-touch')
             expect(control.classes()).toContain('min-w-touch')
             expect(control.attributes('data-mobile-icon-only')).toBe('true')
         }
-        expect(view.get('[data-testid="talos-composer-model-chip"]').text()).toContain('DeepSeek Chat')
+        expect(view.get('[data-testid="talos-composer-model-chip"]').text()).toContain('deepseek-chat') // PILLOLA-01: nome breve
         await view.get('[data-testid="talos-composer-plus"]').trigger('click')
         await vi.dynamicImportSettled()
         await flushPromises()
@@ -264,6 +275,8 @@ describe('TalosMobileComposer', () => {
         // "Model & reasoning" — a configuration surface, not a menu — and
         // closing on every pick meant opening it twice to set two things.
         const view = mountComposer()
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await view.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         const modelTrigger = view.get<HTMLButtonElement>('[data-testid="talos-composer-model-chip"]')
 
         await modelTrigger.trigger('click')
@@ -278,8 +291,8 @@ describe('TalosMobileComposer', () => {
         // F4-#26: model + effort live in one dedicated bottom drawer.
         expect(view.get('[data-testid="talos-model-drawer"]').exists()).toBe(true)
         expect(view.get('[data-testid="talos-mobile-composer-model-picker"]').exists()).toBe(true)
-        // J3 (owner 24/10/2026): il foglio è solo «Modello»; il livello si sceglie dalla pillola del ragionamento
-        expect(view.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(false)
+        // owner 27/10/2026 (mockup approvato): il foglio è di nuovo «Modello e ragionamento», col piede del ragionamento in fondo
+        expect(view.find('[data-testid="talos-mobile-effort-picker"]').exists()).toBe(true)
 
         await view.get('[data-model-profile-id="profile-deepseek"]').trigger('click')
         expect(view.emitted('selectModelProfile')).toEqual([['profile-deepseek']])
@@ -288,6 +301,11 @@ describe('TalosMobileComposer', () => {
         // And a second choice in the same visit: another model, the sheet still open.
         await view.get('[data-model-profile-id="profile-deepseek"]').trigger('click')
         expect(view.emitted('selectModelProfile')).toHaveLength(2)
+        expect(view.find('[data-testid="talos-model-drawer"]').exists()).toBe(true)
+
+        // and the effort, in the footer of the same sheet: the sheet stays open
+        await view.get('[data-testid="talos-mobile-effort-slider-thumb"]').trigger('keydown', { key: 'ArrowLeft' })
+        expect(view.emitted('selectEffort')?.at(-1)).toEqual(['low'])
         expect(view.find('[data-testid="talos-model-drawer"]').exists()).toBe(true)
     })
 
@@ -312,6 +330,8 @@ describe('TalosMobileComposer', () => {
         const view = mountComposer({
             contextAvailable: true,
         })
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await view.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         await view.get('[data-testid="talos-composer-plus"]').trigger('click')
         await vi.dynamicImportSettled()
         await flushPromises()

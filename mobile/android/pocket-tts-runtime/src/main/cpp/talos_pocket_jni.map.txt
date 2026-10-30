@@ -1,0 +1,12 @@
+/*
+ * REL-083 (28/10/2026): l'interfaccia pubblica di libtalos_pocket_sentencepiece.so sono SOLO le funzioni JNI che Kotlin chiama per nome
+ * (TalosPocketTokenizerJni, TalosPocketResamplerJni). Tutto il resto, compresa la libc++ statica, resta locale: prima la libreria esportava
+ * 1.638 simboli `std::__` accanto alla libc++_shared.so dell'app. Strada indicata da developer.android.com/ndk/guides/symbol-visibility
+ * (06/03/2026). Niente JNI_OnLoad/JNI_OnUnload/RegisterNatives nei sorgenti: se un giorno arrivano, vanno aggiunti a `global:`.
+ */
+TALOS_POCKET {
+  global:
+    Java_ai_talos_voice_pocket_*;
+  local:
+    *;
+};

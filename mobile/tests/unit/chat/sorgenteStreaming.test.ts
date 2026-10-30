@@ -41,6 +41,19 @@ describe('la coda in streaming con una sorgente iniettata (K3-B2)', () => {
         expect(w.text()).not.toContain('TESTO DELLA CHAT')
     })
 
+    it('ATT-CHAT-01 R4: la chat dice «giro» dall\'ora in cui la risposta è diventata di questa conversazione; nessuna attesa altrove', async () => {
+        const { talosSorgenteStreamingDellaChat } = await import('@/lib/chat/sorgenteStreaming')
+        const state = reactive({ sending: true, streamingText: null, streamingReasoning: null, streamingConfini: null, streamingSessionId: 'chat-1', streamingSince: 1_700_000_000_000 })
+        const sessione = reactive({ value: { id: 'chat-1' } as { id: string } | null })
+        const s = talosSorgenteStreamingDellaChat({ chat: { state, activeSession: sessione }, toolActivity: { value: [] } })
+        expect(s.attesa!.value).toEqual({ fase: 'giro', dal: 1_700_000_000_000, chi: null })
+        sessione.value = { id: 'chat-2' }
+        expect(s.attesa!.value).toBeNull()
+        sessione.value = { id: 'chat-1' }
+        state.sending = false
+        expect(s.attesa!.value).toBeNull()
+    })
+
     it('SORG-02 senza sorgente iniettata resta quella della chat: niente invio, niente coda', () => {
         mock.state = reactive({ sending: false, streamingText: 'TESTO DELLA CHAT', streamingReasoning: null, streamingConfini: null, streamingSessionId: null })
         const w = mount(TalosMobileStreamingReply)

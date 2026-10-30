@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { Minimize2, Square, ArrowUp } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { useTalosModalSurface } from '@/composables/useTalosModalSurface'
 import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
+import { useTalosI18n } from '@/i18n'
 
 /**
  * Owner 2026-08-27: "voglio inserire un pulsante che fa espandere il
@@ -36,6 +37,8 @@ const props = defineProps<{
     prompt: string
     sending: boolean
     canSubmit: boolean
+    /** ⛔ «Stop anche a chat ferma» (owner 29/10 sera): la stessa regola del compositore, Stop degli agenti a campo vuoto. */
+    agentiDaFermare?: number
 }>()
 
 const emit = defineEmits<{
@@ -62,8 +65,17 @@ function updatePrompt(event: Event): void {
     emit('update:prompt', (event.currentTarget as HTMLTextAreaElement).value)
 }
 
+const { t } = useTalosI18n()
+const stopAgenti = computed(() => !props.sending && (props.agentiDaFermare ?? 0) > 0 && !props.prompt.trim())
+const fermando = computed(() => props.sending || stopAgenti.value)
+const nomeAzione = computed(() => {
+    if (props.sending) return t('chat.stopResponse')
+    if (stopAgenti.value) return props.agentiDaFermare === 1 ? t('chat.stopAgentsOne') : t('chat.stopAgentsMany', { n: props.agentiDaFermare ?? 0 })
+    return t('chat.sendMessage')
+})
+
 function onAction(): void {
-    if (props.sending) { emit('stop'); return }
+    if (fermando.value) { emit('stop'); return }
     if (!props.canSubmit) return
     emit('send')
 }
@@ -114,12 +126,12 @@ function onAction(): void {
                     type="button"
                     size="icon"
                     data-testid="talos-composer-expanded-action"
-                    :aria-label="sending ? $t('chat.stopResponse') : $t('chat.sendMessage')"
-                    :disabled="!sending && !canSubmit"
+                    :aria-label="nomeAzione"
+                    :disabled="!fermando && !canSubmit"
                     class="talos-pressable min-h-touch min-w-touch rounded-2xl bg-[var(--talos-accent,var(--primary))] text-[var(--talos-accent-contrast,var(--primary-foreground))]"
                     @click="onAction"
                 >
-                    <Square v-if="sending" class="size-4" aria-hidden="true" />
+                    <Square v-if="fermando" class="size-4" aria-hidden="true" />
                     <ArrowUp v-else class="size-5" aria-hidden="true" />
                 </Button>
             </div>

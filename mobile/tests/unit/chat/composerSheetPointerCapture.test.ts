@@ -49,7 +49,6 @@ describe('composer sheet pointer ownership', () => {
                 sending: false,
                 sendDisabledReason: '',
                 dictationSupported: true,
-                drawerMode: true,
             },
         })
 
@@ -78,6 +77,41 @@ describe('composer sheet pointer ownership', () => {
         expect(wrapper.get('[data-testid="talos-drawer-tab-create"]').attributes('aria-selected')).toBe('true')
         expect(wrapper.find('[data-testid="talos-drawer-enhance"]').exists()).toBe(true)
 
+        wrapper.unmount()
+    })
+})
+
+/*
+ * ⛔ SHEET-SLIDER-01 (Pad, 27/10/2026, dito vero con `adb shell input swipe` sul mockup del compositore): lo slider del
+ * ragionamento si illuminava ma non scorreva. Il foglio cattura il puntatore per chiudersi tirandolo in giù su tutto ciò che
+ * `bersaglioInterattivo` non conosce, e `[role="slider"]` non c'era: il trascinamento finiva al foglio.
+ */
+describe('SHEET-SLIDER-01 il foglio lascia il dito agli slider', () => {
+    async function foglioCon(html: string) {
+        const { default: Foglio } = await import('@/components/chat/TalosMobileComposerSheet.vue')
+        const wrapper = mount(Foglio, {
+            attachTo: document.body,
+            global: { stubs: { teleport: true } },
+            props: { title: 'Modello', testid: 'foglio-prova' },
+            slots: { default: html },
+        })
+        const foglio = wrapper.get<HTMLElement>('[data-testid="foglio-prova"]')
+        const cattura = vi.fn()
+        Object.defineProperty(foglio.element, 'setPointerCapture', { configurable: true, value: cattura })
+        return { wrapper, cattura }
+    }
+
+    it('un pointerdown sul pollice di uno slider non cattura il puntatore', async () => {
+        const { wrapper, cattura } = await foglioCon('<div data-testid="pista"><span role="slider" data-testid="pollice" tabindex="0" aria-valuenow="2"></span></div>')
+        wrapper.get('[data-testid="pollice"]').element.dispatchEvent(pointerdown())
+        expect(cattura).not.toHaveBeenCalled()
+        wrapper.unmount()
+    })
+
+    it('controllo: su una zona non interattiva del foglio il gesto di chiusura cattura ancora', async () => {
+        const { wrapper, cattura } = await foglioCon('<p data-testid="testo">Solo testo</p>')
+        wrapper.get('[data-testid="testo"]').element.dispatchEvent(pointerdown())
+        expect(cattura).toHaveBeenCalledWith(7)
         wrapper.unmount()
     })
 })

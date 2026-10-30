@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/processi.js",
-    "sha256": "afba7a02a05b1117ce23d870cce46f051589e3c48da41fefdabb0759c7909647",
+    "sha256": "09ef202e4605a0c56dad338af2d45c0fd5a830a8b20a79d70a1726dbf6874559",
     "prefisso": "terminal."
   },
   "it": {
@@ -58,7 +58,7 @@
     "terminal.launchedByAgent": "Launched by the agent",
     "terminal.readOnly": "Read only: this is where you watch the agent’s commands.",
     "terminal.agentTab": "The agent’s commands, read only",
-    "terminal.stateRunning": "running",
+    "terminal.stateRunning": "in progress",
     "terminal.stateConnected": "connected",
     "terminal.stateConnecting": "connecting",
     "terminal.stateWaiting": "waiting",
