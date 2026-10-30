@@ -55,7 +55,7 @@ describe('ART70-TS — gli artefatti del Codice passano dalla finestra e dalla L
         expect(await apriArtefattoCodice(ID, 'Vendite')).toEqual({ ok: true })
         expect(ponte.create).toHaveBeenCalledTimes(1)
         expect(ponte.create).toHaveBeenCalledWith({ title: 'Vendite', html: '<p>grafico</p>' })
-        expect(ponte.open).toHaveBeenCalledWith({ id: 'nativo-1' })
+        expect(ponte.open).toHaveBeenCalledWith(expect.objectContaining({ id: 'nativo-1', title: 'Vendite' })) // UI-108: la testata porta il titolo
         expect(ponte.open).toHaveBeenCalledTimes(2)
     })
 

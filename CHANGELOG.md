@@ -6,6 +6,83 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device, not estimated.
 
+## mobile-v0.1.47
+
+Code on your computer feels like the desktop: tool rows say what happened, sessions you start there show up at once, and a
+single Stop can end the chat and every agent it started. The composer is redesigned around one compact row, every list
+looks like Chats, and nothing that is loading looks stuck.
+
+### Added
+
+- **Stop everything.** When sub-agents are still working, Stop asks whether to stop them too or only the chat, and can
+  remember the answer (also in Settings). The chat then says how many agents were stopped. Stop stays available while
+  the chat is idle and agents are working.
+  Their results wait in the queue and go with your next message, and the queue now says so.
+- **Stop one agent.** In a session's Agents tab, the ⋯ menu of a working agent stops it and everything it started.
+- **Blocked folders.** If a computer removes this device from a folder it can still reach through another allowed folder, the
+  folder stays blocked. The new-session list shows it as "Blocked on the computer"; it is unblocked only from the PC.
+- **"Removed on the computer".** When a computer has removed this device, its card says so at the next connection and offers to
+  forget it.
+- **Open a sent file from its chip** in Chat, in local Code and in computer sessions.
+- **Session settings while connected.** Model, reasoning and permission of a computer session change from the device,
+  and buttons that used to say "Only from the computer" now reach it.
+- **"Connecting to <computer>".** Opening a computer session shows a live connecting screen with Retry; a line that drops
+  mid-turn says how many times it retried and for how long.
+
+### Changed
+
+- **The composer.** One shape for Chat and Code, compact at rest, opening and closing smoothly; dictation sits inside the
+  field; the model chip shows the provider's logo, the model's name and how much reasoning is on. Model and reasoning are
+  chosen in one sheet with providers as tabs, opened on the model in use.
+- **ChatGPT plan in the model picker on smaller screens.** The plan status moved from the composer to the first row of the
+  ChatGPT group in the model picker. A small dot on the model chip shows the plan is in use; at the usage limit it becomes a ring.
+- **Tool rows like the desktop.** A finished row says how it went and opens in place to show what it did; long arguments open
+  on request; argument names use the desktop's words.
+- **Lists like Chats.** Code, Library and Computer have the same header, counts and filters as Chats. On the tablet the
+  Code list is no longer shown twice while a session opens.
+- **Nothing looks stuck.** A screen that loads for more than two seconds shows the same waiting card as Chat, with the seconds;
+  the first word of a reply says what it is waiting for; spinners keep moving gently with reduced motion turned on.
+- **Replies in your language.** TALOS answers in the language you write or speak.
+- **The computer's messages in your language.** Kernel and server messages use the desktop's own wording in English and
+  Italian.
+- **Folder permission.** "Not now" on the computer is no longer shown as a refusal: you can ask again.
+- **Expired QR code.** The error offers to scan a new QR code instead of retrying the old one.
+- **Calm background.** It breathes visibly with a passing light, and keeps moving while messages are on screen.
+- **Device control.** Settings tools use real units (percent, seconds) and report the value they read back.
+- **The on-device Code engine** is the desktop's current one: writes are checked faster, a stopped sub-agent no longer hands
+  its parent a false "history differs" error, and images go to the OpenRouter address you chose.
+
+### Fixed
+
+- A turn the computer never ended no longer stays "working" forever; it is kept and marked interrupted.
+- A tool result that arrives after an approval card updates its row.
+- A finished reply no longer fades in a second time.
+- The ADB bridge accepts only its own device's announcements; a successful pairing no longer blames the code when only the
+  connection failed; when the device does not announce its port, TALOS says how to fix it.
+- TALOS says when the local network permission blocks the ADB bridge or Ollama on the home network.
+- Report PDFs no longer contain blank pages.
+- Language names the WebView cannot spell are shown correctly.
+- Interactive visuals open full screen with a header and a close button.
+- Pairing no longer reports a fresh QR code as expired when the computer's clock is a little behind.
+- The Computer section no longer goes blank after pairing a computer that has no relay of its own.
+- A new session started on a computer appears in Code straight away.
+- A computer that is online is never offered for removal as an old entry of the same name.
+- A computer's times are shown on the device clock when the computer's clock is off.
+- System bar icons stay readable on light themes after rotating or resizing the window.
+- Error text is red and readable in dark themes.
+- The update screen says plainly when a file is for a different app or is not a newer version.
+- Code says plainly when the on-device engine did not answer, or when another TALOS app holds Code.
+- The session header shows the new name after a rename made on the computer.
+
+### Known limitations
+
+- Code on the device does not yet check TypeScript types when it writes a file (the desktop refuses a write that
+  introduces an unknown name). The check comes in the next version.
+
+### Install
+
+- From 0.1.46 TALOS updates itself to this version. Mobile releases are now tagged `mobile-v…`.
+
 ## v0.1.46
 
 A fix release: Code with an on-device model keeps working, and updates download again.

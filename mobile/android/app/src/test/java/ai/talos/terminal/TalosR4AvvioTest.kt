@@ -151,4 +151,19 @@ class TalosR4AvvioTest {
         assertTrue(listOf(d.pacchetto, d.stato, d.chiavi, d.modulo, d.registro, d.marcatore).all { it.path.startsWith(base.path) })
         assertEquals(TalosR4Archivio.CARTELLA_PACCHETTO, d.pacchetto.name)
     }
+
+    /**
+     * ⛔ D-0145-2 (Desktop, Pad 25/10 notte): ai.talos e la copia affiancata ai.talos.dev accendevano r4 sulla STESSA porta; quella
+     * che partiva dopo trovava la porta presa e il suo client parlava all'r4 dell'altra col proprio token: 401 AUTH_REQUIRED nella
+     * lista del Codice. La copia affiancata ha la sua porta; la release resta sulla 4178 (r4 legge `TALOS_HARNESS_UI_PORT` e
+     * ammette le origini della porta su cui ascolta, `http-app.mjs:2908` @ d5bed0a16).
+     */
+    @Test
+    fun `R4AV-09 la copia affiancata accende r4 su una porta sua, la release sulla 4178`() {
+        assertEquals(4178, TalosR4Avvio.portaPer("ai.talos"))
+        assertEquals(4188, TalosR4Avvio.portaPer("ai.talos.dev"))
+        assertNotEquals(TalosR4Avvio.portaPer("ai.talos"), TalosR4Avvio.portaPer("ai.talos.dev"))
+        val d = TalosR4Avvio.disposizione(radice())
+        assertEquals(TalosR4Avvio.PORTA.toString(), TalosR4Avvio.ambiente(d, radice(), radice(), radice(), emptyMap())["TALOS_HARNESS_UI_PORT"])
+    }
 }

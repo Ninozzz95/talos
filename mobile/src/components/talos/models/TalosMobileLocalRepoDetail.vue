@@ -609,7 +609,7 @@ async function reclaim(): Promise<void> {
             data-testid="talos-models-examining-repo"
             class="flex items-center gap-[var(--talos-space-inline)] font-mono text-2xs text-[var(--talos-muted)]"
         >
-            <span class="size-[calc(var(--talos-icon-size)/2)] shrink-0 animate-pulse rounded-full bg-[var(--talos-accent)] motion-reduce:animate-none" aria-hidden="true" />
+            <span class="size-[calc(var(--talos-icon-size)/2)] shrink-0 animate-pulse rounded-full bg-[var(--talos-accent)]" aria-hidden="true" />
             {{ t('localModels.examiningRepo') }}
         </p>
 

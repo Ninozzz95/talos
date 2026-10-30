@@ -24,6 +24,16 @@ export interface ComputerRicordato {
 }
 
 /**
+ * ⛔ D-0147-NAV-1 (Pad, 27/10/2026): `JSObject.put(chiave, null)` di Android TOGLIE la chiave (`TalosRemotoPlugin.kt` `elenco`), quindi
+ * un PC accoppiato col QR senza `relay=` arrivava senza `relay` — undefined, non null — e chi lo leggeva come testo si rompeva. Al
+ * confine col nativo ogni voce prende la forma del tipo: `nome` e `relay` sono testo o null.
+ */
+function computerDalNativo(v: ComputerRicordato): ComputerRicordato {
+    const testo = (x: unknown): string | null => (typeof x === 'string' ? x : null)
+    return { ...v, nome: testo(v.nome), relay: testo(v.relay) }
+}
+
+/**
  * Una cartella che il PC apre al dispositivo (`projects.list`): l'id da mandare a `session.start`, il nome da mostrare.
  * ⛔ D-MOCK-12 (dal vivo, 24/10/2026): una forma sola per i due PC.
  *   · Un PC r5-12 (contratto R5.12, parte 1, punto 1) manda `{ cartellaId, nome, dettaglio?, usataAlle, consentita }`: le recenti
@@ -40,6 +50,11 @@ export interface CartellaDelPc {
     usataAlle: string | null
     /** Falsa: la prima sessione lì chiede il permesso al PC («Conferma sul computer»). */
     consentita: boolean
+    /**
+     * Cartelle bloccate (owner 27/10/2026, contratto del Desktop rev.1): tolta a questo dispositivo ma ancora raggiungibile da un'altra
+     * consentita (una sottocartella, o una junction verso la stessa cartella). Il divieto vince: mai consentita, non si sceglie, si sblocca dal PC.
+     */
+    bloccata: boolean
 }
 
 const testoOppureNull = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v : null)
@@ -48,10 +63,14 @@ function cartellaDaRiga(v: Record<string, unknown> | null | undefined): Cartella
     if (!v || typeof v.nome !== 'string' || v.nome.trim() === '') return null
     if ('cartellaId' in v) {
         if (!idValidoDelPc(v.cartellaId)) return null
-        return { id: v.cartellaId, nome: v.nome, dettaglio: testoOppureNull(v.dettaglio), usataAlle: testoOppureNull(v.usataAlle), consentita: v.consentita === true }
+        const bloccata = v.bloccata === true
+        return {
+            id: v.cartellaId, nome: v.nome, dettaglio: testoOppureNull(v.dettaglio), usataAlle: testoOppureNull(v.usataAlle),
+            consentita: !bloccata && v.consentita === true, bloccata,
+        }
     }
     if (!idValidoDelPc(v.id)) return null
-    return { id: v.id, nome: v.nome, dettaglio: null, usataAlle: null, consentita: true }
+    return { id: v.id, nome: v.nome, dettaglio: null, usataAlle: null, consentita: true, bloccata: false }
 }
 
 /** R-M5a: l'iscrizione Web Push che il distributore ha dato per un PC (RFC 8291: p256dh e auth in base64url). */
@@ -131,7 +150,7 @@ export function creaComputerRemoti(plugin: PluginComputer, {
     let corrente: { annulla(): Promise<void> } | null = null
 
     async function aggiorna(): Promise<void> {
-        elenco.value = (await plugin.elenco()).computer
+        elenco.value = (await plugin.elenco()).computer.map(computerDalNativo)
     }
 
     async function accoppia(testoQr: string): Promise<void> {

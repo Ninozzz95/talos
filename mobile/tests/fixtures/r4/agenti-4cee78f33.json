@@ -1,0 +1,5705 @@
+{
+  "origine": {
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
+    "flusso": "r4-fc5e25d62-delega-vivo.sse",
+    "radice": "dc3e0884-431d-47d1-a660-0dd3061277f5",
+    "file": {
+      "grafo-agenti.js": "edd39c9046983f3a66121e436f2375991632759f076fa224198d1bcd98d5fcb1",
+      "grafo/run-dalle-deleghe.js": "04beb3e44e06f20f93b24a439e491f176fdd38b061ce94b93944bd016564f7b6",
+      "inspector.js": "48aedcc99e9f53e3fffb8448cfe74c3a64945ae229fabf109d6385b74285c348",
+      "nomi-attrezzi.js": "3bbd9562534e0f253bc9eb43efaadb62327c12a98f40aa890b5890f04b324684"
+    }
+  },
+  "ingressi": {
+    "id": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+    "richieste": [
+      {
+        "id": "richiesta-1",
+        "at": 1792072945027,
+        "testo": "Leggi NOTA.md e dimmi cosa dice"
+      },
+      {
+        "id": "richiesta-35",
+        "at": null,
+        "testo": "Riassumi in una riga"
+      },
+      {
+        "id": "richiesta-45",
+        "at": 1792072945812,
+        "testo": "Delega i compiti a due agenti"
+      },
+      {
+        "id": "richiesta-73",
+        "at": 1792072969036,
+        "testo": "Delega ancora un controllo"
+      }
+    ],
+    "inDiretta": [
+      {
+        "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+        "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+        "task": "Conta le righe di NOTA.md",
+        "taskCorto": "Conta le righe di NOTA.md",
+        "avvio": "da-solo",
+        "modello": "lmstudio:finto",
+        "collisioni": [],
+        "conclusa": true,
+        "interrotta": false,
+        "esitoDelega": "concluso",
+        "notaDelega": null,
+        "verdettoDelega": "strutturato",
+        "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+        "evidenzaDelega": {
+          "scritture": 0,
+          "artefatti": 0,
+          "toolCalls": 0,
+          "toolCallsOk": 0,
+          "toolCallsFalliti": 0,
+          "verificabile": false
+        },
+        "avviataAlle": "2026-10-15T14:02:25.852Z",
+        "conclusaAlle": "2026-10-15T14:02:25.993Z",
+        "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+        "approvalPendingCount": 0,
+        "questionPendingCount": 0,
+        "ultimoEsito": "successo",
+        "motivoChiusura": "fine-lavoro",
+        "usageSessione": {
+          "prompt_tokens": 100,
+          "completion_tokens": 20,
+          "cached_tokens": 0,
+          "giri": 1,
+          "esecuzioni": 1,
+          "esecuzioniConCache": 1,
+          "ultimaEsecuzione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          }
+        },
+        "operazioneCorrente": null,
+        "erroreConsegnaDelega": null,
+        "permessi": "Read only",
+        "attivita": {
+          "file": [],
+          "fileTagliati": 0,
+          "attrezzoCorrente": null,
+          "bersaglioCorrente": null,
+          "chiamate": 0,
+          "passi": [
+            {
+              "tipo": "avvio",
+              "attrezzo": null,
+              "percorso": null,
+              "quando": "2026-10-15T14:02:25.867Z"
+            },
+            {
+              "tipo": "fine",
+              "attrezzo": null,
+              "percorso": null,
+              "quando": "2026-10-15T14:02:25.993Z"
+            }
+          ],
+          "passiTagliati": 0
+        },
+        "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+      },
+      {
+        "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+        "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+        "task": "Riassumi NOTA.md in una frase",
+        "taskCorto": "Riassumi NOTA.md in una frase",
+        "avvio": "da-solo",
+        "modello": "lmstudio:finto",
+        "collisioni": [],
+        "conclusa": false,
+        "interrotta": false,
+        "esitoDelega": null,
+        "notaDelega": null,
+        "verdettoDelega": null,
+        "riassuntoDelega": null,
+        "evidenzaDelega": null,
+        "avviataAlle": "2026-10-15T14:02:25.897Z",
+        "conclusaAlle": null,
+        "ultimaAttivitaAlle": "2026-10-15T14:02:25.986Z",
+        "approvalPendingCount": 0,
+        "questionPendingCount": 0,
+        "ultimoEsito": null,
+        "motivoChiusura": null,
+        "usageSessione": null,
+        "operazioneCorrente": {
+          "kind": "response",
+          "status": "running",
+          "label": "Responding",
+          "toolName": null
+        },
+        "erroreConsegnaDelega": null,
+        "permessi": "Read only",
+        "attivita": {
+          "file": [],
+          "fileTagliati": 0,
+          "attrezzoCorrente": null,
+          "bersaglioCorrente": null,
+          "chiamate": 0,
+          "passi": [
+            {
+              "tipo": "avvio",
+              "attrezzo": null,
+              "percorso": null,
+              "quando": "2026-10-15T14:02:25.913Z"
+            }
+          ],
+          "passiTagliati": 0
+        },
+        "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+      },
+      {
+        "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+        "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+        "task": "Controlla la data di consegna in NOTA.md",
+        "taskCorto": "Controlla la data di consegna in NOTA.md",
+        "avvio": "da-solo",
+        "modello": "lmstudio:finto",
+        "collisioni": [],
+        "conclusa": true,
+        "interrotta": false,
+        "esitoDelega": "concluso",
+        "notaDelega": null,
+        "verdettoDelega": "strutturato",
+        "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+        "evidenzaDelega": {
+          "scritture": 0,
+          "artefatti": 0,
+          "toolCalls": 0,
+          "toolCallsOk": 0,
+          "toolCallsFalliti": 0,
+          "verificabile": false
+        },
+        "avviataAlle": "2026-10-15T14:02:49.056Z",
+        "conclusaAlle": "2026-10-15T14:02:49.115Z",
+        "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+        "approvalPendingCount": 0,
+        "questionPendingCount": 0,
+        "ultimoEsito": "successo",
+        "motivoChiusura": "fine-lavoro",
+        "usageSessione": {
+          "prompt_tokens": 100,
+          "completion_tokens": 20,
+          "cached_tokens": 0,
+          "giri": 1,
+          "esecuzioni": 1,
+          "esecuzioniConCache": 1,
+          "ultimaEsecuzione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          }
+        },
+        "operazioneCorrente": null,
+        "erroreConsegnaDelega": null,
+        "permessi": "Read only",
+        "attivita": {
+          "file": [],
+          "fileTagliati": 0,
+          "attrezzoCorrente": null,
+          "bersaglioCorrente": null,
+          "chiamate": 0,
+          "passi": [
+            {
+              "tipo": "avvio",
+              "attrezzo": null,
+              "percorso": null,
+              "quando": "2026-10-15T14:02:49.068Z"
+            },
+            {
+              "tipo": "fine",
+              "attrezzo": null,
+              "percorso": null,
+              "quando": "2026-10-15T14:02:49.115Z"
+            }
+          ],
+          "passiTagliati": 0
+        },
+        "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+      }
+    ]
+  },
+  "nomiAttrezzi": {
+    "elenca": "varie.tools.name.list",
+    "cerca": "varie.tools.name.search",
+    "leggi": "varie.tools.name.read",
+    "scrivi": "varie.tools.name.write",
+    "file_edit": "varie.tools.name.fileEdit",
+    "prova": "varie.tools.name.runTests",
+    "shell": "varie.tools.name.shell",
+    "naviga": "varie.tools.name.browse",
+    "web_search": "varie.tools.name.webSearch",
+    "artifact_create": "varie.tools.name.artifactCreate",
+    "artifact_update": "varie.tools.name.artifactUpdate",
+    "document_create": "varie.tools.name.documentCreate",
+    "generate_image": "varie.tools.name.generateImage",
+    "view_image": "varie.tools.name.viewImage",
+    "local_page": "varie.tools.name.localPage",
+    "delega_sottotask": "varie.tools.name.delegateSubtask",
+    "time_now": "varie.tools.name.timeNow",
+    "ask_user_question": "varie.tools.name.askUserQuestion",
+    "present_plan": "varie.tools.name.presentPlan",
+    "request_plan_mode": "varie.tools.name.requestPlanMode",
+    "workflow_plan_propose": "varie.tools.name.workflowPlanPropose",
+    "workflow_status": "varie.tools.name.workflowStatus",
+    "process_output": "varie.tools.name.processOutput",
+    "workflow_output": "varie.tools.name.workflowOutput",
+    "workflow_control": "varie.tools.name.workflowControl",
+    "automation_list": "varie.tools.name.automationList",
+    "automation_runs": "varie.tools.name.automationRuns",
+    "automation_create": "varie.tools.name.automationCreate",
+    "automation_update": "varie.tools.name.automationUpdate",
+    "automation_pause": "varie.tools.name.automationPause",
+    "automation_resume": "varie.tools.name.automationResume",
+    "automation_run": "varie.tools.name.automationRun",
+    "automation_stop": "varie.tools.name.automationStop",
+    "automation_control": "varie.tools.name.automationControl",
+    "provider_exclusions_list": "varie.tools.name.providerExclusionsList",
+    "provider_exclude": "varie.tools.name.providerExclude",
+    "provider_allow": "varie.tools.name.providerAllow",
+    "chatgpt_account": "varie.tools.name.chatgptAccount",
+    "local_model_window": "varie.tools.name.localModelWindow",
+    "goal_status": "varie.tools.name.goalStatus",
+    "goal_create": "varie.tools.name.goalCreate",
+    "file_changes_undo": "varie.tools.name.fileChangesUndo",
+    "report_problem": "varie.tools.name.reportProblem",
+    "remote_phones": "varie.tools.name.remotePhones",
+    "remote_phone_pair": "varie.tools.name.remotePhonePair",
+    "remote_phone_revoke": "varie.tools.name.remotePhoneRevoke",
+    "remote_phone_folders": "varie.tools.name.remotePhoneFolders",
+    "remote_phone_folder_allow": "varie.tools.name.remotePhoneFolderAllow",
+    "remote_phone_folder_revoke": "varie.tools.name.remotePhoneFolderRevoke",
+    "remote_phone_folder_unblock": "varie.tools.name.remotePhoneFolderUnblock",
+    "remote_control": "varie.tools.name.remoteControl",
+    "remote_device_send_file": "varie.tools.name.remoteDeviceSendFile",
+    "goal_update": "varie.tools.name.goalUpdate",
+    "ask_parent": "varie.tools.name.askParent",
+    "answer_parent_question": "varie.tools.name.answerParentQuestion",
+    "ask_child": "varie.tools.name.askChild",
+    "list_children": "varie.tools.name.listChildren",
+    "stop_child": "varie.tools.name.stopChild",
+    "pause_child": "varie.tools.name.pauseChild",
+    "resume_child": "varie.tools.name.resumeChild",
+    "child_control": "varie.tools.name.childControl",
+    "answer_child_question": "varie.tools.name.answerChildQuestion",
+    "tool_create": "varie.tools.name.toolCreate",
+    "library_list": "varie.tools.name.libraryList",
+    "library_search": "varie.tools.name.librarySearch",
+    "library_find": "varie.tools.name.libraryFind",
+    "library_read": "varie.tools.name.libraryRead",
+    "library_file_origin": "varie.tools.name.libraryFileOrigin",
+    "library_rename": "varie.tools.name.libraryRename",
+    "library_delete": "varie.tools.name.libraryDelete",
+    "library_export": "varie.tools.name.libraryExport",
+    "library_context_policy_update": "varie.tools.name.libraryContextPolicyUpdate",
+    "notes_list": "varie.tools.name.notesList",
+    "notes_search": "varie.tools.name.notesSearch",
+    "notes_find": "varie.tools.name.notesFind",
+    "notes_read": "varie.tools.name.notesRead",
+    "notes_create": "varie.tools.name.notesCreate",
+    "notes_update": "varie.tools.name.notesUpdate",
+    "notes_delete": "varie.tools.name.notesDelete",
+    "tasks_list": "varie.tools.name.tasksList",
+    "tasks_search": "varie.tools.name.tasksSearch",
+    "tasks_find": "varie.tools.name.tasksFind",
+    "tasks_create": "varie.tools.name.tasksCreate",
+    "tasks_complete": "varie.tools.name.tasksComplete",
+    "tasks_update": "varie.tools.name.tasksUpdate",
+    "tasks_delete": "varie.tools.name.tasksDelete",
+    "memory_list": "varie.tools.name.memoryList",
+    "memory_search": "varie.tools.name.memorySearch",
+    "memory_find": "varie.tools.name.memoryFind",
+    "memory_write": "varie.tools.name.memoryWrite",
+    "memory_update": "varie.tools.name.memoryUpdate",
+    "memory_delete": "varie.tools.name.memoryDelete",
+    "research_list": "varie.tools.name.researchList",
+    "research_search": "varie.tools.name.researchSearch",
+    "research_find": "varie.tools.name.researchFind",
+    "conversation_search": "varie.tools.name.conversationSearch",
+    "tool_search": "varie.tools.name.toolSearch",
+    "tool_describe": "varie.tools.name.toolDescribe",
+    "tool_call": "varie.tools.name.toolCall",
+    "research_start": "varie.tools.name.researchStart",
+    "research_read": "varie.tools.name.researchRead",
+    "research_rename": "varie.tools.name.researchRename",
+    "research_control": "varie.tools.name.researchControl",
+    "research_pause": "varie.tools.name.researchPause",
+    "research_resume": "varie.tools.name.researchResume",
+    "research_cancel": "varie.tools.name.researchCancel",
+    "research_delete": "varie.tools.name.researchDelete",
+    "research_deposit": "varie.tools.name.researchDeposit"
+  },
+  "casi": {
+    "vivo": {
+      "corrente": {
+        "sessionId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+        "taskId": "libero:full-access",
+        "progetto": "progetto",
+        "nome": "Leggi NOTA.md e dimmi cosa dice",
+        "avviataAlle": "2026-10-15T14:02:24.891Z",
+        "ultimaRispostaAlle": "2026-10-15T14:02:49.187Z",
+        "conclusa": true,
+        "forkDa": null,
+        "modello": "lmstudio:finto",
+        "modelloPlanner": null,
+        "reasoning": null,
+        "permessi": "Full access",
+        "modalitaOperativa": "normale",
+        "usavaModalitaWorkflow": false,
+        "permessiPerAttrezzo": {},
+        "inAttesaDomanda": false,
+        "inAttesaRichiestaMcp": false,
+        "inAttesaPiano": false,
+        "inAttesaDiscendente": false,
+        "provider": "cloud",
+        "runtimeId": null,
+        "modelId": "lmstudio:finto",
+        "fallbackProvider": null,
+        "fallbackProviders": [],
+        "padreId": null,
+        "profonditaDelega": 0,
+        "avvioDelega": null,
+        "passoWorkflow": null,
+        "taskDelega": null,
+        "interrotta": false,
+        "sequenzaAlRipristino": null,
+        "inAttesaApprovazione": false,
+        "inAttesaApprovazioneDaMs": null,
+        "ultimoEsito": "successo",
+        "motivoChiusura": "fine-lavoro",
+        "usage": {
+          "prompt_tokens": 300,
+          "completion_tokens": 60,
+          "cached_tokens": 0,
+          "giri": 3
+        },
+        "usageSessione": {
+          "prompt_tokens": 900,
+          "completion_tokens": 180,
+          "cached_tokens": 0,
+          "giri": 9,
+          "esecuzioni": 5,
+          "esecuzioniConCache": 5,
+          "ultimaEsecuzione": {
+            "prompt_tokens": 300,
+            "completion_tokens": 60,
+            "cached_tokens": 0,
+            "giri": 3
+          }
+        },
+        "cacheSessione": {
+          "percentuale": null,
+          "tokenIngresso": null,
+          "tokenDaCache": null,
+          "giriMisurati": 0,
+          "giriNonMisurati": 9,
+          "fonte": "consumo-fornitore"
+        },
+        "giriFermati": 0
+      },
+      "sessioni": [
+        {
+          "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:49.056Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:49.113Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Controlla la data di consegna in NOTA.md",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:25.897Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:26.023Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Riassumi NOTA.md in una frase",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:25.852Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:25.990Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Conta le righe di NOTA.md",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "taskId": "libero:full-access",
+          "progetto": "progetto",
+          "nome": "Leggi NOTA.md e dimmi cosa dice",
+          "avviataAlle": "2026-10-15T14:02:24.891Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:49.187Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Full access",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": null,
+          "profonditaDelega": 0,
+          "avvioDelega": null,
+          "passoWorkflow": null,
+          "taskDelega": null,
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 300,
+            "completion_tokens": 60,
+            "cached_tokens": 0,
+            "giri": 3
+          },
+          "usageSessione": {
+            "prompt_tokens": 900,
+            "completion_tokens": 180,
+            "cached_tokens": 0,
+            "giri": 9,
+            "esecuzioni": 5,
+            "esecuzioniConCache": 5,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 300,
+              "completion_tokens": 60,
+              "cached_tokens": 0,
+              "giri": 3
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 9,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Conta le righe di NOTA.md",
+          "taskCorto": "Conta le righe di NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:25.852Z",
+          "conclusaAlle": "2026-10-15T14:02:25.993Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.867Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.993Z"
+              }
+            ],
+            "passiTagliati": 0
+          },
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+        },
+        {
+          "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Riassumi NOTA.md in una frase",
+          "taskCorto": "Riassumi NOTA.md in una frase",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": false,
+          "interrotta": false,
+          "esitoDelega": null,
+          "notaDelega": null,
+          "verdettoDelega": null,
+          "riassuntoDelega": null,
+          "evidenzaDelega": null,
+          "avviataAlle": "2026-10-15T14:02:25.897Z",
+          "conclusaAlle": null,
+          "ultimaAttivitaAlle": "2026-10-15T14:02:25.986Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": null,
+          "motivoChiusura": null,
+          "usageSessione": null,
+          "operazioneCorrente": {
+            "kind": "response",
+            "status": "running",
+            "label": "Responding",
+            "toolName": null
+          },
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.913Z"
+              }
+            ],
+            "passiTagliati": 0
+          },
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+        },
+        {
+          "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Controlla la data di consegna in NOTA.md",
+          "taskCorto": "Controlla la data di consegna in NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:49.056Z",
+          "conclusaAlle": "2026-10-15T14:02:49.115Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.068Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.115Z"
+              }
+            ],
+            "passiTagliati": 0
+          },
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+        }
+      ],
+      "figli": [
+        {
+          "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Conta le righe di NOTA.md",
+          "taskCorto": "Conta le righe di NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:25.852Z",
+          "conclusaAlle": "2026-10-15T14:02:25.993Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.867Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.993Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        },
+        {
+          "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Riassumi NOTA.md in una frase",
+          "taskCorto": "Riassumi NOTA.md in una frase",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:25.897Z",
+          "conclusaAlle": "2026-10-15T14:02:26.025Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.913Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:26.025Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        },
+        {
+          "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Controlla la data di consegna in NOTA.md",
+          "taskCorto": "Controlla la data di consegna in NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:49.056Z",
+          "conclusaAlle": "2026-10-15T14:02:49.115Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.068Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.115Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        }
+      ],
+      "richieste": [
+        {
+          "id": "richiesta-1",
+          "at": 1792072945027,
+          "testo": "Leggi NOTA.md e dimmi cosa dice"
+        },
+        {
+          "id": "richiesta-45",
+          "at": 1792072945812,
+          "testo": "Delega i compiti a due agenti"
+        },
+        {
+          "id": "richiesta-73",
+          "at": 1792072969036,
+          "testo": "Delega ancora un controllo"
+        }
+      ]
+    },
+    "soloElenco": {
+      "corrente": {
+        "sessionId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+        "taskId": "libero:full-access",
+        "progetto": "progetto",
+        "nome": "Leggi NOTA.md e dimmi cosa dice",
+        "avviataAlle": "2026-10-15T14:02:24.891Z",
+        "ultimaRispostaAlle": "2026-10-15T14:02:49.187Z",
+        "conclusa": true,
+        "forkDa": null,
+        "modello": "lmstudio:finto",
+        "modelloPlanner": null,
+        "reasoning": null,
+        "permessi": "Full access",
+        "modalitaOperativa": "normale",
+        "usavaModalitaWorkflow": false,
+        "permessiPerAttrezzo": {},
+        "inAttesaDomanda": false,
+        "inAttesaRichiestaMcp": false,
+        "inAttesaPiano": false,
+        "inAttesaDiscendente": false,
+        "provider": "cloud",
+        "runtimeId": null,
+        "modelId": "lmstudio:finto",
+        "fallbackProvider": null,
+        "fallbackProviders": [],
+        "padreId": null,
+        "profonditaDelega": 0,
+        "avvioDelega": null,
+        "passoWorkflow": null,
+        "taskDelega": null,
+        "interrotta": false,
+        "sequenzaAlRipristino": null,
+        "inAttesaApprovazione": false,
+        "inAttesaApprovazioneDaMs": null,
+        "ultimoEsito": "successo",
+        "motivoChiusura": "fine-lavoro",
+        "usage": {
+          "prompt_tokens": 300,
+          "completion_tokens": 60,
+          "cached_tokens": 0,
+          "giri": 3
+        },
+        "usageSessione": {
+          "prompt_tokens": 900,
+          "completion_tokens": 180,
+          "cached_tokens": 0,
+          "giri": 9,
+          "esecuzioni": 5,
+          "esecuzioniConCache": 5,
+          "ultimaEsecuzione": {
+            "prompt_tokens": 300,
+            "completion_tokens": 60,
+            "cached_tokens": 0,
+            "giri": 3
+          }
+        },
+        "cacheSessione": {
+          "percentuale": null,
+          "tokenIngresso": null,
+          "tokenDaCache": null,
+          "giriMisurati": 0,
+          "giriNonMisurati": 9,
+          "fonte": "consumo-fornitore"
+        },
+        "giriFermati": 0
+      },
+      "sessioni": [
+        {
+          "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:49.056Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:49.113Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Controlla la data di consegna in NOTA.md",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:25.897Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:26.023Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Riassumi NOTA.md in una frase",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:25.852Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:25.990Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Conta le righe di NOTA.md",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "taskId": "libero:full-access",
+          "progetto": "progetto",
+          "nome": "Leggi NOTA.md e dimmi cosa dice",
+          "avviataAlle": "2026-10-15T14:02:24.891Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:49.187Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Full access",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": null,
+          "profonditaDelega": 0,
+          "avvioDelega": null,
+          "passoWorkflow": null,
+          "taskDelega": null,
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 300,
+            "completion_tokens": 60,
+            "cached_tokens": 0,
+            "giri": 3
+          },
+          "usageSessione": {
+            "prompt_tokens": 900,
+            "completion_tokens": 180,
+            "cached_tokens": 0,
+            "giri": 9,
+            "esecuzioni": 5,
+            "esecuzioniConCache": 5,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 300,
+              "completion_tokens": 60,
+              "cached_tokens": 0,
+              "giri": 3
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 9,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        }
+      ],
+      "figli": [
+        {
+          "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Conta le righe di NOTA.md",
+          "taskCorto": "Conta le righe di NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:25.852Z",
+          "conclusaAlle": "2026-10-15T14:02:25.993Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.867Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.993Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        },
+        {
+          "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Riassumi NOTA.md in una frase",
+          "taskCorto": "Riassumi NOTA.md in una frase",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:25.897Z",
+          "conclusaAlle": "2026-10-15T14:02:26.025Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.913Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:26.025Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        },
+        {
+          "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Controlla la data di consegna in NOTA.md",
+          "taskCorto": "Controlla la data di consegna in NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:49.056Z",
+          "conclusaAlle": "2026-10-15T14:02:49.115Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.068Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.115Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        }
+      ],
+      "richieste": [
+        {
+          "id": "richiesta-1",
+          "at": 1792072945027,
+          "testo": "Leggi NOTA.md e dimmi cosa dice"
+        },
+        {
+          "id": "richiesta-45",
+          "at": 1792072945812,
+          "testo": "Delega i compiti a due agenti"
+        },
+        {
+          "id": "richiesta-73",
+          "at": 1792072969036,
+          "testo": "Delega ancora un controllo"
+        }
+      ]
+    },
+    "senzaRichieste": {
+      "corrente": {
+        "sessionId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+        "taskId": "libero:full-access",
+        "progetto": "progetto",
+        "nome": "Leggi NOTA.md e dimmi cosa dice",
+        "avviataAlle": "2026-10-15T14:02:24.891Z",
+        "ultimaRispostaAlle": "2026-10-15T14:02:49.187Z",
+        "conclusa": true,
+        "forkDa": null,
+        "modello": "lmstudio:finto",
+        "modelloPlanner": null,
+        "reasoning": null,
+        "permessi": "Full access",
+        "modalitaOperativa": "normale",
+        "usavaModalitaWorkflow": false,
+        "permessiPerAttrezzo": {},
+        "inAttesaDomanda": false,
+        "inAttesaRichiestaMcp": false,
+        "inAttesaPiano": false,
+        "inAttesaDiscendente": false,
+        "provider": "cloud",
+        "runtimeId": null,
+        "modelId": "lmstudio:finto",
+        "fallbackProvider": null,
+        "fallbackProviders": [],
+        "padreId": null,
+        "profonditaDelega": 0,
+        "avvioDelega": null,
+        "passoWorkflow": null,
+        "taskDelega": null,
+        "interrotta": false,
+        "sequenzaAlRipristino": null,
+        "inAttesaApprovazione": false,
+        "inAttesaApprovazioneDaMs": null,
+        "ultimoEsito": "successo",
+        "motivoChiusura": "fine-lavoro",
+        "usage": {
+          "prompt_tokens": 300,
+          "completion_tokens": 60,
+          "cached_tokens": 0,
+          "giri": 3
+        },
+        "usageSessione": {
+          "prompt_tokens": 900,
+          "completion_tokens": 180,
+          "cached_tokens": 0,
+          "giri": 9,
+          "esecuzioni": 5,
+          "esecuzioniConCache": 5,
+          "ultimaEsecuzione": {
+            "prompt_tokens": 300,
+            "completion_tokens": 60,
+            "cached_tokens": 0,
+            "giri": 3
+          }
+        },
+        "cacheSessione": {
+          "percentuale": null,
+          "tokenIngresso": null,
+          "tokenDaCache": null,
+          "giriMisurati": 0,
+          "giriNonMisurati": 9,
+          "fonte": "consumo-fornitore"
+        },
+        "giriFermati": 0
+      },
+      "sessioni": [
+        {
+          "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:49.056Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:49.113Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Controlla la data di consegna in NOTA.md",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:25.897Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:26.023Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Riassumi NOTA.md in una frase",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:25.852Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:25.990Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Conta le righe di NOTA.md",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "taskId": "libero:full-access",
+          "progetto": "progetto",
+          "nome": "Leggi NOTA.md e dimmi cosa dice",
+          "avviataAlle": "2026-10-15T14:02:24.891Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:49.187Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Full access",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": null,
+          "profonditaDelega": 0,
+          "avvioDelega": null,
+          "passoWorkflow": null,
+          "taskDelega": null,
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 300,
+            "completion_tokens": 60,
+            "cached_tokens": 0,
+            "giri": 3
+          },
+          "usageSessione": {
+            "prompt_tokens": 900,
+            "completion_tokens": 180,
+            "cached_tokens": 0,
+            "giri": 9,
+            "esecuzioni": 5,
+            "esecuzioniConCache": 5,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 300,
+              "completion_tokens": 60,
+              "cached_tokens": 0,
+              "giri": 3
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 9,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Conta le righe di NOTA.md",
+          "taskCorto": "Conta le righe di NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:25.852Z",
+          "conclusaAlle": "2026-10-15T14:02:25.993Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.867Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.993Z"
+              }
+            ],
+            "passiTagliati": 0
+          },
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+        },
+        {
+          "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Riassumi NOTA.md in una frase",
+          "taskCorto": "Riassumi NOTA.md in una frase",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": false,
+          "interrotta": false,
+          "esitoDelega": null,
+          "notaDelega": null,
+          "verdettoDelega": null,
+          "riassuntoDelega": null,
+          "evidenzaDelega": null,
+          "avviataAlle": "2026-10-15T14:02:25.897Z",
+          "conclusaAlle": null,
+          "ultimaAttivitaAlle": "2026-10-15T14:02:25.986Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": null,
+          "motivoChiusura": null,
+          "usageSessione": null,
+          "operazioneCorrente": {
+            "kind": "response",
+            "status": "running",
+            "label": "Responding",
+            "toolName": null
+          },
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.913Z"
+              }
+            ],
+            "passiTagliati": 0
+          },
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+        },
+        {
+          "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Controlla la data di consegna in NOTA.md",
+          "taskCorto": "Controlla la data di consegna in NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:49.056Z",
+          "conclusaAlle": "2026-10-15T14:02:49.115Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.068Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.115Z"
+              }
+            ],
+            "passiTagliati": 0
+          },
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+        }
+      ],
+      "figli": [
+        {
+          "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Conta le righe di NOTA.md",
+          "taskCorto": "Conta le righe di NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:25.852Z",
+          "conclusaAlle": "2026-10-15T14:02:25.993Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.867Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.993Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        },
+        {
+          "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Riassumi NOTA.md in una frase",
+          "taskCorto": "Riassumi NOTA.md in una frase",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:25.897Z",
+          "conclusaAlle": "2026-10-15T14:02:26.025Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.913Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:26.025Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        },
+        {
+          "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Controlla la data di consegna in NOTA.md",
+          "taskCorto": "Controlla la data di consegna in NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:49.056Z",
+          "conclusaAlle": "2026-10-15T14:02:49.115Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.068Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.115Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        }
+      ],
+      "richieste": []
+    },
+    "alLavoro": {
+      "corrente": {
+        "sessionId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+        "taskId": "libero:full-access",
+        "progetto": "progetto",
+        "nome": "Leggi NOTA.md e dimmi cosa dice",
+        "avviataAlle": "2026-10-15T14:02:24.891Z",
+        "ultimaRispostaAlle": "2026-10-15T14:02:49.187Z",
+        "conclusa": true,
+        "forkDa": null,
+        "modello": "lmstudio:finto",
+        "modelloPlanner": null,
+        "reasoning": null,
+        "permessi": "Full access",
+        "modalitaOperativa": "normale",
+        "usavaModalitaWorkflow": false,
+        "permessiPerAttrezzo": {},
+        "inAttesaDomanda": false,
+        "inAttesaRichiestaMcp": false,
+        "inAttesaPiano": false,
+        "inAttesaDiscendente": false,
+        "provider": "cloud",
+        "runtimeId": null,
+        "modelId": "lmstudio:finto",
+        "fallbackProvider": null,
+        "fallbackProviders": [],
+        "padreId": null,
+        "profonditaDelega": 0,
+        "avvioDelega": null,
+        "passoWorkflow": null,
+        "taskDelega": null,
+        "interrotta": false,
+        "sequenzaAlRipristino": null,
+        "inAttesaApprovazione": false,
+        "inAttesaApprovazioneDaMs": null,
+        "ultimoEsito": "successo",
+        "motivoChiusura": "fine-lavoro",
+        "usage": {
+          "prompt_tokens": 300,
+          "completion_tokens": 60,
+          "cached_tokens": 0,
+          "giri": 3
+        },
+        "usageSessione": {
+          "prompt_tokens": 900,
+          "completion_tokens": 180,
+          "cached_tokens": 0,
+          "giri": 9,
+          "esecuzioni": 5,
+          "esecuzioniConCache": 5,
+          "ultimaEsecuzione": {
+            "prompt_tokens": 300,
+            "completion_tokens": 60,
+            "cached_tokens": 0,
+            "giri": 3
+          }
+        },
+        "cacheSessione": {
+          "percentuale": null,
+          "tokenIngresso": null,
+          "tokenDaCache": null,
+          "giriMisurati": 0,
+          "giriNonMisurati": 9,
+          "fonte": "consumo-fornitore"
+        },
+        "giriFermati": 0
+      },
+      "sessioni": [
+        {
+          "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:49.056Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:49.113Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Controlla la data di consegna in NOTA.md",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:25.897Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:26.023Z",
+          "conclusa": false,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Riassumi NOTA.md in una frase",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0,
+          "approvalPendingCount": 1
+        },
+        {
+          "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+          "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "progetto": null,
+          "nome": null,
+          "avviataAlle": "2026-10-15T14:02:25.852Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:25.990Z",
+          "conclusa": false,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Read only",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "profonditaDelega": 1,
+          "avvioDelega": "da-solo",
+          "passoWorkflow": null,
+          "taskDelega": "Conta le righe di NOTA.md",
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1
+          },
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 1,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "taskId": "libero:full-access",
+          "progetto": "progetto",
+          "nome": "Leggi NOTA.md e dimmi cosa dice",
+          "avviataAlle": "2026-10-15T14:02:24.891Z",
+          "ultimaRispostaAlle": "2026-10-15T14:02:49.187Z",
+          "conclusa": true,
+          "forkDa": null,
+          "modello": "lmstudio:finto",
+          "modelloPlanner": null,
+          "reasoning": null,
+          "permessi": "Full access",
+          "modalitaOperativa": "normale",
+          "usavaModalitaWorkflow": false,
+          "permessiPerAttrezzo": {},
+          "inAttesaDomanda": false,
+          "inAttesaRichiestaMcp": false,
+          "inAttesaPiano": false,
+          "inAttesaDiscendente": false,
+          "provider": "cloud",
+          "runtimeId": null,
+          "modelId": "lmstudio:finto",
+          "fallbackProvider": null,
+          "fallbackProviders": [],
+          "padreId": null,
+          "profonditaDelega": 0,
+          "avvioDelega": null,
+          "passoWorkflow": null,
+          "taskDelega": null,
+          "interrotta": false,
+          "sequenzaAlRipristino": null,
+          "inAttesaApprovazione": false,
+          "inAttesaApprovazioneDaMs": null,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usage": {
+            "prompt_tokens": 300,
+            "completion_tokens": 60,
+            "cached_tokens": 0,
+            "giri": 3
+          },
+          "usageSessione": {
+            "prompt_tokens": 900,
+            "completion_tokens": 180,
+            "cached_tokens": 0,
+            "giri": 9,
+            "esecuzioni": 5,
+            "esecuzioniConCache": 5,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 300,
+              "completion_tokens": 60,
+              "cached_tokens": 0,
+              "giri": 3
+            }
+          },
+          "cacheSessione": {
+            "percentuale": null,
+            "tokenIngresso": null,
+            "tokenDaCache": null,
+            "giriMisurati": 0,
+            "giriNonMisurati": 9,
+            "fonte": "consumo-fornitore"
+          },
+          "giriFermati": 0
+        },
+        {
+          "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Conta le righe di NOTA.md",
+          "taskCorto": "Conta le righe di NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": false,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:25.852Z",
+          "conclusaAlle": "2026-10-15T14:02:25.993Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.867Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.993Z"
+              }
+            ],
+            "passiTagliati": 0
+          },
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+        },
+        {
+          "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Riassumi NOTA.md in una frase",
+          "taskCorto": "Riassumi NOTA.md in una frase",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": false,
+          "interrotta": false,
+          "esitoDelega": null,
+          "notaDelega": null,
+          "verdettoDelega": null,
+          "riassuntoDelega": null,
+          "evidenzaDelega": null,
+          "avviataAlle": "2026-10-15T14:02:25.897Z",
+          "conclusaAlle": null,
+          "ultimaAttivitaAlle": "2026-10-15T14:02:25.986Z",
+          "approvalPendingCount": 1,
+          "questionPendingCount": 0,
+          "ultimoEsito": null,
+          "motivoChiusura": null,
+          "usageSessione": null,
+          "operazioneCorrente": {
+            "kind": "response",
+            "status": "running",
+            "label": "Responding",
+            "toolName": null
+          },
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.913Z"
+              }
+            ],
+            "passiTagliati": 0
+          },
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+        },
+        {
+          "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Controlla la data di consegna in NOTA.md",
+          "taskCorto": "Controlla la data di consegna in NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:49.056Z",
+          "conclusaAlle": "2026-10-15T14:02:49.115Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.068Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.115Z"
+              }
+            ],
+            "passiTagliati": 0
+          },
+          "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c"
+        }
+      ],
+      "figli": [
+        {
+          "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Conta le righe di NOTA.md",
+          "taskCorto": "Conta le righe di NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": false,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:25.852Z",
+          "conclusaAlle": "2026-10-15T14:02:25.993Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.867Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.993Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        },
+        {
+          "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Riassumi NOTA.md in una frase",
+          "taskCorto": "Riassumi NOTA.md in una frase",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": false,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:25.897Z",
+          "conclusaAlle": "2026-10-15T14:02:26.025Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+          "approvalPendingCount": 1,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:25.913Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:26.025Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        },
+        {
+          "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+          "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+          "task": "Controlla la data di consegna in NOTA.md",
+          "taskCorto": "Controlla la data di consegna in NOTA.md",
+          "avvio": "da-solo",
+          "modello": "lmstudio:finto",
+          "collisioni": [],
+          "conclusa": true,
+          "interrotta": false,
+          "esitoDelega": "concluso",
+          "notaDelega": null,
+          "verdettoDelega": "strutturato",
+          "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+          "evidenzaDelega": {
+            "scritture": 0,
+            "artefatti": 0,
+            "toolCalls": 0,
+            "toolCallsOk": 0,
+            "toolCallsFalliti": 0,
+            "verificabile": false
+          },
+          "avviataAlle": "2026-10-15T14:02:49.056Z",
+          "conclusaAlle": "2026-10-15T14:02:49.115Z",
+          "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+          "approvalPendingCount": 0,
+          "questionPendingCount": 0,
+          "ultimoEsito": "successo",
+          "motivoChiusura": "fine-lavoro",
+          "usageSessione": {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "cached_tokens": 0,
+            "giri": 1,
+            "esecuzioni": 1,
+            "esecuzioniConCache": 1,
+            "ultimaEsecuzione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            }
+          },
+          "operazioneCorrente": null,
+          "erroreConsegnaDelega": null,
+          "permessi": "Read only",
+          "attivita": {
+            "file": [],
+            "fileTagliati": 0,
+            "attrezzoCorrente": null,
+            "bersaglioCorrente": null,
+            "chiamate": 0,
+            "passi": [
+              {
+                "tipo": "avvio",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.068Z"
+              },
+              {
+                "tipo": "fine",
+                "attrezzo": null,
+                "percorso": null,
+                "quando": "2026-10-15T14:02:49.115Z"
+              }
+            ],
+            "passiTagliati": 0
+          }
+        }
+      ],
+      "richieste": [
+        {
+          "id": "richiesta-1",
+          "at": 1792072945027,
+          "testo": "Leggi NOTA.md e dimmi cosa dice"
+        },
+        {
+          "id": "richiesta-45",
+          "at": 1792072945812,
+          "testo": "Delega i compiti a due agenti"
+        },
+        {
+          "id": "richiesta-73",
+          "at": 1792072969036,
+          "testo": "Delega ancora un controllo"
+        }
+      ]
+    }
+  },
+  "esiti": [
+    {
+      "lingua": "it",
+      "vivo": {
+        "agenti": [
+          {
+            "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Controlla la data di consegna in NOTA.md",
+            "taskCorto": "Controlla la data di consegna in NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:49.056Z",
+            "conclusaAlle": "2026-10-15T14:02:49.115Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.068Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.115Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-73",
+              "at": "2026-10-15T14:02:49.036Z",
+              "testo": "Delega ancora un controllo",
+              "corrente": true
+            }
+          },
+          {
+            "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Riassumi NOTA.md in una frase",
+            "taskCorto": "Riassumi NOTA.md in una frase",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.897Z",
+            "conclusaAlle": "2026-10-15T14:02:26.025Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.913Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:26.025Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          },
+          {
+            "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Conta le righe di NOTA.md",
+            "taskCorto": "Conta le righe di NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.852Z",
+            "conclusaAlle": "2026-10-15T14:02:25.993Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.867Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.993Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          }
+        ],
+        "attivi": 0,
+        "conti": {
+          "richiesta-73": {
+            "totale": 1,
+            "terminati": 1,
+            "daControllare": 0
+          },
+          "richiesta-45": {
+            "totale": 2,
+            "terminati": 2,
+            "daControllare": 0
+          }
+        }
+      },
+      "soloElenco": {
+        "agenti": [
+          {
+            "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+            "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "progetto": null,
+            "nome": null,
+            "avviataAlle": "2026-10-15T14:02:49.056Z",
+            "ultimaRispostaAlle": "2026-10-15T14:02:49.113Z",
+            "conclusa": true,
+            "forkDa": null,
+            "modello": "lmstudio:finto",
+            "modelloPlanner": null,
+            "reasoning": null,
+            "permessi": "Read only",
+            "modalitaOperativa": "normale",
+            "usavaModalitaWorkflow": false,
+            "permessiPerAttrezzo": {},
+            "inAttesaDomanda": false,
+            "inAttesaRichiestaMcp": false,
+            "inAttesaPiano": false,
+            "inAttesaDiscendente": false,
+            "provider": "cloud",
+            "runtimeId": null,
+            "modelId": "lmstudio:finto",
+            "fallbackProvider": null,
+            "fallbackProviders": [],
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "profonditaDelega": 1,
+            "avvioDelega": "da-solo",
+            "passoWorkflow": null,
+            "taskDelega": "Controlla la data di consegna in NOTA.md",
+            "interrotta": false,
+            "sequenzaAlRipristino": null,
+            "inAttesaApprovazione": false,
+            "inAttesaApprovazioneDaMs": null,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            },
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "cacheSessione": {
+              "percentuale": null,
+              "tokenIngresso": null,
+              "tokenDaCache": null,
+              "giriMisurati": 0,
+              "giriNonMisurati": 1,
+              "fonte": "consumo-fornitore"
+            },
+            "giriFermati": 0,
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Controlla la data di consegna in NOTA.md",
+            "taskCorto": "Controlla la data di consegna in NOTA.md",
+            "avvio": "da-solo",
+            "collisioni": [],
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "conclusaAlle": "2026-10-15T14:02:49.115Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.068Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.115Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-73",
+              "at": "2026-10-15T14:02:49.036Z",
+              "testo": "Delega ancora un controllo",
+              "corrente": true
+            }
+          },
+          {
+            "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+            "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "progetto": null,
+            "nome": null,
+            "avviataAlle": "2026-10-15T14:02:25.897Z",
+            "ultimaRispostaAlle": "2026-10-15T14:02:26.023Z",
+            "conclusa": true,
+            "forkDa": null,
+            "modello": "lmstudio:finto",
+            "modelloPlanner": null,
+            "reasoning": null,
+            "permessi": "Read only",
+            "modalitaOperativa": "normale",
+            "usavaModalitaWorkflow": false,
+            "permessiPerAttrezzo": {},
+            "inAttesaDomanda": false,
+            "inAttesaRichiestaMcp": false,
+            "inAttesaPiano": false,
+            "inAttesaDiscendente": false,
+            "provider": "cloud",
+            "runtimeId": null,
+            "modelId": "lmstudio:finto",
+            "fallbackProvider": null,
+            "fallbackProviders": [],
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "profonditaDelega": 1,
+            "avvioDelega": "da-solo",
+            "passoWorkflow": null,
+            "taskDelega": "Riassumi NOTA.md in una frase",
+            "interrotta": false,
+            "sequenzaAlRipristino": null,
+            "inAttesaApprovazione": false,
+            "inAttesaApprovazioneDaMs": null,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            },
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "cacheSessione": {
+              "percentuale": null,
+              "tokenIngresso": null,
+              "tokenDaCache": null,
+              "giriMisurati": 0,
+              "giriNonMisurati": 1,
+              "fonte": "consumo-fornitore"
+            },
+            "giriFermati": 0,
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Riassumi NOTA.md in una frase",
+            "taskCorto": "Riassumi NOTA.md in una frase",
+            "avvio": "da-solo",
+            "collisioni": [],
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "conclusaAlle": "2026-10-15T14:02:26.025Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.913Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:26.025Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          },
+          {
+            "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+            "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "progetto": null,
+            "nome": null,
+            "avviataAlle": "2026-10-15T14:02:25.852Z",
+            "ultimaRispostaAlle": "2026-10-15T14:02:25.990Z",
+            "conclusa": true,
+            "forkDa": null,
+            "modello": "lmstudio:finto",
+            "modelloPlanner": null,
+            "reasoning": null,
+            "permessi": "Read only",
+            "modalitaOperativa": "normale",
+            "usavaModalitaWorkflow": false,
+            "permessiPerAttrezzo": {},
+            "inAttesaDomanda": false,
+            "inAttesaRichiestaMcp": false,
+            "inAttesaPiano": false,
+            "inAttesaDiscendente": false,
+            "provider": "cloud",
+            "runtimeId": null,
+            "modelId": "lmstudio:finto",
+            "fallbackProvider": null,
+            "fallbackProviders": [],
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "profonditaDelega": 1,
+            "avvioDelega": "da-solo",
+            "passoWorkflow": null,
+            "taskDelega": "Conta le righe di NOTA.md",
+            "interrotta": false,
+            "sequenzaAlRipristino": null,
+            "inAttesaApprovazione": false,
+            "inAttesaApprovazioneDaMs": null,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            },
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "cacheSessione": {
+              "percentuale": null,
+              "tokenIngresso": null,
+              "tokenDaCache": null,
+              "giriMisurati": 0,
+              "giriNonMisurati": 1,
+              "fonte": "consumo-fornitore"
+            },
+            "giriFermati": 0,
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Conta le righe di NOTA.md",
+            "taskCorto": "Conta le righe di NOTA.md",
+            "avvio": "da-solo",
+            "collisioni": [],
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "conclusaAlle": "2026-10-15T14:02:25.993Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.867Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.993Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          }
+        ],
+        "attivi": 0,
+        "conti": {
+          "richiesta-73": {
+            "totale": 1,
+            "terminati": 1,
+            "daControllare": 0
+          },
+          "richiesta-45": {
+            "totale": 2,
+            "terminati": 2,
+            "daControllare": 0
+          }
+        }
+      },
+      "senzaRichieste": {
+        "agenti": [
+          {
+            "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Controlla la data di consegna in NOTA.md",
+            "taskCorto": "Controlla la data di consegna in NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:49.056Z",
+            "conclusaAlle": "2026-10-15T14:02:49.115Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.068Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.115Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": null
+          },
+          {
+            "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Riassumi NOTA.md in una frase",
+            "taskCorto": "Riassumi NOTA.md in una frase",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.897Z",
+            "conclusaAlle": "2026-10-15T14:02:26.025Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.913Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:26.025Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": null
+          },
+          {
+            "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Conta le righe di NOTA.md",
+            "taskCorto": "Conta le righe di NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.852Z",
+            "conclusaAlle": "2026-10-15T14:02:25.993Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.867Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.993Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": null
+          }
+        ],
+        "attivi": 0,
+        "conti": {
+          "(senza)": {
+            "totale": 3,
+            "terminati": 3,
+            "daControllare": 0
+          }
+        }
+      },
+      "alLavoro": {
+        "agenti": [
+          {
+            "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Controlla la data di consegna in NOTA.md",
+            "taskCorto": "Controlla la data di consegna in NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:49.056Z",
+            "conclusaAlle": "2026-10-15T14:02:49.115Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.068Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.115Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-73",
+              "at": "2026-10-15T14:02:49.036Z",
+              "testo": "Delega ancora un controllo",
+              "corrente": true
+            }
+          },
+          {
+            "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Riassumi NOTA.md in una frase",
+            "taskCorto": "Riassumi NOTA.md in una frase",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": false,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.897Z",
+            "conclusaAlle": "2026-10-15T14:02:26.025Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+            "approvalPendingCount": 1,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.913Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:26.025Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          },
+          {
+            "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Conta le righe di NOTA.md",
+            "taskCorto": "Conta le righe di NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": false,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.852Z",
+            "conclusaAlle": "2026-10-15T14:02:25.993Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.867Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.993Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          }
+        ],
+        "attivi": 1,
+        "conti": {
+          "richiesta-73": {
+            "totale": 1,
+            "terminati": 1,
+            "daControllare": 0
+          },
+          "richiesta-45": {
+            "totale": 2,
+            "terminati": 0,
+            "daControllare": 0
+          }
+        }
+      },
+      "stati": {
+        "singoli": [
+          {
+            "stato": "pending",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "running",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "waiting_human",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "waiting_human",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "waiting_human",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "waiting_human",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "cancelled",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "cancelled",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "succeeded",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "failed",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "failed",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "failed",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "uncertain",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "uncertain",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "failed",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "pending",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          }
+        ],
+        "tutti": {
+          "totale": 16,
+          "terminati": 7,
+          "daControllare": 6
+        },
+        "vuoto": {
+          "totale": 0,
+          "terminati": 0,
+          "daControllare": 0
+        }
+      },
+      "nomiUmani": [
+        "lettura di un file",
+        "comando nel terminale",
+        "delega a un sotto-agente",
+        "ricerca sul web",
+        null,
+        null
+      ],
+      "ripieghi": [
+        "leggi",
+        "shell",
+        "delega sottotask",
+        "web search",
+        "inventato",
+        "create issue (github)"
+      ]
+    },
+    {
+      "lingua": "en",
+      "vivo": {
+        "agenti": [
+          {
+            "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Controlla la data di consegna in NOTA.md",
+            "taskCorto": "Controlla la data di consegna in NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:49.056Z",
+            "conclusaAlle": "2026-10-15T14:02:49.115Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.068Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.115Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-73",
+              "at": "2026-10-15T14:02:49.036Z",
+              "testo": "Delega ancora un controllo",
+              "corrente": true
+            }
+          },
+          {
+            "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Riassumi NOTA.md in una frase",
+            "taskCorto": "Riassumi NOTA.md in una frase",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.897Z",
+            "conclusaAlle": "2026-10-15T14:02:26.025Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.913Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:26.025Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          },
+          {
+            "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Conta le righe di NOTA.md",
+            "taskCorto": "Conta le righe di NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.852Z",
+            "conclusaAlle": "2026-10-15T14:02:25.993Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.867Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.993Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          }
+        ],
+        "attivi": 0,
+        "conti": {
+          "richiesta-73": {
+            "totale": 1,
+            "terminati": 1,
+            "daControllare": 0
+          },
+          "richiesta-45": {
+            "totale": 2,
+            "terminati": 2,
+            "daControllare": 0
+          }
+        }
+      },
+      "soloElenco": {
+        "agenti": [
+          {
+            "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+            "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "progetto": null,
+            "nome": null,
+            "avviataAlle": "2026-10-15T14:02:49.056Z",
+            "ultimaRispostaAlle": "2026-10-15T14:02:49.113Z",
+            "conclusa": true,
+            "forkDa": null,
+            "modello": "lmstudio:finto",
+            "modelloPlanner": null,
+            "reasoning": null,
+            "permessi": "Read only",
+            "modalitaOperativa": "normale",
+            "usavaModalitaWorkflow": false,
+            "permessiPerAttrezzo": {},
+            "inAttesaDomanda": false,
+            "inAttesaRichiestaMcp": false,
+            "inAttesaPiano": false,
+            "inAttesaDiscendente": false,
+            "provider": "cloud",
+            "runtimeId": null,
+            "modelId": "lmstudio:finto",
+            "fallbackProvider": null,
+            "fallbackProviders": [],
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "profonditaDelega": 1,
+            "avvioDelega": "da-solo",
+            "passoWorkflow": null,
+            "taskDelega": "Controlla la data di consegna in NOTA.md",
+            "interrotta": false,
+            "sequenzaAlRipristino": null,
+            "inAttesaApprovazione": false,
+            "inAttesaApprovazioneDaMs": null,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            },
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "cacheSessione": {
+              "percentuale": null,
+              "tokenIngresso": null,
+              "tokenDaCache": null,
+              "giriMisurati": 0,
+              "giriNonMisurati": 1,
+              "fonte": "consumo-fornitore"
+            },
+            "giriFermati": 0,
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Controlla la data di consegna in NOTA.md",
+            "taskCorto": "Controlla la data di consegna in NOTA.md",
+            "avvio": "da-solo",
+            "collisioni": [],
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "conclusaAlle": "2026-10-15T14:02:49.115Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.068Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.115Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-73",
+              "at": "2026-10-15T14:02:49.036Z",
+              "testo": "Delega ancora un controllo",
+              "corrente": true
+            }
+          },
+          {
+            "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+            "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "progetto": null,
+            "nome": null,
+            "avviataAlle": "2026-10-15T14:02:25.897Z",
+            "ultimaRispostaAlle": "2026-10-15T14:02:26.023Z",
+            "conclusa": true,
+            "forkDa": null,
+            "modello": "lmstudio:finto",
+            "modelloPlanner": null,
+            "reasoning": null,
+            "permessi": "Read only",
+            "modalitaOperativa": "normale",
+            "usavaModalitaWorkflow": false,
+            "permessiPerAttrezzo": {},
+            "inAttesaDomanda": false,
+            "inAttesaRichiestaMcp": false,
+            "inAttesaPiano": false,
+            "inAttesaDiscendente": false,
+            "provider": "cloud",
+            "runtimeId": null,
+            "modelId": "lmstudio:finto",
+            "fallbackProvider": null,
+            "fallbackProviders": [],
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "profonditaDelega": 1,
+            "avvioDelega": "da-solo",
+            "passoWorkflow": null,
+            "taskDelega": "Riassumi NOTA.md in una frase",
+            "interrotta": false,
+            "sequenzaAlRipristino": null,
+            "inAttesaApprovazione": false,
+            "inAttesaApprovazioneDaMs": null,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            },
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "cacheSessione": {
+              "percentuale": null,
+              "tokenIngresso": null,
+              "tokenDaCache": null,
+              "giriMisurati": 0,
+              "giriNonMisurati": 1,
+              "fonte": "consumo-fornitore"
+            },
+            "giriFermati": 0,
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Riassumi NOTA.md in una frase",
+            "taskCorto": "Riassumi NOTA.md in una frase",
+            "avvio": "da-solo",
+            "collisioni": [],
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "conclusaAlle": "2026-10-15T14:02:26.025Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.913Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:26.025Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          },
+          {
+            "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+            "taskId": "delega:fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "progetto": null,
+            "nome": null,
+            "avviataAlle": "2026-10-15T14:02:25.852Z",
+            "ultimaRispostaAlle": "2026-10-15T14:02:25.990Z",
+            "conclusa": true,
+            "forkDa": null,
+            "modello": "lmstudio:finto",
+            "modelloPlanner": null,
+            "reasoning": null,
+            "permessi": "Read only",
+            "modalitaOperativa": "normale",
+            "usavaModalitaWorkflow": false,
+            "permessiPerAttrezzo": {},
+            "inAttesaDomanda": false,
+            "inAttesaRichiestaMcp": false,
+            "inAttesaPiano": false,
+            "inAttesaDiscendente": false,
+            "provider": "cloud",
+            "runtimeId": null,
+            "modelId": "lmstudio:finto",
+            "fallbackProvider": null,
+            "fallbackProviders": [],
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "profonditaDelega": 1,
+            "avvioDelega": "da-solo",
+            "passoWorkflow": null,
+            "taskDelega": "Conta le righe di NOTA.md",
+            "interrotta": false,
+            "sequenzaAlRipristino": null,
+            "inAttesaApprovazione": false,
+            "inAttesaApprovazioneDaMs": null,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usage": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1
+            },
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "cacheSessione": {
+              "percentuale": null,
+              "tokenIngresso": null,
+              "tokenDaCache": null,
+              "giriMisurati": 0,
+              "giriNonMisurati": 1,
+              "fonte": "consumo-fornitore"
+            },
+            "giriFermati": 0,
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Conta le righe di NOTA.md",
+            "taskCorto": "Conta le righe di NOTA.md",
+            "avvio": "da-solo",
+            "collisioni": [],
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "conclusaAlle": "2026-10-15T14:02:25.993Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.867Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.993Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          }
+        ],
+        "attivi": 0,
+        "conti": {
+          "richiesta-73": {
+            "totale": 1,
+            "terminati": 1,
+            "daControllare": 0
+          },
+          "richiesta-45": {
+            "totale": 2,
+            "terminati": 2,
+            "daControllare": 0
+          }
+        }
+      },
+      "senzaRichieste": {
+        "agenti": [
+          {
+            "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Controlla la data di consegna in NOTA.md",
+            "taskCorto": "Controlla la data di consegna in NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:49.056Z",
+            "conclusaAlle": "2026-10-15T14:02:49.115Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.068Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.115Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": null
+          },
+          {
+            "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Riassumi NOTA.md in una frase",
+            "taskCorto": "Riassumi NOTA.md in una frase",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.897Z",
+            "conclusaAlle": "2026-10-15T14:02:26.025Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.913Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:26.025Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": null
+          },
+          {
+            "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Conta le righe di NOTA.md",
+            "taskCorto": "Conta le righe di NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.852Z",
+            "conclusaAlle": "2026-10-15T14:02:25.993Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.867Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.993Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": null
+          }
+        ],
+        "attivi": 0,
+        "conti": {
+          "(senza)": {
+            "totale": 3,
+            "terminati": 3,
+            "daControllare": 0
+          }
+        }
+      },
+      "alLavoro": {
+        "agenti": [
+          {
+            "sessionId": "f60335f5-eda5-4472-9621-b9e1b9637b8c",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Controlla la data di consegna in NOTA.md",
+            "taskCorto": "Controlla la data di consegna in NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": true,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: controlla la data di consegna in nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:49.056Z",
+            "conclusaAlle": "2026-10-15T14:02:49.115Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:49.115Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.068Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:49.115Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-73",
+              "at": "2026-10-15T14:02:49.036Z",
+              "testo": "Delega ancora un controllo",
+              "corrente": true
+            }
+          },
+          {
+            "sessionId": "cabd4999-286a-4b99-9b14-e617e1d1cf80",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Riassumi NOTA.md in una frase",
+            "taskCorto": "Riassumi NOTA.md in una frase",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": false,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: riassumi nota.md in una frase.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.897Z",
+            "conclusaAlle": "2026-10-15T14:02:26.025Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:26.025Z",
+            "approvalPendingCount": 1,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.913Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:26.025Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          },
+          {
+            "sessionId": "7c917933-5e31-4efa-bfff-e2f7eaca0f13",
+            "parentId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "task": "Conta le righe di NOTA.md",
+            "taskCorto": "Conta le righe di NOTA.md",
+            "avvio": "da-solo",
+            "modello": "lmstudio:finto",
+            "collisioni": [],
+            "conclusa": false,
+            "interrotta": false,
+            "esitoDelega": "concluso",
+            "notaDelega": null,
+            "verdettoDelega": "strutturato",
+            "riassuntoDelega": "Fatto: conta le righe di nota.md.",
+            "evidenzaDelega": {
+              "scritture": 0,
+              "artefatti": 0,
+              "toolCalls": 0,
+              "toolCallsOk": 0,
+              "toolCallsFalliti": 0,
+              "verificabile": false
+            },
+            "avviataAlle": "2026-10-15T14:02:25.852Z",
+            "conclusaAlle": "2026-10-15T14:02:25.993Z",
+            "ultimaAttivitaAlle": "2026-10-15T14:02:25.993Z",
+            "approvalPendingCount": 0,
+            "questionPendingCount": 0,
+            "ultimoEsito": "successo",
+            "motivoChiusura": "fine-lavoro",
+            "usageSessione": {
+              "prompt_tokens": 100,
+              "completion_tokens": 20,
+              "cached_tokens": 0,
+              "giri": 1,
+              "esecuzioni": 1,
+              "esecuzioniConCache": 1,
+              "ultimaEsecuzione": {
+                "prompt_tokens": 100,
+                "completion_tokens": 20,
+                "cached_tokens": 0,
+                "giri": 1
+              }
+            },
+            "operazioneCorrente": null,
+            "erroreConsegnaDelega": null,
+            "permessi": "Read only",
+            "attivita": {
+              "file": [],
+              "fileTagliati": 0,
+              "attrezzoCorrente": null,
+              "bersaglioCorrente": null,
+              "chiamate": 0,
+              "passi": [
+                {
+                  "tipo": "avvio",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.867Z"
+                },
+                {
+                  "tipo": "fine",
+                  "attrezzo": null,
+                  "percorso": null,
+                  "quando": "2026-10-15T14:02:25.993Z"
+                }
+              ],
+              "passiTagliati": 0
+            },
+            "padreId": "fd8443cd-703f-4155-83e1-f90f2625d73c",
+            "numeroFigli": 0,
+            "richiesta": {
+              "id": "richiesta-45",
+              "at": "2026-10-15T14:02:25.812Z",
+              "testo": "Delega i compiti a due agenti",
+              "corrente": false
+            }
+          }
+        ],
+        "attivi": 1,
+        "conti": {
+          "richiesta-73": {
+            "totale": 1,
+            "terminati": 1,
+            "daControllare": 0
+          },
+          "richiesta-45": {
+            "totale": 2,
+            "terminati": 0,
+            "daControllare": 0
+          }
+        }
+      },
+      "stati": {
+        "singoli": [
+          {
+            "stato": "pending",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "running",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "waiting_human",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "waiting_human",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "waiting_human",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "waiting_human",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "cancelled",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "cancelled",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "succeeded",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 0
+            }
+          },
+          {
+            "stato": "failed",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "failed",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "failed",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "uncertain",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "uncertain",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "failed",
+            "conto": {
+              "totale": 1,
+              "terminati": 1,
+              "daControllare": 1
+            }
+          },
+          {
+            "stato": "pending",
+            "conto": {
+              "totale": 1,
+              "terminati": 0,
+              "daControllare": 0
+            }
+          }
+        ],
+        "tutti": {
+          "totale": 16,
+          "terminati": 7,
+          "daControllare": 6
+        },
+        "vuoto": {
+          "totale": 0,
+          "terminati": 0,
+          "daControllare": 0
+        }
+      },
+      "nomiUmani": [
+        "reading a file",
+        "terminal command",
+        "delegating to a sub-agent",
+        "web search",
+        null,
+        null
+      ],
+      "ripieghi": [
+        "leggi",
+        "shell",
+        "delega sottotask",
+        "web search",
+        "inventato",
+        "create issue (github)"
+      ]
+    }
+  ],
+  "statiDiProva": [
+    {},
+    {
+      "avviataAlle": "2026-10-15T10:00:00.000Z"
+    },
+    {
+      "avviataAlle": "2026-10-15T10:00:00.000Z",
+      "approvalPendingCount": 2
+    },
+    {
+      "inAttesaDomanda": true
+    },
+    {
+      "esitoDelega": "in-pausa"
+    },
+    {
+      "motivoChiusura": "in-pausa"
+    },
+    {
+      "interrotta": true,
+      "conclusa": true
+    },
+    {
+      "motivoChiusura": "fermata",
+      "conclusa": true
+    },
+    {
+      "conclusa": true
+    },
+    {
+      "conclusa": true,
+      "esitoDelega": "fallito"
+    },
+    {
+      "conclusa": true,
+      "ultimoEsito": "errore"
+    },
+    {
+      "conclusa": true,
+      "esitoDelega": "rifiutata"
+    },
+    {
+      "conclusa": true,
+      "esitoDelega": "incerto"
+    },
+    {
+      "conclusa": true,
+      "motivoChiusura": "esito-incerto"
+    },
+    {
+      "conclusa": true,
+      "ultimoEsito": "ok",
+      "esitoDelega": "fallito"
+    },
+    {
+      "avviataAlle": "non una data"
+    }
+  ]
+}

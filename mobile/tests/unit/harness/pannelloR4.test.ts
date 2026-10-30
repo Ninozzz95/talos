@@ -14,7 +14,7 @@ import {
  * `review.js` @ fc5e25d62 (in Node, `impostaLingua('it'|'en')`); lo stato viene dal golden VERO di una sessione che scrive un file.
  */
 const FIXTURE = resolve(__dirname, '..', '..', 'fixtures', 'r4')
-const golden = JSON.parse(readFileSync(resolve(FIXTURE, 'pannello-fc5e25d62.json'), 'utf8'))
+const golden = JSON.parse(readFileSync(resolve(FIXTURE, 'pannello-4cee78f33.json'), 'utf8'))
 const stato = (nome: string) => leggiFlussoSse(readFileSync(resolve(FIXTURE, nome), 'utf8')).map((e) => e.dati)
     .reduce(applicaEventoPannelloR4, creaPannelloR4())
 

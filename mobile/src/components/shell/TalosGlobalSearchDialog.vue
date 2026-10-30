@@ -2,9 +2,7 @@
 import { computed, nextTick, onMounted, ref, useId, watch, type Component, type Ref } from 'vue'
 import { NavigationFailureType, isNavigationFailure, useRouter, type RouteLocationRaw } from 'vue-router'
 import {
-    Bell, BookMarked, BookOpen, Bot, BrainCircuit, CheckSquare, ChevronRight, DatabaseBackup, Download,
-    Globe2, Languages, Mail, MessageSquareText, Palette, Scale, Search, Settings, Shield, ShieldCheck,
-    Smartphone, StickyNote, User, Volume2, Wrench,
+    Bell, BookMarked, BrainCircuit, ChevronRight, Cpu, DatabaseBackup, Download, Globe2, Languages, Library, ListTodo, Mail, MessageSquareText, Palette, Scale, Search, Settings, Shield, ShieldCheck, Smartphone, StickyNote, User, Volume2, Wrench,
 } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import { TALOS_MOBILE_SETTINGS_TABS, type TalosMobileSettingsTabId } from '@/components/talos/settings/settingsTabs'
@@ -35,7 +33,7 @@ const messages = useTalosMessageSearch(query, (term, options) => controller.sear
     () => controller.chat.history.map((session) => `${session.id}:${session.updated_at}`).join('|'))
 
 const settingIcons: Record<TalosMobileSettingsTabId, Component> = {
-    models: Bot, ai_defaults: BrainCircuit, search: Search, browser: Globe2, integrations: Wrench,
+    models: Cpu, ai_defaults: BrainCircuit, search: Search, browser: Globe2, integrations: Wrench,
     email: Mail, reminders: Bell, appearance: Palette, voice: Volume2, language: Languages,
     privacy: ShieldCheck, backup: DatabaseBackup, account: User, agent_tools: Shield, legal: Scale, updates: Download, system: Settings,
 }
@@ -61,14 +59,14 @@ const entries = computed<SearchEntry[]>(() => {
         subtitle: t('navigation.notes'), icon: StickyNote, fields: [{ text: note.content }],
         route: { name: 'note-item', params: { id: note.id } } })
     for (const task of tasks.value) result.push({ id: `task:${task.id}`, title: task.title,
-        subtitle: t('navigation.tasks'), icon: CheckSquare, fields: [{ text: task.description }, { text: task.instruction }],
+        subtitle: t('navigation.tasks'), icon: ListTodo, fields: [{ text: task.description }, { text: task.instruction }],
         route: { name: 'task-item', params: { id: task.id } } })
     for (const memory of memories.value) result.push({ id: `memory:${memory.id}`, title: memory.title,
         subtitle: t('navigation.memory'), icon: BookMarked, fields: [{ text: memory.content }],
         route: { name: 'memory-item', params: { id: memory.id } } })
     for (const file of files.value) {
         if (file.status === 'revoked') continue
-        result.push({ id: `file:${file.id}`, title: file.display_name, subtitle: t('navigation.library'), icon: BookOpen,
+        result.push({ id: `file:${file.id}`, title: file.display_name, subtitle: t('navigation.library'), icon: Library,
             fields: [], route: { name: 'context' } })
     }
     // Search the same translated categories that Settings actually offers.

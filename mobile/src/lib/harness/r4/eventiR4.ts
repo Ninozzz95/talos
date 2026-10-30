@@ -19,15 +19,22 @@ import {
     talosSequenzaDaSalvare,
     type TalosAttrezzoDelGiro,
     type TalosConfineDelGiro,
+    type TalosEsitoAttrezzo,
+    type TalosRisultatoAttrezzo,
 } from '@/lib/chat/sequenzaDelTurno'
 import { TALOS_METADATA_RISULTATO_DELEGA, vociRisultatoDelegaR4 } from './risultatiDelegaR4'
+import { esitoDellaChiamataR4 } from './esitoAttrezzoR4'
+import { istantaneaR4, type IstantaneaR4 } from './impostazioniDalVivoR4'
 import { TALOS_METADATA_APPROVAZIONE, type VoceApprovazioneR4 } from './approvazioneChiave'
 import { TALOS_METADATA_DOMANDA, type EsitoDomandaR4, type VoceDomandaR4 } from './domandaChiave'
 import { TALOS_METADATA_FERMATO, type VoceFermatoR4 } from './fermatoChiave'
+import { voceFiglieFermateR4 } from './fermaTuttoR4'
+import { TALOS_METADATA_FIGLIE_FERMATE } from './figlieFermateChiave'
 import { FRASI_SOLO_IMMAGINE_R4, bollaPerLaRigiocataR4 } from './allegatiR4'
 import { TALOS_METADATA_PIANO, type PropostaPianoR4, type VocePianoR4 } from './pianoChiave'
 import { leggiEventoPianoR4 } from './pianoEventoR4'
 import { fineMutaR4, interpretaCompattazioneR4, type CompattazioneR4, type StatoRigaVivaR4 } from './compattazioneR4'
+import { eventoPerLoSchermoR4 } from './confineDatiR4'
 import { TALOS_METADATA_COMPATTAZIONE, TALOS_METADATA_COMPATTAZIONE_ANNULLATA, TALOS_METADATA_COMPATTAZIONE_FALLITA } from '@/lib/chat/compattazioneChiavi'
 
 /**
@@ -51,6 +58,8 @@ export interface ImpostazioniSessioneR4 {
     permessi: string | null
     motivo: string | null
     dalVivo: boolean
+    /** IMPOSTAZIONI-DAL-VIVO (r4 `f573cdc93`): la fotografia intera con la sua versione; assente da un PC più vecchio. */
+    istantanea?: IstantaneaR4 | null
 }
 
 export interface EventoSseR4 {
@@ -73,9 +82,15 @@ interface GiroInterno {
     ragionamento: string
     messaggioId: string | null
     confini: { testo: number; ragionamento: number; chiamate: string[] }[]
-    chiamate: Record<string, { name: string; argomenti: string; finita: boolean }>
+    chiamate: Record<string, { name: string; argomenti: string; finita: boolean; esito?: TalosEsitoAttrezzo; risultato?: TalosRisultatoAttrezzo }>
     /** K3-RISDEL: un risultato è arrivato dentro il giro e la parte già scritta è un messaggio a sé. */
     diviso?: boolean
+    /**
+     * ⛔ ESC-01..03 (prova 6 del guardiano, 27/10/2026): le parti del giro già diventate messaggi (una carta, un risultato consegnato),
+     * per id del messaggio. Un `ToolCallResult` la cui chiamata sta in una di loro aggiorna quella parte, come la mappa unica
+     * `toolCallNomi` del desktop (`legacy/app.js:394`, `:23346`); si azzera col giro.
+     */
+    parti?: Record<string, GiroInterno>
 }
 
 export interface ConversazioneR4 {
@@ -97,6 +112,12 @@ export interface ConversazioneR4 {
     rigaViva?: StatoRigaVivaR4 | null
     /** @internal un riassunto in sottofondo è in corso: i suoi passi non aprono la riga viva */
     readonly inSottofondo?: boolean
+    /**
+     * ⛔ Allegati apribili (owner 26/10; r4 7d1d3d7dd, revisione A-F1): la radice della sessione (`RunStarted.contesto.cartella`) e la
+     * cartella di PARTENZA dove stanno i file della chat (`contesto.cartellaBase`, assente quando coincide). Arrivano col giro che
+     * disegna la bolla, quindi un chip si prova «dentro» già al primo disegno.
+     */
+    cartelle?: { radice: string; base: string }
 }
 
 /** I campi degli argomenti che dicono «su che cosa» lavora un attrezzo: il dettaglio della riga. */
@@ -158,8 +179,12 @@ function dettaglio(argomenti: string): string | null {
 
 function attrezzo(giro: GiroInterno, id: string, conStato = false): TalosAttrezzoDelGiro {
     const chiamata = giro.chiamate[id]
-    const base = { name: chiamata.name, detail: dettaglio(chiamata.argomenti) }
-    // solo nella vista dal vivo: il salvato resta nella forma di prima
+    const base: TalosAttrezzoDelGiro = {
+        name: chiamata.name, detail: dettaglio(chiamata.argomenti), ...(chiamata.esito ? { esito: chiamata.esito } : {}),
+        // T8: il corpo della riga (argomenti e risultato), come lo apre il PC; solo in memoria, il Codice si rifà dagli eventi di r4
+        ...(chiamata.argomenti.trim() ? { argomenti: chiamata.argomenti } : {}), ...(chiamata.risultato ? { risultato: chiamata.risultato } : {}),
+    }
+    // `finita` solo nella vista dal vivo: il salvato resta nella forma di prima (l'esito invece resta, ESITO-RIGA)
     return conStato && chiamata.finita ? { ...base, finita: true } : base
 }
 
@@ -222,8 +247,38 @@ function conCartaNelGiro(c: ConversazioneR4, giro: GiroInterno | null, id: strin
     }
     if (!giro || !haDetto(giro)) return { ...c, messaggi: [...c.messaggi, carta] }
     const parte = messaggioDelGiro(giro, { stato: 'persisted' }, giro.messaggioId ?? `${giro.runId}:parte-${c.messaggi.length}`)
-    return conGiro(c, { ...giro, testo: '', ragionamento: '', messaggioId: null, confini: [], chiamate: {}, diviso: true },
+    return conGiro(c, { ...giro, testo: '', ragionamento: '', messaggioId: null, confini: [], chiamate: {}, diviso: true, parti: conLaParte(giro, parte.id) },
         { messaggi: [...c.messaggi, parte, carta] })
+}
+
+/** ESC-01..03: la parte appena diventata messaggio resta raggiungibile dai risultati che arriveranno dopo (per id del messaggio). */
+function conLaParte(giro: GiroInterno, id: string): Record<string, GiroInterno> {
+    const { parti, ...parte } = giro
+    return { ...(parti ?? {}), [id]: parte }
+}
+
+/** Il risultato di una chiamata: com'è andata (ESITO-RIGA, come la decide il PC) e il testo per il corpo della riga (T8). */
+function conIlRisultato(chiamata: GiroInterno['chiamate'][string], evento: Record<string, unknown>): GiroInterno['chiamate'][string] {
+    const esito = esitoDellaChiamataR4(chiamata.name, evento)
+    const risultato: TalosRisultatoAttrezzo = {
+        contenuto: typeof evento.content === 'string' ? evento.content : '',
+        ...(typeof evento.stdout === 'string' && evento.stdout ? { stdout: evento.stdout } : {}),
+        ...(typeof evento.stderr === 'string' && evento.stderr ? { stderr: evento.stderr } : {}),
+    }
+    return { ...chiamata, finita: true, risultato, ...(esito ? { esito } : {}) }
+}
+
+/** ESC-01..03: un risultato per una chiamata di una parte già scritta ridisegna quel messaggio (stesso id, stesso posto, stessa ora). */
+function conIlRisultatoInUnaParte(c: ConversazioneR4, giro: GiroInterno, id: string, evento: Record<string, unknown>): ConversazioneR4 {
+    const voce = Object.entries(giro.parti ?? {}).find(([, parte]) => parte.chiamate[id])
+    if (!voce) return c
+    const [messaggioId, parte] = voce
+    const prima = c.messaggi.find((m) => m.id === messaggioId)
+    if (!prima) return c
+    const aggiornata: GiroInterno = { ...parte, chiamate: { ...parte.chiamate, [id]: conIlRisultato(parte.chiamate[id]!, evento) } }
+    const nuovo = { ...messaggioDelGiro(aggiornata, { stato: 'persisted' }, messaggioId), created_at: prima.created_at }
+    return conGiro(c, { ...giro, parti: { ...giro.parti, [messaggioId]: aggiornata } },
+        { messaggi: c.messaggi.map((m) => (m.id === messaggioId ? nuovo : m)) })
 }
 
 /*
@@ -325,6 +380,26 @@ function conIlPiano(c: ConversazioneR4, giro: GiroInterno | null, valore: unknow
     }
     if (!voce || voce.proposta.revision !== fatto.revision || (voce.proposta.requestId && voce.proposta.requestId !== fatto.requestId)) return c
     return conEsitoDellaCarta(c, id, TALOS_METADATA_PIANO, fatto)
+}
+
+/**
+ * GIR-01/02: un giro che non ha avuto una fine (il PC riavviato a metà non la scrive, `session-registry.mjs:549,567-569`) resta nella
+ * conversazione con quello che aveva detto; le chiamate rimaste senza risultato diventano «interrotte» (la testa del gruppo lo dice
+ * col tono d'avviso, `fallimentiDelGruppoR4`). GIR-04 (Desktop): anche quelle delle parti già scritte (una carta a metà attrezzo,
+ * poi il PC riavviato), ridisegnando quei messaggi al loro posto.
+ */
+function chiudiInterrotto(c: ConversazioneR4, giro: GiroInterno): ConversazioneR4 {
+    const interrotte = (chiamate: GiroInterno['chiamate']) => Object.fromEntries(Object.entries(chiamate)
+        .map(([id, ch]) => [id, ch.finita ? ch : { ...ch, finita: true, esito: 'interrotta' as const }]))
+    const ridisegnati = new Map<string, TalosMobileMessageView>()
+    for (const [messaggioId, parte] of Object.entries(giro.parti ?? {})) {
+        if (Object.values(parte.chiamate).every((ch) => ch.finita)) continue
+        const prima = c.messaggi.find((m) => m.id === messaggioId)
+        if (!prima) continue
+        ridisegnati.set(messaggioId, { ...messaggioDelGiro({ ...parte, chiamate: interrotte(parte.chiamate) }, { stato: 'persisted' }, messaggioId), created_at: prima.created_at })
+    }
+    const conLeParti = ridisegnati.size ? { ...c, messaggi: c.messaggi.map((m) => ridisegnati.get(m.id) ?? m) } : c
+    return chiudi(conLeParti, { ...giro, chiamate: interrotte(giro.chiamate) }, { stato: 'persisted' })
 }
 
 function chiudi(c: ConversazioneR4, giro: GiroInterno, esito: EsitoDelGiro): ConversazioneR4 {
@@ -469,11 +544,16 @@ function bollaDellaPersona(runId: string, consegna: string, input: Record<string
 /** Un evento in più. Puro: torna uno stato nuovo; un evento sconosciuto o storto torna lo stato com'era (a parte la sequenza). */
 export function applicaEventoR4(c: ConversazioneR4, evento: Record<string, unknown>, opzioni: OpzioniEventiR4 = {}): ConversazioneR4 {
     if (!evento || typeof evento !== 'object') return c
+    // CDF-01..04: il confine dei dati (e l'avviso per il modello) si toglie all'arrivo dell'evento, come il desktop (`app.js:22391`)
+    evento = eventoPerLoSchermoR4(evento)
     const sequenza = typeof evento._sequenza === 'number' ? evento._sequenza : null
     if (sequenza !== null && (c.ultimaSequenza === null || sequenza > c.ultimaSequenza)) c = { ...c, ultimaSequenza: sequenza }
     const giro = c.giro
     switch (evento.type) {
         case 'RunStarted': {
+            // ⛔ GIR-01/02 (prova 8 del guardiano): un giro ancora aperto non ha avuto una fine (PC riavviato a metà): si chiude come
+            // interrotto, con le sue righe, invece di sparire sotto il giro nuovo
+            if (giro) c = chiudiInterrotto(senzaRigaViva(c), giro)
             const runId = testo(evento.runId) ?? `giro-${c.messaggi.length}`
             const input = evento.input as Record<string, unknown> | undefined
             const consegna = testo(input?.consegna)
@@ -486,7 +566,12 @@ export function applicaEventoR4(c: ConversazioneR4, evento: Record<string, unkno
             const dellaPersona = consegna !== null && input?.origine === undefined && (!giaUnaBolla || input?.seguito === true)
             const messaggi = !dellaPersona ? c.messaggi : [...c.messaggi, bollaDellaPersona(runId, consegna as string, input, at)]
             // K3 piano: il giro che usa il Piano chiesto dal modello è partito, la fascia «Piano attivo dal prossimo giro» si spegne
-            const aperto = conGiro(c, { runId, at, testo: '', ragionamento: '', messaggioId: null, confini: [], chiamate: {} }, { messaggi, pianoRichiesto: false })
+            const contesto = evento.contesto as Record<string, unknown> | undefined
+            const radice = testo(contesto?.cartella)
+            // un giro senza contesto (sessioni salvate prima) lascia quelle già note: `conGiro` copia lo stato
+            const cartelle = radice ? { radice, base: testo(contesto?.cartellaBase) ?? radice } : null
+            const aperto = conGiro(c, { runId, at, testo: '', ragionamento: '', messaggioId: null, confini: [], chiamate: {} },
+                { messaggi, pianoRichiesto: false, ...(cartelle ? { cartelle } : {}) })
             return conIRisultati(aperto, input, true, at)
         }
         case 'QueuedMessageDelivered': {
@@ -494,7 +579,7 @@ export function applicaEventoR4(c: ConversazioneR4, evento: Record<string, unkno
             if (vociRisultatoDelegaR4(evento, false).length === 0) return c
             if (!giro || !haDetto(giro)) return conIRisultati(c, evento, false, giro?.at ?? '')
             const parte = messaggioDelGiro(giro, { stato: 'persisted' }, giro.messaggioId ?? `${giro.runId}:parte-${c.messaggi.length}`)
-            const riaperto = conGiro(c, { ...giro, testo: '', ragionamento: '', messaggioId: null, confini: [], chiamate: {}, diviso: true },
+            const riaperto = conGiro(c, { ...giro, testo: '', ragionamento: '', messaggioId: null, confini: [], chiamate: {}, diviso: true, parti: conLaParte(giro, parte.id) },
                 { messaggi: [...c.messaggi, parte] })
             return conIRisultati(riaperto, evento, false, giro.at)
         }
@@ -538,6 +623,14 @@ export function applicaEventoR4(c: ConversazioneR4, evento: Record<string, unkno
         case 'CUSTOM': {
             if (evento.name === 'talos.fine-rigiocata') return { ...c, storiaFinita: true }
             if (evento.name === 'talos.plan') return conIlPiano(c, giro, evento.value, opzioni.sessioneId ?? null, sequenza)
+            /* ⛔ «Ferma tutto» (owner 29/10/2026, contratto §1, §5 e §6): lo Stop (o il modello) ha fermato N agenti. L'evento è durevole:
+               la stessa riga anche alla rigiocata, nel giro come le note del PC (`nellaChat`); una per evento (l'id dalla sequenza). */
+            const figlieFermate = voceFiglieFermateR4(evento)
+            if (figlieFermate) {
+                const id = `figlie-fermate:${sequenza ?? figlieFermate.ids.join(',')}`
+                if (c.messaggi.some((m) => m.id === id)) return c
+                return conCartaNelGiro(c, giro, id, { [TALOS_METADATA_FIGLIE_FERMATE]: figlieFermate })
+            }
             const compattazione = interpretaCompattazioneR4(evento.name, evento.value)
             if (compattazione) return conLaCompattazione(c, giro, compattazione, sequenza)
             if (evento.name === 'talos.impostazioni-sessione') {
@@ -545,11 +638,12 @@ export function applicaEventoR4(c: ConversazioneR4, evento: Record<string, unkno
                    (`piano-approvato`) o quando il modello chiede il Piano (`piano-richiesto-dal-modello`, a fine giro). */
                 const v = (evento.value && typeof evento.value === 'object' ? evento.value : {}) as Record<string, unknown>
                 const modalitaOperativa = v.modalitaOperativa === 'normale' || v.modalitaOperativa === 'piano' ? v.modalitaOperativa : null
-                if (!modalitaOperativa && typeof v.permessi !== 'string') return c
+                const istantanea = istantaneaR4(v.istantanea)
+                if (!modalitaOperativa && typeof v.permessi !== 'string' && !istantanea) return c
                 const motivo = testo(v.motivo)
                 return {
                     ...c,
-                    impostazioni: { modalitaOperativa, permessi: testo(v.permessi), motivo, dalVivo: c.storiaFinita },
+                    impostazioni: { modalitaOperativa, permessi: testo(v.permessi), motivo, dalVivo: c.storiaFinita, istantanea },
                     pianoRichiesto: modalitaOperativa === 'piano' && motivo === 'piano-richiesto-dal-modello',
                 }
             }
@@ -597,8 +691,10 @@ export function applicaEventoR4(c: ConversazioneR4, evento: Record<string, unkno
         }
         case 'ToolCallResult': {
             const id = testo(evento.toolCallId)
-            if (!giro || !id || !giro.chiamate[id]) return c
-            return conGiro(c, { ...giro, chiamate: { ...giro.chiamate, [id]: { ...giro.chiamate[id], finita: true } } })
+            if (!giro || !id) return c
+            // ESC-01..03: la chiamata può stare in una parte già scritta (prima di una carta o di un risultato consegnato)
+            if (!giro.chiamate[id]) return conIlRisultatoInUnaParte(c, giro, id, evento)
+            return conGiro(c, { ...giro, chiamate: { ...giro.chiamate, [id]: conIlRisultato(giro.chiamate[id], evento) } })
         }
         case 'RunFinished': {
             c = senzaRigaViva(c)

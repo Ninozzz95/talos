@@ -56,9 +56,9 @@ export async function apriArtefattoCodice(id: string, titolo: string): Promise<E
     const copia = await copiaNativa(id, titolo)
     if (!copia.ok) return copia
     try {
-        const { TalosArtifactBridge } = await import('@/lib/device/artifactPlugin')
-        const esito = await TalosArtifactBridge.open({ id: copia.idNativo })
-        if (esito.opened === true) return { ok: true }
+        // UI-108: la testata nativa porta il titolo
+        const { talosApriArtefatto } = await import('@/lib/device/apriArtefatto')
+        if (await talosApriArtefatto(copia.idNativo, titolo)) return { ok: true }
     } catch {
         // La copia nativa non c'è più (o la finestra non parte): al tocco dopo si rifà.
     }

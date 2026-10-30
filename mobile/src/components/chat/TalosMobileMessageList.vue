@@ -4,7 +4,7 @@ import { useTalosI18n } from '@/i18n'
 import { useTalosMessageEntrance } from '@/composables/useTalosMessageEntrance'
 import './talosCalmMessages.css'
 import TalosMobileAssistantHeader from './TalosMobileAssistantHeader.vue'
-import { BookMarked, CheckCheck, ChevronRight, FileText, Mic, ShieldQuestion } from '@lucide/vue'
+import { BookMarked, CircleCheck, ChevronRight, Mic, ShieldQuestion } from '@lucide/vue'
 import { talosShortModelLabel } from '@/lib/models/modelLabel'
 import {
     TALOS_METADATA_AZIONI,
@@ -16,6 +16,8 @@ import {
 
 import { TALOS_TOOL_LABEL_KEYS, talosDynamicToolFallbackLabel } from '@/lib/tools/toolLabels'
 import type { TalosAzioneMessaggio, TalosMobileMessageView } from '@/components/chat/mobileChatTypes'
+// Owner 26/10 (allegati apribili): il chip di un file della persona, PIGRO come la bolla-immagine (tetto del grafo d'avvio).
+const TalosMobileMessageFileChip = defineAsyncComponent(() => import('./TalosMobileMessageFileChip.vue'))
 // La chat vuota non ha azioni per messaggio: arrivano con il primo messaggio.
 const TalosMobileMessageActions = defineAsyncComponent(() => import('./TalosMobileMessageActions.vue'))
 const TalosMobileComposerSheet = defineAsyncComponent(() => import('./TalosMobileComposerSheet.vue'))
@@ -76,7 +78,8 @@ const TalosMobileSchedaAzione = defineAsyncComponent(
 const TalosMobileLocalMetricsRow = defineAsyncComponent(
     () => import('@/components/chat/TalosMobileLocalMetricsRow.vue'),
 )
-import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessage.vue'
+// a richiesta, con la riga minima sincrona se il caricamento fallisce (29/10, tetto d'avvio)
+import TalosMobileStatusMessage from '@/components/chat/TalosMobileStatusMessagePigra.vue'
 // Le ricevute dei permessi servono solo dopo un'approvazione: pigre come gli altri pezzi rari della lista (il pacchetto d'avvio
 // ha un tetto, 668.000 byte, e la lista vi abita).
 const TalosMobileEsitiPermesso = defineAsyncComponent(() => import('@/components/chat/TalosMobileEsitiPermesso.vue'))
@@ -84,6 +87,7 @@ import { TALOS_METADATA_COMPATTAZIONE, TALOS_METADATA_COMPATTAZIONE_ANNULLATA, T
 import { TALOS_METADATA_RISULTATO_DELEGA } from '@/lib/harness/r4/risultatoDelegaChiave'
 import { TALOS_METADATA_APPROVAZIONE } from '@/lib/harness/r4/approvazioneChiave'
 import { TALOS_METADATA_FERMATO } from '@/lib/harness/r4/fermatoChiave'
+import { TALOS_METADATA_FIGLIE_FERMATE } from '@/lib/harness/r4/figlieFermateChiave'
 import { TALOS_METADATA_DOMANDA } from '@/lib/harness/r4/domandaChiave'
 import { TALOS_METADATA_PIANO } from '@/lib/harness/r4/pianoChiave'
 import TalosMobileReasoningBlock from '@/components/chat/TalosMobileReasoningBlock.vue'
@@ -93,7 +97,6 @@ const TalosMobileSourcesChip = defineAsyncComponent(() => import('@/components/c
 import { writeTalosClipboardText } from '@/services/clipboard'
 import { talosRelativeTime } from '@/lib/relativeTime'
 import { talosChatTextSize } from '@/lib/talosChatLayout'
-import { costoDelFileR4 } from '@/lib/harness/r4/costoFileR4'
 import type { TalosChatBubbleScale } from '@/lib/talosTypes'
 
 const vMessageEntrance = useTalosMessageEntrance()
@@ -132,6 +135,19 @@ const props = defineProps<{
     compattazioneInCorso?: boolean
     /** K3-B2: solo le azioni del messaggio che chi monta la lista sa fare; senza, tutte (la chat). */
     azioni?: readonly TalosAzioneMessaggio[]
+    /**
+     * ⛔ Owner 26/10 (allegati apribili): nel Codice, il percorso relativo alla cartella della sessione da aprire per il chip di un
+     * file, o null se non sta dentro (`percorsoApribileR4` con la radice nota PRIMA del primo messaggio). Passata dalla schermata del
+     * Codice, che si carica pigra: la regola non pesa sul pezzo d'avvio della chat. Senza, i chip con un percorso restano etichette.
+     */
+    apriPercorso?: (percorso: string) => string | null
+    /**
+     * D-0145-6(b): nella sessione di un PC, l'ora di r4 portata sull'orologio del dispositivo (`scartoOrologioPc.ts`), passata dalla
+     * schermata del Codice come `apriPercorso` (il pezzo d'avvio della chat non la porta). Senza, l'ora com'è.
+     */
+    oraMostrata?: (iso: string) => string
+    /** PONTE-03 (Pad, 27/10): vero nel Codice, che non genera con l'adattatore locale: la sua lista non lega né consuma le misure. */
+    senzaMisureLocali?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -148,7 +164,29 @@ const emit = defineEmits<{
     continueAfterLimit: [messageId: string]
     /** ⭐⭐ P4-ter passo 2 — «Annulla» sul separatore: QUALE compattazione (il suo `at`). */
     undoCompaction: [at: string]
+    /** Owner 26/10: il chip di un file del Codice toccato; il percorso è relativo alla cartella della sessione. */
+    apriAllegato: [percorso: string]
 }>()
+
+/*
+ * ⛔ DISS-04 (dal vivo, 28/10/2026; contratto owner 27/07 «fading again once it has arrived is the bug»): il messaggio di Talos che
+ * arriva mentre (o subito dopo che) la risposta stava scorrendo a schermo PRENDE IL POSTO di quella: non rientra da opacità 0
+ * (`useTalosMessageEntrance` lo salta, `data-dallo-streaming`). Un messaggio che compare senza streaming entra come prima.
+ * L'ordine di `sending` falso e del messaggio nuovo può variare: lo streaming visto vale fino al primo cambio della lista dopo.
+ */
+const idsConosciuti = new Set<string>()
+const natiDalloStreaming = new Set<string>()
+let streamingVisto = false
+watch(() => props.sending, (inviando) => { if (inviando) streamingVisto = true }, { immediate: true, flush: 'sync' })
+// gli id, non l'array: la Chat aggiunge nello stesso array (dal vivo, vc339: il finale della Chat rientrava da 0)
+watch(() => props.messages.map((m) => m.id), (_ids, prima) => {
+    for (const m of props.messages) {
+        if (idsConosciuti.has(m.id)) continue
+        idsConosciuti.add(m.id)
+        if (prima && streamingVisto && m.role === 'assistant') natiDalloStreaming.add(m.id)
+    }
+    if (prima && !props.sending) streamingVisto = false
+}, { immediate: true, flush: 'sync' })
 
 /**
  * L'identificativo del punto di ripresa che questo messaggio annunciava, se
@@ -184,7 +222,7 @@ function quanteInAttesa(message: TalosMobileMessageView): number {
         : 1
 }
 
-const { t, locale } = useTalosI18n()
+const { t } = useTalosI18n()
 
 /*
  * ⭐ GESTITA-01 (owner 25/09/2026, «riga compatta»): una risposta sospesa su un permesso, VUOTA e già decisa, non è più
@@ -229,8 +267,8 @@ function annullamentoDi(message: TalosMobileMessageView): string | null {
     const at = (message.metadata?.[TALOS_METADATA_COMPATTAZIONE_ANNULLATA] as { at?: unknown } | undefined)?.at
     return typeof at === 'string' && at ? at : null
 }
-/** K3-RISDEL, K3-AP1 e K3 piano: le righe che solo il Codice su r4 produce (risultato di un sotto-agente, carte d'approvazione, domande, piano). */
-const delCodiceR4 = (m: TalosMobileMessageView) => m.role === 'system' && Boolean(m.metadata?.[TALOS_METADATA_RISULTATO_DELEGA] || m.metadata?.[TALOS_METADATA_APPROVAZIONE] || m.metadata?.[TALOS_METADATA_DOMANDA] || m.metadata?.[TALOS_METADATA_FERMATO] || m.metadata?.[TALOS_METADATA_PIANO])
+/** K3-RISDEL, K3-AP1 e K3 piano: le righe che solo il Codice su r4 produce (risultato di un sotto-agente, carte d'approvazione, domande, piano; «Ferma tutto», 29/10: gli agenti fermati). */
+const delCodiceR4 = (m: TalosMobileMessageView) => m.role === 'system' && Boolean(m.metadata?.[TALOS_METADATA_RISULTATO_DELEGA] || m.metadata?.[TALOS_METADATA_APPROVAZIONE] || m.metadata?.[TALOS_METADATA_DOMANDA] || m.metadata?.[TALOS_METADATA_FERMATO] || m.metadata?.[TALOS_METADATA_PIANO] || m.metadata?.[TALOS_METADATA_FIGLIE_FERMATE])
 const TalosCodiceR4RigaDiSistema = defineAsyncComponent(() => import('@/components/codice/TalosCodiceR4RigaDiSistema.vue'))
 // ⛔ Nel `v-memo` di ogni riga: il separatore cambia per una riga che arriva DOPO di lui.
 const compattazioniAnnullate = computed(() => new Set(props.messages.map(annullamentoDi).filter((at): at is string => at !== null)))
@@ -331,13 +369,13 @@ const TalosMobileAttivitaDelTurno = defineAsyncComponent(() => import('@/compone
  */
 watch(
     () => `${props.messages.length}:${props.messages[props.messages.length - 1]?.id ?? ''}`,
-    () => talosAggiornaMisureDeiMessaggi(props.messages),
+    () => !props.senzaMisureLocali && talosAggiornaMisureDeiMessaggi(props.messages),
     { immediate: true },
 )
 
 /** Le misure di questa risposta, se sono state prese. Quasi sempre `null`. */
 function misureDi(messaggio: TalosMobileMessageView) {
-    return talosMisureDelMessaggio(messaggio.id)
+    return props.senzaMisureLocali ? null : talosMisureDelMessaggio(messaggio.id)
 }
 
 
@@ -574,15 +612,9 @@ function fileAttachments(message: TalosMobileMessageView) {
     return (message.attachments ?? []).filter((entry) => !entry.media_type.startsWith('image/'))
 }
 
-function formatBytes(value: number): string {
-    if (value < 1024) return `${value} B`
-    if (value < 1024 * 1024) return `${Math.round(value / 1024)} KB`
-    const megabytes = value / (1024 * 1024)
-    return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MB`
-}
 
 function relativeTime(iso: string): string {
-    return talosRelativeTime(iso, now.value, {
+    return talosRelativeTime(props.oraMostrata ? props.oraMostrata(iso) : iso, now.value, {
         justNow: t('chat.justNow'),
         minutesAgo: count => t('chat.minutesAgo', { count }),
         hoursAgo: count => t('chat.hoursAgo', { count }),
@@ -622,10 +654,11 @@ function messageStateLabel(state: string): string {
             v-for="(message, index) in messages"
             :key="message.id"
             v-message-entrance="message.state"
-            v-memo="[message, messages[index - 1]?.role, messages[index - 1]?.authorizationOutcome, messages[index - 1]?.reasoning, firmaCatena(index), messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now, compattazioniAnnullate.size, azioni]"
+            v-memo="[message, messages[index - 1]?.role, messages[index - 1]?.authorizationOutcome, messages[index - 1]?.reasoning, firmaCatena(index), messages[index + 1]?.role, sending, modelLabels, messageStyle, textScale, hasOlderMessages, pendingAuthorizationIds, diagnostica, firstMemoryDisclosureMessageId, now, compattazioniAnnullate.size, azioni, oraMostrata]"
             :data-message-id="message.id"
             :data-message-kind="message.role"
             :data-state="message.state"
+            :data-dallo-streaming="natiDalloStreaming.has(message.id) ? 'true' : undefined"
             :data-grouped="isGrouped(index) ? 'true' : undefined"
             class="chat-message talos-chat-message flex min-w-0 max-w-full flex-col"
             :class="[message.role === 'user' ? 'user-message items-end' : 'assistant-message items-start', assorbitaDallaSeguente(index) || annullamentoDi(message) ? 'hidden' : '']"
@@ -866,7 +899,7 @@ function messageStateLabel(state: string): string {
                         data-testid="talos-actions-done"
                         class="mt-1.5 inline-flex max-w-full flex-wrap items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
                     >
-                        <CheckCheck class="size-3.5 shrink-0" aria-hidden="true" />
+                        <CircleCheck class="size-3.5 shrink-0" aria-hidden="true" />
                         <span>{{ $t('chat.actionsDone') }}</span>
                         <span class="opacity-80">{{ azioniFatte(message.metadata).join(' · ') }}</span>
                     </div>
@@ -910,21 +943,14 @@ function messageStateLabel(state: string): string {
                             role="listitem"
                             :data-message-attachment-id="attachment.id"
                         />
-                        <span
+                        <!-- Owner 26/10: un file che si sa dove sta è un pulsante (si apre al tocco); gli altri restano etichette -->
+                        <TalosMobileMessageFileChip
                             v-for="attachment in fileAttachments(message).filter(() => message.role !== 'assistant')"
                             :key="attachment.id"
-                            :data-message-attachment-id="attachment.id"
-                            :title="attachment.percorso ?? attachment.media_type"
-                            role="listitem"
-                            class="inline-flex max-w-full items-center gap-1.5 rounded-md border border-current/25 bg-black/5 px-2 py-1 text-2xs leading-4"
-                        >
-                            <FileText class="size-3.5 shrink-0" aria-hidden="true" />
-                            <span class="max-w-[180px] truncate">{{ attachment.display_name }}</span>
-                            <!-- K3-C Allegati A3: un file del Codice su r4 non ha un peso; il costo solo se il testo è partito -->
-                            <span v-if="attachment.percorso === undefined" class="shrink-0 opacity-75">{{ formatBytes(attachment.size_bytes) }}</span>
-                            <span v-else-if="attachment.caratteri" class="shrink-0 opacity-75">{{ costoDelFileR4(attachment.caratteri, locale) }}</span>
-                            <span v-if="attachment.grant_status === 'revoked'" class="shrink-0">{{ $t('chat.accessRevoked') }}</span>
-                        </span>
+                            :attachment="attachment"
+                            :apri-percorso="apriPercorso"
+                            @apri-allegato="emit('apriAllegato', $event)"
+                        />
                     </div>
                     <TalosMobileBrowserActivity
                         v-if="message.browserActivities?.length"

@@ -147,7 +147,7 @@ const cosa = computed<'image' | 'loading' | 'link' | 'typographic' | 'glyph'>(()
             v-else-if="cosa === 'loading'"
             role="status"
             :aria-label="$t('library.thumbnailLoading')"
-            class="h-full w-full rounded-[calc(var(--talos-radius-control)/2)] bg-[var(--talos-secondary)] motion-safe:animate-pulse"
+            class="h-full w-full rounded-[calc(var(--talos-radius-control)/2)] bg-[var(--talos-secondary)] animate-pulse"
         />
 
         <!-- 3. Un link: la favicon e il titolo della pagina. -->

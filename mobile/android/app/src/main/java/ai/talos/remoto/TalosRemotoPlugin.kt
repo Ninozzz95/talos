@@ -20,6 +20,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -157,7 +158,7 @@ class TalosRemotoPlugin : Plugin() {
     fun percorso(call: PluginCall) {
         val aperto = canali[call.getString("canale") ?: ""] ?: return call.reject("unknown channel", "DISCONNECTED")
         val p = try { TalosRemotoTrasporto.percorso(aperto.canale) } catch (e: Exception) { null }
-        call.resolve(JSObject().put("tipo", p?.first).put("rttMs", p?.second))
+        call.resolve(percorsoPerJs(p))
     }
 
     /** I computer accoppiati, senza chiavi né gettoni. */
@@ -166,7 +167,7 @@ class TalosRemotoPlugin : Plugin() {
         ambito.launch {
             val voci = JSArray()
             for (pc in TalosRemotoCustodia.elenco(cartella)) {
-                voci.put(JSObject().put("pcId", pc.pcId).put("nome", pc.nome).put("relay", pc.relay).put("accoppiatoAlle", pc.accoppiatoAlle))
+                voci.put(computerPerJs(pc.pcId, pc.nome, pc.relay, pc.accoppiatoAlle))
                 pc.chiaveTelefono.fill(0)
             }
             call.resolve(JSObject().put("computer", voci))
@@ -388,3 +389,15 @@ class TalosRemotoPlugin : Plugin() {
     private fun messaggio(e: Exception): String =
         "${e.javaClass.simpleName}: ${(e.message ?: "").lineSequence().firstOrNull().orEmpty()}".replace(Regex("token=[^&\\s]+"), "token=…").take(200)
 }
+
+/**
+ * Una voce dell'elenco dei computer per l'app. ⛔ D-0147-NAV-1, lato nativo (27/10/2026): `put(chiave, null)` di org.json TOGLIE la
+ * chiave, e un PC accoppiato senza `relay=` arrivava senza `relay` (la sezione Computer si svuotava). Un valore che manca va come
+ * `JSONObject.NULL`, che arriva `null`.
+ */
+internal fun computerPerJs(pcId: String, nome: String?, relay: String?, accoppiatoAlle: Long): JSObject =
+    JSObject().put("pcId", pcId).put("nome", nome ?: JSONObject.NULL).put("relay", relay ?: JSONObject.NULL).put("accoppiatoAlle", accoppiatoAlle)
+
+/** Il percorso del canale per l'app: tipo e tempo d'andata e ritorno, `null` quando non si sanno (mai una chiave assente). */
+internal fun percorsoPerJs(p: Pair<String, Long?>?): JSObject =
+    JSObject().put("tipo", p?.first ?: JSONObject.NULL).put("rttMs", p?.second ?: JSONObject.NULL)

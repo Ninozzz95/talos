@@ -186,12 +186,14 @@ describe('la scelta del modello nel Codice su r4 (K3-C)', () => {
         w.unmount()
     })
 
-    it('CMO-02 un modello della sessione che l\'app non ha resta nella pastiglia col nome di r4; nessuna frase se non c\'è niente di escluso', async () => {
+    it('CMO-02 un modello della sessione che l\'app non ha resta nella pastiglia col nome corto; nessuna frase se non c\'è niente di escluso', async () => {
         stato.sessione = { modello: 'lmstudio:finto', reasoning: null }
         const w = await schermata([DEEPSEEK, GLM])
         const c = compositore(w)
         expect(c.props('selectedModelProfileId')).toBe('r4:lmstudio:finto')
-        expect((c.props('modelProfiles') as TalosMobileModelProfileView[])[0]).toMatchObject({ id: 'r4:lmstudio:finto', display_name: 'lmstudio:finto' })
+        // D-0145-4b (Desktop 26/10): il nome CORTO, come la lista e la decisione desktop del 13/10; la fonte la dice il gruppo, l'id
+        // intero di r4 resta in `model`
+        expect((c.props('modelProfiles') as TalosMobileModelProfileView[])[0]).toMatchObject({ id: 'r4:lmstudio:finto', display_name: 'finto', model: 'lmstudio:finto' })
         // J3 (24/10/2026): una sessione senza `reasoning` è «nessuna scelta» (la pillola dice «Auto»), non «off»
         expect(c.props('selectedEffort')).toBeNull()
         expect(c.props('discoveryProblems')).toEqual([])
@@ -216,14 +218,20 @@ describe('la scelta del modello nel Codice su r4 (K3-C)', () => {
         w.unmount()
     })
 
-    it('CMO-04 un rifiuto di r4 lascia il modello di prima, non si ricorda, e la riga dice il perché con le parole del desktop', async () => {
+    /* ⛔ IMPOSTAZIONE-RIFIUTATA (Pad, 27/10/2026): il perché non va più nella riga della conversazione (finiva dietro il foglio aperto) ma
+       in un avviso sopra tutto, «Preference not saved» col perché del desktop, come il PC (`sincronizzaImpostazioniSessione`). */
+    it('CMO-04 un rifiuto di r4 lascia il modello di prima, non si ricorda, e l’avviso dice il perché con le parole del desktop', async () => {
+        const { useTalosMobileToasts, __resetToastsForTests } = await import('@/stores/toasts')
+        __resetToastsForTests()
         stato.rispondi = (r) => (r.percorso.endsWith('/settings') ? { stato: 400, corpo: JSON.stringify(vere.modelloStorto.d) } : null)
         const w = await schermata()
         compositore(w).vm.$emit('selectModelProfile', GLM.id)
         await asciuga()
         expect(compositore(w).props('selectedModelProfileId')).toBe(DEEPSEEK.id)
         expect(stato.setShell).toEqual([])
-        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('The chosen model has a name this server does not recognize: choose it again from the model pill')
+        expect(w.find('[data-testid="talos-codice-r4-errore"]').exists()).toBe(false)
+        expect(useTalosMobileToasts().items.value.map((a) => a.message))
+            .toEqual(['Preference not saved. The chosen model has a name this server does not recognize: choose it again from the model pill'])
         w.unmount()
     })
 
@@ -332,19 +340,40 @@ describe('la scelta del modello nel Codice su r4 (K3-C)', () => {
     it('CMO-11 un codice del piano che manda r4 si dice con le parole del desktop; uno che il telefono dice già, con quelle della chat', async () => {
         stato.sessione = { modello: 'chatgpt:gpt-5', reasoning: { effort: 'medium' } }
         stato.rispondi = (r) => (r.percorso.endsWith('/resume')
-            ? { stato: 409, corpo: JSON.stringify({ ok: false, error: { code: 'CHATGPT_CUSTODE_NON_APP', message: 'x' } }) }
+            // il testo letterale del PC (`chatgpt-rotte.mjs:109` @ r4 79ea996de)
+            ? { stato: 409, corpo: JSON.stringify({ ok: false, error: { code: 'CHATGPT_CUSTODE_NON_APP', message: 'This server keeps its own ChatGPT sign-in: it does not take a token from an app.' } }) }
             : null)
         const w = await schermata()
         await w.get('[data-testid="talos-composer-prompt"]').setValue('Esegui i test')
         compositore(w).vm.$emit('send')
         await asciuga()
-        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('This server keeps its own ChatGPT sign-in: it does not take a token from an app')
+        expect(w.get('[data-testid="talos-codice-r4-errore"]').text()).toBe('This server keeps its own ChatGPT sign-in: it does not take a token from an app.')
         w.unmount()
     })
-    it('CMO-12 col modello del piano il compositore ha la pastiglia «Piano ChatGPT» come la chat, e i giri del Codice entrano nel suo conto', async () => {
+    it('CMO-12b (tablet) col modello del piano il compositore ha la pastiglia «Piano ChatGPT» come la chat', async () => {
+        const { useTalosTabletLayout, __resetTalosTabletLayoutForTests } = await import('@/composables/useTalosTabletLayout')
+        __resetTalosTabletLayoutForTests()
+        useTalosTabletLayout().isTablet.value = true
+        try {
+            stato.sessione = { modello: 'chatgpt:gpt-5', reasoning: { effort: 'medium' } }
+            const w = await schermata()
+            // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+            await w.get('[data-testid="talos-composer-prompt"]').trigger('focus')
+            await asciuga()
+            expect(w.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(true)
+            expect(compositore(w).props('pianoChatgpt')).toBeNull()
+            w.unmount()
+        } finally {
+            __resetTalosTabletLayoutForTests()
+        }
+    })
+
+    /* ⛔ D-0147-UI-2 (owner 27/10/2026, mockup approvato): sul telefono il Codice fa come la chat, compositore unico. */
+    it('CMO-12 (telefono) col modello del piano niente pastiglia: il compositore riceve «attivo»; i giri del Codice entrano nel conto del piano', async () => {
         stato.sessione = { modello: 'chatgpt:gpt-5', reasoning: { effort: 'medium' } }
         const w = await schermata()
-        expect(w.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(true)
+        expect(w.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(false)
+        expect(compositore(w).props('pianoChatgpt')).toBe('attivo')
         // un giro dal vivo: due chiamate al modello, poi un'altra
         const flusso = stato.flussi.at(-1)!
         const manda = (testo: string) => (stato.ascoltatori.r4Pezzo ?? []).forEach((a) => a({ id: flusso.id, testo }))
@@ -357,6 +386,7 @@ describe('la scelta del modello nel Codice su r4 (K3-C)', () => {
         stato.sessione = { modello: 'deepseek:deepseek-v4-pro', reasoning: { effort: 'high' } }
         const w2 = await schermata()
         expect(w2.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(false)
+        expect(compositore(w2).props('pianoChatgpt')).toBeNull()
         // …e i suoi giri non entrano nel conto del piano
         stato.registrati = []
         const flusso2 = stato.flussi.at(-1)!
@@ -521,6 +551,8 @@ describe('la scelta del modello nel Codice su r4 (K3-C)', () => {
         await asciuga()
         expect(compositore(w).props('refreshingModels')).toBe(true)
         stato.chat!.refreshingModels.value = false
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await w.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         await w.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await asciuga()
         const richiestePrima = stato.richieste.length
@@ -557,47 +589,54 @@ describe('la scelta del modello nel Codice su r4 (K3-C)', () => {
 })
 
 /*
- * ⭐ J3 (24/10/2026) — la pillola del ragionamento nel Codice: la STESSA del compositore unico (owner, `compositore-unico-chat-codice`),
- * col livello della sessione di r4.
+ * ⭐ Il ragionamento nel Codice (owner 27/10/2026, mockup approvato): il chip unico «modello livello» del compositore unico, col livello
+ * della sessione di r4, e il piede del foglio «Modello e ragionamento» per sceglierlo (prima: la pillola J3 del 24/10).
  */
-describe('la pillola del ragionamento nel Codice (J3)', () => {
-    it('PILL-UNICA-01 (Codice) il Codice monta TalosMobileReasoningPill DENTRO TalosMobileComposer, col livello della sessione', async () => {
-        const { default: TalosMobileReasoningPill } = await import('@/components/chat/TalosMobileReasoningPill.vue')
+describe('il ragionamento nel Codice: chip unico e piede del foglio', () => {
+    it('PILL-UNICA-01 (Codice) il chip del compositore dice il livello della sessione; il piede lo cambia e lo scrive su r4', async () => {
         const w = await schermata()
-        expect(w.findAllComponents(TalosMobileReasoningPill)).toHaveLength(1)
-        expect(compositore(w).findComponent(TalosMobileReasoningPill).exists()).toBe(true)
-        expect(w.get('[data-testid="talos-composer-reasoning-pill-label"]').text()).toBe('High')
-        // nel Codice «Ragionamento esteso» è lo stesso livello: il menu non lo ripete
-        await w.get('[data-testid="talos-composer-reasoning-pill"]').trigger('click')
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await w.get('[data-testid="talos-composer-prompt"]').trigger('focus')
+        expect(w.get('[data-testid="talos-composer-model-level"]').text()).toBe('High')
+        expect(w.find('[data-testid="talos-composer-reasoning-pill"]').exists()).toBe(false)
+        await w.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await asciuga()
-        expect(w.find('[data-testid="talos-reasoning-menu"]').exists()).toBe(true)
-        expect(w.find('[data-testid="talos-reasoning-thinking"]').exists()).toBe(false)
-        await w.get('[data-testid="talos-reasoning-level"][data-livello="low"]').trigger('click')
+        // nel Codice «Ragionamento esteso» è lo stesso livello: il piede non lo ripete
+        expect(w.find('[data-testid="talos-mobile-thinking-toggle"]').exists()).toBe(false)
+        // un passo a sinistra sul cursore: da «Alto» a «Medio», scritto su r4
+        await w.get('[data-testid="talos-mobile-effort-slider-thumb"]').trigger('keydown', { key: 'ArrowLeft' })
         await asciuga()
-        expect(scritte()).toEqual([`/api/v1/sessions/${SESSIONE}/settings {"reasoning":{"effort":"low"}}`])
+        expect(scritte()).toEqual([`/api/v1/sessions/${SESSIONE}/settings {"reasoning":{"effort":"medium"}}`])
         w.unmount()
     })
 
-    it('PILL-CODICE-AUTO una sessione senza `reasoning` non è «Off»: la pillola dice «Auto»; `none` resta «Off»', async () => {
+    it('PILL-CODICE-AUTO una sessione senza `reasoning` non è «Off»: il chip dice «Auto»; `none` resta «Off»', async () => {
         stato.sessione = { modello: 'deepseek:deepseek-v4-pro', reasoning: null }
         const w = await schermata()
-        expect(w.get('[data-testid="talos-composer-reasoning-pill-label"]').text()).toBe('Auto')
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await w.get('[data-testid="talos-composer-prompt"]').trigger('focus')
+        expect(w.get('[data-testid="talos-composer-model-level"]').text()).toBe('Auto')
         expect(compositore(w).props('selectedEffort')).toBeNull()
         w.unmount()
         stato.sessione = { modello: 'deepseek:deepseek-v4-pro', reasoning: { effort: 'none' } }
         const spento = await schermata()
-        expect(spento.get('[data-testid="talos-composer-reasoning-pill-label"]').text()).toBe('Off')
+        await spento.get('[data-testid="talos-composer-prompt"]').trigger('focus')
+        expect(spento.get('[data-testid="talos-composer-model-level"]').text()).toBe('Off')
         spento.unmount()
     })
 
-    it('PILL-CODICE-LOCALE il motore del telefono non riceve un livello: niente pillola; «Ragionamento esteso» del foglio manda `none` e `high`', async () => {
+    it('PILL-CODICE-LOCALE il motore del telefono non riceve un livello: niente livello nel chip; «Ragionamento esteso» del piede manda `none` e `high`', async () => {
         stato.sessione = { modello: 'locale-ospite:gemma.gguf', reasoning: { effort: 'high' } }
         const w = await schermata([DEEPSEEK, GLM, { ...LOCALE, thinking_toggle: true }, PIANO])
         expect(compositore(w).props('selectedModelProfileId')).toBe(LOCALE.id)
-        expect(w.find('[data-testid="talos-composer-reasoning-pill"]').exists()).toBe(false)
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await w.get('[data-testid="talos-composer-prompt"]').trigger('focus')
+        expect(w.find('[data-testid="talos-composer-model-level"]').exists()).toBe(false)
         await w.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await asciuga()
-        expect(w.get('[data-testid="talos-model-sheet-reasoning-note"]').text()).toBe('This model receives no reasoning level: the provider decides.')
+        // ⛔ D3 (Pad 28/10/2026, OK Desktop): per il motore del telefono niente nota A9 «decide il fornitore» — non c'è un fornitore che
+        // decide; resta l'interruttore «Ragionamento esteso» (PIEDE-09, PILL-STATO-07)
+        expect(w.find('[data-testid="talos-mobile-effort-note"]').exists()).toBe(false)
         const leva = w.get('[data-testid="talos-mobile-thinking-toggle"]')
         expect(leva.attributes('aria-checked') ?? leva.attributes('data-state')).toMatch(/true|checked/u)
         await leva.trigger('click')
@@ -610,6 +649,8 @@ describe('la pillola del ragionamento nel Codice (J3)', () => {
     it('PILL-CODICE-ACCESO riaccendere torna all’ultimo livello scelto; senza un livello, ad Auto (`reasoning: null`)', async () => {
         stato.sessione = { modello: 'locale-ospite:gemma.gguf', reasoning: { effort: 'low' } }
         const w = await schermata([DEEPSEEK, GLM, { ...LOCALE, thinking_toggle: true }, PIANO])
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await w.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         await w.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await asciuga()
         await w.get('[data-testid="talos-mobile-thinking-toggle"]').trigger('click')
@@ -622,6 +663,7 @@ describe('la pillola del ragionamento nel Codice (J3)', () => {
         stato.richieste = []
         stato.sessione = { modello: 'locale-ospite:gemma.gguf', reasoning: { effort: 'none' } }
         const spento = await schermata([DEEPSEEK, GLM, { ...LOCALE, thinking_toggle: true }, PIANO])
+        await spento.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         await spento.get('[data-testid="talos-composer-model-chip"]').trigger('click')
         await asciuga()
         await spento.get('[data-testid="talos-mobile-thinking-toggle"]').trigger('click')

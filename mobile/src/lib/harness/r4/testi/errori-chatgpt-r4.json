@@ -1,11 +1,13 @@
 {
   "origine": {
-    "commit": "f6c6625ac327a82cbf50e15bd989e129e7f81e1d",
+    "commit": "b000e725325cf4d9d1fa1266a43805e86029e7bc",
     "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
-    "sha256": "d2d763a1ea3648b451e312e5f537ed053ca6d0194cdd7f38c6756de504e3dc75",
+    "sha256": "33c13319b8ed7522ef4345804ce6429d38e2af89df7b89b398b7e3fb5ab82200",
     "prefisso": "CHATGPT_"
   },
   "it": {
+    "CHATGPT_TOKEN_DA_RINNOVARE.token_renew": "L’accesso a ChatGPT va rinnovato dall’app.",
+    "CHATGPT_CUSTODE_NON_APP.keeps_own_sign_in": "Questo server tiene il suo accesso a ChatGPT: non prende il token da un’app.",
     "CHATGPT_NON_DISPONIBILE.message": "Su questo computer non si può collegare un account ChatGPT: il portachiavi del sistema non è disponibile",
     "CHATGPT_NON_COLLEGATO.message": "Nessun account ChatGPT è collegato: usa «Continue with ChatGPT» in Fornitori",
     "CHATGPT_PIANO_NON_ABILITATO.message": "Hai fatto l’accesso, ma l’uso del tuo piano ChatGPT in TALOS non è abilitato: abilitalo da Fornitori, oppure usa una chiave API",
@@ -27,6 +29,8 @@
     "CHATGPT_CUSTODE_NON_APP.message": "Questo server tiene il suo accesso a ChatGPT: non accetta un token da un’app"
   },
   "en": {
+    "CHATGPT_TOKEN_DA_RINNOVARE.token_renew": "The ChatGPT access token must be renewed by the app.",
+    "CHATGPT_CUSTODE_NON_APP.keeps_own_sign_in": "This server keeps its own ChatGPT sign-in: it does not take a token from an app.",
     "CHATGPT_NON_DISPONIBILE.message": "A ChatGPT account cannot be connected on this computer: the system keyring is not available",
     "CHATGPT_NON_COLLEGATO.message": "No ChatGPT account is connected: use “Continue with ChatGPT” in Providers",
     "CHATGPT_PIANO_NON_ABILITATO.message": "You are signed in, but using your ChatGPT plan in TALOS is not enabled: enable it from Providers, or use an API key",

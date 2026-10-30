@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/varie.js",
-    "sha256": "457edc223f3bdc3e5e5cc4c80eb07ebc16c2555c5f4cdc1ae2b9193f49e0284b",
+    "sha256": "fa3fe6c41ebce3215ae837542d5742d86893fd3786a30eabe60ffc0fd9885e1e",
     "prefisso": "doctor."
   },
   "it": {
@@ -40,6 +40,7 @@
     "doctor.check.folders.title": "Cartelle di progetto",
     "doctor.check.folders.allowedOne": "{n} cartella consentita.",
     "doctor.check.folders.allowedMany": "{n} cartelle consentite.",
+    "doctor.check.folders.choosePerSession": "La scegli a ogni sessione.",
     "doctor.check.search.title": "Ricerca web",
     "doctor.check.search.note": "Stato della configurazione; nessuna ricerca viene eseguita qui.",
     "doctor.check.providers.title": "Fornitori e portachiavi",
@@ -98,6 +99,7 @@
     "doctor.check.folders.title": "Project folders",
     "doctor.check.folders.allowedOne": "{n} folder allowed.",
     "doctor.check.folders.allowedMany": "{n} folders allowed.",
+    "doctor.check.folders.choosePerSession": "Chosen for each session.",
     "doctor.check.search.title": "Web search",
     "doctor.check.search.note": "Configuration status; no search is run here.",
     "doctor.check.providers.title": "Providers and keychain",

@@ -8,6 +8,7 @@
  */
 import type { TalosHarnessSessionStatus } from '@/lib/harness/harnessUiSessionStatus'
 import { suUnaRigaR4 } from '@/lib/harness/r4/agentiR4'
+import { figlieAlLavoroR4 } from '@/lib/harness/r4/fermaTuttoR4'
 import type { TalosR4ClientePonte } from '@/lib/harness/r4/clienteR4'
 import erroriSessioni from '@/lib/harness/r4/testi/errori-sessioni-r4.json'
 
@@ -15,6 +16,11 @@ export interface TalosRigaSessioneR4 {
     id: string; title: string; updated_at: string; stato: TalosHarnessSessionStatus
     /** R-M4 Q2: il NOME della cartella della sessione (`progetto` di r4, mai un percorso), per proporre la stessa a una sessione nuova. */
     progetto?: string
+    /**
+     * ⛔ «Ferma tutto», «Elenco» (owner 29/10/2026 sera): gli agenti VIVI sotto la sessione (tutto l'albero, `figlieAlLavoroR4`), contati
+     * prima che le deleghe escano dalle righe. Assente a zero: una sessione finita con agenti al lavoro sta «In corso» e lo dice.
+     */
+    agentiAlLavoro?: number
 }
 
 type ClienteElencoR4 = Pick<TalosR4ClientePonte, 'richiesta'>
@@ -28,6 +34,7 @@ export function righeElencoSessioniR4(voci: unknown[]): TalosRigaSessioneR4[] {
         const s = v as Record<string, unknown>
         if (typeof s.sessionId !== 'string' || !s.sessionId) continue
         if (s.padreId || Number(s.profonditaDelega) > 0) continue
+        const agentiAlLavoro = figlieAlLavoroR4(voci, s.sessionId).length
         const quando = typeof s.ultimaRispostaAlle === 'string' && s.ultimaRispostaAlle ? s.ultimaRispostaAlle
             : typeof s.avviataAlle === 'string' ? s.avviataAlle : ''
         righe.push({
@@ -42,6 +49,7 @@ export function righeElencoSessioniR4(voci: unknown[]): TalosRigaSessioneR4[] {
                 ultimoEsito: s.ultimoEsito === 'errore' || s.ultimoEsito === 'successo' ? s.ultimoEsito : null,
             },
             ...(typeof s.progetto === 'string' && s.progetto ? { progetto: s.progetto } : {}),
+            ...(agentiAlLavoro > 0 ? { agentiAlLavoro } : {}),
         })
     }
     return righe.sort((a, b) => b.updated_at.localeCompare(a.updated_at))

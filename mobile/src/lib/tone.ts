@@ -235,7 +235,13 @@ function identityLine(identity?: TalosModelIdentity | null): string {
  * Senza locale non si inventa: resta la frase che chiede di dedurre, che è
  * meglio di niente e non allunga il prompt.
  */
-function linguaDelLocale(locale: string | null | undefined): string {
+function linguaDelLocale(locale: string | null | undefined, rigaLingua?: string): string {
+    /*
+     * ⭐ LINGUA DELLE RISPOSTE (owner 28/10/2026, «come scrivi o parli», tre app): la riga del nucleo r4 (`linguaDelleRisposte.ts`, già
+     * scritta da chi chiama: il modulo è pigro, per il budget d'avvio), che non ordina più la lingua dell'app; la lingua del messaggio
+     * la nomina la nota in coda (STORIA-LINGUA). Il ragionamento la segue.
+     */
+    if (rigaLingua !== undefined) return `${rigaLingua} Think in it too: your reasoning is shown to them. `
     /*
      * Il NOME della lingua e l'eccezione che ha causato il difetto, in una riga
      * sola perché qui il tetto è 600 caratteri.
@@ -263,8 +269,9 @@ function localSystemPrompt(
     preset: TalosTonePreset,
     identity: TalosModelIdentity,
     locale?: string | null,
+    rigaLingua?: string,
 ): string {
-    const languageLine = linguaDelLocale(locale)
+    const languageLine = linguaDelLocale(locale, rigaLingua)
     return `You are TALOS, the local-first assistant in AVM, created by Antonio Rizzo (Ninozz95). `
         + `This session uses the local model "${identity.model}". `
         /*
@@ -341,7 +348,9 @@ export function nomeDellaLingua(locale: string | null | undefined): string | nul
     }
 }
 
-function rigaDellaLingua(locale: string | null | undefined): string {
+function rigaDellaLingua(locale: string | null | undefined, rigaLingua?: string): string {
+    // ⭐ LINGUA DELLE RISPOSTE (owner 28/10/2026): la riga del nucleo r4, già scritta, al posto dell'ordine della lingua dell'app
+    if (rigaLingua !== undefined) return `${rigaLingua} `
     const nome = nomeDellaLingua(locale)
     if (nome) {
         return `Write your reply and your reasoning in ${nome}, even when documents, search results, `
@@ -354,11 +363,16 @@ export function buildTalosSystemPrompt(
     tone: TalosToneId,
     identity?: TalosModelIdentity | null,
     locale?: string | null,
+    /**
+     * La riga della lingua delle risposte (owner 28/10), già scritta da `rigaLinguaDelleRisposte` (`linguaDelleRisposte.ts`, pigro
+     * per il budget d'avvio); assente = la riga di prima (chiamanti non ancora migrati).
+     */
+    rigaLingua?: string,
 ): string {
     const preset = TALOS_TONE_PRESETS.find((candidate) => candidate.id === tone)
         ?? TALOS_TONE_PRESETS.find((candidate) => candidate.id === TALOS_DEFAULT_TONE)!
-    if (identity?.provider === 'local') return localSystemPrompt(preset, identity, locale)
-    return `${identityLine(identity)}${BASE_PROMPT} ${rigaDellaLingua(locale)}${preset.fragment}\n`
+    if (identity?.provider === 'local') return localSystemPrompt(preset, identity, locale, rigaLingua)
+    return `${identityLine(identity)}${BASE_PROMPT} ${rigaDellaLingua(locale, rigaLingua)}${preset.fragment}\n`
         + `The user's selected tone preset is "${preset.id}". If the conversation clearly calls for a different `
         + `preset (${TONE_IDS}), append one final line exactly of the form [TONE_SUGGESTION: <preset>] — `
         + 'never mention this mechanism otherwise, and never change your own tone until the user switches.'

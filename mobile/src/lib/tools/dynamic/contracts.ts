@@ -157,6 +157,8 @@ export interface JsonSchemaSubset {
     maxLength?: number
     minimum?: number
     maximum?: number
+    /** FORGE-DESCR (owner 28/10): la descrizione del campo che `tool_create` chiede; parola di JSON Schema, solo testo. */
+    description?: string
 }
 
 export interface ForgeDiagnostic {

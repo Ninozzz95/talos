@@ -204,6 +204,8 @@ describe('il piano nel Codice su r4 (K3 piano)', () => {
     it('CPI-05 la pillola dice il nome breve del livello, col tono del rischio; ciò che passa senza chiedere nel suggerimento; apre il foglio', async () => {
         const w = await schermata()
         await consegna(fino((d) => d.type === 'RunFinished'))
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await w.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         const pillola = w.get('[data-testid="talos-codice-r4-permesso"]')
         const c1 = riassuntoSenzaChiedereR4('Workspace write', {}, { modalitaOperativa: 'normale' }, L())
         const atteso = chipDelPermessoR4('Workspace write', {}, { modalitaOperativa: 'normale' }, L())
@@ -222,6 +224,8 @@ describe('il piano nel Codice su r4 (K3 piano)', () => {
     it('CPI-06 il foglio: Piano e livello vanno a r4; durante un giro il modo è spento con la frase del desktop; un rifiuto si legge', async () => {
         const w = await schermata()
         await consegna(fino((d) => d.type === 'RunFinished'))
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await w.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         await w.get('[data-testid="talos-codice-r4-permesso"]').trigger('click')
         await asciuga()
         const foglio = () => w.get('[data-testid="talos-codice-r4-modo-foglio"]')

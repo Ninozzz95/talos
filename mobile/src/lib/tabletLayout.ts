@@ -1,3 +1,5 @@
+import { ref } from 'vue'
+
 /**
  * F6 — tablet resizable sidebar width contract (Claude split-view pattern).
  * ONE source of truth for bounds: the settings parser, the drag divider and
@@ -123,4 +125,28 @@ export function talosTabletLeavesHarnessListRoute(
  */
 export function talosTabletStationParent<T extends { name: string }>(isTablet: boolean, parent: T | null): T | null {
     return parent && talosTabletLeavesHarnessListRoute(isTablet, parent.name) ? null : parent
+}
+
+/**
+ * ⛔ E3 — LISTA-DOPPIA-01 dal lato del Codice (revisione del Desktop, F1-F3, 29/10 notte): mentre App.vue apre l'ultima sessione
+ * (`openDefaultHarnessSession`, asincrona), la pagina del tablet deve sapere SUBITO che un'apertura è in corso, nello stesso giro in
+ * cui si decide di lasciare la rotta: per questo il segno vive qui, nel chunk d'avvio, e non dietro un import dinamico. `fallita`
+ * dice a `HarnessScreen` di offrire «Riprova», che rifà la stessa apertura. Mai un rifiuto lasciato scappare.
+ */
+export const aperturaCodiceTablet = ref<'ferma' | 'in-corso' | 'fallita'>('ferma')
+let giroApertura = 0
+let ultimaApertura: (() => Promise<unknown>) | null = null
+
+export function segnaApertura(apri: () => Promise<unknown>): Promise<void> {
+    const mio = ++giroApertura
+    ultimaApertura = apri
+    aperturaCodiceTablet.value = 'in-corso'
+    const esito = (stato: 'ferma' | 'fallita') => { if (mio === giroApertura) aperturaCodiceTablet.value = stato }
+    // revisione del Desktop (S3-2): anche un `apri` che lancia in modo sincrono finisce in un rifiuto, mai una carta senza fine
+    return Promise.resolve().then(apri).then(() => esito('ferma'), () => esito('fallita'))
+}
+
+/** «Riprova»: la stessa apertura di prima. */
+export function riapriCodiceTablet(): Promise<void> {
+    return ultimaApertura ? segnaApertura(ultimaApertura) : Promise.resolve()
 }

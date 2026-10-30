@@ -561,6 +561,45 @@ describe('TalosMobilePersonalVoiceEnrollment', () => {
         expect(wrapper.emitted('close')).toBeTruthy()
     })
 
+    // Owner 29/10 sera («Quella della Chat ovunque», consiglio del Desktop: la pagina intera aspetta): mentre la voce si elabora, la
+    // carta della Chat al posto dell'anello a bordo grande; a elaborazione finita se ne va
+    it('VOCE-ATTESA-01 mentre la voce si elabora c\'è la carta della Chat, non l\'anello a bordo', async () => {
+        let finisci: (valore: unknown) => void = () => {}
+        bridge.buildVoiceEnrollmentProfile.mockReturnValue(new Promise((r) => { finisci = r }))
+        const wrapper = mount(TalosMobilePersonalVoiceEnrollment, {
+            props: { existingProfileCount: 0 },
+            global: { stubs: { teleport: true } },
+        })
+        await flushPromises()
+        await advanceToWizard(wrapper)
+        for (let i = 0; i < 12; i++) {
+            await recordOnePhrase(wrapper)
+            await wrapper.get('[data-testid="talos-personal-voice-next"]').trigger('click')
+        }
+        await wrapper.get('[data-testid="talos-personal-voice-name"]').setValue('Voce di prova')
+        await wrapper.get('[data-testid="talos-personal-voice-encode"]').trigger('click')
+        await flushPromises()
+
+        const carta = wrapper.get('[data-testid="talos-personal-voice-processing"]')
+        expect(carta.get('[data-talos-attesa-carta]').exists()).toBe(true)
+        expect(carta.get('[role="status"]').attributes('aria-label')).toBe('Processing your voice')
+        expect(wrapper.find('.rounded-full.animate-spin').exists()).toBe(false)
+        // owner 29/10 notte («La carta della Chat, senza velo»): niente velo su tutto, «Annulla» resta, la frase sulla privacy resta
+        expect(carta.classes()).not.toContain('fixed')
+        expect(wrapper.find('[data-testid="talos-personal-voice-cancel"]').exists()).toBe(true)
+        expect(wrapper.get('[data-testid="talos-personal-voice-process-body"]').text().length).toBeGreaterThan(0)
+
+        finisci({
+            backend: 'pocket-v2', profileSchemaVersion: 2, sourceSampleRate: 48000,
+            sourceSamples: 768000, referenceSamples: 576000, referenceDurationMs: 12000,
+            conditioningFrames: 150, conditioningDimension: 1024, enrollmentDurationMs: 24000, stages: [],
+        })
+        await flushPromises()
+        expect(wrapper.find('[data-testid="talos-personal-voice-processing"]').exists()).toBe(false)
+        expect(wrapper.find('[data-testid="talos-personal-voice-save"]').exists()).toBe(true)
+        wrapper.unmount()
+    })
+
     /**
      * ⛔⛔⛔ Trovato 24/8, live sul Pad: uno screenshot mostrava il messaggio
      * nativo Kotlin GREZZO ("a cancelled capture cannot be used for voice

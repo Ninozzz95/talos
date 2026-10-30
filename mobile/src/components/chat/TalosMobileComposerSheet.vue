@@ -16,6 +16,12 @@ import { useTalosOverlayBack } from '@/composables/useTalosOverlayBack'
 defineProps<{
     title: string
     testid: string
+    /**
+     * Altezza fissa (85dvh) e corpo in colonna: il foglio non salta quando il contenuto cambia (le schede dei fornitori del foglio
+     * «Modello e ragionamento», owner 27/10/2026) e chi lo monta può fissare un piede in fondo. Stili in linea: nessuna classe nuova
+     * nel CSS d'avvio (tetto 240.000).
+     */
+    alto?: boolean
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -110,10 +116,12 @@ let presa: { y: number; id: number } | null = null
  * disponibile sulle aree non interattive, mentre i gesture handler specifici
  * dei controlli (per esempio lo swipe orizzontale del drawer +) continuano a
  * ricevere la sequenza completa.
+ * ⛔ SHEET-SLIDER-01 (Pad, 27/10/2026, dito vero): anche gli slider (`role="slider"`, il pollice di reka-ui) hanno il loro
+ * trascinamento; senza, il foglio catturava il dito e lo slider si illuminava senza scorrere.
  */
 function bersaglioInterattivo(target: EventTarget | null): boolean {
     return target instanceof Element && Boolean(target.closest(
-        'button, a, input, textarea, select, [role="button"], [role="tab"], [role="switch"], [contenteditable="true"]',
+        'button, a, input, textarea, select, [role="button"], [role="tab"], [role="switch"], [role="slider"], [contenteditable="true"]',
     ))
 }
 
@@ -169,6 +177,7 @@ onBeforeUnmount(() => { molla?.cancel(); molla = null })
             ref="root"
             role="dialog"
             aria-modal="true"
+            :style="alto ? { height: '85dvh' } : undefined"
             :aria-label="title"
             tabindex="-1"
             :data-testid="testid"
@@ -211,8 +220,17 @@ onBeforeUnmount(() => { molla?.cancel(); molla = null })
             <!-- ⛔ `pb-3`: il mockup «Talos Calm Finale» dà il respiro DENTRO la parte che scorre
                  (`.sheet-body{overflow:auto;padding:12px}`). Senza, misurato sul Pad il 14/09, l'ultima
                  voce finiva a filo dell'area della barra dei gesti (16 px) senza un pixel di aria. -->
-            <div data-talos-sheet-body class="min-h-0 flex-1 touch-pan-y space-y-3 overflow-y-auto px-4 pb-3 pt-1">
+            <div
+                data-talos-sheet-body
+                class="min-h-0 flex-1 touch-pan-y space-y-3 overflow-y-auto px-4 pb-3 pt-1"
+                :style="alto ? { display: 'flex', flexDirection: 'column' } : undefined"
+            >
                 <slot />
+            </div>
+            <!-- ⛔ Owner 28/10/2026, foto dal telefono: un piede attaccato in fondo DENTRO la parte che scorre (sticky) lasciava passare la
+                 lista sotto di sé. Chi ha un piede lo mette qui: una fascia del foglio, fuori dallo scorrimento (FOGLIO-03). -->
+            <div v-if="$slots.piede" data-talos-sheet-foot class="shrink-0">
+                <slot name="piede" />
             </div>
         </section>
     </div>

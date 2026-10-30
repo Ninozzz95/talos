@@ -29,7 +29,29 @@ export interface TalosAttrezzoDelGiro {
      * (la chat, il salvato) vale la regola del confine, come prima.
      */
     finita?: true
+    /**
+     * ESITO-RIGA (Pad, 27/10/2026): com'è andata, quando non è andata — la decisione del PC (`esitoAttrezzoR4.ts`). Assente =
+     * riuscita. Resta nel salvato: la riga rossa deve reggere al ricaricamento.
+     */
+    esito?: TalosEsitoAttrezzo
+    /**
+     * T8 (27/10/2026): il corpo della riga che si apre, come sul PC — gli argomenti grezzi (JSON) e il risultato. Solo il Codice r4
+     * li mette, e solo in memoria (la conversazione si rifà dagli eventi di r4); la chat non li salva.
+     */
+    argomenti?: string
+    risultato?: TalosRisultatoAttrezzo
 }
+
+/** T8: il risultato di una chiamata: il testo del kernel e, solo se il backend li ha davvero, i due flussi. */
+export interface TalosRisultatoAttrezzo {
+    contenuto: string
+    stdout?: string
+    stderr?: string
+}
+
+/** Gli stati del PC (`impostaEsitoRiga`): error, interrupted, not-run, duplicate. */
+export type TalosEsitoAttrezzo = 'errore' | 'interrotta' | 'non-eseguita' | 'doppione'
+const ESITI_ATTREZZO: readonly unknown[] = ['errore', 'interrotta', 'non-eseguita', 'doppione'] satisfies TalosEsitoAttrezzo[]
 
 /** Dove finiva un giro: la lunghezza del testo e del ragionamento già arrivati quando sono partiti i suoi attrezzi. */
 export interface TalosConfineDelGiro {
@@ -127,6 +149,16 @@ function attrezzoValido(valore: unknown): valore is TalosAttrezzoDelGiro {
     return typeof name === 'string' && NON_VUOTO.test(name) && (detail === null || detail === undefined || typeof detail === 'string')
 }
 
+function risultatoValido(valore: unknown): valore is TalosRisultatoAttrezzo {
+    if (!valore || typeof valore !== 'object') return false
+    const { contenuto, stdout, stderr } = valore as Record<string, unknown>
+    return typeof contenuto === 'string' && (stdout === undefined || typeof stdout === 'string') && (stderr === undefined || typeof stderr === 'string')
+}
+
+function risultatoPulito({ contenuto, stdout, stderr }: TalosRisultatoAttrezzo): TalosRisultatoAttrezzo {
+    return { contenuto, ...(stdout ? { stdout } : {}), ...(stderr ? { stderr } : {}) }
+}
+
 /**
  * La sequenza riletta dal metadata, o `null`. Il metadata viene dal disco: dati storti non devono diventare interfaccia, e il
  * messaggio allora si mostra come oggi, col suo testo.
@@ -145,7 +177,12 @@ export function talosSequenzaDaMetadata(valore: unknown): TalosSegmentoDelTurno[
         } else if (tipo === 'attrezzi' && Array.isArray(attrezzi)) {
             const validi = attrezzi.filter(attrezzoValido)
             if (validi.length) {
-                segmenti.push({ tipo, attrezzi: validi.map((attrezzo) => ({ name: attrezzo.name, detail: attrezzo.detail ?? null })) })
+                segmenti.push({ tipo, attrezzi: validi.map(({ name, detail, esito, argomenti, risultato }) => ({
+                    name, detail: detail ?? null, ...(ESITI_ATTREZZO.includes(esito) ? { esito } : {}),
+                    // T8: il corpo passa solo nella sua forma (testi); storto si lascia, la riga resta
+                    ...(typeof argomenti === 'string' && argomenti ? { argomenti } : {}),
+                    ...(risultatoValido(risultato) ? { risultato: risultatoPulito(risultato) } : {}),
+                })) })
             }
         } else {
             return null

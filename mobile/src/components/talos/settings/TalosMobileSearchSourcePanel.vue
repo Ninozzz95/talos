@@ -257,7 +257,7 @@ const readiness = computed(() => {
                 :disabled="tavilyOpening"
                 @click="openTavilyPlatform"
             >
-                <Loader2 v-if="tavilyOpening" class="size-3.5 animate-spin" aria-hidden="true" />
+                <Loader2 v-if="tavilyOpening" class="size-3.5 animate-spin text-[var(--talos-accent)]" aria-hidden="true" />
                 <ExternalLink v-else class="size-3.5" aria-hidden="true" />
                 {{ t('search.tavilyKeyLink') }}
             </Button>

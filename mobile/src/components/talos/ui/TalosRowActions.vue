@@ -378,7 +378,8 @@ defineExpose({ close, show })
                          `--talos-danger` is only guaranteed legible ON
                          `--talos-danger-soft`. Used as text over a neutral
                          menu it resolved to #fee2e2 on the device — near
-                         white, no signal at all. The rule above still does
+                         white, no signal at all (until 26/10/2026; in dark it is
+                         now a readable red, see rossoLeggibile in talosThemes.ts). The rule above still does
                          the separating; this makes the colour say
                      something too. -->
                     <button

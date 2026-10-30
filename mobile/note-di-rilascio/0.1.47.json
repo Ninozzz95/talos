@@ -1,0 +1,14 @@
+{
+    "en": [
+        "Code on your computer works like the desktop: tool rows say what happened, new sessions appear at once, and a single Stop can end the chat and every agent it started.",
+        "The composer is redesigned around one compact row; model and reasoning are chosen in one sheet.",
+        "Code, Library and Computer look like Chats, and a screen that loads for more than two seconds shows how long it has been waiting.",
+        "Replies come in the language you write or speak, report PDFs no longer have blank pages, and the ADB bridge explains what blocks it."
+    ],
+    "it": [
+        "Il Codice sul computer funziona come sul desktop: le righe degli attrezzi dicono com'è andata, le sessioni nuove compaiono subito e un solo Stop può fermare la chat e tutti gli agenti che ha avviato.",
+        "Il compositore è rifatto attorno a una sola riga compatta; modello e ragionamento si scelgono in un solo foglio.",
+        "Codice, Libreria e Computer sono come le Chat, e una schermata che carica per più di due secondi mostra da quanto aspetta.",
+        "Le risposte arrivano nella lingua in cui scrivi o parli, i PDF dei rapporti non hanno più pagine bianche e il ponte ADB spiega cosa lo blocca."
+    ]
+}

@@ -1,5 +1,6 @@
 package ai.talos.terminal
 
+import ai.talos.BuildConfig
 import android.content.Context
 import android.system.Os
 import android.util.Log
@@ -18,7 +19,14 @@ import java.security.SecureRandom
  */
 object TalosR4Avvio {
     private const val TAG = "TalosR4Avvio"
-    const val PORTA = 4178
+    /**
+     * ⛔ D-0145-2 (Desktop, Pad 25/10 notte): con ai.talos e la copia affiancata ai.talos.dev sullo stesso dispositivo, chi accendeva
+     * r4 per secondo trovava la porta presa e il suo client parlava all'r4 dell'altra col proprio token (401 AUTH_REQUIRED). La copia
+     * affiancata ha la sua porta; la release resta sulla 4178. r4 la legge da `TALOS_HARNESS_UI_PORT` e ammette le origini della
+     * porta su cui ascolta (`http-app.mjs:2908` @ d5bed0a16): nessun cambio nel kernel.
+     */
+    fun portaPer(applicationId: String): Int = if (applicationId.endsWith(".dev")) 4188 else 4178
+    val PORTA: Int = portaPer(BuildConfig.APPLICATION_ID)
     const val ASSET_ARCHIVIO = "talos-r4/r4.tar"
     const val ASSET_PORTACHIAVI = "talos-r4/portachiavi-android.mjs"
     private const val VAR_TOKEN = "TALOS_HARNESS_UI_TOKEN"

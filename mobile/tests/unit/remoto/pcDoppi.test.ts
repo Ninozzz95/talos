@@ -11,23 +11,23 @@ import { dimenticaRicordo, domandaDoppiGiaFatta, ricordaEffimero, ricordaProgram
  */
 const RELAY = 'https://relay.example/'
 const pc = (pcId: string, nome: string | null, relay: string | null = RELAY) => ({ pcId, nome, relay, accoppiatoAlle: 1 })
-const NUOVO = pc('b8510001', 'DESKTOP-BJ9I7OU')
+const NUOVO = pc('b8510001', 'DESKTOP-ESEMPIO')
 
 beforeEach(() => { localStorage.clear() })
 
 describe('le voci vecchie di un PC appena accoppiato', () => {
     it('DOPPI-01 stesso nome, stesso ponte, spente: sono le voci vecchie', () => {
-        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-BJ9I7OU'), pc('65fe0001', 'DESKTOP-BJ9I7OU')]
+        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-ESEMPIO'), pc('65fe0001', 'DESKTOP-ESEMPIO')]
         expect(vociVecchieDi(NUOVO, elenco, () => false).map((v) => v.pcId)).toEqual(['31ab0001', '65fe0001'])
     })
 
     it('DOPPI-02 ⛔ verso contrario: una voce che risponde non si propone mai (è un altro PC col nome uguale)', () => {
-        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-BJ9I7OU'), pc('65fe0001', 'DESKTOP-BJ9I7OU')]
+        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-ESEMPIO'), pc('65fe0001', 'DESKTOP-ESEMPIO')]
         expect(vociVecchieDi(NUOVO, elenco, (id) => id === '65fe0001').map((v) => v.pcId)).toEqual(['31ab0001'])
     })
 
     it('DOPPI-03 ⛔ verso contrario: nome uguale con un ponte diverso, o nome diverso, non è una voce vecchia', () => {
-        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-BJ9I7OU', 'https://altro.example/'), pc('aa000001', 'PORTATILE'), pc('cc000001', null)]
+        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-ESEMPIO', 'https://altro.example/'), pc('aa000001', 'PORTATILE'), pc('cc000001', null)]
         expect(vociVecchieDi(NUOVO, elenco, () => false)).toEqual([])
     })
 
@@ -55,13 +55,13 @@ describe('le voci vecchie di un PC appena accoppiato', () => {
         ricordaProgramma(NUOVO.pcId, 'TALOS desktop')
         ricordaProgramma('31ab0001', 'TALOS CLI')
         ricordaProgramma('65fe0001', 'TALOS desktop')
-        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-BJ9I7OU'), pc('65fe0001', 'DESKTOP-BJ9I7OU')]
+        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-ESEMPIO'), pc('65fe0001', 'DESKTOP-ESEMPIO')]
         expect(vociVecchieDi(NUOVO, elenco, () => false).map((v) => v.pcId)).toEqual(['65fe0001'])
     })
 
     it('DOPPI-08 se una delle due voci non sa il programma (accoppiata prima della fetta C) vale la regola di nome e ponte', () => {
         ricordaProgramma(NUOVO.pcId, 'TALOS desktop')
-        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-BJ9I7OU')]
+        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-ESEMPIO')]
         expect(vociVecchieDi(NUOVO, elenco, () => false).map((v) => v.pcId)).toEqual(['31ab0001'])
         localStorage.clear()
         ricordaProgramma('31ab0001', 'TALOS CLI')
@@ -71,7 +71,7 @@ describe('le voci vecchie di un PC appena accoppiato', () => {
     /* Owner 24/10/2026 «Sì, adesso»: le voci di un PC col portachiavi di prova (`pc.effimero`, desktop f1199ace0) si propongono per prime. */
     it('DOPPI-09 le voci «di prova» vengono per prime, le altre restano nel loro ordine', () => {
         ricordaEffimero('65fe0001', true)
-        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-BJ9I7OU'), pc('65fe0001', 'DESKTOP-BJ9I7OU'), pc('2d230001', 'DESKTOP-BJ9I7OU')]
+        const elenco = [NUOVO, pc('31ab0001', 'DESKTOP-ESEMPIO'), pc('65fe0001', 'DESKTOP-ESEMPIO'), pc('2d230001', 'DESKTOP-ESEMPIO')]
         expect(vociVecchieDi(NUOVO, elenco, () => false).map((v) => v.pcId)).toEqual(['65fe0001', '31ab0001', '2d230001'])
     })
 
@@ -94,14 +94,68 @@ describe('le voci vecchie di un PC appena accoppiato', () => {
     it('DOPPI-10 ⛔ un PC «di prova» appena accoppiato o in linea non propone di dimenticare niente', () => {
         ricordaEffimero(NUOVO.pcId, true)
         ricordaEffimero('27ba0001', true)
-        const elenco = [NUOVO, pc('287c0001', 'DESKTOP-BJ9I7OU'), pc('27ba0001', 'DESKTOP-BJ9I7OU')]
+        const elenco = [NUOVO, pc('287c0001', 'DESKTOP-ESEMPIO'), pc('27ba0001', 'DESKTOP-ESEMPIO')]
         expect(vociVecchieDi(NUOVO, elenco, () => false)).toEqual([])
     })
 
     it('DOPPI-11 una voce «di prova» in linea non si propone; spenta sì, per prima, quando propone un PC vero', () => {
         ricordaEffimero('27ba0001', true)
-        const elenco = [NUOVO, pc('287c0001', 'DESKTOP-BJ9I7OU'), pc('27ba0001', 'DESKTOP-BJ9I7OU')]
+        const elenco = [NUOVO, pc('287c0001', 'DESKTOP-ESEMPIO'), pc('27ba0001', 'DESKTOP-ESEMPIO')]
         expect(vociVecchieDi(NUOVO, elenco, (id) => id === '27ba0001').map((v) => v.pcId)).toEqual(['287c0001'])
         expect(vociVecchieDi(NUOVO, elenco, () => false).map((v) => v.pcId)).toEqual(['27ba0001', '287c0001'])
+    })
+
+    /* Owner 26/10/2026 (via CLI e Desktop): in modalità n0 il QR del PC non porta più `relay=` (57 → 41 moduli). Le voci accoppiate
+       prima hanno il relay di casa di n0 (`https://euc1-1.relay.n0.iroh.link./`, iroh `defaults.rs:27-33`), le nuove `null`: per il
+       telefono sono lo stesso ponte, come per `relayDalQr` (senza gettone ⇒ n0). Il relay proprio resta un ponte a sé. */
+    const N0_EU = 'https://euc1-1.relay.n0.iroh.link./'
+    const N0_US = 'https://use1-1.relay.n0.iroh.link./'
+
+    it('DOPPI-13 il QR senza `relay=` (n0) ritrova le voci vecchie col relay di casa di n0, di qualunque regione', () => {
+        const nuovoN0 = pc('b8510001', 'DESKTOP-ESEMPIO', null)
+        const elenco = [nuovoN0, pc('31ab0001', 'DESKTOP-ESEMPIO', N0_EU), pc('65fe0001', 'DESKTOP-ESEMPIO', N0_US), pc('77aa0001', 'DESKTOP-ESEMPIO', 'https://EUC1-1.Relay.N0.iroh.link/')]
+        expect(vociVecchieDi(nuovoN0, elenco, () => false).map((v) => v.pcId)).toEqual(['31ab0001', '65fe0001', '77aa0001'])
+        // e al contrario: un PC ancora vecchio (QR col relay di casa) ritrova la voce nuova senza relay
+        expect(vociVecchieDi(pc('c0de0001', 'DESKTOP-ESEMPIO', N0_EU), [pc('b8510001', 'DESKTOP-ESEMPIO', null)], () => false).map((v) => v.pcId)).toEqual(['b8510001'])
+        // revisione del Desktop: un relay vuoto (o di soli spazi) vale n0, come per `relayDalQr` (`isNullOrBlank` ⇒ n0)
+        expect(vociVecchieDi(nuovoN0, [pc('31ab0001', 'DESKTOP-ESEMPIO', ''), pc('65fe0001', 'DESKTOP-ESEMPIO', '  ')], () => false).map((v) => v.pcId)).toEqual(['31ab0001', '65fe0001'])
+    })
+
+    // ⛔ D-0147-NAV-1 (Pad, 27/10): una voce senza `relay` (undefined, la chiave tolta da Android) faceva `undefined.trim()` e la
+    // sezione Computer restava vuota. Anche se il confine col nativo ora la normalizza, il ponte di una voce storta non lancia mai.
+    it('DOPPI-15 una voce senza `relay` (undefined) vale n0 e non lancia mai', () => {
+        const senza = { pcId: '31ab0001', nome: 'DESKTOP-ESEMPIO' } as unknown as Parameters<typeof vociVecchieDi>[1][number]
+        const nuovoN0 = pc('b8510001', 'DESKTOP-ESEMPIO', null)
+        expect(() => vociVecchieDi(nuovoN0, [nuovoN0, senza], () => false)).not.toThrow()
+        expect(vociVecchieDi(nuovoN0, [nuovoN0, senza], () => false).map((v) => v.pcId)).toEqual(['31ab0001'])
+        expect(vociVecchieDi(senza, [nuovoN0, senza], () => false).map((v) => v.pcId)).toEqual(['b8510001'])
+    })
+
+    it('DOPPI-14 ⛔ verso contrario: n0 e il relay proprio restano due ponti, in tutte e due le direzioni', () => {
+        const nuovoN0 = pc('b8510001', 'DESKTOP-ESEMPIO', null)
+        expect(vociVecchieDi(nuovoN0, [nuovoN0, pc('31ab0001', 'DESKTOP-ESEMPIO', RELAY)], () => false)).toEqual([])
+        expect(vociVecchieDi(NUOVO, [NUOVO, pc('31ab0001', 'DESKTOP-ESEMPIO', null), pc('65fe0001', 'DESKTOP-ESEMPIO', N0_EU)], () => false)).toEqual([])
+        // un host che finisce come n0 senza esserlo non conta come n0
+        expect(vociVecchieDi(nuovoN0, [pc('31ab0001', 'DESKTOP-ESEMPIO', 'https://finto-n0.iroh.link.example/')], () => false)).toEqual([])
+    })
+
+    /*
+     * Revisione del blocco 7 (Desktop, D-R1 / C-R2, REV-B7-D2): da r4 `94726d284` il PC salva il relay proprio NORMALIZZATO (`URL.href`:
+     * host minuscolo, `:443` tolto, `..` risolti; senza la `/` aggiunta se la persona non l'ha scritta). Una voce salvata prima col testo
+     * grezzo e lo stesso PC riaccoppiato dopo sono lo stesso ponte.
+     */
+    it('DOPPI-16 il relay proprio scritto in due modi equivalenti è lo stesso ponte; uno davvero diverso no', () => {
+        const nuovo = pc('b8510001', 'DESKTOP-ESEMPIO', 'https://relay.casa')
+        const vecchio = pc('31ab0001', 'DESKTOP-ESEMPIO', 'HTTPS://Relay.Casa:443/')
+        const conPunti = pc('65fe0001', 'DESKTOP-ESEMPIO', 'https://relay.casa/a/../')
+        expect(vociVecchieDi(nuovo, [nuovo, vecchio, conPunti], () => false).map((v) => v.pcId)).toEqual(['31ab0001', '65fe0001'])
+        expect(vociVecchieDi(vecchio, [nuovo, vecchio], () => false).map((v) => v.pcId)).toEqual(['b8510001'])
+        // un'altra porta, un altro percorso o un altro host restano un altro ponte
+        const altri = [pc('aa000001', 'DESKTOP-ESEMPIO', 'https://relay.casa:8443/'), pc('aa000002', 'DESKTOP-ESEMPIO', 'https://relay.casa/altro'),
+            pc('aa000003', 'DESKTOP-ESEMPIO', 'https://relay.altro/')]
+        expect(vociVecchieDi(nuovo, [nuovo, ...altri], () => false)).toEqual([])
+        // un testo che non è un indirizzo vale per sé, come prima
+        expect(vociVecchieDi(pc('cc000001', 'DESKTOP-ESEMPIO', 'non un indirizzo'), [pc('cc000002', 'DESKTOP-ESEMPIO', 'non un indirizzo')], () => false)
+            .map((v) => v.pcId)).toEqual(['cc000002'])
     })
 })

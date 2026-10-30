@@ -1,0 +1,39 @@
+{
+  "origine": {
+    "commit": "79ea996dee15919f5d9dd38ef985a1f1f22bb4bf",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "b9dde01142f567d9d03a93c9a8ebdbafe63579c1f735c5e166cdf71074a64c15",
+    "prefisso": [
+      "turno.no.",
+      "turno.rifiuto."
+    ]
+  },
+  "it": {
+    "turno.rifiuto.htmlVuoto": "L’HTML era vuoto: non è stato creato niente.",
+    "turno.rifiuto.cartellaMancante": "Manca la cartella: il sotto-agente non è partito.",
+    "turno.rifiuto.cartellaUguale": "La cartella del figlio non poteva essere la stessa del padre.",
+    "turno.rifiuto.nonTesto": "Il percorso non era scritto come testo.",
+    "turno.rifiuto.senzaDelega": "Questa sessione non può delegare a un sotto-agente.",
+    "turno.rifiuto.nonConfigurata": "Questa capacità non è configurata su questo TALOS.",
+    "turno.rifiuto.senzaApprovazione": "Serviva un permesso che questa sessione non poteva chiedere.",
+    "turno.rifiuto.troppoGrande": "Il contenuto era troppo grande per essere accettato.",
+    "turno.no.rifiuto": "L’attrezzo ha rifiutato la richiesta.",
+    "turno.no.nonTrovato": "Quello che l’attrezzo cercava non c’è: non è cambiato niente.",
+    "turno.no.ambiguo": "Il testo da sostituire compare più volte: non è cambiato niente.",
+    "turno.no.nonValido": "La richiesta all’attrezzo non era valida: non è cambiato niente."
+  },
+  "en": {
+    "turno.rifiuto.htmlVuoto": "The HTML was empty: nothing was created.",
+    "turno.rifiuto.cartellaMancante": "The folder is missing: the sub-agent did not start.",
+    "turno.rifiuto.cartellaUguale": "The child’s folder could not be the same as the parent’s.",
+    "turno.rifiuto.nonTesto": "The path was not written as text.",
+    "turno.rifiuto.senzaDelega": "This session cannot delegate to a sub-agent.",
+    "turno.rifiuto.nonConfigurata": "This capability is not set up on this TALOS.",
+    "turno.rifiuto.senzaApprovazione": "A permission was needed that this session could not ask for.",
+    "turno.rifiuto.troppoGrande": "The content was too large to be accepted.",
+    "turno.no.rifiuto": "The tool rejected the request.",
+    "turno.no.nonTrovato": "What the tool was looking for is not there: nothing changed.",
+    "turno.no.ambiguo": "The text to replace appears more than once: nothing changed.",
+    "turno.no.nonValido": "The request to the tool was not valid: nothing changed."
+  }
+}

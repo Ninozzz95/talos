@@ -500,6 +500,23 @@ describe('MEM — la prova automatica non tiene mai due copie del modello', () =
         expect(ordine.slice(0, 2)).toEqual(['close', 'qualify'])
     })
 
+    /*
+     * ⛔ B3 (27/10/2026, stessa famiglia di D-0147-NAV-1): il nativo mette `loadedPath` con `put(chiave, null)`, che la TOGLIE; lo stato
+     * arrivava con `loadedPath` undefined, `!== null` era vero e la prova chiudeva un motore senza niente aperto. Ai due versi.
+     */
+    it('LE-NULL-01 nessun modello aperto (chiave assente): niente close; un modello aperto: close prima della prova', async () => {
+        bridge.available.mockResolvedValue({ available: true, backends: 'CPU,OpenCL' })
+        bridge.qualifyBackend.mockResolvedValue(ESITO)
+        const { talosLocalEngineStatus } = await import('@/services/localEngine')
+        expect((await talosLocalEngineStatus()).loadedPath).toBeNull()
+        await talosRunAutomaticProbe('/m.gguf')
+        expect(bridge.close).not.toHaveBeenCalled()
+
+        bridge.available.mockResolvedValue({ available: true, backends: 'CPU,OpenCL', loadedPath: '/m.gguf' })
+        await talosRunAutomaticProbe('/m.gguf')
+        expect(bridge.close).toHaveBeenCalledTimes(1)
+    })
+
     it('MEM-02 con una risposta in corso NON parte: si riprova la volta dopo', async () => {
         bridge.available.mockResolvedValue({ available: true, backends: 'CPU,OpenCL', loadedPath: '/m.gguf' })
         let finisciGenerazione!: (v: unknown) => void

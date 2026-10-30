@@ -55,10 +55,33 @@ const novita = computed<readonly string[]>(() => {
     return talosCurrentLocale().startsWith('it') ? note.it : note.en
 })
 
+/*
+ * D-0147-UPD-a (Pad, 26/10/2026): non ogni `apk-*` è una firma sbagliata. Un'altra app (`TalosControlliApk` PACCHETTO_DIVERSO) o una
+ * versione non più nuova (NON_PIU_NUOVA) hanno la loro frase, come in Obtainium (`appIdMismatch`, `cantInstallOlderVersion`).
+ */
+const apkDiverso = computed(() => talosAggiornamenti.motivo === 'apk-pacchetto_diverso')
+const nonPiuNuova = computed(() => talosAggiornamenti.motivo === 'apk-non_piu_nuova')
+
 const firmaSbagliata = computed(() => {
     const motivo = talosAggiornamenti.motivo ?? ''
+    if (apkDiverso.value || nonPiuNuova.value) return false
     return motivo === 'firma' || motivo === 'impronta' || motivo.startsWith('manifesto') || motivo.startsWith('apk-')
         || motivo === 'versione-del-tag'
+})
+
+const titoloScarto = computed(() => {
+    if (apkDiverso.value) return t('updates.failedNotTalos')
+    if (nonPiuNuova.value) return t('updates.failedNotNewer')
+    if (firmaSbagliata.value) return t('updates.failedSignature')
+    return t(scaricamentoFallito.value ? 'updates.failedDownload' : 'updates.failedOther')
+})
+
+const corpoScarto = computed(() => {
+    const valori = { version: versione.value, installed: talosAggiornamenti.installata }
+    if (apkDiverso.value) return t('updates.failedNotTalosBody', valori)
+    if (nonPiuNuova.value) return t('updates.failedNotNewerBody', valori)
+    if (firmaSbagliata.value) return t('updates.failedSignatureBody', valori)
+    return t('updates.failedOtherBody', { reason: ragione.value, installed: talosAggiornamenti.installata })
 })
 
 /** D-UPD-1: lo scaricamento abbandonato per sempre (`scaricamento:<motivo del runner o del rinvio>`): il file non è mai arrivato. */
@@ -165,16 +188,13 @@ const secondario = 'talos-pressable inline-flex min-h-touch w-full items-center 
             <template v-else-if="stato === 'fallita'">
                 <p class="flex items-start gap-2 text-base font-semibold text-[var(--talos-text)]">
                     <CircleAlert class="mt-0.5 size-5 shrink-0 text-[var(--talos-danger)]" aria-hidden="true" />
-                    {{ firmaSbagliata ? t('updates.failedSignature') : scaricamentoFallito ? t('updates.failedDownload') : t('updates.failedOther') }}
+                    {{ titoloScarto }}
                 </p>
-                <p data-testid="talos-update-failed-body" class="text-sm text-[var(--talos-muted)]">
-                    {{ firmaSbagliata
-                        ? t('updates.failedSignatureBody', { version: versione, installed: talosAggiornamenti.installata })
-                        : t('updates.failedOtherBody', { reason: ragione, installed: talosAggiornamenti.installata }) }}
-                </p>
+                <p data-testid="talos-update-failed-body" class="text-sm text-[var(--talos-muted)]">{{ corpoScarto }}</p>
                 <div class="flex flex-col gap-2">
-                    <button type="button" data-testid="talos-update-retry" :class="primario" :disabled="inCorso" @click="riprova">{{ t('updates.retry') }}</button>
-                    <button type="button" data-testid="talos-update-close" :class="secondario" @click="chiudi">{{ t('updates.close') }}</button>
+                    <!-- niente di più nuovo: riprovare non serve, resta solo «Chiudi», che allora è l'azione principale -->
+                    <button v-if="!nonPiuNuova" type="button" data-testid="talos-update-retry" :class="primario" :disabled="inCorso" @click="riprova">{{ t('updates.retry') }}</button>
+                    <button type="button" data-testid="talos-update-close" :class="nonPiuNuova ? primario : secondario" @click="chiudi">{{ t('updates.close') }}</button>
                 </div>
             </template>
 

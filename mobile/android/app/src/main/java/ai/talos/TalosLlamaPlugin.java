@@ -352,7 +352,9 @@ public class TalosLlamaPlugin extends Plugin {
         if (TalosLlamaNative.AVAILABLE) {
             result.put("engineBuild", TalosLlamaNative.nativeEngineBuild());
         }
-        result.put("loadedPath", openPath.get());
+        // ⛔ B3 (27/10/2026): put(chiave, null) di org.json TOGLIE la chiave; senza modello aperto si manda JSONObject.NULL, che arriva null
+        String percorsoAperto = openPath.get();
+        result.put("loadedPath", percorsoAperto != null ? percorsoAperto : org.json.JSONObject.NULL);
         /**
          * La forma del modello caricato viaggia con lo STATO, non su una porta
          * sua.

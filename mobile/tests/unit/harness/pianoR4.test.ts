@@ -22,6 +22,8 @@ const espandi = (_k: string, v: unknown) => (v && typeof v === 'object' && 'ripe
     ? String((v as { ripeti: string }).ripeti).repeat((v as { volte: number }).volte) : v)
 const golden = JSON.parse(readFileSync(resolve(__dirname, '..', '..', 'fixtures', 'r4', 'piano-golden-701c6c0d2.json'), 'utf8'), espandi)
 const PIN = '701c6c0d2d711879b53aa21bddad5a06d33538e7'
+// pin r4 4cee78f33 (29/10): i testi delle quattro aree vengono dal pin nuovo; il golden resta @ 701c6c0d2 (le sue fonti non cambiano la carta)
+const PIN_TESTI = '4cee78f3349c5d34b4f44303a157b93542656aef'
 const LINGUE = ['it', 'en'] as const
 
 describe('la carta del piano come il desktop @ 701c6c0d2', () => {
@@ -76,7 +78,7 @@ describe('la carta del piano come il desktop @ 701c6c0d2', () => {
 
     it('PIA-05 le aree nuove vengono dal pin e hanno le stesse chiavi nelle due lingue', () => {
         for (const area of [chatPiano, appPiano, modelloPermessi, erroriPiano]) {
-            expect(area.origine.commit).toBe(PIN)
+            expect(area.origine.commit).toBe(PIN_TESTI)
             expect(Object.keys(area.it).sort()).toEqual(Object.keys(area.en).sort())
         }
         for (const chiave of ['plan.activeNextTurn', 'plan.updated', 'plan.planFirst', 'plan.workNormally', 'permissions.workModeLabel', 'permissions.modeChangeHint']) {

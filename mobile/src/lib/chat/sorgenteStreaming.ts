@@ -23,6 +23,23 @@ export interface TalosSorgenteStreaming {
      * OPZIONALE: una sorgente che non li conosce (il Codice su r4) resta valida e mostra quello che mostrava.
      */
     bozze?: ComputedRef<readonly TalosBozzaAttrezzo[]>
+    /**
+     * R3 delle righe in corso (bozzetto approvato il 28/10, scena 9): la linea col PC è caduta a metà giro e si sta riaprendo. L'orb
+     * non dice «al lavoro» finché non torna; `sending` resta vero (il giro sul PC non è finito). OPZIONALE: la chat non ce l'ha.
+     */
+    inPausa?: ComputedRef<boolean>
+    /**
+     * R4 delle righe in corso (bozzetto approvato il 28/10, scene 3a/6/7): a che punto è l'attesa della prima parola e da quando.
+     * `inviato` = il messaggio è partito e il giro non è ancora cominciato (`chi: 'computer'` quando a lavorare è il PC); `giro` = il
+     * giro è partito, `dal` è l'ora dell'evento (RunStarted, o l'invio nella chat). OPZIONALE: senza, la coda resta com'era.
+     */
+    attesa?: ComputedRef<TalosAttesaDelGiro | null>
+}
+
+export interface TalosAttesaDelGiro {
+    fase: 'inviato' | 'giro'
+    dal: number | null
+    chi: 'computer' | null
 }
 
 export const TALOS_SORGENTE_STREAMING: InjectionKey<TalosSorgenteStreaming> = Symbol('talos-sorgente-streaming')
@@ -36,6 +53,7 @@ interface ControllerDellaChat {
             streamingConfini: readonly TalosConfineDelGiro[] | null
             streamingBozze?: readonly TalosBozzaAttrezzo[] | null
             streamingSessionId: string | null
+            streamingSince?: number | null
         }
         activeSession: { value: { id: string } | null | undefined }
     }
@@ -58,5 +76,11 @@ export function talosSorgenteStreamingDellaChat(controller: ControllerDellaChat)
         confini: computed(() => state.streamingConfini ?? []),
         attivi: computed(() => controller.toolActivity.value),
         bozze: computed(() => state.streamingBozze ?? []),
+        // R4: nella chat non c'è un «via» separato: la risposta è in corso dall'ora in cui è diventata di questa conversazione
+        attesa: computed(() => (state.sending
+            && state.streamingSessionId !== null
+            && state.streamingSessionId === controller.chat.activeSession.value?.id
+            ? { fase: 'giro' as const, dal: state.streamingSince ?? null, chi: null }
+            : null)),
     }
 }

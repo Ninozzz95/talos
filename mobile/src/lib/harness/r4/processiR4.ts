@@ -1,7 +1,8 @@
 /**
  * ⛔ K3-C3b-2a (ledger `LEDGER-K3-CODICE-COME-LA-CHAT-2026-10-15.md`): la scheda Processi del pannello ▤ del Codice su r4.
  * COPIA FISSATA delle regole del desktop r4 @ `fc5e25d62`, provata contro il golden calcolato dalle funzioni vere
- * (`tests/fixtures/r4/processi-fc5e25d62.json`):
+ * (`tests/fixtures/r4/processi-4cee78f33.json`, ricalcolato @ 4cee78f33: `datiProcesso` porta anche `avviatoA`, e l'inglese
+ * «Running» diventa «In progress»):
  *   · `components/inspector.js`: `STATI_PROCESSO` (:311), `TETTO_PROCESSI` (:371), `CHI_SFONDA` (:378), `uscitaDaTestoAttrezzo`
  *     (:396), `uscitaDelRisultato` (:411), `statoDaUscita` (:420), `datiProcesso` (:452), le voci del menu della riga (:704-725),
  *     `TESTI_RICHIESTA` e `richiestaConclusa` (:773-807), `testoRisorse` (:819), `comandoDagliArgomenti`,
@@ -298,8 +299,9 @@ export function contaProcessiAttiviR4(processi: { id?: unknown; stato?: unknown 
 export type RigaDettaglioR4 = [string, string] | [string, string, 'lungo']
 export interface ProcessoR4 {
     id: string | null; comando: string; descrizione: string; analisi: AnalisiComandoR4; famiglia: FamigliaR4; stato: StatoProcessoR4
-    etichetta: string; tono: TonoR4; vivo: boolean; chi: string; misura: string; fermo: string | null; quando: string; cartella: string
-    pid: string; uscita: number | null; dettaglio: RigaDettaglioR4[]
+    etichetta: string; tono: TonoR4; vivo: boolean; chi: string; misura: string; fermo: string | null; quando: string
+    /** pin 4cee78f33 (`datiProcesso`, owner 27/10 «righe vive»): l'istante d'avvio vero, per la durata che scorre */
+    avviatoA: number | null; cartella: string; pid: string; uscita: number | null; dettaglio: RigaDettaglioR4[]
 }
 
 function oraConSecondi(ms: number | null, lingua: string): string {
@@ -356,6 +358,7 @@ export function datiProcessoR4(p: ProcessoGrezzoR4, lingua: string): ProcessoR4 
         misura,
         fermo,
         quando,
+        avviatoA: Number.isFinite(p.avviatoA) ? p.avviatoA : null,
         cartella,
         pid: '—',
         uscita: Number.isFinite(p.uscita) ? p.uscita : null,

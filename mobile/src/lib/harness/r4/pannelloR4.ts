@@ -1,7 +1,7 @@
 /**
  * ⛔ K3-C3b-1 (ledger `LEDGER-K3-CODICE-COME-LA-CHAT-2026-10-15.md`): il pannello ▤ del Codice su r4, schede Contesto e File.
  * COPIA FISSATA delle regole del desktop r4 @ `fc5e25d62` (provata contro il golden calcolato dalle funzioni vere,
- * `tests/fixtures/r4/pannello-fc5e25d62.json`):
+ * `tests/fixtures/r4/pannello-4cee78f33.json`, ricalcolato @ 4cee78f33: cambia solo l'inglese «running» → «in progress»):
  *   · `components/inspector.js`: `kilo`, `percento` (:45-56), `righeAmbiente` (:58), `righeFinestra` (:73), `righeFinestraSulLimite`
  *     (:107), `righeGiri` (:210), `anteprimaIndiceGiri` (:244), `righeFile` (:269);
  *   · `components/contesto-scheda.js`: `limiteCheAgisce`, `percheDelLimite`, `CHIAVI_CATEGORIA`, `ripartizioneSulLimite`;

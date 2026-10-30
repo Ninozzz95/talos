@@ -19,6 +19,8 @@ export function useTalosMessageEntrance(): ObjectDirective<HTMLElement, string> 
     function observe(el: HTMLElement, state: string): void {
         if (state !== 'persisted' || seen.has(el)) return
         seen.add(el)
+        // DISS-03 (dal vivo, 28/10): prende il posto dello streaming già visibile, non rientra da opacità 0
+        if (el.dataset.dalloStreaming === 'true') return
         if (typeof IntersectionObserver !== 'function' || typeof el.animate !== 'function') return
         observer ??= new IntersectionObserver((entries) => {
             let count = 0

@@ -7,6 +7,7 @@ import {
     nomeDiRipiegoAttrezzoR4, nomeUmanoAttrezzoR4, NOMI_UMANI_ATTREZZI_R4, statoDelegaR4, suUnaRigaR4, senzaInganniSuPiuRigheR4,
     contoDellaRichiestaR4, statoDelPassoR4, type RichiestaR4,
 } from '@/lib/harness/r4/agentiR4'
+import { agenteVivoR4 } from '@/lib/harness/r4/fermaTuttoR4'
 
 /*
  * ⛔ K3-C3b-2b (ledger `LEDGER-K3-CODICE-COME-LA-CHAT-2026-10-15.md`): la scheda Agenti su r4. Il golden l'hanno calcolato le funzioni
@@ -14,12 +15,12 @@ import {
  * di `agentiPerInspector`, su una sessione registrata da r4 con due richieste che delegano (due figlie, poi una 21 s dopo).
  */
 const FIXTURE = resolve(__dirname, '..', '..', 'fixtures', 'r4')
-const golden = JSON.parse(readFileSync(resolve(FIXTURE, 'agenti-701c6c0d2.json'), 'utf8'))
+const golden = JSON.parse(readFileSync(resolve(FIXTURE, 'agenti-4cee78f33.json'), 'utf8'))
 const eventi = leggiFlussoSse(readFileSync(resolve(FIXTURE, 'r4-fc5e25d62-delega-vivo.sse'), 'utf8')).map((e) => e.dati as Record<string, unknown>)
 
 describe('gli Agenti su r4, contro il desktop (K3-C3b-2b)', () => {
     it('AGE-01 dagli eventi: le richieste della persona (regola della rigiocata) e le istantanee dal vivo delle figlie', () => {
-        expect(golden.origine.commit).toBe('701c6c0d2d711879b53aa21bddad5a06d33538e7')
+        expect(golden.origine.commit).toBe('4cee78f3349c5d34b4f44303a157b93542656aef')
         const richieste = eventi.reduce<RichiestaR4[]>((r, e) => annotaRichiestaR4(r, e), [])
         expect(richieste).toEqual(golden.ingressi.richieste)
         const inDiretta = new Map<string, unknown>()
@@ -34,7 +35,10 @@ describe('gli Agenti su r4, contro il desktop (K3-C3b-2b)', () => {
             for (const caso of ['vivo', 'soloElenco', 'senzaRichieste', 'alLavoro']) {
                 const agenti = agentiDelPannelloR4(golden.casi[caso], esito.lingua)
                 expect(agenti, `${esito.lingua} · ${caso}`).toEqual(esito[caso].agenti)
-                expect(contaAgentiAttiviR4(agenti), caso).toBe(esito[caso].attivi)
+                // ⛔ adattamento dichiarato (owner 29/10 notte, AGE-VIVI-01): il numero conta TUTTI i vivi, anche chi aspetta te; il
+                // desktop @ 4cee78f33 (`esito[caso].attivi`) conta solo «in corso». Dove nessuno aspetta, i due numeri sono uguali.
+                expect(contaAgentiAttiviR4(agenti), caso).toBe(agenti.filter(agenteVivoR4).length)
+                if (!agenti.some((a) => statoDelegaR4(a) === 'attesa')) expect(contaAgentiAttiviR4(agenti), caso).toBe(esito[caso].attivi)
             }
         }
     })
@@ -99,5 +103,28 @@ describe('gli Agenti su r4, contro il desktop (K3-C3b-2b)', () => {
             expect(contoDellaRichiestaR4(golden.statiDiProva)).toEqual(esito.stati.tutti)
             expect(contoDellaRichiestaR4([])).toEqual(esito.stati.vuoto)
         }
+    })
+})
+
+/*
+ * ⛔ Owner 29/10 notte (scheda «Ferma» nella scheda Agenti, «Correzioni dopo il mockup»): il numero accanto ad «Agenti» conta TUTTI i
+ * vivi (`agenteVivoR4`: non conclusi e non interrotti, compresi quelli che aspettano te), come lo Stop e «Ferma tutto»; la delega in
+ * pausa (conclusa per r4) no. Prima contava solo «in corso» (`contaAgentiAttivi` del desktop).
+ */
+describe('il numero della scheda Agenti (owner 29/10 notte)', () => {
+    it('AGE-VIVI-01 conta chi lavora E chi aspetta te; non i finiti, gli interrotti, quelli in pausa, né un dato che manca', () => {
+        const lista = [
+            { sessionId: 'lavora', conclusa: false },
+            { sessionId: 'aspetta', conclusa: false, inAttesaApprovazione: true },
+            { sessionId: 'domanda', conclusa: false, inAttesaDomanda: true },
+            { sessionId: 'finito', conclusa: true },
+            { sessionId: 'fermato', conclusa: false, interrotta: true },
+            { sessionId: 'pausa', conclusa: true, esitoDelega: 'in-pausa' },
+            { sessionId: 'ignoto' },
+        ]
+        expect(contaAgentiAttiviR4(lista)).toBe(3)
+        expect(contaAgentiAttiviR4([])).toBe(0)
+        // la stessa regola di «Ferma tutto» (`agenteVivoR4`), voce per voce
+        for (const a of lista) expect(contaAgentiAttiviR4([a]), a.sessionId).toBe(agenteVivoR4(a) ? 1 : 0)
     })
 })

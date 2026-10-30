@@ -1,0 +1,19 @@
+{
+  "origine": {
+    "commit": "c5ce4e453e1e9841b3d52bac10491abd23e80a56",
+    "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
+    "sha256": "102ea5761c4470cc83d283f75bfa40699a848393ebd06a780783999c9ff15ba8",
+    "prefisso": [
+      "activity.stepFailed",
+      "activity.duplicateSkipped"
+    ]
+  },
+  "it": {
+    "activity.stepFailed": "Attività non riuscita",
+    "activity.duplicateSkipped": "{nome}: richiesta identica, saltata"
+  },
+  "en": {
+    "activity.stepFailed": "Step failed",
+    "activity.duplicateSkipped": "{nome}: same request again, skipped"
+  }
+}

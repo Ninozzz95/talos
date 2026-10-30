@@ -62,6 +62,7 @@ public class MainActivity extends BridgeActivity {
         // pagina di sistema. ⛔ I codici OTP restano oscurati da Android 15 in
         // poi, e TALOS lo dichiara invece di far finta.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosNotificationsPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
+        { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosLinguaPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }
         // ⭐ TALOS che parla. Nessun permesso, e la capacita' col rapporto
         // valore/costo piu' alto di tutto l'inventario.
         { long t = android.os.SystemClock.uptimeMillis(); registerPlugin(ai.talos.agent.TalosSpeechPlugin.class); long d = android.os.SystemClock.uptimeMillis() - t; if (d > 20) Log.i("TalosAvvio", "registerPlugin class: " + d + " ms"); }

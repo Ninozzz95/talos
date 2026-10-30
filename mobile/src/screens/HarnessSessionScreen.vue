@@ -69,7 +69,6 @@ import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
 import TalosMobileComposer from '@/components/chat/TalosMobileComposer.vue'
 import type { TalosMobileModelProfileView } from '@/components/chat/mobileChatTypes'
 import { TALOS_APP_BUILD } from '@/lib/appBuild'
-import { talosComposerFlags } from '@/lib/composerStyle'
 import { createCodiceSession, findCodiceSession } from '@/lib/harness/codiceSessions'
 import {
     listCodiceNotes, createCodiceNote, updateCodiceNote, deleteCodiceNote,
@@ -587,10 +586,6 @@ const codeModelloEsecutoreSelezionato = computed(() => {
     if (codeModelloEsecutoreId.value === null) return null
     return codeModelProfiles.value.find((profilo) => profilo.id === codeModelloEsecutoreId.value)?.model ?? null
 })
-const codeComposerShape = computed(() => talosComposerFlags(
-    settings.state.shell.composer_shape,
-    settings.state.shell.composer_plus,
-))
 const codeCanSend = computed(() => codePrompt.value.trim().length > 0 && !creatingSession.value)
 
 let scriptEl: HTMLScriptElement | null = null
@@ -1302,9 +1297,6 @@ onBeforeUnmount(() => {
                     :thinking="codeThinking"
                     :can-send="codeCanSend"
                     :sending="creatingSession"
-                    :drawer-mode="codeComposerShape.drawerMode"
-                    :immersive-composer="codeComposerShape.immersiveComposer"
-                    :plus-dropdown="codeComposerShape.plusDropdown"
                     :browse-mode="codeBrowseMode"
                     :attachments-available="true"
                     :context-available="true"

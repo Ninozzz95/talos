@@ -55,11 +55,19 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTalosI18n } from '@/i18n'
-import { Check, ChevronDown, CircleDashed, Clock, Laptop, Loader2, MessageSquarePlus, RotateCcw, X } from '@lucide/vue'
+import { AlertTriangle, Check, ChevronDown, CircleDashed, Clock, Laptop, Loader2, MessageSquarePlus, RefreshCw, RotateCcw, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileScreen from '@/components/shell/TalosMobileScreen.vue'
-import TalosMobileNewChatFab from '@/components/shell/TalosMobileNewChatFab.vue'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
+import TalosMobileElencoTesta from '@/components/talos/ui/TalosMobileElencoTesta.vue'
+import TalosMobileStationOptionsSheet, { type TalosStationOptionGroup } from '@/components/talos/ui/TalosMobileStationOptionsSheet.vue'
+import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
+import { CHIAVI_SCHEDE, SCHEDE_CODICE, contaSchede, filtraSessioni, statoDellaSessione, vociDove, type SchedaCodice } from '@/lib/harness/elencoSessioniCodice'
+import { statoConAgentiR4, testoFermaTuttoR4 } from '@/lib/harness/r4/fermaTuttoR4'
+import { aperturaCodiceTablet, riapriCodiceTablet } from '@/lib/tabletLayout'
+import TalosAttesaCarta from '@/components/chat/TalosAttesaCarta.vue'
+import TalosRigaInCorso from '@/components/chat/TalosRigaInCorso.vue'
+import { useTalosSogliaSecondi } from '@/composables/useTalosSogliaSecondi'
 import TalosRowActions, { type TalosRowAction } from '@/components/talos/ui/TalosRowActions.vue'
 import TalosThemedFilter, { type TalosFilterOption } from '@/components/talos/ui/TalosThemedFilter.vue'
 import TalosNuovaSessioneSulPc from '@/components/remoto/TalosNuovaSessioneSulPc.vue'
@@ -74,7 +82,7 @@ import type { TalosLocalChatSession } from '@/repositories/chatRepository'
 import { avvisaSePonteStaccato } from '@/lib/harness/avvisoPonteCodice'
 import { talosCodiceInCasa, talosR4Disponibile, talosR4Pronto } from '@/lib/harness/terminalePonte'
 import { ROTTA_RIPIEGO_R4 } from '@/lib/harness/r4/sceltaCodiceR4'
-import { eliminaSessioneR4, fraseRifiutoSessioneR4, leggiSessioniR4, rinominaSessioneR4, type TalosRigaSessioneR4 } from '@/lib/harness/r4/elencoSessioniR4'
+import { RifiutoSessioneR4, eliminaSessioneR4, fraseRifiutoSessioneR4, leggiSessioniR4, rinominaSessioneR4, type TalosRigaSessioneR4 } from '@/lib/harness/r4/elencoSessioniR4'
 import { annunciaCambioSessioneR4, talosCambiSessioniR4 } from '@/lib/harness/r4/avvisiSessioniR4'
 import { talosClienteR4 } from '@/lib/harness/r4/clienteR4'
 import { talosHarnessUiAvailable } from '@/services/harnessUi'
@@ -82,6 +90,7 @@ import { useTalosMobileToasts } from '@/stores/toasts'
 import { talosChatDateBuckets } from '@/lib/chat/chatDateBuckets'
 import { chatRowBucketTitle, chatRowWhenInBucket } from '@/lib/chat/chatRowTime'
 import { talosRelativeTime } from '@/lib/relativeTime'
+import { oraSulDispositivo, scartoDelPc } from '@/lib/remoto/scartoOrologioPc'
 
 const props = withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false })
 
@@ -98,10 +107,19 @@ type TalosRigaElenco = Pick<TalosLocalChatSession, 'id' | 'title' | 'updated_at'
     pcId?: string
     statoPc?: TalosHarnessSessionStatus
     progetto?: string
+    /** «Ferma tutto», «Elenco» (owner 29/10 sera): gli agenti vivi sotto una sessione di r4 (`elencoSessioniR4.ts`), assente a zero. */
+    agentiAlLavoro?: number
 }
 
 const sessions = ref<TalosRigaElenco[]>([])
 const loading = ref(true)
+/**
+ * E1 (owner 29/10 notte, un segno d'attesa per schermo sul tablet): la colonna mette la sua riga piccola solo quando a destra c'è già
+ * qualcosa (una sessione aperta). Sulla rotta dell'elenco aspetta la pagina intera, e il segno è la sua carta, uno solo.
+ */
+const rigaDellaColonna = computed(() => props.embedded && route.name !== 'harness')
+/** La colonna del tablet mentre legge: i secondi dopo 2 s, come la carta (owner 29/10 notte) */
+const sogliaColonna = useTalosSogliaSecondi({ attivo: () => loading.value && rigaDellaColonna.value })
 /**
  * ⛔ Owner 18/10 «non riesco andare alla lista delle sessioni … esattamente come sulla chat Legacy» (ledger
  * `LEDGER-ELENCO-SESSIONI-R4-2026-10-18.md`): con r4 nell'APK questa pagina elenca le sessioni di r4 e le apre su `/codice-r4/:id`.
@@ -193,6 +211,27 @@ async function leggiPc(): Promise<void> {
 }
 
 /**
+ * Il battito (sotto): solo l'elenco delle sessioni dei PC che hanno una riga al lavoro o in attesa — niente elenco dei PC, niente
+ * cartelle (Desktop 27/10: la lettura più leggera). Un PC che in questa lettura non risponde tiene le righe che aveva. Il tetto di
+ * `riepilogo` può superare il battito: un PC la cui lettura è ancora in volo si salta, così un PC lento non accumula chiamate.
+ */
+const pcInLettura = new Set<string>()
+async function rileggiPcAlLavoro(pcIds: readonly string[]): Promise<void> {
+    if (!remoti) return
+    const questa = ultimaLetturaPc
+    await Promise.all(pcIds.filter((pcId) => !pcInLettura.has(pcId)).map(async (pcId) => {
+        pcInLettura.add(pcId)
+        try {
+            const r = await remoti.riepilogo(pcId)
+            if (questa !== ultimaLetturaPc || !r.inLinea) return
+            sessioniPc.value = { ...sessioniPc.value, [pcId]: { righe: r.righe } }
+        } finally {
+            pcInLettura.delete(pcId)
+        }
+    }))
+}
+
+/**
  * La scelta vale subito ed è una sola per l'app (`doveDelCodice.ts`, D-MOCK-1): una rotta che porta `?dove=` la imposta, una rotta
  * senza non la cancella. Un PC dimenticato torna a «Tutte».
  */
@@ -232,13 +271,79 @@ const righeDeiPc = computed<TalosRigaElenco[]>(() => pcs.value.flatMap((pc) => {
     return lettura.righe.map((r) => ({
         // D-MOCK-5 (dal Pad, vc176): senza nome la riga era la sola data; il vecchio dettaglio del computer diceva «Sessione senza titolo»
         id: r.id, title: r.title || t('computer.untitledSession'), updated_at: r.updated_at, pcId: pc.pcId, statoPc: r.stato, ...(r.progetto ? { progetto: r.progetto } : {}),
+        ...(r.agentiAlLavoro ? { agentiAlLavoro: r.agentiAlLavoro } : {}),
     }))
 }))
-const righeMostrate = computed<TalosRigaElenco[]>(() => {
-    if (!filtroVisibile.value || dove.value === 'qui') return sessions.value
-    if (dove.value === 'tutte') return [...sessions.value, ...righeDeiPc.value].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-    return righeDeiPc.value.filter((r) => r.pcId === dove.value)
+/** Tutte le righe che «Dove» può mostrare: le mie e, con un PC collegato, le sue, dalla più recente. */
+const righeTutte = computed<TalosRigaElenco[]>(() => (filtroVisibile.value
+    ? [...sessions.value, ...righeDeiPc.value].sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    : sessions.value))
+
+/*
+ * ⛔ UI-111 «Liste coerenti» (mockup v2.1 approvato dall'owner il 29/10 sera; ledger `LEDGER-LISTE-COERENTI-MOBILE-2026-10-29.md`,
+ * voce 5): la pagina nella grammatica delle Chat. Schede = gli stati veri (`elencoSessioniCodice.ts`, con la precedenza di
+ * `statusBadge()` qui sotto), ricerca su titolo e cartella, «Dove» e «Ordina» nel foglio «Opzioni». Nella colonna del tablet la testa
+ * non c'è: scheda e ricerca restano quelle di partenza e l'elenco è quello di prima.
+ */
+const { isTablet } = useTalosTabletLayout()
+const scheda = ref<string>('tutte')
+const testo = ref('')
+/** «Ordina» come la Board del PC: l'elenco arriva dal più recente; «Meno recenti» lo rovescia, fasce comprese. */
+const ordine = ref<'recenti' | 'vecchie'>('recenti')
+const opzioniAperte = ref(false)
+// «Ferma tutto», «Elenco» (owner 29/10 sera): una sessione r4 «conclusa» con agenti vivi sotto sta «In corso» (`statoConAgentiR4`)
+const agentiDi = (r: TalosRigaElenco) => (suR4.value || r.pcId ? r.agentiAlLavoro ?? 0 : 0)
+const statoDi = (r: TalosRigaElenco) => statoConAgentiR4(statoDellaSessione(statoServer(r), suR4.value || Boolean(r.pcId)), agentiDi(r))
+// owner 29/10 notte: i numeri seguono «Dove», non la ricerca (come le Chat)
+const contiSchede = computed(() => contaSchede(righeTutte.value, { dove: dove.value }, statoDi))
+const schede = computed(() => SCHEDE_CODICE.map((s) => ({ id: s, label: t(CHIAVI_SCHEDE[s]), count: contiSchede.value[s] })))
+const righeMostrate = computed<TalosRigaElenco[]>(() => filtraSessioni(
+    righeTutte.value,
+    { scheda: scheda.value as SchedaCodice, testo: testo.value, dove: dove.value },
+    statoDi,
+))
+/** «Dove» è acceso solo se il foglio lo mostra (con un PC collegato): un filtro che non si vede non si può spegnere. */
+const doveAcceso = computed(() => filtroVisibile.value && dove.value !== 'tutte')
+const opzioniAccese = computed(() => (doveAcceso.value ? 1 : 0) + (ordine.value === 'recenti' ? 0 : 1))
+/** Una scheda, una ricerca o «Dove» che nascondono qualcosa: l'assenza che ne viene ha la sua frase (come le Chat). */
+const filtrando = computed(() => scheda.value !== 'tutte' || testo.value.trim() !== '' || doveAcceso.value)
+const opzioniOrdine = computed(() => [
+    { value: 'recenti', label: t('harness.sort.recent') },
+    { value: 'vecchie', label: t('harness.sort.oldest') },
+])
+/** Il gruppo «Dove» del foglio: ogni PC collegato, anche senza sessioni o che non risponde, col numero delle sue righe. */
+const gruppiFoglio = computed<TalosStationOptionGroup[]>(() => {
+    if (!filtroVisibile.value) return []
+    const conti = new Map(vociDove(righeTutte.value, nomeDelPc, { tutte: '', qui: '' }).map((v) => [v.value, v.count]))
+    return [{
+        id: 'dove',
+        label: t('harness.where.group'),
+        value: dove.value,
+        options: opzioniDove.value.map((o) => ({ value: o.value, label: o.label ?? o.value, count: conti.get(o.value) ?? 0 })),
+    }]
 })
+function impostaGruppo(id: string, valore: string): void {
+    if (id !== 'dove') return
+    scegliDove(valore)
+    // come nel mockup: cambiando posto si riparte da «Tutte»
+    scheda.value = 'tutte'
+}
+const conteggio = computed(() => `${righeMostrate.value.length} ${t('computer.sessionsCount', { count: righeMostrate.value.length })}`)
+
+/**
+ * ⛔ E3 — LISTA-DOPPIA-01 (Desktop 29/10 notte, revisione F1): sul tablet la rotta nuda `harness` apre l'ultima sessione (`App.vue`),
+ * in modo asincrono, e l'elenco sta già nella colonna. Qui, a tutta pagina, l'elenco non si disegna MAI: apertura in corso → solo la
+ * carta; finita senza sessioni → la frase dell'elenco vuoto; rifiutata → «Codice non si è aperto» con «Riprova»; finita con delle
+ * sessioni e senza rimando → vuoto, con le sole righe d'avviso. Il segno è sincrono (`aperturaCodiceTablet`, `tabletLayout.ts`).
+ */
+const paginaSulTablet = computed(() => !props.embedded && isTablet.value && route.name === 'harness')
+const aperturaInCorso = computed(() => paginaSulTablet.value && aperturaCodiceTablet.value === 'in-corso')
+const aperturaFallita = computed(() => paginaSulTablet.value && aperturaCodiceTablet.value === 'fallita')
+
+/** La pagina sta nel foglio della stazione come le Chat; la colonna del tablet resta nel guscio di sempre (`TalosMobileScreen`). */
+const cornice = computed(() => (props.embedded
+    ? { title: t('navigation.harness'), embedded: true }
+    : { 'aria-label': t('navigation.harness'), class: 'relative flex min-h-full flex-col bg-[var(--talos-background)] text-[var(--talos-text)]' }))
 /** I PC che non hanno risposto, fra quelli che il filtro mostra. */
 const pcAssenti = computed(() => pcs.value.filter((pc) => 'assente' in (sessioniPc.value[pc.pcId] ?? {})
     && (dove.value === 'tutte' || dove.value === pc.pcId)))
@@ -247,6 +352,8 @@ const nuovaSulPc = ref(false)
 const etichettaNuova = computed(() => (dove.value !== 'tutte' && dove.value !== 'qui'
     ? tTesto('harness.newSessionOn', { name: nomeSenzaProva(dove.value) })
     : t('harness.newSession')))
+/** UI-111: il nome del «+» per chi ascolta; filtrati su un PC dice quale (il «+» quadrato del telefono non ha testo) */
+const etichettaNuovaAria = computed(() => (dove.value !== 'tutte' && dove.value !== 'qui' ? etichettaNuova.value : t('harness.newSessionAria')))
 const progettoRecenteDelPc = computed(() => righeDeiPc.value.find((r) => r.pcId === dove.value)?.progetto ?? null)
 
 /**
@@ -278,7 +385,12 @@ function statusBadge(session: TalosRigaElenco, bucket: string): TalosHarnessRowB
     if (stato && !stato.conclusa) return { kind: 'running', label: t('harness.statusRunning') }
     if (stato?.interrotta) return { kind: 'interrupted', label: t('harness.statusInterrupted') }
     if (stato?.ultimoEsito === 'errore') return { kind: 'error', label: t('harness.statusError') }
-    return { kind: 'idle', label: quandoInFascia(bucket, session.updated_at) }
+    // «Ferma tutto», «Elenco» (owner 29/10 sera): finita, ma sotto lavorano degli agenti — «N agenti al lavoro» col segno di chi lavora
+    // (sul telefono il `Loader2` della riga, poi la cartella); finiti tutti torna l'ora. Gli stati sopra dicono di più e restano.
+    const agenti = agentiDi(session)
+    if (r4 && agenti > 0) return { kind: 'running', label: testoFermaTuttoR4('elenco.agenti', locale.value, agenti) }
+    // ⛔ D-0145-6(b): l'ora di una sessione del PC sull'orologio del dispositivo, come dentro la conversazione
+    return { kind: 'idle', label: quandoInFascia(bucket, oraSulDispositivo(session.updated_at, scartoDelPc(session.pcId))) }
 }
 
 onMounted(refresh)
@@ -314,7 +426,8 @@ watch(() => [route.name, route.params.id], () => {
     // 18/10: anche `codice-r4` (sul tablet l'elenco resta montato accanto alla sessione r4: la bozza che diventa sessione vera)
     if (route.name === 'harness' || route.name === 'harness-session' || route.name === 'codice-r4') void refresh()
     // tavola 3: tornando all'elenco si rileggono anche i PC (una sessione nuova aperta sul PC)
-    if (route.name === 'harness') void leggiPc()
+    // ⛔ D-0147-COD-1 (Pad, 27/10): e sulla sessione del PC, dove la bozza che diventa sessione vera cambia solo `:id`
+    if (route.name === 'harness' || route.name === 'computer-codice') void leggiPc()
 })
 
 const relativeTimeLabels = computed(() => ({
@@ -333,7 +446,11 @@ function titoloFascia(gruppo: { bucket: string, monthKey: string | null }): stri
     return chatRowBucketTitle(gruppo, locale.value, (bucket) => t(`harness.groups.${bucket}`))
 }
 
-const fasce = computed(() => talosChatDateBuckets(righeMostrate.value, (session) => session.updated_at, new Date()))
+const fasce = computed(() => {
+    const gruppi = talosChatDateBuckets(righeMostrate.value, (session) => session.updated_at, new Date())
+    // UI-111, «Meno recenti»: le fasce e le righe dentro ciascuna, dalla più vecchia
+    return ordine.value === 'vecchie' ? [...gruppi].reverse().map((g) => ({ ...g, items: [...g.items].reverse() })) : gruppi
+})
 
 function openSession(session: TalosRigaElenco): void {
     if (session.pcId) {
@@ -389,6 +506,10 @@ function dettaglioErrore(error: unknown): string {
     const frase = fraseRifiutoSessioneR4(error, locale.value)
     if (frase) return frase
     if (error instanceof Error && error.message === 'TALOS_R4_IRRAGGIUNGIBILE') return t('harness.r4Unreachable')
+    // ⛔ D-0145-2/3 (Pad 25/10): il 401 dell'r4 del dispositivo vuol dire che un'altra app TALOS (la copia affiancata) tiene la sua
+    // porta; e un rifiuto con un codice senza frase non passa mai il suo inglese (la regola di D-F3-1)
+    if (error instanceof RifiutoSessioneR4 && error.code === 'AUTH_REQUIRED') return t('harness.r4OtherCopy')
+    if (error instanceof RifiutoSessioneR4 && error.code) return t('harness.r4Refused')
     return actionErrorText(error)
 }
 /**
@@ -466,13 +587,21 @@ watch(() => talosCambiSessioniR4.value.n, (n) => {
  * REV-ELENCO-10 (review avversariale v0.1.42): una riga «In corso» (un'automazione, un giro lasciato a metà) restava ferma finché non
  * si cambiava pagina. Come il battito del desktop per le figlie (`legacy/app.js:11666`, 5 s): l'elenco si rilegge ogni 5 s solo
  * finché una riga lavora o aspetta qualcuno, e mai con l'app in sottofondo.
+ * ⛔ 27/10/2026 (trovato cercando il «ancora al lavoro» dell'owner): anche le righe dei PC. Lette a giro vivo restavano «In corso»
+ * finché non si cambiava pagina, anche dopo che il PC aveva chiuso il giro (sul tablet la colonna resta a schermo).
  */
-const qualcunaLavora = computed(() => suR4.value && [...serverStatus.value.values()]
-    .some((stato) => stato.inAttesaApprovazione || (!stato.conclusa && !stato.interrotta)))
+const lavora = (stato: TalosHarnessSessionStatus) => stato.inAttesaApprovazione || (!stato.conclusa && !stato.interrotta)
+// «Ferma tutto»: anche una sessione finita con agenti al lavoro si rilegge, così torna «Conclusa» quando finiscono
+const qualcunaLavora = computed(() => suR4.value && ([...serverStatus.value.values()].some(lavora) || sessions.value.some((r) => (r.agentiAlLavoro ?? 0) > 0)))
+const pcAlLavoro = computed(() => Object.entries(sessioniPc.value)
+    .filter(([, lettura]) => 'righe' in lettura && lettura.righe.some((riga) => lavora(riga.stato) || (riga.agentiAlLavoro ?? 0) > 0))
+    .map(([pcId]) => pcId))
 let battito: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
     battito = setInterval(() => {
-        if (qualcunaLavora.value && document.visibilityState === 'visible') void refresh()
+        if (document.visibilityState !== 'visible') return
+        if (qualcunaLavora.value) void refresh()
+        if (pcAlLavoro.value.length) void rileggiPcAlLavoro(pcAlLavoro.value)
     }, 5000)
 })
 onBeforeUnmount(() => {
@@ -535,6 +664,8 @@ async function submitRename(): Promise<void> {
     try {
         if (target.pcId && remoti) {
             await remoti.rinominaSessione(target.pcId, target.id, title)
+            // dal Pad, prova della CLI (27/10/2026): come in locale, la testata della conversazione aperta prende il nome nuovo
+            annuncia({ id: target.id, nome: title })
             if (mio()) renameTarget.value = null
             actionError.value = null
             await leggiPc()
@@ -553,7 +684,7 @@ async function submitRename(): Promise<void> {
         const pcId = target.pcId
         if (pcId && remoti && serveIlConsenso(error, {
             pcId,
-            rifai: async () => { await remoti.rinominaSessione(pcId, target.id, title); await leggiPc() },
+            rifai: async () => { await remoti.rinominaSessione(pcId, target.id, title); annuncia({ id: target.id, nome: title }); await leggiPc() },
             fallito: (e) => tTesto('harness.renameFailed', { detail: dettaglioErrore(e) }),
         })) {
             renameTarget.value = null
@@ -623,8 +754,34 @@ async function confirmDelete(): Promise<void> {
 </script>
 
 <template>
-    <TalosMobileScreen :title="t('navigation.harness')" :embedded="embedded" data-testid="talos-harness-screen">
-        <div class="flex flex-col gap-4">
+    <component :is="embedded ? TalosMobileScreen : 'section'" v-bind="cornice" data-testid="talos-harness-screen">
+        <!-- ⛔ E3 (LISTA-DOPPIA-01): sul tablet, mentre si apre l'ultima sessione, la pagina intera aspetta e ha un segno solo -->
+        <TalosAttesaCarta v-if="aperturaInCorso" testid="talos-harness-loading" :testo="t('harness.loadingSessions')" />
+        <template v-else>
+        <!-- ⛔ UI-111: la testa delle sezioni a elenco, uguale alle Chat (`ChatsScreen.vue:794-946`). Nella colonna no: il pannello ha
+             la sua intestazione, come le Chat (`ChatsScreen.vue:794`). E3 (F1): nemmeno a tutta pagina sulla rotta `harness` del tablet. -->
+        <TalosMobileElencoTesta
+            v-if="!embedded && !paginaSulTablet"
+            v-model:testo="testo"
+            v-model:scheda="scheda"
+            test-id-prefix="talos-harness"
+            :titolo="t('navigation.harness')"
+            :frase="t('harness.subtitle')"
+            :nuova-etichetta="etichettaNuovaAria"
+            :nuova-breve="etichettaNuova"
+            :cerca-etichetta="t('harness.search')"
+            :opzioni-etichetta="opzioniAccese > 0 ? t('harness.optionsActive', { count: opzioniAccese }) : t('harness.options')"
+            :opzioni-accese="opzioniAccese"
+            :opzioni-aperte="opzioniAperte"
+            :schede-etichetta="t('harness.filterLabel')"
+            :schede="schede"
+            :conteggio="conteggio"
+            :tablet="isTablet"
+            :nuova-con-nome="dove !== 'tutte' && dove !== 'qui'"
+            @nuova="newSession"
+            @opzioni="opzioniAperte = true"
+        />
+        <div class="flex flex-col gap-4" :class="{ 'px-[var(--talos-space-page)]': !embedded, 'pt-[var(--talos-space-section)]': paginaSulTablet }">
             <button
                 v-if="embedded"
                 type="button"
@@ -638,8 +795,10 @@ async function confirmDelete(): Promise<void> {
                 <span data-testid="talos-harness-new-label" class="line-clamp-2 min-w-0 text-left">{{ etichettaNuova }}</span>
             </button>
 
-            <!-- tavola 3: «Dove». Sul telefono un pulsante che apre la scelta; dove c'è posto, le voci in fila -->
-            <div v-if="filtroVisibile" class="@container/dove px-1">
+            <!-- tavola 3: «Dove». Sul telefono un pulsante che apre la scelta; dove c'è posto, le voci in fila.
+                 ⛔ UI-111: nella pagina «Dove» sta nel foglio «Opzioni»; nella colonna del tablet, che non ha la testa, resta qui:
+                 senza, sul tablet non si sceglierebbe più il posto (domanda aperta all'owner nel ledger, «Niente perso»). -->
+            <div v-if="filtroVisibile && embedded" class="@container/dove px-1">
                 <div class="flex items-center justify-between gap-3">
                     <button
                         type="button"
@@ -676,6 +835,13 @@ async function confirmDelete(): Promise<void> {
                     <p v-else>{{ t('harness.where.pcsUnreachable', { count: pcAssenti.length }) }}</p>
                 </div>
             </div>
+            <!-- UI-111: nella pagina il PC che non risponde si dice al suo posto di prima, sotto la testa (D-MOCK-3: una riga sola) -->
+            <div v-if="!embedded && pcAssenti.length" data-testid="talos-codice-dove-assenti" role="status" class="px-1 text-xs leading-5 text-[var(--talos-muted)]">
+                <p v-if="pcAssenti.length === 1">
+                    <span class="font-medium text-[var(--talos-text)]">{{ nomeDelPc(pcAssenti[0]!.pcId) }}</span> {{ t('harness.where.pcUnreachable') }}
+                </p>
+                <p v-else>{{ t('harness.where.pcsUnreachable', { count: pcAssenti.length }) }}</p>
+            </div>
 
             <p v-if="actionError" role="alert" class="px-1 text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ actionError }}</p>
             <!-- D-MOCK-11: il permesso del PC per la cartella di una sua sessione, chiesto da qui (mai solo l'errore) -->
@@ -687,7 +853,7 @@ async function confirmDelete(): Promise<void> {
                 class="rounded-md border border-[var(--talos-border)] bg-[var(--talos-surface-2)] p-3 text-sm text-[var(--talos-text)]"
             >
                 <template v-if="consensoPc.fase === 'attesa'">
-                    <p class="flex items-center gap-2 font-medium"><Loader2 class="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> {{ t('computer.consent.waitingTitle') }}</p>
+                    <p class="flex items-center gap-2 font-medium"><Loader2 class="size-4 animate-spin text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('computer.consent.waitingTitle') }}</p>
                     <p class="mt-1 text-xs leading-5 text-[var(--talos-muted)]">{{ t('computer.consent.waitingBody') }}</p>
                 </template>
                 <p v-else>{{ testoDelConsenso }}</p>
@@ -700,12 +866,41 @@ async function confirmDelete(): Promise<void> {
             </div>
             <p v-if="erroreElenco" role="alert" data-testid="talos-harness-list-error" class="px-1 text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ erroreElenco }}</p>
 
-            <p v-if="!loading && !righeMostrate.length && !erroreElenco" data-testid="talos-harness-empty" class="px-1 text-sm text-[var(--talos-muted)]">
-                {{ t('harness.emptyBody') }}
+            <!-- ⛔ E3 (F1): l'apertura dell'ultima sessione è stata rifiutata. La riga d'errore della Libreria (`ContextScreen.vue:1354-1358`),
+                 con «Riprova» che rifà la stessa apertura -->
+            <div v-if="aperturaFallita" role="alert" data-testid="talos-harness-open-failed" class="mb-3 flex items-center gap-2 rounded-md border border-[var(--talos-danger-border)] bg-[var(--talos-danger-soft)] p-3 text-sm text-[var(--talos-danger)]">
+                <AlertTriangle class="size-4 shrink-0" aria-hidden="true" />
+                <span class="min-w-0 flex-1">{{ t('harness.loadFailed') }}</span>
+                <Button type="button" size="icon" variant="ghost" class="min-h-12 min-w-12" :aria-label="t('common.retry')" @click="riapriCodiceTablet()"><RefreshCw class="size-4" aria-hidden="true" /></Button>
+            </div>
+            <!-- ⛔ E3 (F1, owner 29/10 notte): finita con delle sessioni ma senza rimando, l'elenco sta nella colonna: una riga sola, al centro -->
+            <p v-else-if="paginaSulTablet && !loading && righeMostrate.length" data-testid="talos-harness-pick-from-list" class="px-1 py-4 text-center text-sm text-[var(--talos-muted)]">
+                {{ t('harness.pickFromList') }}
             </p>
 
+            <!-- UI-111: due assenze, due frasi (come le Chat): l'elenco vuoto, e una scheda, una ricerca o «Dove» che non lasciano niente -->
+            <p v-if="!loading && !righeMostrate.length && !erroreElenco && !aperturaFallita" data-testid="talos-harness-empty" class="px-1 text-sm text-[var(--talos-muted)]" :class="{ 'py-4': !embedded }">
+                {{ filtrando ? t('harness.noMatches') : t('harness.emptyBody') }}
+            </p>
+            <!-- owner 29/10 sera (mockup «Caricamenti vivi» v6, D2/D3): l'elenco che si legge vuoto non resta muto, ha la carta della
+                 Chat. ⛔ Nella colonna del tablet (`embedded`) il velo coprirebbe anche la sessione aperta accanto: lì la riga piccola in
+                 cima, con la rotella arancione e i secondi (owner 29/10 notte, «Sì, la riga piccola in cima»; regola del 27/10) -->
+            <TalosAttesaCarta
+                v-else-if="loading && !righeMostrate.length && !erroreElenco && !embedded && !aperturaFallita"
+                testid="talos-harness-loading"
+                :testo="t('harness.loadingSessions')"
+            />
+            <!-- E1 (owner 29/10 notte): la riga della colonna solo se accanto c'è già una sessione; sulla rotta dell'elenco il segno è la
+                 carta della pagina, uno per schermo -->
+            <div v-else-if="loading && !righeMostrate.length && !erroreElenco && rigaDellaColonna" data-testid="talos-harness-loading-row" class="px-1">
+                <TalosRigaInCorso :key="sogliaColonna.chiave.value" compatta segno="giro" :testo="t('harness.loadingSessions')" :inizio="sogliaColonna.inizio.value" />
+            </div>
+
+            <!-- ⛔ E3 (F1): a tutta pagina sulla rotta `harness` del tablet l'elenco non si disegna mai: sta nella colonna -->
+            <div v-if="!paginaSulTablet">
             <div v-for="gruppo in fasce" :key="gruppo.monthKey ?? gruppo.bucket">
-                <p class="px-1 pb-1 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)]">
+                <!-- UI-111: la fascia del giorno con la classe delle Chat (`ChatsScreen.vue:1070-1073`) -->
+                <p data-testid="talos-harness-fascia" class="px-2 pb-1 pt-3 text-2xs font-semibold uppercase tracking-wide text-[var(--talos-muted)] landscape:pb-0.5 landscape:pt-1.5">
                     {{ titoloFascia(gruppo) }}
                 </p>
                 <div role="list" class="flex flex-col gap-0.5">
@@ -786,19 +981,24 @@ async function confirmDelete(): Promise<void> {
                     </div>
                 </div>
             </div>
+            </div>
         </div>
+        </template>
 
-        <!-- Full-page (phone, routed): same floating pill Chat uses, own wording. -->
-        <div
-            v-if="!embedded"
-            class="sticky bottom-0 z-20 mt-auto flex justify-end bg-gradient-to-t from-[var(--talos-background)] via-[var(--talos-background)]/85 to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-6 landscape:pb-2 landscape:pt-3"
-        >
-            <TalosMobileNewChatFab
-                :label="etichettaNuova"
-                :aria-label="t('harness.newSessionAria')"
-                @click="newSession"
-            />
-        </div>
+        <!-- ⛔ UI-111: la pillola galleggiante «Nuova sessione» se n'è andata: sul telefono il «+» sta accanto al titolo, come nelle Chat
+             (owner 25/09 per le chat; mockup v2.1 per il Codice). «Dove» e «Ordina» nel foglio «Opzioni» delle stazioni. -->
+        <TalosMobileStationOptionsSheet
+            v-if="opzioniAperte && !embedded"
+            :title="t('harness.options')"
+            test-id-prefix="talos-codice"
+            :sort-label="t('harness.sortLabel')"
+            :sort-options="opzioniOrdine"
+            :sort="ordine"
+            :groups="gruppiFoglio"
+            @update:sort="(value: string) => ordine = value === 'vecchie' ? 'vecchie' : 'recenti'"
+            @update:group="impostaGruppo"
+            @close="opzioniAperte = false"
+        />
 
         <TalosNuovaSessioneSulPc
             v-if="nuovaSulPc && dove !== 'tutte' && dove !== 'qui'"
@@ -824,7 +1024,7 @@ async function confirmDelete(): Promise<void> {
             >
             <!-- D-MOCK-15: l'attesa del PC si dice; D-MOCK-10: l'errore sta qui, non dietro il velo -->
             <p v-if="actionBusy && renameTarget.pcId" role="status" data-testid="talos-harness-dialog-pc-working" class="flex items-center gap-2 text-xs text-[var(--talos-muted)]">
-                <Loader2 class="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> {{ t('harness.pcWorking') }}
+                <Loader2 class="size-4 animate-spin text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('harness.pcWorking') }}
             </p>
             <p v-if="renameError" role="alert" data-testid="talos-harness-dialog-error" class="text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ renameError }}</p>
             <template #footer>
@@ -842,7 +1042,7 @@ async function confirmDelete(): Promise<void> {
             @close="actionBusy && !deleteTarget.pcId ? undefined : chiudiElimina()"
         >
             <p v-if="actionBusy && deleteTarget.pcId" role="status" data-testid="talos-harness-dialog-pc-working" class="flex items-center gap-2 text-xs text-[var(--talos-muted)]">
-                <Loader2 class="size-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> {{ t('harness.pcWorking') }}
+                <Loader2 class="size-4 animate-spin text-[var(--talos-accent)]" aria-hidden="true" /> {{ t('harness.pcWorking') }}
             </p>
             <p v-if="deleteError" role="alert" data-testid="talos-harness-dialog-error" class="text-xs leading-5 text-[var(--talos-danger,#dc5b5b)]">{{ deleteError }}</p>
             <template #footer>
@@ -853,5 +1053,5 @@ async function confirmDelete(): Promise<void> {
                 </Button>
             </template>
         </TalosMobileConfirmDialog>
-    </TalosMobileScreen>
+    </component>
 </template>

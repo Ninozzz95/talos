@@ -218,6 +218,7 @@ describe('i motivi sono scritti in ENTRAMBE le lingue', () => {
         'connect-not-announced',
         'bad-code',
         'connect-refused',
+        'local-network-blocked',
         'bridge-not-packaged',
         'bridge-timeout',
         'overlay-not-allowed',

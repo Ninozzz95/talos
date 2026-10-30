@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ListChecks, Minus, ShieldAlert, Undo2, X } from '@lucide/vue'
+import { ClipboardList, Minus, ShieldAlert, Undo2, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import type { TalosPlan, TalosPlanStep } from '@/lib/tools/plan'
 
@@ -97,7 +97,7 @@ function argomenti(step: TalosPlanStep): string {
             @keydown.esc.stop="emit('later')"
         >
             <div class="flex items-start gap-3">
-                <ListChecks
+                <ClipboardList
                     class="mt-0.5 size-5 shrink-0 text-[var(--talos-accent)]"
                     aria-hidden="true"
                 />

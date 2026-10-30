@@ -7,13 +7,13 @@ import {
     Flashlight,
     Globe,
     Image as ImageIcon,
+    Library,
     ListTodo,
     MapPin,
+    Music,
     Mail,
-    NotebookPen,
     Smartphone,
-    Sparkles,
-    Play,
+    StickyNote,
     Telescope,
     Volume2,
     Wrench,
@@ -26,10 +26,10 @@ import type { TalosToolIconName } from '@/lib/tools/toolLabels'
  * streaming reply that the app loads at start.
  */
 export const TALOS_TOOL_ICONS: Record<TalosToolIconName, unknown> = {
-    library: BookMarked,
-    note: NotebookPen,
+    library: Library,
+    note: StickyNote,
     task: ListTodo,
-    memory: Sparkles,
+    memory: BookMarked,
     clock: Clock,
     web: Globe,
     research: Telescope,
@@ -39,10 +39,11 @@ export const TALOS_TOOL_ICONS: Record<TalosToolIconName, unknown> = {
     place: MapPin,
     torch: Flashlight,
     volume: Volume2,
-    // ⛔ Play e non un altoparlante: il volume ha gia' il suo segno, e due
-    // strumenti diversi con lo stesso disegno raccontano la stessa cosa
-    // mentre ne stanno facendo due.
-    audio: Play,
+    // ⛔ Non un altoparlante: il volume ha gia' il suo segno, e due strumenti
+    // diversi con lo stesso disegno raccontano la stessa cosa mentre ne
+    // stanno facendo due. Owner 28/10/2026 (icone, P28): la nota musicale, non
+    // Play, che nell'app vuol dire «Riprendi».
+    audio: Music,
     voice: AudioLines,
     document: FileText,
     // ⛔ La busta e non il foglio: contare la posta non è leggere un documento,

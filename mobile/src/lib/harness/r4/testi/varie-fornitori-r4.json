@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/varie.js",
-    "sha256": "457edc223f3bdc3e5e5cc4c80eb07ebc16c2555c5f4cdc1ae2b9193f49e0284b",
+    "sha256": "fa3fe6c41ebce3215ae837542d5742d86893fd3786a30eabe60ffc0fd9885e1e",
     "prefisso": "providerCard."
   },
   "it": {
@@ -11,6 +11,8 @@
     "providerCard.chatgptDisconnect": "Scollegare ChatGPT? TALOS smetterà di usare il tuo piano.",
     "providerCard.chatgptNow": "Collegato: le richieste usano il tuo piano",
     "providerCard.chatgptAfter": "Scollegato: i modelli del piano non rispondono più",
+    "providerCard.windowBadge": "Vuole riaprire il modello locale",
+    "providerCard.windowWhy": "Una finestra più grande usa più memoria, e riaprire richiede qualche secondo. La conversazione resta com’è.",
     "providerCard.exclude": "TALOS vuole che OpenRouter salti {name} per ogni modello.",
     "providerCard.excludeForModel": "TALOS vuole che OpenRouter salti di nuovo {name} per {model}, come fa di serie.",
     "providerCard.allow": "TALOS vuole che OpenRouter usi di nuovo {name}.",
@@ -30,6 +32,8 @@
     "providerCard.chatgptDisconnect": "Disconnect ChatGPT? TALOS will stop using your plan.",
     "providerCard.chatgptNow": "Connected: requests use your plan",
     "providerCard.chatgptAfter": "Disconnected: the plan models stop answering",
+    "providerCard.windowBadge": "Wants to reopen the local model",
+    "providerCard.windowWhy": "A larger window uses more memory, and reopening takes a few seconds. The conversation stays as it is.",
     "providerCard.exclude": "TALOS wants OpenRouter to skip {name} for every model.",
     "providerCard.excludeForModel": "TALOS wants OpenRouter to skip {name} again for {model}, as it does by default.",
     "providerCard.allow": "TALOS wants OpenRouter to use {name} again.",

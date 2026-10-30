@@ -6,7 +6,7 @@
  * d'avvio non lo porta. Una xterm per scheda, creata la prima volta che la scheda diventa attiva e tenuta finché la scheda c'è.
  */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Plus, RotateCw, X } from '@lucide/vue'
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Plus, RefreshCw, X } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import type { ClienteTerminaleR4, SchedaTerminaleR4 } from '@/composables/useTerminaleR4'
 import { useTerminaleR4 } from '@/composables/useTerminaleR4'
@@ -269,7 +269,7 @@ defineExpose({ ridimensionaAttiva })
                 class="talos-codice-r4-terminale-ricollega"
                 @click="ricollega"
             >
-                <RotateCw class="size-3.5" aria-hidden="true" /> {{ tr('mobile.ricollega') }}
+                <RefreshCw class="size-3.5" aria-hidden="true" /> {{ tr('mobile.ricollega') }}
             </button>
         </p>
 

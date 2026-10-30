@@ -395,3 +395,24 @@ describe('TalosMobileComposerModelPicker', () => {
         expect(byProp.find('[aria-label="Refresh model catalog"]').exists()).toBe(true)
     })
 })
+
+/*
+ * ⛔ PICK-SCROLL-01 (Pad, 27/10/2026, dito vero sul mockup del compositore): dentro il foglio «Modello» l'elenco ha un suo
+ * scorrimento con `overscroll-contain`. Quando i modelli ci stanno tutti, il dito si ferma lì e il foglio, che deve scorrere per
+ * mostrare ciò che sta sotto, resta fermo. Dentro un foglio lo scorrimento è UNO, quello del foglio; fuori (la barra) resta com'è.
+ */
+describe('PICK-SCROLL-01 dentro il foglio lo scorrimento è quello del foglio', () => {
+    it('dentro il foglio l\'elenco non ha un suo scorrimento che trattiene il dito', () => {
+        const picker = mountPicker({ dentroAlFoglio: true })
+        const elenco = picker.get('[role="listbox"]')
+        expect(elenco.classes()).not.toContain('overscroll-contain')
+        expect(elenco.classes()).not.toContain('overflow-y-auto')
+    })
+
+    it('fuori dal foglio (la barra) l\'elenco scorre da sé come oggi', () => {
+        const picker = mountPicker()
+        const elenco = picker.get('[role="listbox"]')
+        expect(elenco.classes()).toContain('overflow-y-auto')
+        expect(elenco.classes()).toContain('overscroll-contain')
+    })
+})

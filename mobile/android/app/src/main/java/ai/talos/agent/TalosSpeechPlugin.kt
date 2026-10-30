@@ -293,11 +293,7 @@ class TalosSpeechPlugin : Plugin() {
                 elenco.put(riga)
             }
         }
-        result.put("available", true)
-        result.put("voices", elenco)
-        result.put("current", runCatching { tts.voice?.name }.getOrNull())
-        result.put("engine", runCatching { tts.defaultEngine }.getOrNull())
-        call.resolve(result)
+        call.resolve(vociPerJs(elenco, runCatching { tts.voice?.name }.getOrNull(), runCatching { tts.defaultEngine }.getOrNull()))
     }
 
     /**
@@ -581,4 +577,15 @@ class TalosSpeechPlugin : Plugin() {
         result.put("stopped", true)
         call.resolve(result)
     }
+}
+
+/**
+ * La risposta di `voices()`. ⛔ `JSObject.put(chiave, null)` di org.json TOGLIE la chiave: senza voce scelta o col motore muto
+ * `current`/`engine` sparivano invece di arrivare `null` (stessa famiglia di B1-B3, test VOCI-JS-01).
+ */
+internal fun vociPerJs(voci: org.json.JSONArray, current: String?, engine: String?): JSObject = JSObject().apply {
+    put("available", true)
+    put("voices", voci)
+    put("current", current ?: org.json.JSONObject.NULL)
+    put("engine", engine ?: org.json.JSONObject.NULL)
 }

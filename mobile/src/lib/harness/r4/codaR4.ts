@@ -152,3 +152,12 @@ export function vociDellaStrisciaR4(stato: unknown, { sessioneId, lingua, ora }:
 export function azioneCodaR4(giroVivo: boolean): 'indirizza' | 'invia-ora' {
     return giroVivo ? 'indirizza' : 'invia-ora'
 }
+
+/**
+ * ⛔ UI-113 (owner 29/10/2026 notte, «Come la riga del PC»): a chat ferma, con la coda non in pausa e fatta SOLO di risultati di agenti,
+ * quei risultati non svegliano la chat (dopo uno Stop, contratto CONTRATTO-FERMA-TUTTE): partono col prossimo messaggio della persona.
+ * Allora la riga sotto la coda lo dice, come la riga «Fermati N agenti» (PC `stopMenu.lineByYou`), invece di «Parte appena TALOS è libero».
+ */
+export function partonoColProssimoR4(stato: StatoCodaR4, giroVivo: boolean): boolean {
+    return !giroVivo && !stato.inPausa && stato.voci.length > 0 && stato.voci.every((v) => v.origine === 'delega')
+}

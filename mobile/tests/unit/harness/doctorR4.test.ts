@@ -9,7 +9,7 @@ import { ErroreDoctorR4, TESTI_DOCTOR_R4, contaGravitaDoctorR4, controlliDoctorR
  * `impostaLingua('it'|'en')`), sui casi di prova; l'unica differenza ammessa è la riga della shell sul telefono (accordo con Nino1).
  */
 interface Esito { nome: string; lingua: string; voci?: { id: string; titolo: string; gravita: string; righe: string[] }[]; errore?: string }
-const golden = JSON.parse(readFileSync(resolve(__dirname, '..', '..', 'fixtures', 'r4', 'doctor-701c6c0d2.json'), 'utf8')) as {
+const golden = JSON.parse(readFileSync(resolve(__dirname, '..', '..', 'fixtures', 'r4', 'doctor-4cee78f33.json'), 'utf8')) as {
     origine: { commit: string; percorso: string; sha256: string }
     casi: Record<string, Record<string, unknown>>
     esiti: Esito[]
@@ -57,7 +57,7 @@ describe('il Doctor del Codice su r4 (K3-C2b)', () => {
 
     it('DOC-05 i testi del Doctor vengono dallo stesso commit del golden, con le stesse chiavi nelle due lingue', () => {
         expect(TESTI_DOCTOR_R4.origine).toMatchObject({ commit: golden.origine.commit, percorso: 'harness-ui/frontend/src/i18n/testi/varie.js', prefisso: 'doctor.' })
-        expect(golden.origine).toMatchObject({ percorso: 'harness-ui/frontend/src/components/doctor.js', sha256: 'abcd36bd81ae8472c75603dff3a94d1a40c65043d2e41d6f57ef4b780f42b85e' })
+        expect(golden.origine).toMatchObject({ percorso: 'harness-ui/frontend/src/components/doctor.js', sha256: '154b39a23ddeca3508acdf03c6adf9cdb069ca69b63ffbf6e692a20720a59686' })
         expect(Object.keys(TESTI_DOCTOR_R4.it).sort()).toEqual(Object.keys(TESTI_DOCTOR_R4.en).sort())
         expect(TESTI_DOCTOR_R4.it['doctor.check.shell.device']).toBe(DISPOSITIVO.it)
     })

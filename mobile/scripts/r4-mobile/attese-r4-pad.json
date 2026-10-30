@@ -1,7 +1,7 @@
 {
   "schema": "talos.mobile.attese-r4.v1",
-  "pin": "d5bed0a16",
-  "nota": "Ogni riga è una prova di r4 che sul Pad è rossa per l'ambiente (Android, niente git/npm/ripgrep, prove scritte per Windows/WSL), letta una per una il 17/10/2026 sul giro 2 di K4 (pin 701c6c0d2), confermata uguale al pin 9f8b5fae5 (desktop 0.1.31) lo stesso giorno: 805 file, 246 rosse attese, nessuna nuova. Il cancello fallisce per una rossa NON qui e per una riga qui che adesso passa. — 18/10/2026: pin a813c2377 (desktop 0.1.33); +17 righe (14 link-vietato, 2 ripgrep-assente-cerca, 1 ctime-a-scatti, misurate sul Pad), −1 (ETICHETTA-SANDBOX ora passa). — 18/10/2026: pin f6c6625ac (desktop 0.1.34, custode ChatGPT nell'app); 0 righe nuove, −1 (IMP-10 ora passa: hash «racy» riletti come git, 81abd635a). — 19/10/2026: pin di prova 0f3f90f8e (feat/remoto-modulo, fonte locale-ospite); +18 righe confermate dal Desktop come solo-PC: 16 punti di ripristino (PDR/RIP, git vero, git-assente) e 2 file del remoto (iroh, relay: solo-pc-remoto). — 23/10/2026: pin cba8f4084 (r4 della main pubblica, desktop 0.1.35; kernel identico a d06f6a9d3): 890 file, 9.116 prove, 8.594 verdi; 10 rosse nuove, tutte d'ambiente e lette una per una: 7 del revisore dell'obiettivo con git vero (spawnSync git ENOENT, git-assente) e 3 di OpenRouter con modulePath 'C:/fixture/runtime.mjs' (OWNER_RUNTIME_PATH_INVALID, modulo-runtime-per-percorso); nessuna riga scaduta. — 25/10/2026: pin d5bed0a16 (candidato desktop 0.1.37): 927 file, 9.598 prove, 9.061 verdi; 7 rosse nuove, tutte d'ambiente e lette una per una: 5 di binding-iroh-scarica (ENOENT harness-ui/native/iroh-binding.json e iroh-THIRD_PARTY_NOTICES.txt, file del binding iroh del desktop che la copia delle prove non porta: file-non-copiato), 1 CASA-U2028-01 (CASA_LINUX_PERCORSO «non è su un disco di Windows»: casa-linux-wsl), 1 B8-03 (ENAMETOOLONG: la prova costruisce 110 cartelle da 115 caratteri, «i percorsi lunghi sono accesi su Windows»: windows-nella-prova); nessuna riga scaduta.",
+  "pin": "4e5a1a1d4",
+  "nota": "Ogni riga è una prova di r4 che sul Pad è rossa per l'ambiente (Android, niente git/npm/ripgrep, prove scritte per Windows/WSL), letta una per una il 17/10/2026 sul giro 2 di K4 (pin 701c6c0d2), confermata uguale al pin 9f8b5fae5 (desktop 0.1.31) lo stesso giorno: 805 file, 246 rosse attese, nessuna nuova. Il cancello fallisce per una rossa NON qui e per una riga qui che adesso passa. — 18/10/2026: pin a813c2377 (desktop 0.1.33); +17 righe (14 link-vietato, 2 ripgrep-assente-cerca, 1 ctime-a-scatti, misurate sul Pad), −1 (ETICHETTA-SANDBOX ora passa). — 18/10/2026: pin f6c6625ac (desktop 0.1.34, custode ChatGPT nell'app); 0 righe nuove, −1 (IMP-10 ora passa: hash «racy» riletti come git, 81abd635a). — 19/10/2026: pin di prova 0f3f90f8e (feat/remoto-modulo, fonte locale-ospite); +18 righe confermate dal Desktop come solo-PC: 16 punti di ripristino (PDR/RIP, git vero, git-assente) e 2 file del remoto (iroh, relay: solo-pc-remoto). — 23/10/2026: pin cba8f4084 (r4 della main pubblica, desktop 0.1.35; kernel identico a d06f6a9d3): 890 file, 9.116 prove, 8.594 verdi; 10 rosse nuove, tutte d'ambiente e lette una per una: 7 del revisore dell'obiettivo con git vero (spawnSync git ENOENT, git-assente) e 3 di OpenRouter con modulePath 'C:/fixture/runtime.mjs' (OWNER_RUNTIME_PATH_INVALID, modulo-runtime-per-percorso); nessuna riga scaduta. — 25/10/2026: pin d5bed0a16 (candidato desktop 0.1.37): 927 file, 9.598 prove, 9.061 verdi; 7 rosse nuove, tutte d'ambiente e lette una per una: 5 di binding-iroh-scarica (ENOENT harness-ui/native/iroh-binding.json e iroh-THIRD_PARTY_NOTICES.txt, file del binding iroh del desktop che la copia delle prove non porta: file-non-copiato), 1 CASA-U2028-01 (CASA_LINUX_PERCORSO «non è su un disco di Windows»: casa-linux-wsl), 1 B8-03 (ENAMETOOLONG: la prova costruisce 110 cartelle da 115 caratteri, «i percorsi lunghi sono accesi su Windows»: windows-nella-prova); nessuna riga scaduta. Pin 4cee78f33 (29/10/2026, giro K4 sul Pad, 1.031 file): 9 rosse nuove lette una per una; 7 d'ambiente aggiunte (2 modulo di runtime per percorso «C:/fixture», 1 canvas senza binario Android, 2 Windows nella prova, 1 router del motore locale del desktop, 1 link() vietato). Fuori elenco, al Desktop: RV20-R1a/b (fuori da Windows non c'è lettore delle porte: un indirizzo solo stampato rende «pronta» una porta). Pin d9cb13449 (29/10/2026 sera, giro K4 sul Pad, 1.041 file): RV20-R1a/b ora verdi (7/7 nel file); le 7 rosse d'ambiente del 4cee restano; 10 rosse nuove, tutte d'ambiente con cause note (5 «cerca» senza ripgrep dà i nomi e non le righe: R24-01/04, R25-01/04/08; 5 git assente: R26-04…08). Pin 174a2057d (29/10/2026 notte, r4 d'esportazione per la 0.1.47 = d19131630 + solo prove: nomi inventati negli esempi e segreti finti composti; giro K4 sul Pad a 58482dd63, stessi file spediti: 1.045 file, 10.354 prove, 9.772 verdi): 1 rossa nuova d'ambiente, CANC-A2-06 (la prova usa il tetto del PC; su Android il tetto è 512 KiB per scelta, CANC-A2-08 verde); nessuna riga scaduta. Pin 4e5a1a1d4 (30/10/2026, r4 fuso sul pubblico per la 0.1.47 = 174a2057d + cure della CI di GitHub: chiave di percorso reale nella guardia stash/clean, prova REV-B9, riga del .gitignore pubblico; giro K4 sul Pad con una build di debug: 1.045 file, 10.354 prove, 9.772 verdi): nessuna rossa nuova, nessuna riga scaduta.",
   "cause": {
     "casa-linux-wsl": "la casa Linux in WSL esiste solo sul desktop",
     "file-non-copiato": "la prova legge un file che il pacchetto delle prove non porta",
@@ -17,7 +17,9 @@
     "shell-windows-wsl": "la prova sceglie la shell Windows/WSL",
     "watcher-linux": "su Linux il watcher ricorsivo dei file è fatto da più watcher: la prova conta quelli di Windows",
     "windows-nella-prova": "la prova scrive un percorso o un comportamento di Windows",
-    "solo-pc-remoto": "i moduli del controllo remoto lato PC (iroh, relay) non vanno sul telefono: la prova li importa"
+    "solo-pc-remoto": "i moduli del controllo remoto lato PC (iroh, relay) non vanno sul telefono: la prova li importa",
+    "canvas-assente": "@napi-rs/canvas non ha il binario android-arm64: la prova lo importa di sicuro; il prodotto ripiega (view_image senza ridimensionare, tetto degli allegati)",
+    "tetto-cache-android": "la prova misura il tetto del PC (2 MiB di sorgenti); su Android il tetto voluto è 512 KiB (Mobile 29/10, CANC-A2-08 lo prova): una cartella da 1.200 KiB non entra nella cache"
   },
   "voci": [
     {
@@ -1795,6 +1797,114 @@
       "prova": "B8-03 (revisione a blocco 8, tetto alzato in A9-1) oltre il tetto il percorso resta fuori dall'esito, che resta intero; FILE_TOO_LARGE porta il percorso vero",
       "esito": "fail",
       "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/finestra-che-cresce-motore-del-contesto.test.mjs",
+      "prova": "FC-B6-03 (A-R5) il riassunto del motore del contesto è una chiamata di servizio: sul rifiuto del motore locale non lo riapre e non chiede una carta",
+      "esito": "fail",
+      "causa": "modulo-runtime-per-percorso"
+    },
+    {
+      "file": "tests/finestra-che-cresce-revisione-5.test.mjs",
+      "prova": "FC-B5-11 (A-4) il segno «senza persona» passa dall'adattatore vero al rifiuto del motore locale: niente riapertura, niente carta",
+      "esito": "fail",
+      "causa": "modulo-runtime-per-percorso"
+    },
+    {
+      "file": "tests/guarda-immagine-ospite.test.mjs",
+      "prova": null,
+      "esito": "fail",
+      "causa": "canvas-assente"
+    },
+    {
+      "file": "tests/motore-locale-router-revisione-g.test.mjs",
+      "prova": "RG-5b G-R5 the resource sampler starts PowerShell and WSL by their full path",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/motore-locale-router.test.mjs",
+      "prova": "RT-01 the router starts with the brief's arguments, the offline variable, and no key, token or secret in its environment",
+      "esito": "fail",
+      "causa": "llama-server-desktop"
+    },
+    {
+      "file": "tests/remoto-giunzione-elevazione-revisione-8.test.mjs",
+      "prova": "REV-B8-C3 (controllo) una revoca toglie UN consenso solo, e una giunzione verso una cartella consentita si revoca col suo percorso (CD-10)",
+      "esito": "fail",
+      "causa": "windows-nella-prova"
+    },
+    {
+      "file": "tests/rev-anteprima-domande-file.test.mjs",
+      "prova": "REV-ANTEPRIMA-04 — un HARD LINK dal nome innocuo verso `.env` (uccide il mutante «eUnFileSegreto senza `cartella`»)",
+      "esito": "fail",
+      "causa": "link-vietato"
+    },
+    {
+      "file": "tests/r24-continua-solo-riferimento.test.mjs",
+      "prova": "R24-01 LA PAROLA SCIVOLATA: continua senza testo né nome si cerca come testo, con la nota in testa",
+      "esito": "fail",
+      "causa": "ripgrep-assente-cerca"
+    },
+    {
+      "file": "tests/r24-continua-solo-riferimento.test.mjs",
+      "prova": "R24-04 FORMA: solo r<numero> è un riferimento; «r12abc» si cerca come testo",
+      "esito": "fail",
+      "causa": "ripgrep-assente-cerca"
+    },
+    {
+      "file": "tests/r25-dentro-un-file.test.mjs",
+      "prova": "R25-01 FILE (ripgrep): dentro un file cerca solo lì, coi percorsi relativi alla radice",
+      "esito": "fail",
+      "causa": "ripgrep-assente-cerca"
+    },
+    {
+      "file": "tests/r25-dentro-un-file.test.mjs",
+      "prova": "R25-04 GIUNZIONE (CLI, Windows): un dentro che porta fuori dal progetto si rifiuta, cartella o file",
+      "esito": "fail",
+      "causa": "ripgrep-assente-cerca"
+    },
+    {
+      "file": "tests/r25-dentro-un-file.test.mjs",
+      "prova": "R25-08 GITIGNORE: un file del .gitignore nominato apposta si cerca, con rg e senza",
+      "esito": "fail",
+      "causa": "ripgrep-assente-cerca"
+    },
+    {
+      "file": "tests/r26-lavoro-della-persona.test.mjs",
+      "prova": "R26-04 il lavoro della PERSONA: git stash non parte, anche in Accesso pieno; il file resta, nessuna voce di stash, le alternative nell'esito",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/r26-lavoro-della-persona.test.mjs",
+      "prova": "R26-05 le altre quattro forme sul lavoro della persona: reset --hard, checkout --, restore, clean -fd — e con git -C",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/r26-lavoro-della-persona.test.mjs",
+      "prova": "R26-06 AL CONTRARIO: modifiche tutte dell'agente (scritte in questo turno) — lo stash e il clean passano",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/r26-lavoro-della-persona.test.mjs",
+      "prova": "R26-07 AL CONTRARIO: niente da perdere (albero pulito) — lo stash passa; e un file dell'agente toccato poi dalla persona torna della persona",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/r26-lavoro-della-persona.test.mjs",
+      "prova": "R26-08 l'ospite sa che cosa ha scritto l'agente nei turni prima (lavoroDellAgenteFn): con lui, passa",
+      "esito": "fail",
+      "causa": "git-assente"
+    },
+    {
+      "file": "tests/cancello-veloce-cache.test.mjs",
+      "prova": "CANC-A2-06 TETTO DELLA MEMORIA: oltre 2 MiB di sorgenti niente cache (esito di sempre); due cartelle che insieme lo superano ⇒ se ne tiene una",
+      "esito": "fail",
+      "causa": "tetto-cache-android"
     }
   ]
 }

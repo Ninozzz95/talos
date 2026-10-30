@@ -1,0 +1,87 @@
+data: {"type":"RunStarted","threadId":"2d907f0f-da5c-47dd-8b5c-877c8238d457","runId":"b5d90622-79dd-4bb9-99d9-7858673d531c","input":{"consegna":"Prova 6 del guardiano: esegui nel terminale npm test e dimmi solo quanti test falliscono.","progetto":"coda-remota-2026-10-27","seguito":true,"bolla":{"testo":"Prova 6 del guardiano: esegui nel terminale npm test e dimmi solo quanti test falliscono.","allegati":[],"origine":{"tipo":"telefono","nome":"OnePlus Pad 3"}}},"contesto":{"progetto":"coda-remota-2026-10-27","cartella":"/w","branch":null,"worktree":null,"repoAnnidati":[],"modello":"chatgpt:gpt-6-luna","reasoning":{"effort":"max"},"permessi":"On request","modalitaOperativa":"normale"},"timestamp":1793132592269,"_sequenza":990}
+
+data: {"type":"ReasoningMessageStart","messageId":"d04a8799-5193-41f1-86cb-210e8f844319","role":"reasoning","_sequenza":991}
+
+data: {"type":"ReasoningMessageContent","messageId":"d04a8799-5193-41f1-86cb-210e8f844319","delta":"**Running npm test**","_sequenza":992}
+
+data: {"type":"ToolCallStart","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","toolCallName":"shell","avviatoA":1793132597339,"_sequenza":993}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"{\"","_sequenza":994}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"com","_sequenza":995}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"ando","_sequenza":996}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"\":\"","_sequenza":997}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"npm","_sequenza":998}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":" test","_sequenza":999}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"\",\"","_sequenza":1000}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"descr","_sequenza":1001}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"izione","_sequenza":1002}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"\":\"","_sequenza":1003}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"E","_sequenza":1004}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"segue","_sequenza":1005}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":" npm","_sequenza":1006}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":" test","_sequenza":1007}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":" e","_sequenza":1008}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":" conta","_sequenza":1009}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":" i","_sequenza":1010}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":" test","_sequenza":1011}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":" fall","_sequenza":1012}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"iti","_sequenza":1013}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"\",\"","_sequenza":1014}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"timeout","_sequenza":1015}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"\":","_sequenza":1016}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"120","_sequenza":1017}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"000","_sequenza":1018}
+
+data: {"type":"ToolCallArgs","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","delta":"}","_sequenza":1019}
+
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"chatgpt","model":"gpt-6-luna","usage":{"prompt_tokens":16921,"completion_tokens":62,"total_tokens":16983,"prompt_tokens_details":{"cached_tokens":16384,"cache_write_tokens":0},"completion_tokens_details":{"reasoning_tokens":22}},"costoDichiarato":null,"esito":"completato"},"_sequenza":1020}
+
+data: {"type":"ReasoningMessageEnd","messageId":"d04a8799-5193-41f1-86cb-210e8f844319","_sequenza":1021}
+
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":16921,"completion_tokens":62,"cached_tokens":16384,"giri":1}}],"_sequenza":1022}
+
+data: {"type":"ApprovalRequested","requestId":"fa9c6d30-27ec-47c1-8557-e0e3f1c73adb","azione":{"tipo":"shell","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","comando":"npm test"},"_sequenza":1023}
+
+data: {"type":"ApprovalResolved","requestId":"fa9c6d30-27ec-47c1-8557-e0e3f1c73adb","approvato":true,"_sequenza":1024}
+
+data: {"type":"CUSTOM","name":"talos.process-output","value":{"schema":"talos.process-output.v1","outputId":"7d2c98c3-66c1-4ab7-90cf-e8d9a5038784","sessionId":"e7ce3dea-0055-45d6-ae3b-cfb8d2ebd482","runId":"b5d90622-79dd-4bb9-99d9-7858673d531c","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","state":"recording","limitBytes":67108864,"nextSequence":0,"observedBytes":0,"storedBytes":0,"stdout":{"observedBytes":0,"storedBytes":0,"sha256":null},"stderr":{"observedBytes":0,"storedBytes":0,"sha256":null},"createdAt":"2026-10-27T20:24:21.366Z","finishedAt":null,"termination":null,"exitCode":null,"errorCode":null},"_sequenza":1025}
+
+data: {"type":"CUSTOM","name":"talos.process-output","value":{"schema":"talos.process-output.v1","outputId":"7d2c98c3-66c1-4ab7-90cf-e8d9a5038784","sessionId":"e7ce3dea-0055-45d6-ae3b-cfb8d2ebd482","runId":"b5d90622-79dd-4bb9-99d9-7858673d531c","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","state":"complete","limitBytes":67108864,"nextSequence":13,"observedBytes":1333,"storedBytes":1333,"stdout":{"observedBytes":1333,"storedBytes":1333,"sha256":"b7d7a3f3b06d774e6b37a139365b05856b5d95be86431d57094b7c20affeb9e9"},"stderr":{"observedBytes":0,"storedBytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"createdAt":"2026-10-27T20:24:21.366Z","finishedAt":"2026-10-27T20:24:22.032Z","termination":"exited","exitCode":1,"errorCode":null,"outputMetadataVersion":1,"persistence":"confirmed"},"_sequenza":1026}
+
+data: {"type":"ToolCallResult","messageId":"98e0d3d2-f5f4-43db-a158-4a1b34c2515f","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","content":"[shell output: stdout and stderr combined in arrival order; stream identity is not preserved]\nexit 1 [sandbox: wsl2 (Linux in WSL as root; no isolation: /mnt/c is the Windows disk with the rights of the Windows user running TALOS, and Linux permissions do not apply there)]\n<<<TALOS_DATA id=bef90926489a from=\"shell\">>>\n[TALOS output reference: 7d2c98c3-66c1-4ab7-90cf-e8d9a5038784; retained 1333 of 1333 bytes.] Read retained bytes with process_output({\"outputId\":\"7d2c98c3-66c1-4ab7-90cf-e8d9a5038784\"}); follow nextOffset, and select stderr separately.\n> slugify-prova@1.0.0 test\n> node --test\n\n✔ base (0.625604ms)\n✔ numbers keep their place (0.095031ms)\n✖ a slug never exceeds 20 characters, cut at a dash (0.609523ms)\nℹ tests 3\nℹ suites 0\nℹ pass 2\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 61.701397\n\n✖ failing tests:\n\ntest at slugify.test.mjs:14:1\n✖ a slug never exceeds 20 characters, cut at a dash (0.609523ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  + actual - expected\n  \n  + 'a-very-long-title-that-keeps-going'\n  - 'a-very-long-title'\n                      ^\n  \n      at TestContext.<anonymous> (file:///w)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1325:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:911:18)\n      at Test.postRun (node:internal/test_runner/test:1465:19)\n      at Test.run (node:internal/test_runner/test:1390:12)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:911:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 'a-very-long-title-that-keeps-going',\n    expected: 'a-very-long-title',\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n<<<END_TALOS_DATA id=bef90926489a>>>","role":"tool","isError":true,"durataMs":672,"comando":"npm test","cwd":"/w","exitCode":1,"receipt":{"schema_version":1,"azione":"shell","percorso":null,"comando":"npm test","toolCallId":"call_FyWG9FhzONZ7H2R6NrjAWzSP","consentito":true,"via":"livello-su-richiesta","motivo":null,"status":"failed","risk":"R2","trifecta":false,"action":"execute","requiredActions":["execute","outbound","write"],"hashContenuto":null,"evidence":{"exitCode":1,"sandboxEnforcement":"wsl2"},"postcondizione":"nessuna","verified":null,"error":null,"signature":null,"keyId":null},"_sequenza":1027}
+
+data: {"type":"TextMessageStart","messageId":"5ec2890f-a1bc-4542-8bb1-3d04a67788c5","role":"assistant","_sequenza":1028}
+
+data: {"type":"TextMessageContent","messageId":"5ec2890f-a1bc-4542-8bb1-3d04a67788c5","delta":"1","_sequenza":1029}
+
+data: {"type":"CUSTOM","name":"consumo-fornitore","value":{"tipo":"consumo-fornitore","provider":"chatgpt","model":"gpt-6-luna","usage":{"prompt_tokens":17587,"completion_tokens":15,"total_tokens":17602,"prompt_tokens_details":{"cached_tokens":16768,"cache_write_tokens":0},"completion_tokens_details":{"reasoning_tokens":8}},"costoDichiarato":null,"esito":"completato"},"_sequenza":1030}
+
+data: {"type":"TextMessageEnd","messageId":"5ec2890f-a1bc-4542-8bb1-3d04a67788c5","_sequenza":1031}
+
+data: {"type":"StateDelta","delta":[{"op":"replace","path":"/usage","value":{"prompt_tokens":34508,"completion_tokens":77,"cached_tokens":33152,"giri":2}}],"_sequenza":1032}
+
+data: {"type":"RunFinished","threadId":"2d907f0f-da5c-47dd-8b5c-877c8238d457","runId":"b5d90622-79dd-4bb9-99d9-7858673d531c","outcome":{"type":"success"},"result":{"detto":"1","compattazioni":0,"premesseNegate":0,"usage":{"prompt_tokens":34508,"completion_tokens":77,"prompt_tokens_details":{"cached_tokens":33152},"giri":2}},"timestamp":1793132666531,"_sequenza":1033}

@@ -11,7 +11,7 @@
  * `/providers/<id>…` non sono in elenco.
  */
 import type { TalosR4ClientePonte } from '@/lib/harness/r4/clienteR4'
-import { inviaFileAlPc, inviaImmagineAlPc, type NativoFileRemoti, type StatoFileRemoto } from '@/lib/remoto/fileRemoti'
+import { anteprimaDalPc, inviaFileAlPc, inviaImmagineAlPc, type NativoFileRemoti, type StatoFileRemoto } from '@/lib/remoto/fileRemoti'
 
 /** Ciò che il ponte usa del cliente del canale (`clienteRemoto.ts`). */
 export interface ClientePerIlPonte {
@@ -48,10 +48,26 @@ const VOCI: readonly Voce[] = Object.freeze([
     ...([['resume', 'session.send'], ['queue', 'session.queue'], ['stop', 'session.stop'], ['approve', 'session.approve'],
         ['question', 'session.answer'], ['plan-decision', 'session.plan'], ['settings', 'session.settings'], ['rename', 'session.rename'],
         // revisione del blocco 3 (S3), owner 24/10/2026 «Sì, uguali alle locali»: `session.delete` del PC (9e548d7b8), col consenso
-        ['delete', 'session.delete']] as const)
+        ['delete', 'session.delete'],
+        // IMPOSTAZIONI-DAL-VIVO (owner 27/10/2026, r4 f573cdc93 e 115cdc671): dove girano i comandi, il loro racconto, l'obiettivo
+        ['dove-girano-i-comandi', 'session.commands-location'], ['comandi-nella-conversazione', 'session.commands-in-chat'], ['goal', 'session.goal.set']] as const)
         .map(([coda, op]): Voce => ({
             metodo: 'POST', re: new RegExp(`^/api/v1/sessions/${ID}/${coda}$`, 'u'), op, args: (m, c) => ({ sessionId: sid(m), corpo: c ?? {} }),
         })),
+    // l'obiettivo: la lettura e le sue azioni, solo quelle della rotta del PC (r4 115cdc671 le ricontrolla: mai un pezzo di percorso)
+    { metodo: 'GET', re: new RegExp(`^/api/v1/sessions/${ID}/goal$`, 'u'), op: 'session.goal', args: (m) => ({ sessionId: sid(m) }) },
+    { metodo: 'POST', re: new RegExp(`^/api/v1/sessions/${ID}/goal/(pausa|riprendi|togli|contratto|criteri|proposta|verifica)$`, 'u'), op: 'session.goal.action',
+        args: (m, c) => ({ sessionId: sid(m), action: m[2], corpo: c ?? {} }) },
+    // CENSIMENTO G (a), Desktop 27/10: pulsanti del dispositivo che finivano in «Solo dal computer»; le operazioni del PC ci sono già
+    // (r4 ca94ffa1c `operazioni.mjs:191-207`, col consenso della cartella). La coda: «Invia ora», «Indirizza ora», «Togli»
+    { metodo: 'POST', re: new RegExp(`^/api/v1/sessions/${ID}/queue/invia$`, 'u'), op: 'session.queue.send', args: (m, c) => ({ sessionId: sid(m), corpo: c ?? {} }) },
+    { metodo: 'POST', re: new RegExp(`^/api/v1/sessions/${ID}/queue/annulla$`, 'u'), op: 'session.queue.cancel', args: (m, c) => ({ sessionId: sid(m), corpo: c ?? {} }) },
+    // il riassunto: «Salta» della riga viva e «Annulla» sul separatore (l'istante ISO della compattazione, mai un pezzo di percorso)
+    { metodo: 'POST', re: new RegExp(`^/api/v1/sessions/${ID}/compaction/skip$`, 'u'), op: 'session.compact.skip', args: (m, c) => ({ sessionId: sid(m), corpo: c ?? {} }) },
+    { metodo: 'POST', re: new RegExp(`^/api/v1/sessions/${ID}/compaction/([^/]+)/undo$`, 'u'), op: 'session.compact.undo', args: (m) => ({ sessionId: sid(m), compactionAt: decodeURIComponent(m[2]!) }) },
+    // «Duplica in una sessione nuova»: il punto del giro, se c'è, è un argomento dell'operazione e non un pezzo del corpo
+    { metodo: 'POST', re: new RegExp(`^/api/v1/sessions/${ID}/fork$`, 'u'), op: 'session.fork',
+        args: (m, c) => ({ sessionId: sid(m), ...(typeof c?.primaDelGiro === 'string' ? { primaDelGiro: c.primaDelGiro } : {}) }) },
     { metodo: 'GET', re: new RegExp(`^/api/v1/sessions/${ID}/file-undo$`, 'u'), op: 'session.undo.list', args: (m) => ({ sessionId: sid(m) }) },
     { metodo: 'POST', re: new RegExp(`^/api/v1/sessions/${ID}/file-undo/redo$`, 'u'), op: 'session.undo.redo', args: (m) => ({ sessionId: sid(m) }) },
     { metodo: 'GET', re: new RegExp(`^/api/v1/sessions/${ID}/file-undo/(\\d{1,9})$`, 'u'), op: 'session.undo.preview', args: (m) => ({ sessionId: sid(m), turn: Number(m[2]) }) },
@@ -105,9 +121,11 @@ const statoDelCodice = (code: string) => (Object.hasOwn(STATO_DEL_CODICE, code) 
 /** RA-02 (revisione 21/10/2026): il motivo nella forma del nativo, l'unica che il Codice riconosce come «la sessione non c'è più». */
 const motivoDelFlusso = (code: string) => (code === 'NOT_FOUND' ? 'HTTP 404' : code)
 // RA-04: lo stato che r4 ha dato al PC, se il PC lo manda (il cliente lo accetta solo fra 400 e 599); altrimenti dal codice
-const rifiuto = (code: string, message: string, extra: { reason?: unknown, params?: unknown, stato?: unknown } = {}) =>
+// FRASI-UNICHE (27/10/2026): anche la frase precisa per la persona (`explanation`), se il PC la manda: la busta HTTP ha la generica in `message`
+const rifiuto = (code: string, message: string, extra: { reason?: unknown, params?: unknown, stato?: unknown, explanation?: unknown } = {}) =>
     busta(typeof extra.stato === 'number' ? extra.stato : statoDelCodice(code), { ok: false, error: { code, message,
-        ...(typeof extra.reason === 'string' ? { reason: extra.reason } : {}), ...(extra.params && typeof extra.params === 'object' ? { params: extra.params } : {}) } })
+        ...(typeof extra.reason === 'string' ? { reason: extra.reason } : {}), ...(extra.params && typeof extra.params === 'object' ? { params: extra.params } : {}),
+        ...(typeof extra.explanation === 'string' ? { explanation: extra.explanation } : {}) } })
 
 /** Il percorso senza query e la query. Un «..» non combacia con nessuna voce; un id di soli punti lo ferma `ID_VALIDO`. */
 function dividi(percorso: string): { via: string, query: URLSearchParams } {
@@ -206,7 +224,7 @@ export function creaPonteRemotoR4(
         } catch (e) {
             // ⛔ CAMBIA 2 (Desktop, 25/10): un guasto senza codice (un difetto, un lancio del nativo) non è «connessione persa»
             const code = typeof (e as { code?: unknown })?.code === 'string' ? (e as { code: string }).code : 'BAD_MESSAGE'
-            return rifiuto(code, String((e as Error)?.message ?? code), e as { reason?: unknown, params?: unknown, stato?: unknown })
+            return rifiuto(code, String((e as Error)?.message ?? code), e as { reason?: unknown, params?: unknown, stato?: unknown, explanation?: unknown })
         }
     }
 
@@ -231,7 +249,7 @@ export function creaPonteRemotoR4(
                 return busta(200, { ok: true, data })
             } catch (e) {
                 const code = typeof (e as { code?: unknown })?.code === 'string' ? (e as { code: string }).code : 'DISCONNECTED'
-                return rifiuto(code, String((e as Error)?.message ?? code), e as { reason?: unknown, params?: unknown, stato?: unknown })
+                return rifiuto(code, String((e as Error)?.message ?? code), e as { reason?: unknown, params?: unknown, stato?: unknown, explanation?: unknown })
             }
         },
 
@@ -278,6 +296,11 @@ export function creaPonteRemotoR4(
             ascoltatori.get(evento)!.add(ascoltatore)
             return { remove: async () => { ascoltatori.get(evento)?.delete(ascoltatore) } }
         },
+    }
+    // ⛔ Owner 26/10 (allegati apribili): il chip di un file della sessione del PC si apre leggendolo in sola lettura, senza rotte nuove
+    ponte.anteprimaFile = async ({ sessionId, nome }) => {
+        if (typeof sessionId !== 'string' || !ID_VALIDO.test(sessionId)) throw guasto('FILE_NO_CONVERSATION', 'Open a conversation before opening a file.')
+        return anteprimaDalPc(cliente, sessionId, nome)
     }
     if (file) {
         // D-6 (Desktop, 25/10), come la finestra: un file vuole una conversazione che esiste; mai una sessione vuota apposta

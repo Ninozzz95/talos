@@ -7,11 +7,13 @@
  * messaggio successivo (`resume`) arriva sullo stesso. Se cade, si riapre con `?after=<ultima sequenza applicata>`: il blocco a
  * metà si butta, e r4 rimanda tutto ciò che viene dopo.
  */
-import { computed, getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { applicaEventoR4, conRigaVivaAMano, creaConversazioneR4, leggiFlussoSse, type OpzioniEventiR4 } from '@/lib/harness/r4/eventiR4'
 import { testoDelServerR4 } from '@/lib/harness/r4/testiServerR4'
 import { applicaEventoPannelloR4, creaPannelloR4 } from '@/lib/harness/r4/pannelloR4'
 import { motivoDelRifiutoR4, type AzioneProcessoR4, type RisorsaR4 } from '@/lib/harness/r4/processiR4'
+import { corpoStopR4, figlieFermateDallaRispostaR4, type SceltaStopR4 } from '@/lib/harness/r4/fermaTuttoR4'
+import { richiestaFermaFigliaR4 } from '@/lib/harness/r4/fermaAgenteR4'
 import { suUnaRigaR4 } from '@/lib/harness/r4/agentiR4'
 import { motivoErroreFileR4, riassuntoRicercaR4, vociAlberoR4, type AzioneFileR4, type RisultatoRicercaR4, type VoceAlberoR4 } from '@/lib/harness/r4/alberoR4'
 import { talosCurrentLocale } from '@/i18n'
@@ -23,11 +25,12 @@ import { statoCodaR4, type StatoCodaR4 } from '@/lib/harness/r4/codaR4'
 import { messaggioErroreModelloR4, type RagionamentoR4 } from '@/lib/harness/r4/modelloR4'
 import type { BollaR4 } from '@/lib/harness/r4/allegatiR4'
 import { chiDellAgenteR4, conCarteDelleFiglieR4, discendentiInAttesaR4, messaggioDellaFigliaR4, richiestaDellaFigliaR4, voceDellaFigliaR4, type CartaDellaFigliaR4, type RichiestaDellaFigliaR4 } from '@/lib/harness/r4/figlieR4'
-import type { TalosSorgenteStreaming } from '@/lib/chat/sorgenteStreaming'
+import type { TalosAttesaDelGiro, TalosSorgenteStreaming } from '@/lib/chat/sorgenteStreaming'
 import { messaggioErroreServerR4 } from '@/lib/harness/r4/pianoR4'
 import type { DecisionePianoR4 } from '@/lib/harness/r4/pianoChiave'
 import { CHIAVE_COORDINAZIONE_R4, catenaDellaSessioneR4, coordinazioneAccesaNellaCatenaR4 } from '@/lib/harness/r4/coordinazioneR4'
 import { annunciaCambioSessioneR4 } from '@/lib/harness/r4/avvisiSessioniR4'
+import { arrivaIstantanea, creaStatoImpostazioniR4, fineScrittura, inizioScrittura, istantaneaR4, type IstantaneaR4 } from '@/lib/harness/r4/impostazioniDalVivoR4'
 import {
     MOTIVO_TROPPE_RICHIESTE, attendiConsenso, chiediConsenso as apriRichiestaDiConsenso, consensoRichiesto, leggiAttesaConsenso, type AttesaConsenso, type EsitoConsenso,
 } from '@/lib/remoto/consensoDelPc'
@@ -38,6 +41,8 @@ export interface ErroreR4 {
     /** Il motivo e i valori che r4 aggiunge al codice (`reason`, `params`): la chiave che manca ha il nome del fornitore. */
     reason?: string
     params?: Record<string, unknown>
+    /** FRASI-UNICHE (27/10/2026): la frase precisa che il server pubblica per la persona; sulla busta HTTP il `message` è quella generica del codice. */
+    explanation?: string
 }
 
 /** Una delega della sessione (`GET /:id/children`, forma misurata su r4 il 15/10). */
@@ -64,6 +69,9 @@ export interface HookDelProgettoR4 {
     errore: string | null
 }
 
+/** Perché il guardiano del flusso si è arreso (GFR-10/12, RG-01..09, BST-03). */
+export type MotivoResaR4 = 'silenzio' | 'cadute' | 'riga' | 'interrotta'
+
 export interface OpzioniConversazioneR4 {
     cliente: TalosR4ClientePonte
     /** La cartella di lavoro che r4 conosce (`statoR4Sviluppo.cartella`). */
@@ -79,6 +87,11 @@ export interface OpzioniConversazioneR4 {
     /** Millisecondi prima del tentativo `n` di riapertura (da 1). Di serie 0,5 s, 1 s, 2 s… fino a 5 s. */
     attesaRiapertura?: (tentativo: number) => number
     /**
+     * R4 delle righe in corso: un'ora del PC (ms dall'epoca) portata sull'orologio del dispositivo (D-0145-6(b), lo scarto misurato
+     * dal vivo). Senza, le ore del flusso valgono come sono (il r4 del telefono ha lo stesso orologio).
+     */
+    oraDelPc?: (ms: number) => number
+    /**
      * K3-C Scelta del modello: prima di ogni invio (creazione e ripresa), col modello che il giro userà. La schermata porta lì la
      * chiave dell'app in r4 (owner 16/10 «alla scelta e a ogni invio»); un rifiuto ferma l'invio e si dice.
      */
@@ -93,6 +106,20 @@ export interface OpzioniConversazioneR4 {
      * totali cumulativi nel giro): le chiamate al modello e i token (richiesta + risposta) in più rispetto al totale di prima.
      */
     suConsumo?: (consumo: { richieste: number; token: number }) => void
+    /**
+     * D-0145-6(b): l'ora (`timestamp`, ms) di ogni evento DAL VIVO che la porta, per misurare lo scarto d'orologio del PC
+     * (`scartoOrologioPc.ts`). Dal vivo = dopo il `talos.fine-rigiocata` del flusso corrente: la storia, e alla riapertura ciò che è
+     * successo mentre il canale era giù, porta ore vecchie.
+     */
+    suOraDalVivo?: (timestampMs: number) => void
+    /** D-0145-6(b): il flusso si apre o si riapre; lo scarto si rimisura da capo. */
+    suApertura?: () => void
+    /**
+     * IMPOSTAZIONE-RIFIUTATA (Pad, 27/10/2026): il PC ha rifiutato il modello o il ragionamento scelti. Come il PC
+     * (`sincronizzaImpostazioniSessione`) il rifiuto NON va nella riga della conversazione (finiva dietro il foglio aperto): chi monta
+     * lo dice in un avviso sopra tutto. Per CONSENT_REQUIRED la cartella resta pronta per `chiediConsenso`.
+     */
+    suImpostazioneRifiutata?: (errore: ErroreR4) => void
 }
 
 /** I totali che r4 manda a ogni chiamata del giro (`talosHarness.mjs` `conto`); `null` se l'evento non è un consumo. */
@@ -121,13 +148,14 @@ let contatore = 0
 
 function erroreDalCorpo(stato: number, corpo: string): ErroreR4 {
     try {
-        const valore = JSON.parse(corpo) as { error?: { code?: unknown; message?: unknown; reason?: unknown; params?: unknown } }
+        const valore = JSON.parse(corpo) as { error?: { code?: unknown; message?: unknown; reason?: unknown; params?: unknown; explanation?: unknown } }
         const code = typeof valore?.error?.code === 'string' ? valore.error.code : null
         if (code) {
-            const { reason, params } = valore.error ?? {}
+            const { reason, params, explanation } = valore.error ?? {}
             return {
                 code, message: typeof valore.error?.message === 'string' ? valore.error.message : code,
                 ...(typeof reason === 'string' ? { reason } : {}),
+                ...(typeof explanation === 'string' && explanation.trim() ? { explanation } : {}),
                 ...(params && typeof params === 'object' && !Array.isArray(params) ? { params: params as Record<string, unknown> } : {}),
             }
         }
@@ -183,8 +211,83 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
     const coordinazione = ref<{ accesa: boolean; delega: boolean; conosciuta: boolean }>({ accesa: false, delega: false, conosciuta: true })
     let modoScelto = false
     let permessoScelto = false
+
+    /*
+     * ⛔ IMPOSTAZIONI-DAL-VIVO (owner 27/10/2026, contratto F, r4 `f573cdc93`): la fotografia intera delle impostazioni, decisa dalla
+     * sua versione (`impostazioniDalVivoR4.ts`). Un PC più vecchio non la manda: allora resta la strada di prima (la riga dell'elenco,
+     * la risposta 2xx, il modo e il permesso dal vivo).
+     */
+    let statoImpostazioni = creaStatoImpostazioniR4()
+    function mostraIstantanea(f: IstantaneaR4): void {
+        if (f.modello) modello.value = f.modello
+        ragionamento.value = f.reasoning
+        politica.value = { permessi: f.permessi, perAttrezzo: { ...f.permessiPerAttrezzo } }
+        modalita.value = f.modalitaOperativa
+        // la coordinazione di un agente delegato la decide la conversazione principale
+        if (!coordinazione.value.delega && CHIAVE_COORDINAZIONE_R4 in f.permessiPerAttrezzo) {
+            coordinazione.value = { ...coordinazione.value, accesa: f.permessiPerAttrezzo[CHIAVE_COORDINAZIONE_R4] === 'sempre', conosciuta: true }
+        }
+        if (f.nome && f.nome !== titolo.value) {
+            titolo.value = f.nome
+            // Desktop 27/10: anche la riga dell'elenco (la colonna del tablet, la lista) dice il nome nuovo
+            if (sessioneId.value) annunciaCambioSessioneR4({ id: sessioneId.value, nome: f.nome })
+        }
+    }
+    function riceviIstantanea(f: IstantaneaR4): void {
+        const esito = arrivaIstantanea(statoImpostazioni, f)
+        statoImpostazioni = esito.stato
+        if (esito.applica) mostraIstantanea(esito.applica)
+    }
+    /**
+     * Una scrittura delle impostazioni del dispositivo: in volo trattiene ciò che arriva, alla risposta vale la sua fotografia (o la
+     * trattenuta più nuova). `conFotografia` dice a chi scrive di NON mettere a mano il valore: l'ha già messo la fotografia, e un
+     * valore messo dopo potrebbe disfare una trattenuta più nuova.
+     */
+    async function conFotografia<T extends { ok: boolean; corpo?: string }>(scrivi: () => Promise<T>): Promise<{ esito: T; conFotografia: boolean }> {
+        statoImpostazioni = inizioScrittura(statoImpostazioni)
+        let risposta: IstantaneaR4 | null = null
+        try {
+            const esito = await scrivi()
+            if (esito.ok && esito.corpo) {
+                try { risposta = istantaneaR4((JSON.parse(esito.corpo) as { data?: { istantanea?: unknown } }).data?.istantanea) } catch { /* corpo non JSON: nessuna fotografia */ }
+            }
+            return { esito, conFotografia: risposta !== null }
+        } finally {
+            const fine = fineScrittura(statoImpostazioni, risposta)
+            statoImpostazioni = fine.stato
+            if (fine.applica) mostraIstantanea(fine.applica)
+        }
+    }
     /** Dal clic su Invia al `RunStarted` (o al rifiuto): il giro non c'è ancora, ma il messaggio è partito. */
     const inviando = ref(false)
+    /** GFR-12 (Desktop 27/10): il guardiano si è arreso col giro visto. Lo schermo non dice «al lavoro»; `inCorso` resta dentro. */
+    const collegamentoPerso = ref(false)
+    /** RG-04: la sessione non c'è più sul PC (404 del flusso): niente «al lavoro» accanto all'avviso. */
+    const sessioneSparita = ref(false)
+    /**
+     * Il guardiano: il `talos.battito` portato da questo pezzo del flusso (RG-08), con lo stato della fonte quando il PC lo manda
+     * (`{ultimaSequenza, lavora}`, Desktop 27/10 sera, BST-01..05); `null` = nessun battito nel pezzo.
+     */
+    let battitoNelPezzo: { ultimaSequenza: number | null; lavora: boolean | null } | null = null
+    /** Perché il guardiano si è arreso: «Riconnetti» ha senso per tutti tranne `interrotta` (lì si scrive un messaggio nuovo). */
+    const motivoResa = ref<MotivoResaR4 | null>(null)
+    /**
+     * ⛔ R3 delle righe in corso (owner 27/10 «nulla deve fare sembrare la ui bloccata»; bozzetto approvato il 28/10, scena 9; test
+     * RICOLL-01..06): a giro vivo il flusso è caduto e si sta riaprendo. `dal` è l'ora della PRIMA caduta, `tentativo` cresce a ogni
+     * caduta di fila; il primo pezzo del flusso riaperto la toglie e accende `ricollegato` per 2 s. Alla resa del guardiano lascia il
+     * posto all'errore con «Riconnetti».
+     */
+    const ricollegamento = ref<{ tentativo: number, dal: number } | null>(null)
+    /** R4: l'ora del tocco su Invia; l'attesa della prima parola conta da qui finché il giro non porta la sua (ATT-01..03). */
+    const inviatoAlle = ref<number | null>(null)
+    const ricollegato = ref(false)
+    let timerRicollegato: ReturnType<typeof setTimeout> | null = null
+    function lineaTornata(): void {
+        ricollegamento.value = null
+        ricollegato.value = true
+        if (timerRicollegato !== null) clearTimeout(timerRicollegato)
+        timerRicollegato = setTimeout(() => { timerRicollegato = null; ricollegato.value = false }, 2_000)
+    }
     const errore = ref<ErroreR4 | null>(null)
     /**
      * ⛔ D-MOCK-11 (contratto R5.12, parte 1, punti 2-3; solo sul PC): la richiesta di consenso aperta sul PC mentre la persona ci
@@ -200,12 +303,26 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
     const coda = shallowRef<StatoCodaR4>({ voci: [], inPausa: false })
     const messaggi = computed(() => conCarteDelleFiglieR4(stato.value.messaggi, carteFiglie.value))
     const inCorso = computed(() => stato.value.inCorso)
+    // R4, revisione del Desktop (S3, ATT-04): a giro chiuso e niente in volo l'ora dell'invio si dimentica; un giro partito altrove
+    // (dal PC, da un'automazione) senza la sua ora non conta da un invio vecchio
+    watch(() => inCorso.value === null && !inviando.value, (fermo) => { if (fermo) inviatoAlle.value = null })
     const ultimaSequenza = computed(() => stato.value.ultimaSequenza)
     const storiaFinita = computed(() => stato.value.storiaFinita)
 
     /** La coda in streaming della chat legge da qui (`TALOS_SORGENTE_STREAMING`). */
     const sorgente: TalosSorgenteStreaming = {
-        sending: computed(() => inviando.value || inCorso.value !== null),
+        sending: computed(() => !collegamentoPerso.value && !sessioneSparita.value && (inviando.value || inCorso.value !== null)),
+        inPausa: computed(() => ricollegamento.value !== null),
+        // R4 (bozzetto approvato il 28/10, scene 3a/6): «inviato» dal tocco al via, poi «giro» dall'ora del RunStarted
+        attesa: computed<TalosAttesaDelGiro | null>(() => {
+            if (collegamentoPerso.value || sessioneSparita.value) return null
+            if (inCorso.value) {
+                const at = Date.parse(stato.value.giro?.at ?? '')
+                const dal = Number.isFinite(at) ? (opzioni.oraDelPc ?? ((ms: number) => ms))(at) : inviatoAlle.value
+                return { fase: 'giro', dal, chi: null }
+            }
+            return inviando.value ? { fase: 'inviato', dal: inviatoAlle.value, chi: null } : null
+        }),
         testo: computed(() => inCorso.value?.testo ?? ''),
         ragionamento: computed(() => inCorso.value?.ragionamento ?? ''),
         confini: computed(() => inCorso.value?.confini ?? []),
@@ -214,6 +331,8 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
 
     let flussoId: string | null = null
     let buffer = ''
+    /** D-0145-6(b): il flusso CORRENTE ha già passato la sua storia (`talos.fine-rigiocata`). */
+    let dalVivo = false
     let tentativi = 0
     let chiuso = false
     let timerRiapertura: ReturnType<typeof setTimeout> | null = null
@@ -244,7 +363,21 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
                 consumoDelGiro = totali
                 if (c.storiaFinita && (richieste || token)) opzioni.suConsumo?.({ richieste, token })
             }
+            if (dalVivo && typeof evento.dati.timestamp === 'number') opzioni.suOraDalVivo?.(evento.dati.timestamp)
+            if (evento.dati.type === 'CUSTOM' && evento.dati.name === 'talos.fine-rigiocata') dalVivo = true
+            // il guardiano del flusso: da qui in poi il silenzio di questo PC vuol dire flusso morto
+            if (evento.dati.type === 'CUSTOM' && evento.dati.name === 'talos.battito') {
+                battitoVisto = true
+                const v = (evento.dati.value ?? {}) as { ultimaSequenza?: unknown; lavora?: unknown }
+                battitoNelPezzo = {
+                    ultimaSequenza: Number.isSafeInteger(v.ultimaSequenza) ? v.ultimaSequenza as number : null,
+                    lavora: typeof v.lavora === 'boolean' ? v.lavora : null,
+                }
+            }
+            const impostazioniPrima = c.impostazioni
             c = applicaEventoR4(c, evento.dati, opzioniEventi)
+            // IMPOSTAZIONI-DAL-VIVO: evento per evento, anche dalla storia (decide la versione): due fotografie nello stesso pezzo contano tutte e due
+            if (c.impostazioni !== impostazioniPrima && c.impostazioni?.istantanea) riceviIstantanea(c.impostazioni.istantanea)
             p = applicaEventoPannelloR4(p, evento.dati)
             const richiesta = richiestaDellaFigliaR4(evento.dati, sessioneId.value)
             if (richiesta) richiestaDellaFiglia(richiesta)
@@ -253,7 +386,7 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         }
         // K3 piano: dopo il sì al piano r4 cambia modo e permesso; dal vivo si rileggono da qui, dalla storia no (`legacy/app.js:21141`)
         const impostazioni = c.impostazioni
-        if (impostazioni && impostazioni !== stato.value.impostazioni && impostazioni.dalVivo) {
+        if (impostazioni && impostazioni !== stato.value.impostazioni && impostazioni.dalVivo && !impostazioni.istantanea) {
             if (impostazioni.modalitaOperativa) modalita.value = impostazioni.modalitaOperativa
             if (impostazioni.permessi) politica.value = { ...politica.value, permessi: impostazioni.permessi }
         }
@@ -331,7 +464,11 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         maniglie.push(cliente.addListener('r4Pezzo', (dati) => {
             if (chiuso || dati.id !== flussoId || typeof dati.testo !== 'string') return
             tentativi = 0
+            if (ricollegamento.value) lineaTornata()
+            const sequenzaPrima = stato.value.ultimaSequenza
+            battitoNelPezzo = null
             consuma(dati.testo)
+            segnaleDalFlusso(sequenzaPrima, battitoNelPezzo)
         }))
         maniglie.push(cliente.addListener('r4Errore', (dati) => {
             if (chiuso || dati.id !== flussoId) return
@@ -347,9 +484,20 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         flussoId = null
         buffer = ''
         if (motivo === 'HTTP 404') {
-            errore.value = { code: 'NOT_FOUND', message: 'The session no longer exists' }
+            // il motivo porta la frase del desktop nella lingua dell'app (`NOT_FOUND.session_not_found`, MOD-22)
+            errore.value = { code: 'NOT_FOUND', reason: 'session-not-found', message: 'The session no longer exists' }
             inviando.value = false
+            // RG-04: un giro visto resta dentro, ma accanto a «la sessione non esiste più» niente rotellina
+            sessioneSparita.value = true
+            ricollegamento.value = null
             return
+        }
+        // RG-06: un trasporto che cade a ogni apertura (PC spento) non lascia «al lavoro» per sempre
+        caduteDiFila += 1
+        if (caduteDiFila >= CADUTE_MASSIME && alLavoro()) arrenditi('cadute')
+        // R3: a giro vivo la caduta si vede («riprovo · tentativo N» dall'ora della prima); a giro fermo si riapre in silenzio
+        if (alLavoro() && !collegamentoPerso.value) {
+            ricollegamento.value = { tentativo: (ricollegamento.value?.tentativo ?? 0) + 1, dal: ricollegamento.value?.dal ?? Date.now() }
         }
         tentativi += 1
         timerRiapertura = setTimeout(() => {
@@ -368,9 +516,22 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
             // r4 risponde `{ data: { items: [...] } }` (misurato sul Pad, 15/10)
             const dati = (JSON.parse(risposta.corpo) as { data?: { items?: unknown } }).data
             const elenco: unknown[] = Array.isArray(dati?.items) ? dati.items : []
-            const voce = elenco.find((v): v is { sessionId: string; nome?: unknown; taskDelega?: unknown; permessi?: unknown; permessiPerAttrezzo?: unknown; modello?: unknown; reasoning?: unknown; modalitaOperativa?: unknown } =>
+            const voce = elenco.find((v): v is { sessionId: string; nome?: unknown; taskDelega?: unknown; permessi?: unknown; permessiPerAttrezzo?: unknown; modello?: unknown; reasoning?: unknown; modalitaOperativa?: unknown; versioneImpostazioni?: unknown } =>
                 typeof v === 'object' && v !== null && (v as { sessionId?: unknown }).sessionId === id)
-            if (voce && sessioneId.value === id) {
+            /*
+             * IMPOSTAZIONI-DAL-VIVO: la riga conta solo se è più nuova di ciò che si è già applicato (una fotografia della storia arrivata
+             * prima della riga non torna indietro) e se nessuna scrittura del dispositivo è in volo. Senza versione (PC più vecchio) conta
+             * sempre, come prima.
+             */
+            const versione = voce?.versioneImpostazioni
+            const fresca = !Number.isSafeInteger(versione)
+                || ((versione as number) > statoImpostazioni.applicata && statoImpostazioni.inVolo === 0)
+            if (fresca && Number.isSafeInteger(versione)) statoImpostazioni = { ...statoImpostazioni, applicata: versione as number }
+            if (voce && sessioneId.value === id && !fresca) {
+                const catena = catenaDellaSessioneR4(id, elenco as { sessionId?: unknown; padreId?: unknown; permessiPerAttrezzo?: unknown }[], politica.value.perAttrezzo)
+                coordinazione.value = { accesa: catena.scelte ? coordinazioneAccesaNellaCatenaR4(catena.scelte) : false, delega: catena.delega, conosciuta: catena.scelte !== null }
+            }
+            if (voce && sessioneId.value === id && fresca) {
                 const mappa = voce.permessiPerAttrezzo && typeof voce.permessiPerAttrezzo === 'object' ? voce.permessiPerAttrezzo as Record<string, unknown> : {}
                 politica.value = {
                     permessi: typeof voce.permessi === 'string' ? voce.permessi : null,
@@ -388,7 +549,7 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
             }
             // K3-C3b-2b: una delega non ha `nome`; il desktop la intitola col suo compito (`session-item.js:247`), su una riga
             const nome = voce ? (typeof voce.nome === 'string' && voce.nome ? voce.nome : suUnaRigaR4(voce.taskDelega)) : ''
-            if (nome && sessioneId.value === id) titolo.value = nome
+            if (nome && sessioneId.value === id && (fresca || !titolo.value)) titolo.value = nome
         } catch {
             // il titolo non è essenziale: resta quello di prima
         }
@@ -418,11 +579,16 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         }
         if (scelta === 'sessione' && tipo && await ancoraInAttesa()) {
             try {
-                const r = await cliente.richiesta({ metodo: 'POST', percorso: `${base}/settings`, corpo: JSON.stringify({ unisciPermessiPerAttrezzo: { [tipo]: 'sempre' }, rispettaNega: true }) })
-                if (r.stato >= 200 && r.stato < 300) {
+                const scrivi = async () => {
+                    const r = await cliente.richiesta({ metodo: 'POST', percorso: `${base}/settings`, corpo: JSON.stringify({ unisciPermessiPerAttrezzo: { [tipo]: 'sempre' }, rispettaNega: true }) })
+                    return { ok: r.stato >= 200 && r.stato < 300, corpo: r.corpo }
+                }
+                // IMPOSTAZIONI-DAL-VIVO: solo la propria sessione passa dalla fotografia; quella di una figlia non è questa vista
+                const { esito: r, conFotografia: f } = figlia ? { esito: await scrivi(), conFotografia: false } : await conFotografia(scrivi)
+                if (r.ok) {
                     const nonUniti = (JSON.parse(r.corpo) as { data?: { nonUniti?: unknown } }).data?.nonUniti
                     sempreNonSalvato = Array.isArray(nonUniti) && nonUniti.includes(tipo)
-                    if (!sempreNonSalvato && !figlia) politica.value = { ...politica.value, perAttrezzo: { ...politica.value.perAttrezzo, [tipo]: 'sempre' } }
+                    if (!sempreNonSalvato && !figlia && !f) politica.value = { ...politica.value, perAttrezzo: { ...politica.value.perAttrezzo, [tipo]: 'sempre' } }
                 }
             } catch {
                 // il permesso resta «chiedi»: la risposta alla richiesta parte comunque
@@ -515,24 +681,27 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
      * quando r4 accetta; un rifiuto (per esempio il modo durante un giro) torna con le parole del server nella lingua dell'app, e il
      * foglio lo dice da sé: l'errore del Codice non si tocca.
      */
-    async function scriviImpostazioni(corpo: Record<string, unknown>): Promise<{ ok: true } | { ok: false; messaggio: string }> {
+    async function scriviImpostazioni(corpo: Record<string, unknown>): Promise<{ ok: true; conFotografia: boolean } | { ok: false; messaggio: string }> {
         const id = sessioneId.value
-        if (!id) return { ok: true }
-        try {
-            const r = await cliente.richiesta({ metodo: 'POST', percorso: `/api/v1/sessions/${encodeURIComponent(id)}/settings`, corpo: JSON.stringify(corpo) })
-            if (r.stato >= 200 && r.stato < 300) return { ok: true }
-            const e = erroreDalCorpo(r.stato, r.corpo)
-            return { ok: false, messaggio: messaggioErroreServerR4(e, talosCurrentLocale()) || e.message }
-        } catch (guasto) {
-            return { ok: false, messaggio: guasto instanceof Error ? guasto.message : String(guasto) }
-        }
+        if (!id) return { ok: true, conFotografia: false }
+        const { esito, conFotografia: f } = await conFotografia(async (): Promise<{ ok: true; corpo: string } | { ok: false; messaggio: string }> => {
+            try {
+                const r = await cliente.richiesta({ metodo: 'POST', percorso: `/api/v1/sessions/${encodeURIComponent(id)}/settings`, corpo: JSON.stringify(corpo) })
+                if (r.stato >= 200 && r.stato < 300) return { ok: true, corpo: r.corpo }
+                const e = erroreDalCorpo(r.stato, r.corpo)
+                return { ok: false, messaggio: messaggioErroreServerR4(e, talosCurrentLocale()) || e.message }
+            } catch (guasto) {
+                return { ok: false, messaggio: guasto instanceof Error ? guasto.message : String(guasto) }
+            }
+        })
+        return esito.ok ? { ok: true, conFotografia: f } : esito
     }
     async function impostaModo(modo: 'normale' | 'piano'): Promise<{ ok: true } | { ok: false; messaggio: string }> {
         const esito = await scriviImpostazioni({ modalitaOperativa: modo })
         if (!esito.ok) return esito
-        modalita.value = modo
+        if (!esito.conFotografia) modalita.value = modo
         if (!sessioneId.value) modoScelto = true
-        return esito
+        return { ok: true }
     }
     /**
      * K3 Coordinazione: l'interruttore scrive la SOLA chiave sul server, con l'unione (`legacy/app.js:10200-10230`): «sempre» accesa,
@@ -543,16 +712,18 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         const valore = accesa ? 'sempre' : 'chiedi'
         const esito = await scriviImpostazioni({ unisciPermessiPerAttrezzo: { [CHIAVE_COORDINAZIONE_R4]: valore } })
         if (!esito.ok) return esito
-        politica.value = { ...politica.value, perAttrezzo: { ...politica.value.perAttrezzo, [CHIAVE_COORDINAZIONE_R4]: valore } }
-        coordinazione.value = { ...coordinazione.value, accesa, conosciuta: true }
-        return esito
+        if (!esito.conFotografia) {
+            politica.value = { ...politica.value, perAttrezzo: { ...politica.value.perAttrezzo, [CHIAVE_COORDINAZIONE_R4]: valore } }
+            coordinazione.value = { ...coordinazione.value, accesa, conosciuta: true }
+        }
+        return { ok: true }
     }
     async function impostaPermesso(permesso: string): Promise<{ ok: true } | { ok: false; messaggio: string }> {
         const esito = await scriviImpostazioni({ permessi: permesso })
         if (!esito.ok) return esito
-        politica.value = { ...politica.value, permessi: permesso }
+        if (!esito.conFotografia) politica.value = { ...politica.value, permessi: permesso }
         if (!sessioneId.value) permessoScelto = true
-        return esito
+        return { ok: true }
     }
 
     /**
@@ -572,16 +743,40 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         }
     }
 
+    /**
+     * IMPOSTAZIONE-RIFIUTATA (Pad, 27/10/2026): la scrittura del modello o del ragionamento. Un rifiuto non tocca la riga d'errore della
+     * conversazione (finiva dietro il foglio aperto): va a chi monta, che lo dice sopra tutto; senza ascoltatore resta nella riga, come
+     * prima. Per il consenso la cartella resta pronta per `chiediConsenso`.
+     */
+    async function postaImpostazione(percorso: string, corpo: unknown): Promise<{ ok: true; corpo: string } | { ok: false }> {
+        let rifiuto: ErroreR4
+        try {
+            const r = await cliente.richiesta({ metodo: 'POST', percorso, corpo: JSON.stringify(corpo) })
+            if (r.stato >= 200 && r.stato < 300) return { ok: true, corpo: r.corpo }
+            rifiuto = erroreDalCorpo(r.stato, r.corpo)
+        } catch (guasto) {
+            rifiuto = { code: 'TALOS_R4_IRRAGGIUNGIBILE', message: guasto instanceof Error ? guasto.message : String(guasto) }
+        }
+        const cartella = consensoRichiesto(rifiuto)
+        if (cartella) cartellaDaConsentire = cartella
+        if (opzioni.suImpostazioneRifiutata) opzioni.suImpostazioneRifiutata(rifiuto)
+        else errore.value = rifiuto
+        return { ok: false }
+    }
+
     async function impostaModello(nuovo: string, reasoning: RagionamentoR4 | null): Promise<boolean> {
         if (!sessioneId.value) {
             modello.value = nuovo
             ragionamento.value = reasoning
             return true
         }
-        const esito = await posta(`/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/settings`, { modello: nuovo, ...(reasoning ? { reasoning } : {}) })
+        const id = sessioneId.value
+        const { esito, conFotografia: f } = await conFotografia(() => postaImpostazione(`/api/v1/sessions/${encodeURIComponent(id)}/settings`, { modello: nuovo, ...(reasoning ? { reasoning } : {}) }))
         if (!esito.ok) return false
-        modello.value = nuovo
-        if (reasoning) ragionamento.value = reasoning
+        if (!f) {
+            modello.value = nuovo
+            if (reasoning) ragionamento.value = reasoning
+        }
         return true
     }
     /** `null` = nessuna scelta: r4 non manda un livello e decide il fornitore (J3-bis, «Auto»; il desktop manda lo stesso). */
@@ -590,8 +785,9 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
             ragionamento.value = reasoning
             return true
         }
-        const esito = await posta(`/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/settings`, { reasoning })
-        if (esito.ok) ragionamento.value = reasoning
+        const id = sessioneId.value
+        const { esito, conFotografia: f } = await conFotografia(() => postaImpostazione(`/api/v1/sessions/${encodeURIComponent(id)}/settings`, { reasoning }))
+        if (esito.ok && !f) ragionamento.value = reasoning
         return esito.ok
     }
     /**
@@ -654,9 +850,219 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         }
     }
 
+    /**
+     * Dal Pad, prova della CLI (27/10/2026): dopo un 404 il flusso si ferma (USR4-06) e l'avviso resta. Se qualcuno dimostra che la
+     * sessione c'è ancora (la colonna l'ha appena rinominata sul PC riavviato), l'avviso se ne va e il flusso riparte. Solo quell'avviso.
+     */
+    async function ritrovata(): Promise<void> {
+        if (chiuso || errore.value?.code !== 'NOT_FOUND' || errore.value.reason !== 'session-not-found') return
+        errore.value = null
+        sessioneSparita.value = false
+        tentativi = 0
+        await apri()
+    }
+
+    /*
+     * ⛔ Il guardiano del flusso (owner 27/10/2026, Server-PC e OnePlus13: sul PC il giro era finito in errore, sul dispositivo restava
+     * «al lavoro»; test GFR-01..12 e RG-01..09). L'iscrizione remota poteva restare aperta ma muta, e nessuno chiudeva il giro. Contratto
+     * col Desktop: il PC manda `talos.battito` ogni 15 s su ogni iscrizione viva. Finché il pulsante dice «al lavoro»
+     * (`inviando || inCorso`):
+     *   · 40 s senza niente dal flusso, su un flusso che ha già portato un battito ⇒ il flusso è morto: si riapre da `ultimaSequenza`;
+     *   · 40 s senza niente su un PC di prima (mai un battito), oppure 120 s senza una sequenza nuova anche col battito (revisione
+     *     avversaria: il battito prova l'iscrizione del PONTE, non la fonte degli eventi; un PC riavviato a metà giro non scrive una fine,
+     *     `session-registry.mjs:549,567-569`) ⇒ la riga di `GET /api/v1/sessions`: conclusa o interrotta ⇒ si riapre una volta, e se la
+     *     rigiocata non ha portato niente ci si arrende subito; viva (un comando lungo) ⇒ si riguarda più tardi; assente o senza risposta
+     *     in 15 s ⇒ «ignota», e 6 ignote di fila valgono la resa (l'elenco non è paginato: una sessione che non vi compare non si vede).
+     * Tetti: 3 riaperture di fila senza una sequenza nuova (GFR-10), 6 cadute di fila del trasporto (RG-06). La resa (GFR-12) non
+     * inventa una fine: `collegamentoPerso` spegne «al lavoro», la riga d'errore dice la frase del PC e offre «Riconnetti». Una sequenza
+     * nuova riporta lo stato normale; un battito anche, se la resa era per silenzio o per cadute (RG-08), non se la riga era finita.
+     * A giro fermo il guardiano non fa niente. Una riapertura di troppo (il timer ritardato da Android al ritorno dal sottofondo) non fa
+     * danni: i pezzi del flusso vecchio si scartano per id e la rigiocata riparte dopo `ultimaSequenza` (GFR-06).
+     */
+    const SILENZIO_MASSIMO_MS = 40_000
+    const SENZA_SEQUENZA_MASSIMO_MS = 120_000
+    const CONTROLLO_SILENZIO_MS = 10_000
+    const TETTO_CONTROLLO_RIGA_MS = 15_000
+    const RIAPERTURE_MASSIME = 3
+    const CADUTE_MASSIME = 6
+    const IGNOTE_MASSIME = 6
+    const ERRORE_COLLEGAMENTO_PERSO = { code: 'OPERATION_FAILED', reason: 'timeout', message: 'The computer did not answer in time.' } as const
+    // BST-03: la frase del PC per una sessione interrotta (`errori-sessioni-r4.json`), non l'errore di collegamento
+    const ERRORE_INTERROTTA = { code: 'SESSION_NOT_READY', reason: 'interrupted-write-message', message: 'This session was interrupted: write a new message to resume it safely.' } as const
+    const erroriDelGuardiano = [ERRORE_COLLEGAMENTO_PERSO, ERRORE_INTERROTTA]
+    let ultimoSegnale = Date.now()
+    let sequenzaAvanzataAlle = Date.now()
+    let battitoVisto = false
+    let guardiano: ReturnType<typeof setInterval> | null = null
+    let controlloInVolo = false
+    let controlloPartitoAlle = 0
+    let gettoneControllo = 0
+    let riapertureDiFila = 0
+    let caduteDiFila = 0
+    let ignoteDiFila = 0
+    let sequenzaAllUltimaRiapertura: number | null = null
+    let arreso = false
+    let avantiDiFila = 0
+    const alLavoro = () => inviando.value || inCorso.value !== null
+
+    type RigaSulPc = 'terminale' | 'viva' | 'ignota'
+    async function rigaSulPc(id: string): Promise<RigaSulPc> {
+        try {
+            const risposta = await cliente.richiesta({ metodo: 'GET', percorso: '/api/v1/sessions' })
+            if (risposta.stato < 200 || risposta.stato >= 300) return 'ignota'
+            const dati = (JSON.parse(risposta.corpo) as { data?: { items?: unknown } }).data
+            const elenco: unknown[] = Array.isArray(dati?.items) ? dati.items : []
+            const voce = elenco.find((v) => typeof v === 'object' && v !== null && (v as { sessionId?: unknown }).sessionId === id) as
+                { conclusa?: unknown; interrotta?: unknown } | undefined
+            if (!voce) return 'ignota'
+            return voce.conclusa === true || voce.interrotta === true ? 'terminale' : 'viva'
+        } catch {
+            return 'ignota'
+        }
+    }
+    /** Il controllo della riga, con un tetto di 15 s guardato dal battito del guardiano (`gettoneControllo`): una risposta tardiva non conta. */
+    async function chiediLaRiga(id: string): Promise<RigaSulPc | null> {
+        controlloInVolo = true
+        controlloPartitoAlle = Date.now()
+        const mio = ++gettoneControllo
+        const esito = await rigaSulPc(id)
+        if (mio !== gettoneControllo) return null
+        controlloInVolo = false
+        return esito
+    }
+    function arrenditi(motivo: MotivoResaR4): void {
+        if (collegamentoPerso.value) return
+        arreso = true
+        motivoResa.value = motivo
+        ricollegamento.value = null
+        inviando.value = false
+        collegamentoPerso.value = true
+        errore.value = { ...(motivo === 'interrotta' ? ERRORE_INTERROTTA : ERRORE_COLLEGAMENTO_PERSO) }
+    }
+    /** Una riapertura del guardiano, col tetto di GFR-10. */
+    function riapriPerIlGuardiano(): void {
+        if (!flussoId) return
+        if (riapertureDiFila >= RIAPERTURE_MASSIME) return arrenditi('silenzio')
+        riapertureDiFila += 1
+        sequenzaAllUltimaRiapertura = stato.value.ultimaSequenza
+        ultimoSegnale = sequenzaAvanzataAlle = Date.now()
+        riapri(flussoId)
+    }
+    function contaIgnota(): void {
+        ignoteDiFila += 1
+        if (ignoteDiFila >= IGNOTE_MASSIME) arrenditi('riga')
+        else ultimoSegnale = sequenzaAvanzataAlle = Date.now()
+    }
+    async function controllaSilenzio(): Promise<void> {
+        if (chiuso || !sessioneId.value || !alLavoro()) return
+        if (controlloInVolo) {
+            // RG-07: il PC non risponde alla lettura della riga (ponte mezzo morto): scade e conta come «ignota»
+            if (Date.now() - controlloPartitoAlle >= TETTO_CONTROLLO_RIGA_MS) {
+                gettoneControllo += 1
+                controlloInVolo = false
+                contaIgnota()
+            }
+            return
+        }
+        if (!flussoId) return
+        if (stato.value.ultimaSequenza !== sequenzaAllUltimaRiapertura) {
+            riapertureDiFila = 0
+            arreso = false
+        }
+        if (arreso) return
+        const ora = Date.now()
+        const muto = ora - ultimoSegnale >= SILENZIO_MASSIMO_MS
+        const fermo = battitoVisto && ora - sequenzaAvanzataAlle >= SENZA_SEQUENZA_MASSIMO_MS
+        if (!muto && !fermo) return
+        const id = flussoId
+        if (muto && battitoVisto) {
+            // il flusso che portava il battito tace: è morto (GFR-01); il tetto delle riaperture vale per i silenzi di fila
+            if (riapertureDiFila >= RIAPERTURE_MASSIME) return arrenditi('silenzio')
+            riapertureDiFila += 1
+            sequenzaAllUltimaRiapertura = stato.value.ultimaSequenza
+            riapri(id)
+            return
+        }
+        const riga = await chiediLaRiga(sessioneId.value)
+        if (riga === null || chiuso || flussoId !== id || !alLavoro()) return
+        if (riga === 'ignota') return contaIgnota()
+        ignoteDiFila = 0
+        if (riga === 'viva') {
+            // un comando lungo su un PC vivo: si riguarda più tardi (40 s senza battito, 120 s col battito)
+            ultimoSegnale = sequenzaAvanzataAlle = Date.now()
+            return
+        }
+        // la riga dice finita (conclusa o interrotta): una riapertura per la rigiocata; se c'è già stata senza portare niente, la resa
+        if (riapertureDiFila > 0) return arrenditi('riga')
+        riapertureDiFila += 1
+        sequenzaAllUltimaRiapertura = stato.value.ultimaSequenza
+        ultimoSegnale = sequenzaAvanzataAlle = Date.now()
+        riapri(id)
+    }
+    function riapri(id: string): void {
+        caduto('')
+        void cliente.chiudiFlusso({ id }).catch(() => undefined)
+    }
+    function ripresoIlCollegamento(): void {
+        collegamentoPerso.value = false
+        arreso = false
+        motivoResa.value = null
+        riapertureDiFila = 0
+        caduteDiFila = 0
+        ignoteDiFila = 0
+        avantiDiFila = 0
+        if (erroriDelGuardiano.some((e) => errore.value?.code === e.code && errore.value.reason === e.reason)) errore.value = null
+    }
+    /** Ogni pezzo del flusso di adesso: il guardiano sa che il ponte è vivo; una sequenza nuova dice che lo è anche la fonte. */
+    function segnaleDalFlusso(sequenzaPrima: number | null, battito: typeof battitoNelPezzo): void {
+        ultimoSegnale = Date.now()
+        caduteDiFila = 0
+        if (stato.value.ultimaSequenza !== sequenzaPrima) {
+            sequenzaAvanzataAlle = Date.now()
+            avantiDiFila = 0
+            riapertureDiFila = 0
+            if (collegamentoPerso.value) ripresoIlCollegamento()
+            return
+        }
+        if (!battito) return
+        // RG-08: un battito dopo una resa per silenzio o per cadute: il giro gira davvero (non se la riga o il PC l'hanno detto finito)
+        if (collegamentoPerso.value && (motivoResa.value === 'silenzio' || motivoResa.value === 'cadute')) ripresoIlCollegamento()
+        const mia = stato.value.ultimaSequenza ?? 0
+        // BST-01: due battiti di fila con la fonte più avanti ⇒ il flusso ha perso eventi (uno solo può incrociare un evento in volo)
+        if (battito.ultimaSequenza !== null && battito.ultimaSequenza > mia) {
+            avantiDiFila += 1
+            if (avantiDiFila >= 2) {
+                avantiDiFila = 0
+                riapriPerIlGuardiano()
+            }
+            return
+        }
+        avantiDiFila = 0
+        // BST-03: il PC dice che il giro VISTO non lavora più e la rigiocata non ha portato la fine ⇒ interrotto sul PC.
+        // BST-04: a messaggio appena mandato (`inCorso` nullo) no: il giro nuovo può non essere ancora partito.
+        if (battito.lavora === false && inCorso.value !== null && !collegamentoPerso.value) {
+            if (riapertureDiFila === 0) riapriPerIlGuardiano()
+            else arrenditi('interrotta')
+        }
+    }
+    /** GFR-12c «Riconnetti»: errore via, conti a zero, si riapre da `ultimaSequenza`. */
+    async function riconnetti(): Promise<void> {
+        if (chiuso) return
+        ripresoIlCollegamento()
+        ultimoSegnale = sequenzaAvanzataAlle = Date.now()
+        sequenzaAllUltimaRiapertura = stato.value.ultimaSequenza
+        const id = flussoId
+        if (id) riapri(id)
+        // R3: dopo «Riconnetti» la stessa riga, da capo
+        if (alLavoro()) ricollegamento.value = { tentativo: 1, dal: Date.now() }
+        if (!id) await apri()
+    }
+
     /** Apre (o riapre) il flusso della sessione. Senza sessione non fa niente. */
     async function apri(): Promise<void> {
         if (chiuso || !sessioneId.value || flussoId) return
+        ultimoSegnale = Date.now()
+        guardiano ??= setInterval(() => { void controllaSilenzio() }, CONTROLLO_SILENZIO_MS)
         if (!titolo.value) void leggiTitolo()
         ascolta()
         await Promise.all(maniglie)
@@ -667,6 +1073,8 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         const percorso = `/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/events${dopo === null ? '' : `?after=${dopo}`}`
         flussoId = id
         buffer = ''
+        dalVivo = false
+        opzioni.suApertura?.()
         try {
             await cliente.apriFlusso({ id, percorso })
         } catch (guasto) {
@@ -693,10 +1101,14 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
      */
     async function invia(testo: string, extra: ExtraDelMessaggioR4 = {}): Promise<boolean> {
         const consegna = testo.trim()
-        if (chiuso || !consegna || inviando.value || inCorso.value) return false
+        // GFR-12b: col collegamento perso il messaggio va al PC per la via normale (decide lui), non sparisce
+        if (chiuso || !consegna || inviando.value || (inCorso.value && !collegamentoPerso.value)) return false
         inviando.value = true
+        inviatoAlle.value = Date.now()
         errore.value = null
         giroRiprovato = false
+        // RG-09: l'invio rinfresca l'orologio del guardiano. RG-05: la resa resta finché il PC non ha ricevuto il messaggio
+        ultimoSegnale = sequenzaAvanzataAlle = Date.now()
         if (!(await prontoPerInviare())) {
             inviando.value = false
             return false
@@ -744,6 +1156,9 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
             inviando.value = false
             return false
         }
+        // il PC ha il messaggio: il collegamento c'è, i conti del guardiano ripartono
+        if (collegamentoPerso.value) ripresoIlCollegamento()
+        ultimoSegnale = sequenzaAvanzataAlle = Date.now()
         if (!flussoId) await apri()
         return true
     }
@@ -811,10 +1226,38 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         annullaAttesa?.()
     }
 
-    /** Stop: lo dice r4 (`RunError`/`RunFinished` arriva dal flusso). */
-    async function ferma(): Promise<void> {
-        if (!sessioneId.value) return
-        await posta(`/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/stop`, {})
+    /**
+     * Stop: lo dice r4 (`RunError`/`RunFinished` arriva dal flusso).
+     * ⛔ «Ferma tutto» (owner 29/10/2026, contratto `CONTRATTO-FERMA-TUTTE-2026-10-29.md` §1): con la scelta del foglio il corpo porta
+     * `figlie: 'tutte' | 'nessuna'` (`corpoStopR4`); senza scelta `{}`, come oggi. Torna quante figlie r4 ha fermato (`figlieFermate`,
+     * solo con «tutte»), `null` se non lo dice o se lo Stop non è partito.
+     */
+    async function ferma(figlie?: SceltaStopR4): Promise<number | null> {
+        if (!sessioneId.value) return null
+        const esito = await posta(`/api/v1/sessions/${encodeURIComponent(sessioneId.value)}/stop`, corpoStopR4(figlie ?? null))
+        if (!esito.ok) return null
+        try {
+            return figlieFermateDallaRispostaR4(JSON.parse(esito.corpo))
+        } catch {
+            return null
+        }
+    }
+
+    /**
+     * ⛔ «Ferma» nella scheda Agenti (owner 29/10 notte; correzione del Desktop, FA-G1): UNA figlia, sulla SUA rotta dello Stop con
+     * `{ figlie: 'tutte' }` (`richiestaFermaFigliaR4`): lei e le sue figlie, niente risveglio. Con `{}` r4 la fermerebbe senza cascata.
+     * Come le azioni dei Processi non tocca `errore` (è della riga, non della conversazione); il perché solo con le parole dell'app, se no
+     * `null` e la riga dice «Delega non fermata». Gli elenchi li rilegge chi li tiene (la scheda, la schermata).
+     */
+    async function fermaFiglia(figliaId: string): Promise<{ ok: true } | { ok: false; messaggio: string | null }> {
+        const r = richiestaFermaFigliaR4(figliaId)
+        try {
+            const risposta = await cliente.richiesta({ metodo: r.metodo, percorso: r.percorso, corpo: JSON.stringify(r.corpo) })
+            if (risposta.stato >= 200 && risposta.stato < 300) return { ok: true }
+            return { ok: false, messaggio: motivoDelRifiutoR4(risposta.corpo, talosCurrentLocale()) }
+        } catch {
+            return { ok: false, messaggio: null }
+        }
     }
 
     /** K3-C1, «Riprendi la sessione»: un giro interrotto riparte, senza un messaggio nuovo (`resume` con `{}`). */
@@ -886,6 +1329,10 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
         if (chiuso) return
         chiuso = true
         if (timerRiapertura !== null) clearTimeout(timerRiapertura)
+        if (timerRicollegato !== null) clearTimeout(timerRicollegato)
+        ricollegamento.value = null
+        ricollegato.value = false
+        if (guardiano !== null) clearInterval(guardiano)
         const id = flussoId
         flussoId = null
         if (id) await cliente.chiudiFlusso({ id }).catch(() => undefined)
@@ -1098,10 +1545,18 @@ export function useConversazioneR4(opzioni: OpzioniConversazioneR4) {
 
     return {
         sessioneId, titolo, messaggi, inCorso, inviando, errore, ultimaSequenza, storiaFinita, sorgente,
-        apri, invia, ferma, riprendi, compatta, saltaRiassunto, annullaCompattazione, figli, hook, fidaHook, rinomina, duplica, doctor, esporta, chiudi,
-        pannello: computed(() => statoPannello.value), politicaCompattazione, cacheSessione, azioneProcesso, risorseProcessi, sessioni,
+        apri, ritrovata, invia, ferma, fermaFiglia, riprendi, compatta, saltaRiassunto, annullaCompattazione, figli, hook, fidaHook, rinomina, duplica, doctor, esporta, chiudi,
+        pannello: computed(() => statoPannello.value),
+        /** Allegati apribili (owner 26/10): la radice della sessione e la cartella di partenza, dal `RunStarted`. */
+        cartelle: computed(() => stato.value.cartelle ?? null),
+        politicaCompattazione, cacheSessione, azioneProcesso, risorseProcessi, sessioni,
         albero, cercaFile, apriFile, azioneFile, politica, leggiPolitica, rispondiApprovazione, rispondiDomanda,
         coda, accoda, inviaDallaCoda, togliDallaCoda, riportaDallaCoda,
+        // GFR-12: il collegamento perso dopo il tetto del guardiano, e «Riconnetti» (non per una sessione interrotta sul PC, BST-03)
+        collegamentoPerso, riconnetti,
+        // R3: la linea caduta a giro vivo e il «Ricollegato» di 2 s
+        ricollegamento, ricollegato,
+        riconnettibile: computed(() => collegamentoPerso.value && motivoResa.value !== 'interrotta'),
         modello, ragionamento, impostaModello, impostaRagionamento,
         // K3 piano
         modalita, impostaModo, impostaPermesso, decidiPiano,

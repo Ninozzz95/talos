@@ -115,32 +115,41 @@ describe('TalosMobileComposer dictation (F2-T5)', () => {
  * ancora da sola (useTalosMobileDictation, capturedBase) quando parte a
  * campo vuoto.
  */
-describe('TalosMobileComposer — un solo comando dinamico accanto al campo (owner 2026-09-13)', () => {
-    it('a campo vuoto il comando e il microfono, e il secondo microfono non esiste piu', async () => {
+/*
+ * ⭐ Owner 27/10/2026 («Approvato», mockup del compositore v6/v7): il microfono è un comando SUO accanto all'invio, non più
+ * lo stato a campo vuoto dell'invio. Restano veri: un microfono solo, la stessa dettatura, la ragione scritta se manca.
+ */
+describe('TalosMobileComposer — microfono e invio, due comandi accanto al campo (owner 27/10/2026)', () => {
+    it("a campo vuoto il microfono acceso e l'invio spento; il secondo microfono non esiste piu", async () => {
         const wrapper = mountComposer({ dictationSupported: true, prompt: '' })
         expect(wrapper.find('[data-testid="talos-composer-append-mic"]').exists()).toBe(false)
+        expect(wrapper.findAll('button[aria-label="Dictate"]')).toHaveLength(1)
+        expect(wrapper.get('[data-testid="talos-composer-mic"]').attributes('disabled')).toBeUndefined()
         const action = wrapper.get('[data-testid="talos-composer-action"]')
-        expect(action.attributes('aria-label')).toBe('Dictate')
-        expect(action.attributes('disabled')).toBeUndefined()
+        expect(action.attributes('aria-label')).toBe('Send message')
+        expect(action.attributes('disabled')).toBeDefined()
     })
 
-    it('con del testo scritto lo stesso comando diventa Invia', async () => {
+    it("con del testo scritto l'invio si accende e il microfono resta", async () => {
         const wrapper = mountComposer({ dictationSupported: true, prompt: 'ciao TALOS' })
-        expect(wrapper.get('[data-testid="talos-composer-action"]').attributes('aria-label')).toBe('Send message')
-        expect(wrapper.find('button[aria-label="Dictate"]').exists()).toBe(false)
+        const action = wrapper.get('[data-testid="talos-composer-action"]')
+        expect(action.attributes('aria-label')).toBe('Send message')
+        expect(action.attributes('disabled')).toBeUndefined()
+        expect(wrapper.find('[data-testid="talos-composer-mic"]').exists()).toBe(true)
     })
 
-    it('a campo vuoto il tocco avvia la dettatura, stesso evento di prima', async () => {
-        const wrapper = mountComposer({ dictationSupported: true, prompt: '' })
-        await wrapper.get('[data-testid="talos-composer-action"]').trigger('click')
+    it('il tocco sul microfono avvia la dettatura, stesso evento di prima, anche con una bozza', async () => {
+        const wrapper = mountComposer({ dictationSupported: true, prompt: 'ciao' })
+        await wrapper.get('[data-testid="talos-composer-mic"]').trigger('click')
         expect(wrapper.emitted('toggleDictation')).toHaveLength(1)
+        expect(wrapper.emitted('send')).toBeUndefined()
     })
 
     it('senza dettatura disponibile il microfono resta, spento e con la sua ragione', async () => {
         const wrapper = mountComposer({ dictationSupported: false, prompt: '' })
-        const action = wrapper.get('[data-testid="talos-composer-action"]')
-        expect(action.attributes('aria-label')).toBe('Dictate')
-        expect(action.attributes('disabled')).toBeDefined()
+        const mic = wrapper.get('[data-testid="talos-composer-mic"]')
+        expect(mic.attributes('aria-label')).toBe('Dictate')
+        expect(mic.attributes('disabled')).toBeDefined()
         expect(wrapper.get('[data-testid="talos-composer-mic-reason"]').text()).toContain('not available')
     })
 

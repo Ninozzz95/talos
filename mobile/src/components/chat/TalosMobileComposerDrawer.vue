@@ -23,8 +23,8 @@
  */
 import { computed, nextTick, ref, watch } from 'vue'
 import {
-    BookMarked, Camera as CameraIcon, CheckSquare, Code2, Database, FileText, FlaskConical, Images,
-    Paperclip, Presentation, Search, Smartphone, Sparkles, Wrench, Zap,
+    BookMarked, BookOpenCheck, Bot, Camera as CameraIcon, Code2, Cpu, FilePlus, FileSearch, FileText, Images, Library, ListTodo,
+    Paperclip, Presentation, Smartphone, Sparkles, StickyNote, Telescope, Wrench, Zap,
 } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import { talosCurva, talosDurataMs, talosMotionConsentito } from '@/composables/useTalosCalmMotion'
@@ -52,6 +52,9 @@ const props = defineProps<{
     agentToolsEnabled?: boolean
     /** Codice c'e' solo dove il ponte nativo esiste (build di sviluppo). */
     harnessAvailable?: boolean
+    /** Owner 28/10/2026: la Libreria del prossimo messaggio si apre da qui (il suo tondo è uscito dalla riga del compositore). */
+    libraryTurnAvailable?: boolean
+    libraryTurnSubtitle?: string
 }>()
 const emit = defineEmits<{
     close: []
@@ -68,6 +71,7 @@ const emit = defineEmits<{
     /** Le voci che aprono un'altra stazione: la schermata naviga. */
     navigate: [route: TalosMobileRouteName]
     setAgentToolsEnabled: [enabled: boolean]
+    openLibraryTurn: []
 }>()
 const { t } = useTalosI18n()
 
@@ -138,9 +142,9 @@ watch(categoria, async () => {
 
 const categorie = computed<Array<{ id: Categoria, icon: unknown, title: string, subtitle: string }>>(() => [
     { id: 'attach', icon: Paperclip, title: t('chat.drawerAttach'), subtitle: t('chat.drawerAttachHint') },
-    { id: 'create', icon: FileText, title: t('chat.drawerCreate'), subtitle: t('chat.drawerCreateHint') },
+    { id: 'create', icon: FilePlus, title: t('chat.drawerCreate'), subtitle: t('chat.drawerCreateHint') },
     { id: 'tools', icon: Wrench, title: t('chat.drawerTools'), subtitle: t('chat.drawerToolsHint') },
-    { id: 'agent', icon: Zap, title: t('chat.drawerAgent'), subtitle: t('chat.drawerAgentHint') },
+    { id: 'agent', icon: Bot, title: t('chat.drawerAgent'), subtitle: t('chat.drawerAgentHint') },
 ])
 
 /** Frecce sinistra/destra: fuoco E attivazione, come nell'APG (scheda attivata al fuoco). */
@@ -343,19 +347,20 @@ const voci = computed<Voce[]>(() => {
         { id: 'attach', categoria: 'attach', testId: 'talos-drawer-attach', icon: Paperclip, title: t('chat.attachFile'), subtitle: t('chat.drawerAttachFileHint'), disabled: !props.attachmentsAvailable, reason: props.attachmentDisabledReason, run: chiudi(() => emit('attach')) },
         { id: 'pick-photos', categoria: 'attach', testId: 'talos-drawer-pick-photos', icon: Images, title: t('chat.drawerPickImage'), subtitle: t('chat.drawerPickImageHint'), disabled: !props.attachmentsAvailable, reason: props.attachmentDisabledReason, run: chiudi(() => emit('pickPhotos')) },
         { id: 'take-photo', categoria: 'attach', testId: 'talos-drawer-take-photo', icon: CameraIcon, title: t('chat.takePhoto'), subtitle: t('chat.drawerTakePhotoHint'), disabled: !props.attachmentsAvailable, reason: props.attachmentDisabledReason, run: chiudi(() => emit('takePhoto')) },
-        { id: 'context', categoria: 'attach', testId: 'talos-drawer-context', icon: Database, title: t('chat.drawerFromLibrary'), label: t('chat.chooseGroundingContext'), subtitle: t('chat.drawerFromLibraryHint'), disabled: !props.contextAvailable, reason: props.contextDisabledReason, run: chiudi(() => emit('openContext')) },
+        { id: 'context', categoria: 'attach', testId: 'talos-drawer-context', icon: Library, title: t('chat.drawerFromLibrary'), label: t('chat.chooseGroundingContext'), subtitle: t('chat.drawerFromLibraryHint'), disabled: !props.contextAvailable, reason: props.contextDisabledReason, run: chiudi(() => emit('openContext')) },
+        ...(props.libraryTurnAvailable ? [{ id: 'library-turn', categoria: 'attach', testId: 'talos-drawer-library-turn', icon: BookOpenCheck, title: t('library.contextForNextMessage'), subtitle: props.libraryTurnSubtitle ?? '', run: chiudi(() => emit('openLibraryTurn')) } as Voce] : []),
         { id: 'enhance', categoria: 'create', testId: 'talos-drawer-enhance', icon: Sparkles, title: t('chat.improvePrompt'), subtitle: props.canEnhance ? t('chat.drawerEnhanceHint') : (props.enhanceReason ?? t('chat.drawerEnhanceHint')), disabled: props.enhancing === true, reason: props.enhanceReason ?? undefined, run: chiudi(() => emit('enhancePrompt')) },
         { id: 'slides', categoria: 'create', testId: 'talos-drawer-preset-slides', icon: Presentation, title: t('chat.drawerPresetSlides'), subtitle: t('chat.drawerPresetHint'), run: chiudi(() => emit('preset', 'slides')) },
         { id: 'document', categoria: 'create', testId: 'talos-drawer-preset-document', icon: FileText, title: t('chat.promptDocument'), subtitle: t('chat.drawerPresetHint'), run: chiudi(() => emit('preset', 'document')) },
-        { id: 'analyze', categoria: 'create', testId: 'talos-drawer-preset-analyze', icon: Search, title: t('chat.promptAnalyze'), subtitle: t('chat.drawerAnalyzeHint'), run: chiudi(() => emit('preset', 'analyze')) },
-        { id: 'note-new', categoria: 'tools', testId: 'talos-drawer-note-new', icon: FileText, title: t('notes.add'), subtitle: t('chat.drawerNoteHint'), run: chiudi(() => emit('navigate', 'note-new')) },
+        { id: 'analyze', categoria: 'create', testId: 'talos-drawer-preset-analyze', icon: FileSearch, title: t('chat.promptAnalyze'), subtitle: t('chat.drawerAnalyzeHint'), run: chiudi(() => emit('preset', 'analyze')) },
+        { id: 'note-new', categoria: 'tools', testId: 'talos-drawer-note-new', icon: StickyNote, title: t('notes.add'), subtitle: t('chat.drawerNoteHint'), run: chiudi(() => emit('navigate', 'note-new')) },
         { id: 'memory-new', categoria: 'tools', testId: 'talos-drawer-memory-new', icon: BookMarked, title: t('memory.newMemory'), subtitle: t('chat.drawerMemoryHint'), run: chiudi(() => emit('navigate', 'memory-new')) },
         { id: 'privilege', categoria: 'tools', testId: 'talos-drawer-privilege', icon: Smartphone, title: t('chat.drawerPhoneControl'), subtitle: t('chat.drawerPhoneControlHint'), run: chiudi(() => emit('navigate', 'settings-privilege')) },
         { id: 'toolforge', categoria: 'tools', testId: 'talos-drawer-toolforge', icon: Wrench, title: t('navigation.toolForge'), subtitle: t('chat.drawerToolForgeHint'), run: chiudi(() => emit('navigate', 'toolforge')) },
-        { id: 'model-lab', categoria: 'tools', testId: 'talos-drawer-model-lab', icon: FlaskConical, title: t('navigation.models'), subtitle: t('chat.drawerModelLabHint'), run: chiudi(() => emit('openModelLab')) },
+        { id: 'model-lab', categoria: 'tools', testId: 'talos-drawer-model-lab', icon: Cpu, title: t('navigation.models'), subtitle: t('chat.drawerModelLabHint'), run: chiudi(() => emit('openModelLab')) },
         { id: 'agent-tools', categoria: 'agent', testId: 'talos-drawer-agent-tools', icon: Zap, title: t('chat.drawerAgentTools'), subtitle: props.agentToolsEnabled === false ? t('chat.agentToolsOff') : t('chat.agentToolsOn'), checked: props.agentToolsEnabled !== false, run: () => emit('setAgentToolsEnabled', props.agentToolsEnabled === false) },
-        { id: 'task-new', categoria: 'agent', testId: 'talos-drawer-task-new', icon: CheckSquare, title: t('chat.drawerPlanTask'), subtitle: t('chat.drawerPlanTaskHint'), run: chiudi(() => emit('navigate', 'task-new')) },
-        { id: 'research-new', categoria: 'agent', testId: 'talos-drawer-research-new', icon: Search, title: t('navigation.research'), subtitle: t('chat.drawerResearchHint'), run: chiudi(() => emit('navigate', 'research-new')) },
+        { id: 'task-new', categoria: 'agent', testId: 'talos-drawer-task-new', icon: ListTodo, title: t('chat.drawerPlanTask'), subtitle: t('chat.drawerPlanTaskHint'), run: chiudi(() => emit('navigate', 'task-new')) },
+        { id: 'research-new', categoria: 'agent', testId: 'talos-drawer-research-new', icon: Telescope, title: t('navigation.research'), subtitle: t('chat.drawerResearchHint'), run: chiudi(() => emit('navigate', 'research-new')) },
     ]
     if (props.harnessAvailable) {
         elenco.push({ id: 'harness', categoria: 'agent', testId: 'talos-drawer-harness', icon: Code2, title: t('chat.drawerCode'), subtitle: t('chat.drawerCodeHint'), run: chiudi(() => emit('navigate', 'harness')) })

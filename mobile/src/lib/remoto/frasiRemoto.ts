@@ -14,6 +14,8 @@ const FRASI: Readonly<Record<string, string>> = Object.freeze({
     DISCONNECTED: 'computer.errors.disconnected',
     BAD_MESSAGE: 'computer.errors.badCode',
     SCANNER_UNAVAILABLE: 'computer.errors.scannerUnavailable',
+    // revisione del blocco 10, F-R1: il lucchetto dei consensi del PC (503), da riprovare fra poco
+    REMOTE_STORE_BUSY: 'computer.errors.busy',
 })
 
 /** La chiave i18n della frase, `null` per «Annulla» (nessun messaggio), la generica per un codice che il telefono non conosce. */

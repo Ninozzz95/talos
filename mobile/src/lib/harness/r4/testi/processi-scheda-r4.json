@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/processi.js",
-    "sha256": "afba7a02a05b1117ce23d870cce46f051589e3c48da41fefdabb0759c7909647",
+    "sha256": "09ef202e4605a0c56dad338af2d45c0fd5a830a8b20a79d70a1726dbf6874559",
     "prefisso": [
       "process.",
       "agents."
@@ -22,6 +22,9 @@
     "process.stateNotRun": "Non eseguito",
     "process.stateInterrupted": "Interrotto",
     "process.stateLost": "Non più seguito",
+    "process.stateEndedUnknown": "Finito (esito non noto)",
+    "process.detailTracking": "Seguito",
+    "process.reattached": "Ripreso dopo un riavvio: «Ferma questo comando» funziona, ma il suo output non viene più raccolto",
     "process.stateBackgrounded": "In sfondo",
     "process.background": "Manda in sfondo",
     "process.backgrounding": "Lo mando in sfondo…",
@@ -124,7 +127,7 @@
     "process.title": "Processes",
     "process.stateQueued": "Queued",
     "process.stateStarting": "Starting",
-    "process.stateRunning": "Running",
+    "process.stateRunning": "In progress",
     "process.stateWaiting": "Waiting",
     "process.stateAwaitingApproval": "Waiting for your approval",
     "process.stateSucceeded": "Succeeded",
@@ -134,6 +137,9 @@
     "process.stateNotRun": "Not run",
     "process.stateInterrupted": "Interrupted",
     "process.stateLost": "No longer tracked",
+    "process.stateEndedUnknown": "Ended (exit unknown)",
+    "process.detailTracking": "Tracking",
+    "process.reattached": "Re-attached after a restart: “Stop this command” works, but its output is no longer collected",
     "process.stateBackgrounded": "In background",
     "process.background": "Send to background",
     "process.backgrounding": "Sending to background…",
@@ -216,7 +222,7 @@
     "agents.openConversationOf": "Open the conversation of: {nome}",
     "agents.stateStopped": "Stopped",
     "agents.statePaused": "Paused",
-    "agents.stateRunning": "Running",
+    "agents.stateRunning": "In progress",
     "agents.stateFailed": "Failed",
     "agents.stateDone": "Done",
     "agents.stateWaiting": "Waiting",

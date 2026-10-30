@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- UI-108 (owner 28/10): la testata nativa del visual interattivo. -->
+<resources>
+    <string name="talos_artifact_close">Close</string>
+    <string name="talos_artifact_title_fallback">Interactive visual</string>
+</resources>

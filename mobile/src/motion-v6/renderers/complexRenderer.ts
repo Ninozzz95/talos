@@ -76,7 +76,15 @@ export type ComplexRendererOptions = Readonly<{
     maxCatchUpSteps?: number
     onFrame?: (metric: ComplexRendererFrameMetric) => void
     onFault?: (fault: ComplexRendererError) => void
+    /**
+     * Subito dopo il disegno di ogni fotogramma, sullo stesso contesto e nelle coordinate della scena (larghezza e altezza del viewport).
+     * Serve al velo delle scene (`veloDelleScene.ts`, Forge «Corridoio velato», owner 28/10): un passo in più sulla stessa tela, senza
+     * toccare le scene portate dal desktop.
+     */
+    afterDraw?: (frame: ComplexRendererAfterDraw) => void
 }>
+
+export type ComplexRendererAfterDraw = Readonly<{ context: unknown, sceneId: string, width: number, height: number }>
 
 type DataRecord = Record<string, unknown>
 
@@ -243,6 +251,13 @@ export function createComplexSceneFactory<State, Geometry>(
                 logicalTimeMs,
                 stepMs,
             }))
+            if (options.afterDraw) {
+                try {
+                    options.afterDraw(Object.freeze({ context, sceneId: definition.id, width: latestInput.viewport.width, height: latestInput.viewport.height }))
+                } catch {
+                    // Il velo è un ritocco: se cade, la scena resta com'è e il renderer non si guasta.
+                }
+            }
             const finishedAt = config.scheduler.now()
             try {
                 options.onFrame?.(Object.freeze({

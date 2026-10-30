@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { azioneCodaR4, statoCodaR4, testoVoceCodaR4, vociDellaStrisciaR4 } from '@/lib/harness/r4/codaR4'
+import { azioneCodaR4, partonoColProssimoR4, statoCodaR4, testoVoceCodaR4, vociDellaStrisciaR4 } from '@/lib/harness/r4/codaR4'
 
 /*
  * ⛔ K3-C Accoda (ledger `LEDGER-K3-ACCODA-2026-10-16.md`; owner 16/10: la striscia della chat, «Modifica» riporta nel compositore).
@@ -44,5 +44,21 @@ describe('la coda del Codice su r4 (K3-C Accoda)', () => {
     it('CODA-04 l\'azione per voce: «Indirizza ora» a giro vivo, «Invia ora» a giro fermo (il desktop non distingue «ferma e riparti»)', () => {
         expect(azioneCodaR4(true)).toBe('indirizza')
         expect(azioneCodaR4(false)).toBe('invia-ora')
+    })
+
+    // ⛔ UI-113 (owner 29/10 notte, «Come la riga del PC»): dopo uno Stop i risultati degli agenti fermati aspettano il prossimo messaggio
+    const delega = (id: string) => ({ id, testo: 'fatto', origine: 'delega' as const, childId: `c-${id}` })
+    it('CODA-PROSSIMO-01 chat ferma, coda non in pausa, solo risultati di agenti ⇒ partono col prossimo messaggio', () => {
+        expect(partonoColProssimoR4({ voci: [delega('a'), delega('b')], inPausa: false }, false)).toBe(true)
+    })
+    it('CODA-PROSSIMO-02 anche UNA voce scritta dalla persona basta a tornare alla riga di sempre', () => {
+        expect(partonoColProssimoR4({ voci: [delega('a'), { id: 'p', testo: 'ciao' }], inPausa: false }, false)).toBe(false)
+    })
+    it('CODA-PROSSIMO-03 a giro vivo no: la coda entra dopo il passo in corso', () => {
+        expect(partonoColProssimoR4({ voci: [delega('a')], inPausa: false }, true)).toBe(false)
+    })
+    it('CODA-PROSSIMO-04 in pausa no (lo dice la riga della pausa), e una coda vuota non dice niente', () => {
+        expect(partonoColProssimoR4({ voci: [delega('a')], inPausa: true }, false)).toBe(false)
+        expect(partonoColProssimoR4({ voci: [], inPausa: false }, false)).toBe(false)
     })
 })

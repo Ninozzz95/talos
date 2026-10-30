@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import { Check, Square, X } from '@lucide/vue'
+import { talosCurva, talosMotionConsentito } from '@/composables/useTalosCalmMotion'
 import TalosMicWaveform from '@/components/brand/TalosMicWaveform.vue'
 
 /**
@@ -21,13 +23,23 @@ const props = defineProps<{
     bozza: string
 }>()
 const emit = defineEmits<{ annulla: []; ferma: []; invia: [] }>()
+
+/* Owner 28/10/2026 («Approvo»): la dettatura è il compositore stesso; la barra ENTRA morbida, in dissolvenza, al posto del campo (stessa
+   cornice, stessa altezza). Movimento ridotto o spento: compare e basta. */
+const radice = ref<HTMLElement | null>(null)
+onMounted(() => {
+    const el = radice.value
+    if (!el || typeof el.animate !== 'function' || !talosMotionConsentito(el, '--talos-motion-calm-composer')) return
+    el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: talosCurva(el, '--talos-motion-calm-ease') })
+})
 </script>
 
 <template>
         <div
             
+            ref="radice"
             data-testid="talos-dictation-live"
-            class="talos-dictation-live flex flex-col gap-2 rounded-2xl border border-[var(--talos-accent,var(--primary))]/30 bg-[color-mix(in_srgb,var(--talos-accent,#c08b3c)_10%,transparent)] px-2 py-2"
+            class="talos-dictation-live"
         >
             <!-- Le parole mentre le dici (owner 2026-08-10: niente dettatura al buio; 2026-08-14: la stessa riga dell'assistente)
                  stanno SOPRA il compositore dal 18/10/2026 (DET-FUORI). -->
@@ -39,7 +51,7 @@ const emit = defineEmits<{ annulla: []; ferma: []; invia: [] }>()
                 type="button"
                 data-testid="talos-dictation-discard"
                 :aria-label="$t('chat.discardDictation')"
-                class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--talos-panel,var(--card))] text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 @click="emit('annulla')"
             >
                 <X class="size-4" aria-hidden="true" />
@@ -59,7 +71,7 @@ const emit = defineEmits<{ annulla: []; ferma: []; invia: [] }>()
                 type="button"
                 data-testid="talos-dictation-keep"
                 :aria-label="$t('chat.stopDictation')"
-                class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--talos-panel,var(--card))] text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
+                class="talos-pressable flex size-11 shrink-0 items-center justify-center rounded-full text-[var(--talos-text)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--talos-ring)]"
                 @click="emit('ferma')"
             >
                 <Square class="size-3" fill="currentColor" aria-hidden="true" />

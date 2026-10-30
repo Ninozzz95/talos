@@ -5,9 +5,11 @@
  * fidati (`POST /:id/hooks/:id/trust`). Doctor non è qui: il suo contratto su r4 è chiesto a Nino1 (15/10).
  */
 import { onMounted, ref } from 'vue'
-import { LoaderCircle, Zap } from '@lucide/vue'
+import { Webhook } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
+import TalosRigaInCorso from '@/components/chat/TalosRigaInCorso.vue'
 import type { HookDelProgettoR4 } from '@/composables/useConversazioneR4'
+import { useTalosSogliaSecondi } from '@/composables/useTalosSogliaSecondi'
 import './codiceR4.css'
 
 const props = defineProps<{
@@ -21,6 +23,7 @@ const emit = defineEmits<{ close: [] }>()
 const stato = ref<'carica' | 'pronto' | 'guasto'>('carica')
 const dati = ref<HookDelProgettoR4>({ hooks: [], errore: null })
 const inCorso = ref<string | null>(null)
+const { inizio: inizioAttesa, chiave: chiaveAttesa } = useTalosSogliaSecondi({ attivo: () => stato.value === 'carica' })
 
 async function ricarica(): Promise<void> {
     const risposta = await props.carica()
@@ -48,15 +51,17 @@ onMounted(ricarica)
 <template>
     <TalosMobileComposerSheet :title="$t('harness.r4Hooks')" testid="talos-codice-r4-hook-foglio" @close="emit('close')">
         <ul class="talos-codice-r4-elenco" role="list">
-            <li v-if="stato === 'carica'" class="talos-codice-r4-nota" role="status">
-                <LoaderCircle class="inline size-4 animate-spin" aria-hidden="true" /> {{ $t('harness.r4Loading') }}
+            <!-- owner 29/10 sera (mockup «Caricamenti vivi» v6): la rotella arancione accanto al testo, i secondi dopo 2 s; la regione
+                 `status` è quella della riga -->
+            <li v-if="stato === 'carica'" class="talos-codice-r4-nota">
+                <TalosRigaInCorso :key="chiaveAttesa" compatta segno="giro" :testo="$t('harness.r4Loading')" :inizio="inizioAttesa" />
             </li>
             <li v-else-if="stato === 'guasto'" class="talos-codice-r4-nota" role="alert">{{ $t('harness.r4LoadFailed') }}</li>
             <li v-else-if="dati.errore" class="talos-codice-r4-nota" role="alert">{{ $t('harness.r4HooksInvalid', { reason: dati.errore }) }}</li>
             <li v-else-if="dati.hooks.length === 0" class="talos-codice-r4-nota">{{ $t('harness.r4NoHooks') }}</li>
             <li v-for="voce in dati.hooks" v-else :key="voce.id">
                 <div class="talos-codice-r4-azione" role="group" :data-hook="voce.id">
-                    <Zap class="talos-codice-r4-azione-icona" aria-hidden="true" />
+                    <Webhook class="talos-codice-r4-azione-icona" aria-hidden="true" />
                     <span class="talos-codice-r4-azione-testo">
                         <strong class="truncate">{{ voce.id }}</strong>
                         <small>{{ voce.eventi.join(', ') }}</small>

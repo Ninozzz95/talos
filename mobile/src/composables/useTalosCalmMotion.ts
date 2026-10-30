@@ -133,6 +133,10 @@ export const TALOS_CALM_SPECS = Object.freeze({
     menu: Object.freeze({ intent: 'menu-open' as TalosInteractionIntent, ms: 440 }),
     /** …e che se ne va. Superfici. */
     'menu-exit': Object.freeze({ intent: 'menu-close' as TalosInteractionIntent, ms: 210 }),
+    /** D2 (owner 28/10/2026): il compositore che si apre (altezza, comandi, fila del modello). Compositore. */
+    composer: Object.freeze({ intent: 'composer-expand' as TalosInteractionIntent, ms: 180 }),
+    /** …e che torna a riposo. Compositore. */
+    'composer-exit': Object.freeze({ intent: 'composer-collapse' as TalosInteractionIntent, ms: 150 }),
     /** Il disegno dello stato vuoto che si traccia. Finestre. */
     empty: Object.freeze({ intent: 'window-open' as TalosInteractionIntent, ms: 360 }),
 })

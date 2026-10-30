@@ -1,0 +1,35 @@
+{
+  "origine": {
+    "commit": "79ea996dee15919f5d9dd38ef985a1f1f22bb4bf",
+    "percorso": "harness-ui/frontend/src/i18n/testi/chat.js",
+    "sha256": "a1048e2a391391954f34be4597e6b368f12dc98c8b662dae8333f463aae7525d",
+    "prefisso": [
+      "command.where.",
+      "command.outcome."
+    ]
+  },
+  "it": {
+    "command.outcome.noExitCode": "Fermato: il comando non ha restituito un codice d'uscita",
+    "command.outcome.succeeded": "Riuscito",
+    "command.outcome.cancelled": "Annullato · codice {code}",
+    "command.outcome.killed": "Terminato a forza · codice {code}",
+    "command.outcome.failed": "Non riuscito · codice {code}",
+    "command.where.wslAs": "in Linux (WSL) come {user}, non su Windows",
+    "command.where.wslUnverified": "in Linux (WSL), con un utente non verificato",
+    "command.where.wsl": "in Linux (WSL), non su Windows",
+    "command.where.windows": "su Windows, senza isolamento",
+    "command.where.phone": "sul dispositivo collegato"
+  },
+  "en": {
+    "command.outcome.noExitCode": "Stopped: the command did not return an exit code",
+    "command.outcome.succeeded": "Succeeded",
+    "command.outcome.cancelled": "Cancelled · code {code}",
+    "command.outcome.killed": "Force-stopped · code {code}",
+    "command.outcome.failed": "Failed · code {code}",
+    "command.where.wslAs": "in Linux (WSL) as {user}, not on Windows",
+    "command.where.wslUnverified": "in Linux (WSL), with an unverified user",
+    "command.where.wsl": "in Linux (WSL), not on Windows",
+    "command.where.windows": "on Windows, without isolation",
+    "command.where.phone": "on the connected device"
+  }
+}

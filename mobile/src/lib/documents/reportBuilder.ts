@@ -175,7 +175,7 @@ function barChart(block: Extract<TalosReportBlock, { t: 'chart' }>, theme: Talos
                 margin: [0, 2, 0, 0],
             },
         ],
-        margin: [0, 4, 0, 12],
+        margin: [0, 16, 0, 0],
     }
 }
 
@@ -219,7 +219,7 @@ function pieChart(block: Extract<TalosReportBlock, { t: 'chart' }>, theme: Talos
                 margin: [0, 18, 0, 0],
             },
         ],
-        margin: [0, 4, 0, 12],
+        margin: [0, 16, 0, 0],
     }
 }
 
@@ -243,7 +243,7 @@ function renderBlock(block: TalosReportBlock, theme: TalosReportTheme): unknown[
         case 'list':
             return [{
                 [block.ordered ? 'ol' : 'ul']: block.items.map((item) => ({ text: item, style: 'body' })),
-                margin: [0, 0, 0, 10],
+                margin: [0, 10, 0, 0],
             }]
         case 'kpi':
             return [{
@@ -257,7 +257,7 @@ function renderBlock(block: TalosReportBlock, theme: TalosReportTheme): unknown[
                     margin: [8, 10, 8, 10],
                 })),
                 columnGap: 8,
-                margin: [0, 4, 0, 14],
+                margin: [0, 18, 0, 0],
             }]
         case 'table': {
             const head = block.head ?? []
@@ -298,15 +298,16 @@ function renderBlock(block: TalosReportBlock, theme: TalosReportTheme): unknown[
                     paddingTop: () => 5,
                     paddingBottom: () => 5,
                 },
-                margin: [0, 2, 0, 14],
+                margin: [0, 16, 0, 0],
             }]
         }
         case 'chart':
             return [block.kind === 'pie' ? pieChart(block, theme) : barChart(block, theme)]
         case 'spacer':
-            return [{ text: ' ', margin: [0, 6, 0, 6] }]
+            return [{ text: ' ', margin: [0, 12, 0, 0] }]
         case 'pb':
-            return [{ text: '', pageBreak: 'after' }]
+            // CHAT-141: il salto non è più un nodo; lo porta il primo nodo del blocco dopo (`buildTalosReportDefinition`)
+            return []
         default:
             return []
     }
@@ -315,17 +316,36 @@ function renderBlock(block: TalosReportBlock, theme: TalosReportTheme): unknown[
 export function buildTalosReportDefinition(spec: TalosReportSpec): TalosPdfDefinition {
     const theme = TALOS_REPORT_THEMES[spec.theme ?? 'report'] ?? TALOS_REPORT_THEMES.report!
     const content: unknown[] = []
-    let lastWasBreak = true // a break before any content is a blank first page
+    /*
+     * ⛔⛔ CHAT-141 — LE PAGINE BIANCHE (audit v2 dell'owner: 6 pagine, la 5 interamente bianca).
+     *
+     * Riprodotto con pdfmake 0.3.11: il `pb` era un nodo `{ text: '', pageBreak: 'after' }` che occupa una riga, e gli spazi erano margini
+     * INFERIORI. Una sezione che finisce negli ultimi punti della pagina: il margine o la riga del `pb` aprono la pagina dopo
+     * (`LayoutBuilder.js:443-452`, `:1304-1324`), e il salto ne apre un'altra (`:467-468`). Quella in mezzo resta col solo piè di pagina.
+     * Su 135 impaginazioni realistiche: 135 con una bianca in coda, 5 anche in mezzo.
+     *
+     * ⇒ Il salto lo porta il PRIMO nodo del blocco dopo (`pageBreak: 'before'`, il consiglio del manutentore in pdfmake #2794), e gli
+     * spazi stanno IN ALTO: un margine superiore che non entra porta il nodo stesso alla pagina dopo, senza aprirne una vuota. Misurato:
+     * 0 bianche su 135. Un salto in testa, uno in coda, o seguito solo da spazi e altri salti, non ha niente da portare e sparisce.
+     */
+    let saltoInAttesa = false
+    // uno spazio NON è contenuto: «[spacer, pb, p]» dava una prima pagina col solo spazio (BIANCHE-07, trovato dal Desktop il 29/10)
+    let haContenuto = false
 
     for (const block of spec.blocks) {
         if (block.t === 'pb') {
-            // Consecutive breaks are blank pages nobody asked for.
-            if (lastWasBreak) continue
-            lastWasBreak = true
-        } else {
-            lastWasBreak = false
+            saltoInAttesa = haContenuto
+            continue
         }
-        content.push(...renderBlock(block, theme))
+        // uno spazio subito dopo un salto finirebbe da solo in cima alla pagina nuova
+        if (saltoInAttesa && block.t === 'spacer') continue
+        const nodi = renderBlock(block, theme)
+        if (saltoInAttesa && nodi.length) {
+            nodi[0] = { ...(nodi[0] as Record<string, unknown>), pageBreak: 'before' }
+            saltoInAttesa = false
+        }
+        content.push(...nodi)
+        if (block.t !== 'spacer' && nodi.length) haContenuto = true
     }
 
     const footerText = spec.footer?.text ?? ''
@@ -344,11 +364,11 @@ export function buildTalosReportDefinition(spec: TalosReportSpec): TalosPdfDefin
             coverTitle: { fontSize: 30, bold: true, color: theme.brand, margin: [0, 0, 0, 10] },
             coverSubtitle: { fontSize: 13, color: theme.muted, margin: [0, 0, 0, 26] },
             coverDate: { fontSize: 11, color: theme.accent },
-            h1: { fontSize: 18, bold: true, color: theme.brand, margin: [0, 14, 0, 6] },
-            h2: { fontSize: 14, bold: true, color: theme.brand, margin: [0, 12, 0, 5] },
-            h3: { fontSize: 11, bold: true, color: theme.ink, margin: [0, 10, 0, 4] },
-            body: { margin: [0, 0, 0, 8] },
-            note: { fontSize: 8.5, color: theme.muted, italics: true, margin: [0, 0, 0, 10] },
+            h1: { fontSize: 18, bold: true, color: theme.brand, margin: [0, 20, 0, 0] },
+            h2: { fontSize: 14, bold: true, color: theme.brand, margin: [0, 17, 0, 0] },
+            h3: { fontSize: 11, bold: true, color: theme.ink, margin: [0, 14, 0, 0] },
+            body: { margin: [0, 8, 0, 0] },
+            note: { fontSize: 8.5, color: theme.muted, italics: true, margin: [0, 10, 0, 0] },
             kpiValue: { fontSize: 17, bold: true, color: theme.brand },
             kpiLabel: { fontSize: 8.5, color: theme.muted },
             kpiDelta: { fontSize: 9, color: theme.accent, bold: true },

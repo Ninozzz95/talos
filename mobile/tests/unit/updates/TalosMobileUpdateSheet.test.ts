@@ -124,6 +124,40 @@ describe('TalosMobileUpdateSheet', () => {
             .toBe('GitHub didn’t hand over the file. TALOS tries again at the next check. 0.1.43 stays on the device, untouched.')
     })
 
+    /*
+     * D-0147-UPD-a (Pad, 26/10/2026, candidata vc301 contro GitHub vero): ogni `apk-*` diventava «non è firmato da TALOS … non
+     * corrisponde alla firma pubblicata», anche quando il file è un'altra app o una versione non più nuova. Come Obtainium
+     * (`assets/translations/en.json` @ fcd1807c8f: `appIdMismatch`, `cantInstallOlderVersion`), ogni caso ha la sua frase.
+     */
+    it('UPD-SHEET-11 un\'altra app (apk-pacchetto_diverso): lo dice come tale, non come firma', () => {
+        talosApplicaStatoAggiornamenti({ ...pronta, fase: 'FALLITA', motivo: 'apk-pacchetto_diverso' })
+        const w = monta()
+        expect(w.text()).toContain('The file is a different app')
+        expect(w.text()).not.toContain('not signed by TALOS')
+        expect(w.get('[data-testid="talos-update-failed-body"]').text())
+            .toBe('The file downloaded for 0.1.44 is not TALOS. It was not installed and has been deleted. 0.1.43 stays on the device, untouched.')
+    })
+
+    it('UPD-SHEET-12 una versione non più nuova (apk-non_piu_nuova): niente da installare, niente «Riprova»', () => {
+        talosApplicaStatoAggiornamenti({ ...pronta, fase: 'FALLITA', motivo: 'apk-non_piu_nuova' })
+        const w = monta()
+        expect(w.text()).toContain('Nothing newer to install')
+        expect(w.text()).not.toContain('not signed by TALOS')
+        expect(w.get('[data-testid="talos-update-failed-body"]').text())
+            .toBe('0.1.44 is not newer than 0.1.43 on this device, so there is nothing to install. The downloaded file has been deleted.')
+        expect(w.find('[data-testid="talos-update-retry"]').exists()).toBe(false)
+        expect(w.find('[data-testid="talos-update-close"]').exists()).toBe(true)
+    })
+
+    it('UPD-SHEET-13 ⛔ verso contrario: certificato diverso, file illeggibile, impronta e manifesto restano «non firmato da TALOS»', () => {
+        for (const motivo of ['apk-firma_diversa', 'apk-illeggibile', 'impronta', 'firma', 'manifesto-dimensione', 'versione-del-tag']) {
+            talosApplicaStatoAggiornamenti({ ...pronta, fase: 'FALLITA', motivo })
+            const w = monta()
+            expect(w.text(), motivo).toContain('The file is not signed by TALOS')
+            w.unmount()
+        }
+    })
+
     // «riprova al prossimo controllo» è vero solo con gli aggiornamenti automatici: spenti, il controllo giornaliero non c'è
     // (`programmaControllo`), quindi la frase dice cosa fare (revisione del Desktop, 26/10)
     it('UPD-SHEET-10 scaricamento fallito con gli aggiornamenti automatici spenti: dice di riprovare, non promette un controllo', () => {
@@ -154,6 +188,27 @@ describe('TalosMobileUpdateSheet', () => {
             expect(w.findAll('[data-testid="talos-update-note"]').map((n) => n.text())).toEqual(['Motore locale più veloce.'])
             expect(w.get('[data-testid="talos-update-restart"]').text()).toBe('Riavvia ora')
             expect(w.get('[data-testid="talos-update-next-launch"]').text()).toBe('Al prossimo avvio')
+        } finally {
+            globale.locale.value = prima
+        }
+    })
+
+    // revisione del Desktop su D-0147-UPD-a: la frase italiana tiene la voce impersonale dell'inglese, non la prima persona
+    it('UPD-SHEET-14 in italiano: un\'altra app lo dice con la stessa voce dell\'inglese', async () => {
+        const { createTalosI18n } = await import('@/i18n')
+        const { TALOS_IT_MESSAGES } = await import('@/i18n/locales/it')
+        const globale = (await createTalosI18n()).global as unknown as { mergeLocaleMessage(l: string, m: object): void, locale: { value: string } }
+        globale.mergeLocaleMessage('it', TALOS_IT_MESSAGES)
+        const prima = globale.locale.value
+        globale.locale.value = 'it'
+        try {
+            talosApplicaStatoAggiornamenti({ ...pronta, fase: 'FALLITA', motivo: 'apk-pacchetto_diverso' })
+            const w = monta()
+            expect(w.text()).toContain('Il file è un’altra app')
+            expect(w.get('[data-testid="talos-update-failed-body"]').text())
+                .toBe('Il file scaricato per la 0.1.44 non è TALOS: non è stato installato ed è stato cancellato. Sul dispositivo resta la 0.1.43, intatta.')
+            // a differenza di «niente di più nuovo», qui «Riprova» resta: un file sbagliato da una copia in cache può essere passeggero
+            expect(w.find('[data-testid="talos-update-retry"]').exists()).toBe(true)
         } finally {
             globale.locale.value = prima
         }

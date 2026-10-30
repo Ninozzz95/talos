@@ -13,7 +13,7 @@
  * chiusura col gesto e col pulsante.
  */
 import { defineAsyncComponent, ref } from 'vue'
-import { ArrowLeft, ChevronDown, Command, Download, MoreHorizontal, PanelRight, Play, Share2, Shrink, Stethoscope, Zap } from '@lucide/vue'
+import { ArrowLeft, ChevronDown, Download, EllipsisVertical, FoldVertical, PanelRight, Play, Share2, SquareSlash, Stethoscope, Webhook } from '@lucide/vue'
 import TalosMobileComposerSheet from '@/components/chat/TalosMobileComposerSheet.vue'
 import { talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
 import './codiceR4.css'
@@ -85,7 +85,7 @@ function scegli(azione: 'riprendi' | 'compatta' | 'hook' | 'doctor' | 'esporta' 
             :title="$t('harness.r4More')"
             @click="azioniAperte = true"
         >
-            <MoreHorizontal class="size-5" aria-hidden="true" />
+            <EllipsisVertical class="size-5" aria-hidden="true" />
         </button>
         <!--
             ⛔ Owner 15/10 sera: «compatto solo nella versione telefonino portrait; nel tablet … rimane com'è». Da 640 px in su
@@ -111,7 +111,7 @@ function scegli(azione: 'riprendi' | 'compatta' | 'hook' | 'doctor' | 'esporta' 
             :disabled="occupato"
             @click="emit('compatta')"
         >
-            <Shrink class="size-5" aria-hidden="true" />
+            <FoldVertical class="size-5" aria-hidden="true" />
         </button>
         <TalosMobileUpdateSignal v-if="talosSegnaleAggiornamento.visibile" />
         <!-- K3-C3a: ⌘ in vista su tutte le larghezze (owner 15/10: «Tre in vista + Altro» sul telefono), dopo ▷ e ⊞ come oggi. -->
@@ -124,7 +124,7 @@ function scegli(azione: 'riprendi' | 'compatta' | 'hook' | 'doctor' | 'esporta' 
             :title="$t('harness.r4Commands')"
             @click="emit('comandi')"
         >
-            <Command class="size-5" aria-hidden="true" />
+            <SquareSlash class="size-5" aria-hidden="true" />
         </button>
         <!-- K3-C3b-1 (owner 15/10): ▤ in vista su tutte le larghezze, dopo ⌘ (telefono «← · titolo ⌄ · ⌘ · ▤ · •••»). -->
         <button
@@ -148,7 +148,7 @@ function scegli(azione: 'riprendi' | 'compatta' | 'hook' | 'doctor' | 'esporta' 
             :title="$t('harness.r4More')"
             @click="azioniAperte = true"
         >
-            <MoreHorizontal class="size-5" aria-hidden="true" />
+            <EllipsisVertical class="size-5" aria-hidden="true" />
         </button>
         <TalosMobileComposerSheet
             v-if="azioniAperte"
@@ -178,7 +178,7 @@ function scegli(azione: 'riprendi' | 'compatta' | 'hook' | 'doctor' | 'esporta' 
                         :disabled="occupato"
                         @click="scegli('compatta')"
                     >
-                        <Shrink class="talos-codice-r4-azione-icona" aria-hidden="true" />
+                        <FoldVertical class="talos-codice-r4-azione-icona" aria-hidden="true" />
                         <span>{{ $t('harness.r4Compact') }}</span>
                     </button>
                 </li>
@@ -200,7 +200,7 @@ function scegli(azione: 'riprendi' | 'compatta' | 'hook' | 'doctor' | 'esporta' 
                         class="talos-codice-r4-azione"
                         @click="scegli('hook')"
                     >
-                        <Zap class="talos-codice-r4-azione-icona" aria-hidden="true" />
+                        <Webhook class="talos-codice-r4-azione-icona" aria-hidden="true" />
                         <span>{{ $t('harness.r4Hooks') }}</span>
                     </button>
                 </li>

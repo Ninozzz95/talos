@@ -46,6 +46,11 @@ const props = defineProps<{
      * fanno dal PC (il ponte remoto li rifiuta): la scheda File lo dice invece dell'albero, i Processi spengono le azioni col perché.
      */
     soloDalPc?: string
+    /**
+     * ⛔ «Ferma» nella scheda Agenti (owner 29/10 notte): lo Stop di UNA figlia (`useConversazioneR4.fermaFiglia`, `{ figlie: 'tutte' }`),
+     * come l'azione dei Processi. Dopo la risposta il pannello rilegge figli ed elenco (come il PC, `caricaFigliSessione`).
+     */
+    fermaFiglia?: (sessionId: string) => Promise<{ ok: true } | { ok: false; messaggio: string | null }>
 }>()
 const emit = defineEmits<{ apriDelega: [sessionId: string]; allega: [percorsi: string[]] }>()
 const { locale } = useTalosI18n()
@@ -133,6 +138,11 @@ const agenti = computed(() => {
     }, locale.value)
 })
 const agentiAttivi = computed(() => contaAgentiAttiviR4(agenti.value))
+async function fermaAgente(sessionId: string): Promise<{ ok: true } | { ok: false; messaggio: string | null }> {
+    const esito = await props.fermaFiglia!(sessionId)
+    void rileggiAgenti()
+    return esito
+}
 </script>
 
 <template>
@@ -178,6 +188,7 @@ const agentiAttivi = computed(() => contaAgentiAttiviR4(agenti.value))
             role="tabpanel"
             :agenti="agenti"
             :errore="erroreAgenti"
+            :ferma="fermaFiglia ? fermaAgente : undefined"
             @apri="(id) => emit('apriDelega', id)"
         />
         <TalosCodiceR4Processi

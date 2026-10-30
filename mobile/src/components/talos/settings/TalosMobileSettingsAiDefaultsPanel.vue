@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import TalosThemedSelect, { type TalosThemedSelectItem } from '@/components/talos/ui/TalosThemedSelect.vue'
 import TalosThemedSwitch from '@/components/talos/ui/TalosThemedSwitch.vue'
+import TalosMobileSettingsStopAgenti from './TalosMobileSettingsStopAgenti.vue'
+import type { PreferenzaStopR4 } from '@/lib/harness/r4/fermaTuttoR4'
 import { useSettingsStore } from '@/stores/settings'
 import { TALOS_TONE_PRESETS, isTalosToneId } from '@/lib/tone'
 import {
@@ -22,6 +24,11 @@ const toneItems = computed(() => TALOS_TONE_PRESETS.map((preset) => ({
 function setTone(value: string): void {
     if (!isTalosToneId(value)) return
     void settings.setTone(value)
+}
+
+// «Ferma tutto» (owner 29/10/2026): che cosa fa lo Stop del Codice con sotto-agenti al lavoro, per dispositivo
+function setStopConSottoAgenti(valore: PreferenzaStopR4): void {
+    void settings.setShell({ stop_con_sotto_agenti: valore })
 }
 
 function setVision(enabled: boolean): void {
@@ -134,6 +141,11 @@ function setShellFlag(key: 'library_context_enabled' | 'library_autosave_generat
                 {{ t('aiDefaults.toneSuggestionBody') }}
             </span>
         </label>
+
+        <TalosMobileSettingsStopAgenti
+            :model-value="settings.state.shell.stop_con_sotto_agenti"
+            @update:model-value="setStopConSottoAgenti"
+        />
 
         <!--
             Qui c'erano due tendine, «Modalita' modello di utilita'» e «Modalita'

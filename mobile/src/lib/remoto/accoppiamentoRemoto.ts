@@ -35,6 +35,13 @@ export interface AccoppiamentoRiuscito {
     effimero: boolean
 }
 
+/**
+ * ⛔ D-0147-QR-SKEW (Pad, 27/10/2026, Desktop «(b)»): la scadenza del QR la scrive il PC col SUO orologio e la fa rispettare da sé
+ * (offerte scadute tolte, `accoppiamento.mjs:88` ⇒ `PAIR_TOKEN_INVALID`). Qui è solo una cortesia: con 2 minuti di scarto fra i due
+ * orologi un QR valido sul PC era già «scaduto» sul telefono. Si rifiuta in anticipo solo oltre questo margine.
+ */
+export const MARGINE_OROLOGI_QR_MS = 120_000
+
 function errore(code: string): ErroreRemoto {
     return Object.assign(new Error(code), { code }) as ErroreRemoto
 }
@@ -60,7 +67,7 @@ export function avviaAccoppiamento(
     const esito = (async () => {
         const qr = leggiQrRemoto(testoQr)
         if (!qr) throw errore('BAD_MESSAGE')
-        if (qr.scadeAlle <= ora()) throw errore('PAIR_EXPIRED')
+        if (qr.scadeAlle + MARGINE_OROLOGI_QR_MS <= ora()) throw errore('PAIR_EXPIRED')
         const { canale, telefonoId } = await plugin.accoppia({ pcId: qr.pcId, relay: qr.relay })
         if (annullatoPrima) {
             await plugin.chiudi({ canale }).catch(() => undefined)

@@ -467,3 +467,51 @@ export async function elencoFileDelPc(cliente: ClienteFileRemoti, sessionId: str
     const righe = items.map(rigaFileRemoto).filter((x): x is RigaFileRemoto => x !== null)
     return { righe, scartate: items.length - righe.length }
 }
+
+export type AnteprimaDalPc = { esito: 'testo', testo: string, mime: string } | { esito: 'assente' | 'non-mostrabile' | 'ambiguo' }
+
+/**
+ * ⛔ Owner 26/10/2026: «dalla chat il file ordini dal pad si deve poter aprire se ci clicco sopra». L'anteprima di un file allegato
+ * a una sessione del PC, senza rotte nuove (revisione del Desktop 26/10): `file.list` dà gli allegati della conversazione
+ * (`origine: 'allegato'`; il nome è l'ultimo segmento del percorso del chip, unico in `allegati/` perché il PC aggiunge -2, -3…),
+ * `file.read` lo legge in sola lettura, a pezzi di al più `PEZZO_REMOTO`. Nessun percorso parte dal dispositivo.
+ * Testo fino a 512 KiB; un'immagine, byte che non sono UTF-8 o un NUL ⇒ «non mostrabile». Nessuna voce o `FILE_GONE` ⇒ «assente»;
+ * due voci con lo stesso nome ⇒ «ambiguo» (non si tira a indovinare). Gli altri guasti escono come errore.
+ */
+export async function anteprimaDalPc(cliente: ClienteFileRemoti, sessionId: string, nome: string): Promise<AnteprimaDalPc> {
+    const { righe } = await elencoFileDelPc(cliente, sessionId)
+    const voci = righe.filter((r) => r.origine === 'allegato' && r.nome === nome)
+    if (voci.length === 0) return { esito: 'assente' }
+    if (voci.length > 1) return { esito: 'ambiguo' }
+    const riga = voci[0]
+    if (riga.immagine || riga.dimensione > PEZZO_REMOTO) return { esito: 'non-mostrabile' }
+    const pezzi: Uint8Array[] = []
+    let letti = 0
+    for (;;) {
+        let r: Record<string, unknown> | null
+        try {
+            r = oggetto(await cliente.richiesta('file.read', {
+                sessionId, fileId: riga.fileId, versione: riga.versione, da: letti, quanti: Math.max(1, Math.min(PEZZO_REMOTO, riga.dimensione - letti)),
+            }))
+        } catch (e) {
+            if (codice(e) === 'FILE_GONE') return { esito: 'assente' }
+            throw e
+        }
+        if (!r || typeof r.dati !== 'string' || typeof r.fine !== 'boolean') throw guasto('BAD_MESSAGE', 'The computer sent a piece in an unknown shape.')
+        const pezzo = daBase64Url(r.dati)
+        pezzi.push(pezzo)
+        letti += pezzo.length
+        // un PC che manda più di quanto ha detto, o pezzi vuoti senza fine: non si legge oltre il tetto
+        if (r.fine) break
+        if (pezzo.length === 0 || letti > PEZZO_REMOTO) return { esito: 'non-mostrabile' }
+    }
+    const byte = new Uint8Array(letti)
+    let at = 0
+    for (const p of pezzi) { byte.set(p, at); at += p.length }
+    if (byte.includes(0)) return { esito: 'non-mostrabile' }
+    try {
+        return { esito: 'testo', testo: new TextDecoder('utf-8', { fatal: true }).decode(byte), mime: riga.mime }
+    } catch {
+        return { esito: 'non-mostrabile' }
+    }
+}

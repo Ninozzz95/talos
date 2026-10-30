@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
-    "sha256": "19b9eb9d26356513c31bf08c83b6fff039cd0db16e2d8d6337613df34dca046d",
+    "sha256": "3520e3b597a275ab341a6976bf50c5f7492fbc8e78c53c64a192462a80ecd124",
     "prefisso": "attachments."
   },
   "it": {
@@ -11,6 +11,9 @@
     "attachments.imagesLabel": "Immagini allegate",
     "attachments.messageCountOne": "{n} allegato del messaggio",
     "attachments.messageCountMany": "{n} allegati del messaggio",
+    "attachments.open": "Apri {file}",
+    "attachments.outsideFolderTitle": "File fuori dalla cartella",
+    "attachments.outsideFolder": "{file} non sta più nella cartella di questa sessione: aprilo dall’albero dei file o da Esplora file.",
     "attachments.costUnknown": "costo ignoto",
     "attachments.costNoDimensions": "Non sono riuscito a leggere le misure dell’immagine: il costo vero lo vedrai nel consumo del giro.",
     "attachments.costDepends": "Il costo del file dipende da come verrà letto durante il giro.",
@@ -47,6 +50,9 @@
     "attachments.imagesLabel": "Attached images",
     "attachments.messageCountOne": "{n} message attachment",
     "attachments.messageCountMany": "{n} message attachments",
+    "attachments.open": "Open {file}",
+    "attachments.outsideFolderTitle": "File outside the folder",
+    "attachments.outsideFolder": "{file} is no longer inside this session’s folder: open it from the file tree or from File Explorer.",
     "attachments.costUnknown": "unknown cost",
     "attachments.costNoDimensions": "Could not read image dimensions: the actual cost will appear in turn usage.",
     "attachments.costDepends": "File cost depends on how it is read during the turn.",

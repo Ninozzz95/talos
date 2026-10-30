@@ -67,6 +67,20 @@ describe('il ponte r4 sopra il canale remoto', () => {
             // r4 2297237fd (R-M4 bis): i modelli di un fornitore del PC e i modelli locali del PC, ridotti dal PC
             ['GET', '/api/v1/providers/anthropic/models', 'provider.models', { provider: 'anthropic' }],
             ['GET', '/api/v1/local-models', 'local-models.list', {}],
+            // IMPOSTAZIONI-DAL-VIVO (owner 27/10/2026, r4 f573cdc93 e 115cdc671): ogni impostazione anche dal dispositivo
+            ['POST', `/api/v1/sessions/${id}/dove-girano-i-comandi`, 'session.commands-location', { sessionId: 'sess:1', corpo: { a: 1 } }],
+            ['POST', `/api/v1/sessions/${id}/comandi-nella-conversazione`, 'session.commands-in-chat', { sessionId: 'sess:1', corpo: { a: 1 } }],
+            ['GET', `/api/v1/sessions/${id}/goal`, 'session.goal', { sessionId: 'sess:1' }],
+            ['POST', `/api/v1/sessions/${id}/goal`, 'session.goal.set', { sessionId: 'sess:1', corpo: { a: 1 } }],
+            ...(['pausa', 'riprendi', 'togli', 'contratto', 'criteri', 'proposta', 'verifica'] as const).map((action): ['POST', string, string, Record<string, unknown>] =>
+                ['POST', `/api/v1/sessions/${id}/goal/${action}`, 'session.goal.action', { sessionId: 'sess:1', action, corpo: { a: 1 } }]),
+            // CENSIMENTO G, punto (a) (Desktop 27/10): i pulsanti del dispositivo che finivano in «Solo dal computer»; le operazioni del PC
+            // ci sono già (r4 ca94ffa1c `operazioni.mjs:191-207`), mancava la mappa
+            ['POST', `/api/v1/sessions/${id}/queue/invia`, 'session.queue.send', { sessionId: 'sess:1', corpo: { a: 1 } }],
+            ['POST', `/api/v1/sessions/${id}/queue/annulla`, 'session.queue.cancel', { sessionId: 'sess:1', corpo: { a: 1 } }],
+            ['POST', `/api/v1/sessions/${id}/compaction/skip`, 'session.compact.skip', { sessionId: 'sess:1', corpo: { a: 1 } }],
+            ['POST', `/api/v1/sessions/${id}/compaction/${encodeURIComponent('2026-10-27T15:00:00.000Z')}/undo`, 'session.compact.undo', { sessionId: 'sess:1', compactionAt: '2026-10-27T15:00:00.000Z' }],
+            ['POST', `/api/v1/sessions/${id}/fork`, 'session.fork', { sessionId: 'sess:1' }],
         ]
         for (const [metodo, percorso, op, args] of casi) {
             const r = await p.richiesta({ metodo, percorso, ...(metodo === 'POST' ? { corpo: '{"a":1}' } : {}) })
@@ -97,6 +111,13 @@ describe('il ponte r4 sopra il canale remoto', () => {
         const f = clienteFinto(() => Object.assign(new Error('Invalid configuration'), { code: 'CONFIG_INVALID', reason: 'provider-key-missing-named', params: { provider: 'OpenRouter' } }))
         const r = await creaPonteRemotoR4(f.cliente).richiesta({ metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: '{}' })
         expect(JSON.parse(r.corpo)).toEqual({ ok: false, error: { code: 'CONFIG_INVALID', message: 'Invalid configuration', reason: 'provider-key-missing-named', params: { provider: 'OpenRouter' } } })
+    })
+
+    it('PRR-10b FRASI-UNICHE (27/10/2026): anche la frase precisa per la persona (`explanation`) resta nella busta', async () => {
+        const precisa = 'The working mode is changed between turns, not while the model is working'
+        const f = clienteFinto(() => Object.assign(new Error('Session not ready for this action'), { code: 'SESSION_NOT_READY', reason: 'mode-change-while-running', explanation: precisa }))
+        const r = await creaPonteRemotoR4(f.cliente).richiesta({ metodo: 'POST', percorso: '/api/v1/sessions/custom', corpo: '{}' })
+        expect(JSON.parse(r.corpo).error).toEqual({ code: 'SESSION_NOT_READY', message: 'Session not ready for this action', reason: 'mode-change-while-running', explanation: precisa })
     })
 
     it('PRR-11 RA-02 (revisione 21/10): una sessione che il PC non ha più ⇒ il motivo del nativo «HTTP 404» (il Codice smette di riprovare)', async () => {
@@ -152,14 +173,16 @@ describe('il ponte r4 sopra il canale remoto', () => {
         const f = clienteFinto()
         // la frase la sceglie chi apre il ponte, nella lingua dell'app (`computer.onlyFromPc`): è quella che la riga d'errore mostra
         const p = creaPonteRemotoR4(f.cliente, { soloDalPc: () => 'Solo dal computer' })
-        // restano solo dal PC (r4 c6aff0362): /export, /fork, terminali, albero dei file, politica di compattazione, azioni sui
+        // restano solo dal PC (r4 c6aff0362): /export, terminali, albero dei file, politica di compattazione, azioni sui
         // processi e sugli hook, risorse dei processi, e ogni rotta d'accesso o di chiave dei fornitori
-        const casi: Array<['GET' | 'POST', string]> = [['GET', '/api/v1/sessions/x/export'], ['POST', '/api/v1/sessions/x/fork'],
+        const casi: Array<['GET' | 'POST', string]> = [['GET', '/api/v1/sessions/x/export'],
             ['GET', '/api/v1/sessions/x/compaction-policy'], ['GET', '/api/v1/sessions/x/processes/resources'],
             ['POST', '/api/v1/sessions/x/processes/t1/stop'], ['POST', '/api/v1/sessions/x/hooks/h1/trust'],
             ['GET', '/api/v1/sessions/x/../settings'], ['POST', '/api/v1/providers/chatgpt/access'], ['GET', '/api/v1/providers/ollama'],
             ['POST', '/api/v1/providers'], ['POST', '/api/v1/sessions/x/children'], ['GET', '/api/v1/sessions/x/compact'],
-            ['GET', '/api/v1/providers/anthropic/models/x'], ['GET', '/api/v1/local-models/a/fit'], ['POST', '/api/v1/local-models/import']]
+            ['GET', '/api/v1/providers/anthropic/models/x'], ['GET', '/api/v1/local-models/a/fit'], ['POST', '/api/v1/local-models/import'],
+            // un'azione dell'obiettivo fuori dalla lista del PC non parte (r4 115cdc671), né con un pezzo in più, né letta in GET
+            ['POST', '/api/v1/sessions/x/goal/cancella'], ['POST', '/api/v1/sessions/x/queue/svuota'], ['GET', '/api/v1/sessions/x/queue/invia'], ['POST', '/api/v1/sessions/x/compaction/a/b/undo'], ['POST', '/api/v1/sessions/x/goal/pausa/altro'], ['GET', '/api/v1/sessions/x/goal/pausa']]
         for (const [metodo, percorso] of casi) {
             const r = await p.richiesta({ metodo, percorso, corpo: '{}' })
             expect(r.stato, percorso).toBe(403)

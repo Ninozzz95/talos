@@ -503,7 +503,8 @@ describe('selezionarne piu di una', () => {
         await wrapper.get('[data-testid="talos-research-select-header"]').trigger('click')
 
         const inCorso = wrapper.get('[data-research-id="run-1"]')
-        expect(inCorso.text()).toContain('Running')
+        // owner 29/10 notte: lo stato «in corso» in inglese è «In progress» ovunque (i verbi «Running…» restano)
+        expect(inCorso.text()).toContain('In progress')
         await inCorso.trigger('click')
         expect(wrapper.get('[data-testid="talos-research-selection-bar"]').text()).toContain('0')
 

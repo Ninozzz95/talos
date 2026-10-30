@@ -370,7 +370,8 @@
        Dodici sta in mezzo e non stringe i comandi da 48. */
     padding: var(--talos-space-card, 0.75rem);
     border: 1px solid var(--talos-border-strong);
-    border-radius: var(--talos-radius-card);
+    /* Owner 27/10/2026, mockup approvato: un raggio suo, fisso — su due righe il compositore resta uno «stadio». */
+    border-radius: 1.5rem;
     background: var(--talos-composer-surface, var(--talos-card));
     color: var(--talos-composer-text, var(--talos-text));
     box-shadow: 0 8px 28px -20px color-mix(in srgb, var(--talos-text) 24%, transparent);
@@ -453,6 +454,14 @@
 /* Owner 2026-09-13: il «+» sta a SINISTRA del campo, come nel vecchio compositore.
    Il campo ha gia' il suo passo interno: qui glielo tolgo, o si sommerebbero. */
 .talos-composer-field-row .talos-calm-prompt { flex: 1 1 auto; min-width: 0; padding: 0; }
+/* ⭐ Aperto (owner 27/10/2026, mockup approvato): UNA griglia, il campo non cambia contenitore. Il campo occupa la prima riga
+   (lasciando l'ultima colonna alla colonna «alto», se c'è); tutti gli altri si dispongono da soli nella seconda, in ordine:
+   «+» · fila degli strumenti · microfono (o Accoda) · invio (o Ferma). */
+.talos-composer-field-row.is-aperto { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; }
+.is-aperto > .talos-calm-prompt { grid-area: 1 / 1 / 2 / -1; }
+.is-aperto.has-alto > .talos-calm-prompt { grid-column-end: 4; }
+.is-aperto > .talos-composer-alto { grid-area: 1 / 4; flex-direction: column; align-self: start; }
+.talos-composer-alto { display: flex; }
 /* Owner 2026-09-13: «centrato e allineato bene col placeholder». Il campo aveva
    un mezzo passo di padding SOTTO, nato quando la riga strumenti gli stava
    attaccata: con le icone centrate sulla scatola, quel padding alza il testo e
@@ -462,7 +471,7 @@
 /* ⛔ «senza bordo rotondo»: niente cerchio e niente fondo pieno — e' un comando
    di servizio accanto al testo, non un pulsante d'azione. Il raggio e' quello dei
    controlli del preset, non un valore scritto a mano. */
-.talos-composer-field-row .talos-plus-btn {
+.talos-composer-field-row .talos-plus-btn, .talos-composer-field-row .talos-mic-btn {
     width: var(--talos-touch-target);
     height: var(--talos-touch-target);
     flex: none;
@@ -516,8 +525,6 @@
     display: flex;
     align-items: center;
     gap: calc(var(--talos-space-inline) / 2);
-    flex-wrap: wrap;
-    margin-top: var(--talos-space-inline);
 }
 
 .talos-composer-tools .talos-mode-chip,
@@ -538,7 +545,9 @@
    piu' a sinistra». Ora e' la prima della riga (il «+» se n'e' andato accanto al
    campo): senza il passo iniziale si allinea al bordo del compositore. */
 .talos-composer-tools > .talos-model-chip:first-child { padding-inline-start: 0; }
-.talos-model-chip > span:first-of-type { color: var(--talos-text); font-weight: 500; }
+.talos-model-chip > .talos-model-chip__nome { color: var(--talos-text); font-weight: 500; }
+.talos-model-chip__logo { position: relative; display: inline-flex; width: 1rem; height: 1rem; flex-shrink: 0; }
+.talos-model-chip__piano { position: absolute; right: -2px; bottom: -2px; width: 7px; height: 7px; border-radius: 50%; box-shadow: 0 0 0 1.5px var(--talos-composer-surface, var(--talos-panel)); }
 .talos-mode-chip:disabled { opacity: .5; }
 .talos-composer-tools .talos-icon-chip {
     width: var(--talos-touch-target);
@@ -566,10 +575,10 @@
    strumenti (n)», che lascia il posto a biblioteca, pastiglia del piano ~58 px ed «Espandi»). `.talos-model-chip.x` (0,2,0) viene dopo
    `.talos-composer-tools .talos-model-chip` e ne vince il `max-width: 100%`. Le parti accorciate hanno `overflow: hidden`, quindi il
    loro minimo automatico di elemento flessibile è già 0. */
-.talos-model-chip.has-reasoning-pill, .talos-model-chip.talos-reasoning-pill, .talos-model-chip.talos-composer-review { flex-wrap: nowrap; }
-.talos-model-chip.has-reasoning-pill { max-width: calc(100% - 9rem); }
-.talos-model-chip.talos-reasoning-pill { flex: none; }
-.has-reasoning-pill > .talos-model-chip__nome, .talos-reasoning-pill > span, .talos-composer-review__testo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ⭐ Owner 27/10/2026, mockup approvato: la fila sta su UNA riga, fra «+» e microfono; il chip cede lo spazio e si accorcia il NOME,
+   coi puntini (per intero nel nome accessibile e nel suggerimento), mai il livello (`shrink-0`). */
+.talos-composer-tools > .talos-model-chip { flex-wrap: nowrap; min-width: 0; }
+.talos-composer-tools .talos-model-chip__nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Owner 2026-09-13, dal Pad: «il pulsante microfono deve avere lo stesso border
    radius del container del composer». Quindi la variabile del contenitore, non un
    cerchio: se un preset cambia il raggio delle schede, questo lo segue da solo. */
@@ -589,18 +598,31 @@
     /* Owner 13/09: il comando di destra — microfono o invio — torna dentro il
        suo contenitore ACCENTO, col raggio del contenitore del compositore (lo
        stesso token, non un valore scritto a mano: misurati 12px su entrambi). */
-    border-radius: var(--talos-radius-card);
+    /* Owner 27/10/2026, mockup approvato: l'invio è tondo. */
+    border-radius: 50%;
     background: var(--talos-accent);
     color: var(--talos-accent-text);
 }
 @media (hover: hover) and (pointer: fine) {
     .talos-calm-composer .talos-send-btn:hover:not(:disabled) { background: var(--talos-accent-hover); color: var(--talos-accent-text); }
 }
-/* ⛔ Disabilitato: niente accento pieno, o «non si puo' premere» resterebbe
-   affidato alla sola opacita' su un pulsante che sembra acceso. WCAG 1.4.11
-   esenta l'inattivo dal 3:1, ma chiede che si distingua per qualcosa in piu'
-   del colore — qui cambia il fondo E l'opacita'. */
-.talos-calm-composer .talos-send-btn:disabled { background: transparent; color: var(--talos-muted); opacity: .5; }
+/* ⭐ Owner 28/10/2026 («Approvo»): la dettatura È il compositore — stessa cornice, nessun riquadro dentro. «Ti sto sentendo» lo dice il
+   bordo, color accento, che respira piano; col movimento ridotto resta fermo (PILLOLA-DETT-01/02). */
+.talos-calm-composer.is-dictating { border-color: var(--talos-accent); }
+/* l'anello si disegna UNA volta; respira la sua opacità, che la anima la GPU (Desktop 28/10: box-shadow si ridisegnava a ogni fotogramma) */
+.talos-calm-composer.is-dictating::after {
+    content: ''; position: absolute; inset: -1px; border-radius: calc(1.5rem + 1px); pointer-events: none; opacity: 0;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--talos-accent) 18%, transparent);
+}
+@keyframes talosAscolto { 50% { opacity: 1; } }
+@media (prefers-reduced-motion: no-preference) {
+    .talos-calm-composer.is-dictating::after { animation: talosAscolto 2.4s ease-in-out infinite; }
+}
+/* Disabilitato. Owner 27/10/2026, mockup approvato (`.mk-invia { opacity: 0.4 }`): spento resta l'accento, sbiadito — cambia
+   SOLO l'opacita', non piu' il fondo come prima. Lo si accetta perche' e' il mockup approvato: WCAG 1.4.11 esenta l'inattivo
+   dal 3:1, e lo spento si distingue anche per la forma della riga (a campo vuoto accanto c'e' il microfono, sola icona su
+   fondo trasparente, che non si confonde con l'invio). */
+.talos-calm-composer .talos-send-btn:disabled { opacity: .4; }
 
 @media (max-width: 860px) {
     .talos-docked-composer { padding: var(--talos-space-inline) var(--talos-space-inline) calc(max(var(--talos-space-card), env(safe-area-inset-bottom)) + var(--talos-compositore-rialzo)); }
@@ -832,7 +854,13 @@
         animation-iteration-count: 1 !important;
         transition-duration: 0.001ms !important;
     }
+    /* ⛔ Calmo, mai fermo (owner 27/10/2026; Desktop 28/10): qui sopra una rotella si fermava, e ferma dice «bloccato». Sotto riduzione
+       ogni rotella e ogni pulsazione «in corso» pulsa piano d'opacità, senza ruotare (CALMO-01, CALMO-03; pulsazioni dal 29/10). Più
+       specifica della regola su `*`, quindi vince. */
+    .animate-spin { animation: talosCalmo 2s ease-in-out infinite !important; }
+    .animate-pulse { animation: talosCalmo 2s ease-in-out infinite !important; }
 }
+@keyframes talosCalmo { 50% { opacity: .45; } }
 
 @layer base {
     * {

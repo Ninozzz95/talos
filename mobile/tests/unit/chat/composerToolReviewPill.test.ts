@@ -23,23 +23,28 @@ function mountComposer(overrides: Record<string, unknown> = {}) {
             selectedModelProfileId: profile.id, selectedRoutingProfileId: null,
             selectedEffort: 'high', thinking: false, canSend: true, sending: false,
             sendDisabledReason: '', dictationSupported: true,
-            drawerMode: true, immersiveComposer: true,
             ...overrides,
         },
     })
 }
 
 describe('A3-OSS-2 — la pillola «Controlla azioni» sta accanto al selettore del modello', () => {
-    it('OSS2-01 a riposo, con una richiesta da controllare, la riga c\'è e la pillola segue il selettore', () => {
+    /*
+     * ⭐ Owner 27/10/2026 («Approvato», mockup v7): «Controlla azioni» non sta più nella fila accanto al chip (a 393 dp schiacciava il
+     * nome del modello) ma in una riga SUA in cima al compositore, a riposo e aperto. Resta vero A3-OSS-2: un permesso in attesa non
+     * sparisce mai dalla vista, e non copre «Interrompi risposta».
+     */
+    it('OSS2-01 a riposo, con una richiesta da controllare, la riga sta in cima, prima del campo, fuori dalla fila', () => {
         const wrapper = mountComposer({ toolReviewCount: 1 })
-        const chip = wrapper.get('[data-testid="talos-composer-model-chip"]')
         const pillola = wrapper.get('[data-testid="talos-composer-tool-review"]')
-        // J3 (owner 24/10/2026): subito dopo il modello viene la pillola del ragionamento; «Controlla azioni» la segue
-        const ragionamento = wrapper.get('[data-testid="talos-composer-reasoning-pill"]')
-        expect(chip.element.nextElementSibling).toBe(ragionamento.element)
-        expect(ragionamento.element.nextElementSibling).toBe(pillola.element)
+        const campo = wrapper.get('[data-testid="talos-composer-prompt"]')
+        expect(pillola.element.compareDocumentPosition(campo.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(pillola.element.closest('[data-testid="talos-composer-tools"]')).toBeNull()
         expect(pillola.text()).toBe('Review tool actions (1)')
-        expect(wrapper.get('[data-talos-composer-compact]').attributes('data-talos-composer-compact')).toBe('false')
+        // il compositore resta a riposo: la riga si vede senza aprirlo
+        expect(wrapper.get('[data-talos-composer-compact]').attributes('data-talos-composer-compact')).toBe('true')
+        // e non è sotto Ferma: durante il giro Ferma resta nella riga del campo, la richiesta sopra
+        expect(wrapper.find('[data-testid="talos-composer-action"]').element.closest('.talos-composer-field-row')).not.toBeNull()
     })
 
     it('OSS2-02 toccarla chiede di riaprire la richiesta', async () => {
@@ -48,7 +53,7 @@ describe('A3-OSS-2 — la pillola «Controlla azioni» sta accanto al selettore 
         expect(wrapper.emitted('reviewTools')).toHaveLength(1)
     })
 
-    it('OSS2-03 senza richieste il compositore a riposo resta compatto, come prima', () => {
+    it('OSS2-03 senza richieste niente riga, e il compositore a riposo resta compatto, come prima', () => {
         const wrapper = mountComposer({ toolReviewCount: 0 })
         expect(wrapper.find('[data-testid="talos-composer-tool-review"]').exists()).toBe(false)
         expect(wrapper.find('[data-testid="talos-composer-model-chip"]').exists()).toBe(false)

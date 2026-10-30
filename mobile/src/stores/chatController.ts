@@ -373,6 +373,14 @@ interface TalosChatControllerSendRuntime {
     /** Assente nei checkpoint precedenti a Calm: equivale ad acceso. */
     readonly agentToolsEnabled?: boolean
     readonly tone: TalosToneId
+    /** La lingua delle risposte (owner 28/10): l'impostazione «Lingua», `'auto'` o un codice. Assente nei checkpoint di prima = Automatica. */
+    readonly linguaDelleRisposte?: string
+    /** La lingua sentita o riconosciuta del messaggio di questo giro (codice), se il dispositivo la sa (owner 28/10). */
+    readonly linguaDelMessaggio?: string | null
+    /** La riga della lingua delle risposte, già scritta in `prepareSend` (modulo pigro, budget d'avvio). */
+    readonly rigaLingua?: string
+    /** La lingua da nominare nel promemoria dopo i dati degli attrezzi (LINGUA-DOPO-IL-TOOL-01), già scelta in `prepareSend`. */
+    readonly linguaPromemoria?: string | null
     readonly autosaveGenerated: boolean
     readonly debugDiagnostics: boolean
     readonly libraryMasterEnabled: boolean
@@ -682,6 +690,8 @@ export interface ChatControllerDeps {
             readonly composer_defaults: TalosComposerDefaults
             readonly model_lab: TalosMobileModelLabPreferences
             readonly tone: { readonly preset: TalosToneId }
+            /** La lingua delle risposte (owner 28/10): l'impostazione «Lingua», la stessa della dettatura. */
+            readonly voice?: { readonly dictation_language?: string }
             readonly shell?: {
                 readonly library_context_enabled?: boolean
                 /** Il modello scelto nel compositore, che DEVE arrivare alla barra. */
@@ -1120,6 +1130,8 @@ export interface ChatController {
         text: string,
         turnPolicy?: TalosLibraryTurnOverride | null,
         diVoce?: boolean,
+        /** La lingua che la dettatura ha sentito per questo messaggio (owner 28/10). */
+        linguaDelMessaggio?: string | null,
     ): Promise<boolean>
     enhancePrompt(text: string): Promise<TalosMobilePromptEnhancementResult | null>
     clearPromptEnhancement(): void
@@ -1872,6 +1884,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             thinking: thinking.value,
             agentToolsEnabled: captureAgentTools(identity.sessionId),
             tone: deps.settings.state.tone.preset,
+            linguaDelleRisposte: deps.settings.state.voice?.dictation_language ?? 'auto',
             autosaveGenerated: deps.settings.state.shell?.library_autosave_generated === true,
             debugDiagnostics: deps.settings.state.shell?.debug_diagnostics === true,
             libraryMasterEnabled,
@@ -2087,8 +2100,26 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 context.signal,
             ),
         ])
+        /*
+         * ⭐ la lingua delle risposte (owner 28/10, tre app): quella che la dettatura ha sentito per questo messaggio, scritta dallo
+         * schermo (chiave `lingua_del_messaggio`, `TALOS_METADATA_LINGUA_DEL_MESSAGGIO`: a lettere per non portare il modulo
+         * nell'avvio). La riga e la lingua del promemoria si scrivono QUI, col modulo pigro: siamo già dentro un `await` prima del modello.
+         */
+        const linguaSentita = context.metadata['lingua_del_messaggio']
+        /*
+         * LTESTO (vc341, 28/10): senza la nota anche ciò che si SCRIVE sbaglia lingua sui modelli piccoli. Se la dettatura non l'ha
+         * detta, la dice Android (`TalosLinguaPlugin`), con un tetto che non ferma l'invio; si salva coi metadati del messaggio.
+         */
+        const linguaDelMessaggio = typeof linguaSentita === 'string'
+            ? linguaSentita
+            : await (await import('@/services/linguaDelTesto')).identificaLinguaDelTesto(context.text)
+        const lingue = await import('@/lib/chat/linguaDelleRisposte')
+        const linguaImpostata = context.runtime.linguaDelleRisposte ?? 'auto'
         const runtime = Object.freeze({
             ...context.runtime,
+            linguaDelMessaggio,
+            rigaLingua: lingue.rigaLinguaDelleRisposte({ lingua: linguaImpostata, linguaInterfaccia: localization.state.locale }),
+            linguaPromemoria: lingue.linguaDelPromemoria({ lingua: linguaImpostata, linguaDelMessaggio, linguaInterfaccia: localization.state.locale }),
             memorySelection: Object.freeze([...memorySelection]),
             libraryTopicAnchor: library.topicAnchor,
             libraryDecision: library.decision,
@@ -2096,6 +2127,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         return {
             runtime,
             metadata: Object.freeze({
+                // la lingua del messaggio va sul disco col messaggio: la nota nella storia si ridisegna identica (STORIA-LINGUA-02)
+                ...(linguaDelMessaggio ? { lingua_del_messaggio: linguaDelMessaggio } : {}),
                 ...(memorySelection.length
                     ? { used_memories: talosMemoryDisclosure(memorySelection) }
                     : {}),
@@ -2711,6 +2744,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                 // nessuna lingua e il modello la deduce dal contesto — che qui
                 // è italiano anche quando l'app è in inglese. Vedi tone.ts.
                 localization.state.locale,
+                // ⭐ la lingua delle risposte (owner 28/10, tre app): la riga del nucleo r4, al posto dell'ordine della lingua dell'app
+                sendRuntime.rigaLingua,
             )
             let payloadTurns = acceptedTurns
             let memoryWrapped = false
@@ -4132,7 +4167,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
                      * legge; il motore locale lo usa anche per l'ultima, dopo
                      * i dati inglesi del tool.
                      */
-                    locale: localization.state.locale,
+                    // la lingua NOMINATA dopo i dati degli attrezzi: scelta, del messaggio, o dell'app (`linguaDelPromemoria`)
+                    locale: sendRuntime.linguaPromemoria ?? localization.state.locale,
                     /*
                      * ⛔ SALTO-DIRETTO-PUNITO-01: l'adattatore locale recupera le
                      * chiamate che il modello scrive nel testo, e per farlo deve
@@ -5561,6 +5597,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
         riassumiConversazione,
         misuraRichiesta,
         finestraPerCompattazione: (modelProfileId, sessionId) => finestraDellaChat(sessionId, modelProfileId),
+        // la lingua delle risposte (owner 28/10): l'impostazione «Lingua», la stessa della dettatura (come `language` di Claude Code)
+        linguaDelleRisposte: () => deps.settings.state.voice?.dictation_language ?? 'auto',
     })
     const browseMode = computed(() => chat.activeSession.value?.surface === 'browse')
     // Solo memoria del controller, distinta dalle preferenze globali dei singoli strumenti.
@@ -7507,6 +7545,8 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
          * `lib/voice/messaggioDettato.ts`.
          */
         diVoce = false,
+        /** La lingua che la dettatura ha sentito per questo messaggio (owner 28/10, lingua delle risposte); `null` = non si sa. */
+        linguaDelMessaggio: string | null = null,
     ): Promise<boolean> {
         clearPromptEnhancement()
         preferVisionProfileForAttachments()
@@ -7524,7 +7564,11 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // grafo che sta a venticinque dal tetto. È documentata in
             // `tracciaAzione.ts` (`TALOS_METADATA_DETTATO`), la legge il
             // template di `TalosMobileMessageList`, e un test la tiene ferma.
-            diVoce ? { dictated: true } : {},
+            {
+                ...(diVoce ? { dictated: true } : {}),
+                // `TALOS_METADATA_LINGUA_DEL_MESSAGGIO` (linguaDelleRisposte.ts), a lettere per il budget d'avvio come `dictated`
+                ...(linguaDelMessaggio ? { lingua_del_messaggio: linguaDelMessaggio } : {}),
+            },
             attachments.bindings.value,
             // Owner 2026-07-24: clear the composer's attachments the instant the
             // user turn is COMMITTED — not after the whole generation, which left

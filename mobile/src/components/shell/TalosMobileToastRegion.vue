@@ -11,6 +11,10 @@
  * the station sheet covered it, and the screenshot showed nothing. A
  * snackbar sits above the page it comments on (Material, snackbars, read
  * 12/09/2026), and a station is a page.
+ *
+ * ⛔ AVVISO-INERTE (Pad, 27/10/2026): teleported to body, like the sheets. With a sheet open the app root (`#app`) is `inert` (SF-7
+ * modality), and a region inside it was drawn above the sheet but could not be touched: `elementFromPoint` at «Chiedi al computer»
+ * returned the model row underneath, so a tap picked a model. Its placement variables and the theme live on `<html>`, so nothing moves.
  */
 import { X } from '@lucide/vue'
 import { useTalosMobileToasts } from '@/stores/toasts'
@@ -19,6 +23,7 @@ const toasts = useTalosMobileToasts()
 </script>
 
 <template>
+    <Teleport to="body">
     <div
         data-testid="talos-mobile-toasts"
         aria-live="polite"
@@ -59,4 +64,5 @@ const toasts = useTalosMobileToasts()
             </div>
         </TransitionGroup>
     </div>
+    </Teleport>
 </template>

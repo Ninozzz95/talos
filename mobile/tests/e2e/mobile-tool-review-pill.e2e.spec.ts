@@ -77,7 +77,7 @@ for (const viewport of VIEWPORTS) {
         await scriviEInvia(page, 'Save a note: buy eggs tomorrow.')
         await expect(page.getByTestId('talos-tool-consent')).toBeVisible({ timeout: 15_000 })
         await page.getByTestId('talos-tool-consent-later').click()
-        // Sulla chat il richiamo sta nel compositore, accanto al selettore del modello; il pulsante fisso non c'è.
+        // Sulla chat il richiamo sta nel compositore, in una riga sua in cima (mockup v7, owner 28/10); il pulsante fisso non c'è.
         const richiamo = page.getByTestId('talos-composer-tool-review')
         await expect(richiamo).toBeVisible()
         await expect(page.getByTestId('talos-tool-authorization-reopen')).toHaveCount(0)
@@ -91,8 +91,12 @@ for (const viewport of VIEWPORTS) {
         await expect(stop).toHaveAccessibleName('Stop response')
         await expect(richiamo).toBeVisible()
         await expect(page.getByTestId('talos-tool-authorization-reopen')).toHaveCount(0)
-        expect(await richiamo.evaluate((el) => el.previousElementSibling?.getAttribute('data-testid')))
-            .toBe('talos-composer-model-chip')
+        // La riga sua sta sopra la riga dei comandi del compositore, non accanto al chip del modello.
+        expect(await richiamo.evaluate((el) => el.nextElementSibling?.classList.contains('talos-composer-field-row')))
+            .toBe(true)
+        const scatolaRiga = (await page.getByTestId('talos-mobile-composer').locator('.talos-composer-field-row').boundingBox())!
+        const scatolaSopra = (await richiamo.boundingBox())!
+        expect(scatolaSopra.y + scatolaSopra.height).toBeLessThanOrEqual(scatolaRiga.y + 0.5)
 
         // Le due scatole non si sovrappongono, e al centro dello Stop c'è proprio lo Stop.
         const scatolaStop = (await stop.boundingBox())!

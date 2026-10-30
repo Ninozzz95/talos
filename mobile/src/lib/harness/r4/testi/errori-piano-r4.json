@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
-    "sha256": "1c54a18f9f27f84ede0f86ae64f563433dd8e64f5222f9d336c30b40790fba44",
+    "sha256": "f0f4c90b510618958ac0843a8484760e9a1d2827259028982349d2b6fd4c9b9e",
     "prefisso": [
       "PLAN_",
       "NOT_FOUND.",
@@ -20,6 +20,9 @@
     "PLAN_STALE.message": "Il piano a schermo non è più l’ultimo: leggi la versione aggiornata e scegli su quella",
     "PLAN_DECISION_NOT_SAVED.message": "La scelta sul piano non è stata salvata: il piano aspetta ancora, puoi riprovare",
     "PLAN_APPROVAL_ORIGIN_FORBIDDEN.message": "La scelta sul piano deve partire da questa finestra di TALOS",
+    "NOT_FOUND.bridge_route": "Non trovato.",
+    "NOT_FOUND.device_session_not_found": "Sessione non trovata.",
+    "NOT_FOUND.consent_request_not_found": "Questa richiesta di consenso non esiste.",
     "PLAN_NOT_PENDING.title": "Piano già deciso",
     "PLAN_NOT_PENDING.explanation": "La sessione è andata avanti: questo piano non aspetta più una scelta.",
     "PLAN_NOT_PENDING.action": "Ricarica la sessione e guarda il piano che vedi adesso, se ce n’è uno.",
@@ -63,6 +66,9 @@
     "PLAN_STALE.message": "The plan on screen is no longer the latest: read the updated version and choose on that one",
     "PLAN_DECISION_NOT_SAVED.message": "The choice on the plan was not saved: the plan is still waiting, you can try again",
     "PLAN_APPROVAL_ORIGIN_FORBIDDEN.message": "The choice on the plan must come from this TALOS window",
+    "NOT_FOUND.bridge_route": "Not found.",
+    "NOT_FOUND.device_session_not_found": "Session not found.",
+    "NOT_FOUND.consent_request_not_found": "This consent request does not exist.",
     "PLAN_NOT_PENDING.title": "Plan already decided",
     "PLAN_NOT_PENDING.explanation": "The session has moved on: this plan no longer waits for a choice.",
     "PLAN_NOT_PENDING.action": "Reload the session and look at the plan you see now, if there is one.",

@@ -752,6 +752,7 @@ export const TALOS_EN_MESSAGES = {
         queueHintPaused: 'Paused by Stop: it goes only when you send it.',
         queueHintOtherChat: 'Goes when the other chat finishes.',
         queueHintIdle: 'Goes as soon as TALOS is free.',
+        queueHintNextMessage: 'They stay queued and go with your next message.',
         queueHintSteer: 'Goes when TALOS finishes answering. “Steer now” brings it in at the next step between tools.',
         queueHintStopRestart: 'Goes when TALOS finishes answering. “Stop and restart” stops the answer, keeps what is already written and restarts with this.',
         queueSteerNow: 'Steer now',
@@ -1018,6 +1019,9 @@ export const TALOS_EN_MESSAGES = {
         removeFailedFiles: 'Remove files that could not be added before sending',
         improvingPrompt: 'Improving prompt',
         stopResponse: 'Stop response',
+        // «Stop even with the chat idle» (owner 29/10/2026 evening, the PC words): Stop with the chat idle and agents working
+        stopAgentsOne: 'Stop the agent',
+        stopAgentsMany: 'Stop the {n} agents',
         discardDictation: 'Discard dictation',
         stopDictation: 'Stop dictation',
         dictate: 'Dictate',
@@ -1045,6 +1049,7 @@ export const TALOS_EN_MESSAGES = {
         browseWeb: 'Browse the web',
         improvePrompt: 'Improve the message',
         chooseModel: 'Choose model',
+        modelActiveOf: '{totali} ({attivi} active)',
         chooseModelProfile: 'Choose model profile',
         chooseReasoningEffort: 'Choose reasoning effort',
         effortValue: 'Effort: {effort}',
@@ -1057,6 +1062,9 @@ export const TALOS_EN_MESSAGES = {
         reasoningEffortLevels: 'Reasoning effort levels',
         noReasoningSetting: 'This model runs without a reasoning setting.',
         modelAndReasoning: 'Model & reasoning',
+        // owner 27/10/2026, foglio «Modello e ragionamento»: le schede dei fornitori
+        providerTabs: 'Providers',
+        chosenModelIsHere: 'The chosen model is here',
         // J3 (24/10/2026, owner): the model sheet is «Model» only; reasoning has its own pill in the composer (desktop c6d1cbff2)
         modelSheetTitle: 'Model',
         reasoningPillTitle: 'Reasoning',
@@ -1296,6 +1304,13 @@ export const TALOS_EN_MESSAGES = {
         localSpeedOpeningTooLarge: 'cannot set the instructions aside: they would take too much space',
         localSpeedOpeningUnavailable: 'cannot set the instructions aside: I cannot tell where they end',
         localSpeedOpeningCheckFailed: 'cannot tell whether the instructions were set aside: the check did not complete',
+        // R4 (sketch approved 28/10): the first word. The ladder is the desktop's own (`app.wait.*`, legacy/app.js:14031), word for word
+        waitSentComputer: 'Message sent, waiting for the computer',
+        waitSent: 'Message sent',
+        waitProcessing: 'TALOS is processing the response…',
+        waitStillWorking: 'The model is still working on it…',
+        waitLonger: 'It is taking longer than usual — hold on…',
+        writing: 'Writing',
         receivingResponse: 'Receiving response',
         // Owner 20/10/2026: how much the tool call the model is writing has grown, and a run of tool rows folded into one.
         toolDraftSize: '{size} KB written',
@@ -1401,6 +1416,9 @@ export const TALOS_EN_MESSAGES = {
         faultNoChatTemplate: 'This model does not carry the instructions for how to talk to it, so TALOS cannot shape the question.',
         faultNoChatTemplateNext: 'Pick another local model from the picker: conversation-ready builds usually have "instruct" or "it" in the name.',
         faultProviderRefused: 'The model service refused the request without saying why.',
+        faultLocalNetworkBlocked: 'TALOS cannot reach your server on your home network: the Local network permission is off.',
+        faultLocalNetworkBlockedNext: 'Turn "Local network" back on in the TALOS app permissions, then try again.',
+        openAppPermissions: 'Open permissions',
         faultProviderKeyMissing: 'This model has no provider key.',
         faultProviderCatalogMissing: 'This provider’s model catalog has not been loaded yet.',
         faultModelMismatch: 'The chosen model does not belong to the selected provider.',
@@ -1467,6 +1485,9 @@ export const TALOS_EN_MESSAGES = {
         editMessageUnavailable: "Wait for the reply and authorization requests to finish before editing this message.",
         messageInterrupted: "Interrupted. The text has been kept.",
         openAttachmentPreview: "Open preview",
+        openAttachment: "Open {name}",
+        remoteFileGone: "This file is no longer on the computer.",
+        remotePreviewUnavailable: "This file can’t be shown here. It stays on the computer.",
         attachmentPreviewUnavailable: "Preview unavailable. The file remains in the Library.",
     },
     messageMarkdown: {
@@ -1527,6 +1548,24 @@ export const TALOS_EN_MESSAGES = {
         // ⛔ F4 (14/10/2026): the notification while a Code round works with the app in the background.
         keeperWorking: 'Code is working',
         emptyBody: 'No sessions yet. Tap "New", or just write below to start one.',
+        // Owner 29/10 evening («Live loading» mockup v6, D3): while the list is read, the Chat's waiting card.
+        // E2 (owner 29/10 night): no ellipsis, like «Loading chats» and «Loading Library»
+        loadingSessions: 'Loading sessions',
+        // ⛔ UI-111 «Coherent lists» (mockup v2.1 approved by the owner on 29/10 evening): the Code list in the Chats grammar
+        subtitle: 'Your code sessions, here and on your computers.',
+        search: 'Search sessions',
+        options: 'Session options',
+        optionsActive: 'Session options, {count} filter on | Session options, {count} filters on',
+        filterLabel: 'Session status',
+        // the tabs are the real states; «All», «In progress» and «Finished» come from Chats (`chats.filter`)
+        filter: { waitingForYou: 'Waiting for you', toResume: 'To resume', interrupted: 'Interrupted' },
+        // «Sort» like the PC Board (owner 29/10 evening: «Most recent / Least recent»)
+        sortLabel: 'Sort',
+        sort: { recent: 'Most recent', oldest: 'Least recent' },
+        // a tab, a search or «Where» that leaves nothing: a different absence from the empty list
+        noMatches: 'No sessions here.',
+        // E3 (owner 29/10 night): on the tablet, when the opening ends without a redirect, the list is in the column
+        pickFromList: 'Choose a session from the list.',
         draftHint: 'Write your first message to start the session.',
         openingMockup: 'Opening Code…',
         unavailable: "Code isn't available in this build.",
@@ -1607,6 +1646,13 @@ export const TALOS_EN_MESSAGES = {
         // K4-E (owner 17/10 «the old one as fallback»): r4 did not start and the previous Code opens
         r4Fallback: 'The new Code did not start on this device: the classic Code opens instead.',
         r4ListFailed: 'Sessions did not load: {detail}',
+        // GFR-12 (27/10): the computer stopped answering during a turn; reconnect from where the device left off
+        r4ConnectionLostAction: 'Reconnect',
+        // R3 (sketch approved 28/10, scene 9): the line dropped mid-turn and is being reopened; then «Reconnected» for 2 s
+        r4ConnectionRetrying: 'Connection lost · retrying',
+        r4Reconnected: 'Reconnected',
+        r4OtherCopy: 'another TALOS app on this device is using Code. Close it from Settings › Apps and try again.',
+        r4Refused: 'the Code engine refused the request. Try again.',
         r4Unreachable: 'Code is not responding yet. Try again in a moment.',
         r4RenameTitle: 'Rename the session',
         r4RenameField: 'Session name',
@@ -1650,7 +1696,8 @@ export const TALOS_EN_MESSAGES = {
         // D-MOCK-14 (24/10/2026): a PC row is deleted on that PC, named with its short code
         deleteDescriptionPc: '"{title}" will be removed from the computer {name}. This cannot be undone.',
         deleteFailed: "Couldn't delete the session: {detail}",
-        statusRunning: 'Running',
+        // owner 29/10 evening: «In progress» everywhere in English, like the tab and the PC Board (the Desktop aligns the PC)
+        statusRunning: 'In progress',
         statusRunningAria: 'Session still running',
         statusInterrupted: 'Interrupted',
         statusWaitingApproval: 'Waiting for approval',
@@ -1795,14 +1842,19 @@ export const TALOS_EN_MESSAGES = {
         floatWorking: 'Pairing. Looking for the device on the network and opening the connection: this can take a few seconds.',
         floatFailed: 'That did not work. The system dialog shows a new code every time: open it again and type that one.',
         floatReady: 'Found it. Type the six digits you can see now: the connection starts by itself.',
+        floatPairedNotConnected: 'Paired. Only the connection is missing: the device did not announce its port. Turn wireless debugging off and on, then open TALOS and tap "Reconnect".',
         fallbackNote: 'Or, if you would rather not grant that permission: type the code below — but the system dialog closes when you leave Settings, and then pairing cannot work.',
         reasonOverlayNotAllowed: 'The permission to draw over other apps is missing. Without it the field cannot appear on top of Settings.',
         openDeveloper: 'Open developer options',
+        openAppPermissions: 'Open permissions',
+        republishAction: 'Turn wireless debugging off and on',
         codeLabel: 'Six-digit code',
         reasonNotificationNotShown: 'TALOS cannot show the notification with the code field. Turn TALOS notifications on and try again.',
+        reasonLocalNetworkBlocked: 'TALOS can\'t see your home network: the Local network permission is off. Turn it back on in the app permissions, then try again.',
         reasonPairingNotAnnounced: 'TALOS cannot hear the pairing announcement. Check that the dialog with the code is still open — it does not last long — and that the device is on Wi-Fi.',
-        reasonConnectNotAnnounced: 'Pairing worked, but TALOS cannot find the connection port. Try again in a few seconds: the device announces it shortly after.',
+        reasonConnectNotAnnounced: 'TALOS cannot find the connection port: the device is not announcing it. Turn wireless debugging off and on, then come back here: TALOS reconnects by itself.',
         reasonBadCode: 'The code is six digits.',
+        reasonPairedNotConnected: 'Paired: that step worked and stays valid. Only the connection is missing, because the device did not announce its port. Turn wireless debugging off and on, then come back here: TALOS reconnects by itself.',
         reasonConnectRefused: 'The device refused the connection. Usually that means wireless debugging was switched off in the meantime.',
         reasonTimeout: 'The bridge did not answer in time. Try again.',
         reasonGeneric: 'The bridge did not manage it. Try again, and if it keeps failing turn wireless debugging off and on.',
@@ -2524,6 +2576,8 @@ export const TALOS_EN_MESSAGES = {
         title: 'Library',
         contextVault: 'Context Vault',
         acrossEveryChat: '{count} across every chat',
+        // ⛔ UI-111 (owner 29/10 evening, «69 files»): the count like the other list sections («91 chats», «1 note»)
+        countFiles: '{count} file | {count} files',
         globalContextMode: 'Global Library context',
         contextModeOff: 'Off',
         contextState: 'Context: {state}',
@@ -3495,7 +3549,16 @@ export const TALOS_EN_MESSAGES = {
         pairedHint: 'You can now write to TALOS, answer its questions and grant permissions from here.',
         done: 'Done',
         retry: 'Try again',
+        // QR scaduto (revisione del Desktop 27/10/2026): riprovare lo stesso link non serve; si apre lo scanner per uno nuovo
+        scanNewQr: 'Scan a new QR code',
         unnamed: 'Computer',
+        // R2 (approved mockup, 28/10/2026): opening a session of a computer, while it answers
+        connectingTo: 'Connecting to {name}',
+        attempt: 'attempt {n}',
+        waitingToWrite: 'Waiting for the computer: as soon as it answers you can write.',
+        notAnswering: 'The computer is not answering',
+        notAnsweringHint: 'Check that it is on, connected to the internet and with TALOS open.',
+        backToComputer: 'Back to the computer',
         listLabel: 'Connected computers',
         pairedOn: 'Connected {when}',
         // remote mockup approved on 23/10, board 1: one card per computer
@@ -3525,6 +3588,8 @@ export const TALOS_EN_MESSAGES = {
         checking: 'Checking…',
         online: 'Online',
         offline: 'Not online',
+        /** Owner 27/10/2026: the computer answered NOT_PAIRED or REVOKED. It says only what we know. */
+        removed: 'Removed on the computer',
         path: 'Path',
         pathDirect: 'Direct · {ms} ms',
         pathRelay: 'Through a relay · {ms} ms',
@@ -3533,6 +3598,8 @@ export const TALOS_EN_MESSAGES = {
         forget: 'Forget this computer',
         forgetTitle: 'Forget {name}?',
         forgetBody: 'This device will no longer be able to control it. To do it again you need a new QR code.',
+        // il PC ha già tolto questo dispositivo: resta solo da toglierlo anche da qui (Desktop, 27/10/2026)
+        forgetRemovedBody: 'Remove it from this device too.',
         forgetConfirm: 'Forget',
         newSessionOnPc: 'For a new session, choose the computer’s folder: «New session on …», below.',
         newSession: 'New session',
@@ -3548,6 +3615,7 @@ export const TALOS_EN_MESSAGES = {
         noFileExchange: 'This computer can’t receive files yet: update TALOS on the computer.',
         fileNeedsConsent: 'This folder needs the computer’s consent',
         fileBusy: 'The computer is receiving too many files: try again in a moment.',
+        fileSaveFailed: 'The computer couldn’t save the file. Try again.',
         fileWaiting: 'The computer is busy with other files: waiting for a free slot…',
         imageEmpty: 'The image is empty.',
         imagesUnavailable: 'This computer can’t receive images for the model yet: update TALOS on the computer.',
@@ -3565,11 +3633,16 @@ export const TALOS_EN_MESSAGES = {
         // D-MOCK-11 (24/10/2026, contratto R5.12): il permesso che il PC dà al dispositivo per una cartella, chiesto da qui
         consent: {
             firstTime: 'The first time, the PC asks you for permission',
+            // cartelle bloccate (owner 27/10/2026): tolta a questo dispositivo, raggiungibile da un'altra; si sblocca dal PC
+            blocked: 'Blocked on the computer',
             waitingTitle: 'Confirm on the computer',
             waitingBody: 'The PC is asking whether this device can work in this folder. Answer there.',
-            ask: 'Ask the PC',
-            required: 'The PC must allow this device to write here',
-            denied: 'The PC said no for this folder',
+            ask: 'Ask the computer',
+            required: 'The computer must allow this device to write here',
+            // il PC non salva mai un rifiuto dalla carta: `negata` vale per questa richiesta (Desktop, 27/10/2026)
+            denied: 'The computer didn’t allow it, for now. You can ask again.',
+            // l'unico no che dura: cartella bloccata dopo una revoca (`FOLDER_BLOCKED`, 409)
+            folderBlocked: 'This folder is blocked on the computer: unblock it from the computer.',
             expired: 'The PC didn’t answer',
             folderNotListed: 'This folder is no longer on the PC',
             rateLimited: 'There are already 3 requests waiting on the PC: answer them there',
@@ -3596,7 +3669,7 @@ export const TALOS_EN_MESSAGES = {
         errors: {
             rejected: 'The computer rejected the connection. If it wasn’t you, nothing was exchanged.',
             expired: 'The QR code has expired. Ask the PC for a new one.',
-            tokenInvalid: 'This QR code has already been used or is no longer valid. Ask the PC for a new one.',
+            tokenInvalid: 'This QR code has already been used or has expired. Ask the PC for a new one.',
             locked: 'The computer isn’t accepting new devices for a while. Try again in 15 minutes.',
             codeMismatch: 'The number on the PC didn’t match this device, so the connection was cancelled. Nothing was exchanged.',
             revoked: 'The computer revoked this device. To control it again you need a new QR code.',
@@ -3606,6 +3679,8 @@ export const TALOS_EN_MESSAGES = {
             badCode: 'This isn’t a TALOS remote control QR code.',
             scannerUnavailable: 'The scanner isn’t available on this device right now.',
             generic: 'Something went wrong with the computer connection.',
+            // REMOTE_STORE_BUSY (503): il PC sta già scrivendo i suoi consensi; non è un guasto del collegamento (revisione del blocco 10)
+            busy: 'The computer is busy: try again in a moment.',
             // RA-12: il PC non ha risposto entro il tetto della schermata
             timeout: 'The computer didn’t answer in time.',
         },
@@ -3908,6 +3983,10 @@ export const TALOS_EN_MESSAGES = {
         failedDownloadTitle: 'Update didn’t arrive',
         failedSignature: 'The file is not signed by TALOS',
         failedSignatureBody: 'The package downloaded for {version} doesn’t match the published signature. It was not installed and has been deleted. {installed} stays on the device, untouched.',
+        failedNotTalos: 'The file is a different app',
+        failedNotTalosBody: 'The file downloaded for {version} is not TALOS. It was not installed and has been deleted. {installed} stays on the device, untouched.',
+        failedNotNewer: 'Nothing newer to install',
+        failedNotNewerBody: '{version} is not newer than {installed} on this device, so there is nothing to install. The downloaded file has been deleted.',
         failedOther: 'The update could not be installed',
         failedDownload: 'The update could not be downloaded',
         failedOtherBody: '{reason} {installed} stays on the device, untouched.',
@@ -4169,7 +4248,7 @@ export const TALOS_EN_MESSAGES = {
         bulkDeleted: '{count} researches deleted.',
         bulkDeletedSources: '{count} researches deleted. {sources} source dossiers went with them.',
         bulkDeleteFailed: '{count} could not be deleted.',
-        runningNotSelectable: 'Running',
+        runningNotSelectable: 'In progress',
         deleteTitle: 'Delete “{title}”?',
         deleteBodyWithSources: 'This permanently deletes the report and the dossiers of the sources it gathered. It cannot be undone.',
         deleteBody: 'This deletes it permanently. It cannot be undone.',
@@ -4247,7 +4326,7 @@ export const TALOS_EN_MESSAGES = {
             cancelled: 'Cancelled',
             paused: 'Paused',
             all: 'All',
-            running: 'Running',
+            running: 'In progress',
             unfinished: 'Interrupted',
             done: 'Finished',
             failed: 'Failed',
@@ -4269,7 +4348,7 @@ export const TALOS_EN_MESSAGES = {
         bucketOne: {
             cancelled: 'Cancelled',
             paused: 'Paused',
-            running: 'Running',
+            running: 'In progress',
             unfinished: 'Interrupted',
             done: 'Finished',
             failed: 'Failed',

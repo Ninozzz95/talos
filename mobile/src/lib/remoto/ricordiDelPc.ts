@@ -122,6 +122,31 @@ export function nomeConCodice(
 export const nomeECodice = (pc: { pcId: string, nome: string | null }, senzaNome: string): string =>
     `${pc.nome || senzaNome} · ${codiceBreve(pc.pcId)}`
 
+/** I relay gratuiti di n0 (iroh v1.0.0 `iroh/src/defaults.rs:27-33,94-96`: `<regione>.relay.n0.iroh.link.` e lo staging). */
+const DOMINIO_N0 = '.n0.iroh.link'
+
+/**
+ * Il «ponte» di una voce per `vociVecchieDi`. Owner 26/10/2026 (via CLI e Desktop): in modalità n0 il QR non porta più `relay=`,
+ * quindi una voce nuova ha `null` dove le vecchie hanno il relay di casa di n0, che per di più cambia regione. Per il telefono sono
+ * lo stesso ponte, come per `TalosRemotoTrasporto.relayDalQr` (vuoto o senza gettone ⇒ n0). Ogni altro indirizzo (il relay proprio)
+ * vale per sé.
+ */
+export function ponteDi(relay: string | null): string {
+    // revisione del Desktop: vuoto o di soli spazi vale n0, come `isNullOrBlank` in `relayDalQr`
+    // ⛔ D-0147-NAV-1 (Pad, 27/10): una voce senza `relay` (undefined) faceva `undefined.trim()` e svuotava la sezione Computer
+    if (typeof relay !== 'string' || relay.trim() === '') return 'n0'
+    try {
+        const indirizzo = new URL(relay)
+        const host = indirizzo.hostname.toLowerCase().replace(/\.$/u, '')
+        if (host.endsWith(DOMINIO_N0)) return 'n0'
+        // revisione del blocco 7 (D-R1): il PC salva il relay proprio come `URL.href` da r4 `94726d284`; si confronta nella stessa forma
+        return indirizzo.href
+    } catch {
+        // un indirizzo illeggibile non è n0: vale per sé, come prima
+    }
+    return relay
+}
+
 /**
  * Fetta C del mockup remoto, D-REM-2 (owner via Desktop (3), 24/10/2026: «Proponi di dimenticare»): le voci vecchie di un PC appena
  * accoppiato. Stesso nome e stesso ponte, `pcId` diverso, e spente adesso; stesso programma quando tutte e due lo sanno. Propone solo un
@@ -137,7 +162,7 @@ export function vociVecchieDi<T extends { pcId: string, nome: string | null, rel
     if (!nuovo.nome || leggiRicordo(nuovo.pcId).effimero) return []
     const programmaNuovo = leggiRicordo(nuovo.pcId).programma
     const vecchie = elenco.filter((v) => {
-        if (v.pcId === nuovo.pcId || v.nome !== nuovo.nome || v.relay !== nuovo.relay || inLinea(v.pcId)) return false
+        if (v.pcId === nuovo.pcId || v.nome !== nuovo.nome || ponteDi(v.relay) !== ponteDi(nuovo.relay) || inLinea(v.pcId)) return false
         // revisione del blocco 3 (S3), owner 24/10 «Sì, anche il programma»: il desktop e la CLI sullo stesso PC sono due PC
         const programma = leggiRicordo(v.pcId).programma
         return !programmaNuovo || !programma || programma === programmaNuovo

@@ -176,4 +176,18 @@ describe('il consenso del PC visto dal dispositivo (D-MOCK-11)', () => {
         expect(leggi(TALOS_EN_MESSAGES, fraseDelConsenso({ code: 'RATE_LIMITED', reason: 'consent-rate-limited' })!))
             .toBe('There are already 3 requests waiting on the PC: answer them there')
     })
+
+    /*
+     * Dal Pad, prova della CLI (27/10/2026): «Non ora» sulla carta del PC arriva come `negata` e il telefono diceva «Il PC ha detto di no».
+     * Il Desktop: il PC non salva MAI un rifiuto dalla carta, `negata` vale solo per quella richiesta; l'unico no che dura è la cartella
+     * BLOCCATA dopo una revoca (`FOLDER_BLOCKED`, 409), che ha la sua frase.
+     */
+    it('CONS-FRASI-02 «negata» dice «per ora» e invita a richiedere; FOLDER_BLOCKED ha la frase sua, nelle due lingue', () => {
+        const leggi = (catalogo: unknown, chiave: string) => chiave.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], catalogo)
+        expect(leggi(TALOS_EN_MESSAGES, fraseDelConsenso({ code: 'CONSENT_DENIED' })!)).toBe('The computer didn’t allow it, for now. You can ask again.')
+        expect(leggi(TALOS_IT_MESSAGES, fraseDelConsenso({ code: 'CONSENT_DENIED' })!)).toBe('Il PC non l’ha consentita, per ora. Puoi chiederla di nuovo.')
+        expect(fraseDelConsenso({ code: 'FOLDER_BLOCKED' })).toBe('computer.consent.folderBlocked')
+        expect(leggi(TALOS_EN_MESSAGES, 'computer.consent.folderBlocked')).toBe('This folder is blocked on the computer: unblock it from the computer.')
+        expect(leggi(TALOS_IT_MESSAGES, 'computer.consent.folderBlocked')).toBe('Questa cartella è bloccata sul PC: si sblocca dal PC.')
+    })
 })

@@ -1,10 +1,10 @@
 /**
  * ⛔ K3-C2b (ledger `LEDGER-K3-CODICE-COME-LA-CHAT-2026-10-15.md`): il Doctor del Codice su r4, COPIA FISSATA delle regole del desktop.
  *
- * Fonte: r4 @ `701c6c0d2` (invariato da `fc5e25d62`) `harness-ui/frontend/src/components/doctor.js` (sha256 `abcd36bd…2b85e`): `valida` (:11-19),
- * `dettaglioSessioni` (:20-27), `controlliDoctor` (:28-42), `contaGravitaDoctor` (:43). Testi: `i18n/testi/varie.js` (chiavi
+ * Fonte: r4 @ `4cee78f33` `harness-ui/frontend/src/components/doctor.js` (sha256 `154b39a2…a59686`; da `701c6c0d2` cambia solo la riga
+ * delle cartelle, `sceltaPerSessione`): `valida` (:11-19), `dettaglioSessioni` (:20-27), `controlliDoctor` (:28-43), `contaGravitaDoctor` (:44). Testi: `i18n/testi/varie.js` (chiavi
  * `doctor.*`, `testi/varie-doctor-r4.json`) e `server.js` (`testiServerR4.ts`). La conformità la prova il golden calcolato dal VERO
- * `doctor.js` (`tests/fixtures/r4/doctor-701c6c0d2.json`).
+ * `doctor.js` (`tests/fixtures/r4/doctor-4cee78f33.json`).
  *
  * Unica differenza dichiarata (accordo con Nino1, 15/10/2026): sul telefono `shell: 'desktop'` vuol dire «sul dispositivo», e la
  * riga è `doctor.check.shell.device`; la gravità (`info`) resta quella del desktop.
@@ -109,10 +109,14 @@ export function controlliDoctorR4(risposta: unknown, lingua: string): VoceDoctor
     if (r.catalogoTask) add('catalogo', t('doctor.check.catalog.title'), r.catalogoTask.disponibile ? 'success' : 'warning',
         campo(r.catalogoTask, 'dettaglio') || (r.catalogoTask.disponibile ? t('doctor.check.catalog.available') : t('doctor.check.catalog.unavailable')))
     else ignoto('catalogo', t('doctor.check.catalog.title'))
-    if (r.cartelleProgetto) add('cartelle', t('doctor.check.folders.title'), r.cartelleProgetto.disponibili ? 'success' : 'warning',
-        plurale('varie.doctor.check.folders.allowedOne', 'varie.doctor.check.folders.allowedMany', r.cartelleProgetto.conteggio, lingua),
-        campo(r.cartelleProgetto, 'dettaglio'))
-    else ignoto('cartelle', t('doctor.check.folders.title'))
+    // pin 4cee78f33 (a25dca408, 29/10): zero cartelle fisse con `sceltaPerSessione` è lo stato voluto, non un avviso
+    if (r.cartelleProgetto) {
+        const perSessione = r.cartelleProgetto.sceltaPerSessione === true && r.cartelleProgetto.conteggio === 0
+        add('cartelle', t('doctor.check.folders.title'), r.cartelleProgetto.disponibili || perSessione ? 'success' : 'warning',
+            perSessione ? t('doctor.check.folders.choosePerSession')
+                : plurale('varie.doctor.check.folders.allowedOne', 'varie.doctor.check.folders.allowedMany', r.cartelleProgetto.conteggio, lingua),
+            campo(r.cartelleProgetto, 'dettaglio'))
+    } else ignoto('cartelle', t('doctor.check.folders.title'))
     if (r.ricercaWeb) add('ricerca', t('doctor.check.search.title'), r.ricercaWeb.pronta || r.ricercaWeb.fonte === 'off' ? 'info' : 'warning',
         campo(r.ricercaWeb, 'etichetta') || r.ricercaWeb.fonte, campo(r.ricercaWeb, 'dettaglio'), t('doctor.check.search.note'))
     else ignoto('ricerca', t('doctor.check.search.title'))

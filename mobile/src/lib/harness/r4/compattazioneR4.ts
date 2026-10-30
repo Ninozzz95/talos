@@ -141,7 +141,7 @@ export function stimaBreveR4(secondi: number | null | undefined, t: TraduttoreR4
     return t('chat.compaction.live.etaMinutes', { n: Math.max(1, Math.round(secondi / 60)) })
 }
 
-/** Il tempo trascorso in breve («3m 12s», in italiano «3 min 12 s»). */
+/** Il tempo trascorso in breve, «3m 12s» in italiano e in inglese (owner 29/10, mockup «Caricamenti vivi» v6). */
 export function durataBreveR4(ms: number | null | undefined, t: TraduttoreR4): string {
     if (!intero(ms)) return ''
     const tutti = Math.floor(ms / 1000)

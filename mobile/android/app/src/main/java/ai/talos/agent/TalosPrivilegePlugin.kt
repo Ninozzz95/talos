@@ -631,6 +631,8 @@ class TalosPrivilegePlugin : Plugin() {
             "assistant" -> android.content.Intent(
                 android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS,
             )
+            // ASS-148: il pulsante sotto «hai tolto il permesso Rete locale»
+            "app-permissions" -> ai.talos.agent.ponte.TalosReteLocale.intentPermessi(context)
             else -> {
                 call.reject("TALOS_PRIVILEGE_UNKNOWN_TARGET")
                 return
@@ -838,6 +840,15 @@ class TalosPrivilegePlugin : Plugin() {
             .put("error", ponte.errore)
     }
 
+    /**
+     * ASS-148, parte Ollama: se la persona ha tolto «Rete locale» (Android 17). Fuori dal thread del ponte apposta: è una lettura
+     * dell'appop, non un comando adb, e la chat la chiede proprio quando il ponte potrebbe non esserci.
+     */
+    @PluginMethod
+    fun localNetwork(call: PluginCall) {
+        call.resolve(JSObject().put("blocked", ai.talos.agent.ponte.TalosReteLocale.bloccata(context)))
+    }
+
     /** Se il ponte è impacchettato, e se in questo istante è collegato. */
     @PluginMethod
     fun bridgeStatus(call: PluginCall) = sulPonte(call) {
@@ -933,7 +944,11 @@ class TalosPrivilegePlugin : Plugin() {
         }
 
         fun fallito() = JSObject().put("ok", false)
-            .put("reason", ultimo?.motivo ?: seNessuno)
+            // ASS-148: senza annunci, la rete locale tolta è la causa vera e si dice
+            .put("reason", ultimo?.motivo ?: ai.talos.agent.ponte.TalosReteLocaleRegola.motivoSenzaAnnunci(
+                seNessuno,
+                ai.talos.agent.ponte.TalosReteLocale.bloccata(context),
+            ))
             .put("tried", provati)
             .put("output", ultimo?.uscita ?: "").put("error", ultimo?.errore ?: "")
 
@@ -1006,6 +1021,7 @@ class TalosPrivilegePlugin : Plugin() {
             call.getString("working") ?: "Pairing…",
             call.getString("failed") ?: "Pairing failed. Open wireless debugging again and enter the new code.",
             call.getString("ready") ?: "Found it. Type the six digits now.",
+            call.getString("pairedNotConnected") ?: "Paired. Only the connection is missing: open TALOS and tap Reconnect.",
         ) { codice ->
             /*
              * ⛔ Su un thread a parte: qui si scopre un servizio di rete e si
@@ -1054,14 +1070,23 @@ class TalosPrivilegePlugin : Plugin() {
                     TalosPonteAdb.scopri(context, TalosPonteAdb.ANNUNCIO_ACCOPPIAMENTO)
                 }
                 var riuscito = false
+                var accoppiato = false
                 // ⛔ Il motivo si TIENE. Un fallimento senza motivo manda la
                 // persona a ripetere lo stesso gesto: non ha modo di sapere se
                 // ha sbagliato il codice, se l'annuncio non è arrivato, o se il
                 // telefono ha chiuso la porta mentre lei scriveva.
-                var motivo: String? = if (indirizzi.isEmpty()) "pairing-not-announced" else null
+                var motivo: String? = if (indirizzi.isEmpty()) {
+                    ai.talos.agent.ponte.TalosReteLocaleRegola.motivoSenzaAnnunci(
+                        "pairing-not-announced",
+                        ai.talos.agent.ponte.TalosReteLocale.bloccata(context),
+                    )
+                } else {
+                    null
+                }
                 for (indirizzo in indirizzi) {
                     val paio = TalosPonteAdb.accoppia(context, indirizzo, codice)
                     if (!paio.ok) { motivo = paio.motivo ?: "pair-refused"; continue }
+                    accoppiato = true
                     val collegato = TalosPonteAdb.scopri(
                         context,
                         TalosPonteAdb.ANNUNCIO_COLLEGAMENTO,
@@ -1070,9 +1095,14 @@ class TalosPrivilegePlugin : Plugin() {
                     if (!riuscito) motivo = "connect-refused"
                     break
                 }
+                // ASS-149: dopo un accoppiamento riuscito il codice non c'entra più
+                motivo = ai.talos.agent.ponte.TalosAccoppiamentoEsitoRegola.motivo(accoppiato, riuscito, motivo)
                 if (riuscito) {
                     TalosSentinelle.accoppiamento.spegni(context)
                     TalosAccoppiamentoNotifica.chiudi(context)
+                } else if (motivo == ai.talos.agent.ponte.TalosAccoppiamentoEsitoRegola.ACCOPPIATO_NON_COLLEGATO) {
+                    TalosSentinelle.accoppiamento.spegni(context)
+                    TalosAccoppiamentoNotifica.accoppiatoNonCollegato(context)
                 } else {
                     // Il campo torna, col motivo accanto: la porta è cambiata e
                     // il codice è un altro, quindi la cosa utile è poterlo

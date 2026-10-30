@@ -498,3 +498,34 @@ describe('useTalosMobileDictation — il testo finale dopo lo stop (N12)', () =>
         expect(sistema.chiusaDalMotore.value).toBe(false)
     })
 })
+
+/**
+ * DETT-LINGUA-01/02 — la lingua delle risposte (owner 28/10/2026, «se parlo in persiano a Talos mi risponde in inglese»): il motore
+ * dice la lingua che sente (`onLanguage`), e prima nessuno la usava. Ora la dettatura la tiene (`linguaSentita`) perché l'invio la
+ * scriva nei metadati del messaggio; una dettatura nuova riparte da capo.
+ */
+describe('DETT-LINGUA la lingua sentita dal motore', () => {
+    it('DETT-LINGUA-01 tiene l\'ultima lingua che il motore dice di sentire', async () => {
+        const { engine, events } = engineStub()
+        const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
+        await flush()
+        expect(dictation.linguaSentita.value).toBeNull()
+        await dictation.toggle()
+        events().onLanguage?.('fa-IR')
+        events().onPartial('سلام')
+        expect(dictation.linguaSentita.value).toBe('fa-IR')
+    })
+
+    it('DETT-LINGUA-02 una dettatura nuova azzera la lingua di quella prima', async () => {
+        const { engine, events } = engineStub()
+        const dictation = useTalosMobileDictation({ base: () => '', onTranscript: vi.fn(), engine })
+        await flush()
+        await dictation.toggle()
+        events().onLanguage?.('fa-IR')
+        events().onEnd?.()
+        await flush()
+        dictation.cancel()
+        await dictation.toggle()
+        expect(dictation.linguaSentita.value).toBeNull()
+    })
+})

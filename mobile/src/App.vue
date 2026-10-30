@@ -57,7 +57,7 @@ import { useTalosMobileToasts } from '@/stores/toasts'
 import { talosAnswerNpuTerms, talosNpuTermsPromptOpen } from '@/stores/npuTermsPrompt'
 import { useTalosTabletLayout } from '@/composables/useTalosTabletLayout'
 import { useTalosSheetNav } from '@/composables/useTalosSheetNav'
-import { TALOS_TABLET_CHAT_SIDEBAR_DEFAULT, TALOS_TABLET_CHAT_SIDEBAR_MIN, TALOS_TABLET_SIDEBAR_MAX, clampTalosTabletChatSidebarWidth, clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletRailVariant, talosTabletSidebarEffectiveWidth, talosTabletStationParent } from '@/lib/tabletLayout'
+import { TALOS_TABLET_CHAT_SIDEBAR_DEFAULT, TALOS_TABLET_CHAT_SIDEBAR_MIN, TALOS_TABLET_SIDEBAR_MAX, clampTalosTabletChatSidebarWidth, clampTalosTabletSidebarWidth, talosTabletLeavesChatsRoute, talosTabletLeavesHarnessListRoute, talosTabletRailVariant, talosTabletSidebarEffectiveWidth, talosTabletStationParent, segnaApertura } from '@/lib/tabletLayout'
 import { useLauncherIconController } from '@/services/launcherIcon'
 import { talosChiudiCassettoAggiornamento, talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
 import { parseTalosSessionLibraryContextPolicy } from '@/lib/chat/libraryPolicy'
@@ -76,7 +76,8 @@ const uiFallback = disabled.has('ui')
 // The animated workspace backdrop is useful on the empty hero, but it is pure
 // competition once a real thread is visible: chat scrolling must not share a
 // frame budget with a decorative canvas. Keep the empty-chat presentation.
-const chatHasMessages = computed(() => chatController.chat.messages.length > 0)
+// SFONDO-01 (owner 28/10): lo sfondo si ferma SOLO mentre si scorre, come il desktop; non più dietro i messaggi della Chat.
+// La pausa di scorrimento la tiene TalosMobileBackground (chunk a parte, fuori dal tetto dell'avvio).
 
 // The static theme paints immediately. Procedural scenes and renderers are an
 // optional post-entry enhancement, kept outside the first-chat bundle.
@@ -998,7 +999,11 @@ watch(
         // Stessa domanda, per Harness: la barra laterale ora mostra il suo
         // elenco (vedi tabletRailVariant) quando la stazione è Harness, quindi
         // la rotta-elenco nuda nel riquadro principale la duplicherebbe.
-        else if (talosTabletLeavesHarnessListRoute(isTablet, rotta)) void openDefaultHarnessSession()
+        // ⛔ E3 (F2/F3, 29/10 notte): il segno dell'apertura si mette in questo stesso giro (`tabletLayout.ts`, sincrono); un rifiuto si
+        // dice nella console e la pagina offre «Riprova», mai un rifiuto lasciato scappare.
+        else if (talosTabletLeavesHarnessListRoute(isTablet, rotta)) {
+            void segnaApertura(() => openDefaultHarnessSession().catch((e: unknown) => { console.warn('[TALOS] Codice sul tablet', e); throw e }))
+        }
     },
     { immediate: true },
 )
@@ -1350,7 +1355,6 @@ onBeforeUnmount(async () => {
             v-if="!uiFallback"
             class="z-0"
             aria-hidden="true"
-            :paused="activeRoute === 'chat' && chatHasMessages"
         />
 
         <!-- Fail-closed fallback: no upstream shadcn/reka components. -->

@@ -20,7 +20,9 @@ import {
     nomeLocaleValidoR4,
     nomeModelloUmanoR4,
     spingiAccessoLocaleR4,
+    MESSAGGI_DEL_KERNEL_R4,
 } from '@/lib/harness/r4/modelloR4'
+import erroriKernel from '@/lib/harness/r4/testi/errori-kernel-r4.json'
 
 /**
  * ⛔ K3-C Scelta del modello (ledger `LEDGER-K3-MODELLO-2026-10-16.md`; owner 16/10 «Profili dell'app, chiave unica»). Il golden della
@@ -55,6 +57,18 @@ function cliente(fornitore: Record<string, unknown>, rispondi: (r: Richiesta) =>
     return { ponte, richieste, scritte: () => richieste.filter((r) => r.metodo === 'POST') }
 }
 
+
+/**
+ * FRASI-UNICHE (27/10/2026): un testo LETTERALE del server (non passa da `MESSAGE_BY_CODE`: rotte del piano ChatGPT, del motore
+ * dell'app, del ponte remoto) si dice nella lingua dell'app solo quando il dizionario del desktop ha la voce col suo inglese identico.
+ * Qui si pretende quello che pretende la prova del desktop (ERR-REMOTI-01): in inglese resta identico, in italiano cambia, mai una chiave.
+ */
+function attesoTradotto(busta: { code: string; message: string; reason?: string }) {
+    expect(messaggioErroreModelloR4(busta, 'en')).toBe(busta.message)
+    const it = messaggioErroreModelloR4(busta, 'it')
+    expect(it, `${busta.code}: «${busta.message}» resta in inglese`).not.toBe(busta.message)
+    expect(it).not.toMatch(/^(errori\.)?[A-Z_]+\./u)
+}
 describe('il modello del Codice su r4 (K3-C Scelta del modello)', () => {
     it('MOD-01 il profilo dell\'app diventa l\'id che r4 riconosce per lo stesso fornitore e lo stesso modello (golden del pin)', () => {
         for (const voce of fonti.voci) {
@@ -98,7 +112,10 @@ describe('il modello del Codice su r4 (K3-C Scelta del modello)', () => {
         const profili = fonti.voci.map((v) => profilo(v.provider, v.model, { display_name: `Nome ${v.model}` }))
         for (const voce of fonti.voci) expect(profiloDelModelloR4(voce.id, profili)?.id).toBe(`${voce.provider}:${voce.model}`)
         const ignoto = profiloDelModelloR4('lmstudio:finto', profili)!
-        expect([ignoto.id, ignoto.display_name, ignoto.model]).toEqual(['r4:lmstudio:finto', 'lmstudio:finto', 'lmstudio:finto'])
+        // D-0145-4b (Desktop 26/10): il nome senza la fonte, che dice già il gruppo; l'id intero di r4 resta in `model`
+        expect([ignoto.id, ignoto.provider, ignoto.display_name, ignoto.model]).toEqual(['r4:lmstudio:finto', 'lmstudio', 'finto', 'lmstudio:finto'])
+        // un id senza fonte nota (OpenRouter per r4) resta intero
+        expect(profiloDelModelloR4('z-ai/glm-4.7', profili)!.display_name).toBe('z-ai/glm-4.7')
         expect(profiloDelModelloR4(null, profili)).toBeNull()
     })
 
@@ -214,13 +231,17 @@ describe('il modello del Codice su r4 (K3-C Scelta del modello)', () => {
         expect(messaggioErroreModelloR4({ code: 'MODEL_ID_INVALID', message: vere.modelloStorto.d.error.message }, 'it'))
             .toBe('Il modello scelto ha un nome che questo server non riconosce: sceglilo di nuovo dalla pillola del modello')
         expect(messaggioErroreModelloR4({ code: 'REASONING_INVALID', message: vere.ragionamentoStorto.d.error.message }, 'en')).toBe(vere.ragionamentoStorto.d.error.message)
-        expect(messaggioErroreModelloR4({ code: 'NOT_FOUND', message: 'Resource not found' }, 'it')).toBe('Resource not found')
+        // MOD-21 (27/10/2026): i codici generici ora hanno le parole del desktop; resta con quelle di r4 solo un codice che nessuno porta
+        expect(messaggioErroreModelloR4({ code: 'NOT_FOUND', message: 'Resource not found' }, 'it')).toBe('Risorsa non trovata')
+        expect(messaggioErroreModelloR4({ code: 'CODICE_CHE_NESSUNO_PORTA', message: 'Resource gone' }, 'it')).toBe('Resource gone')
     })
 
     it('MOD-09 i codici del piano ChatGPT che manda r4 con le parole del desktop (`errori.js` @ f6c6625ac), nelle due lingue', () => {
-        expect(messaggioErroreModelloR4({ code: 'CHATGPT_TOKEN_DA_RINNOVARE', message: 'The ChatGPT access token must be renewed by the app.' }, 'it'))
-            .toBe('L’accesso a ChatGPT va rinnovato dall’app: riprova')
-        expect(messaggioErroreModelloR4({ code: 'CHATGPT_CUSTODE_NON_APP', message: 'x' }, 'en')).not.toBe('x')
+        // i testi letterali delle rotte del piano (`server.mjs:362`, `chatgpt-rotte.mjs:109` @ r4 79ea996de), mai riscritti dalla busta HTTP
+        attesoTradotto({ code: 'CHATGPT_TOKEN_DA_RINNOVARE', message: 'The ChatGPT access token must be renewed by the app.' })
+        attesoTradotto({ code: 'CHATGPT_CUSTODE_NON_APP', message: 'This server keeps its own ChatGPT sign-in: it does not take a token from an app.' })
+        // senza testo del server, la frase del codice
+        expect(messaggioErroreModelloR4({ code: 'CHATGPT_TOKEN_DA_RINNOVARE', message: '' }, 'it')).toBe('L’accesso a ChatGPT va rinnovato dall’app: riprova')
         expect(messaggioErroreModelloR4({ code: 'CHATGPT_SCONOSCIUTO', message: 'x' }, 'it')).toBe('x')
     })
 
@@ -257,7 +278,142 @@ describe('il modello del Codice su r4 (K3-C Scelta del modello)', () => {
         expect(messaggioErroreModelloR4({ code: 'LOCAL_ENGINE_BUSY', message: 'x' }, 'en')).toBe('The on-device model is busy with another job (a chat reply or a context summary); try again when it has finished.')
         expect(messaggioErroreModelloR4({ code: 'LOCAL_RUNTIME_NOT_READY', message: 'x' }, 'en')).toBe('No local model is open in the app: open one from the model picker.')
         expect(messaggioErroreModelloR4({ code: 'LOCAL_MODEL_CHANGED', message: 'x' }, 'it')).toBe('Ora sul dispositivo è aperto un altro modello: sceglilo di nuovo nel Codice.')
-        expect(messaggioErroreModelloR4({ code: 'LOCAL_GUEST_SOCKET_INVALID', message: 'x' }, 'en')).toBe('The local engine socket is not valid: it must be a socket inside the app folder')
+        // il testo letterale di `accesso-locale-ospite.mjs:74` @ r4 79ea996de; senza testo, la frase del codice
+        attesoTradotto({ code: 'LOCAL_GUEST_SOCKET_INVALID', message: 'The local engine socket is outside the app folder.' })
+        expect(messaggioErroreModelloR4({ code: 'LOCAL_GUEST_SOCKET_INVALID', message: '' }, 'en')).toBe('The local engine socket is not valid: it must be a socket inside the app folder')
+    })
+
+    /*
+     * D-0146-1, lato r4 (`6476265ef`, Desktop 26/10/2026): il socket del motore dell'app che non risponde ha il suo codice,
+     * `LOCAL_GUEST_UNREACHABLE`, e la frase dice cosa fare; prima arrivava come LOCAL_RUNTIME_NOT_READY («nessun modello aperto»),
+     * falso con il modello aperto. Le parole sono quelle del desktop (`errori.js` @ 6476265ef, `kernel.motoreOspiteNonRisponde`).
+     */
+    it('MOD-15 il motore dell’app che non risponde: il codice nuovo ha la sua frase, nelle due lingue', () => {
+        expect(messaggioErroreModelloR4({ code: 'LOCAL_GUEST_UNREACHABLE', message: 'x' }, 'en'))
+            .toBe('The on-device engine in the app did not answer: send the message again, the app reopens it.')
+        expect(messaggioErroreModelloR4({ code: 'LOCAL_GUEST_UNREACHABLE', message: 'x' }, 'it'))
+            .toBe('Il motore sul dispositivo non ha risposto: rimanda il messaggio, l’app lo riapre.')
+    })
+
+    it('MOD-16 ⛔ verso contrario: un r4 senza la cura manda ancora LOCAL_RUNTIME_NOT_READY, che resta «nessun modello aperto»', () => {
+        expect(messaggioErroreModelloR4({ code: 'LOCAL_RUNTIME_NOT_READY', message: 'x' }, 'it')).toBe('Nessun modello locale è aperto nell’app: aprine uno dal selettore dei modelli.')
+        expect(messaggioErroreModelloR4({ code: 'LOCAL_RUNTIME_NOT_READY', message: 'x' }, 'en')).toBe('No local model is open in the app: open one from the model picker.')
+    })
+
+    /*
+     * ⛔ D-0147-ERR-2 (Pad, 27/10/2026, sessione sul PC 0632): «Errore del provider · PROVIDER_CREDIT_LIMIT · Credit not available at the
+     * provider.» in INGLESE con l'app in italiano. K3 scrive i messaggi del kernel in inglese; il desktop li dice nella lingua
+     * dell'interfaccia con `MESSAGGI_DEL_KERNEL` (`components/errori.js:908-959` @ 5bccc25a8). Il telefono ne conosceva due.
+     */
+    it('MOD-17 il credito che manca presso il fornitore si dice nella lingua dell\'app', () => {
+        const credito = { code: 'PROVIDER_CREDIT_LIMIT', message: 'Credit not available at the provider.' }
+        expect(messaggioErroreModelloR4(credito, 'it')).toBe('Credito non disponibile presso il fornitore.')
+        expect(messaggioErroreModelloR4(credito, 'en')).toBe('Credit not available at the provider.')
+        // una storia salvata in italiano si riconosce anche lei
+        expect(messaggioErroreModelloR4({ ...credito, message: 'Credito non disponibile presso il fornitore.' }, 'en')).toBe('Credit not available at the provider.')
+    })
+
+    it('MOD-18 ogni regola del desktop ha il suo testo nelle due lingue, e le frasi senza numeri si riconoscono da sé', () => {
+        const testi = erroriKernel as unknown as { it: Record<string, string>, en: Record<string, string>, regole: Array<{ chiave: string, sorgente: string, flag: string, parametri: string[] }> }
+        expect(testi.regole.length).toBeGreaterThan(40)
+        for (const regola of testi.regole) {
+            const chiave = regola.chiave.replace(/^errori\./u, '')
+            expect(typeof testi.it[chiave], chiave).toBe('string')
+            expect(typeof testi.en[chiave], chiave).toBe('string')
+            if (regola.parametri.length) continue
+            const re = new RegExp(regola.sorgente, regola.flag)
+            expect(re.test(testi.en[chiave]), `${chiave} en`).toBe(true)
+            expect(re.test(testi.it[chiave]), `${chiave} it`).toBe(true)
+            expect(messaggioErroreModelloR4({ code: 'X', message: testi.en[chiave] }, 'it'), chiave).toBe(testi.it[chiave])
+        }
+    })
+
+    it('MOD-19 le frasi coi numeri portano i numeri, e «unknown» diventa «sconosciuto»', () => {
+        expect(messaggioErroreModelloR4({ code: 'X', message: 'The provider is not responding (status unknown). Retry later.' }, 'it'))
+            .toBe('Il fornitore non risponde (stato sconosciuto). Retry later.')
+        expect(messaggioErroreModelloR4({ code: 'X', message: 'The provider is not responding (status 503). ' }, 'it'))
+            .toBe('Il fornitore non risponde (stato 503). ')
+        expect(messaggioErroreModelloR4({ code: 'X', message: 'The provider answered HTTP 418.' }, 'it')).toBe('Il fornitore ha risposto HTTP 418.')
+        expect(messaggioErroreModelloR4({ code: 'X', message: 'OpenRouter sent no activity for 90 seconds.' }, 'it'))
+            .toBe('OpenRouter non ha inviato attività per 90 secondi.')
+        // una frase che il desktop non conosce resta com'è, mai una chiave grezza
+        expect(messaggioErroreModelloR4({ code: 'X', message: 'Something new from r4.' }, 'it')).toBe('Something new from r4.')
+    })
+
+    /* MOD-20 (Desktop): la tabella del telefono È quella del desktop al commit fissato, voce per voce; il lato script la rilegge dal commit. */
+    it('MOD-20 la tabella del telefono è quella estratta, nello stesso ordine; i parametri sono gli stessi', () => {
+        const testi = erroriKernel as unknown as { regole: Array<{ chiave: string, sorgente: string, flag: string, parametri: string[] }> }
+        expect(MESSAGGI_DEL_KERNEL_R4.map((v) => [v.chiave, v.re.source, v.re.flags]))
+            .toEqual(testi.regole.map((r) => [r.chiave, r.sorgente, r.flag]))
+        for (const [i, voce] of MESSAGGI_DEL_KERNEL_R4.entries()) {
+            const attesi = testi.regole[i].parametri
+            expect(voce.parametri ? Object.keys(voce.parametri(['', '1', '2', '3'] as unknown as RegExpExecArray, 'it')) : [], voce.chiave).toEqual(attesi)
+        }
+    })
+
+    /*
+     * Dal Pad, vc307 (27/10/2026, prova della CLI): un PC che non sa dire il suo guasto risponde INTERNAL_ERROR «Internal error», e il
+     * Codice remoto con l'app in italiano lo mostrava in inglese. Le parole sono quelle del desktop (`INTERNAL_ERROR.message`, già
+     * estratte per il piano); un codice che nessun dizionario porta resta con le parole di r4.
+     */
+    it('MOD-21 INTERNAL_ERROR, NOT_FOUND, QUERY_INVALID nella lingua dell’app; ⛔ uno sconosciuto resta con le parole di r4', () => {
+        expect(messaggioErroreModelloR4({ code: 'INTERNAL_ERROR', message: 'Internal error' }, 'it')).toBe('Errore interno')
+        expect(messaggioErroreModelloR4({ code: 'INTERNAL_ERROR', message: 'Internal error' }, 'en')).toBe('Internal error')
+        // la busta HTTP dice `MESSAGE_BY_CODE` (`http-app.mjs:914`); il ponte remoto dice il suo letterale (`remoto/rotte.mjs:127`)
+        expect(messaggioErroreModelloR4({ code: 'NOT_FOUND', message: 'Resource not found' }, 'it')).toBe('Risorsa non trovata')
+        attesoTradotto({ code: 'NOT_FOUND', message: 'Not found.' })
+        expect(messaggioErroreModelloR4({ code: 'QUERY_INVALID', message: 'Invalid query' }, 'it')).toBe('Query non valida')
+        expect(messaggioErroreModelloR4({ code: 'QUALCOSA_DI_NUOVO', message: 'something new' }, 'it')).toBe('something new')
+    })
+
+    /* Dal Pad, vc307 (27/10/2026): la sessione che il PC non ha più («The session no longer exists») restava in inglese. Il motivo sceglie la
+       frase del desktop (`NOT_FOUND.session_not_found`); un motivo che il dizionario non porta ricade sul codice. */
+    it('MOD-22 il testo sceglie la frase: NOT_FOUND «Session not found» nelle due lingue, anche con un motivo ignoto; senza testo il codice', () => {
+        // il testo letterale del registro (`session-registry.mjs:3765` @ r4 79ea996de)
+        const sparita = { code: 'NOT_FOUND', reason: 'session-not-found', message: 'Session not found' }
+        expect(messaggioErroreModelloR4(sparita, 'it')).toBe('Sessione non trovata')
+        expect(messaggioErroreModelloR4(sparita, 'en')).toBe('Session not found')
+        // ⛔ come `testoErroreServer`: decide il testo, non il motivo; e un testo diverso resta le parole del server
+        expect(messaggioErroreModelloR4({ ...sparita, reason: 'motivo-mai-visto' }, 'it')).toBe('Sessione non trovata')
+        expect(messaggioErroreModelloR4({ ...sparita, message: 'The session no longer exists' }, 'it')).toBe('The session no longer exists')
+        expect(messaggioErroreModelloR4({ ...sparita, reason: 'motivo-mai-visto', message: '' }, 'it')).toBe('Risorsa non trovata')
+    })
+
+    /* IMPOSTAZIONE-RIFIUTATA (Pad, 27/10/2026): un rifiuto di sessione (SESSION_NOT_READY) diceva le parole inglesi del server nel Codice;
+       le frasi del desktop c'erano già (area `errori-sessioni`, per la lista). Il motivo sceglie la frase, senza motivo il titolo. */
+    it('MOD-24 SESSION_NOT_READY nel Codice: la frase del motivo che il server pubblica in `explanation`, nella lingua dell’app', () => {
+        // la busta HTTP vera (`errorEnvelope` @ r4 79ea996de): `message` è la frase del codice, quella precisa sta in `explanation`
+        const modo = { code: 'SESSION_NOT_READY', message: 'Session not ready for this action', reason: 'mode-change-while-running',
+            explanation: 'The working mode is changed between turns, not while the model is working' }
+        expect(messaggioErroreModelloR4(modo, 'it')).toBe('La modalità di lavoro si cambia fra un giro e l’altro, non mentre il modello sta lavorando')
+        expect(messaggioErroreModelloR4(modo, 'en')).toBe('The working mode is changed between turns, not while the model is working')
+        // un PC che non inoltra `explanation`, o una spiegazione diversa: la frase del codice, mai quella del motivo per indovinare
+        expect(messaggioErroreModelloR4({ ...modo, explanation: undefined }, 'it')).toBe('Sessione non pronta per questa azione')
+        expect(messaggioErroreModelloR4({ ...modo, explanation: 'Something else entirely' }, 'it')).toBe('Sessione non pronta per questa azione')
+    })
+
+    /* Revisione del blocco 10, F-R1: PROVIDER_KEY_MISSING (422, r4 1c547775e) e quattro codici con le frasi per motivo (estratti a r4 c5ce4e453; i .message col blocco 11) arrivavano al
+       telefono in inglese. Le parole sono del desktop (`errori.js` a r4 c5ce4e453, area `errori-generici`); il motivo sceglie la frase. */
+    it('MOD-23 PROVIDER_KEY_MISSING e i quattro codici nuovi del PC nella lingua dell’app, col motivo e i parametri', () => {
+        // la busta HTTP vera: `message` è `MESSAGE_BY_CODE` (`http-app.mjs` @ r4 79ea996de), l'inglese di `<CODICE>.message`
+        const chiave = "No key for this model's provider on this computer: add it, or choose another model"
+        expect(messaggioErroreModelloR4({ code: 'PROVIDER_KEY_MISSING', message: chiave }, 'it'))
+            .toBe('Su questo computer manca la chiave del fornitore di questo modello: aggiungila, oppure scegli un altro modello')
+        expect(messaggioErroreModelloR4({ code: 'PROVIDER_KEY_MISSING', message: chiave }, 'en')).toBe(chiave)
+        // il testo letterale del registro (`session-registry.mjs:10450`) coincide con la voce del motivo
+        expect(messaggioErroreModelloR4({ code: 'DELEGATION_READ_ONLY', reason: 'delegation-read-only',
+            message: 'This delegation is read-only. To make changes, start a new explicit delegation from the parent session.' }, 'it'))
+            .toBe('Questa delega è di sola lettura. Per eseguire modifiche avvia una nuova delega esplicita dalla sessione padre.')
+        expect(messaggioErroreModelloR4({ code: 'HISTORY_RECOVERY_AMBIGUOUS', reason: 'damaged_tool_call',
+            message: 'The conversation history cannot be put back together with certainty. No data was changed.' }, 'it'))
+            .toBe('La cronologia della conversazione non si può ricomporre con certezza. Nessun dato è stato cambiato.')
+        expect(messaggioErroreModelloR4({ code: 'START_OPERATION_CONFLICT', reason: 'operation_id_conflict',
+            message: 'This operation was already used to start a different session' }, 'it'))
+            .toBe('Questa operazione è già stata usata per avviare una sessione diversa')
+        // il motivo coi parametri, quando il server lo pubblica in `explanation`
+        expect(messaggioErroreModelloR4({ code: 'FORGE_INVALID', reason: 'tool_manifest_invalid', message: 'The tool manifest is not valid: fix it before enabling the tool',
+            params: { detail: 'manca nome' }, explanation: 'The tool manifest is not valid: manca nome' }, 'it'))
+            .toBe('Il manifest dello strumento non è valido: manca nome')
     })
 
     it('MOD-14 il motore dell’app non ha chiave né indirizzo da sincronizzare; il nome per la persona è quello del file', async () => {

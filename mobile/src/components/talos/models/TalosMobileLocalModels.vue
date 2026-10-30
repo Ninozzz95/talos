@@ -22,6 +22,7 @@ import { useTalosI18n } from '@/i18n'
 import { Search, LayoutGrid, List, FolderOpen, Loader2 } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import TalosMobileConfirmDialog from '@/components/shell/TalosMobileConfirmDialog.vue'
+import TalosAttesaCarta from '@/components/chat/TalosAttesaCarta.vue'
 import {
     talosLocalModels,
     talosSetBrowseFilters,
@@ -1199,8 +1200,12 @@ function resultCountLabel(count: number): string {
             data-testid="talos-models-measuring"
             class="flex flex-col items-center gap-[var(--talos-space-inline)] rounded-[var(--talos-radius-card)] border border-[var(--talos-border)] bg-[var(--talos-panel)]/70 p-[var(--talos-space-page)] text-center"
         >
-            <span class="size-[calc(var(--talos-touch-target)*.75)] animate-spin rounded-full border-2 border-[var(--talos-active)] border-t-[var(--talos-accent)]" aria-hidden="true" />
-            <b class="text-sm font-semibold text-[var(--talos-text)]">{{ t('localModels.measuring') }}</b>
+            <!-- owner 29/10 sera («Quella della Chat ovunque», classe B, consiglio del Desktop): in una carta la rotella piccola
+                 arancione accanto al testo, al posto dell'anello a bordo -->
+            <b class="inline-flex items-center gap-[var(--talos-space-inline)] text-sm font-semibold text-[var(--talos-text)]">
+                <Loader2 class="size-[var(--talos-icon-size)] shrink-0 animate-spin text-[var(--talos-accent)]" aria-hidden="true" />
+                {{ t('localModels.measuring') }}
+            </b>
             <span class="text-2xs text-[var(--talos-muted)]">{{ t('localModels.measuringWhat') }}</span>
         </div>
 
@@ -1400,9 +1405,8 @@ function resultCountLabel(count: number): string {
              inventarti nulla». Le voci sono quelle del Hub, non nostre. -->
 
 
-        <p v-if="store.searching" class="py-[var(--talos-space-page)] text-center text-sm text-[var(--talos-muted)]">
-            {{ t('localModels.searching') }}
-        </p>
+        <!-- owner 29/10 sera (mockup «Caricamenti vivi» v6, «Quella della Chat ovunque»): la ricerca sull'Hub ha la carta della Chat -->
+        <TalosAttesaCarta v-if="store.searching" testid="talos-models-searching" :testo="t('localModels.searching')" />
 
         <p v-else-if="store.searchFailure" role="alert" class="text-xs text-[var(--talos-danger)]">
             {{ store.searchFailure }}

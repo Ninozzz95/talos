@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/modello.js",
-    "sha256": "8e11b2cf43c281fd77a35bc620ec348775935aea39fb8682736d5def14505590",
+    "sha256": "d56fd5241d7260892d982a30a9703f9f100e85b4ca4c39e800ae1129a62aced3",
     "prefisso": "inspector."
   },
   "it": {
@@ -129,7 +129,7 @@
     "inspector.3TheTwoConditions": "3 · The two conditions",
     "inspector.5WriteAndReceipt": "5 · Write and receipt",
     "inspector.7FullSuite": "7 · Full suite",
-    "inspector.running": "running",
+    "inspector.running": "in progress",
     "inspector.openTheBranchTree": "Open the branch tree",
     "inspector.folder": "Folder",
     "inspector.createInTheFolder": "Create in the folder",
@@ -167,7 +167,7 @@
     "inspector.subAgents": "Sub-agents",
     "inspector.noSubAgentIn": "No sub-agent in this session. When a delegation starts, it shows up here with its task, its status and what it did; from there you open its conversation or stop it.",
     "inspector.nodeTestTestsTest": "node --test tests/*.test.mjs",
-    "inspector.running2": "Running",
+    "inspector.running2": "In progress",
     "inspector.agentTurn7": "agent · turn 7",
     "inspector.npmRunVerifyAll": "npm run verify:all",
     "inspector.agentTurn5": "agent · turn 5",

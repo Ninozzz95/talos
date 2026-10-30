@@ -79,6 +79,11 @@ const MOTIVO: Record<string, string> = {
     // e un motivo senza testo e' un modello che riprova.
     'shizuku-refused': 'The privileged bridge could not run this. Tell the user plainly and offer the system panel instead. Do not retry.',
     'solo-ponte': 'This device routes every privileged command through the in-house bridge. It needs to be paired once with a six-digit code. Offer to open the bridge page. Do not retry.',
+    // ASS-145..147 (28/10): i rifiuti con l'unità vera e gli esiti riletti
+    'value-out-of-range': 'The value is outside what this setting accepts. Correct it as the detail says and call once more; do not guess another unit.',
+    'brightness-scale-unknown': 'This phone does not tell its brightness scale, so a percentage cannot be set safely. Tell the user and offer the display settings.',
+    'power-saver-while-charging': 'Battery saver did not turn on: the phone is charging, and Android does not allow it while plugged in. Tell the user it can be turned on after unplugging.',
+    'not-applied': 'The command ran, but reading the phone again shows nothing changed. Say it did NOT happen; do not report it as done and do not retry.',
 }
 
 /**

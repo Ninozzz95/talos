@@ -46,7 +46,7 @@
 import { computed, nextTick, ref } from 'vue'
 import { useTalosTouchWave } from '@/composables/useTalosTouchWave'
 import { useRouter } from 'vue-router'
-import { BookMarked, ListTodo, MessageSquarePlus, Plus, Search, StickyNote } from '@lucide/vue'
+import { BookMarked, ListTodo, MessageSquarePlus, Plus, StickyNote, Telescope } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 
 const { t } = useTalosI18n()
@@ -105,7 +105,7 @@ const azioni = computed<Voce[]>(() => [
     { id: 'task', icon: ListTodo, label: t('speedDial.task'), run: () => router.push({ name: 'task-new' }) },
     { id: 'memory', icon: BookMarked, label: t('speedDial.memory'), run: () => router.push({ name: 'memory-new' }) },
     { id: 'note', icon: StickyNote, label: t('speedDial.note'), run: () => router.push({ name: 'note-new' }) },
-    { id: 'research', icon: Search, label: t('speedDial.research'), run: () => router.push({ name: 'research-new' }) },
+    { id: 'research', icon: Telescope, label: t('speedDial.research'), run: () => router.push({ name: 'research-new' }) },
     { id: 'chat', icon: MessageSquarePlus, label: t('speedDial.chat'), disabled: props.creatingChat, run: () => emit('chat') },
 ])
 

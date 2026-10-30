@@ -13,9 +13,11 @@
  * therefore has to happen in the app, and TALOS is distributed, so this rule
  * protects other people's phones and not just one.
  *
- * From Android 17 the platform adds a second, independent gate: reaching a
- * local network address needs the `ACCESS_LOCAL_NETWORK` runtime permission,
- * which the user grants and can revoke. This module is not the only guardrail.
+ * For apps targeting SDK 37 or higher the platform adds a second, independent
+ * gate: reaching a local network address needs the `ACCESS_LOCAL_NETWORK`
+ * runtime permission, which the user grants and can revoke. Below 37 access is
+ * implicit through INTERNET and the permission must not be declared (ASS-144).
+ * This module is not the only guardrail.
  */
 
 export type TalosEndpointVerdict =

@@ -1,0 +1,40 @@
+{
+  "origine": {
+    "commit": "b000e725325cf4d9d1fa1266a43805e86029e7bc",
+    "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
+    "sha256": "33c13319b8ed7522ef4345804ce6429d38e2af89df7b89b398b7e3fb5ab82200",
+    "prefisso": [
+      "PROVIDER_KEY_MISSING.",
+      "DELEGATION_READ_ONLY.",
+      "FORGE_INVALID.",
+      "HISTORY_RECOVERY_AMBIGUOUS.",
+      "START_OPERATION_CONFLICT."
+    ]
+  },
+  "it": {
+    "PROVIDER_KEY_MISSING.message": "Su questo computer manca la chiave del fornitore di questo modello: aggiungila, oppure scegli un altro modello",
+    "DELEGATION_READ_ONLY.message": "Questa delega è di sola lettura. Per eseguire modifiche avvia una nuova delega esplicita dalla sessione padre.",
+    "FORGE_INVALID.message": "Il manifesto dell’attrezzo non è valido: correggilo prima di abilitarlo",
+    "HISTORY_RECOVERY_AMBIGUOUS.message": "La cronologia della conversazione non si può ricomporre con certezza. Nessun dato è stato cambiato.",
+    "START_OPERATION_CONFLICT.message": "Questa operazione è già stata usata per avviare una sessione diversa",
+    "START_OPERATION_CONFLICT.operation_id_conflict": "La stessa identità operazione è già associata a un avvio diverso",
+    "HISTORY_RECOVERY_AMBIGUOUS.interrupted_turn_events_ambiguous": "Gli eventi del giro interrotto non possono essere associati con certezza. Nessun dato è stato modificato.",
+    "HISTORY_RECOVERY_AMBIGUOUS.damaged_tool_call": "Lo storico contiene una chiamata danneggiata che non può essere associata con certezza al suo risultato. Nessun dato è stato modificato.",
+    "DELEGATION_READ_ONLY.delegation_read_only": "Questa delega è di sola lettura. Per eseguire modifiche avvia una nuova delega esplicita dalla sessione padre.",
+    "FORGE_INVALID.tool_manifest_invalid": "Il manifest dello strumento non è valido: {detail}",
+    "FORGE_INVALID.tool_manifest_invalid_shape": "Il manifest dello strumento non è valido: forma non ammessa"
+  },
+  "en": {
+    "PROVIDER_KEY_MISSING.message": "No key for this model's provider on this computer: add it, or choose another model",
+    "DELEGATION_READ_ONLY.message": "This delegation is read-only. To make changes, start a new explicit delegation from the parent session.",
+    "FORGE_INVALID.message": "The tool manifest is not valid: fix it before enabling the tool",
+    "HISTORY_RECOVERY_AMBIGUOUS.message": "The conversation history cannot be put back together with certainty. No data was changed.",
+    "START_OPERATION_CONFLICT.message": "This operation was already used to start a different session",
+    "START_OPERATION_CONFLICT.operation_id_conflict": "The same operation identity is already tied to a different start",
+    "HISTORY_RECOVERY_AMBIGUOUS.interrupted_turn_events_ambiguous": "The events of the interrupted turn cannot be matched with certainty. No data was changed.",
+    "HISTORY_RECOVERY_AMBIGUOUS.damaged_tool_call": "The history contains a damaged call that cannot be matched with certainty to its result. No data was changed.",
+    "DELEGATION_READ_ONLY.delegation_read_only": "This delegation is read-only. To make changes, start a new explicit delegation from the parent session.",
+    "FORGE_INVALID.tool_manifest_invalid": "The tool manifest is not valid: {detail}",
+    "FORGE_INVALID.tool_manifest_invalid_shape": "The tool manifest is not valid: shape not allowed"
+  }
+}

@@ -5,6 +5,9 @@ import { join, relative, resolve } from 'node:path'
 /*
  * ⛔ Owner 24/10/2026 (`compositore-unico-chat-codice-24-10`): «condiviso da tutti i componenti del composer, sia chat che codice …
  * non sfori nelle due righe, perfettamente coerente e simmetrico … Mai distaccati.»
+ * ⭐ Owner 27/10/2026 (mockup del compositore approvato): la pillola del ragionamento J3 non c'è più; il chip è UNO, «modello livello»,
+ * e il livello si sceglie nel piede del foglio «Modello e ragionamento». Questi test, nati per la pillola unica, ora proteggono il chip
+ * unico e il piede unico.
  */
 const SRC = resolve(__dirname, '..', '..', '..', 'src')
 const leggi = (rel: string) => readFileSync(join(SRC, rel), 'utf8')
@@ -16,35 +19,43 @@ function tutti(radice: string): string[] {
 }
 const sorgenti = tutti(SRC).map((p) => ({ rel: relative(SRC, p).replaceAll('\\', '/'), testo: readFileSync(p, 'utf8') }))
 
-describe('UNA pillola del ragionamento, nel compositore unico (J3)', () => {
-    it('PILL-UNICA-01 la pillola la monta SOLO TalosMobileComposer, una volta; Chat, Codice e sessione montano quel compositore', () => {
-        const chiImporta = sorgenti.filter((f) => /from '@\/components\/chat\/TalosMobileReasoningPill\.vue'/u.test(f.testo)).map((f) => f.rel)
-        expect(chiImporta).toEqual(['components/chat/TalosMobileComposer.vue'])
-        expect(leggi('components/chat/TalosMobileComposer.vue').match(/<TalosMobileReasoningPill\b/gu)).toHaveLength(1)
+describe('UN chip «modello livello» e UN piede del ragionamento, nel compositore unico', () => {
+    it('PILL-UNICA-01 la pillola J3 non esiste più e nessuno la importa; Chat, Codice e sessione montano lo stesso compositore', () => {
+        const pillola = ['components/chat/TalosMobileReasoningPill.vue', 'components/chat/TalosMobileReasoningMenu.vue']
+        expect(sorgenti.filter((f) => pillola.includes(f.rel))).toEqual([])
+        expect(sorgenti.filter((f) => /TalosMobileReasoning(?:Pill|Menu)\.vue'/u.test(f.testo)).map((f) => f.rel)).toEqual([])
         for (const schermata of ['screens/ChatScreen.vue', 'screens/CodiceR4Screen.vue', 'screens/HarnessSessionScreen.vue']) {
             expect(leggi(schermata), schermata).toMatch(/import TalosMobileComposer from '@\/components\/chat\/TalosMobileComposer\.vue'/u)
         }
-        // nessuna seconda regola dei livelli scritta a mano: la porta fissata la usano solo l'adattatore e i suoi tipi
+        // nessuna seconda regola dei livelli scritta a mano: la porta fissata la usano solo l'adattatore, il chip, il piede e il foglio
         const regola = sorgenti.filter((f) => /from '(?:\.\/|@\/lib\/chat\/)pillolaRagionamento'/u.test(f.testo)).map((f) => f.rel).sort()
-        expect(regola).toEqual(['components/chat/TalosMobileComposer.vue', 'components/chat/TalosMobileReasoningPill.vue', 'lib/chat/statoPillolaRagionamento.ts'])
+        expect(regola).toEqual([
+            'components/chat/TalosMobileComposer.vue',
+            'components/chat/TalosMobileEffortPicker.vue',
+            'components/chat/TalosMobileModelEffortDrawer.vue',
+            'lib/chat/statoPillolaRagionamento.ts',
+        ])
     })
 
-    it('MARCO5-SPARITO nessun cursore del ragionamento resta montato: TalosMobileEffortPicker non lo importa più nessuno', () => {
+    // MARCO5 (era «sparito»): il cursore è tornato, UNO, nel piede del foglio. L'anomalia 4 di Marco (il ragionamento fuori dallo
+    // schermo, sotto l'elenco dei modelli) la evita il piede fisso in fondo (FOGLIO-03).
+    it('MARCO5-UNICO il piede del ragionamento lo monta solo il foglio «Modello e ragionamento», e il cursore solo il piede', () => {
         const chi = sorgenti.filter((f) => f.rel !== 'components/chat/TalosMobileEffortPicker.vue'
             && /TalosMobileEffortPicker\.vue'/u.test(f.testo)).map((f) => f.rel)
-        expect(chi).toEqual([])
-        const cursore = sorgenti.filter((f) => f.rel !== 'components/chat/TalosMobileEffortPicker.vue'
+        expect(chi).toEqual(['components/chat/TalosMobileModelEffortDrawer.vue'])
+        const cursore = sorgenti.filter((f) => f.rel !== 'components/talos/ui/TalosThemedSegmentedSlider.vue'
             && /TalosThemedSegmentedSlider\.vue'/u.test(f.testo)).map((f) => f.rel)
-        expect(cursore).toEqual([])
+        expect(cursore).toEqual(['components/chat/TalosMobileEffortPicker.vue'])
     })
 })
 
 /*
  * ⛔ PILL-RIGHE-01 — al più due righe a 360 px. jsdom non impagina, quindi questa è una prova di COSTRUZIONE, non una misura: legge le
- * regole che reggono la fila e rifà i conti col caso peggiore. La misura vera è la foto sul telefono (rapporto J3, «da guardare dal
- * vivo»). I conti: compositore a 360 px ⇒ 360 − 2×0,5rem (fascia agganciata, ≤ 860 px) − 2×0,75rem (compositore) − 2×1 px = 318 px.
+ * regole che reggono la fila e rifà i conti col caso peggiore. La misura vera è la foto sul telefono. I conti: compositore a 360 px ⇒
+ * 360 − 2×0,5rem (fascia agganciata, ≤ 860 px) − 2×0,75rem (compositore) − 2×1 px = 318 px.
+ * Col chip unico (owner 27/10) la riga 1 è il chip «modello livello» (al più largo quanto lascia due tocchi) + la Libreria.
  */
-describe('la fila delle pillole sta in due righe a 360 px (J3)', () => {
+describe('la fila del compositore sta in due righe a 360 px', () => {
     const css = leggi('style.css')
     const codice = leggi('components/codice/codiceR4.css')
     const REM = 16
@@ -58,29 +69,25 @@ describe('la fila delle pillole sta in due righe a 360 px (J3)', () => {
         return testo.slice(i, testo.indexOf('}', i))
     }
 
-    it('PILL-RIGHE-01 riga 1 = modello + ragionamento (il modello lascia sempre il posto); riga 2 = il resto, che ci sta', () => {
-        // le regole che lo reggono (J3-bis: compattate per il tetto del foglio d'avvio, stessa resa)
-        expect(regola(css, '.talos-model-chip.has-reasoning-pill')).toContain('max-width: calc(100% - 9rem);')
-        expect(css).toContain('.talos-model-chip.has-reasoning-pill, .talos-model-chip.talos-reasoning-pill, .talos-model-chip.talos-composer-review { flex-wrap: nowrap; }')
-        expect(css).toContain('.has-reasoning-pill > .talos-model-chip__nome, .talos-reasoning-pill > span, .talos-composer-review__testo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }')
-        expect(leggi('components/chat/TalosMobileReasoningPill.vue')).toContain('style="max-width: 8.75rem"')
-        expect(leggi('components/chat/TalosMobileComposer.vue')).toContain('style="max-width: calc(100% - 3 * var(--talos-touch-target) - 2.5rem)"')
-        expect(regola(codice, '.talos-composer-tools .talos-codice-r4-permesso')).toContain('max-width: calc(100% - 2 * var(--talos-touch-target) - 2rem);')
-        // riga 1: il modello al massimo + lo spazio + la pillola al massimo
-        const stanza = 9 * REM
-        expect((LARGO - stanza) + SPAZIO + (stanza - SPAZIO)).toBeLessThanOrEqual(LARGO)
-        // riga 2 del Codice: pastiglia + permesso al massimo + «Espandi»
-        const permesso = LARGO - 2 * TOCCO - 2 * REM
-        expect(PASTIGLIA + SPAZIO + permesso + SPAZIO + TOCCO).toBeLessThanOrEqual(LARGO)
-        // riga 2 della Chat: «Controlla azioni» al massimo + biblioteca + pastiglia + «Espandi»
-        const controlla = LARGO - 3 * TOCCO - 2.5 * REM
-        expect(controlla + SPAZIO + TOCCO + SPAZIO + PASTIGLIA + SPAZIO + TOCCO).toBeLessThanOrEqual(LARGO)
-        // la pillola del ragionamento col nome più lungo («Molto alto» / «Extra high», ~62 px a 12 px) entra nella sua stanza
-        expect(8 + 16 + 8 + 62 + 8 + 14 + 8).toBeLessThanOrEqual(stanza - SPAZIO)
+    /*
+     * ⭐ Owner 27/10/2026 («Approvato», mockup v6/v7): la fila non va più a capo. Sta nella seconda riga del compositore aperto,
+     * fra «+» e microfono · invio; il permesso del Codice è uno scudo in alto a destra e «Controlla azioni» una riga sua in cima,
+     * quindi nella fila restano il chip, la Libreria e (solo sul tablet) la pastiglia del piano.
+     */
+    it('PILL-RIGHE-01 la fila sta su una riga: niente a capo, il chip cede lo spazio, e a 360 px resta posto per il nome', () => {
+        expect(regola(css, '.talos-composer-tools')).not.toContain('flex-wrap: wrap')
+        expect(css).toContain('.talos-composer-tools > .talos-model-chip { flex-wrap: nowrap; min-width: 0; }')
+        expect(css).toContain('.talos-composer-tools .talos-model-chip__nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }')
+        expect(codice).not.toContain('.talos-composer-tools .talos-codice-r4-permesso')
+        // seconda riga a 360 px: «+» · fila · microfono · invio, tre spazi fra le quattro colonne
+        const fila = LARGO - 3 * TOCCO - 3 * SPAZIO
+        // nella fila del telefono: il chip e la Libreria; al chip restano almeno 6rem per nome e livello
+        expect(fila - SPAZIO - TOCCO).toBeGreaterThanOrEqual(6 * REM)
     })
 
-    it('PILL-RIGHE-02 la pillola del ragionamento non va mai a capo dentro di sé, e il modello si accorcia solo quando c’è', () => {
-        expect(css).toContain('.talos-model-chip.talos-reasoning-pill { flex: none; }')
-        expect(leggi('components/chat/TalosMobileComposer.vue')).toContain(':class="{ \'has-reasoning-pill\': !reasoningPill.nascosta }"')
+    it('PILL-RIGHE-02 nel chip si accorcia il nome, mai il livello', () => {
+        const compositore = leggi('components/chat/TalosMobileComposer.vue')
+        expect(compositore).toContain('<span class="talos-model-chip__nome">')
+        expect(compositore).toContain('data-testid="talos-composer-model-level"\n                        class="shrink-0 text-[var(--talos-muted)]"')
     })
 })

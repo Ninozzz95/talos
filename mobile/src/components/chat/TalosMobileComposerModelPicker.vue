@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useTalosI18n } from '@/i18n'
-import { Check, FlaskConical, Loader2, RefreshCw, WandSparkles } from '@lucide/vue'
+import { Check, Cpu, Loader2, RefreshCw, WandSparkles } from '@lucide/vue'
 import TalosMobileProviderIcon from '@/components/models/TalosMobileProviderIcon.vue'
+import TalosMobileProviderTabs from '@/components/chat/TalosMobileProviderTabs.vue'
+// D-0147-UI-2: pigra come la pastiglia del piano: chi non usa il piano non carica il suo servizio
+const TalosMobileChatgptRigaPiano = defineAsyncComponent(() => import('@/components/chat/TalosMobileChatgptRigaPiano.vue'))
 import { ChevronDown, Search } from '@lucide/vue'
 import {
     groupTalosModelsByProvider,
@@ -55,9 +58,29 @@ const props = withDefaults(defineProps<{
      * a tap on any row is ignored: a second tap would open a second time.
      */
     openingModelProfileId?: string | null
+    /**
+     * ⛔ D-0147-UI-2 (owner 27/10/2026, mockup approvato): sul telefono lo stato del piano ChatGPT è la prima riga del gruppo
+     * ChatGPT (`TalosMobileChatgptRigaPiano`), non più una pastiglia nel compositore. `null`: nessuna riga (tablet, desktop).
+     */
+    pianoChatgpt?: 'attivo' | 'limite' | null
+    /**
+     * ⛔ PICK-SCROLL-01 (Pad, 27/10/2026, dito vero): dentro un foglio lo scorrimento è UNO, quello del foglio. Col suo
+     * `overscroll-contain` l'elenco tratteneva il dito anche quando i modelli ci stavano tutti, e il foglio non scorreva più.
+     * Fuori da un foglio (la barra) l'elenco scorre da sé, come prima.
+     */
+    dentroAlFoglio?: boolean
+    /**
+     * ⭐ Owner 27/10/2026 (mockup del compositore approvato): «organizzare più provider con Tab pill a scorrimento». Nel foglio
+     * «Modello e ragionamento» i fornitori sono schede (TalosMobileProviderTabs) e l'elenco mostra solo quella attiva; cercando, le
+     * schede spariscono e si cerca in tutti. Fuori (la barra) i gruppi restano quelli di oggi.
+     */
+    schede?: boolean
 }>(), {
     routingProfiles: () => [],
     openingModelProfileId: null,
+    pianoChatgpt: null,
+    dentroAlFoglio: false,
+    schede: false,
     selectedModelProfileId: null,
     selectedRoutingProfileId: null,
     loadingModels: false,
@@ -112,6 +135,80 @@ function toggleGroup(provider: string): void {
         ? current.filter((entry) => entry !== provider)
         : [...current, provider]
 }
+
+// ⭐ Le schede (vedi la prop `schede`): una per fornitore, più «Automatico» prima se ci sono rotte.
+const ROTTE = '__rotte'
+const schedeAttive = computed(() => props.schede && !searching.value)
+const conRotte = computed(() => props.routingProfiles.length > 0 || props.loadingRoutes)
+const elencoSchede = computed(() => [
+    ...(conRotte.value ? [{ id: ROTTE, nome: t('chat.autoRouting'), quanti: props.routingProfiles.length }] : []),
+    ...modelGroups.value.map((g) => ({ id: g.provider, nome: groupLabel(g.provider), quanti: g.profiles.length })),
+])
+const schedaDelModello = computed<string | null>(() => {
+    if (props.selectedRoutingProfileId && conRotte.value) return ROTTE
+    return modelGroups.value.find((g) => g.profiles.some((p) => p.id === props.selectedModelProfileId))?.provider ?? null
+})
+const schedaScelta = ref<string | null>(null)
+const schedaAttiva = computed(() => {
+    const ids = elencoSchede.value.map((s) => s.id)
+    if (schedaScelta.value && ids.includes(schedaScelta.value)) return schedaScelta.value
+    return schedaDelModello.value ?? ids[0] ?? ''
+})
+const gruppiVisibili = computed(() => (schedeAttive.value ? modelGroups.value.filter((g) => g.provider === schedaAttiva.value) : modelGroups.value))
+
+/*
+ * ⭐ SELETTORE-01 (owner 28/10/2026: «quando apro il selettore modelli non vedo selezionato e centrato il modello in uso»; regola
+ * comune col desktop, che ha lo stesso difetto sul 4174). All'apertura la riga in uso viene portata AL CENTRO della sua lista. Si
+ * muove SOLO la lista che scorre, mai il foglio o la pagina (nota del Desktop: `scrollIntoView` muove ogni antenato che scorre),
+ * e senza animazione: è un posto in cui ci si trova, non un movimento da guardare. Hermes fa lo stesso con `block: 'nearest'`
+ * (`model-catalog-menu.tsx:669`); qui al centro, per il colpo d'occhio.
+ */
+const radice = ref<HTMLElement | null>(null)
+// la lista che scorre più vicina: dentro il foglio è il corpo del foglio (`dentroAlFoglio`), fuori è il selettore stesso; mai la pagina
+function listaCheScorre(el: HTMLElement): HTMLElement | null {
+    for (let p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+        const { overflowY } = getComputedStyle(p)
+        if ((overflowY === 'auto' || overflowY === 'scroll') && p.scrollHeight > p.clientHeight) return p
+    }
+    return null
+}
+onMounted(async () => {
+    await nextTick()
+    await new Promise<void>((ok) => requestAnimationFrame(() => ok()))
+    const id = props.selectedModelProfileId
+    if (!id || !radice.value) return
+    const riga = [...radice.value.querySelectorAll<HTMLElement>('[data-talos-mobile-model-option]')]
+        .find((el) => el.dataset.modelProfileId === id)
+    const lista = riga ? listaCheScorre(riga) : null
+    if (!riga || !lista) return
+    const centra = (): void => {
+        const r = riga.getBoundingClientRect()
+        const l = lista.getBoundingClientRect()
+        lista.scrollTop += (r.top + r.height / 2) - (l.top + l.height / 2)
+    }
+    centra()
+    // SELETTORE-03 (misurato sul Pad, vc345): il foglio si apre CRESCENDO, la lista misura 277 px quando la si centra e 636 un attimo
+    // dopo. Si ricentra a ogni cambio di misura per un secondo, finché la persona non tocca la lista: da lì la lista è sua.
+    // SELETTORE-04 (vc346, telefono orizzontale): anche il CONTENUTO cambia, la riga pigra del piano ChatGPT spinge giù i modelli di
+    // 57 px senza che la lista cambi misura; per questo si osserva anche il selettore.
+    if (typeof ResizeObserver === 'undefined') return
+    const contenuto = radice.value
+    const osservatore = new ResizeObserver(centra)
+    const tocchi = ['pointerdown', 'wheel', 'touchstart'] as const
+    const tempo = setTimeout(() => smettiDiCentrare?.(), 1000)
+    smettiDiCentrare = () => {
+        osservatore.disconnect()
+        clearTimeout(tempo)
+        tocchi.forEach((tipo) => lista.removeEventListener(tipo, smetti))
+        smettiDiCentrare = null
+    }
+    const smetti = (): void => smettiDiCentrare?.()
+    tocchi.forEach((tipo) => lista.addEventListener(tipo, smetti, { passive: true }))
+    osservatore.observe(lista)
+    if (contenuto !== lista) osservatore.observe(contenuto)
+})
+let smettiDiCentrare: (() => void) | null = null
+onBeforeUnmount(() => smettiDiCentrare?.())
 
 // A new search is a new question: the user's collapse choices were about the
 // previous set of results and should not survive it.
@@ -222,6 +319,13 @@ function statusLabel(status: string): string | null {
 function secondLine(profile: TalosMobileModelProfileView): string {
     // un modello del dispositivo si APRE; uno in rete si cambia soltanto (revisione avversaria 22/10, rilievo 13)
     if (profile.id === props.openingModelProfileId) return t(profile.provider === 'local' ? 'chat.modelOpening' : 'chat.modelSwitching')
+    // ⛔ D-0145-4 (Desktop 25/10, sessione del PC): un modello del PC (`pc:`, `modelliDelPc.ts`) non ha uno stato vero (il telefono non
+    // lo prova: «mai provato» anche dopo dieci giri) e il suo id è del PC («chatgpt:gpt-6-luna»), non una parola: il nome e il gruppo
+    // bastano, la seconda riga non c'è
+    if (profile.id.startsWith('pc:')) return ''
+    // ⛔ D-0145-4b: lo stesso per un modello in rete del Codice che l'app non elenca più (`r4:`, `profiloDelModelloR4`): nessuno l'ha
+    // provato dal telefono e `model` è l'id di r4; il locale `r4:` dice invece che il file non c'è (`modelLine`)
+    if (profile.id.startsWith('r4:') && profile.provider !== 'local') return ''
     const stato = profile.provider === 'local' && profile.status === 'untested' ? null : statusLabel(profile.status)
     return [modelLine(profile), stato].filter((part): part is string => !!part).join(' - ')
 }
@@ -308,6 +412,7 @@ function onListKeydown(event: KeyboardEvent): void {
 
 <template>
     <div
+        ref="radice"
         class="talos-mobile-model-picker"
         data-testid="talos-mobile-composer-model-picker"
     >
@@ -328,15 +433,33 @@ function onListKeydown(event: KeyboardEvent): void {
             respiro: era un pavimento pensato per la lista aperta, applicato
             anche quando è chiusa.
         -->
+        <TalosMobileProviderTabs
+            v-if="schedeAttive && elencoSchede.length"
+            :schede="elencoSchede"
+            :attiva="schedaAttiva"
+            :del-modello="schedaDelModello"
+            :etichetta="$t('chat.providerTabs')"
+            :etichetta-modello-qui="$t('chat.chosenModelIsHere')"
+            pannello="talos-provider-tabpanel"
+            class="mb-2"
+            @scegli="schedaScelta = $event"
+        />
+        <!-- APG Tabs (revisione del Desktop, 28/10): con le schede l'elenco è il pannello della scheda attiva -->
+        <div
+            :id="schedeAttive ? 'talos-provider-tabpanel' : undefined"
+            :role="schedeAttive ? 'tabpanel' : undefined"
+            :aria-labelledby="schedeAttive ? `talos-provider-tab-${schedaAttiva}` : undefined"
+        >
         <div
             ref="listbox"
             role="listbox"
             :aria-label="$t('chat.modelForConversation')"
-            class="max-h-[70dvh] space-y-3 overflow-y-auto overscroll-contain pr-1"
+            class="space-y-3 pr-1"
+            :class="dentroAlFoglio ? '' : 'max-h-[70dvh] overflow-y-auto overscroll-contain'"
             @keydown="onListKeydown"
         >
             <section
-                v-if="routingProfiles.length || loadingRoutes"
+                v-if="(routingProfiles.length || loadingRoutes) && (!schedeAttive || schedaAttiva === '__rotte')"
                 role="group"
                 aria-labelledby="talos-mobile-model-picker-auto"
                 class="space-y-1"
@@ -388,6 +511,7 @@ function onListKeydown(event: KeyboardEvent): void {
             </section>
 
             <section
+                v-if="!schedeAttive || schedaAttiva !== '__rotte'"
                 role="group"
                 aria-labelledby="talos-mobile-model-picker-models"
                 class="space-y-1"
@@ -395,6 +519,7 @@ function onListKeydown(event: KeyboardEvent): void {
                 <header
                     id="talos-mobile-model-picker-models"
                     class="px-1 text-xs font-semibold uppercase text-[var(--talos-muted,var(--muted-foreground))]"
+                    :class="{ 'sr-only': schedeAttive }"
                 >
                     {{ modelsSectionLabel || $t('chat.models') }}
                 </header>
@@ -460,8 +585,9 @@ function onListKeydown(event: KeyboardEvent): void {
 
                 <!-- rilievo 12: le righe ignorano i tocchi mentre un modello si apre; chi usa il lettore di schermo sente perché -->
                 <p data-testid="talos-mobile-model-opening-live" class="sr-only" aria-live="polite">{{ openingLiveText }}</p>
-                <div v-for="group in modelGroups" :key="group.provider" :data-model-group="group.provider">
+                <div v-for="group in gruppiVisibili" :key="group.provider" :data-model-group="group.provider">
                     <button
+                        v-if="!schedeAttive"
                         type="button"
                         :data-testid="`talos-model-group-${group.provider}`"
                         :aria-expanded="openGroups.includes(group.provider)"
@@ -479,7 +605,8 @@ function onListKeydown(event: KeyboardEvent): void {
                             aria-hidden="true"
                         />
                     </button>
-                    <div v-show="openGroups.includes(group.provider)" class="space-y-1 pl-1">
+                    <div v-show="schedeAttive || openGroups.includes(group.provider)" class="space-y-1 pl-1">
+                <TalosMobileChatgptRigaPiano v-if="group.provider === 'chatgpt' && pianoChatgpt" :al-limite="pianoChatgpt === 'limite'" />
                 <button
                     v-for="profile in group.profiles"
                     :key="profile.id"
@@ -499,7 +626,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     <TalosMobileProviderIcon :provider="profile.provider" class="size-8" />
                     <span class="flex min-w-0 flex-1 flex-col">
                         <span class="truncate font-medium text-[var(--talos-text,var(--foreground))]">{{ profile.display_name }}</span>
-                        <span class="truncate font-mono text-2xs text-[var(--talos-muted,var(--muted-foreground))]">
+                        <span v-if="secondLine(profile)" class="truncate font-mono text-2xs text-[var(--talos-muted,var(--muted-foreground))]">
                             {{ secondLine(profile) }}
                         </span>
                         <span
@@ -511,7 +638,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     <Loader2
                         v-if="profile.id === openingModelProfileId"
                         data-testid="talos-mobile-model-option-opening"
-                        class="size-4 shrink-0 text-[var(--talos-accent,var(--primary))] motion-safe:animate-spin"
+                        class="size-4 shrink-0 text-[var(--talos-accent,var(--primary))] animate-spin"
                         aria-hidden="true"
                     />
                     <Check
@@ -523,6 +650,7 @@ function onListKeydown(event: KeyboardEvent): void {
                     </div>
                 </div>
             </section>
+        </div>
         </div>
         <footer class="mt-2 flex items-center justify-between gap-2 border-t border-[var(--talos-border,var(--border))] pt-2">
             <button
@@ -542,7 +670,7 @@ function onListKeydown(event: KeyboardEvent): void {
                 class="inline-flex min-h-touch items-center gap-2 rounded-md px-2.5 text-xs font-medium text-[var(--talos-text,var(--foreground))] outline-none hover:bg-[var(--talos-active,var(--accent))] focus-visible:ring-2 focus-visible:ring-[var(--talos-ring,var(--ring))]"
                 @click="emit('openModelLab')"
             >
-                <FlaskConical class="size-4 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
+                <Cpu class="size-4 text-[var(--talos-accent,var(--primary))]" aria-hidden="true" />
                 {{ $t('navigation.modelLab') }}
             </button>
         </footer>
@@ -556,8 +684,15 @@ function onListKeydown(event: KeyboardEvent): void {
     color: var(--talos-text, var(--foreground));
 }
 
-.talos-mobile-model-option:not(:disabled):hover,
+/* SELETTORE-02 (owner 28/10): la riga in uso si vede a colpo d'occhio — fondo accento tenue e bordo d'accento; il testo resta del
+   suo colore (mai accento su accento tenue: cura D3 dei modelli locali) */
 .talos-mobile-model-option[data-selected="true"] {
-    background: var(--talos-active, var(--accent));
+    background: var(--talos-accent-soft, var(--accent));
+    border-color: var(--talos-accent, var(--ring));
+    box-shadow: inset 0 0 0 1px var(--talos-accent, var(--ring));
+}
+/* ⛔ Owner 28/10/2026 (foto: una riga col fondo acceso e la spunta su un'altra): sui touch `:hover` resta sull'ultima riga toccata. */
+@media (hover: hover) and (pointer: fine) {
+    .talos-mobile-model-option:not(:disabled):hover { background: var(--talos-active, var(--accent)); }
 }
 </style>

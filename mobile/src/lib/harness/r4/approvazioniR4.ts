@@ -110,6 +110,11 @@ export interface CartaApprovazioneR4 {
 }
 
 const stringa = (v: unknown) => (typeof v === 'string' ? v : '')
+const CONTROLLO_FIGLIE: Readonly<Record<string, readonly [string, string]>> = Object.freeze({
+    stop_child: ['app.approval.wantsStopAgent', 'app.approval.wantsStopAllAgents'],
+    pause_child: ['app.approval.wantsPauseAgent', 'app.approval.wantsPauseAllAgents'],
+    resume_child: ['app.approval.wantsResumeAgent', 'app.approval.wantsResumeAllAgents'],
+})
 
 function perche(a: Record<string, unknown>, lingua: string): string {
     const tr = (k: string, v?: Record<string, unknown>) => testoApprovazioneR4(k, lingua, v)
@@ -125,6 +130,8 @@ function perche(a: Record<string, unknown>, lingua: string): string {
     if (a.tipo === CHIAVE_COORDINAZIONE) {
         return typeof a.cartella === 'string' && a.cartella.trim() ? tr('app.approval.wantsStartAgentIn', { cartella: a.cartella }) : tr('app.approval.wantsStartAgent')
     }
+    // pin r4 4cee78f33 (owner 29/10 «Ferma tutto», `CONTROLLO_FIGLIE` di legacy/app.js): un agente, o tutti con `childId: "all"`
+    if (typeof a.tipo === 'string' && Object.hasOwn(CONTROLLO_FIGLIE, a.tipo)) return tr(CONTROLLO_FIGLIE[a.tipo][a.childId === 'all' ? 1 : 0])
     if (a.tipo === 'giri-in-tondo') {
         return tn('app.approval.wantsGoOnRepeatingOne', 'app.approval.wantsGoOnRepeatingMany', Number(a.volte) || 5, lingua, { strumento: nomeAttrezzo(stringa(a.strumento), lingua) })
     }

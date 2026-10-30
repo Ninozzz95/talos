@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { ShieldAlert, X } from '@lucide/vue'
+import { ShieldQuestionMark, X } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { useTalosI18n } from '@/i18n'
 import type { TalosToolAction } from '@/lib/tools/permissionTypes'
@@ -244,7 +244,7 @@ onMounted(() => {
             -->
             <div class="min-h-0 flex-1 overflow-y-auto">
             <div class="flex items-start gap-3">
-                <ShieldAlert
+                <ShieldQuestionMark
                     class="mt-0.5 size-5 shrink-0 text-[var(--talos-accent)]"
                     aria-hidden="true"
                 />

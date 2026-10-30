@@ -992,12 +992,17 @@ describe('Agent Tools control registry', () => {
          * STORICA sopra (che esclude anche questo tool per nome) torna
          * `369a6da1…` byte per byte — il movimento qui sotto è SOLO
          * l'aggiunta.
+         *
+         * ⛔ 2026-10-28, cambio di contratto VOLUTO (ASS-145, ASS-146, OK del Desktop): la descrizione di `device_system_setting` diceva
+         * «brightness is 0-255, screen_timeout is in seconds» mentre il controllo voleva millisecondi e il OnePlus 13 legge 1352. Ora dice
+         * le unità vere (percentuale come il cursore, secondi da 15 a 1800), prese dalle costanti di `unitaImpostazioni.ts`. Si muovono i
+         * tre dialetti insieme; le impronte storiche sopra restano ferme byte per byte, perché nome, titolo e azioni non cambiano.
          */
         expect(digestOf(talosToolsForAnthropic(tools as never)))
-            .toBe('36fe3503dcdac4348ba14a7ec079aec04c62de275e0065f761c7bbd19e7b3f82')
+            .toBe('cf4c5db84a6275ae68db541fb1653a18e51588d826943d9345b128ab26e77912')
         expect(digestOf(talosToolsForOpenAi(tools as never)))
-            .toBe('b9ad62db3c944d54b71c9e0755a229004d1f9a7255b08f73ecc80f59c0181310')
+            .toBe('88f49e014e0170954a0651c880bfc671c5da1eb4b103b16f510ff1f6fb7ec80f')
         expect(digestOf(talosToolsForGemini(tools as never)))
-            .toBe('252df34773424a7ed2b34230d9d7ae14d87be38bb06ca1d04f30c16a87ffb669')
+            .toBe('207de6b9d47c9166ee61d5e11b19785a250a2ef9f360e1d1732073d0cf209e20')
     })
 })

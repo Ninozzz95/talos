@@ -568,4 +568,55 @@ class TalosMotoreOspiteServizioTest {
         val r = corpo(uscita.toString(Charsets.UTF_8))
         assertEquals("abc", r.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content"))
     }
+
+    /*
+     * Contratto «sistema piegato» (Desktop 26/10/2026, r4 `fix/sistema-piegato` 68f86c368): r4 sonda il template del modello aperto
+     * PRIMA del giro (`applicaTemplateOspite`): `POST /apply-template` come llama-server, `{messages, tools}` → `{prompt}` col template
+     * vero del GGUF e senza generare. Il testo serve a vedere il system scartato in silenzio (gpt-oss); un rifiuto del Jinja è
+     * CHAT_TEMPLATE_FAILED col messaggio fisso di SERV-26 (r4 lo riconosce dalla stringa del codice), il testo del Jinja resta in logcat.
+     */
+    @Test
+    fun `SERV-27 apply-template rende il prompt col template del modello, senza generare, e libera il motore`() {
+        val m = Finto(prompt = "<|im_start|>system\nA<|im_end|>\n<|im_start|>user\nciao<|im_end|>\n<|im_start|>assistant\n")
+        val r = chiedi(m, postA("/apply-template", """{"messages":[{"role":"system","content":"A"},{"role":"user","content":"ciao"}],"tools":[{"type":"function","function":{"name":"read_file"}}],"reasoning":{"effort":"none"}}"""))
+        assertEquals(200, stato(r))
+        assertEquals(m.prompt, corpo(r).getString("prompt"))
+        assertEquals(false, m.pensaChiesto)
+        assertEquals(0, m.generazioni)
+        assertEquals(-1, m.maxChiesti)
+        assertEquals(1, m.lasciato)
+        assertEquals(emptyList<String>(), m.fuoriDallAttore)
+        assertEquals(200, stato(chiedi(Finto(), postA("/v1/apply-template", """{"messages":[{"role":"user","content":"x"}]}"""))))
+    }
+
+    @Test
+    fun `SERV-28 un template che rifiuta la conversazione e 400 CHAT_TEMPLATE_FAILED col messaggio fisso, e il motore torna libero`() {
+        val m = Finto(prompt = "")
+        val r = chiedi(m, postA("/apply-template", """{"messages":[{"role":"user","content":"x"},{"role":"system","content":"B"}]}"""))
+        assertEquals(400, stato(r))
+        val errore = corpo(r).getJSONObject("error")
+        assertEquals("CHAT_TEMPLATE_FAILED", errore.getString("code"))
+        assertEquals("This model's chat template does not accept the conversation.", errore.getString("message"))
+        assertFalse(corpo(r).has("prompt"))
+        assertEquals(0, m.generazioni)
+        assertEquals(1, m.lasciato)
+    }
+
+    @Test
+    fun `SERV-29 apply-template senza messaggi 400, con GET 405, senza chiave 401, per un altro modello 409, senza modello 503`() {
+        val m = Finto()
+        val senza = chiedi(m, postA("/apply-template", """{"tools":[]}"""))
+        assertEquals("MESSAGES_REQUIRED", corpo(senza).getJSONObject("error").getString("code"))
+        assertEquals(405, stato(chiedi(m, get("/apply-template"))))
+        assertEquals(0, m.lasciato)
+        val anonima = "POST /apply-template HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: 2\r\n\r\n{}"
+        assertEquals(401, stato(chiedi(m, anonima)))
+        // il template di un ALTRO modello direbbe il falso sulla sonda: si dice che il modello è cambiato, come il giro
+        val altro = chiedi(m, postA("/apply-template", """{"model":"Qwen3.5-2B-Q4_0.gguf","messages":[{"role":"user","content":"x"}]}"""))
+        assertEquals(409, stato(altro))
+        assertEquals("LOCAL_MODEL_CHANGED", corpo(altro).getJSONObject("error").getString("code"))
+        assertEquals(1, m.lasciato)
+        val vuoto = Finto(esito = TalosMotoreCondiviso.Esito.NESSUN_MODELLO)
+        assertEquals(503, stato(chiedi(vuoto, postA("/apply-template", """{"messages":[{"role":"user","content":"x"}]}"""))))
+    }
 }

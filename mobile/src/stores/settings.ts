@@ -14,6 +14,7 @@ import {
     type TalosPromptEnhancerDepth,
 } from '@/lib/chat/promptEnhancerDepth'
 import type { TalosSpeechEngine } from '@/lib/voice/personalVoiceContracts'
+import type { PreferenzaStopR4 } from '@/lib/harness/r4/fermaTuttoR4'
 import { Preferences } from '@capacitor/preferences'
 import type { TalosSearchSourceId } from '@/lib/search/searchSources'
 import type { TalosLibrarySort } from '@/lib/libraryGrouping'
@@ -270,6 +271,12 @@ export interface TalosMobileShellPreferences {
      * Nasce a `ask`: la prima volta si guarda.
      */
     image_attachment_consent: 'allow' | 'ask' | 'deny'
+    /**
+     * ⛔ «Ferma tutto» (owner 29/10/2026, contratto `CONTRATTO-FERMA-TUTTE-2026-10-29.md` §3, `stopConSottoAgenti`): che cosa fa lo Stop del
+     * Codice su r4 mentre lavorano dei sotto-agenti — chiedere col foglio, fermare tutto o solo la chat. Per dispositivo; «Ricorda la
+     * scelta» del foglio la scrive, le Preferenze AI la cambiano. Nasce a `chiedi`.
+     */
+    stop_con_sotto_agenti: PreferenzaStopR4
     library_view: 'grid' | 'list'
     research_view: 'grid' | 'list'
     /**
@@ -401,6 +408,7 @@ const DEFAULT_SHELL_PREFERENCES: TalosMobileShellPreferences = {
     memory_write_access: 'ask',
     plan_scope: 'turn',
     image_attachment_consent: 'ask',
+    stop_con_sotto_agenti: 'chiedi',
     library_view: 'list',
     research_view: 'list',
     notes_view: 'list',
@@ -471,6 +479,11 @@ function parseShellPreferences(value: unknown): TalosMobileShellPreferences {
         image_attachment_consent: record.image_attachment_consent === 'allow' || record.image_attachment_consent === 'deny'
             ? record.image_attachment_consent
             : DEFAULT_SHELL_PREFERENCES.image_attachment_consent,
+        // la regola di `leggiPreferenzaStopR4` (`fermaTuttoR4.ts`), scritta qui senza importarla: le preferenze stanno nel pezzo d'avvio e
+        // non si portano dietro le parole di «Ferma tutto» (FT-SET-02 prova che è la stessa). Ciò che non è una delle tre vale «chiedi».
+        stop_con_sotto_agenti: record.stop_con_sotto_agenti === 'tutte' || record.stop_con_sotto_agenti === 'solo-chat'
+            ? record.stop_con_sotto_agenti
+            : DEFAULT_SHELL_PREFERENCES.stop_con_sotto_agenti,
         memory_write_access: record.memory_write_access === 'allow' || record.memory_write_access === 'deny'
             ? record.memory_write_access
             : DEFAULT_SHELL_PREFERENCES.memory_write_access,

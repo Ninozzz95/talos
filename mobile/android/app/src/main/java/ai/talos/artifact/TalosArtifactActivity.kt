@@ -1,7 +1,16 @@
 package ai.talos.artifact
 
 import android.annotation.SuppressLint
+import android.content.res.ColorStateList
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.GeolocationPermissions
@@ -13,7 +22,13 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.TextView
 import ai.talos.R
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.graphics.Insets
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
 import androidx.webkit.ProfileStore
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
@@ -75,8 +90,23 @@ class TalosArtifactActivity : AppCompatActivity() {
             return
         }
 
+        // UI-108: la testata si prepara prima di tutto, così vale anche per la schermata «non supportato», che prima non si chiudeva
+        val chrome = TalosArtifactChrome.colori(
+            intent?.getStringExtra(EXTRA_SCHEME),
+            mapOf(
+                "header" to intent?.getStringExtra(EXTRA_COLOR_HEADER),
+                "background" to intent?.getStringExtra(EXTRA_COLOR_BACKGROUND),
+                "text" to intent?.getStringExtra(EXTRA_COLOR_TEXT),
+                "border" to intent?.getStringExtra(EXTRA_COLOR_BORDER),
+                "ring" to intent?.getStringExtra(EXTRA_COLOR_RING),
+            ),
+        )
+        val titolo = TalosArtifactChrome.titoloPulito(intent?.getStringExtra(EXTRA_TITLE))
+            .ifEmpty { getString(R.string.talos_artifact_title_fallback) }
+        preparaFinestra(chrome, titolo)
+
         if (!isolationAvailable()) {
-            setContentView(unsupportedView())
+            setContentView(conTestata(unsupportedView(), chrome, titolo))
             return
         }
 
@@ -150,7 +180,7 @@ class TalosArtifactActivity : AppCompatActivity() {
             }
         }
 
-        setContentView(webView)
+        setContentView(conTestata(webView, chrome, titolo))
         webView.loadUrl(
             "https://${WebViewAssetLoader.DEFAULT_DOMAIN}$ARTIFACT_PATH_PREFIX$artifactId"
         )
@@ -206,6 +236,96 @@ class TalosArtifactActivity : AppCompatActivity() {
         )
     }
 
+    /**
+     * UI-108: barre trasparenti, icone di sistema scure solo su una testata chiara, e la finestra già del colore di fondo, così prima del
+     * primo fotogramma non lampeggia il bianco. Il titolo dell'activity è quello che TalkBack annuncia aprendo la finestra.
+     */
+    private fun preparaFinestra(chrome: TalosArtifactChrome.Colori, titolo: String) {
+        val stile = if (TalosArtifactChrome.iconeScure(chrome.header)) {
+            SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)
+        } else {
+            SystemBarStyle.dark(Color.TRANSPARENT)
+        }
+        enableEdgeToEdge(statusBarStyle = stile, navigationBarStyle = stile)
+        window.setBackgroundDrawable(ColorDrawable(chrome.background))
+        title = titolo
+    }
+
+    private fun dp(valore: Int): Int =
+        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, valore.toFloat(), resources.displayMetrics).toInt()
+
+    /**
+     * ⭐ UI-108 — la testata nativa (owner 28/10 «non c'è un header»; mockup S3mAxFoTAkEAAjPdAJhyg6; scelte del 29/10: visual BIANCO come
+     * oggi, filo da 1 px). La X di Lucide all'inizio, 48 dp di bersaglio, col suo nome per TalkBack; il titolo su una riga con l'ellissi;
+     * la testata si allunga sotto la barra di stato. Il contenuto (la WebView isolata, o il rifiuto) resta quello di prima, intatto.
+     *
+     * Bordi barra per barra: la barra di stato la prende la testata, la navigazione o la TASTIERA il contenuto (un visual con un campo
+     * resta visibile). Alla WebView si passano bordi AZZERATI, non consumati (Chromium, insets.md M144): così `env(safe-area-inset-*)`
+     * resta a zero e l'HTML del modello non si aggiunge un secondo margine.
+     */
+    private fun conTestata(contenuto: View, chrome: TalosArtifactChrome.Colori, titolo: String): View {
+        val chiudi = ImageButton(this).apply {
+            setImageResource(R.drawable.talos_icona_chiudi)
+            imageTintList = ColorStateList.valueOf(chrome.text)
+            contentDescription = getString(R.string.talos_artifact_close)
+            val sfondo = TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, sfondo, true)
+            setBackgroundResource(sfondo.resourceId)
+            setOnClickListener { finish() }
+            layoutParams = LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginStart = dp(4) }
+        }
+        val testo = TextView(this).apply {
+            text = titolo
+            setTextColor(chrome.text)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            ViewCompat.setAccessibilityHeading(this, true)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = dp(4)
+                marginEnd = dp(16)
+            }
+        }
+        val riga = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(chiudi)
+            addView(testo)
+        }
+        val testata = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(chrome.header)
+            addView(riga, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
+        }
+        val filo = View(this).apply { setBackgroundColor(chrome.border) }
+        val corpo = FrameLayout(this).apply {
+            setBackgroundColor(chrome.background)
+            (contenuto.parent as? ViewGroup)?.removeView(contenuto)
+            addView(contenuto, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        val radice = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(chrome.background)
+            addView(testata, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(filo, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1))
+            addView(corpo, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(radice) { _, insets ->
+            val barre = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val tastiera = insets.getInsets(WindowInsetsCompat.Type.ime())
+            testata.updatePadding(left = barre.left, top = barre.top, right = barre.right)
+            corpo.updatePadding(left = barre.left, right = barre.right, bottom = maxOf(barre.bottom, tastiera.bottom))
+            WindowInsetsCompat.Builder(insets)
+                .setInsets(
+                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime(),
+                    Insets.NONE,
+                )
+                .build()
+        }
+        return radice
+    }
+
     override fun onDestroy() {
         webView?.let { view ->
             (view.parent as? ViewGroup)?.removeView(view)
@@ -219,6 +339,14 @@ class TalosArtifactActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "TalosArtifact"
         const val EXTRA_ARTIFACT_ID = "talos_artifact_id"
+        // UI-108: la testata. Stringhe di pochi byte (il tetto del Binder lo usa solo l'HTML, che qui non passa)
+        const val EXTRA_TITLE = "talos_artifact_title"
+        const val EXTRA_SCHEME = "talos_artifact_scheme"
+        const val EXTRA_COLOR_HEADER = "talos_artifact_color_header"
+        const val EXTRA_COLOR_BACKGROUND = "talos_artifact_color_background"
+        const val EXTRA_COLOR_TEXT = "talos_artifact_color_text"
+        const val EXTRA_COLOR_BORDER = "talos_artifact_color_border"
+        const val EXTRA_COLOR_RING = "talos_artifact_color_ring"
         private const val ARTIFACT_PROFILE_NAME = "talos-artifacts-v1"
         private const val ARTIFACT_PATH_PREFIX = "/talos-artifact/"
     }

@@ -22,6 +22,7 @@ import { exportTalosThemeIdentity, getTalosThemeIdentityV6 } from '@/motion-v6/t
 import { parseTalosMobileDesignTokens } from '@talos-mobile/design-tokens'
 import { applyTalosMobileDesignTokens } from '@/theme/applyDesignTokens'
 import { configureNativeFraming } from '@/services/nativeFraming'
+import { conPuntinoDelPiano } from '@/lib/puntinoDelPiano'
 
 export const TALOS_MOBILE_THEME_KEY = 'talos.mobile.theme'
 const THEME_MODES: readonly TalosThemeMode[] = ['system', 'light', 'dark']
@@ -79,7 +80,8 @@ export function applyTalosTheme(
         applyTalosMobileDesignTokens(identity, resolved, target)
     }
     // Overlay the exact desktop `--talos-*` set so ported desktop components render identically.
-    const vars = talosThemeModeVariantStyle(theme, resolved)
+    // I-R1: più i due colori del puntino del piano, calcolati dal mobile (`puntinoDelPiano.ts`)
+    const vars = conPuntinoDelPiano(talosThemeModeVariantStyle(theme, resolved), resolved)
     for (const [key, val] of Object.entries(vars)) target.style.setProperty(key, val)
 
     return resolved
@@ -94,6 +96,7 @@ export interface ThemeStore {
 }
 
 let singleton: ThemeStore | null = null
+let togliBarra: (() => void) | null = null
 
 export function useThemeStore(): ThemeStore {
     if (singleton) return singleton
@@ -128,6 +131,20 @@ export function useThemeStore(): ThemeStore {
         const onChange = (): void => { if (state.mode === 'system') applyCurrent() }
         if (typeof media.addEventListener === 'function') media.addEventListener('change', onChange)
     }
+    // ⛔ BARRA-01 (Pad, 27/10/2026): dopo un cambio di configurazione dello schermo Android rimette le icone di sistema bianche; si
+    // riapplicano quando cambia la LARGHEZZA (rotazione, piegevole, finestra divisa), mai per la sola altezza della tastiera
+    if (typeof window !== 'undefined') {
+        let larghezza = window.innerWidth
+        let attesa: ReturnType<typeof setTimeout> | undefined
+        togliBarra = () => { window.removeEventListener('resize', onResize); clearTimeout(attesa) }
+        function onResize(): void {
+            if (window.innerWidth === larghezza) return
+            larghezza = window.innerWidth
+            clearTimeout(attesa)
+            attesa = setTimeout(applyCurrent, 150)
+        }
+        window.addEventListener('resize', onResize)
+    }
 
     singleton = {
         state: readonly(state),
@@ -156,5 +173,7 @@ export function useThemeStore(): ThemeStore {
 }
 
 export function __resetThemeStoreForTests(): void {
+    togliBarra?.()
+    togliBarra = null
     singleton = null
 }

@@ -57,7 +57,9 @@ describe('statoPillolaRagionamento — la porta nel lessico del telefono', () =>
         // `mobileModelCatalog.ts` deduce low/medium/high per un modello che ragiona; `localAdapter` e il motore ospite leggono solo
         // `thinking` / `none` (TalosMotoreOspiteHttp.java:168-172)
         expect(statoPillolaRagionamento({ profilo: profilo({ provider: 'local' }), scelto: 'high' }).nascosta).toBe(true)
-        expect(statoPillolaRagionamento({ profilo: profilo({ provider: 'local' }), scelto: 'high' }).nota).toEqual({ chiave: 'effortNotSent' })
+        // ⛔ D3 (Pad 28/10/2026, OK Desktop): per il motore del telefono niente nota A9 «decide il fornitore» — non c'è un fornitore che
+        // decide, e il piede diceva già «funziona senza un'impostazione di ragionamento». Una frase sola (PIEDE-09).
+        expect(statoPillolaRagionamento({ profilo: profilo({ provider: 'local' }), scelto: 'high' }).nota).toBeNull()
     })
 
     it('PILL-STATO-08 A9, i quattro casi della riga, coi valori nel lessico del telefono', () => {

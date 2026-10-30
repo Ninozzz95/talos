@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
-    "sha256": "19b9eb9d26356513c31bf08c83b6fff039cd0db16e2d8d6337613df34dca046d",
+    "sha256": "3520e3b597a275ab341a6976bf50c5f7492fbc8e78c53c64a192462a80ecd124",
     "prefisso": "terminal."
   },
   "it": {
@@ -24,6 +24,8 @@
     "terminal.domNoWebgl": "dom (WebGL non disponibile)",
     "terminal.domWebglLost": "dom (contesto WebGL perso)",
     "terminal.shellClosed": "shell chiusa, codice {codice}",
+    "terminal.queuedDropped": "questa è una shell nuova: quello che avevi scritto mentre non era collegata non è stato mandato",
+    "terminal.queueFull": "troppo testo scritto prima che la shell fosse pronta: il resto non è stato mandato",
     "terminal.startFailed.folderMissing": "Il terminale non si è avviato: la cartella «{cartella}» non esiste.",
     "terminal.startFailed.notAFolder": "Il terminale non si è avviato: «{cartella}» non è una cartella.",
     "terminal.startFailed.spawnFailed": "Il terminale non si è avviato: il sistema ha rifiutato di lanciare la shell.",
@@ -48,6 +50,8 @@
     "terminal.domNoWebgl": "dom (WebGL not available)",
     "terminal.domWebglLost": "dom (WebGL context lost)",
     "terminal.shellClosed": "shell closed, code {codice}",
+    "terminal.queuedDropped": "this is a new shell: what you typed while it was not connected was not sent",
+    "terminal.queueFull": "too much typed before the shell was ready: the rest was not sent",
     "terminal.startFailed.folderMissing": "The terminal could not start: the folder \"{cartella}\" does not exist.",
     "terminal.startFailed.notAFolder": "The terminal could not start: \"{cartella}\" is not a folder.",
     "terminal.startFailed.spawnFailed": "The terminal could not start: the system refused to launch the shell.",

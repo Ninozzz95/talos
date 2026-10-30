@@ -20,6 +20,9 @@ import { talosToolActivityLabel, talosToolIconName } from '@/lib/tools/toolLabel
 import { TALOS_TOOL_ICONS } from '@/lib/tools/toolIcons'
 import { talosParolaAttrezzo } from '@/lib/chat/parolaAttrezzo'
 import { talosElapsedLabel } from '@/composables/useTalosElapsed'
+import { parolaDellEsitoR4, STATO_DELLA_RIGA_R4 } from '@/lib/harness/r4/paroleEsitoR4'
+import { corpoApribileR4 } from '@/lib/harness/r4/corpoApribileR4'
+import { fallimentiDelGruppoR4 } from '@/lib/harness/r4/corpoAttrezzoR4'
 
 /**
  * ⭐⭐⭐ N13 — il turno dell'assistente nell'ordine in cui è successo: ragionamento, righe degli attrezzi, testo, giro dopo giro.
@@ -97,11 +100,35 @@ function parola(nome: string): string | undefined {
     return talosParolaAttrezzo(nome, t, locale.value)
 }
 
+/**
+ * ESITO-RIGA (Pad, 27/10/2026, parità col PC, `impostaEsitoRiga`): una riga non riuscita dice la frase del PC accanto al suo
+ * dettaglio e ha l'icona nel colore d'errore; interrotta e non eseguita l'icona d'attenzione; una copia saltata dice solo che è
+ * stata saltata. Il PC ha un pallino, la riga del dispositivo ha l'icona: il tono va lì (Desktop, 27/10).
+ */
+const TONO_DELLA_RIGA: Readonly<Record<string, string>> = {
+    errore: 'text-[var(--talos-danger)]', interrotta: 'text-[var(--talos-warning)]', 'non-eseguita': 'text-[var(--talos-warning)]',
+}
+
 function riga(attrezzo: TalosAttrezzoDelGiro) {
+    const propria = parola(attrezzo.name)
+    const dellEsito = parolaDellEsitoR4(attrezzo, propria ?? attrezzo.name, locale.value)
     return {
-        label: talosToolActivityLabel(attrezzo, parola(attrezzo.name)),
+        label: attrezzo.esito === 'doppione' && dellEsito ? dellEsito : talosToolActivityLabel(attrezzo, dellEsito ?? propria),
         icon: TALOS_TOOL_ICONS[talosToolIconName(attrezzo.name)],
+        stato: attrezzo.esito ? STATO_DELLA_RIGA_R4[attrezzo.esito] : undefined,
+        tono: (attrezzo.esito && TONO_DELLA_RIGA[attrezzo.esito]) || '',
+        // T8: il corpo della riga (argomenti e risultato) se c'è qualcosa da aprire; senza, la riga resta com'era
+        corpo: corpoApribileR4(attrezzo),
     }
+}
+
+/**
+ * T8, punto 2 del Desktop (27/10): il gruppo chiuso dice se dentro c'è un fallimento — accanto ai passi, con le frasi della testa del
+ * PC, e col tono sull'icona (errore se una è fallita, attenzione se solo interrotte).
+ */
+const TONO_DEL_GRUPPO: Readonly<Record<string, string>> = { errore: 'text-[var(--talos-danger)]', avviso: 'text-[var(--talos-warning)]' }
+function fallimenti(righe: readonly TalosRigaDelBlocco[]) {
+    return fallimentiDelGruppoR4(righe.map((voce) => voce.attrezzo.esito), locale.value)
 }
 
 /** Le righe dell'ultimo giro sono «in corso» solo mentre scrive e finché dopo di loro non è arrivato niente. */
@@ -169,12 +196,17 @@ function riassunto(righe: readonly TalosRigaDelBlocco[]): string {
                 v-if="raggruppato(blocco.righe)"
                 :riassunto="riassunto(blocco.righe)"
                 :passi="passi(blocco.righe, indice)"
+                :fallimenti="fallimenti(blocco.righe)?.testo"
                 :vivo="blocco.righe.some((voce) => voce.inCorso)"
                 :aperto="aperti.has(indice)"
                 @cambia="cambia(indice)"
             >
                 <template #icon>
-                    <component :is="riga(blocco.righe[blocco.righe.length - 1]!.attrezzo).icon" class="size-3.5" />
+                    <component
+                        :is="riga(blocco.righe[blocco.righe.length - 1]!.attrezzo).icon"
+                        class="size-3.5"
+                        :class="TONO_DEL_GRUPPO[fallimenti(blocco.righe)?.tono ?? ''] ?? ''"
+                    />
                 </template>
                 <template v-for="(voce, posizione) in visibili(blocco, indice)" :key="`${posizione}-${voce.tipo}`">
                     <TalosMobileReasoningBlock v-if="voce.tipo === 'ragionamento'" :reasoning="voce.testo" data-segmento="ragionamento" />
@@ -183,9 +215,9 @@ function riassunto(righe: readonly TalosRigaDelBlocco[]): string {
                             <component :is="riga(voce.riga.attrezzo).icon" class="size-3.5" />
                         </template>
                     </TalosMobileRunningToolRow>
-                    <TalosMobileTraceRow v-else :label="riga(voce.riga.attrezzo).label" :interactive="false" data-voce="attrezzo">
+                    <TalosMobileTraceRow v-else :label="riga(voce.riga.attrezzo).label" :interactive="false" :corpo="riga(voce.riga.attrezzo).corpo" data-voce="attrezzo" :data-tool-state="riga(voce.riga.attrezzo).stato">
                         <template #icon>
-                            <component :is="riga(voce.riga.attrezzo).icon" class="size-3.5" />
+                            <component :is="riga(voce.riga.attrezzo).icon" class="size-3.5" :class="riga(voce.riga.attrezzo).tono" />
                         </template>
                     </TalosMobileTraceRow>
                 </template>
@@ -198,9 +230,9 @@ function riassunto(righe: readonly TalosRigaDelBlocco[]): string {
                             <component :is="riga(voce.riga.attrezzo).icon" class="size-3.5" />
                         </template>
                     </TalosMobileRunningToolRow>
-                    <TalosMobileTraceRow v-else :label="riga(voce.riga.attrezzo).label" :interactive="false" data-voce="attrezzo">
+                    <TalosMobileTraceRow v-else :label="riga(voce.riga.attrezzo).label" :interactive="false" :corpo="riga(voce.riga.attrezzo).corpo" data-voce="attrezzo" :data-tool-state="riga(voce.riga.attrezzo).stato">
                         <template #icon>
-                            <component :is="riga(voce.riga.attrezzo).icon" class="size-3.5" />
+                            <component :is="riga(voce.riga.attrezzo).icon" class="size-3.5" :class="riga(voce.riga.attrezzo).tono" />
                         </template>
                     </TalosMobileTraceRow>
                 </template>

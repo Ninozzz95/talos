@@ -65,7 +65,9 @@ export function statoPillolaRagionamento({ profilo, scelto, filo = null }: {
     const delModello = dichiarati.length ? livelliDaMostrare({ tutti, livelliAmmessi: dichiarati, filo }) : []
     const livelli = profilo?.reasoning_mandatory === true ? delModello.filter((l) => l.valore !== 'none') : delModello
     const stato = statoDelLivello({ livelli, valoreIniziale: scelto == null ? null : daTelefono(scelto), filo })
-    const nota = notaVersoTelefono(stato.nota)
+    // ⛔ D3 (Pad 28/10/2026, OK Desktop): il motore del telefono non ha un fornitore che «decide» — la nota A9 lì sarebbe falsa, e il
+    // piede dice già «funziona senza un'impostazione di ragionamento». La nota resta per i modelli in rete (PILL-STATO-07, PIEDE-09).
+    const nota = profilo && SENZA_LIVELLO.has(profilo.provider) ? null : notaVersoTelefono(stato.nota)
     if (!profilo || stato.nessuno) return { nascosta: true, voci: [], mostrato: null, toccato: false, nota }
     return {
         nascosta: false,

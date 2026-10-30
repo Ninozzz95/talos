@@ -1088,7 +1088,12 @@ describe('welcome setup checklist (F2-T6)', () => {
         expect(girello.exists()).toBe(true)
         // Il banco gira in inglese: la chiave è la stessa, la lingua no.
         expect(girello.text()).toContain('Loading chats')
-        expect(girello.attributes('role')).toBe('status')
+        // Owner 29/10 sera (mockup «Caricamenti vivi» v6, «Quella della Chat ovunque»): il velo è `TalosAttesaCarta`, e la regione
+        // `status` è UNA, la riga dentro la carta (ha il suo nome coi secondi dopo 2 s); il velo l'ha ceduta (ATTESA-03).
+        expect(girello.attributes('role')).toBeUndefined()
+        expect(girello.findAll('[role="status"]')).toHaveLength(1)
+        expect(girello.get('[role="status"]').attributes('aria-label')).toBe('Loading chats')
+        expect(wrapper.findComponent({ name: 'TalosAttesaCarta' }).exists()).toBe(true)
 
         // ⛔ E il doppione sotto il compositore tace.
         expect(wrapper.findComponent({ name: 'TalosMobileComposer' }).props('sendDisabledReason'))
@@ -1472,23 +1477,61 @@ describe('N15 — la pastiglia del piano ChatGPT nel compositore', () => {
         id, provider, model: id, display_name: id, status: 'healthy', has_secret: true, effort_levels: ['high'],
         supports_thinking: true, show_in_composer: true, capabilities: null, probe_ok: true,
     })
-    it('N15-PAST-03: modello del piano scelto → pastiglia; modello di un altro fornitore → niente pastiglia', async () => {
+    it('N15-PAST-03 (tablet): modello del piano scelto → pastiglia; modello di un altro fornitore → niente pastiglia', async () => {
+        const { useTalosTabletLayout, __resetTalosTabletLayoutForTests } = await import('@/composables/useTalosTabletLayout')
+        __resetTalosTabletLayoutForTests()
+        useTalosTabletLayout().isTablet.value = true
+        try {
+            const controller = makeController()
+            controller.profiles.value = [profilo('piano', 'chatgpt'), profilo('chiave', 'openai')] as never
+            controller.selectedModelId.value = 'piano' as never
+            mockState.controller = controller
+            const wrapper = mount(ChatScreen)
+            await flushPromises()
+            await flushPromises()
+            // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+            await wrapper.get('[data-testid="talos-composer-prompt"]').trigger('focus')
+            await flushPromises()
+            await flushPromises()
+            expect(wrapper.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(true)
+            // sul tablet il compositore non porta il piano: c'è la pastiglia
+            expect(wrapper.findComponent({ name: 'TalosMobileComposer' }).props('pianoChatgpt')).toBeNull()
+            controller.selectedModelId.value = 'chiave' as never
+            await flushPromises()
+            expect(wrapper.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(false)
+        } finally {
+            __resetTalosTabletLayoutForTests()
+        }
+    })
+
+    /*
+     * ⛔ D-0147-UI-2 (owner 27/10/2026, mockup approvato): sul TELEFONO la pastiglia mandava il compositore su tre righe a 360-393 dp.
+     * Lì non c'è più: il compositore riceve lo stato del piano (puntino sulla pillola del modello, riga nel selettore). Guardia
+     * strutturale del «mai oltre due righe»: nella riga del compositore restano modello, ragionamento e libreria.
+     */
+    it('UI2-05 (telefono) niente pastiglia; il compositore riceve «attivo», e «limite» quando il giro di questa chat aspetta', async () => {
         const controller = makeController()
+        controller.chat.activeSession.value = { id: 'chat-aperta', title: 'Prova' }
         controller.profiles.value = [profilo('piano', 'chatgpt'), profilo('chiave', 'openai')] as never
         controller.selectedModelId.value = 'piano' as never
         mockState.controller = controller
         const wrapper = mount(ChatScreen)
         await flushPromises()
         await flushPromises()
-        expect(wrapper.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(true)
-        controller.selectedModelId.value = 'chiave' as never
-        await flushPromises()
+        const compositore = () => wrapper.findComponent({ name: 'TalosMobileComposer' })
         expect(wrapper.find('[data-testid="talos-chatgpt-pill"]').exists()).toBe(false)
+        expect(compositore().props('pianoChatgpt')).toBe('attivo')
+        controller.attesaDelPiano.value = { riprendeAlle: 1, tentativo: 1, totale: 9, sessionId: 'chat-aperta' } as never
+        await flushPromises()
+        expect(compositore().props('pianoChatgpt')).toBe('limite')
+        controller.selectedModelId.value = 'chiave' as never
+        controller.attesaDelPiano.value = null as never
+        await flushPromises()
+        expect(compositore().props('pianoChatgpt')).toBeNull()
     })
 })
-describe('J3 — la pillola del ragionamento della Chat è quella del compositore unico', () => {
-    it('PILL-UNICA-01 (Chat) la Chat monta TalosMobileReasoningPill DENTRO TalosMobileComposer, accanto al modello, col livello della chat', async () => {
-        const { default: TalosMobileReasoningPill } = await import('@/components/chat/TalosMobileReasoningPill.vue')
+describe('il ragionamento della Chat sta nel chip unico del compositore unico (owner 27/10/2026)', () => {
+    it('PILL-UNICA-01 (Chat) il chip del compositore della Chat dice il livello della chat; la pillola J3 è sparita', async () => {
         const controller = makeController()
         controller.profiles.value = [{
             id: 'chiave', provider: 'openai', model: 'gpt-6', display_name: 'GPT-6', status: 'healthy', has_secret: true,
@@ -1499,11 +1542,11 @@ describe('J3 — la pillola del ragionamento della Chat è quella del compositor
         const wrapper = mount(ChatScreen)
         await flushPromises()
         await flushPromises()
+        // owner 27/10/2026, forma unica: compatto a riposo, la riga sotto il campo c'è col fuoco (FORMA-01)
+        await wrapper.get('[data-testid="talos-composer-prompt"]').trigger('focus')
         const compositore = wrapper.getComponent(TalosMobileComposer)
-        const pillole = wrapper.findAllComponents(TalosMobileReasoningPill)
-        expect(pillole).toHaveLength(1)
-        expect(compositore.findComponent(TalosMobileReasoningPill).exists()).toBe(true)
-        expect(compositore.get('[data-testid="talos-composer-reasoning-pill-label"]').text()).toBe('High')
+        expect(wrapper.find('[data-testid="talos-composer-reasoning-pill"]').exists()).toBe(false)
+        expect(compositore.get('[data-testid="talos-composer-model-level"]').text()).toBe('High')
         wrapper.unmount()
     })
 })

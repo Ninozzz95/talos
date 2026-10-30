@@ -617,8 +617,8 @@ describe('HarnessSessionScreen (28/8) — real sessions + a DRAFT state, shadow 
         const composer = w.get('[data-testid="talos-mobile-composer"]')
         await composer.get('textarea').trigger('focus')
         // Solo il profilo OpenRouter è arrivato al composer — quello OpenAI
-        // (il kernel non lo può chiamare) non è mai stato offerto.
-        expect(composer.text()).toContain('GLM 4.7 Flash')
+        // (il kernel non lo può chiamare) non è mai stato offerto. Dal 28/10 la pillola dice il nome breve dall'id, come il desktop.
+        expect(composer.text()).toContain('glm-4.7-flash')
         expect(composer.text()).not.toContain('gpt-5.6-sol')
     })
 
@@ -1383,9 +1383,9 @@ describe('HarnessSessionScreen (28/8) — real sessions + a DRAFT state, shadow 
             const w = mount(HarnessSessionScreen)
             await flushPromises()
             expect(w.getComponent({ name: 'TalosMobileComposer' }).props('dictationSupported')).toBe(true)
-            // Col campo vuoto il tasto a destra è il microfono: ascolta, e non
+            // Il microfono (owner 27/10/2026: un comando suo, accanto all'invio) ascolta, e non
             // crea MAI una sessione (CODE-DRAFT-03 resta vero anche qui).
-            await w.get('[data-testid="talos-composer-action"]').trigger('click')
+            await w.get('[data-testid="talos-composer-mic"]').trigger('click')
             await flushPromises()
             expect(dettaturaMock.motore.start).toHaveBeenCalledTimes(1)
             expect(codiceMock.createCodiceSession).not.toHaveBeenCalled()

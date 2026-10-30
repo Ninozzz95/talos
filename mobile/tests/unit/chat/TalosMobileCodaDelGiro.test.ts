@@ -320,4 +320,16 @@ describe('TalosMobileCodaDelGiro', () => {
         const menu = document.body.querySelector('[data-testid="talos-row-actions-menu"]')!
         expect([...menu.querySelectorAll('[role="menuitem"]')].map((el) => el.getAttribute('data-testid'))).toEqual(['talos-queue-remove-v1'])
     })
+
+    // ⛔ UI-113 (owner 29/10 notte): la riga della coda dopo uno Stop, come la riga del PC
+    it('CODA-PROSSIMO-UI-01 con `partonoColProssimo` la riga dice che partono col prossimo messaggio, non «appena TALOS è libero»', () => {
+        const view = mountStrip({ azione: 'invia-ora', partonoColProssimo: true })
+        const riga = view.get('[data-testid="talos-queue-hint"]').text()
+        expect(riga).toContain('They stay queued and go with your next message.')
+        expect(riga).not.toContain('Goes as soon as TALOS is free.')
+    })
+    it('CODA-PROSSIMO-UI-02 senza, la riga di sempre (la coda della Chat non cambia)', () => {
+        const view = mountStrip({ azione: 'invia-ora' })
+        expect(view.get('[data-testid="talos-queue-hint"]').text()).toContain('Goes as soon as TALOS is free.')
+    })
 })

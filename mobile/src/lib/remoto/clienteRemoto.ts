@@ -89,7 +89,9 @@ export function creaClienteRemoto(
                 const e = erroreRemoto(code, String(r.message ?? code), { n: r.n })
                 const params = parametriStretti(r.params)
                 const stato = Number.isInteger(r.stato) && (r.stato as number) >= 400 && (r.stato as number) <= 599 ? { stato: r.stato as number } : {}
-                attesa.rifiuta(Object.assign(e, typeof r.reason === 'string' && MOTIVO_VALIDO.test(r.reason) ? { reason: r.reason } : {}, params ? { params } : {}, stato))
+                // FRASI-UNICHE (27/10/2026): la frase precisa per la persona, se il PC la manda (testo corto, come `messaggioPubblicabile` di r4)
+                const spiegazione = typeof r.explanation === 'string' && r.explanation.trim() && r.explanation.length <= 240 ? { explanation: r.explanation } : {}
+                attesa.rifiuta(Object.assign(e, typeof r.reason === 'string' && MOTIVO_VALIDO.test(r.reason) ? { reason: r.reason } : {}, params ? { params } : {}, stato, spiegazione))
             }
             return
         }

@@ -131,6 +131,64 @@ describe('il Doctor (K3-C2b)', () => {
 })
 
 /*
+ * FOG-ATTESA-01 — owner 29/10 sera, mockup «Caricamenti vivi» v6 («Quella della Chat ovunque», classe B): nei fogli del Codice l'attesa
+ * è la riga in corso in linea, con la rotella ARANCIONE accanto al testo, e i secondi solo dopo 2 s. Una sola regione `status`.
+ */
+describe('le attese dei fogli del Codice (FOG-ATTESA-01)', () => {
+    afterEach(() => { vi.useRealTimers() })
+    const giroArancione = () => {
+        const giro = document.body.querySelector('[data-testid="talos-riga-in-corso-giro"]')
+        expect(giro?.getAttribute('class')).toContain('text-[var(--talos-accent)]')
+    }
+    const durata = () => document.body.querySelector('[data-testid="talos-riga-in-corso-durata"]')?.textContent ?? null
+
+    it('FOG-ATTESA-01 Albero, Hook e Doctor: rotella arancione, niente secondi prima di 2 s, «· 2s» dopo; uno status solo', async () => {
+        vi.useFakeTimers()
+        const { default: TalosCodiceR4DoctorSheet } = await import('@/components/codice/TalosCodiceR4DoctorSheet.vue')
+        const fogli = [
+            () => mount(TalosCodiceR4AlberoSheet, { attachTo: document.body, props: { titolo: 'S', carica: () => new Promise<never>(() => {}) } }),
+            () => mount(TalosCodiceR4HookSheet, { attachTo: document.body, props: { carica: () => new Promise<never>(() => {}), fida: vi.fn() } }),
+            () => mount(TalosCodiceR4DoctorSheet, { attachTo: document.body, props: { carica: () => new Promise<never>(() => {}) } }),
+        ]
+        for (const monta of fogli) {
+            const w = monta()
+            await vi.advanceTimersByTimeAsync(0)
+            const riga = document.body.querySelector('[data-testid="talos-riga-in-corso"]')
+            expect(riga).not.toBeNull()
+            expect(riga!.getAttribute('class')).not.toContain('min-h-8')
+            expect(riga!.closest('.talos-codice-r4-nota')?.getAttribute('role')).toBeNull()
+            giroArancione()
+            await vi.advanceTimersByTimeAsync(1_900)
+            expect(durata()).toBeNull()
+            await vi.advanceTimersByTimeAsync(100)
+            expect(durata()).toBe('· 2s')
+            w.unmount()
+            expect(vi.getTimerCount()).toBe(0)
+        }
+    })
+
+    it('FOG-ATTESA-01 Doctor «Check again»: l\'attesa ricomincia da zero', async () => {
+        vi.useFakeTimers()
+        const { default: TalosCodiceR4DoctorSheet } = await import('@/components/codice/TalosCodiceR4DoctorSheet.vue')
+        let rispondi: (v: unknown) => void = () => {}
+        const carica = vi.fn(() => new Promise((r) => { rispondi = r }))
+        const w = mount(TalosCodiceR4DoctorSheet, { attachTo: document.body, props: { carica } })
+        await vi.advanceTimersByTimeAsync(3_000)
+        expect(durata()).toBe('· 3s')
+        rispondi({ chiaveApi: true, shell: 'android', git: true, naviga: true })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(document.body.querySelector('[data-testid="talos-riga-in-corso"]')).toBeNull()
+        document.body.querySelector<HTMLButtonElement>('[data-testid="talos-codice-r4-doctor-ancora"]')!.click()
+        await vi.advanceTimersByTimeAsync(500)
+        expect(document.body.querySelector('[data-testid="talos-riga-in-corso"]')).not.toBeNull()
+        expect(durata()).toBeNull()
+        await vi.advanceTimersByTimeAsync(1_500)
+        expect(durata()).toBe('· 2s')
+        w.unmount()
+    })
+})
+
+/*
  * ⛔ K3-C2b, visto sul Pad (15/10): tutte le icone ambra e tutte le gravità grigie, perché `.talos-codice-r4-azione-icona` e
  * `.talos-codice-r4-azione-testo > small` pesano più delle classi di colore. Il colore della gravità sta nel CSS, per `data-gravita`.
  */
@@ -408,7 +466,7 @@ describe('la scheda Agenti (K3-C3b-2b)', () => {
         const w = mount(TalosCodiceR4Pannello, { attachTo: document.body, props: {
             pannello, caricaPolitica: async () => null, caricaCache: async () => null, giriFiniti: 0, azioneProcesso: vi.fn(),
             caricaRisorse: vi.fn(async () => null), caricaSessioni, caricaFigli,
-            sessioneId: sessioneId ?? JSON.parse(fx('agenti-701c6c0d2.json')).ingressi.id,
+            sessioneId: sessioneId ?? JSON.parse(fx('agenti-4cee78f33.json')).ingressi.id,
         } as never })
         await flushPromises()
         await w.get('[data-scheda="agenti"]').trigger('click')

@@ -13,7 +13,8 @@ import { registerPlugin } from '@capacitor/core'
  */
 interface PonteArtefatto {
     create(options: { title: string, html: string }): Promise<{ id: string }>
-    open(options: { id: string }): Promise<{ opened: boolean }>
+    // UI-108: titolo e colori del tema per la testata nativa (`apriArtefatto.ts`); facoltativi, il nativo ha i suoi di serie
+    open(options: { id: string, title?: string, chrome?: Readonly<Record<string, string>> }): Promise<{ opened: boolean }>
     /**
      * ⛔ Owner 2026-08-27 — «salvare l'artefatto nella Libreria». Sola
      * lettura dell'HTML già scritto da `create` — il titolo non viaggia:

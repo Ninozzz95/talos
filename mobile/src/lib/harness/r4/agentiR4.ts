@@ -1,7 +1,8 @@
 /**
  * ⛔ K3-C3b-2b (ledger `LEDGER-K3-CODICE-COME-LA-CHAT-2026-10-15.md`): la scheda Agenti del pannello ▤ del Codice su r4.
  * COPIA FISSATA delle regole del desktop r4 @ `701c6c0d2` (prima `2161afb32`, con L3-15, il conto della richiesta; poi L3-17, il nome
- * dell'agente), provata contro il golden calcolato dalle funzioni vere (`tests/fixtures/r4/agenti-701c6c0d2.json`, `nome-motivi-701c6c0d2.json`):
+ * dell'agente), provata contro il golden calcolato dalle funzioni vere (`tests/fixtures/r4/agenti-4cee78f33.json` — ricalcolato @ 4cee78f33: identico a 701c6c0d2 salvo la tabella dei nomi degli attrezzi,
+ * 18 voci in più —, `nome-motivi-701c6c0d2.json`):
  *   · `components/grafo-agenti.js` `modelloGrafoAgenti`: chi c'è (la sessione e TUTTI i suoi discendenti), quanti figli ha ognuno;
  *   · `components/grafo/run-dalle-deleghe.js` `runDalleDeleghe`: i lotti di nascita per padre (finestra 20 s) e la richiesta di ogni
  *     lotto (quella che lo precede per la sessione, quella del padre per gli altri) — solo la parte che serve al pannello;
@@ -164,9 +165,14 @@ const CHIAVE_STATO: Record<StatoDelegaR4, string> = {
 export function etichettaDelegaR4(a: AgenteR4, lingua: string): string {
     return testoAgentiR4(CHIAVE_STATO[statoDelegaR4(a)], lingua)
 }
-/** Il numero sulla scheda: `in-corso` e basta, lo stesso del filtro «Attivi». */
+/**
+ * Il numero sulla scheda. ⛔ Owner 29/10 notte («Ferma» nella scheda Agenti): conta TUTTI i vivi, come lo Stop e «Ferma tutto» —
+ * non conclusi e non interrotti, compresi quelli che aspettano te; la delega in pausa (conclusa per r4) no. È la regola di
+ * `agenteVivoR4` (`fermaTuttoR4.ts`), scritta qui senza importarla: questo file sta anche nel pezzo della chat (`parolaAttrezzo.ts`)
+ * e non deve portarsi dietro le parole di «Ferma tutto». Che siano la stessa regola lo prova AGE-VIVI-01.
+ */
 export function contaAgentiAttiviR4(lista: AgenteR4[] = []): number {
-    return (Array.isArray(lista) ? lista : []).filter((a) => statoDelegaR4(a) === 'in-corso').length
+    return (Array.isArray(lista) ? lista : []).filter((a) => a?.conclusa === false && a?.interrotta !== true).length
 }
 
 // ---- chi c'è e a quale richiesta appartiene (`modelloGrafoAgenti`, `runDalleDeleghe`, `agentiPerInspector`) ----

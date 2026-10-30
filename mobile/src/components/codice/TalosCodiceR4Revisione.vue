@@ -9,7 +9,7 @@
  * nei toast dell'app. Le azioni «fase 3» del desktop (Accetta, Apri nell'editor, Scarta) sono nascoste anche lì: qui non ci sono.
  */
 import { computed, nextTick, ref, watch } from 'vue'
-import { Copy, FileDiff, MoreHorizontal } from '@lucide/vue'
+import { Copy, FileDiff, EllipsisVertical } from '@lucide/vue'
 import { useTalosI18n } from '@/i18n'
 import type { FileR4 } from '@/lib/harness/r4/pannelloR4'
 import {
@@ -156,7 +156,7 @@ const copiaTutti = () => copia(testoDiffCompletoR4(props.file, locale.value), te
                         :aria-expanded="menuAperto"
                         @click="menuAperto = !menuAperto"
                     >
-                        <MoreHorizontal class="size-4" aria-hidden="true" />
+                        <EllipsisVertical class="size-4" aria-hidden="true" />
                     </button>
                 </header>
                 <div v-if="menuAperto" role="menu" :aria-label="tr('varie.review.menu.label')" class="talos-codice-r4-processo-azioni">

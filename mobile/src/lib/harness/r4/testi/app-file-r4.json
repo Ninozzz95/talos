@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "701c6c0d2d711879b53aa21bddad5a06d33538e7",
+    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
     "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
-    "sha256": "19b9eb9d26356513c31bf08c83b6fff039cd0db16e2d8d6337613df34dca046d",
+    "sha256": "3520e3b597a275ab341a6976bf50c5f7492fbc8e78c53c64a192462a80ecd124",
     "prefisso": [
       "files.",
       "common.",
@@ -199,7 +199,7 @@
     "common.tryAgain": "Try again",
     "common.openDoctor": "Open Doctor",
     "common.codeCopied": "Code copied",
-    "common.inProgress": "running",
+    "common.inProgress": "in progress",
     "common.copiedToClipboard": "Copied to clipboard",
     "common.pathCopied": "Path copied",
     "common.pathNotCopied": "Path not copied",

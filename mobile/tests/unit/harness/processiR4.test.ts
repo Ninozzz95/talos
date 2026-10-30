@@ -16,7 +16,7 @@ import {
  */
 process.env.TZ = 'UTC'
 const FIXTURE = resolve(__dirname, '..', '..', 'fixtures', 'r4')
-const golden = JSON.parse(readFileSync(resolve(FIXTURE, 'processi-fc5e25d62.json'), 'utf8'))
+const golden = JSON.parse(readFileSync(resolve(FIXTURE, 'processi-4cee78f33.json'), 'utf8'))
 
 /** Come lo script del golden: un orologio finto (250 ms per evento) e i giri contati a ogni `RunStarted`. */
 function vociDalFlusso(testo: string): VoceAttrezzoR4[] {
@@ -32,7 +32,7 @@ function vociDalFlusso(testo: string): VoceAttrezzoR4[] {
 
 describe('i Processi su r4, contro il desktop (K3-C3b-2a)', () => {
     it('PRC-01 dagli eventi registrati alle voci: la stessa trasformazione di legacy/app.js', () => {
-        expect(golden.origine.commit).toBe('fc5e25d6209721788aa425c8455bbaa37147e46e')
+        expect(golden.origine.commit).toBe('4cee78f3349c5d34b4f44303a157b93542656aef')
         expect(vociDalFlusso(readFileSync(resolve(FIXTURE, 'r4-fc5e25d62-comando-vivo.sse'), 'utf8'))).toEqual(golden.casi[0].voci)
         expect(vociDalFlusso(readFileSync(resolve(FIXTURE, 'r4-fc5e25d62-comando-rigiocata.sse'), 'utf8'))).toEqual(golden.casi[1].voci)
     })

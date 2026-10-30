@@ -19,7 +19,7 @@
  * with the accent and a check when on. `tone="danger"`, for choices that widen
  * a deletion, wears the destructive button's three tokens (danger-soft fill,
  * danger-border, danger check): `--talos-danger` is a TEXT colour in some themes
- * (#fee2e2 in «calm», measured on the Pad 2026-09-25) and as a fill it read as a
+ * (#fee2e2 in «calm» on the Pad 2026-09-25; a readable red in dark since 26/10/2026, see rossoLeggibile) and as a fill it read as a
  * white box. The caller keeps the whole row in
  * a `<label>`: the row stays the touch target, and the label text is the
  * accessible name.

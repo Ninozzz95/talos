@@ -4,7 +4,10 @@
 /* Owner 12/09: la bolla della domanda è SEMPRE del colore dell'accento (il grigio `--talos-user` del mockup è stato visto e scartato). */
 .talos-calm-thread .user-bubble { margin-left: auto; width: fit-content; max-width: 83%; background: var(--talos-accent); color: var(--talos-accent-text); border: 1px solid transparent; border-radius: var(--talos-radius-card); padding: var(--talos-space-card) var(--talos-space-page); line-height: 1.65; }
 /* Owner 12/09: in Aspetto → «sezioni» la risposta NON sta in un contenitore: tutta larghezza, senza fondo né bordo. In «bolle» è una bolla (sotto). */
-.talos-calm-thread .assistant-text { width: 100%; background: transparent; padding: 0; border-radius: 0; line-height: 1.85; animation: talos-answer-fade var(--talos-motion-calm-answer, 184ms) ease-out; }
+.talos-calm-thread .assistant-text { width: 100%; background: transparent; padding: 0; border-radius: 0; line-height: 1.85; }
+/* ⛔ DISS-01 (dal vivo, 28/10): la dissolvenza solo sul corpo che sta ARRIVANDO. Sul messaggio finito ripartiva da opacità 0 mentre
+   sostituiva lo streaming già visibile, e la risposta lampeggiava (contratto owner 27/07: «fading again once it has arrived is the bug»). */
+.talos-calm-thread .talos-streaming-body.assistant-text { animation: talos-answer-fade var(--talos-motion-calm-answer, 184ms) ease-out; }
 .talos-calm-thread .assistant-bubble { max-width: 92%; background: var(--talos-assistant); padding: var(--talos-space-page); border-radius: var(--talos-radius-card); border: 1px solid var(--talos-border); }
 .talos-calm-thread .talos-message-content { line-height: inherit; }
 .assistant-header { display: flex; align-items: center; width: 100%; gap: .55rem; font-size: var(--text-xs); margin-bottom: .75rem; }
@@ -34,4 +37,4 @@
 @keyframes talos-answer-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes talos-orb-spin { to { transform: rotate(360deg); } }
 @media (max-width: 520px) { .talos-calm-thread .user-bubble { max-width: 92%; } }
-@media (prefers-reduced-motion: reduce) { .talos-calm-thread .assistant-text, .talos-orb.working::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .talos-calm-thread .talos-streaming-body.assistant-text, .talos-orb.working::after { animation: none; } }

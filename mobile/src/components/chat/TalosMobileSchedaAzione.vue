@@ -425,12 +425,12 @@ const esitoFile = ref<Record<string, 'manda' | 'mandato' | 'rifiutato'>>({})
  * non restare davanti a un tocco che non ha fatto niente.
  */
 const esitoArtefatto = ref<Record<string, 'apre' | 'rifiutato'>>({})
-async function apriArtefatto(id: string): Promise<void> {
+async function apriArtefatto(id: string, titolo: string): Promise<void> {
     if (esitoArtefatto.value[id] === 'apre') return
     esitoArtefatto.value = { ...esitoArtefatto.value, [id]: 'apre' }
     try {
         const { talosApriArtefattoDaScheda } = await import('@/lib/tools/schedaComandi')
-        const fatto = await talosApriArtefattoDaScheda(id)
+        const fatto = await talosApriArtefattoDaScheda(id, titolo)
         const nuovo = { ...esitoArtefatto.value }
         if (fatto) delete nuovo[id]
         else nuovo[id] = 'rifiutato'
@@ -693,7 +693,7 @@ const parolaStato = (acceso: boolean): string => (acceso
                 :aria-busy="esitoArtefatto[s.id] === 'apre'"
                 :disabled="esitoArtefatto[s.id] === 'apre'"
                 data-testid="talos-scheda-artefatto"
-                @click="apriArtefatto(s.id)"
+                @click="apriArtefatto(s.id, s.titolo)"
             >
                 <span class="talos-nome min-w-0 flex-1">
                     <span class="block truncate">{{ s.titolo }}</span>

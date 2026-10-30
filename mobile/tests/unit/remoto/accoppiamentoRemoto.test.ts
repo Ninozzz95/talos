@@ -124,8 +124,23 @@ describe("l'accoppiamento dal telefono", () => {
 
     it('ACC-05 un QR scaduto o storto non apre nessuna connessione', async () => {
         const f = pluginFinto()
-        await expect(avviaAccoppiamento(f.plugin, QR, { nome: 'Pad', ora: () => 2_000_000_000_000 }).esito).rejects.toMatchObject({ code: 'PAIR_EXPIRED' })
+        // scaduto anche col margine degli orologi (ACC-SKEW-01)
+        await expect(avviaAccoppiamento(f.plugin, QR, { nome: 'Pad', ora: () => 2_000_000_000_000 + 120_001 }).esito).rejects.toMatchObject({ code: 'PAIR_EXPIRED' })
         await expect(avviaAccoppiamento(f.plugin, 'https://talos-code.com', { nome: 'Pad', ora }).esito).rejects.toMatchObject({ code: 'BAD_MESSAGE' })
         expect(f.plugin.accoppia).not.toHaveBeenCalled()
+    })
+
+    /*
+     * ⛔ D-0147-QR-SKEW (Pad, 27/10): la scadenza la scrive il PC col SUO orologio, il telefono la guardava col proprio. PC 2 minuti
+     * indietro ⇒ un QR da 5 minuti ne durava 3 e il Pad diceva «scaduto» a un QR che il PC accettava ancora. Il PC la fa rispettare da
+     * sé (le offerte scadute spariscono, `accoppiamento.mjs:88`, e risponde `PAIR_TOKEN_INVALID`); il telefono tiene 120 s di margine.
+     */
+    it('ACC-SKEW-01 un telefono fino a 120 s avanti sul PC prova lo stesso: decide il PC', async () => {
+        const f = pluginFinto()
+        const giro = avviaAccoppiamento(f.plugin, QR, { nome: 'Pad', ora: () => 2_000_000_000_000 + 119_000 })
+        await salutato(f.inviati)
+        expect(f.plugin.accoppia).toHaveBeenCalledTimes(1)
+        f.arriva({ v: 1, t: 'error', code: 'PAIR_TOKEN_INVALID' })
+        await expect(giro.esito).rejects.toMatchObject({ code: 'PAIR_TOKEN_INVALID' })
     })
 })

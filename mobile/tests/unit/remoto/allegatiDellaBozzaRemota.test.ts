@@ -132,6 +132,8 @@ describe('R5.13 F3 — la bozza del Codice con la sessione sul PC', () => {
             [{ code: 'DISCONNECTED' }, 'computer.errors.disconnected'],
             [{ code: 'RATE_LIMITED' }, 'computer.fileBusy'],
             [{ code: 'BAD_MESSAGE', reason: 'images-unavailable' }, 'computer.imagesUnavailable'],
+            // r4 173c755b3 (`file-dispositivi.mjs`): il PC ha ricevuto il file ma non è riuscito a scriverlo; mai la frase generica
+            [{ code: 'OPERATION_FAILED', reason: 'save-failed' }, 'computer.fileSaveFailed'],
             // B9-4: un guasto senza codice che non è una frase dell'app (un TypeError) non entra grezzo nel vassoio
             [{ name: 'TypeError' }, 'chat.attachmentErrors.generic'],
             [{ code: 'NOT_AVAILABLE_REMOTELY' }, 'computer.onlyFromPc'],

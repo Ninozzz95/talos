@@ -81,6 +81,21 @@ class TalosRemotoCustodiaTest {
         assertNull(TalosRemotoCustodia.relayDiviso("non un indirizzo"))
     }
 
+    /*
+     * Il QR più piccolo (owner 26/10/2026, r4 `153759c16` `relayNelQr`, prove ACC-QR-01..04): il relay arriva al nativo come lo
+     * restituisce `URLSearchParams` (qrDelKernel.test.ts QRK-01). Qui il gettone che il telefono stacca deve essere QUELLO che il PC
+     * legge con `new URL(relay).searchParams.get('token')` (valori calcolati col modulo del kernel a quel commit).
+     */
+    @Test
+    fun `CUST-07 i relay difficili del kernel - il telefono stacca lo stesso gettone del PC`() {
+        assertEquals("https://relay.example/" to null, TalosRemotoCustodia.relayDiviso("https://relay.example"))
+        assertEquals("https://euc1-1.relay.n0.example/" to null, TalosRemotoCustodia.relayDiviso("https://euc1-1.relay.n0.example/"))
+        assertEquals("segreto-43", TalosRemotoCustodia.relayDiviso("https://relay.casa-di-nino.example/?token=segreto-43")?.second)
+        assertEquals("a b/c/d", TalosRemotoCustodia.relayDiviso("https://relay.example/talos/?token=a+b/c%2Fd&e=1#frammento")?.second)
+        // la forma che `new URL(...).href` dà al relay con spazio e «ù» crudi: il PC legge «con spazio più%e», il telefono pure
+        assertEquals("con spazio più%e", TalosRemotoCustodia.relayDiviso("https://relay.example/?token=con%20spazio+pi%C3%B9%25e&x=y=z?w")?.second)
+    }
+
     @Test
     fun `CUST-05 il sigillo - magia, nonce, cifrato - ogni altra forma si rifiuta`() {
         val nonce = ByteArray(12) { 7 }
