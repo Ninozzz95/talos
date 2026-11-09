@@ -86,7 +86,8 @@ test('CI-CHAT-UPLOAD-BUILD-019 — il server prova gli upload dopo il helper Go 
 test('R04-WINDOWS — Node 24, PowerShell, cache e cancelli prima dello staging', () => {
   assert.equal(desktop['runs-on'], 'windows-latest');
   assert.equal(desktop.defaults.run.shell, 'pwsh');
-  assert.equal(desktop['timeout-minutes'], 45);
+  // 09/11/2026 (0.2.0, giudice v1264): tetto del job alzato 45→60 in release.yml:541 (prove tagliate a 25 min con 0 rosse).
+  assert.equal(desktop['timeout-minutes'], 60);
   assert.equal(desktop.if, "startsWith(github.ref_name, 'desktop-v')");
   /* owner 27/10/2026: dalla 0.1.47 il mobile si tagga `mobile-vX.Y.Z` (release.yml, 808c25c53); `v*` resta per i tag già usciti.
      Il desktop resta solo su `desktop-v*` (la riga sopra). */

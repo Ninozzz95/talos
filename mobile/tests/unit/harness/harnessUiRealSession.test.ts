@@ -169,6 +169,47 @@ function runtime() {
     return rt
 }
 
+/*
+ * 09/11/2026 (0.2.0, gates della #92, «ReferenceError: document is not defined» in motionMilliseconds ← animateExit ← Timeout):
+ * app.js arma timer (l'uscita animata, i rinvii a 0 ms) che possono scattare DOPO la fine della prova, quando l'ambiente jsdom
+ * del file è già chiuso. Qui si tengono tutti i timer armati durante ogni prova e si cancellano nell'afterEach di file, che
+ * gira DOPO l'afterEach di ogni describe (gli afterEach vanno dall'interno all'esterno). Niente si ignora: un timer rimasto
+ * armato non scatta più fuori dalla sua prova. TIMER-PULITI-01/02 in fondo al file lo provano.
+ * I timer armati da dentro node_modules (jsdom: il ripiego di requestAnimationFrame) restano a chi li gestisce: cancellarli
+ * lascerebbe jsdom convinto di avere un fotogramma in attesa, e nessun fotogramma partirebbe più nelle prove dopo.
+ */
+// la riga 3 della pila è chi ha chiamato setTimeout (0 il messaggio, 1 daLibreria, 2 l'involucro qui sotto)
+const daLibreria = (): boolean => /node_modules[\\/]/u.test((new Error().stack ?? '').split('\n')[3] ?? '')
+const timerArmati = new Set<ReturnType<typeof setTimeout>>()
+let timerOriginali: { timeout: typeof setTimeout, intervallo: typeof setInterval } | null = null
+
+beforeEach(() => {
+    const timeout = globalThis.setTimeout
+    const intervallo = globalThis.setInterval
+    timerOriginali = { timeout, intervallo }
+    globalThis.setTimeout = ((fn: unknown, ms?: number, ...resto: unknown[]) => {
+        if (typeof fn !== 'function' || daLibreria()) return timeout(fn as () => void, ms, ...resto)
+        const id = timeout((...a: unknown[]) => { timerArmati.delete(id); (fn as (...x: unknown[]) => void)(...a) }, ms, ...resto)
+        timerArmati.add(id)
+        return id
+    }) as typeof setTimeout
+    globalThis.setInterval = ((fn: () => void, ms?: number, ...resto: unknown[]) => {
+        const id = intervallo(fn, ms, ...resto)
+        if (!daLibreria()) timerArmati.add(id as unknown as ReturnType<typeof setTimeout>)
+        return id
+    }) as typeof setInterval
+})
+
+afterEach(() => {
+    for (const id of timerArmati) { clearTimeout(id); clearInterval(id as unknown as ReturnType<typeof setInterval>) }
+    timerArmati.clear()
+    if (timerOriginali) {
+        globalThis.setTimeout = timerOriginali.timeout
+        globalThis.setInterval = timerOriginali.intervallo
+        timerOriginali = null
+    }
+})
+
 describe('Harness UI — real session, la parte portata da lane/harness-ui', () => {
     beforeEach(() => {
         document.body.className = ''
@@ -5036,5 +5077,21 @@ describe('OSS70B-UI — la scheda ricorda «salvato» e dice da dove viene', () 
         document.querySelector<HTMLButtonElement>('.artifact-card-save')!.click()
         await attesa()
         expect(salva).toHaveBeenCalledWith(ID, 'Vendite', { sessioneServer: 'srv-7', modello: 'z-ai/glm-5.3-flash' })
+    })
+})
+
+describe('Harness UI — timer di app.js puliti a fine prova (09/11/2026, gates #92)', () => {
+    const scattato = globalThis as unknown as { __provaTimerScattato?: boolean }
+
+    it('TIMER-PULITI-01 una prova arma un timer per la stessa strada di app.js (window.eval) e finisce prima che scatti', () => {
+        delete scattato.__provaTimerScattato
+        window.eval('setTimeout(() => { globalThis.__provaTimerScattato = true }, 30)')
+        expect(scattato.__provaTimerScattato).toBeUndefined()
+    })
+
+    it('TIMER-PULITI-02 nella prova dopo quel timer non scatta più: l afterEach di file lo ha cancellato', async () => {
+        await new Promise((fatto) => setTimeout(fatto, 90))
+        expect(scattato.__provaTimerScattato).toBeUndefined()
+        delete scattato.__provaTimerScattato
     })
 })
