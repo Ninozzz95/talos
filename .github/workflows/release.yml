@@ -538,7 +538,7 @@ jobs:
   desktop:
     if: startsWith(github.ref_name, 'desktop-v')
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     defaults:
       run:
         shell: pwsh
@@ -672,7 +672,9 @@ jobs:
         name: server, kernel, frontend e guscio Electron reale
         # 10/10/2026 (0.1.26): 0.1.25 qui 10 min 10 s; nel CI della PR #55 il solo server 9 min 14 s e il frontend 2 min 49 s,
         # e R04-TAG-COMMIT ora può aspettare fino a 2 min per la copia del repo. 15 min non lasciavano margine dopo il tag.
-        timeout-minutes: 25
+        # 09/11/2026 (0.2.0, giudice v1255): tentativo 2 della corsa 42622431229 tagliato a 25 min con 0 prove rosse;
+        # il solo server ora 21 min 46 s, frontend 2 min 44 s; 0.1.38 qui 14 min 04 s. 40 = ~27 stimati + 50%.
+        timeout-minutes: 40
         run: |
           node --test harness-ui/tests/*.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Test server falliti.' }
