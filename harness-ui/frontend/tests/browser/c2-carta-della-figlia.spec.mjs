@@ -165,7 +165,7 @@ for (const modo of ['light', 'dark']) {
     /* C2 UNIONE (08/10/2026, owner «Sì, anche sul server»): la carta manda al server il SOLO attrezzo da unire
        (`unisciPermessiPerAttrezzo`), mai una mappa; che le altre regole della figlia restino com'erano lo prova il registro
        (`tests/c2-unione-permessi-per-attrezzo.test.mjs`, UNIONE-01…07). */
-    test('C2-CARTA-04 — «Per questa sessione» UNISCE l\'attrezzo nelle impostazioni della FIGLIA, mai quelle del padre', async ({ page }) => {
+    test('C2-CARTA-04 — «Per questa sessione» UNISCE lo strumento nelle impostazioni della FIGLIA, mai quelle del padre', async ({ page }) => {
       const traffico = await prepara(page);
       await manda(page, [agenti(IN_ATTESA)]);
       await carta(page).getByRole('button', { name: 'Per questa sessione' }).click();
@@ -220,7 +220,7 @@ for (const modo of ['light', 'dark']) {
     /* C2-R7 (owner 08/10/2026 sera, «Sì, anche la sessione stessa»): la carta di QUESTA sessione unisce il solo attrezzo, con
        `rispettaNega`, invece di mandare la mappa intera da una copia locale (con due finestre un «nega» poteva sparire). Forme degli
        eventi da `agui-events.mjs` (righe 332 e 363). */
-    test('C2-CARTA-18 — la carta della sessione STESSA: unione del solo attrezzo con rispettaNega, e la stessa riga se il server salta', async ({ page }) => {
+    test('C2-CARTA-18 — la carta della sessione STESSA: unione del solo strumento con rispettaNega, e la stessa riga se il server salta', async ({ page }) => {
       const traffico = await prepara(page, { impostazioni: { updated: true, nonUniti: ['shell'] } });
       await manda(page, [{ type: 'ApprovalRequested', requestId: 'c2r7-propria-1', azione: { tipo: 'shell', comando: 'npm test' }, _sequenza: 2 }]);
       const propria = page.locator('#conversation [data-c="ApprovalCard"]:not([data-figlia])');
@@ -294,7 +294,7 @@ for (const modo of ['light', 'dark']) {
        e la carta partiva dalla fotografia presa alla sua nascita — un «nega» messo altrove nel frattempo spariva. La cura (a)
        rilegge prima di scrivere: la finestra si riduce a un giro di rete, non si chiude (la chiude solo il server, ETag + If-Match
        o un'unione per chiave: OpenStack API-SIG «etags», archman «Concurrency Control and ETags», letti l'08/10/2026). */
-    test('C2-CARTA-15 — regole della figlia cambiate DOPO la nascita della carta: la carta non porta nessuna fotografia, unisce l\'attrezzo', async ({ page }) => {
+    test('C2-CARTA-15 — regole della figlia cambiate DOPO la nascita della carta: la carta non porta nessuna fotografia, unisce lo strumento', async ({ page }) => {
       let regole = { scrivi: 'chiedi' };
       const traffico = await prepara(page, { pending: () => ({ ...PENDENTE(), perAttrezzo: regole }) });
       await manda(page, [agenti(IN_ATTESA)]);

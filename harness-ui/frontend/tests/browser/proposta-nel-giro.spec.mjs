@@ -76,7 +76,7 @@ test.describe('Proposta di workflow nel giro — riga e Indice dei giri', () => 
     expect(c.nonGet, 'nessuna scrittura verso il server').toBe(0);
   });
 
-  test('PROPOSTA-INDICE-12b — due attrezzi senza parole nostre nello stesso gruppo: tutti e due per nome', async ({ page }) => {
+  test('PROPOSTA-INDICE-12b — due strumenti senza parole nostre nello stesso gruppo: tutti e due per nome', async ({ page }) => {
     const c = await apri(page, 'due');
     const testa = page.locator('#conversation [data-c="ActivityBundle"]:not(.talos-activity--segment) .tool-note-summary-text').first();
     await expect(testa).toHaveText(/Proposta di workflow/u);

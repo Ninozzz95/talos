@@ -46,7 +46,7 @@ test('LINGUA-APPLICA: traduce solo il primo nodo di testo (il badge dentro la sc
    (forma di jquery-i18next). AL CONTRARIO: una chiave che non esiste non scrive niente, e il primo testo resta l'unico toccato. */
 test('LINGUA-APPLICA-CHIAVI: data-t con chiave stabile e data-t-attr per gli attributi', () => {
   const testo = (data) => ({ nodeType: 3, data });
-  const etichetta = { childNodes: [testo('Riprendi il workspace all’avvio'), { nodeType: 1 }, testo(' dopo')], getAttribute: () => 'impostazioni.search.workspaceRestore.title' };
+  const etichetta = { childNodes: [testo('Riprendi lo spazio di lavoro all’avvio'), { nodeType: 1 }, testo(' dopo')], getAttribute: () => 'impostazioni.search.workspaceRestore.title' };
   const finta = { childNodes: [testo('Resta così')], getAttribute: () => 'impostazioni.chiave.inventata' };
   const attributi = {};
   const pulsante = {
@@ -62,7 +62,7 @@ test('LINGUA-APPLICA-CHIAVI: data-t con chiave stabile e data-t-attr per gli att
     assert.equal(finta.childNodes[0].data, 'Resta così', 'una chiave inventata non scrive');
     assert.deepEqual(attributi, { title: 'Reopens the last available session without starting operations.' });
     applicaLingua(root, 'it');
-    assert.equal(etichetta.childNodes[0].data, 'Riprendi il workspace all’avvio', 'in italiano torna la voce italiana, identica');
+    assert.equal(etichetta.childNodes[0].data, 'Riprendi lo spazio di lavoro all’avvio', 'in italiano torna la voce italiana, identica');
   } finally { impostaLingua('it'); }
 });
 
@@ -71,7 +71,7 @@ test('LINGUA-APPLICA-CHIAVI: data-t con chiave stabile e data-t-attr per gli att
    applicaLingua, si traduce. */
 test('LINGUA-APPLICA-DINAMICI: un testo cambiato dal codice non si sovrascrive', () => {
   const nodo = (data) => ({ nodeType: 3, data });
-  const stato = { childNodes: [nodo('Riprendi il workspace all’avvio')], getAttribute: () => 'impostazioni.search.workspaceRestore.title' };
+  const stato = { childNodes: [nodo('Riprendi lo spazio di lavoro all’avvio')], getAttribute: () => 'impostazioni.search.workspaceRestore.title' };
   const attributi = { title: 'Riapre l’ultima sessione disponibile senza avviare operazioni.' };
   const pulsante = {
     getAttribute: (n) => (n === 'data-t-attr' ? '[title]impostazioni.search.workspaceRestore.help' : attributi[n] ?? null),
@@ -89,6 +89,6 @@ test('LINGUA-APPLICA-DINAMICI: un testo cambiato dal codice non si sovrascrive',
     assert.equal(attributi.title, 'Ultima ripresa alle 18:04', 'l’attributo scritto dal codice resta');
     stato.childNodes[0].data = 'Restore the workspace at startup';
     applicaLingua(root, 'it');
-    assert.equal(stato.childNodes[0].data, 'Riprendi il workspace all’avvio', 'AL CONTRARIO: la frase del modello si traduce ancora');
+    assert.equal(stato.childNodes[0].data, 'Riprendi lo spazio di lavoro all’avvio', 'AL CONTRARIO: la frase del modello si traduce ancora');
   } finally { impostaLingua('it'); }
 });

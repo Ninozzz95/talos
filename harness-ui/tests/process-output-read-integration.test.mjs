@@ -88,7 +88,7 @@ test('OUTPUT15-REAL: real session/process -> reference -> tool read -> HTTP -> r
   assert.equal((await registry.leggiOutputProcesso(sessionId,{outputId:retainedId,stream:'stderr'})).text,'stderr15');
   await assert.rejects(registry.leggiOutputProcesso(sessionId,{outputId:retainedId,sessionId:'other'}),e=>e.code==='OUTPUT_INVALID_INPUT');
   await assert.rejects(registry.leggiOutputProcesso('other',{outputId:retainedId}),e=>e.code==='OUTPUT_NOT_FOUND');
-  server=createServer(createHttpApp({staticHandler:()=>{},token:'fixture15',sessionRegistry:registry}));await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  server=createServer(createHttpApp({ senzaGettone: 'prove', staticHandler:()=>{},token:'fixture15',sessionRegistry:registry}));await new Promise(r=>server.listen(0,'127.0.0.1',r));
   const url=`http://127.0.0.1:${server.address().port}/api/v1/sessions/${sessionId}/process-outputs/${retainedId}?offset=100000&limit=${middle.length}`;
   assert.equal((await fetch(url)).status,401);
   const response=await fetch(url,{headers:{Cookie:'talos_token=fixture15'}});assert.equal(response.status,200);assert.equal((await response.json()).data.text,middle);

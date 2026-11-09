@@ -110,7 +110,7 @@
 .talos-pannello .pn-sezione--attenzione .pn-riga[aria-expanded="true"] { box-shadow: inset 2px 0 0 var(--pn-t), inset 0 0 0 1px var(--pn-tb); }
 
 .talos-pannello .pn-segno { position: relative; z-index: 1; display: inline-grid; place-items: center; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; flex: none; color: var(--pn-t); background: var(--pn-ts); box-shadow: inset 0 0 0 1px var(--pn-tb); }
-.talos-pannello .pn-segno .i { width: 11px; height: 11px; }
+.talos-pannello .pn-segno .i { width: 12px; height: 12px; }
 .talos-pannello .pn-segno__lettera { font-family: var(--talos-font-mono); font-size: 10.5px; font-weight: 600; line-height: 1; }
 .talos-pannello .pn-segno[data-vivo]::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1.5px solid transparent; border-top-color: var(--talos-accent); animation: pn-giro 1.4s linear infinite; }
 @keyframes pn-giro { to { transform: rotate(360deg); } }
@@ -236,7 +236,9 @@
 .talos-pannello span[data-categoria="memory"] { background: var(--talos-success); }
 .talos-pannello .pn-barra-finestra { display: flex; height: 8px; border-radius: 4px; background: var(--talos-border-subtle); overflow: hidden; }
 .talos-pannello .pn-grafico { padding: 10px 12px 4px; border-bottom: 1px solid var(--talos-border-subtle); }
-.talos-pannello .pn-grafico svg { width: 100%; height: 96px; display: block; overflow: visible; border-radius: 4px; }
+/* 31/10/2026 (foto del blocco, Context Manager): dentro una finestra `.talos-dialog svg` dà a ogni svg il contorno delle icone (1,8):
+   testo e area lo ereditavano e le etichette del grafico uscivano ingrossate. Il grafico non eredita contorni: chi ne vuole uno lo dichiara. */
+.talos-pannello .pn-grafico svg { width: 100%; height: 96px; display: block; overflow: visible; border-radius: 4px; stroke: none; stroke-width: 0; }
 .talos-pannello .pn-grafico svg:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: 2px; }
 .talos-pannello .pn-grafico__area { fill: var(--talos-accent-soft); }
 .talos-pannello .pn-grafico__linea { fill: none; stroke: var(--talos-accent); stroke-width: 1.5; stroke-linejoin: round; }

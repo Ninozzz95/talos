@@ -13,7 +13,7 @@ test('B3-METRICHE-ONESTE: giri della sessione, token totali, assenza diversa da 
  const s={usage:{giri:9,prompt_tokens:89470,completion_tokens:2635}};
  const m={giri:1,cache:{percentuale:83},primoToken:{ms:null,motivoAssente:'Orario non registrato'},chiusura:{motivo:'fine-lavoro'}};
  const t=testiBoard(s,m);
- assert.equal(t.giri,'9'); assert.equal(t.token,'92,1k'); assert.equal(t.cache,'83%'); assert.equal(t.primo,'—'); assert.equal(t.chiusura,'fine lavoro');
+ assert.equal(t.giri,'9'); assert.equal(t.token,'92,1 k'); assert.equal(t.cache,'83%'); assert.equal(t.primo,'—'); assert.equal(t.chiusura,'fine lavoro');
  assert.equal(testiBoard({},{}).token,'—'); assert.equal(testiBoard({usage:{giri:0,prompt_tokens:0,completion_tokens:0}},{primoToken:{ms:0},cache:{percentuale:0}}).primo,'0,0 s');
  assert.equal(testiBoard({usage:{prompt_tokens:2}},{}).token,'—');
 });
@@ -42,8 +42,8 @@ test('B3-TEMPO: assenza, futuro, minuti, ieri e giorni, orologio esplicito',()=>
 
 test('B3-CACHE-COPERTURA: il conteggio originale resta visibile anche senza percentuale',()=>{
  const s={usage:{cached_tokens:74240}};
- assert.equal(testiBoard(s,{cache:{percentuale:83}}).cache,'83% · 74,2k');
- assert.equal(testiBoard(s,{}).cache,'— · 74,2k');
+ assert.equal(testiBoard(s,{cache:{percentuale:83}}).cache,'83% · 74,2 k');
+ assert.equal(testiBoard(s,{}).cache,'— · 74,2 k');
 });
 
 test('owner 24/10 — la Board dice «Da riprendere» in ambra per l\'ultimo giro in errore, come la barra laterale; mai «Errore» rosso', () => {

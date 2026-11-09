@@ -4,6 +4,7 @@
  * `isError: true`. The desktop has `outcome` on RunFinished only; the CLI draws "cancelled" instead of "failed" for that row.
  * Only the value 'cancelled' is carried; any other value, or none, leaves the event unchanged.
  */
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {tmpdir} from 'node:os';
@@ -55,4 +56,13 @@ test('DUP-02 a discarded identical copy is marked duplicate; a cancellation for 
   assert.equal(results.c3.outcome, 'cancelled', 'still a cancellation for whoever reads only that');
   assert.equal(results.c3.isError, true, 'and the text-based readers (delegation evidence) see what they saw before');
   assert.equal('duplicate' in results.c1, false);
+});
+
+test('REV-B17-M5: una lettura già partita non si dichiara annullata', () => {
+  const sorgente = readFileSync(new URL('../src/agent-service.mjs', import.meta.url), 'utf8');
+  assert.match(sorgente, /isError: true, \.\.\.\(evento\.partita === true \? \{ interrotta: true \} : \{ outcome: 'cancelled' \}\)/u, 'resta un errore: senza `isError` la CLI la mostrerebbe completata');
+  const e = eventoPerEsitoTool({ messageId: 'm', toolCallId: 'c', content: 'x', isError: true, interrotta: true });
+  assert.equal(e.interrotta, true);
+  assert.equal('outcome' in e, false);
+  assert.equal('interrotta' in eventoPerEsitoTool({ messageId: 'm', toolCallId: 'c', content: 'x', interrotta: 'si' }), false, 'solo il vero');
 });

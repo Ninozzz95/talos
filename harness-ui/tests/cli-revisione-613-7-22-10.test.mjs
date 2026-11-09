@@ -502,14 +502,26 @@ test('R8-N1-01 — schemi pesanti e fornitore onesto: lo scarto ereditato è sta
   const messaggi = [{ role: 'system', content: 'You are a coding agent' }, ...coppie(5, 1_200), { role: 'user', content: 'Rispondi OK.' }];
   const base = compattazione.stimaDegliAttrezzi(ATTREZZI_OPENAI);
   const f = fornitoreOnesto(finestra);
+  /* ⛔ 28/10/2026 (contratto C1, owner 27/10/2026, «Sì, mai aspettare»): «si compatta prima» resta l'intento — la differenza degli schemi
+     porta la richiesta all'emergenza e la compattazione avviene PRIMA della richiesta, senza rifiuti. Ma all'emergenza la richiesta non
+     aspetta più il riassunto del modello: parte col riassunto senza modello (ragione 'in-arrivo'), e il riassunto pagato è UNO, in
+     sottofondo (si conta dopo averlo atteso, perché può partire quando il giro ha già restituito). AL CONTRARIO: niente compattazione e
+     niente riassunto, nemmeno in sottofondo. */
+  const righe = [];
   let errore = null;
-  try { await giroPesante(t, { messaggiIniziali: messaggi, finestraToken: finestra, scartoMisurato: base, stimaAttrezziMisurati: base, fetchDiRete: f.fetchDiRete }); } catch (e) { errore = e; }
+  let ris = null;
+  try {
+    ris = await giroPesante(t, { messaggiIniziali: messaggi, finestraToken: finestra, scartoMisurato: base, stimaAttrezziMisurati: base, fetchDiRete: f.fetchDiRete,
+      onGiro: (e) => { if (e?.tipo === 'compattazione-fine') righe.push({ prima: f.conti.richieste + f.conti.rifiuti, compattato: e.compattato, ragione: e.ragione ?? null }); } });
+  } catch (e) { errore = e; }
+  await ris?.compattazioneInPreparazione;
   assert.ok(f.conti.schemi > 6_500, `premessa: gli schemi pesano come quelli della CLI (${f.conti.schemi})`);
   assert.ok(stima(messaggi) + base < finestra * 0.75, `premessa: con lo scarto ereditato la richiesta «entra» (${stima(messaggi) + base})`);
   assert.ok(stima(messaggi) + f.conti.schemi > finestra, `premessa: con gli schemi veri no (${stima(messaggi) + f.conti.schemi})`);
   assert.equal(errore, null, `il giro finisce (${errore?.message})`);
   assert.equal(f.conti.rifiuti, 0, 'nessuna richiesta rifiutata come troppo grande');
-  assert.equal(f.conti.riassunti, 1, 'un riassunto, pagato prima della richiesta');
+  assert.deepEqual(righe[0], { prima: 0, compattato: true, ragione: 'in-arrivo' }, `si compatta prima della richiesta, senza aspettare il modello (${JSON.stringify(righe)})`);
+  assert.equal(f.conti.riassunti, 1, 'un riassunto pagato, in sottofondo');
   /* AL CONTRARIO: lo stesso scarto misurato con GLI STESSI attrezzi è il numero del fornitore (conta meno della stima): niente si paga */
   let riassunti = 0;
   const conta = async (_u, o) => {
@@ -517,7 +529,8 @@ test('R8-N1-01 — schemi pesanti e fornitore onesto: lo scarto ereditato è sta
     if (!corpo.tools?.length) { riassunti += 1; return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nfatto' }, finish_reason: 'stop' }] }); }
     return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages) + base, completion_tokens: 1 } });
   };
-  await giroPesante(t, { messaggiIniziali: messaggi, finestraToken: finestra, scartoMisurato: base, stimaAttrezziMisurati: f.conti.schemi, fetchDiRete: conta });
+  const contrario = await giroPesante(t, { messaggiIniziali: messaggi, finestraToken: finestra, scartoMisurato: base, stimaAttrezziMisurati: f.conti.schemi, fetchDiRete: conta });
+  await contrario?.compattazioneInPreparazione;
   assert.equal(riassunti, 0, 'AL CONTRARIO: la misura ereditata si rispetta');
 });
 
@@ -559,11 +572,18 @@ test('R8-N1-04 — il blocco dei fatti non fa mai uscire la richiesta dalla fine
       const corpo = corpoSenzaMarcatori(o.body);
       if (!corpo.tools?.length) return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: `## Riassunto\n${'parola '.repeat(caratteriDelRiassunto / 7)}` }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 5 } });
       visti.push(corpo);
-      return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages) + compattazione.stimaDegliAttrezzi(corpo.tools), completion_tokens: 1 } });
+      /* 28/10/2026: il fornitore conta lo stesso scarto della scena (7.500). Il riassunto vero ora arriva in sottofondo DOPO la prima
+         risposta, e con un numero diverso lo scarto misurato cambierebbe sotto la prova (prima il riassunto era pagato prima di lei) */
+      return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages) + 7_500, completion_tokens: 1 } });
     };
     const r = await giro(t, { messaggiIniziali: messaggi, finestraToken: 10_240, scartoMisurato: 7_500, fetchDiRete });
-    const rec = r.recordDiCompattazione?.at(-1);
-    assert.ok(rec, 'premessa: il giro ha compattato all\'emergenza');
+    assert.ok(r.recordDiCompattazione?.at(-1), 'premessa: il giro ha compattato all\'emergenza');
+    /* ⛔ 28/10/2026 (contratto C1, owner 27/10/2026, «Sì, mai aspettare»): all'emergenza la richiesta parte col riassunto senza modello e
+       il riassunto VERO si prepara in sottofondo — è lì, nel record che sostituirà quello rapido, che il blocco dei fatti si giudica oggi
+       (stessa preparazione, `preparaCompattazioneCorpo`). Prima si guardava il record applicato nel giro, che era quello vero. */
+    const pronta = r.compattazionePronta ?? await r.compattazioneInPreparazione;
+    const rec = pronta?.record;
+    assert.ok(rec && JSON.stringify(rec.riassunto).includes('parola parola'), 'premessa: il riassunto vero è arrivato, in sottofondo');
     return { conBlocco: JSON.stringify(rec.riassunto).includes('coveredThrough='), richiesta: stima(rec.riassunto) + 7_500 };
   };
   const lungo = await corsa(4_000);

@@ -1,5 +1,6 @@
 import { t, tn, linguaCorrenteDiT } from './lingua.js';
 import { creaNotaSistema } from './conversazione.js';
+import { chiaveDelMotivo, chiaveDelPerche, nomeCortoDelModello, oraDelLimite, quandoTorna } from './motivi-compattazione.js';
 
 /*
  * ⭐ F5 (onda 2 della fase F2), 24/09/2026 — LA COMPATTAZIONE LEGACY VISTA DALLA CHAT.
@@ -58,8 +59,12 @@ export const EVENTO_ANNULLATA = 'talos.compattazione-annullata';
 export const EVENTO_JOURNAL_RIPARATO = 'talos.journal-riparato';
 /** B1 (owner 21/10/2026): i passi del riassunto ATTESO, effimeri (solo a chi è connesso). Contratto §2, `CONTRATTO-RIGA-VIVA-…-21.md`. */
 export const EVENTO_PROGRESSO = 'talos.compattazione-progresso';
+/** I passi del riassunto preparato in SOTTOFONDO (16/10/2026). La chat ne legge uno solo: «non arriva» (contratto con la CLI, 28/10). */
+export const EVENTO_PREPARATA = 'talos.compattazione-preparata';
+/** Perché il riassunto del modello che doveva sostituire il rapido non arriverà: codici chiusi del kernel (`diciNonArriva`). */
+export const MOTIVI_NON_ARRIVA = Object.freeze(['fallita', 'inefficace', 'bersaglio', 'non-serve', 'non-vale-piu', 'fermata']);
 /** Contratto §3: perché un riassunto è stato fatto SENZA il modello (`ripiego:true`). Un valore fuori elenco resta `null`. */
-export const RAGIONI_RIPIEGO = Object.freeze(['tempo', 'saltato', 'rifiutato', 'stima', 'esaurito']);
+export const RAGIONI_RIPIEGO = Object.freeze(['tempo', 'saltato', 'rifiutato', 'stima', 'esaurito', 'in-arrivo']);
 
 const numero = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 const intero = (v) => Number.isSafeInteger(v) && v >= 0;
@@ -74,9 +79,18 @@ export function sogliaLegacy({ finestraToken = null, tettoToken = TETTO_TOKEN_DE
   return Math.min(tetto, Math.floor(finestraToken * FRAZIONE_FINESTRA));
 }
 
-/** Se avvisare: solo con numeri veri e positivi; mai un avviso costruito su uno zero o su un `undefined`. */
-export function valutaSogliaContesto({ tokenMisurati, soglia, warningTokens = null, source = null } = {}) {
+/**
+ * Se avvisare: solo con numeri veri e positivi; mai un avviso costruito su uno zero o su un `undefined`.
+ * ⛔ Owner 06/11/2026 14:20 («Il contesto ha superato la soglia (196.482 su 165.999 token)» — «questo avviso non deve comparire più, la
+ * compattazione deve essere gestita automaticamente a meno che l'utente non voglia cambiare qualcosa»): `automatica:true` = il motore
+ * compatta da solo oltre la soglia (`prepareForRequest`, misurato in `tests/auto-compatta-oltre-soglia.test.mjs`), e il numero del
+ * fornitore che qui si confronta è per costruzione quello della richiesta che ha FATTO partire il riassunto: nessun avviso, nessun
+ * «Compatta ora». Si avvisa solo se la persona ha spento la compattazione automatica. Come Hermes (`agent/context_compressor.py:3007`,
+ * `should_compress_info`: oltre la soglia si comprime, e si avvisa solo quando la compressione serve ma è bloccata).
+ */
+export function valutaSogliaContesto({ tokenMisurati, soglia, warningTokens = null, source = null, automatica = false } = {}) {
   if (!numero(tokenMisurati) || tokenMisurati <= 0 || !numero(soglia) || soglia <= 0) return { mostra: false, rapporto: null, testo: '' };
+  if (automatica === true) return { mostra: false, rapporto: tokenMisurati / soglia, testo: '' };
   const rapporto = tokenMisurati / soglia;
   const numeri = { n: formattaToken(tokenMisurati), m: formattaToken(soglia) };
   // oltre la soglia «quasi pieno» sarebbe falso: si dice che la soglia è superata (visto nella foto 2-durante: 184.000 su 150.000)
@@ -140,6 +154,22 @@ export function interpretaEventoCompattazione(evento) {
         /* B1, contratto §3 (21/10/2026): un riassunto riuscito ma SENZA il modello dice perché. Solo quando c'è: chi legge la forma
            di sempre (le prove CTX-UI-LEGACY-EVENT-PARSE la confrontano intera) non vede campi in più. */
         ...(compattato && v.ripiego === true ? { ripiego: true, ragione: RAGIONI_RIPIEGO.includes(v.ragione) ? v.ragione : null } : {}),
+        /* «Mai aspettare» (owner 27/10/2026 notte, contratto C5): il riassunto del MODELLO che prende il posto del rapido porta l'`at` del
+           rapido (`migliora: { at }`, `talosHarness.desktop-hotfix.mjs`, `annunciaCompattazione`): la riga è la stessa, si aggiorna.
+           Solo un testo non vuoto, e solo su un successo; assente, la forma resta quella di sempre. */
+        ...(compattato && typeof v.migliora?.at === 'string' && v.migliora.at ? { migliora: v.migliora.at } : {}),
+        /* Contratto con la CLI (28/10/2026): il rapido nato da un «non pronto» del MOTORE del contesto nomina il lavoro che scrive il
+           riassunto atteso (`agent-service.mjs`); solo la versione di quel lavoro migliora la riga (`context-separator.js`). Solo un
+           testo non vuoto e corto (≤256), solo su un successo. */
+        ...(compattato && typeof v.lavoroDelMotore === 'string' && v.lavoroDelMotore && v.lavoroDelMotore.length <= 256 ? { lavoroDelMotore: v.lavoroDelMotore } : {}),
+        /* Spesa dei riassunti (owner 30/10/2026 sera): l'id del riassunto applicato, che lega la riga della scheda Contesto alle sue righe di
+           spesa. Solo su un successo e solo nella forma ammessa; assente, la forma resta quella di sempre (e la riga non dice un costo). */
+        ...(compattato && typeof v.idRiassunto === 'string' && /^[A-Za-z0-9._:-]{1,256}$/u.test(v.idRiassunto) ? { idRiassunto: v.idRiassunto } : {}),
+        /* FE-053 (owner 01/11/2026): chi non ha potuto scrivere e perché, e chi ha scritto al suo posto. Solo se c'è, come tutti i campi qui sopra */
+        ...(v.nonDisponibile && typeof v.nonDisponibile === 'object' && typeof v.nonDisponibile.modello === 'string' && v.nonDisponibile.modello ? { nonDisponibile: { modello: v.nonDisponibile.modello, motivo: typeof v.nonDisponibile.motivo === 'string' ? v.nonDisponibile.motivo : null, diAccount: v.nonDisponibile.diAccount === true, finoAlle: quandoTorna(v.nonDisponibile.finoAlle) } } : {}),
+        ...(compattato && v.dallaRiserva === true && typeof v.riassuntoDi === 'string' && v.riassuntoDi.trim() ? { dallaRiserva: true, riassuntoDi: v.riassuntoDi } : {}),
+        /* Revisione del blocco 25, R3: il segno del registro (`diciGanciDelContestoRotti`) che il motore del contesto NON è partito. Solo `true` e solo su un ripiego */
+        ...(!compattato && motivo === 'ripiego' && v.motoreNonPartito === true ? { motoreNonPartito: true } : {}),
       };
     }
     if (v.fase === 'annullata') return at(v) ? { tipo: 'annullata', at: v.at } : null;
@@ -165,6 +195,18 @@ export function interpretaEventoCompattazione(evento) {
     };
   }
   if (evento.name === EVENTO_ANNULLATA) return at(v) ? { tipo: 'annullata', at: v.at } : null;
+  /* «Non arriva» (contratto con la CLI, 28/10/2026): il riassunto del modello nato per sostituire il rapido non arriverà. Solo questa forma;
+     gli altri passi del sottofondo restano fuori dalla chat come prima. Un motivo fuori elenco è `null`, mai il testo di un fornitore. */
+  if (evento.name === EVENTO_PREPARATA) {
+    if (!v || typeof v.perIlRapido?.at !== 'string' || !v.perIlRapido.at) return null;
+    /* P4 (owner 28/10/2026, forma approvata dalla CLI): a fine giro il riassunto del rapido lo scrive il motore del contesto, e la riga si
+       lega al SUO lavoro prima di aspettarlo — solo la versione di quel lavoro la migliorerà. Un id che non è un testo corto non lega. */
+    if (v.fase === 'lavoro-del-motore') {
+      return typeof v.jobId === 'string' && v.jobId && v.jobId.length <= 256 ? { tipo: 'lavoro-del-motore', at: v.perIlRapido.at, jobId: v.jobId } : null;
+    }
+    if (v.fase !== 'non-arriva') return null;
+    return { tipo: 'non-arriva', at: v.perIlRapido.at, motivo: MOTIVI_NON_ARRIVA.includes(v.motivo) ? v.motivo : null };
+  }
   if (evento.name === EVENTO_JOURNAL_RIPARATO) {
     if (!v || typeof v !== 'object') return null;
     return {
@@ -207,6 +249,10 @@ const MOTIVI = Object.freeze({
   /* Revisione 7 della CLI (22/10/2026, F6): la finestra non regge attrezzi e parte tenuta — nessun riassunto pagato; detto una volta per
      finestra (il registro non lo ripete) */
   'non-entra': 'chat.context.failure.doesNotFit',
+  /* C6-bis (30/10/2026, domanda del Mobile): il riassunto di FINE GIRO non ha trovato un modello pronto (scelto fermo, nessuna riserva
+     usabile) e NON ha ripiegato sul modello della conversazione. A fine giro è un fallimento: non c'è il rapido senza modello, quello lo
+     fa il giro se serve. Il dettaglio (`nonDisponibile`) lo userà la riga del bozzetto C6-bis. */
+  'non-disponibile': 'chat.context.failure.unavailable',
 });
 /* Owner 12/10/2026 («Si ripara da solo»): l'archivio del motore non combaciava con la conversazione; i vecchi originali sono stati
    messi da parte e il motore è ripartito. Non è un fallimento: la riga dice che cosa è successo e che niente si è perso. */
@@ -250,12 +296,18 @@ const RAGIONE_BREVE = Object.freeze({
 });
 const RAGIONE_PERCHE = Object.freeze({
   tempo: 'chat.context.fallback.whyTime', saltato: 'chat.context.fallback.whySkipped', rifiutato: 'chat.context.fallback.whyRejected',
-  stima: 'chat.context.fallback.whyEstimate', esaurito: 'chat.context.fallback.whyExhausted',
+  stima: 'chat.context.fallback.whyEstimate', esaurito: 'chat.context.fallback.whyExhausted', 'in-arrivo': 'chat.context.fallback.whyComing',
 });
 /** La ragione del ripiego in una parola, o `null` se non è una del contratto (non si riporta un codice grezzo). */
 export function ragioneRipiegoBreve(ragione) { return Object.hasOwn(RAGIONE_BREVE, ragione) ? t(RAGIONE_BREVE[ragione]) : null; }
 /** Il perché per esteso, per il `title` della riga. */
 export function percheRipiego(ragione) { return t(Object.hasOwn(RAGIONE_PERCHE, ragione) ? RAGIONE_PERCHE[ragione] : 'chat.context.fallback.whyUnknown'); }
+/** FE-053: il `title` della riga quando il modello scelto non ha potuto scrivere: il perché, e chi ha fatto la compattazione. `null` se non c'è niente da dire. */
+export function percheDellaCatena({ nonDisponibile = null, dallaRiserva = false, compattata = true, nomi = nomeCortoDelModello } = {}) {
+  if (!nonDisponibile) return null;
+  const perche = t(chiaveDelPerche(nonDisponibile), { modello: nomi(nonDisponibile.modello), ora: oraDelLimite(nonDisponibile.finoAlle, inglese() ? 'en' : 'it') });
+  return `${perche} ${t(!compattata ? 'varie.compaction.tail.whole' : dallaRiserva ? 'varie.compaction.tail.backup' : 'varie.compaction.tail.without')}`;
+}
 /** I token in breve, come il mockup: «31.2k» (in italiano «31,2k»); sotto il migliaio il numero intero. */
 export function formattaTokenBreve(n) {
   if (!numero(n)) return null;
@@ -265,11 +317,30 @@ export function formattaTokenBreve(n) {
 }
 
 /** Il testo della riga persistente: i numeri quando ci sono, mai inventati quando mancano. */
-export function testoRigaCompattazione({ stato, tokenPrima = null, tokenDopo = null, motivo = null, dettaglio = null, ripiego = false, ragione = null } = {}) {
+export function testoRigaCompattazione({ stato, giro = null, tokenPrima = null, tokenDopo = null, motivo = null, dettaglio = null, ripiego = false, ragione = null, migliorata = false, nonDisponibile = null, riassuntoDi = null, dallaRiserva = false, motoreNonPartito = false, nomi = nomeCortoDelModello } = {}) {
   if (stato === 'annullata') return t('chat.context.row.undone');
+  /* Frontend 01/11/2026 (visto dal vivo dal Motore locale): al primo giro i ganci del motore del contesto non sono partiti (riga D2 del
+     registro). «Non compattata» su una chat di due messaggi non diceva niente: si dice cosa è successo.
+     ⛔ Revisione del blocco 25, R3: si decide sul segno del registro (`motoreNonPartito`), mai su `giro === 0`: giro 0 + ripiego vengono anche da un
+     `prepare` rifiutato nel guscio e da una `capture('start')` divergente nel nucleo, col motore partito. Lì resta la riga del ripiego di prima. */
+  if (stato === 'non-riuscita' && motivo === 'ripiego' && motoreNonPartito === true) return t('chat.context.row.engineDidNotStart');
   if (stato === 'non-riuscita' && motivo === RIALLINEATO) return t('chat.context.row.realigned');
   if (stato === 'non-riuscita' && motivo === FRENO) return t('chat.context.row.paused');
+  /* FE-053: la riga dice chi ha scritto e, se nessuno ha potuto, perché; il perché per esteso sta nel `title` (`percheDellaCatena`) */
+  if (stato === 'non-riuscita' && nonDisponibile) return t('chat.context.row.noModelAvailable');
+  const numeri = () => { const prima = formattaTokenBreve(tokenPrima), dopo = formattaTokenBreve(tokenDopo); return prima && dopo ? ` · ${t('chat.context.row.beforeAfter', { prima, dopo })}` : ''; };
+  /* Revisione del Blocco 22, F11: un nome che non dice niente non firma: sarebbe «Compattazione di  (riserva)» */
+  const nomeRiserva = stato !== 'non-riuscita' && dallaRiserva === true && riassuntoDi ? nomi(riassuntoDi) : '';
+  if (nomeRiserva) return `${t('chat.context.row.byBackup', { modello: nomeRiserva })}${numeri()}`;
+  if (stato !== 'non-riuscita' && ripiego === true && nonDisponibile && ragione !== 'in-arrivo') return `${t('chat.context.row.withoutModelBecause', { ragione: t(`varie.compaction.reason.${chiaveDelMotivo(nonDisponibile)}`) })}${numeri()}`;
   if (stato === 'non-riuscita') return `${t('chat.context.row.notSummarized')}${motivo ? ` · ${motivoUmano(motivo, dettaglio)}` : ''}`;
+  /* «Mai aspettare» (bozzetto approvato dall'owner il 28/10/2026): il rapido lo dice in chiaro, e quando il riassunto del modello prende il
+     suo posto la stessa riga dice «migliorato», coi numeri nuovi. Il perché del rapido sta nel `title` (`percheRipiego('in-arrivo')`). */
+  if (migliorata === true || (ripiego === true && ragione === 'in-arrivo')) {
+    const base = t(migliorata === true ? 'chat.context.row.improved' : 'chat.context.row.quick');
+    const prima = formattaTokenBreve(tokenPrima), dopo = formattaTokenBreve(tokenDopo);
+    return prima && dopo ? `${base} · ${t('chat.context.row.beforeAfter', { prima, dopo })}` : base;
+  }
   if (ripiego === true) {
     const breve = ragioneRipiegoBreve(ragione);
     const base = breve ? t('chat.context.row.withoutModelBecause', { ragione: breve }) : t('chat.context.row.withoutModel');
@@ -317,7 +388,7 @@ export function montaAvvisoContesto({ document: doc = globalThis.document, rifer
   avviso.setAttribute('role', 'group');
   avviso.setAttribute('aria-label', t('chat.context.notice.ariaLabel'));
   avviso.hidden = true;
-  const icona = doc.createElement('span'); icona.className = 'talos-avviso-piano__icona'; icona.setAttribute('aria-hidden', 'true'); icona.append(ICONA(doc, 'i-history'));
+  const icona = doc.createElement('span'); icona.className = 'talos-avviso-piano__icona'; icona.setAttribute('aria-hidden', 'true'); icona.append(ICONA(doc, 'i-compatta'));
   const testo = doc.createElement('p'); testo.className = 'talos-avviso-piano__testo'; testo.setAttribute('role', 'status'); testo.dataset.avvisoContestoTesto = '';
   const azioni = doc.createElement('div'); azioni.className = 'talos-avviso-piano__azioni';
   const compatta = doc.createElement('button'); compatta.type = 'button'; compatta.className = 'talos-button talos-button--secondary talos-button--sm'; compatta.dataset.avvisoContesto = 'compatta'; compatta.textContent = t('chat.context.compactNow');

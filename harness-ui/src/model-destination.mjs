@@ -204,7 +204,7 @@ const NATIVI = ID_NATIVI_SDK;
  * @param {object} deps
  * @param {(fonte: string) => string|null} deps.leggiChiave dal portachiavi
  * @param {(fonte: string) => {endpoint?: string|null}} deps.leggiRuntime indirizzo configurato
- * @param {() => boolean} [deps.localePronto] il motore locale è acceso adesso?
+ * @param {(modello?: string) => boolean} [deps.localePronto] il motore locale ha aperto QUESTO modello, adesso? (01/11/2026: un motore acceso con un altro modello rispondeva in silenzio al posto suo)
  * @param {(modello: string) => boolean} [deps.ospitePronto] l'app che ospita r4 ha aperto QUESTO modello?
  * @returns {{fonte: string, url: string, headers: Record<string,string>, modelloRemoto: string}}
  */
@@ -242,7 +242,7 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
      * dice SOLO che la destinazione è locale e che il motore è pronto; a
      * spedire ci pensa chi possiede la credenziale.
      */
-    if (typeof localePronto !== 'function' || !localePronto()) {
+    if (typeof localePronto !== 'function' || !localePronto(modelloRemoto)) {
       throw new ModelDestinationError('The local engine is not running: load it from the Model Lab before using it in chat.', 'LOCAL_RUNTIME_NOT_READY');
     }
     return { fonte, modelloRemoto, locale: true, percorso: REGISTRO_FORNITORI[fonte].endpoint.chat };

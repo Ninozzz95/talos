@@ -1,0 +1,13 @@
+/* FE-008: i Passi sopra la riga viva. Dal bozzetto `bozzetto-superfici-vive`, righe 30408-30418. */
+.talos-passi{margin-bottom:8px}
+.talos-passi[hidden]{display:none}
+.talos-passi .talos-activity__body[hidden]{display:none}
+.talos-passi .talos-activity__head{padding-block:6px}
+.talos-passi .talos-tool-row{padding-block:1px;min-height:0}
+.talos-passi .talos-tool-row__icon{transform:scale(.8)}
+.talos-passi .talos-tool-row[data-passo="ora"] .talos-tool-row__name{color:var(--talos-text)}
+.talos-passi .talos-tool-row[data-passo="no"] .talos-tool-row__name{color:var(--talos-muted)}
+.talos-passi .talos-tool-row[data-passo="fatto"] .talos-tool-row__name,
+.talos-passi .talos-tool-row[data-passo="annullato"] .talos-tool-row__name{color:var(--talos-muted);text-decoration:line-through}
+.passo-vuoto{display:block;width:12px;height:12px;border-radius:50%;border:1.5px solid var(--talos-muted)}
+.passi-altri{padding:4px 14px 8px 46px;font-size:12px;color:var(--talos-muted)}

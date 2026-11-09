@@ -34,7 +34,7 @@ test('WF-UI-PHASE-PERCENT: terminated/total rounded down, null for a plan (no in
 test('WF-UI-PHASE-ICON: the phase icon comes from the roles of its steps, then from the kinds (D28)', () => {
   assert.equal(iconaDellaFase({ roles: { researcher: 3, implementer: 1 } }), 'i-search');
   assert.equal(iconaDellaFase({ roles: { implementer: 2, tester: 2 } }), 'i-code', 'a tie goes to the contract order');
-  assert.equal(iconaDellaFase({ roles: {}, kinds: { test: 2, agent: 1 } }), 'i-flask');
+  assert.equal(iconaDellaFase({ roles: {}, kinds: { test: 2, agent: 1 } }), 'i-test-tube');
   assert.equal(iconaDellaFase({ roles: {}, kinds: { agent: 3 } }), 'i-robot');
   assert.equal(iconaDelPasso({ role: 'reviewer', kind: 'agent' }), 'i-shield');
   assert.equal(iconaDelPasso({ role: null, kind: 'artifact' }), 'i-doc');

@@ -30,7 +30,7 @@ test('DELEGHE-REGISTRO-VERO-01 — registro e server veri: il diagramma aperto d
     avviaSessioneFn: (input) => new Promise((resolve) => { runs.push({ input, resolve }); input.onEvento({ type: 'RunStarted', input: { consegna: 'Controlla il progetto' } }); }) };
   let registry = createSessionRegistry(options); let server;
   const listen = async (port = 0) => {
-    server = createServer(createHttpApp({ sessionRegistry: registry, staticHandler: createStaticHandler(BUNDLE) }));
+    server = createServer(createHttpApp({ senzaGettone: 'prove', sessionRegistry: registry, staticHandler: createStaticHandler(BUNDLE) }));
     await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve)); return server.address().port;
   };
   const close = async () => { const promise = new Promise((resolve) => server.close(resolve)); server.closeAllConnections(); await promise; };

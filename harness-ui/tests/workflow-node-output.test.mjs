@@ -168,7 +168,7 @@ test('⛔ F-014-05, AL CONTRARIO — un passo senza output dice che non c\'è, n
 
 async function app(t, store) {
   const registry = { leggiSessioneContesto: (id) => [ROOT_SESSION_ID, ALTRO_SESSION_ID].includes(id) ? { sessionId: id } : null };
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registry, workflowStore: store }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registry, workflowStore: store }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;

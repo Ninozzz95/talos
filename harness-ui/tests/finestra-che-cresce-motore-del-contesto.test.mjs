@@ -171,7 +171,11 @@ test('REV-B6-A2 «Chiedimi» dopo un riassunto del motore del contesto: parte il
   const r1 = ospite(live, () => ({ ok: false, motivo: 'scelta' }));
   const a = await giro(t, { messaggi: grande, motore, live, contextHooks: await runtime.service.createKernelHooks({ sessionId: 'chat', runId: 'g1' }), finestraLocale: r1.finestraLocale });
   assert.equal(a.errore, null, `premessa (giro 1): ${a.errore?.code} ${a.errore?.message}`);
-  assert.ok(riassunti.n >= 1, 'premessa: il motore del contesto ha riassunto nel giro 1');
+  /* owner 28/10/2026 («Rapido subito, il modello dopo», P4): sul posto unico nel giro va il rapido, e il riassunto del motore del contesto
+     arriva a FINE giro (il registro chiama `service.compact`). Qui il fine giro lo si fa come il registro; poi la premessa di sempre. */
+  const fineGiro = await runtime.service.compact({ sessionId: 'chat' });
+  assert.equal(fineGiro?.compattato, true, `premessa: il riassunto di fine giro del motore ${JSON.stringify(fineGiro)}`);
+  assert.ok(riassunti.n >= 1, 'premessa: il motore del contesto ha riassunto dopo il giro 1');
   const inviata1 = motore.stato.chiamate.at(-1).n;
   t.diagnostic(`giro 1: riassunti ${riassunti.n}, ultima richiesta ${inviata1}`);
   /* giro 2: la persona sceglie «Chiedimi» (Impostazioni → Modelli locali). La storia è la stessa più un messaggio. */
@@ -193,7 +197,11 @@ test('REV-B6-A3 «Allarga» dopo un riassunto del motore del contesto: il motore
   const r1 = ospite(live, () => ({ ok: false, motivo: 'memoria' }));
   const a = await giro(t, { messaggi: grande, motore, live, contextHooks: await runtime.service.createKernelHooks({ sessionId: 'chat', runId: 'g1' }), finestraLocale: r1.finestraLocale });
   assert.equal(a.errore, null, `premessa (giro 1): ${a.errore?.code} ${a.errore?.message}`);
-  assert.ok(riassunti.n >= 1, 'premessa: il motore del contesto ha riassunto');
+  /* owner 28/10/2026 («Rapido subito, il modello dopo», P4): sul posto unico nel giro va il rapido, e il riassunto del motore del contesto
+     arriva a FINE giro (il registro chiama `service.compact`). Qui il fine giro lo si fa come il registro; poi la premessa di sempre. */
+  const fineGiro = await runtime.service.compact({ sessionId: 'chat' });
+  assert.equal(fineGiro?.compattato, true, `premessa: il riassunto di fine giro del motore ${JSON.stringify(fineGiro)}`);
+  assert.ok(riassunti.n >= 1, 'premessa: il motore del contesto ha riassunto dopo il giro 1');
   const prima = motore.stato.chiamate.length;
   /* giro 2: ora la crescita riuscirebbe (la memoria si è liberata). Che cosa chiede il kernel? */
   const r2 = ospite(live, ({ servono, live: l }) => { const p = l.nCtx; l.nCtx = 65_536; return { ok: true, prima: p, dopo: l.nCtx, proattiva: true, servono }; });

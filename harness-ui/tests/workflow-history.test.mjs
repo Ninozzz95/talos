@@ -22,7 +22,7 @@ async function setup(t) {
   t.after(async () => { await store.close(); rimuoviCartellaDiProva(root); });
   await createDefinition(store, { record: definition });
   await approveDefinition(store, { approval });
-  const server = createServer(createHttpApp({ staticHandler: async () => null, workflowStore: store,
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, workflowStore: store,
     sessionRegistry: { leggiSessioneContesto: (id) => id === sessionId ? { sessionId: id } : null } }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));

@@ -43,7 +43,7 @@ function el(doc,tag,classe,testo){const n=doc.createElement(tag);if(classe)n.cla
 export function creaReportRow(ricerca,{document:doc=globalThis.document,aperta=false,onEspandi,onApriRapporto}={}){
  const t=testiRicerca(ricerca),stato=statoRicerca(ricerca);
  const riga=el(doc,'div','talos-list-row');riga.dataset.c='ReportRow';riga.dataset.researchId=ricerca?.id||'';riga.setAttribute('role','listitem');
- const icona=el(doc,'span','talos-list-row__icon'),svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),use=doc.createElementNS('http://www.w3.org/2000/svg','use');svg.setAttribute('class','i');svg.setAttribute('aria-hidden','true');use.setAttribute('href','#i-globe');svg.append(use);icona.append(svg);
+ const icona=el(doc,'span','talos-list-row__icon'),svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),use=doc.createElementNS('http://www.w3.org/2000/svg','use');svg.setAttribute('class','i');svg.setAttribute('aria-hidden','true');use.setAttribute('href','#i-telescope');svg.append(use);icona.append(svg);
  const testo=el(doc,'span','talos-list-row__text'),titolo=el(doc,'span','talos-list-row__title',t.titolo),sotto=el(doc,'span','talos-list-row__sub');titolo.title=t.titolo;testo.append(titolo,sotto);
  // 24/09/2026, decisione owner («Barra + fase e conteggi»): una ricerca in corso dice a che punto è, nella riga stessa.
  if(ricerca?.stato==='running'&&ricerca?.avanzamento){const av=creaAvanzamentoRicerca(doc,ricerca.avanzamento,{etichetta:traduci("sezioni.research.row.progressLabel", { title: t.titolo })});if(av)testo.append(av);}

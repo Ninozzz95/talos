@@ -26,7 +26,7 @@ test('SET-01 preserves all eleven destinations and all forty-one stable setting 
   assert.equal(SEZIONI_IMPOSTAZIONI.some(s=>s.id==='providers'||s.titolo==='Provider e accessi'),false,'«Provider e accessi» è stata tolta dall owner');
   /* 28/10/2026, owner (via Mobile): «Lingua delle risposte e della dettatura» subito dopo «Lingua dei menu» — con «Domande a tutta
      larghezza» del 27/10 gli ID diventano QUARANTADUE */
-  assert.equal(CAMPI_IMPOSTAZIONI.length,43); // 29/10/2026: lo Stop con agenti al lavoro (owner)
+  assert.equal(CAMPI_IMPOSTAZIONI.length,44); // 29/10/2026: lo Stop con agenti al lavoro (owner); 03/11: come si apre Nuova sessione (FE-040)
   assert.ok(CAMPI_IMPOSTAZIONI.some(f=>f.id==='userBubbleFullWidthToggle'),'la bolla a tutta larghezza è un’impostazione (owner 27/10/2026)');
   assert.ok(CAMPI_IMPOSTAZIONI.some(f=>f.id==='replyLanguageSelect'),'la lingua delle risposte è un\'impostazione (owner 28/10)');
   assert.ok(CAMPI_IMPOSTAZIONI.some(f=>f.id==='askTimeoutSelect'),'la scadenza delle domande è un\'impostazione (decisione owner 35)');
@@ -39,7 +39,7 @@ test('SET-01 migrated theme controls remain search destinations, not hidden matc
   assert.ok(searchSettings(index(),'bilanciata').some(e=>e.id==='motionQualitySelect' && e.studio));
 });
 test('SET-01 separates seven reading/writing controls without changing their values contract', () => {
-  assert.equal(CHAT_FIELDS.size,8); // 29/10/2026: lo Stop con agenti al lavoro
+  assert.equal(CHAT_FIELDS.size,9); // 29/10/2026: lo Stop con agenti al lavoro; 03/11: come si apre Nuova sessione
   assert.ok(CHAT_FIELDS.has('stopWithAgentsSelect'));
   assert.ok(CHAT_FIELDS.has('userBubbleFullWidthToggle'));
   assert.ok(CHAT_FIELDS.has('askTimeoutSelect'));

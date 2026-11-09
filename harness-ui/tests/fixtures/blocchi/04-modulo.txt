@@ -1,0 +1,5 @@
+root = Modulo("viaggio", "Dettagli del viaggio", [
+  {id: "meta", etichetta: "Dove vuoi andare?", tipo: "testo"},
+  {id: "notti", etichetta: "Quante notti?", tipo: "numero"},
+  {id: "mezzo", etichetta: "Mezzo", tipo: "scelta", opzioni: [{testo: "Treno"}, {testo: "Aereo"}]}
+], "Cerca")

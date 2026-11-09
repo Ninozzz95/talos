@@ -17,7 +17,7 @@ function banco() {
     reindirizza: (sessionId, testo, opzioni) => { chiamate.push(['reindirizza', opzioni?.dispositivoDelGiro]); return { ok: true, redirectId: 'r' }; },
     accodaMessaggio: (sessionId, testo, immagini, opzioni) => { chiamate.push(['accodaMessaggio', opzioni?.dispositivoDelGiro]); return { ok: true, voci: [] }; },
   };
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   return { chiama, chiamate };
 }

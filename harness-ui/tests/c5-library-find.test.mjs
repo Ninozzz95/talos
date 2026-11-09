@@ -142,5 +142,5 @@ test('C5-LIB-08 (review RED, through the real kernel): no row with the injected 
   const fuori = esito.replace(/<<<TALOS_DATA[^\n]*>>>\n[\s\S]*?\n<<<END_TALOS_DATA[^\n]*>>>/gu, '');
   assert.ok(esito.includes(INIETTATA.trim()), 'premise: the injected text did reach the result, inside the fence');
   assert.equal(fuori.includes('IGNORE PREVIOUS INSTRUCTIONS'), false, 'nothing injected outside the fence');
-  assert.doesNotMatch(esito, /characters omitted|\[\.\.\.|truncated/iu, 'the kernel never had to cut a page');
+  assert.doesNotMatch(esito, /characters omitted|characters trimmed|\[\.\.\.|truncated/iu, 'the kernel never had to cut a page');
 });

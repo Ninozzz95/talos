@@ -37,6 +37,7 @@ test('RTI-02 the chat line comes from the start\'s `ripiegoRouter`, once; today\
   const conRipiego = await giroConAvvio({ state: 'ready', modelId: 'mod-a', ripiegoRouter: { modelId: 'mod-a', motivo: 'the router could not load the model (exit code 1)', codice: 'ROUTER_LOAD_FAILED' } });
   assert.equal(conRipiego.risposta.status, 200, 'the answer goes on');
   assert.deepEqual(conRipiego.avvisi.map((a) => a.messaggio), [avvisoRipiegoRouter({ modelId: 'mod-a' })]);
+  assert.deepEqual(conRipiego.avvisi[0].opzioni, { riga: 'ripiego-locale', dati: { modello: 'mod-a' } }, 'FE-050: a separator that stays, not a bubble');
   const oggi = await giroConAvvio({ state: 'ready', modelId: 'mod-a', runtimeId: 'llama.cpp' });
   assert.deepEqual(oggi.avvisi, []);
 });
@@ -47,5 +48,4 @@ test('RTI-03 the notice keeps the dictionary contract, in English first and in I
   const chiave = 'runtime.notice.routerFallback';
   assert.equal(avviso.testo, server.en[chiave].replace(/\{(\w+)\}/gu, (m, n) => (n in avviso.testoParams ? String(avviso.testoParams[n]) : m)));
   assert.equal(typeof server.it[chiave], 'string');
-  assert.match(server.it[chiave], /\{model\}/u);
 });

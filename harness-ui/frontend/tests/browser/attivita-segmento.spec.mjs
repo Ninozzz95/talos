@@ -106,7 +106,7 @@ test.describe('R4 segmento compatto — prodotto', () => {
 
   /* TACCUINO (09/10/2026, bugfixer): un attrezzo senza parole sue apre la riga col suo nome umano, minuscolo apposta (va a metà
      frase). La riga del segmento diceva «scrittura di una nota ×2», l'Indice «Scrittura di una nota» (misurato sulla 4176). */
-  test('ATTIVITA-MAIUSCOLA — la riga del segmento comincia con la maiuscola anche quando la apre un attrezzo senza parole sue', async ({ page }) => {
+  test('ATTIVITA-MAIUSCOLA — la riga del segmento comincia con la maiuscola anche quando la apre uno strumento senza parole sue', async ({ page }) => {
     const c = await apri(page);
     await scena(page, 'nota', 'maiuscola');
     const conteggi = (await page.locator(`${SEG} .talos-activity__conteggi`).first().textContent()).trim();

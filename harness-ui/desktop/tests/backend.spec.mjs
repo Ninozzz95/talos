@@ -7,7 +7,7 @@ import { mkdirSync, mkdtempSync, copyFileSync, symlinkSync, readFileSync, writeF
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
-import { creaAvvioFiglio, scegliPortaEffimera, validaHandshake, urlIngresso } from '../runtime.mjs';
+import { consegnaSegreti, creaAvvioFiglio, scegliPortaEffimera, validaHandshake, urlIngresso } from '../runtime.mjs';
 import { creaRegistro } from '../log.mjs';
 import { preparaRuntime } from './support.mjs';
 
@@ -23,6 +23,7 @@ test('R01-BACKEND — Electron Node, redirect, cookie, rifiuto anonimo, PTY real
   const reportFile = join(dataDir, 'handshake.json');
   const avvio = creaAvvioFiglio({ execPath: require('electron'), percorsi: { root: runtime, server: join(runtime, 'server.mjs'), bootstrap: join(root, 'child-bootstrap.mjs') }, port, token, reportFile, dataDir, env });
   const proc = spawn(avvio.command, avvio.args, avvio.options);
+  consegnaSegreti(proc, avvio);
   const registro = creaRegistro(join(dataDir, 'registro.log'), [token]);
   const uscita = registro.canale();
   proc.stdout.on('data', d => uscita.scrivi(d)); proc.stderr.on('data', d => uscita.scrivi(d));
@@ -92,7 +93,8 @@ test('R01-BACKEND — Electron Node, redirect, cookie, rifiuto anonimo, PTY real
   assert.ok(testo.includes('TALOS-R01')); assert.equal(uscitaPty.codice, 0);
   ws.close();
   await attendi(3000);
-  const misura = new Promise(resolve => proc.once('message', resolve));
+  // 09/11/2026 r39b: the shell also sends {tipo:'sveglio'} (pc-sveglio.mjs); the test waits for the reply to «misura», not the first message
+  const misura = new Promise(resolve => { const f = m => { if (m?.tipo === 'misura') { proc.off('message', f); resolve(m); } }; proc.on('message', f); });
   proc.send({ tipo: 'misura' });
   const memoria = await misura;
   assert.equal(memoria.versions.electron, '44.3.0');

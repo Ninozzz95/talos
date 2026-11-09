@@ -51,7 +51,7 @@ test('⛔ IL DIFETTO DEL 12/09: una cartella scelta a mano parte con TUTTI e qua
     assert.equal(esito.puoAvviare, true, `«${permesso}» su una cartella scelta a mano deve partire`);
     assert.equal(esito.situazione, 'pronto');
     assert.equal(esito.rimedioSu, null);
-    assert.match(esito.etichetta, /Continua nella chat — progetto-mio/u);
+    assert.match(esito.etichetta, /Continua su progetto-mio/u);
     assert.doesNotMatch(esito.etichetta, /Serve/u, 'la frase segnalata dall’owner non deve poter tornare');
     if (permesso !== 'Full access') {
       // ⛔ «Accesso pieno» può comparire solo quando è il permesso SCELTO, mai come cosa che manca.
@@ -64,9 +64,13 @@ test('il PERMESSO comanda la frase del piede: quattro promesse diverse sulla ste
   const per = (permesso) => statoAvvioSessione({ cartella: FUORI, permesso }).motivo;
 
   assert.match(per('Read only'), /legge progetto-mio e non ci scrive niente/u);
-  assert.match(per('Workspace write'), /resterà nella cartella scelta: scrive solo dentro progetto-mio/u);
+  assert.match(per('Workspace write'), /resterà nella cartella scelta: scrive direttamente dentro progetto-mio, senza creare copie/u);
   assert.match(per('On request'), /chiederà conferma prima di ogni scrittura/u);
   assert.match(per('Full access'), /senza i cancelli ordinari/u);
+  /* FE-040 (Frontend, 31/10/2026): «senza creare copie» esce dalla testata e sta sotto Accesso, solo dove è VERO: chi legge soltanto
+     non scrive, quindi di copie non ha senso parlare */
+  for (const scrive of ['Workspace write', 'On request', 'Full access']) assert.match(per(scrive), /senza creare copie/u, scrive);
+  assert.doesNotMatch(per('Read only'), /copie/u);
 
   // ⛔ Al contrario: quattro frasi DIVERSE, non la stessa con un nome sostituito.
   const frasi = new Set(['Read only', 'Workspace write', 'On request', 'Full access'].map(per));
@@ -105,7 +109,7 @@ test('una cartella dell’allowlist parte con TUTTI e quattro i permessi (era gi
   for (const permesso of ['Read only', 'Workspace write', 'On request', 'Full access']) {
     const esito = statoAvvioSessione({ cartella: AUTORIZZATA, permesso });
     assert.equal(esito.puoAvviare, true, `«${permesso}» su una cartella autorizzata deve partire`);
-    assert.match(esito.etichetta, /Continua nella chat — AVM/u);
+    assert.match(esito.etichetta, /Continua su AVM/u);
     assert.match(esito.motivo, /AVM|cartella scelta/u, 'la frase deve comunque parlare della cartella scelta');
     // ⛔ Una cartella GIÀ autorizzata non si annuncia come esterna: quella coda è solo per le altre.
     assert.doesNotMatch(esito.motivo, /non è fra i progetti già autorizzati/u);

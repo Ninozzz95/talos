@@ -28,7 +28,7 @@ export const NODI_PRONTI_MASSIMI = 150_000;
  */
 export const CAMPI_DELLA_CHAT = Object.freeze([
   'approvazioniPendenti', 'attesaAperturaSequenza', 'attesaBubble', 'batchAttivo', 'browserIndice', 'browserPagine',
-  'cachePromptPrecedenti', 'cacheSessione', 'carteDelleFiglie', 'cartellaAssoluta', 'cartellaBase', 'codaInPausa', 'codaMessaggi',
+  'cachePromptPrecedenti', 'cacheSessione', 'cartaRifiuto', 'carteDelleFiglie', 'cartellaAssoluta', 'cartellaBase', 'codaInPausa', 'codaMessaggi',
   'comandiInVolo', 'currentRunModel', 'domandeDelleFiglie', 'domandePendenti', 'durateRagionamento', 'eventiAttrezzi',
   'motiviAttesaFiglie', // pannello v2 (29/10/2026): che cosa chiede ogni figlia che aspetta — vive con le sue carte
   'eventiUsageContesto', 'fileSelezionati', 'followUpBubbleInAttesa', 'messageElements', 'previewProjectId',
@@ -38,6 +38,10 @@ export const CAMPI_DELLA_CHAT = Object.freeze([
   'treeUiRestored', 'ultimaRichiesta', 'ultimoBatchChiuso', 'usage', 'usageEsecuzioniPrecedenti', 'usageSessione', 'usciteAgente',
   // `azzeraSchedaContesto` (C1, sessione desktop): la scheda Contesto della chat
   'richiestaDelGiro', 'politicaContesto', 'compattazioniLegacy', 'recordCompattazioneLegacy', 'storiaContesto', // pannello v2, C-05: il contesto nel tempo
+  'cacheRicominciata', // cache, punto 2 (30/10): l'ultima ripartenza della cache di QUESTA chat, torna con lei
+  'fornitoriEvitati', // decisione 193 (04/11): i fornitori che QUESTA chat evita, tornano con lei
+  'pausaContesto', // decisione 315 (06/11): la pausa del motore dopo un riassunto automatico non riuscito è di QUESTA chat, torna con lei
+  'spesaServizio', // spesa dei riassunti (30/10 sera): il conto di QUESTA chat — al ritorno arrivano solo gli eventi nuovi, non la rigiocata
   // /goal G6 (15/10/2026): la fascia dell'obiettivo; il flusso lo ridice all'apertura, qui per non farla sparire e riapparire
   'obiettivo', 'obiettivoTetti',
   /* ⛔ E quelli che il reset NON tocca ma la RIGIOCATA riscrive (il `RunStarted`, i comandi della persona, gli esiti degli attrezzi):

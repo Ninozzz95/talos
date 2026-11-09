@@ -163,3 +163,167 @@ test('RIG-10 il registro accetta solo un campo del ragionamento conosciuto e dat
     assert.throws(() => verificaRegistro(con(errato)), /reasoning field in messages/u, JSON.stringify(errato));
   }
 });
+
+/* Decisione 330 (giro 3 della cura 324, punti 6b e 6c del giudice): l'assistant in coda senza attrezzi e senza testo che non porta più
+   ragionamento si toglie; DeepSeek diretto (senza `prefix: true`) non lo prosegue e lo perde anche col ragionamento. Hermes toglie dalla
+   copia per la rete gli assistant di solo ragionamento (`agent/turn_request_assembly.py:178-187`), con gli attrezzi restano. */
+const conCoda = (model, coda) => ({ model, messages: [{ role: 'system', content: 'Sei TALOS.' }, { role: 'user', content: 'Leggi a.txt.' }, coda], stream: true });
+const PREFILL = { role: 'assistant', content: '', reasoning_content: 'PENSIERO' };
+
+test('RIG-11 (330, b) verso Groq e Mistral l\u2019assistant in coda rimasto senza ragionamento si toglie: mai un assistant vuoto per ultimo', () => {
+  for (const [id, model] of [['groq', 'openai/gpt-oss-20b'], ['mistral', 'mistral-small-latest']]) {
+    const entrata = conCoda(model, PREFILL);
+    const prima = structuredClone(entrata);
+    const { corpo } = preparaRichiestaCompatibile(id, entrata);
+    assert.deepEqual(corpo.messages.at(-1), { role: 'user', content: 'Leggi a.txt.' }, `${id}: ${JSON.stringify(corpo.messages.at(-1))}`);
+    assert.equal(corpo.messages.length, 2, id);
+    assert.deepEqual(entrata, prima, `${id}: il corpo del chiamante non cambia`);
+  }
+});
+
+test('RIG-12 (330, b, al contrario) restano: Cerebras col suo campo, OpenRouter e i motori di questo PC col ragionamento, ogni assistant con attrezzi o con testo', () => {
+  assert.deepEqual(preparaRichiestaCompatibile('cerebras', conCoda('gpt-oss-120b', PREFILL)).corpo.messages.at(-1), { role: 'assistant', content: '', reasoning: 'PENSIERO' });
+  for (const [id, model] of [['openrouter', 'z-ai/glm-5.3-flash'], ['local', 'qwen3-8b']]) {
+    assert.deepEqual(preparaRichiestaCompatibile(id, conCoda(model, PREFILL)).corpo.messages.at(-1), PREFILL, id);
+  }
+  const conAttrezzi = { role: 'assistant', content: '', reasoning_content: 'PENSIERO', tool_calls: [{ id: 'c1', type: 'function', function: { name: 'leggi', arguments: '{}' } }] };
+  const conTesto = { role: 'assistant', content: 'Sto leggendo' };
+  const aPezzi = { role: 'assistant', content: [{ type: 'text', text: 'Sto leggendo' }] };
+  for (const [id, model] of [['groq', 'openai/gpt-oss-20b'], ['mistral', 'mistral-small-latest'], ['deepseek', 'deepseek-flash']]) {
+    assert.equal(preparaRichiestaCompatibile(id, conCoda(model, conAttrezzi)).corpo.messages.at(-1).tool_calls.length, 1, `${id}: con gli attrezzi resta (R07)`);
+    assert.equal(preparaRichiestaCompatibile(id, conCoda(model, conTesto)).corpo.messages.at(-1).content, 'Sto leggendo', `${id}: col testo resta`);
+    assert.deepEqual(preparaRichiestaCompatibile(id, conCoda(model, aPezzi)).corpo.messages.at(-1).content, aPezzi.content, `${id}: col testo a pezzi resta`);
+  }
+  const vuotoAPezzi = { role: 'assistant', content: [{ type: 'text', text: '  ' }] };
+  assert.equal(preparaRichiestaCompatibile('mistral', conCoda('mistral-small-latest', vuotoAPezzi)).corpo.messages.length, 2, 'testo a pezzi solo di spazi: vuoto');
+  assert.equal(preparaRichiestaCompatibile('openrouter', conCoda('z-ai/glm-5.3-flash', { role: 'assistant', content: '' })).corpo.messages.length, 2, 'anche verso OpenRouter un assistant muto in coda si toglie');
+  const conDettagli = { role: 'assistant', content: '', reasoning_details: [{ type: 'reasoning.encrypted', data: 'X' }] };
+  assert.deepEqual(preparaRichiestaCompatibile('openrouter', conCoda('z-ai/glm-5.3-flash', conDettagli)).corpo.messages.at(-1), conDettagli, 'i soli dettagli sono ragionamento');
+});
+
+test('RIG-13 (330, c) DeepSeek diretto non prosegue l\u2019assistant in coda (prefix:true solo su /beta): si toglie anche col ragionamento', () => {
+  assert.equal(REGISTRO_FORNITORI.deepseek.prefillInCoda.prosegue, false);
+  const { corpo } = preparaRichiestaCompatibile('deepseek', conCoda('deepseek-flash', PREFILL));
+  assert.deepEqual(corpo.messages.at(-1), { role: 'user', content: 'Leggi a.txt.' });
+  // un assistant con ragionamento NON in coda resta (DeepSeek lo vuole rimandato coi tool_calls, RIG-03)
+  assert.equal(preparaRichiestaCompatibile('deepseek', corpoDelKernel('deepseek-flash')).corpo.messages[2].reasoning_content, 'PENSIERO');
+});
+
+test('RIG-14 (330) il registro accetta prefillInCoda solo come «non prosegue», con fonte e data', () => {
+  const con = (prefillInCoda) => ({ ...REGISTRO_FORNITORI, deepseek: { ...REGISTRO_FORNITORI.deepseek, prefillInCoda } });
+  for (const errato of [null, {}, { prosegue: true, fonte: 'https://x.example', data: '2026-11-07' }, { prosegue: false, data: '2026-11-07' }, { prosegue: false, fonte: 'x', data: '2026-11-07' }, { prosegue: false, fonte: 'https://x.example', data: 'oggi' },
+    // giro 5 (L1 dei revisori 1 e 3): una fonte è un indirizzo https vero e una data è un giorno del calendario
+    { fonte: 'https://x.example', data: '2026-11-07' }, { prosegue: false, fonte: 'http://x.example', data: '2026-11-07' }, { prosegue: false, fonte: 'https://x', data: '2026-11-07' },
+    // giro 6 (BASSO del revisore 3): niente etichette vuote nel dominio
+    { prosegue: false, fonte: 'https://.example', data: '2026-11-07' }, { prosegue: false, fonte: 'https://example.', data: '2026-11-07' }, { prosegue: false, fonte: 'https://x..example', data: '2026-11-07' },
+    { prosegue: false, fonte: 'https://a b.example', data: '2026-11-07' }, { prosegue: false, fonte: 'https://x.example/a b', data: '2026-11-07' }, { prosegue: false, fonte: 'https://x.exa\tmple', data: '2026-11-07' }, { prosegue: false, fonte: 'https://x.example', data: '2026-99-99' }, { prosegue: false, fonte: 'https://x.example', data: '2026-02-30' }]) {
+    assert.throws(() => verificaRegistro(con(errato)), /trailing assistant declaration/u, JSON.stringify(errato));
+  }
+  assert.equal(verificaRegistro(con({ prosegue: false, fonte: 'https://x.example', data: '2026-11-07' })), true);
+  assert.equal(verificaRegistro(con({ prosegue: false, fonte: 'https://x.example/a/b.md#c', data: '2024-02-29' })), true, 'il 29 febbraio di un anno bisestile è un giorno vero');
+});
+
+test('RIG-14B (330, b) un ragionamento di soli spazi non è ragionamento: l’assistant in coda si toglie anche verso OpenRouter', () => {
+  for (const coda of [{ role: 'assistant', content: '', reasoning_content: '  \n' }, { role: 'assistant', content: '', reasoning: ' ' }]) {
+    assert.equal(preparaRichiestaCompatibile('openrouter', conCoda('z-ai/glm-5.3-flash', coda)).corpo.messages.length, 2, JSON.stringify(coda));
+  }
+});
+
+test('RIG-16 (giro 4, M1 del revisore 2): Kimi e Qwen continuano solo con partial:true, che TALOS non manda: dichiarati «non prosegue», con fonte', async () => {
+  const { prefillInCodaArriva } = await import('../src/openai-compatible-runtime.mjs');
+  for (const id of ['kimi', 'qwen']) {
+    const voce = REGISTRO_FORNITORI[id];
+    assert.equal(voce?.prefillInCoda?.prosegue, false, `${id}: prefillInCoda.prosegue`);
+    assert.match(voce.prefillInCoda.fonte, /^https:\/\//, `${id}: fonte scritta`);
+    assert.equal(prefillInCodaArriva(`${id}:modello-qualunque`), null, `${id}: nessuna continuazione`);
+  }
+  assert.deepEqual(prefillInCodaArriva('openrouter:moonshotai/kimi-k2'), { testo: true }, 'al contrario: via OpenRouter si continua');
+});
+
+test('RIG-17 (giro 6, MEDIO del revisore 2; giro 7, MEDIO del revisore 1): Ollama e Ollama Cloud leggono `reasoning`, non `reasoning_content`, e non proseguono il pensiero dell’assistant in coda', async () => {
+  const { prefillInCodaArriva } = await import('../src/openai-compatible-runtime.mjs');
+  for (const [id, model] of [['ollama', 'qwen3.5:9b'], ['ollama', 'glm-4.7'], ['ollama', 'deepseek-v3.2'], ['ollama-cloud', 'glm-4.7'], ['ollama-cloud', 'gpt-oss:20b']]) {
+    const voce = REGISTRO_FORNITORI[id];
+    assert.equal(voce.ragionamentoNeiMessaggi?.campo, 'reasoning', `${id}: campo del ragionamento`);
+    assert.ok(voce.campiRifiutati?.campi?.includes('reasoning_content'), `${id}: reasoning_content non arriva`);
+    assert.match(voce.ragionamentoNeiMessaggi.fonte, /ollama/u, `${id}: fonte scritta`);
+    // giro 7: i renderer e i parser di Ollama (qwen35, glm47, deepseek3) non proseguono il pensiero di un assistant in coda senza testo
+    assert.equal(voce.prefillInCoda?.prosegue, false, `${id}: prefillInCoda.prosegue`);
+    assert.match(voce.prefillInCoda.fonte, /^https:\/\/github\.com\/ollama\/ollama\//u, `${id}: fonte nel sorgente di Ollama`);
+    assert.equal(prefillInCodaArriva(`${id}:${model}`), null, `${id}:${model}: nessuna continuazione, la scala di oggi`);
+    // la rete del filo: un assistant di solo ragionamento in coda non parte
+    const { corpo } = preparaRichiestaCompatibile(id, conCoda(model, PREFILL));
+    assert.deepEqual(corpo.messages.at(-1), { role: 'user', content: 'Leggi a.txt.' }, `${id}: l’assistant in coda si toglie`);
+    // un assistant della storia col ragionamento: resta, nel campo di Ollama, mai il campo che Ollama butta
+    const storia = preparaRichiestaCompatibile(id, corpoDelKernel(model)).corpo.messages.filter((m) => m.role === 'assistant');
+    assert.ok(storia.length > 0 && storia.every((m) => !Object.hasOwn(m, 'reasoning_content')), `${id}: nessun reasoning_content`);
+    assert.ok(storia.some((m) => m.reasoning === 'PENSIERO'), `${id}: l’eco della storia porta il ragionamento in \`reasoning\``);
+  }
+  assert.equal(prefillInCodaArriva('ollama:qwen3.5:9b'), null);
+  // al contrario: il motore di TALOS (llama.cpp) prosegue il ragionamento in coda e legge reasoning_content; Cerebras col suo campo
+  assert.deepEqual(prefillInCodaArriva('local:qwen3-8b'), { testo: true });
+  assert.deepEqual(prefillInCodaArriva('cerebras:gpt-oss-120b'), { testo: true });
+  assert.deepEqual(preparaRichiestaCompatibile('local', conCoda('qwen3-8b', PREFILL)).corpo.messages.at(-1), PREFILL);
+  assert.deepEqual(preparaRichiestaCompatibile('cerebras', conCoda('gpt-oss-120b', PREFILL)).corpo.messages.at(-1), { role: 'assistant', content: '', reasoning: 'PENSIERO' });
+});
+
+/* Giro 8 della cura 324 (BASSO del revisore dei fornitori del giro 7): un prefill costruito per OpenRouter (coi `reasoning_details`)
+   può arrivare a un altro fornitore DENTRO la stessa chiamata (il cambio di fornitore dopo un 429). I `reasoning_details` li legge solo
+   OpenRouter: Hermes dà a Mistral, Groq e Cerebras nessun campo del ragionamento (rifiutano ogni chiave che non conoscono) e i tre campi
+   solo ai fili alla OpenRouter (`agent/message_sanitization.py:645-647`, `:670-671`, `:674-676`). */
+const DETTAGLI_OR = [{ type: 'reasoning.encrypted', data: 'X' }];
+const PREFILL_OR = { role: 'assistant', content: '', reasoning_content: 'PENSIERO', reasoning_details: DETTAGLI_OR };
+const SOLO_DETTAGLI = { role: 'assistant', content: '', reasoning_details: DETTAGLI_OR };
+
+test('RIG-18 (giro 8): i `reasoning_details` dell’assistant in coda partono solo verso OpenRouter; verso un rigido coi soli dettagli l’assistant si toglie', () => {
+  for (const [id, model] of [['groq', 'openai/gpt-oss-20b'], ['mistral', 'mistral-small-latest']]) {
+    for (const coda of [PREFILL_OR, SOLO_DETTAGLI]) {
+      const entrata = conCoda(model, coda);
+      const prima = structuredClone(entrata);
+      const { corpo } = preparaRichiestaCompatibile(id, entrata);
+      assert.deepEqual(corpo.messages.at(-1), { role: 'user', content: 'Leggi a.txt.' }, `${id}: ${JSON.stringify(corpo.messages.at(-1))}`);
+      assert.ok(!JSON.stringify(corpo).includes('reasoning_details'), id);
+      assert.deepEqual(entrata, prima, `${id}: il corpo del chiamante non cambia`);
+    }
+  }
+  // chi prosegue il ragionamento nel suo campo lo riceve, senza i dettagli; coi soli dettagli non c'è niente da proseguire
+  assert.deepEqual(preparaRichiestaCompatibile('cerebras', conCoda('gpt-oss-120b', PREFILL_OR)).corpo.messages.at(-1), { role: 'assistant', content: '', reasoning: 'PENSIERO' });
+  assert.deepEqual(preparaRichiestaCompatibile('local', conCoda('qwen3-8b', PREFILL_OR)).corpo.messages.at(-1), PREFILL);
+  // giro 9 (BASSO del revisore delle prove del giro 8): l'assistant in coda si SOSTITUISCE, mai uno nuovo dopo quello coi dettagli
+  for (const [id, model] of [['cerebras', 'gpt-oss-120b'], ['local', 'qwen3-8b']]) {
+    const { corpo } = preparaRichiestaCompatibile(id, conCoda(model, PREFILL_OR));
+    assert.equal(corpo.messages.length, 3, `${id}: ${JSON.stringify(corpo.messages)}`);
+    assert.ok(!JSON.stringify(corpo).includes('reasoning_details'), `${id}: nessun reasoning_details nel corpo`);
+  }
+  for (const [id, model] of [['cerebras', 'gpt-oss-120b'], ['local', 'qwen3-8b']]) {
+    assert.equal(preparaRichiestaCompatibile(id, conCoda(model, SOLO_DETTAGLI)).corpo.messages.length, 2, `${id}: coi soli dettagli si toglie`);
+  }
+  // al contrario: verso OpenRouter l'assistant in coda parte intero, dettagli compresi
+  assert.deepEqual(preparaRichiestaCompatibile('openrouter', conCoda('z-ai/glm-5.3-flash', PREFILL_OR)).corpo.messages.at(-1), PREFILL_OR);
+  assert.deepEqual(preparaRichiestaCompatibile('openrouter', conCoda('z-ai/glm-5.3-flash', SOLO_DETTAGLI)).corpo.messages.at(-1), SOLO_DETTAGLI);
+  // un assistant con attrezzi o con testo non è un prefill: resta com'è, anche verso un rigido (la regola tocca solo l'assistant in coda muto)
+  const conTesto = { role: 'assistant', content: 'Sto leggendo', reasoning_details: DETTAGLI_OR };
+  assert.equal(preparaRichiestaCompatibile('groq', conCoda('openai/gpt-oss-20b', conTesto)).corpo.messages.at(-1).content, 'Sto leggendo');
+});
+
+test('RIG-19 (giro 8): la strada vera verso Mistral (router reale, server finto): il prefill di OpenRouter non arriva, né i suoi dettagli', async (t) => {
+  const ricevute = [];
+  const server = createServer(async (req, res) => {
+    const blocchi = []; for await (const b of req) blocchi.push(b);
+    ricevute.push(JSON.parse(Buffer.concat(blocchi).toString()));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'pronto' } }], usage: { prompt_tokens: 7, completion_tokens: 1, total_tokens: 8 } }));
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }));
+  assert.notEqual(server.address().port, 4174);
+  const store = createProviderCredentialStore({ env: { MISTRAL_API_KEY: 'credenziale-fittizia-rig' } });
+  store.setRuntime('mistral', { endpoint: `http://127.0.0.1:${server.address().port}/v1` });
+  const richiesta = creaFetchMultiProvider(fetch, { dipendenze: { leggiChiave: store.getKey, leggiRuntime: store.getRuntime } });
+  const { stream: _s, ...corpo } = conCoda('mistral:mistral-small-latest', PREFILL_OR);
+  await richiesta('https://openrouter.ai/api/v1/chat/completions', { method: 'POST', body: JSON.stringify({ ...corpo, stream: false }) });
+  const arrivato = ricevute.at(-1);
+  assert.equal(arrivato.model, 'mistral-small-latest');
+  assert.equal(arrivato.messages.at(-1).role, 'user', JSON.stringify(arrivato.messages.at(-1)));
+  assert.ok(!JSON.stringify(arrivato).includes('reasoning_details'));
+});

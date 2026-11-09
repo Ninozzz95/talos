@@ -74,16 +74,16 @@ export const FAMIGLIE = Object.freeze([
 export const ICONA_FAMIGLIA = Object.freeze({
   git: 'i-git',
   node: 'i-code',
-  python: 'i-brain',
-  docker: 'i-grid',
-  test: 'i-check-sq',
-  build: 'i-layout',
-  server: 'i-play',
+  python: 'i-file-code',
+  docker: 'i-container',
+  test: 'i-test-tube',
+  build: 'i-hammer',
+  server: 'i-server',
   rete: 'i-globe',
   filesystem: 'i-folder',
   install: 'i-download',
   shell: 'i-terminal',
-  generico: 'i-command',
+  generico: 'i-square-chevron',
 });
 
 /**

@@ -178,3 +178,21 @@ test('IN-TURN single slot: past the limit, the summary still happens inside the 
   assert.ok(prepared.measurement.inputTokens < modelProfile.windowTokens - modelProfile.responseReserve, `below the input limit: ${prepared.measurement.inputTokens}`);
   assert.ok(prepared.messages.some(m => typeof m.content === 'string' && m.content.includes('talos-context-memory')), 'this request already carries the summary');
 });
+
+/*
+ * Owner 28/10/2026, «Rapido subito, il modello dopo» (contratto P4 con la CLI, `CONTRATTO-POSTO-UNICO-RAPIDO-POI-MODELLO-2026-10-28.md`):
+ * col «non aspettare» (`summaryCeilingMs: 0`) anche il posto unico risponde SUBITO «non pronto» quando la richiesta non entra — ma SENZA
+ * avviare un lavoro, che occuperebbe l'unico posto mentre la richiesta del giro (col riassunto rapido) è in volo. Il riassunto del modello
+ * lo avvia chi ospita a giro finito (`details.aFineGiro`), e il suo jobId lo conosce lui.
+ */
+test('IN-TURN single slot + no wait: past the limit, NOT_READY at once with aFineGiro and no job; the engine stays free', async t => {
+  const { engine, append, calls } = await engineFixture(t);
+  await append('s0', { role: 'system', content: 'Sei un assistente.' });
+  await append('u0', { role: 'user', content: TASK });
+  for (let k = 1; k <= 10; k++) { await append(`a${k}`, readCall(k)); await append(`t${k}`, readResult(k)); }
+  const errore = await engine.prepareForRequest({ sessionId: 'turn', sessionModel: { ...modelProfile, singleSlot: true }, summaryCeilingMs: 0 }).then(() => null, (e) => e);
+  assert.equal(errore?.code, 'CTX_SUMMARY_NOT_READY');
+  assert.deepEqual(errore.details, { jobId: null, aFineGiro: true });
+  assert.deepEqual((await engine.getContextState({ sessionId: 'turn' })).jobs, [], 'no job: the only slot stays free for the turn');
+  assert.equal(calls.length, 0, 'no summary request while the turn has one in flight');
+});

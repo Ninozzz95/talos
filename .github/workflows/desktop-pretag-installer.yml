@@ -78,6 +78,15 @@ jobs:
           node harness-ui/scripts/scarica-binding-iroh.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Binding iroh non pronto.' }
 
+      # 09/11/2026 (owner, strada A): l'aiutante del PC precostruito dalla release interna nominata in harness-ui/native/aiutante-pc.json;
+      # sha256 controllato contro IMPRONTA_AIUTANTE_PC prima di qualunque copia, poi TALOS_AIUTANTE_PC_SORGENTE/AVVISI in GITHUB_ENV.
+      - name: aiutante del PC dalla release interna, con impronta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node harness-ui/scripts/scarica-aiutante-pc.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Aiutante del PC non pronto.' }
+
       - name: costruisci NSIS e ZIP
         timeout-minutes: 15
         run: |

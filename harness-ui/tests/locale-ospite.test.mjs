@@ -160,7 +160,7 @@ test('LOS-03 il risolutore: modello aperto ⇒ destinazione dell\'ospite; non ap
 
 test('LOS-04 le rotte: POST access tiene e risponde lo stato senza chiave; remove dimentica; corpo con un campo in più 400; spenta 404; GET 405', async () => {
   const accessoLocaleOspite = creaAccessoLocaleOspite({ cartella: CARTELLA, fs: FS_SOCKET });
-  const chiama = creaChiamataInterna({ httpApp: createHttpApp({ staticHandler: async () => null, accessoLocaleOspite }), porta: 4999 });
+  const chiama = creaChiamataInterna({ httpApp: createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, accessoLocaleOspite }), porta: 4999 });
   const dentro = join(CARTELLA, 'motore.sock');
   /* `chiama` rifiuta ogni stato non 2xx con `{ stato, code }`: qui serve solo lo stato e il codice */
   const esito = (p) => p.then((x) => ({ stato: x.stato, dati: x.dati }), (e) => ({ stato: e.stato, code: e.code }));
@@ -175,7 +175,7 @@ test('LOS-04 le rotte: POST access tiene e risponde lo stato senza chiave; remov
   const via = await esito(chiama({ metodo: 'POST', percorso: '/api/v1/providers/locale-ospite/access/remove', corpo: {} }));
   assert.deepEqual(via, { stato: 200, dati: { pronto: false } });
   assert.equal(accessoLocaleOspite.stato().pronto, false);
-  const spenta = creaChiamataInterna({ httpApp: createHttpApp({ staticHandler: async () => null, accessoLocaleOspite: creaAccessoLocaleOspite({ cartella: null }) }), porta: 4999 });
+  const spenta = creaChiamataInterna({ httpApp: createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, accessoLocaleOspite: creaAccessoLocaleOspite({ cartella: null }) }), porta: 4999 });
   assert.deepEqual(await esito(spenta({ metodo: 'POST', percorso: '/api/v1/providers/locale-ospite/access', corpo: valido(dentro) })), { stato: 404, code: 'LOCAL_GUEST_DISABLED' });
   assert.deepEqual(await esito(spenta({ metodo: 'POST', percorso: '/api/v1/providers/locale-ospite/access/remove', corpo: {} })), { stato: 404, code: 'LOCAL_GUEST_DISABLED' },
     'spenta vuol dire spenta anche per remove: un 200 direbbe all\'app che la fonte esiste');

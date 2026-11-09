@@ -220,7 +220,7 @@ export function leggiAccantonato(soggetto) {
  * ha la sua ICONA e la sua parola: lo stato non sta solo nel colore (i colori sono quelli del tema, `scheda-github.css`).
  */
 export const ESITI_CONTROLLO = Object.freeze(['fallito', 'in-corso', 'annullato', 'passato', 'saltato']);
-const ICONA_ESITO = Object.freeze({ fallito: 'i-x', 'in-corso': 'i-clock', annullato: 'i-stop', passato: 'i-check', saltato: 'i-minus' });
+const ICONA_ESITO = Object.freeze({ fallito: 'i-x', 'in-corso': 'i-loader', annullato: 'i-quadrato', passato: 'i-check', saltato: 'i-minus' });
 const CONTEGGIO_DI = Object.freeze({ fallito: 'falliti', 'in-corso': 'inCorso', annullato: 'annullati', passato: 'passati', saltato: 'saltati' });
 
 /** Tutte le voci del gruppo «Pull request»: una sola lista, che un test di copertura legge (`i18n-copertura.test.mjs`). Sono CHIAVI del dizionario: il testo lo dà `t()` nella lingua corrente. */
@@ -690,7 +690,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
   }
 
   const IN_CORSO = { recupera: 'github.sync.progress.fetching', scarica: 'github.sync.progress.pulling', invia: 'github.sync.progress.pushing', pubblica: 'github.sync.progress.publishing' };
-  const ICONA_SINC = { recupera: 'i-history', scarica: 'i-download', invia: 'i-send', pubblica: 'i-send' };
+  const ICONA_SINC = { recupera: 'i-refresh', scarica: 'i-download', invia: 'i-arrow-up-line', pubblica: 'i-arrow-up-line' };
 
   function etichettaSinc(azione, s) {
     if (azione === 'scarica') return t("github.sync.button.pull", { n: s.indietro });
@@ -1126,7 +1126,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       riga.dataset.commit = v.commit;
       const corpo = el(doc, 'div', 'talos-github-riga__apri talos-github-riga__apri--fermo');
       const segno = el(doc, 'span', 'talos-github-riga__lettera');
-      segno.append(icona(doc, 'i-layers'));
+      segno.append(icona(doc, 'i-archive'));
       const nome = el(doc, 'span', 'talos-github-riga__nome', automatica ? t("github.stash.noNote") : nota);
       const dove = el(doc, 'span', 'talos-github-riga__cartella', [ramo ? t("github.stash.row.onBranch", { branch: ramo }) : null, tempoFa(v.data, lingua)].filter(Boolean).join(' · '));
       // su due righe, come i commit: a 1024 una riga sola tagliava «su lavor…» e l'ora spariva (visto in foto, 26/09)
@@ -1323,13 +1323,13 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     ramo.title = t("github.repo.header.branch", { name: nomeRamo });
     ramo.append(icona(doc, 'i-branch'), el(doc, 'b', 'talos-file-head__nome', nomeRamo), icona(doc, 'i-chevron'));
     ramo.addEventListener('click', (e) => { void apriMenuRami(e.currentTarget); });
-    const vociRepo = [{ etichetta: t("github.repo.menu.refresh"), icona: 'i-clock', azione: () => api.ricarica() }, ...vociSinc()];
+    const vociRepo = [{ etichetta: t("github.repo.menu.refresh"), icona: 'i-refresh', azione: () => api.ricarica() }, ...vociSinc()];
     if (dati.base) {
       vociRepo.push({ etichetta: t("github.commit.amend.menu"), icona: 'i-edit', azione: () => { void avviaModifica(); } });
-      vociRepo.push({ etichetta: t("github.commit.undo.menu"), icona: 'i-arrow-left', azione: () => { void annullaUltimoCommit(); } });
+      vociRepo.push({ etichetta: t("github.commit.undo.menu"), icona: 'i-undo', azione: () => { void annullaUltimoCommit(); } });
     }
-    if (g.conflitti.length === 0 && g.preparati.length + g.modificati.length > 0) vociRepo.push({ etichetta: t("github.stash.action"), icona: 'i-layers', azione: () => accantona(false) });
-    if (g.conflitti.length === 0 && g.nuovi.length > 0) vociRepo.push({ etichetta: t("github.stash.actionWithNew"), icona: 'i-layers', azione: () => accantona(true) });
+    if (g.conflitti.length === 0 && g.preparati.length + g.modificati.length > 0) vociRepo.push({ etichetta: t("github.stash.action"), icona: 'i-archive', azione: () => accantona(false) });
+    if (g.conflitti.length === 0 && g.nuovi.length > 0) vociRepo.push({ etichetta: t("github.stash.actionWithNew"), icona: 'i-archive', azione: () => accantona(true) });
     /* ⭐ «Affida all'agente» (owner 26/09, punto 10): scrive la richiesta nel composer e la persona la manda lei — non parte da sola */
     if (quanteModifiche > 0 && typeof api.affidaAllAgente === 'function') {
       const richiesta = g.preparati.length > 0
@@ -1687,7 +1687,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     }
     riga.append(corpo);
     /* a icona: un pulsante testuale, anche invisibile, prende il posto degli esiti e taglia l'ultimo (foto del 27/09) */
-    const apri = bottoneIcona(doc, 'i-link', t(CHIAVI_PR.apri), () => apriFuori(pr.url));
+    const apri = bottoneIcona(doc, 'i-external-link', t(CHIAVI_PR.apri), () => apriFuori(pr.url));
     apri.dataset.fuoco = 'pr-apri';
     riga.append(apri);
     return riga;
@@ -1702,7 +1702,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
       corpo.type = 'button';
       const segno = el(doc, 'span', 'talos-github-riga__lettera');
       segno.dataset.esito = c.stato;
-      segno.append(icona(doc, ICONA_ESITO[c.stato] ?? 'i-ignoto'));
+      segno.append(icona(doc, ICONA_ESITO[c.stato] ?? 'i-question'));
       corpo.append(segno, el(doc, 'span', 'talos-github-riga__nome', c.nome), el(doc, 'span', 'talos-github-riga__cartella', [t(PAROLA_ESITO[c.stato] ?? c.stato), c.flusso].filter(Boolean).join(' · ')));
       corpo.setAttribute('aria-label', `${c.nome}: ${t(PAROLA_ESITO[c.stato] ?? c.stato)}${c.flusso ? ` · ${c.flusso}` : ''}`);
       if (c.indirizzo) { corpo.addEventListener('click', () => apriFuori(c.indirizzo)); corpo.title = c.indirizzo; }
@@ -1880,8 +1880,8 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     const aperto = !stato.chiusi.has('pr');
     if (aperto && p?.dati) {
       const voci = [
-        { etichetta: t(CHIAVI_PR.aggiorna), icona: 'i-clock', azione: () => { void caricaPr(); } },
-        { etichetta: t(CHIAVI_PR.suGithub), icona: 'i-link', azione: () => apriFuori(`https://github.com/${p.dati.repo}/pulls`) },
+        { etichetta: t(CHIAVI_PR.aggiorna), icona: 'i-refresh', azione: () => { void caricaPr(); } },
+        { etichetta: t(CHIAVI_PR.suGithub), icona: 'i-external-link', azione: () => apriFuori(`https://github.com/${p.dati.repo}/pulls`) },
       ];
       const altro = bottoneIcona(doc, 'i-more', t(CHIAVI_PR.altreAzioni), (e) => menu(voci, { ancoraEl: e.currentTarget, focusElement: e.currentTarget, etichetta: t(CHIAVI_PR.azioni) }));
       altro.setAttribute('aria-haspopup', 'menu');
@@ -1987,7 +1987,7 @@ export function creaSchedaGithub({ doc = globalThis.document, radice, api, confe
     titoli.append(nome, meta);
     const comandi = el(doc, 'div', 'talos-lettore__comandi');
     if (typeof onSchermoIntero === 'function') {
-      const schermo = bottoneIcona(doc, 'i-layout', stato.schermoIntero ? t("github.diff.fullScreen.exit") : t("github.diff.fullScreen.enter"), () => { stato.schermoIntero = !stato.schermoIntero; disegnaDiff(); onSchermoIntero(vistaDiff, stato.schermoIntero); allinea(); });
+      const schermo = bottoneIcona(doc, stato.schermoIntero ? 'i-minimize' : 'i-maximize', stato.schermoIntero ? t("github.diff.fullScreen.exit") : t("github.diff.fullScreen.enter"), () => { stato.schermoIntero = !stato.schermoIntero; disegnaDiff(); onSchermoIntero(vistaDiff, stato.schermoIntero); allinea(); });
       schermo.setAttribute('aria-pressed', String(stato.schermoIntero));
       comandi.append(schermo);
     }

@@ -77,6 +77,7 @@
  */
 import { interpola, linguaCorrenteDiT, t } from './lingua.js';
 import { TESTI } from '../i18n/testi/index.js';
+import { schedaPerCodice } from './accesso-chatgpt-scheda.js'; // decisione 116 C
 import { conToken } from './context-separator.js'; // L1 1.3: il numero con la sua unità, al plurale giusto
 
 /** I numeri nella lingua corrente (stesso uso di `capability.js`: italiano con il punto delle migliaia, altrimenti inglese). */
@@ -207,6 +208,8 @@ const PUNTI_DI_FERMATA = [
   [/^while "(.+)" was running$/u, (m) => ['errori.turno.punto.inCorso', { nome: m[1] }]],
   [/^before round (\d+)$/u, (m) => ['errori.turno.punto.primaDelGiro', { n: m[1] }]],
   [/^while the model was answering, at round (\d+)$/u, (m) => ['errori.turno.punto.rispostaDelModello', { n: m[1] }]],
+  [/^while the model was still loading, at round (\d+)$/u, (m) => ['errori.turno.punto.caricamentoDelModello', { n: m[1] }]], // 01/11/2026, Stop durante l'apertura
+  [/^while the model was reading the conversation, at round (\d+)$/u, (m) => ['errori.turno.punto.letturaDellaConversazione', { n: m[1] }]], // D8, 04/11/2026: Stop prima della prima parola
   [/^before the request was sent, at round (\d+)$/u, (m) => ['errori.turno.punto.primaDellInvio', { n: m[1] }]],
   [/^while waiting to ask again after an empty answer, at round (\d+)$/u, (m) => ['errori.turno.punto.attesaDopoRispostaVuota', { n: m[1] }]],
   [/^during compaction, at round (\d+)$/u, (m) => ['errori.turno.punto.compattazione', { n: m[1] }]],
@@ -311,6 +314,16 @@ const REGOLE = [
       tecnico: tecnico.includes('OPENROUTER_ALL_PROVIDERS_EXCLUDED') ? tecnico : `[OPENROUTER_ALL_PROVIDERS_EXCLUDED]${tecnico ? ` ${tecnico}` : ''}`,
     }),
   },
+  /* 01/11/2026: la restrizione sta nel conto OpenRouter, non nell'elenco di TALOS: stessa forma della carta sopra, altro posto dove si cambia */
+  {
+    id: 'restrizione-conto', riconosce: (_testo, code) => code === 'OPENROUTER_GUARDRAIL_BLOCKED',
+    spiega: tecnico => ({
+      cosa: t('errori.turno.restrizioneConto.cosa'),
+      perche: t('errori.turno.restrizioneConto.perche'),
+      rimedi: [t('errori.turno.restrizioneConto.rimedio1'), t('errori.turno.restrizioneConto.rimedio2')],
+      tecnico: tecnico.includes('OPENROUTER_GUARDRAIL_BLOCKED') ? tecnico : `[OPENROUTER_GUARDRAIL_BLOCKED]${tecnico ? ` ${tecnico}` : ''}`,
+    }),
+  },
   /* 18/10/2026: un modello ritirato o chiuso agli account nuovi (Gemini 2.5 Flash-Lite, misurato). Il codice lo mette il server
      (`classificaRifiutoNoto`); non è un limite del servizio né un guasto: si sceglie un altro modello. */
   {
@@ -331,6 +344,13 @@ const REGOLE = [
   {
     id: 'piano-chatgpt', famiglia: 'piano-chatgpt', riconosce: (_testo, code) => typeof code === 'string' && code.startsWith('CHATGPT_'),
     spiega: (tecnico, codice) => {
+      /* Decisione 116 C (owner 04/11/2026), stato 3: TALOS ha già provato a rinnovare l'accesso. La scheda dice il perché e porta i
+         pulsanti («Accedi e riprendi» o «Riprova», e «Altro modello…»): niente rimedi da leggere, niente codice né «Testo del server». */
+      const scheda = schedaPerCodice(codice);
+      if (scheda) {
+        return { cosa: t('errori.turno.pianoChatgpt.cosa'), perche: t(scheda === 'accedi' ? 'chat.chatgptAccess.triedToRenew' : 'chat.chatgptAccess.cannotReach'),
+          rimedi: [], schedaAccesso: scheda, senzaTestoDelServer: true, tecnico: tecnico.includes(codice) ? tecnico : `[${codice}]${tecnico ? ` ${tecnico}` : ''}` };
+      }
       const chiave = `errori.${codice}.message`;
       const frase = t(chiave);
       // chiavi scritte per intero: la prova ERRORI-LINGUA-01 legge questo file per sapere quali voci si dicono
@@ -780,6 +800,25 @@ const REGOLE = [
       };
     },
   },
+  /*
+   * FE-051 (owner 01/11/2026, bozzetto `bozzetto-rifiuto-modello`): il modello ha rifiutato la conversazione. Non è un guasto di TALOS e riprovare
+   *   con lo stesso modello dà lo stesso rifiuto e può costare: l'unica strada è un altro modello, quindi la carta non porta rimedi, porta il tasto.
+   *   Due forme: risposta vuota (`PROVIDER_EMPTY_RESPONSE` con la frase, che il server può mandare tradotta) e testo a metà (il code suo).
+   *   Sta PRIMA della risposta vuota: il code è lo stesso, a distinguerla è la frase.
+   */
+  {
+    id: 'rifiuto-del-modello',
+    famiglia: 'rifiuto',
+    riconosce: (t, codice) => codice === 'rifiuto-del-modello' || /refused to answer this conversation|rifiutato di rispondere a questa conversazione/u.test(t),
+    spiega: (_tecnico, codice) => {
+      const parziale = codice === 'rifiuto-del-modello';
+      return {
+        cosa: t(parziale ? 'errori.turno.rifiuto.cosaParziale' : 'errori.turno.rifiuto.cosa'),
+        perche: t(parziale ? 'errori.turno.rifiuto.percheParziale' : 'errori.turno.rifiuto.perche'),
+        rimedi: [],
+      };
+    },
+  },
   {
     id: 'risposta-vuota-dopo-tentativi',
     riconosce: (t, codice) => codice === 'PROVIDER_EMPTY_RESPONSE' || /ha risposto senza testo né attrezzi|answered with neither text nor tools/u.test(t),
@@ -946,6 +985,8 @@ const RIFIUTI = [
  *   Sono tutti un NO dichiarato dal kernel, e ognuno si spiega con le sue parole. (NO CHANGE non è un no: non si spiega qui.)
  */
 const PAROLE_DEL_NO = Object.freeze([
+  /* Tester R2-R4 (03/11/2026): il no della PERSONA su una carta è una sua scelta, non un rifiuto dello strumento */
+  { parola: /^DECLINED\b\.?\s*/i, tipo: 'detto-no', detto: 'errori.turno.no.dettoNo' },
   { parola: /^REFUSED\b\.?\s*/i, tipo: 'rifiuto', detto: 'errori.turno.no.rifiuto' },
   { parola: /^NOT FOUND\b\.?\s*/i, tipo: 'non-trovato', detto: 'errori.turno.no.nonTrovato' },
   { parola: /^AMBIGUOUS\b\.?\s*/i, tipo: 'ambiguo', detto: 'errori.turno.no.ambiguo' },
@@ -994,12 +1035,14 @@ const MESSAGGI_DEL_KERNEL = [
   { chiave: 'errori.kernel.sseNonValido', re: /^(?:Invalid SSE event\.|Evento SSE non valido\.)$/u },
   { chiave: 'errori.kernel.flussoSenzaFine', re: /^(?:The provider's stream finished without a final event\.|Flusso del fornitore concluso senza un evento finale\.)$/u },
   { chiave: 'errori.kernel.motoreLocaleRifiuta', re: /^(?:The local engine did not accept this request, not even as a plain chat\.|Il motore locale non ha accettato questa richiesta, nemmeno senza gli attrezzi\.)$/u },
+  // 01/11/2026, vista locale (`ModelloLocaleNonVedeError`, runtime-owner-adapter.mjs)
+  { chiave: 'errori.kernel.modelloLocaleNonVede', re: /^(?:This local model cannot see images: it was opened without the part that reads them\. Send the message without the image, or use a model that sees images\.|Questo modello locale non vede le immagini: è aperto senza la parte che le legge\. Manda il messaggio senza l'immagine, o usa un modello che le vede\.)$/u },
   { chiave: 'errori.kernel.rispostaInutilizzabile', re: /^(?:The provider did not return a usable response\.|Il fornitore non ha restituito una risposta utilizzabile\.)$/u },
   { chiave: 'errori.kernel.rispostaIncompleta', re: /^(?:The provider did not complete the response\.|Il fornitore non ha completato la risposta\.)$/u },
   { chiave: 'errori.kernel.inattivoOltreLimite', re: /^(?:OpenRouter stayed idle past the configured limit\.|OpenRouter è rimasto inattivo oltre il limite configurato\.)$/u },
   { chiave: 'errori.kernel.motoreLocaleScollegato', re: /^(?:The local engine is not connected to this server\.|Il motore locale non è collegato a questo server\.)$/u },
   /* 18/10/2026: il motore locale dell'app che ospita r4 (`accesso-locale-ospite.mjs`) */
-  { chiave: 'errori.kernel.motoreOspiteOccupato', re: /^(?:The on-device model is busy with another job \(a chat reply or a context summary\); try again when it has finished\.|Il modello sul dispositivo è occupato con un altro lavoro \(una risposta nella chat o un riassunto del contesto\); riprova quando ha finito\.|The local model is busy answering in the chat: one reply at a time\. Try again when it has finished\.|Il modello locale sta rispondendo nella chat: una risposta alla volta\. Riprova quando ha finito\.)$/u },
+  { chiave: 'errori.kernel.motoreOspiteOccupato', re: /^(?:The on-device model is busy with another job \(a chat reply or a context summary\); try again when it has finished\.|Il modello sul dispositivo è occupato con un altro lavoro \(una risposta nella chat o un riassunto del contesto\); riprova quando ha finito\.|Il modello sul dispositivo è occupato con un altro lavoro \(una risposta nella chat o una compattazione del contesto\); riprova quando ha finito\.|The local model is busy answering in the chat: one reply at a time\. Try again when it has finished\.|Il modello locale sta rispondendo nella chat: una risposta alla volta\. Riprova quando ha finito\.)$/u },
   { chiave: 'errori.kernel.motoreOspiteNonAperto', re: /^(?:No local model is open in the app: open one from the model picker\.|Nessun modello locale è aperto nell’app: aprine uno dal selettore dei modelli\.)$/u },
   { chiave: 'errori.kernel.motoreOspiteCambiato', re: /^(?:Another on-device model is open now; choose it again in Code\.|Ora sul dispositivo è aperto un altro modello: sceglilo di nuovo nel Codice\.)$/u },
   /* 26/10/2026 (D-0146-1): la frase nuova dice cosa fare; quella di prima resta riconosciuta per le storie salvate */
@@ -1100,6 +1143,7 @@ const VESTIZIONI = {
   // «Invia come allegato» (bozzetto 29/10): attenzione, come nel bozzetto; niente è stato inviato e niente si è guastato
   'richiesta-troppo-grande': { badge: 'errori.turno.vestizione.troppoGrande.badge', titolo: 'errori.turno.vestizione.troppoGrande.titolo', tono: 'warning' },
   'esito-fornitore-incerto': { badge: 'errori.turno.vestizione.esitoIncerto.badge', titolo: 'errori.turno.vestizione.esitoIncerto.titolo', tono: 'warning' },
+  rifiuto: { badge: 'errori.turno.vestizione.rifiuto.badge', titolo: 'errori.turno.vestizione.rifiuto.titolo', tono: 'warning' }, // FE-051: non è un guasto di TALOS
   fermato: { badge: 'errori.turno.vestizione.fermato.badge', titolo: 'errori.turno.vestizione.fermato.titolo', tono: 'accent' },
   // C3 tappa 4: la pausa di una delega, ambra come «In pausa» nell'elenco e nel dettaglio dell'agente
   'in-pausa': { badge: 'errori.turno.vestizione.inPausa.badge', titolo: 'errori.turno.vestizione.inPausa.titolo', tono: 'warning' },

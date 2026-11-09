@@ -55,7 +55,7 @@ export function conOpacita(colore, opacita) {
 /** L'indirizzo `data:` di un'immagine della presentazione, dai suoi byte; `null` se non si legge. */
 export async function immagineDati(gestore, percorso) {
   const estensione = String(percorso ?? '').split('.').pop().toLowerCase();
-  const mime = MIME_IMMAGINE[estensione];
+  const mime = Object.hasOwn(MIME_IMMAGINE, estensione) ? MIME_IMMAGINE[estensione] : null; // D-17: un nome di file non è una chiave qualunque
   if (!mime) {
     const convertita = await gestore.getImageData?.(percorso)?.catch?.(() => null);
     return typeof convertita === 'string' && URI_AMMESSE.test(convertita) ? convertita : null;

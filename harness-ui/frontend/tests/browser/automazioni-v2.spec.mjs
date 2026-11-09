@@ -263,9 +263,10 @@ for (const modo of ['light', 'dark']) {
       await chiudiMenu(page);
     });
 
-    test('AUTO2-POSTA-01 —«Da guardare» è un filtro col contatore; nel pannello «Segna come letto» scrive solo quello; la campanella conta il giro', async ({ page }) => {
+    test('AUTO2-POSTA-01 —«Da guardare» è un filtro col contatore; nel pannello «Segna come letto» scrive solo quello; la campanella NON conta il giro (owner 31/10)', async ({ page }) => {
       const s = await prepara(page, { elenco: [VOCE(), VOCE({ id: 'a3', nome: 'Pulizia settimanale', pianificazione: { tipo: 'settimanale', ora: '08:00', giorno: 1 } })] });
-      await expect(page.locator('#notificationsBadge')).toHaveText('1');
+      /* owner 31/10/2026: i giri «Da guardare» stanno solo in «Tutto» delle notifiche, fuori dal numero della campanella */
+      await expect(page.locator('#notificationsBadge')).toBeHidden();
       const filtro = page.locator('#schermoAutomazioni .td-filter[data-filtro="da-guardare"]');
       await expect(filtro.locator('small')).toHaveText('1');
       await filtro.click();
@@ -287,7 +288,7 @@ for (const modo of ['light', 'dark']) {
       const foglio = page.locator('#sheetBody [data-c="AutomationSheet"]');
       await expect(foglio.locator('[data-auto-foglio-nome]')).toHaveValue('Rapporto mattutino');
       await expect(foglio.locator('[data-auto-foglio-istruzioni]')).toHaveValue(ISTRUZIONI);
-      await expect(foglio).toContainText('Usa glm-5.3-flash.');
+      await expect(foglio).toContainText('Usa GLM 5.3 Flash.'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
       // le istruzioni nel carattere del testo, non nel monospazio di serie dei textarea
       expect(await foglio.locator('[data-auto-foglio-istruzioni]').evaluate((n) => getComputedStyle(n).fontFamily)).not.toMatch(/monospace/u);
       await foto(page, `auto2-foglio-modifica-${modo}.png`);
@@ -329,7 +330,7 @@ for (const modo of ['light', 'dark']) {
       await expect(carta).toBeVisible();
       await expect(carta).toContainText('Il modello vuole creare questa automazione.');
       await expect(carta).toContainText('Giorni feriali alle 09:00');
-      await expect(carta).toContainText('glm-5.3-flash');
+      await expect(carta).toContainText('GLM 5.3 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
       await expect(carta).not.toContainText('z-ai/');
       await expect(carta).not.toContainText('Workspace write');
       await expect(carta.getByRole('button', { name: 'Approva' })).toBeVisible();
@@ -376,7 +377,7 @@ for (const modo of ['light', 'dark']) {
       expect(s.approve[0].corpo).toEqual({ requestId: 'auto-req-2', approvato: false, automazioneModificata: 'a2' });
       await manda(page, [{ type: 'ApprovalResolved', requestId: 'auto-req-2', approvato: false, motivo: 'modificata-dalla-persona', _sequenza: 3 }]);
       await expect(carta.locator('.talos-approval__esito')).toContainText('Modificata e salvata da te');
-      await expect(carta.locator('.talos-approval__esito')).toHaveClass(/talos-approval__esito--si/u);
+      await expect(carta.locator('.talos-approval__esito')).toHaveClass(/talos-approval__esito--neutro/u); // d6e35bdd7 (decisione 89, 03/11): «Modificata da te» è neutra, non un sì verde
       await expect(page.locator('#sheetDialog')).toBeHidden(); // il foglio si chiude al salvataggio, non resta sopra la carta
       await foto(page, `auto2-carta-modificata-${modo}.png`);
       expect(s.scritture).toEqual([]);

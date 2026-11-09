@@ -80,7 +80,7 @@ test('C1-ULTIMA-03: the registry keeps the last request in RAM, announces its br
 
 test('C1-ULTIMA-HTTP: GET /last-request — token guard, 200 with the copy or null, 404 for an unknown conversation, no query', async (t) => {
   const ultima = { at: '2026-10-10T00:00:00.000Z', model: 'm', messages: [], tools: [], ripartizione: { categorie: [{ id: 'conversation', tokens: 0 }], stimata: true, messaggi: 0, attrezzi: 0 } };
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null, token: 'token-di-prova',
     sessionRegistry: { leggiUltimaRichiesta: (id) => (id === 's1' ? ultima : id === 's2' ? null : undefined) },
   });
@@ -140,7 +140,7 @@ test('C1-ULTIMA-LEVEL1-REGISTRY: the counts annotated by the engine travel with 
 
 test('C1-STATO-COMPATTAZIONE-HTTP: GET /compaction-state — the legacy record with its summary, 404 for an unknown conversation', async (t) => {
   const record = { coveredThrough: 4, riassunto: 'RIASSUNTO con le richieste', tokenPrima: 184000, tokenDopo: 41000, misura: 'stima', at: '2026-10-10T00:00:00.000Z', modello: 'm', indice: 'INDICE' };
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null, token: 'token-di-prova',
     sessionRegistry: { statoCompattazione: (id) => (id === 's1' ? { record, inCorso: false } : { erroreAvvio: 'Session not found', code: 'NOT_FOUND' }) },
   });

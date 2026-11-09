@@ -39,7 +39,7 @@ test('WSL-T-01: la macchina dell owner — root, dischi senza permessi Linux, e 
   const t = testiUtenteWsl(STATO_VERO);
   assert.equal(t.visibile, true);
   assert.equal(t.chi, 'In Linux i comandi girano come root (Ubuntu)');
-  assert.equal(t.dischi, '/mnt/c, /mnt/d sono i dischi di Windows: nessun isolamento, e lì i permessi Linux non valgono. Se un comando gira come root senza la tua approvazione, TALOS te lo chiede una volta per sessione.');
+  assert.equal(t.dischi, '/mnt/c, /mnt/d sono i dischi di Windows: nessun isolamento, e lì i permessi Linux non valgono. Se un comando gira come root senza la tua approvazione, TALOS te lo chiede prima: solo questa volta, o per questa chat.');
   assert.equal(t.nota, 'Vale per tutte le sessioni. Ubuntu non ne ha uno. Per crearlo, da un terminale di Windows:');
   assert.equal(t.comando, 'wsl -d Ubuntu -u root adduser <nome>');
   assert.equal(t.acceso, true);
@@ -55,7 +55,7 @@ test('WSL-T-02: con un utente normale e l interruttore acceso si usa lui; spento
   const spento = testiUtenteWsl({ preferenze: { usaUtenteNormale: false }, wsl: { ...conMario.wsl, utenteUsato: 'root', root: true } });
   assert.equal(spento.acceso, false);
   assert.equal(spento.nota, 'Vale per tutte le sessioni. Spento: i comandi girano come root anche se c’è mario.');
-  assert.match(spento.dischi, /te lo chiede una volta per sessione/);
+  assert.match(spento.dischi, /te lo chiede prima: solo questa volta/);
 });
 
 test('WSL-T-03: un dato che manca non si inventa', () => {
@@ -63,7 +63,7 @@ test('WSL-T-03: un dato che manca non si inventa', () => {
   assert.deepEqual(testiUtenteWsl({ wsl: { disponibile: false } }), { visibile: false });
   const muto = testiUtenteWsl({ preferenze: {}, wsl: { disponibile: true, distro: 'Ubuntu', utenteUsato: null, root: null, predefinitoRoot: null, montaggi: [] } });
   assert.equal(muto.chi, 'In Linux non è stato possibile verificare con che utente girano i comandi (Ubuntu)');
-  assert.equal(muto.dischi, 'I dischi di Windows sono in /mnt: nessun isolamento. Se un comando gira come root senza la tua approvazione, TALOS te lo chiede una volta per sessione.');
+  assert.equal(muto.dischi, 'I dischi di Windows sono in /mnt: nessun isolamento. Se un comando gira come root senza la tua approvazione, TALOS te lo chiede prima: solo questa volta, o per questa chat.');
   assert.equal(muto.nota, 'Vale per tutte le sessioni.');
   assert.equal(muto.acceso, true, 'senza preferenza vale «accesa», il valore di partenza dell owner');
   const giaNormale = testiUtenteWsl({ preferenze: { usaUtenteNormale: true }, wsl: { ...STATO_VERO.wsl, utentePredefinito: 'anna', predefinitoRoot: false, utenteNormale: 'anna', utenteUsato: 'anna', root: false } });
@@ -88,8 +88,8 @@ test('WSL-T-05 (fase B): con la casa Linux pronta «Automatico» e «Linux» dic
   const conCasa = { ...STATO_VERO, wsl: { ...STATO_VERO.wsl, casaLinux: { pronta: true } } };
   const t = testiDoveGiranoIComandi(conCasa);
   assert.equal(t.automatico.badge, 'Linux con WSL');
-  assert.equal(t.automatico.sub, 'Una casa sola: con WSL comandi e attrezzi dei file lavorano in Linux, senza WSL su Windows.');
-  assert.match(t.linux.sub, /^Sempre in Linux, comandi e attrezzi dei file con gli stessi percorsi\. Se WSL non c’è/);
+  assert.equal(t.automatico.sub, 'Una casa sola: con WSL comandi e strumenti dei file lavorano in Linux, senza WSL su Windows.');
+  assert.match(t.linux.sub, /^Sempre in Linux, comandi e strumenti dei file con gli stessi percorsi\. Se WSL non c’è/);
   assert.equal(t.linux.badge, undefined, '«Consigliato» resta quello del template');
   assert.equal(testiDoveGiranoIComandi(STATO_VERO), null, 'binari della casa assenti: il comportamento è quello di prima, e i testi pure')
   assert.equal(testiDoveGiranoIComandi({ wsl: { ...STATO_VERO.wsl, casaLinux: { pronta: false, motivo: 'manca manifesto.json' } } }), null);
@@ -105,7 +105,7 @@ test('WSL-T-EN: in inglese le frasi sono intere e il plurale lo sceglie il numer
   try {
     const t = testiUtenteWsl(STATO_VERO);
     assert.equal(t.chi, 'In Linux, commands run as root (Ubuntu)');
-    assert.equal(t.dischi, '/mnt/c, /mnt/d are the Windows disks: no isolation, and Linux permissions do not apply there. If a command runs as root without your approval, TALOS asks you once per session.');
+    assert.equal(t.dischi, '/mnt/c, /mnt/d are the Windows disks: no isolation, and Linux permissions do not apply there. If a command runs as root without your approval, TALOS asks you first: only this time, or for this chat.');
     assert.equal(t.nota, 'Applies to all sessions. Ubuntu does not have one. To create it, from a Windows terminal:');
     assert.equal(t.comando, 'wsl -d Ubuntu -u root adduser <name>');
     const uno = testiUtenteWsl({ ...STATO_VERO, wsl: { ...STATO_VERO.wsl, montaggi: [{ montaggio: '/mnt/c', metadata: true }] } });

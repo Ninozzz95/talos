@@ -302,6 +302,10 @@
    `flex:1 1 auto` da solo NON porta con sé il minimo, e perché la copia è la figlia che contiene
    il testo lungo. */
 #schermoImpostazioni[data-settings-ui="v3"] .talos-setting { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 21px 0; border-block-start: 1px solid var(--talos-border); }
+/* decisione 331 (07/11/2026), secondo giro: l'aiuto della riga «Uso del computer» ha la misura della spiegazione delle sorelle nello
+   stesso pannello (13 px, a tutta riga: `.talos-settings__section > p` qui sopra), non 12 px su 49 caratteri con un vuoto largo prima
+   dell'interruttore (revisione della vista, settings.css:321). Solo questa carta: le righe delle altre sezioni restano come sono. */
+#schermoImpostazioni[data-settings-ui="v3"] [data-settings-card="tools-computer-use"] .talos-setting__help { font-size: .8125rem; line-height: 1.65; max-width: none; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-setting > .settings-field-info,
 #schermoImpostazioni[data-settings-ui="v3"] .talos-setting > div:first-child { flex: 1 1 auto; min-width: 0; }
 /* Il lato del CONTROLLO: nel mockup `.setting-control{flex:0 0 auto; min-width:190px;
@@ -426,6 +430,10 @@
    foglio. Il mio `font-size` perdeva e il margine 4px entrava al posto dello zero. ⇒ La regola
    prende il peso che le serve con il selettore del gruppo, e riporta il margine a zero. */
 #schermoImpostazioni[data-settings-ui="v3"] .settings-group__title { margin: 0; font-size: 1.125rem; font-weight: 600; line-height: 1.5; letter-spacing: -.025em; }
+/* decisione 331 (07/11/2026), secondo giro: un segno accanto al titolo (`Anteprima` di «Uso del computer»). Titolo e segno stanno in un
+   `.settings-group__copy` in riga, a 8 px, come il nome e la sua `Pill` in Hermes (`delegation/model-routes.tsx:115`, `gap-2`) e come
+   il segno accanto al titolo nel laboratorio (`index.css:2726`, `margin-left: 8px`); il conteggio resta in fondo a destra. */
+.settings-group__copy--riga { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .settings-group__count { color: var(--talos-muted); font-size: .6875rem; font-weight: 400; line-height: 1.5; letter-spacing: .07em; }
 
 /* ── LA BANDA DEL TEMA ──────────────────────────────────────────────────────────────────────────

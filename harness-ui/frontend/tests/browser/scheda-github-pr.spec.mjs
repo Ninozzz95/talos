@@ -162,7 +162,7 @@ for (const [larghezza, altezza] of [[1440, 900], [1024, 800]]) {
       const controlli = gruppo(page).locator('.talos-github-riga--controllo');
       await expect(controlli).toHaveCount(5);
       expect(await controlli.evaluateAll((n) => n.map((r) => `${r.dataset.esito}|${r.querySelector('use')?.getAttribute('href')}|${r.querySelector('.talos-github-riga__cartella')?.textContent}`))).toEqual([
-        'fallito|#i-x|fallito · cli', 'in-corso|#i-clock|in corso · desktop', 'annullato|#i-stop|annullato · nightly', 'passato|#i-check|passato · ci', 'saltato|#i-minus|saltato · release',
+        'fallito|#i-x|fallito · cli', 'in-corso|#i-loader|in corso · desktop', 'annullato|#i-quadrato|annullato · nightly', 'passato|#i-check|passato · ci', 'saltato|#i-minus|saltato · release',
       ]);
       const scorre = await page.locator('#railGithub').evaluate((n) => n.scrollWidth > n.clientWidth + 1);
       expect(scorre, 'nessuno scorrimento laterale nella colonna').toBe(false);

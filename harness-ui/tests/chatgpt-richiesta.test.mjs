@@ -18,7 +18,8 @@ test('RICHIESTA-01 — the body loses every field the plan refuses, always strea
   const congelato = structuredClone(corpo);
   const { corpo: nuovo, volevaIlFlusso, tolti } = adattaCorpoAlPiano(corpo);
   assert.deepEqual(corpo, congelato, 'the caller’s object is not touched');
-  assert.deepEqual(Object.keys(nuovo).sort(), ['input', 'model', 'prompt_cache_key', 'reasoning', 'store', 'stream', 'tools']);
+  /* PERF R-35 P1 (30/10/2026): con attrezzi parte anche `parallel_tool_calls` (vedi chatgpt-attrezzi-in-parallelo.test.mjs) */
+  assert.deepEqual(Object.keys(nuovo).sort(), ['input', 'model', 'parallel_tool_calls', 'prompt_cache_key', 'reasoning', 'store', 'stream', 'tools']);
   assert.equal(nuovo.store, false);
   assert.equal(nuovo.stream, true);
   assert.equal(volevaIlFlusso, false);

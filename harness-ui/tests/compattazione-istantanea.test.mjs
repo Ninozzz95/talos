@@ -15,7 +15,7 @@ import test from 'node:test';
 import { talosLavora } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
 import { MARCATORE_RIASSUNTO, VARIABILE_TETTO_TOKEN, applicaRecord, budgetCoda, creaRecord, riduciCodaSottoPressione } from '../src/kernel/compattazione-desktop.mjs';
 import { stimaTokenConversazione } from '../src/kernel/talosHarness.mjs';
-import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const CONSEGNA = 'CONSEGNA-ORIGINALE-MARKER: leggi grande.txt più volte e riferisci.';
@@ -24,7 +24,9 @@ const PREAMBOLO = 'PREAMBOLO-PROGETTO ' + 'x'.repeat(12_000);
 function cartellaDiProva(t) {
   const dir = mkdtempSync(join(tmpdir(), 'talos-istantanea-'));
   writeFileSync(join(dir, 'grande.txt'), `${'g'.repeat(79)}\n`.repeat(50)); // ≈1.000 token per lettura
-  t.after(() => rimuoviCartellaDiProva(dir));
+  /* 04/11/2026, terza suite della candidata: EPERM sotto carico. La via sincrona su Windows non ritenta l'EPERM
+   * (aiuto/rimuovi-cartella-di-prova.mjs:29-36), quella asincrona sì. */
+  t.after(() => rimuoviCartellaDiProvaAttesa(dir));
   return dir;
 }
 
@@ -219,7 +221,11 @@ test('IST-05 — un riassuntore che fallisce in sottofondo non ferma il giro, si
     JSON.stringify(eventi.filter((e) => e.ripiego).map((e) => [e.tipo, e.istantanea, e.classe])));
 });
 
-test('IST-06 — all\'emergenza si ASPETTA il riassunto già in preparazione e lo si usa; mai un secondo riassunto al suo posto', async (t) => {
+/* ⛔ 28/10/2026 — IST-06 è SUPERATA dal contratto C1, owner 27/10/2026, «Sì, mai aspettare»: all'emergenza il riassunto già in
+   preparazione non si aspetta più. La richiesta parte col riassunto senza modello (ragione 'in-arrivo'); quello in preparazione resta il
+   SOLO riassunto pagato (mai un secondo al suo posto, la metà della prova che vale ancora) e, arrivato, porta `sostituisce`: prenderà il
+   posto del rapido alla prima richiesta dopo. Sul codice di prima (8fde46abf) è rossa: si aspettava, e la riga era lo scambio. */
+test('IST-06 — superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): all\'emergenza il riassunto già in preparazione NON si aspetta — riassunto senza modello subito, e mai un secondo riassunto pagato al posto di quello in corso', async (t) => {
   /* 22/10/2026 notte (verdetto della CLI sulla regola del riassunto, C1): un riassunto vero pesa il suo budget d'uscita (almeno 2.000
      token) e si paga solo se toglie il 10% della soglia al netto di quello. Con 8.000 il preambolo (~3.000) più le due letture della coda
      (~2.000) più il riassunto atteso non lasciavano il 10%: la scena è a 12.000, come IST-03, IST-04 e IST-08. */
@@ -228,15 +234,18 @@ test('IST-06 — all\'emergenza si ASPETTA il riassunto già in preparazione e l
   const { esito, eventi } = await giro(t, { cartella: cartellaDiProva(t), fornitore });
   assert.equal(esito.comeFinita, 'concluso');
   const fini = eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato);
-  assert.ok(fini.some((e) => e.istantanea && e.motivo === 'emergenza'), JSON.stringify(fini.map((e) => [e.motivo, e.istantanea])));
-  /* 22/10/2026 (revisione avversaria, B): l'attesa d'emergenza apre la riga viva PRIMA di aspettare (Stop, «Salta», tetto), quindi un
-     `compattazione-inizio` per ogni attesa c'è; ciò che non deve esserci è un riassunto pagato in più: ogni riassunto chiesto è una
-     preparazione in sottofondo, e ogni riga aperta si chiude con lo scambio istantaneo */
+  const rapide = fini.filter((e) => e.ripiego === true && e.ragione === 'in-arrivo');
+  assert.ok(rapide.length >= 1, `all'emergenza il riassunto senza modello, senza attesa: ${JSON.stringify(fini.map((e) => [e.motivo, e.istantanea, e.ragione]))}`);
+  /* ogni riga aperta si chiude; ciò che non deve esserci è un riassunto pagato in più: ogni riassunto chiesto è una preparazione in
+     sottofondo */
   const inizi = eventi.filter((e) => e.tipo === 'compattazione-inizio');
-  assert.equal(inizi.length, fini.filter((e) => e.istantanea && e.motivo === 'emergenza').length, `una riga per attesa, chiusa dallo scambio: ${JSON.stringify(eventi.filter((e) => /compattazione-(inizio|fine)/u.test(e.tipo)).map((e) => [e.tipo, e.motivo, e.istantanea]))}`);
-  assert.equal(fornitore.riassuntiChiesti().length, esito.preparazioniDiCompattazione.preparate, 'nessun riassunto sincrono: è bastato aspettare quello in corso');
+  assert.equal(inizi.length, eventi.filter((e) => e.tipo === 'compattazione-fine').length, `ogni riga aperta si chiude: ${JSON.stringify(eventi.filter((e) => /compattazione-(inizio|fine)/u.test(e.tipo)).map((e) => [e.tipo, e.motivo, e.istantanea, e.ragione]))}`);
+  assert.equal(fornitore.riassuntiChiesti().length, esito.preparazioniDiCompattazione.preparate, 'nessun riassunto sincrono, e nessun secondo al posto di quello in corso');
   const massima = Math.max(...fornitore.lavori().map((b) => Math.ceil(JSON.stringify(b.messages).length / 4)));
   assert.ok(massima < 14_400 * 1.15, `nessuna richiesta molto oltre l'emergenza: ${massima}`);
+  /* quello in preparazione arriva, e viene a sostituire il rapido alla richiesta dopo */
+  const pronta = esito.compattazionePronta ?? await esito.compattazioneInPreparazione;
+  assert.equal(typeof pronta?.sostituisce, 'string', `il riassunto in preparazione arriva e dice quale rapido sostituisce (${JSON.stringify(pronta && Object.keys(pronta))})`);
 });
 
 test('IST-07 — letture grandi arrivate DOPO il riassunto si accorciano allo scambio: la richiesta resta limitata (il difetto misurato il 15/10)', async (t) => {
@@ -251,7 +260,12 @@ test('IST-07 — letture grandi arrivate DOPO il riassunto si accorciano allo sc
   assert.ok(eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato).length >= 3, 'la compattazione continua lungo il giro');
 });
 
-test('IST-08 — un riassunto pronto troppo vecchio (lo scambio non riporterebbe sotto la soglia) NON si usa: se ne fa uno nuovo; AL CONTRARIO, uno fresco sì (IST-03)', async (t) => {
+/* ⛔ 28/10/2026 — IST-08 è SUPERATA in parte dal contratto C1, owner 27/10/2026, «Sì, mai aspettare». Resta: il riassunto pronto troppo
+   vecchio non si SCAMBIA (si dice «ancora sopra la soglia») e se ne fa uno nuovo. Cambia la strada del nuovo: all'emergenza non si paga
+   più dentro il giro — la richiesta parte col riassunto senza modello (ragione 'in-arrivo'; quello vecchio, valido ma insufficiente, gli fa
+   da base come prima, e il suo testo resta nel riassunto senza modello), e il riassunto nuovo del modello si prepara in sottofondo e
+   arriva per la richiesta dopo, al posto del rapido. Sul codice di prima (8fde46abf) è rossa: la prima richiesta portava già il nuovo. */
+test('IST-08 — superata in parte dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): un riassunto pronto troppo vecchio (lo scambio non riporterebbe sotto la soglia) NON si scambia, e se ne fa uno nuovo — in sottofondo, dopo il riassunto senza modello; AL CONTRARIO, uno fresco sì (IST-03)', async (t) => {
   conTetto(t, 12_000); // soglia 12.000, emergenza 14.400
   const cartella = cartellaDiProva(t);
   const primo = fintoFornitore({ chiamateTool: 7, testoRiassunto: 'RIASSUNTO-PRONTO' });
@@ -261,12 +275,17 @@ test('IST-08 — un riassunto pronto troppo vecchio (lo scambio non riporterebbe
   /* dopo il riassunto arrivano ~8.000 token di TESTO (non esiti di attrezzi: l'accorciamento della coda non li tocca) */
   const dopo = Array.from({ length: 16 }, (_, i) => ({ role: i % 2 ? 'assistant' : 'user', content: `messaggio ${i} ${'w'.repeat(2_000)}` }));
   const secondo = fintoFornitore({ chiamateTool: 0, testoRiassunto: 'RIASSUNTO-NUOVO' });
-  const { eventi } = await giro(t, { cartella, fornitore: secondo, messaggiIniziali: [...e1.messaggiFinali, ...dopo, { role: 'user', content: 'e adesso?' }], compattazionePronta: pronta });
+  const { esito: e2, eventi } = await giro(t, { cartella, fornitore: secondo, messaggiIniziali: [...e1.messaggiFinali, ...dopo, { role: 'user', content: 'e adesso?' }], compattazionePronta: pronta });
   const prima = secondo.lavori()[0];
-  assert.equal(prima.messages.some((m) => testoDi(m).includes('RIASSUNTO-PRONTO')), false, 'il riassunto vecchio non si usa');
-  assert.ok(prima.messages.some((m) => testoDi(m).includes('RIASSUNTO-NUOVO')), 'all\'emergenza se ne fa uno nuovo');
+  assert.ok(eventi.some((e) => e.tipo === 'compattazione-preparata' && e.fase === 'scartata' && e.motivo === 'still-over-threshold'), `il riassunto vecchio non si scambia, e lo si dice: ${JSON.stringify(eventi.map((e) => [e.tipo, e.fase, e.motivo]))}`);
+  assert.ok(!eventi.some((e) => e.tipo === 'compattazione-fine' && e.istantanea && e.compattato), 'nessuno scambio istantaneo del riassunto vecchio');
   assert.ok(eventi.some((e) => e.tipo === 'compattazione-inizio' && e.motivo === 'emergenza'), 'la compattazione nuova è quella dell’emergenza');
-  assert.ok(eventi.some((e) => e.tipo === 'compattazione-fine' && e.compattato), JSON.stringify(eventi.map((e) => [e.tipo, e.motivo])));
+  const riga = eventi.find((e) => e.tipo === 'compattazione-fine' && e.compattato);
+  assert.equal(riga?.ragione, 'in-arrivo', `all'emergenza il riassunto senza modello, senza attesa: ${JSON.stringify(eventi.map((e) => [e.tipo, e.motivo, e.ragione]))}`);
+  assert.equal(prima.messages.some((m) => testoDi(m).includes('RIASSUNTO-NUOVO')), false, 'la prima richiesta non ha aspettato il nuovo');
+  const nuovo = e2.compattazionePronta ?? await e2.compattazioneInPreparazione;
+  assert.ok(JSON.stringify(nuovo?.record?.riassunto ?? '').includes('RIASSUNTO-NUOVO'), 'se ne fa uno nuovo, in sottofondo');
+  assert.equal(typeof nuovo.sostituisce, 'string', 'e viene a sostituire il riassunto rapido');
 });
 
 /* Revisione 8 della CLI (N3, 23/10/2026): lo scambio di un riassunto pronto si misura sulla scala della richiesta, scarto compreso — se la
@@ -279,7 +298,11 @@ test('IST-09 — lo scambio di un riassunto pronto conta lo scarto: proiezione +
   const { esito: e1 } = await giro(t, { cartella, fornitore: primo });
   const pronta = e1.compattazionePronta ?? await e1.compattazioneInPreparazione;
   assert.ok(pronta?.record, 'premessa: un riassunto pronto a fine giro');
-  const grande = { role: 'user', content: `seconda domanda ${'z'.repeat(20_000)}` };
+  /* 05/11/2026 (ebf0b600c, M1: «a shortened tool result starts with one system line BEFORE the envelope»): gli esiti accorciati della coda
+     pesano qualche token in più (lo scambio era 11.707): la domanda grande cala di 2.000 caratteri perché la premessa resti vera con margine;
+     misurato il 06/11: scambio 11.207 (493 sotto i 11.700 della premessa), richiesta intera 15.375 (975 sopra l'emergenza di 14.400).
+     Con 19.800 il margine era di soli 43 token. L'intento resta lo stesso */
+  const grande = { role: 'user', content: `seconda domanda ${'z'.repeat(18_000)}` };
   /* lo scambio come lo misura il giro: il riassunto, più ciò che è arrivato dopo (gli esiti lunghi accorciati come nella coda) */
   const coda = [...e1.messaggiFinali, grande].slice(pronta.record.coveredThrough);
   const scambio = stimaTokenConversazione([...pronta.record.riassunto, ...riduciCodaSottoPressione(coda, { budgetToken: budgetCoda(12_000) }).coda]);

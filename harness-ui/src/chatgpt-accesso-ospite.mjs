@@ -32,6 +32,9 @@ function errore(messaggio, code) {
 
 export function creaAccessoChatgptOspite({ clock = () => Date.now() } = {}) {
   let attuale = null; // { accessToken, accountId, email, scadeAlle }
+  /* Decisione 116 C (owner 04/11/2026; Mobile C1): chi aspetta un token NUOVO dopo un rifiuto (`attendiTokenNuovo`). Solo in memoria. */
+  const inAttesa = new Set();
+  const valeAncora = () => Boolean(attuale) && clock() < attuale.scadeAlle - MARGINE_OSPITE_MS;
 
   return {
     gestitoDallApp: true,
@@ -42,7 +45,29 @@ export function creaAccessoChatgptOspite({ clock = () => Date.now() } = {}) {
       if (!Number.isFinite(scadeAlle)) return errore('The access token carries no expiry.', 'CHATGPT_ACCESSO_NON_VALIDO');
       if (scadeAlle <= clock()) return errore('The access token has already expired.', CODICE_DA_RINNOVARE);
       attuale = { accessToken, scadeAlle, accountId: typeof accountId === 'string' && accountId ? accountId : null };
+      for (const attesa of [...inAttesa]) if (attesa.rifiutato !== accessToken) attesa.risolvi(accessToken);
       return null;
+    },
+
+    /**
+     * Decisione 116 C, stato 2 sul telefono — il servizio ha rifiutato `rifiutato`: la riga viva ha chiesto all'app un token nuovo
+     * (`chiedeTokenAllApp`), e qui si aspetta che arrivi con `ricevi`, al massimo `entroMs`. Lo stesso token rifiutato non conta. Un token
+     * già diverso e valido si usa subito (l'app l'ha spinto prima della richiesta). Durante l'attesa il token di prima NON si dimentica
+     * (lo stato resta quello che l'app conosce); se non arriva niente sì, e si dice il codice di sempre, `CHATGPT_TOKEN_DA_RINNOVARE`.
+     * «Ferma» interrompe l'attesa (AbortError).
+     */
+    attendiTokenNuovo({ rifiutato = null, entroMs = 10_000, signal = null } = {}) {
+      if (valeAncora() && attuale.accessToken !== rifiutato) return Promise.resolve(attuale.accessToken);
+      return new Promise((risolvi, rifiuta) => {
+        const attesa = { rifiutato };
+        const chiudi = () => { inAttesa.delete(attesa); clearTimeout(scadenza); signal?.removeEventListener?.('abort', alStop); };
+        const alStop = () => { chiudi(); rifiuta(signal.reason instanceof Error && signal.reason.name === 'AbortError' ? signal.reason : new DOMException('The wait for a new ChatGPT token was stopped.', 'AbortError')); };
+        attesa.risolvi = (token) => { chiudi(); risolvi(token); };
+        const scadenza = setTimeout(() => { chiudi(); attuale = null; rifiuta(errore('The ChatGPT access token must be renewed by the app.', CODICE_DA_RINNOVARE)); }, entroMs);
+        if (signal?.aborted) { alStop(); return; }
+        signal?.addEventListener?.('abort', alStop, { once: true });
+        inAttesa.add(attesa);
+      });
     },
 
     /** Scollegato nella chat, o rifiutato dal servizio: r4 non ha più nessun token. */

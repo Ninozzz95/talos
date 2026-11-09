@@ -37,7 +37,7 @@ export const RIGHE_TABELLA = 200;
 
 /** Le viste che un tipo ha DAVVERO: un interruttore con una scelta sola non è un interruttore. */
 export function modiDelTipo(tipo, estensione = '') {
-  if (tipo === 'markdown' || tipo === 'tabella' || tipo === 'html') return ['resa', 'sorgente'];
+  if (tipo === 'markdown' || tipo === 'tabella' || tipo === 'html' || tipo === 'blocco') return ['resa', 'sorgente'];
   if (tipo === 'immagine' && estensione === 'svg') return ['resa', 'sorgente'];
   if (tipo === 'testo') return ['sorgente'];
   return ['resa'];
@@ -53,12 +53,12 @@ export const PAROLE_MODO = Object.freeze({
 const ETICHETTE = new Map([
   ['markdown', () => traduci('varie.reader.kind.markdown')], ['tabella', () => traduci('varie.reader.kind.table')], ['testo', () => traduci('varie.reader.kind.text')],
   ['html', () => traduci('varie.reader.kind.html')], ['immagine', () => traduci('varie.reader.kind.image')], ['pdf', () => traduci('varie.reader.kind.pdf')],
-  ['documento', () => traduci('varie.reader.kind.document')], ['foglio', () => traduci('varie.reader.kind.spreadsheet')], ['presentazione', () => traduci('varie.reader.kind.presentation')],
+  ['blocco', () => traduci('varie.reader.kind.block')], ['documento', () => traduci('varie.reader.kind.document')], ['foglio', () => traduci('varie.reader.kind.spreadsheet')], ['presentazione', () => traduci('varie.reader.kind.presentation')],
 ]);
 export const etichettaTipo = (tipo) => (ETICHETTE.get(tipo) ?? (() => traduci('varie.reader.kind.file')))();
 const ICONE = new Map([
-  ['markdown', 'i-doc'], ['tabella', 'i-grid'], ['testo', 'i-code'], ['html', 'i-globe'], ['immagine', 'i-image'], ['pdf', 'i-doc'],
-  ['documento', 'i-doc'], ['foglio', 'i-grid'], ['presentazione', 'i-layout'],
+  ['blocco', 'i-layout'], ['markdown', 'i-doc'], ['tabella', 'i-lib-file-spreadsheet'], ['testo', 'i-code'], ['html', 'i-globe'], ['immagine', 'i-image'], ['pdf', 'i-doc'],
+  ['documento', 'i-doc'], ['foglio', 'i-lib-file-spreadsheet'], ['presentazione', 'i-lib-presentation'],
 ]);
 export const iconaTipo = (tipo) => ICONE.get(tipo) ?? 'i-file';
 
@@ -164,6 +164,8 @@ let contatore = 0;
  * @param {()=>void} [p.opzioni.onChiudi]
  * @param {(tipo:string)=>Promise<{rendi:Function}>} [p.opzioni.lettoreOffice] il lettore di docx/xlsx/pptx, caricato quando serve
  * @param {(testo:string)=>void} [p.opzioni.copia]
+ * @param {{riconosci:(testo:string)=>boolean, disegna:(testo:string)=>Node}} [p.opzioni.blocco] decisione 142 (04/11/2026): un `.txt` che
+ *   è il sorgente di un blocco vivo salvato in Libreria si disegna VIVO (`bloccoPerIlLettore`, blocchi/aggancio.js), col «Testo» accanto
  */
 export function creaLettore({ doc = globalThis.document, finestra = globalThis, fonte, opzioni = {} }) {
   contatore += 1;
@@ -202,7 +204,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     bottoneIcona(doc, 'i-plus', traduci('varie.reader.zoom.in'), () => cambiaZoom(1)),
     bottoneIcona(doc, 'i-fit', traduci('varie.reader.zoom.fitWindow'), () => { stato.zoom = 'adatta'; applicaZoom(); }),
   );
-  const schermo = bottoneIcona(doc, 'i-layout', opzioni.schermoIntero ? traduci("varie.reader.exitFullScreen") : traduci("varie.reader.fullScreen"), () => opzioni.onSchermoIntero?.());
+  const schermo = bottoneIcona(doc, opzioni.schermoIntero ? 'i-minimize' : 'i-maximize', opzioni.schermoIntero ? traduci("varie.reader.exitFullScreen") : traduci("varie.reader.fullScreen"), () => opzioni.onSchermoIntero?.());
   schermo.setAttribute('aria-pressed', String(Boolean(opzioni.schermoIntero)));
   if (typeof opzioni.onSchermoIntero !== 'function') schermo.hidden = true;
   const altro = bottoneIcona(doc, 'i-more', traduci('varie.reader.moreActions'), (e) => apriMenu(e.currentTarget));
@@ -410,7 +412,8 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
         pezzi.push(cartaFuori(traduci('varie.reader.tooBigOutside', { size: dimensioneLeggibile(stato.byte ?? fonte.dimensione), limit: dimensioneLeggibile(TETTO_FILE) })));
       } else if (stato.fase === 'errore') {
         const box = crea(doc, 'div', 'talos-lettore__fuori');
-        const frase = crea(doc, 'p', '', traduci('varie.reader.error.notOpened', { reason: stato.errore }));
+        /* decisione 215: un rifiuto del server porta già la frase intera di TALOS (`rifiuti-dei-file.js`), e si mostra da sola */
+        const frase = crea(doc, 'p', '', stato.erroreFrase ? stato.errore : traduci('varie.reader.error.notOpened', { reason: stato.errore }));
         frase.setAttribute('role', 'alert');
         box.append(frase, bottoneTesto(doc, traduci('varie.reader.retry'), () => { void carica(); }));
         pezzi.push(box);
@@ -426,6 +429,10 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
       } else if (modo === 'sorgente') {
         pezzi.push(sorgente());
         notaTaglio(pezzi);
+      } else if (tipo === 'blocco') {
+        const vivo = crea(doc, 'div', 'talos-lettore__blocco');
+        vivo.append(opzioni.blocco.disegna(stato.testo));
+        pezzi.push(vivo);
       } else if (tipo === 'markdown') {
         const prosa = crea(doc, 'div', 'talos-lettore__prosa');
         /* revisione R2 (23/10): il renderer della prosa passa (testo, lingua, chiuso, riga d'apertura); al blocco del lettore il terzo
@@ -522,6 +529,7 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
       buffer = await fonte.leggiByte();
     } catch (errore) {
       stato.errore = errore?.message || traduci('varie.reader.error.noReason');
+      stato.erroreFrase = errore?.frase === true && Boolean(errore?.message);
       fase('errore');
       return disegna();
     }
@@ -543,6 +551,10 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     if (testuale) {
       if (byte.byteLength > TETTO_TESTO && !stato.forzato) { fase('grande'); return disegna(); }
       stato.testo = new TextDecoder('utf-8').decode(byte); // `fatal:false`: una riga sporca si legge lo stesso, e si VEDE
+      /* decisione 142: il blocco salvato in Libreria è un `.txt` col sorgente; se il catalogo lo dice completo, si disegna vivo */
+      if (stato.tipo === 'testo' && stato.estensione === 'txt' && typeof opzioni.blocco?.riconosci === 'function' && opzioni.blocco.riconosci(stato.testo)) {
+        stato.tipo = 'blocco';
+      }
     }
     if (stato.tipo === 'immagine') stato.urlImmagine = await urlDati(buffer, mimeImmagine(esito.firma, stato.estensione));
     fase('pronto');

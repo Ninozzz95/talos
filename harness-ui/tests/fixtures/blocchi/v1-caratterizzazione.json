@@ -1,0 +1,1342 @@
+{
+ "fixture": {
+  "01-tabella.txt": {
+   "stato": "completo",
+   "righe": 8,
+   "blocco": {
+    "tipo": "tabella",
+    "id": "vendite",
+    "titolo": "Vendite per mese",
+    "colonne": [
+     {
+      "id": "mese",
+      "titolo": "Mese",
+      "tipo": "testo"
+     },
+     {
+      "id": "euro",
+      "titolo": "Euro",
+      "tipo": "soldi"
+     }
+    ],
+    "righe": [
+     [
+      "Gennaio",
+      1200
+     ],
+     [
+      "Febbraio",
+      980.5
+     ],
+     [
+      "Marzo",
+      null
+     ]
+    ],
+    "ordinabile": true
+   },
+   "ripiego": {
+    "en": "Vendite per mese\n\n| Mese | Euro |\n| --- | --- |\n| Gennaio | 1200 |\n| Febbraio | 980.5 |\n| Marzo |  |",
+    "it": "Vendite per mese\n\n| Mese | Euro |\n| --- | --- |\n| Gennaio | 1200 |\n| Febbraio | 980.5 |\n| Marzo |  |"
+   }
+  },
+  "02-grafico.txt": {
+   "stato": "completo",
+   "righe": 3,
+   "blocco": {
+    "tipo": "grafico",
+    "id": "prezzi",
+    "titolo": "Prezzo medio",
+    "forma": "linee",
+    "descrizione": "Il prezzo sale da 10 a 14 euro fra gennaio e marzo.",
+    "serie": [
+     {
+      "nome": "Prezzo",
+      "punti": [
+       {
+        "x": "gen",
+        "y": 10
+       },
+       {
+        "x": "feb",
+        "y": 12
+       },
+       {
+        "x": "mar",
+        "y": 14
+       }
+      ]
+     }
+    ],
+    "unita": "€"
+   },
+   "ripiego": {
+    "en": "Prezzo medio\n\nIl prezzo sale da 10 a 14 euro fra gennaio e marzo. (€)\n\n| x | Prezzo |\n| --- | --- |\n| gen | 10 |\n| feb | 12 |\n| mar | 14 |",
+    "it": "Prezzo medio\n\nIl prezzo sale da 10 a 14 euro fra gennaio e marzo. (€)\n\n| x | Prezzo |\n| --- | --- |\n| gen | 10 |\n| feb | 12 |\n| mar | 14 |"
+   }
+  },
+  "03-scelte.txt": {
+   "stato": "completo",
+   "righe": 1,
+   "blocco": {
+    "tipo": "scelte",
+    "id": "prossimo",
+    "domanda": "Come vuoi procedere?",
+    "opzioni": [
+     {
+      "testo": "Continua"
+     },
+     {
+      "testo": "Fermati qui"
+     }
+    ]
+   },
+   "ripiego": {
+    "en": "Come vuoi procedere?\n\n- Continua\n- Fermati qui",
+    "it": "Come vuoi procedere?\n\n- Continua\n- Fermati qui"
+   }
+  },
+  "04-modulo.txt": {
+   "stato": "completo",
+   "righe": 5,
+   "blocco": {
+    "tipo": "modulo",
+    "id": "viaggio",
+    "titolo": "Dettagli del viaggio",
+    "campi": [
+     {
+      "id": "meta",
+      "etichetta": "Dove vuoi andare?",
+      "tipo": "testo"
+     },
+     {
+      "id": "notti",
+      "etichetta": "Quante notti?",
+      "tipo": "numero"
+     },
+     {
+      "id": "mezzo",
+      "etichetta": "Mezzo",
+      "tipo": "scelta",
+      "opzioni": [
+       {
+        "testo": "Treno"
+       },
+       {
+        "testo": "Aereo"
+       }
+      ]
+     }
+    ],
+    "invia": "Cerca"
+   },
+   "ripiego": {
+    "en": "Dettagli del viaggio\n\n- Dove vuoi andare?\n- Quante notti?\n- Mezzo (Treno / Aereo)",
+    "it": "Dettagli del viaggio\n\n- Dove vuoi andare?\n- Quante notti?\n- Mezzo (Treno / Aereo)"
+   }
+  },
+  "05-chiave-valore.txt": {
+   "stato": "completo",
+   "righe": 5,
+   "blocco": {
+    "tipo": "chiave-valore",
+    "id": "server",
+    "titolo": "Server",
+    "righe": [
+     {
+      "chiave": "CPU",
+      "valore": "42%",
+      "stato": "ok"
+     },
+     {
+      "chiave": "Disco",
+      "valore": 91,
+      "stato": "attenzione"
+     },
+     {
+      "chiave": "Acceso da",
+      "valore": "3 giorni"
+     }
+    ]
+   },
+   "ripiego": {
+    "en": "Server\n\n- CPU: 42% (ok)\n- Disco: 91 (warning)\n- Acceso da: 3 giorni",
+    "it": "Server\n\n- CPU: 42% (ok)\n- Disco: 91 (attenzione)\n- Acceso da: 3 giorni"
+   }
+  },
+  "06-passi.txt": {
+   "stato": "completo",
+   "righe": 6,
+   "blocco": {
+    "tipo": "passi",
+    "id": "migrazione",
+    "titolo": "Migrazione",
+    "voci": [
+     {
+      "quando": "lunedì",
+      "titolo": "Copia dei dati",
+      "stato": "fatto"
+     },
+     {
+      "titolo": "Verifica",
+      "stato": "ora"
+     },
+     {
+      "titolo": "Spegnimento del vecchio",
+      "stato": "da-fare"
+     }
+    ]
+   },
+   "ripiego": {
+    "en": "Migrazione\n\n1. Copia dei dati (done, lunedì)\n2. Verifica (now)\n3. Spegnimento del vecchio (to do)",
+    "it": "Migrazione\n\n1. Copia dei dati (fatto, lunedì)\n2. Verifica (ora)\n3. Spegnimento del vecchio (da fare)"
+   }
+  },
+  "07-avviso.txt": {
+   "stato": "completo",
+   "righe": 2,
+   "blocco": {
+    "tipo": "avviso",
+    "id": "disco",
+    "tono": "attenzione",
+    "testo": "Il disco è quasi pieno:\nrestano 2 GB."
+   },
+   "ripiego": {
+    "en": "Warning: Il disco è quasi pieno:\nrestano 2 GB.",
+    "it": "Attenzione: Il disco è quasi pieno:\nrestano 2 GB."
+   }
+  },
+  "08-riferimenti.txt": {
+   "stato": "completo",
+   "righe": 4,
+   "blocco": {
+    "tipo": "tabella",
+    "id": "t",
+    "colonne": [
+     {
+      "id": "a",
+      "titolo": "A",
+      "tipo": "testo"
+     }
+    ],
+    "righe": [
+     [
+      "uno"
+     ],
+     [
+      "due 'e' tre"
+     ]
+    ]
+   },
+   "ripiego": {
+    "en": "| A |\n| --- |\n| uno |\n| due 'e' tre |",
+    "it": "| A |\n| --- |\n| uno |\n| due 'e' tre |"
+   }
+  },
+  "09-testo-sporco.txt": {
+   "stato": "completo",
+   "righe": 1,
+   "blocco": {
+    "tipo": "tabella",
+    "id": "x",
+    "titolo": "Titolo rovesciato",
+    "colonne": [
+     {
+      "id": "c",
+      "titolo": "C",
+      "tipo": "testo"
+     }
+    ],
+    "righe": [
+     [
+      "]52;c;Y2lhbw==ciao"
+     ],
+     [
+      "a$&b$1$$"
+     ],
+     [
+      "riga uno riga due"
+     ],
+     [
+      "zerolarghezza"
+     ]
+    ]
+   },
+   "ripiego": {
+    "en": "Titolo rovesciato\n\n| C |\n| --- |\n| ]52;c;Y2lhbw==ciao |\n| a$&b$1$$ |\n| riga uno riga due |\n| zerolarghezza |",
+    "it": "Titolo rovesciato\n\n| C |\n| --- |\n| ]52;c;Y2lhbw==ciao |\n| a$&b$1$$ |\n| riga uno riga due |\n| zerolarghezza |"
+   }
+  },
+  "10-fonte-tabella.txt": {
+   "stato": "completo",
+   "righe": 1,
+   "blocco": {
+    "tipo": "tabella",
+    "id": "prezzi-web",
+    "titolo": "Prezzi letti dalla pagina",
+    "colonne": [
+     {
+      "id": "p",
+      "titolo": "Prodotto",
+      "tipo": "testo"
+     },
+     {
+      "id": "e",
+      "titolo": "Prezzo",
+      "tipo": "soldi"
+     }
+    ],
+    "righe": [
+     [
+      "Pane",
+      2.5
+     ]
+    ],
+    "filtrabile": true,
+    "fonte": {
+     "tipo": "pagina",
+     "nome": "esempio.it",
+     "quando": "2026-11-02"
+    }
+   },
+   "ripiego": {
+    "en": "Prezzi letti dalla pagina\n\n| Prodotto | Prezzo |\n| --- | --- |\n| Pane | 2.5 |\n\nSource: esempio.it (2026-11-02)",
+    "it": "Prezzi letti dalla pagina\n\n| Prodotto | Prezzo |\n| --- | --- |\n| Pane | 2.5 |\n\nFonte: esempio.it (2026-11-02)"
+   }
+  },
+  "20-rotto-tipo-sconosciuto.txt": {
+   "stato": "rotto",
+   "righe": 0,
+   "motivo": {
+    "codice": "tipoSconosciuto",
+    "campo": "Carosello",
+    "riga": 1
+   },
+   "ripiego": null
+  },
+  "21-rotto-chiave-fuori-schema.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "campoFuoriSchema",
+    "campo": "colonne[0].colore",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "22-rotto-argomento-in-piu.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "campoFuoriSchema",
+    "campo": "argomento 6",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "23-rotto-campo-mancante.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "campoMancante",
+    "campo": "testo",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "24-rotto-valore-non-valido.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "valoreNonValido",
+    "campo": "tono",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "25-rotto-oltre-il-limite.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "oltreIlLimite",
+    "campo": "opzioni",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "26-rotto-sintassi.txt": {
+   "stato": "rotto",
+   "righe": 0,
+   "motivo": {
+    "codice": "sintassi",
+    "riga": 1
+   },
+   "ripiego": null
+  },
+  "27-rotto-espressione.txt": {
+   "stato": "rotto",
+   "righe": 0,
+   "motivo": {
+    "codice": "espressioneNonAmmessa",
+    "riga": 1
+   },
+   "ripiego": null
+  },
+  "28-rotto-nessuna-radice.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "nessunaRadice",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "29-rotto-riferimento-mancante.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "riferimentoMancante",
+    "campo": "testo",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "30-rotto-riferimento-circolare.txt": {
+   "stato": "rotto",
+   "righe": 3,
+   "motivo": {
+    "codice": "riferimentoCircolare",
+    "campo": "colonne",
+    "riga": 4
+   },
+   "ripiego": null
+  },
+  "31-rotto-incompleto.txt": {
+   "stato": "rotto",
+   "righe": 0,
+   "motivo": {
+    "codice": "bloccoIncompleto",
+    "riga": 1
+   },
+   "ripiego": null
+  },
+  "32-rotto-coda-dopo-istruzione.txt": {
+   "stato": "rotto",
+   "righe": 0,
+   "motivo": {
+    "codice": "sintassi",
+    "riga": 1
+   },
+   "ripiego": null
+  },
+  "33-rotto-scelte-da-fonte-esterna.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "interazioneDaFonteEsterna",
+    "campo": "fonte",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "34-rotto-modulo-da-fonte-esterna.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "interazioneDaFonteEsterna",
+    "campo": "fonte",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "35-rotto-chiamata-annidata.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "valoreNonValido",
+    "campo": "testo",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "36-rotto-torta-troppe-fette.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "oltreIlLimite",
+    "campo": "serie[0].punti",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "37-rotto-riga-piu-lunga.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "oltreIlLimite",
+    "campo": "righe[0]",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "38-rotto-opzioni-su-testo.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "campoFuoriSchema",
+    "campo": "campi[0].opzioni",
+    "riga": 2
+   },
+   "ripiego": null
+  },
+  "39-rotto-id-vuoto.txt": {
+   "stato": "rotto",
+   "righe": 1,
+   "motivo": {
+    "codice": "valoreNonValido",
+    "campo": "id",
+    "riga": 2
+   },
+   "ripiego": null
+  }
+ },
+ "schemi": {
+  "tabella": {
+   "componente": "Tabella",
+   "limiti": {
+    "colonne": 12,
+    "righe": 500,
+    "cella": 200
+   },
+   "argomenti": [
+    {
+     "nome": "id",
+     "schema": {
+      "t": "testo",
+      "massimo": 64,
+      "righe": "una"
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "titolo",
+     "schema": {
+      "t": "testo",
+      "massimo": 120,
+      "righe": "una"
+     },
+     "obbligatorio": false
+    },
+    {
+     "nome": "colonne",
+     "schema": {
+      "t": "lista",
+      "di": {
+       "t": "oggetto",
+       "campi": [
+        {
+         "nome": "id",
+         "schema": {
+          "t": "testo",
+          "massimo": 64,
+          "righe": "una"
+         },
+         "obbligatorio": true
+        },
+        {
+         "nome": "titolo",
+         "schema": {
+          "t": "testo",
+          "massimo": 120,
+          "righe": "una"
+         },
+         "obbligatorio": true
+        },
+        {
+         "nome": "tipo",
+         "schema": {
+          "t": "scelta",
+          "valori": [
+           "testo",
+           "numero",
+           "data",
+           "soldi"
+          ]
+         },
+         "obbligatorio": true
+        }
+       ]
+      },
+      "massimo": 12,
+      "minimo": 1
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "righe",
+     "schema": {
+      "t": "lista",
+      "di": {
+       "t": "lista",
+       "di": {
+        "t": "cella",
+        "massimo": 200
+       },
+       "massimo": 12,
+       "minimo": 0
+      },
+      "massimo": 500,
+      "minimo": 0
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "ordinabile",
+     "schema": {
+      "t": "logico"
+     },
+     "obbligatorio": false
+    },
+    {
+     "nome": "filtrabile",
+     "schema": {
+      "t": "logico"
+     },
+     "obbligatorio": false
+    },
+    {
+     "nome": "fonte",
+     "schema": {
+      "t": "oggetto",
+      "campi": [
+       {
+        "nome": "tipo",
+        "schema": {
+         "t": "scelta",
+         "valori": [
+          "file",
+          "attrezzo",
+          "pagina"
+         ]
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "nome",
+        "schema": {
+         "t": "testo",
+         "massimo": 200,
+         "righe": "una"
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "quando",
+        "schema": {
+         "t": "testo",
+         "massimo": 64,
+         "righe": "una"
+        },
+        "obbligatorio": false
+       }
+      ]
+     },
+     "obbligatorio": false
+    }
+   ]
+  },
+  "grafico": {
+   "componente": "Grafico",
+   "limiti": {
+    "serie": 6,
+    "punti": 60,
+    "fette": 8
+   },
+   "argomenti": [
+    {
+     "nome": "id",
+     "schema": {
+      "t": "testo",
+      "massimo": 64,
+      "righe": "una"
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "titolo",
+     "schema": {
+      "t": "testo",
+      "massimo": 120,
+      "righe": "una"
+     },
+     "obbligatorio": false
+    },
+    {
+     "nome": "forma",
+     "schema": {
+      "t": "scelta",
+      "valori": [
+       "barre",
+       "linee",
+       "torta"
+      ]
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "descrizione",
+     "schema": {
+      "t": "testo",
+      "massimo": 400,
+      "righe": "piu"
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "serie",
+     "schema": {
+      "t": "lista",
+      "di": {
+       "t": "oggetto",
+       "campi": [
+        {
+         "nome": "nome",
+         "schema": {
+          "t": "testo",
+          "massimo": 120,
+          "righe": "una"
+         },
+         "obbligatorio": true
+        },
+        {
+         "nome": "punti",
+         "schema": {
+          "t": "lista",
+          "di": {
+           "t": "oggetto",
+           "campi": [
+            {
+             "nome": "x",
+             "schema": {
+              "t": "testo-o-numero",
+              "massimo": 200
+             },
+             "obbligatorio": true
+            },
+            {
+             "nome": "y",
+             "schema": {
+              "t": "numero"
+             },
+             "obbligatorio": true
+            }
+           ]
+          },
+          "massimo": 60,
+          "minimo": 1
+         },
+         "obbligatorio": true
+        }
+       ]
+      },
+      "massimo": 6,
+      "minimo": 1
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "unita",
+     "schema": {
+      "t": "testo",
+      "massimo": 24,
+      "righe": "una"
+     },
+     "obbligatorio": false
+    },
+    {
+     "nome": "fonte",
+     "schema": {
+      "t": "oggetto",
+      "campi": [
+       {
+        "nome": "tipo",
+        "schema": {
+         "t": "scelta",
+         "valori": [
+          "file",
+          "attrezzo",
+          "pagina"
+         ]
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "nome",
+        "schema": {
+         "t": "testo",
+         "massimo": 200,
+         "righe": "una"
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "quando",
+        "schema": {
+         "t": "testo",
+         "massimo": 64,
+         "righe": "una"
+        },
+        "obbligatorio": false
+       }
+      ]
+     },
+     "obbligatorio": false
+    }
+   ]
+  },
+  "scelte": {
+   "componente": "Scelte",
+   "limiti": {
+    "opzioni": 6,
+    "testo": 80
+   },
+   "argomenti": [
+    {
+     "nome": "id",
+     "schema": {
+      "t": "testo",
+      "massimo": 64,
+      "righe": "una"
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "titolo",
+     "schema": {
+      "t": "testo",
+      "massimo": 120,
+      "righe": "una"
+     },
+     "obbligatorio": false
+    },
+    {
+     "nome": "domanda",
+     "schema": {
+      "t": "testo",
+      "massimo": 300,
+      "righe": "piu"
+     },
+     "obbligatorio": false
+    },
+    {
+     "nome": "opzioni",
+     "schema": {
+      "t": "lista",
+      "di": {
+       "t": "oggetto",
+       "campi": [
+        {
+         "nome": "testo",
+         "schema": {
+          "t": "testo",
+          "massimo": 80,
+          "righe": "una"
+         },
+         "obbligatorio": true
+        }
+       ]
+      },
+      "massimo": 6,
+      "minimo": 1
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "fonte",
+     "schema": {
+      "t": "oggetto",
+      "campi": [
+       {
+        "nome": "tipo",
+        "schema": {
+         "t": "scelta",
+         "valori": [
+          "file",
+          "attrezzo",
+          "pagina"
+         ]
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "nome",
+        "schema": {
+         "t": "testo",
+         "massimo": 200,
+         "righe": "una"
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "quando",
+        "schema": {
+         "t": "testo",
+         "massimo": 64,
+         "righe": "una"
+        },
+        "obbligatorio": false
+       }
+      ]
+     },
+     "obbligatorio": false
+    }
+   ]
+  },
+  "modulo": {
+   "componente": "Modulo",
+   "limiti": {
+    "campi": 8
+   },
+   "argomenti": [
+    {
+     "nome": "id",
+     "schema": {
+      "t": "testo",
+      "massimo": 64,
+      "righe": "una"
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "titolo",
+     "schema": {
+      "t": "testo",
+      "massimo": 120,
+      "righe": "una"
+     },
+     "obbligatorio": false
+    },
+    {
+     "nome": "campi",
+     "schema": {
+      "t": "lista",
+      "di": {
+       "t": "oggetto",
+       "campi": [
+        {
+         "nome": "id",
+         "schema": {
+          "t": "testo",
+          "massimo": 64,
+          "righe": "una"
+         },
+         "obbligatorio": true
+        },
+        {
+         "nome": "etichetta",
+         "schema": {
+          "t": "testo",
+          "massimo": 120,
+          "righe": "una"
+         },
+         "obbligatorio": true
+        },
+        {
+         "nome": "tipo",
+         "schema": {
+          "t": "scelta",
+          "valori": [
+           "scelta",
+           "piu-scelte",
+           "testo",
+           "numero",
+           "data"
+          ]
+         },
+         "obbligatorio": true
+        },
+        {
+         "nome": "opzioni",
+         "schema": {
+          "t": "lista",
+          "di": {
+           "t": "oggetto",
+           "campi": [
+            {
+             "nome": "testo",
+             "schema": {
+              "t": "testo",
+              "massimo": 80,
+              "righe": "una"
+             },
+             "obbligatorio": true
+            }
+           ]
+          },
+          "massimo": 12,
+          "minimo": 1
+         },
+         "obbligatorio": false
+        }
+       ]
+      },
+      "massimo": 8,
+      "minimo": 1
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "invia",
+     "schema": {
+      "t": "testo",
+      "massimo": 40,
+      "righe": "una"
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "fonte",
+     "schema": {
+      "t": "oggetto",
+      "campi": [
+       {
+        "nome": "tipo",
+        "schema": {
+         "t": "scelta",
+         "valori": [
+          "file",
+          "attrezzo",
+          "pagina"
+         ]
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "nome",
+        "schema": {
+         "t": "testo",
+         "massimo": 200,
+         "righe": "una"
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "quando",
+        "schema": {
+         "t": "testo",
+         "massimo": 64,
+         "righe": "una"
+        },
+        "obbligatorio": false
+       }
+      ]
+     },
+     "obbligatorio": false
+    }
+   ]
+  },
+  "chiave-valore": {
+   "componente": "ChiaveValore",
+   "limiti": {
+    "righe": 20
+   },
+   "argomenti": [
+    {
+     "nome": "id",
+     "schema": {
+      "t": "testo",
+      "massimo": 64,
+      "righe": "una"
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "titolo",
+     "schema": {
+      "t": "testo",
+      "massimo": 120,
+      "righe": "una"
+     },
+     "obbligatorio": false
+    },
+    {
+     "nome": "righe",
+     "schema": {
+      "t": "lista",
+      "di": {
+       "t": "oggetto",
+       "campi": [
+        {
+         "nome": "chiave",
+         "schema": {
+          "t": "testo",
+          "massimo": 120,
+          "righe": "una"
+         },
+         "obbligatorio": true
+        },
+        {
+         "nome": "valore",
+         "schema": {
+          "t": "testo-o-numero",
+          "massimo": 200
+         },
+         "obbligatorio": true
+        },
+        {
+         "nome": "stato",
+         "schema": {
+          "t": "scelta",
+          "valori": [
+           "ok",
+           "attenzione",
+           "errore"
+          ]
+         },
+         "obbligatorio": false
+        }
+       ]
+      },
+      "massimo": 20,
+      "minimo": 1
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "fonte",
+     "schema": {
+      "t": "oggetto",
+      "campi": [
+       {
+        "nome": "tipo",
+        "schema": {
+         "t": "scelta",
+         "valori": [
+          "file",
+          "attrezzo",
+          "pagina"
+         ]
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "nome",
+        "schema": {
+         "t": "testo",
+         "massimo": 200,
+         "righe": "una"
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "quando",
+        "schema": {
+         "t": "testo",
+         "massimo": 64,
+         "righe": "una"
+        },
+        "obbligatorio": false
+       }
+      ]
+     },
+     "obbligatorio": false
+    }
+   ]
+  },
+  "passi": {
+   "componente": "Passi",
+   "limiti": {
+    "voci": 30
+   },
+   "argomenti": [
+    {
+     "nome": "id",
+     "schema": {
+      "t": "testo",
+      "massimo": 64,
+      "righe": "una"
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "titolo",
+     "schema": {
+      "t": "testo",
+      "massimo": 120,
+      "righe": "una"
+     },
+     "obbligatorio": false
+    },
+    {
+     "nome": "voci",
+     "schema": {
+      "t": "lista",
+      "di": {
+       "t": "oggetto",
+       "campi": [
+        {
+         "nome": "quando",
+         "schema": {
+          "t": "testo",
+          "massimo": 64,
+          "righe": "una"
+         },
+         "obbligatorio": false
+        },
+        {
+         "nome": "titolo",
+         "schema": {
+          "t": "testo",
+          "massimo": 200,
+          "righe": "una"
+         },
+         "obbligatorio": true
+        },
+        {
+         "nome": "stato",
+         "schema": {
+          "t": "scelta",
+          "valori": [
+           "fatto",
+           "ora",
+           "da-fare"
+          ]
+         },
+         "obbligatorio": false
+        }
+       ]
+      },
+      "massimo": 30,
+      "minimo": 1
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "fonte",
+     "schema": {
+      "t": "oggetto",
+      "campi": [
+       {
+        "nome": "tipo",
+        "schema": {
+         "t": "scelta",
+         "valori": [
+          "file",
+          "attrezzo",
+          "pagina"
+         ]
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "nome",
+        "schema": {
+         "t": "testo",
+         "massimo": 200,
+         "righe": "una"
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "quando",
+        "schema": {
+         "t": "testo",
+         "massimo": 64,
+         "righe": "una"
+        },
+        "obbligatorio": false
+       }
+      ]
+     },
+     "obbligatorio": false
+    }
+   ]
+  },
+  "avviso": {
+   "componente": "Avviso",
+   "limiti": {
+    "testo": 400
+   },
+   "argomenti": [
+    {
+     "nome": "id",
+     "schema": {
+      "t": "testo",
+      "massimo": 64,
+      "righe": "una"
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "titolo",
+     "schema": {
+      "t": "testo",
+      "massimo": 120,
+      "righe": "una"
+     },
+     "obbligatorio": false
+    },
+    {
+     "nome": "tono",
+     "schema": {
+      "t": "scelta",
+      "valori": [
+       "info",
+       "attenzione",
+       "errore"
+      ]
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "testo",
+     "schema": {
+      "t": "testo",
+      "massimo": 400,
+      "righe": "piu"
+     },
+     "obbligatorio": true
+    },
+    {
+     "nome": "fonte",
+     "schema": {
+      "t": "oggetto",
+      "campi": [
+       {
+        "nome": "tipo",
+        "schema": {
+         "t": "scelta",
+         "valori": [
+          "file",
+          "attrezzo",
+          "pagina"
+         ]
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "nome",
+        "schema": {
+         "t": "testo",
+         "massimo": 200,
+         "righe": "una"
+        },
+        "obbligatorio": true
+       },
+       {
+        "nome": "quando",
+        "schema": {
+         "t": "testo",
+         "massimo": 64,
+         "righe": "una"
+        },
+        "obbligatorio": false
+       }
+      ]
+     },
+     "obbligatorio": false
+    }
+   ]
+  }
+ }
+}

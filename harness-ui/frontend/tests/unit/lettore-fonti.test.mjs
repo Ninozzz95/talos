@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { RESE_OFFICE, caricatoreOffice, fonteDaCartella, fonteDaLibreria } from '../../src/components/lettore/fonti.js';
+import { RESE_OFFICE, caricatoreOffice, fonteDaCartella, fonteDaLibreria, fonteDaAllegato } from '../../src/components/lettore/fonti.js';
 
 function rete(risposte) {
   const chiamate = [];
@@ -51,15 +51,15 @@ test('LETTORE-FONTI-LIBRERIA: la voce si legge per id, la pagina si chiede per v
   ]);
 });
 
-test('LETTORE-FONTI-ERRORI: il messaggio del server arriva al lettore; un indirizzo che non è un lasciapassare si rifiuta', async () => {
+test('LETTORE-FONTI-ERRORI: il codice del server diventa una frase di TALOS (decisione 215), mai l’inglese della busta; un indirizzo che non è un lasciapassare si rifiuta', async () => {
   const { fetchFn } = rete([
     { status: 404, corpo: { error: { code: 'FILE_NOT_FOUND', message: 'Il file non esiste più' } } },
     { status: 500, corpo: 'non json' },
     { status: 200, corpo: { data: { indirizzo: 'https://altrove.example/pagina.html' } } },
   ]);
   const fonte = fonteDaCartella({ sessionId: 's1', percorso: 'a.md', fetchFn });
-  await assert.rejects(fonte.leggiByte(), (e) => e.message === 'Il file non esiste più' && e.code === 'FILE_NOT_FOUND' && e.status === 404);
-  await assert.rejects(fonte.leggiByte(), (e) => e.message === 'il server ha risposto HTTP 500' && e.code === null);
+  await assert.rejects(fonte.leggiByte(), (e) => e.message === 'Questo file non c’è più: forse è stato spostato o cancellato.' && e.code === 'FILE_NOT_FOUND' && e.status === 404);
+  await assert.rejects(fonte.leggiByte(), (e) => e.message === 'TALOS non è riuscito ad aprire questo file. Riprova fra poco.' && e.code === null);
   await assert.rejects(fonte.creaPagina(), /non ha dato un indirizzo/u, 'la cornice non punta mai fuori dalla rotta dei lasciapassare');
 });
 
@@ -129,8 +129,20 @@ test('LETTORE-FONTI-EN: con l’interfaccia in inglese i motivi del lettore sono
   try {
     const { fetchFn } = rete([{ status: 500, corpo: 'non json' }, { status: 200, corpo: { data: { indirizzo: 'https://altrove.example/p.html' } } }]);
     const fonte = fonteDaCartella({ sessionId: 's1', percorso: 'a.md', fetchFn });
-    await assert.rejects(fonte.leggiByte(), (e) => e.message === 'the server answered HTTP 500');
+    await assert.rejects(fonte.leggiByte(), (e) => e.message === 'TALOS could not open this file. Try again in a moment.');
     await assert.rejects(fonte.creaPagina(), (e) => e.message === 'the server gave no address for the page');
     await assert.rejects(caricatoreOffice(async () => ({}))('binario'), (e) => e.message === 'no renderer for «binario»');
   } finally { impostaLingua('it'); }
+});
+
+/* Decisioni 43 e 47: un allegato si legge per riferimento, mai dall'albero */
+test('LETTORE-FONTE-ALLEGATO: i byte e il PDF dalle rotte dell allegato di questa conversazione, niente percorso', async () => {
+  const chieste = [];
+  const fetchFn = async (u) => { chieste.push(u); return new Response(new Uint8Array([1, 2])); };
+  const fonte = fonteDaAllegato({ sessionId: 's 1', allegatoId: 'a'.repeat(24), nome: 'x.pdf', fetchFn });
+  assert.equal(fonte.percorso, null);
+  assert.equal(fonte.creaPagina, undefined);
+  assert.equal(fonte.indirizzoPdf.endsWith(`/sessions/s%201/allegati/${'a'.repeat(24)}/anteprima`), true, fonte.indirizzoPdf);
+  await fonte.leggiByte();
+  assert.equal(chieste[0].endsWith(`/sessions/s%201/allegati/${'a'.repeat(24)}`), true, chieste[0]);
 });

@@ -472,3 +472,67 @@ test('PH-FALLBACK-EMPTY: una risposta vuota non è un guasto del fornitore, e la
   await esegui(f, { onDelta: () => {}, accettaVuota: true });
   assert.deepEqual(b.richieste.map((r) => r.url.split('/')[1]), ['deepseek', 'deepseek'], 'il fornitore non è finito in panchina');
 });
+
+/* Cura 324, giro 10 (BASSO dei revisori del filo e dei fornitori del giro 9): l'errore che esce dal ripiego dice CHI lo ha dato. Dopo un cambio
+   di fornitore dentro la stessa chiamata è la riserva a rifiutare, e il kernel ricorda il rifiuto del prefill su quel filo, come Hermes lo
+   registra sulla strada attiva quando la richiesta è partita (`agent/message_sanitization.py:953-961`, `reasoning_route_key`). Campo in più,
+   opzionale: codice, stato e frase dell'errore restano quelli di prima. */
+test('PH-FALLBACK-26 l\'errore del ripiego porta fornitoreEffettivo e modelloEffettivo di chi lo ha dato, anche dopo un cambio', async t => {
+  const rifiuto = (res) => { res.writeHead(400, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: { message: 'Invalid messages: last message must be user or tool', type: 'invalid_request_error' } })); };
+  const b = await banco(t, (req, res) => { if (req.url.startsWith('/deepseek')) { res.writeHead(503); res.end('Service unavailable'); } else rifiuto(res); });
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch, b.opzioni)), (error) => {
+    assert.equal(error.code, 'PROVIDER_REQUEST_ERROR');
+    assert.equal(error.stato, 400);
+    assert.equal(error.fornitoreEffettivo, 'zai', 'la riserva ha rifiutato');
+    assert.equal(error.modelloEffettivo, 'glm-4.7-flash');
+    return true;
+  });
+  assert.equal(b.eventi.filter((e) => e.tipo === 'cambio-fornitore').length, 1);
+  // senza cambio: il fornitore della sessione
+  const c = await banco(t, (_req, res) => rifiuto(res));
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch, c.opzioni)), (error) => {
+    assert.equal(error.stato, 400);
+    assert.equal(error.fornitoreEffettivo, 'deepseek');
+    assert.equal(error.modelloEffettivo, 'deepseek-chat');
+    return true;
+  });
+  assert.equal(c.richieste.length, 1, 'un rifiuto non si ritenta e non cerca riserve');
+});
+
+/* Cura 324, giro 11 (MEDIO del revisore dei fornitori del giro 10): un rifiuto detto DENTRO il flusso prima di ogni testo (HTTP 200, poi il
+   pacchetto d'errore con `error.code` 400, la forma della sonda V8) esce ancora come esito incerto, ma col codice del pacchetto in un campo in
+   più (`statoNelFlusso`): il kernel lo legge solo col prefill in volo. Come Hermes `_status_code_from_payload`
+   (`agent/chat_completion_helpers.py:144-157`). Codice, frase e classe restano quelli di prima; testo già arrivato o un codice fuori 400-599: niente campo. */
+test('PH-FALLBACK-27 il pacchetto d\'errore nel flusso prima di ogni testo porta il suo codice nell\'errore (statoNelFlusso), il resto invariato', async t => {
+  const flusso = (res, pacchetti) => { res.writeHead(200, { 'Content-Type': 'text/event-stream' }); for (const p of pacchetti) res.write(`data: ${JSON.stringify(p)}\n\n`); res.end('data: [DONE]\n\n'); };
+  const pacchetto = (code) => ({ id: 'gen-1', object: 'chat.completion.chunk', error: { code, message: 'Provider returned error: last message must be user or tool' }, choices: [{ index: 0, delta: { content: '' }, finish_reason: 'error' }] });
+  const conFlusso = { onDelta: () => {} };
+  for (const [code, atteso] of [[400, 400], ['422', 422], [502, 502], [599, 599], [600, undefined], [302, undefined], ['400.5', undefined], ['3230', undefined], ['context_window', undefined]]) {
+    const b = await banco(t, (_req, res) => flusso(res, [pacchetto(code)]));
+    await assert.rejects(esegui(creaFetchMultiProvider(fetch, b.opzioni), conFlusso), (error) => {
+      assert.equal(error.code, 'PROVIDER_OUTCOME_UNKNOWN', `codice ${code}`);
+      assert.equal(error.causaDiTrasporto, 'PROVIDER_STREAM_ERROR');
+      assert.equal(error.stato, undefined, 'nessuno stato HTTP inventato');
+      assert.equal(error.statoNelFlusso, atteso, `codice ${code}`);
+      return true;
+    });
+    assert.equal(b.richieste.length, 1, 'un errore esplicito nel flusso non si ritenta e non cerca riserve');
+  }
+  // testo già arrivato: niente campo, il parziale resta
+  const c = await banco(t, (_req, res) => flusso(res, [{ choices: [{ index: 0, delta: { content: 'Ecco' } }] }, pacchetto(400)]));
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch, c.opzioni), conFlusso), (error) => {
+    assert.equal(error.code, 'PROVIDER_OUTCOME_UNKNOWN');
+    assert.equal(error.statoNelFlusso, undefined);
+    assert.equal(error.parziale?.content, 'Ecco');
+    return true;
+  });
+  // una chiamata d'attrezzo già cominciata: niente campo, il parziale lo dice
+  const chiamata = { choices: [{ index: 0, delta: { tool_calls: [{ index: 0, id: 'call_1', type: 'function', function: { name: 'shell', arguments: '{}' } }] } }] };
+  const d = await banco(t, (_req, res) => flusso(res, [chiamata, pacchetto(400)]));
+  await assert.rejects(esegui(creaFetchMultiProvider(fetch, d.opzioni), conFlusso), (error) => {
+    assert.equal(error.code, 'PROVIDER_OUTCOME_UNKNOWN');
+    assert.equal(error.statoNelFlusso, undefined);
+    assert.equal(error.parziale?.chiamateInCorso, true);
+    return true;
+  });
+});

@@ -97,3 +97,32 @@ test('LINGUA-7-04 — cancello: nessuna frase NUOVA con un numero davanti a un p
   const curate = [...debito].filter((k) => !oggi.includes(k));
   assert.deepEqual(curate, [], `voci curate ancora nel debito: toglierle da lingua7-plurali-debito.json: ${curate.join(', ')}`);
 });
+
+/* Rossa della suite del blocco 24 (LINGUA-7-04), classificata il 01/11/2026 sera: DIFETTO. La riga della scheda video lenta (FE-050, `a3453c50e`) diceva
+   «{adesso} tokens per second» e «{migliore} tokens per second» con il plurale fisso: «1 tokens per second» quando la scheda va a un token al secondo. */
+test('LINGUA-7-05 — la scheda lenta: il plurale segue il numero, nelle due lingue', async (prova) => {
+  prova.after(() => impostaLingua('it'));
+  const { testiSchedaLenta } = await import('../../src/components/context-separator.js');
+  const v = (adesso, migliore) => testiSchedaLenta({ adesso, migliore, modello: 'm', scheda: 'GPU', versione: 'b1' });
+  impostaLingua('en');
+  assert.equal(v(1, 40).riga, 'The graphics card is slower than usual: 1 token per second instead of 40. Restarting the PC usually brings it back to full speed.');
+  assert.equal(v(12, 40).riga, 'The graphics card is slower than usual: 12 tokens per second instead of 40. Restarting the PC usually brings it back to full speed.');
+  assert.equal(v(0, 1).dettagli, 'm on GPU, engine b1. The best speed seen on this PC was 1 token per second.');
+  assert.equal(v(0, 40).dettagli, 'm on GPU, engine b1. The best speed seen on this PC was 40 tokens per second.');
+  impostaLingua('it');
+  assert.equal(v(1, 40).riga, 'La scheda video va più piano del solito: 1 token al secondo invece di 40. Riavviare il PC di solito la riporta alla velocità piena.');
+  assert.equal(v(0, 1).dettagli, 'm su GPU, motore b1. La velocità migliore vista su questo PC era 1 token al secondo.');
+});
+
+/* Rossa della suite del blocco computer use (LINGUA-7-04), 05/11/2026: la riga dei dati locali (0e6cdf514) diceva «{n} items» con il plurale fisso.
+   Oggi compare solo da 2 in su, ma la frase non deve dipendere da chi la chiama: due voci `…One`/`…Many` e `tn()`. */
+test('LINGUA-7-06 — i dati locali: «1 item» e «3 items», «1 voce» e «3 voci»', (prova) => {
+  prova.after(() => impostaLingua('it'));
+  const voci = (n) => tn('app.settings.localData.itemsOne', 'app.settings.localData.itemsMany', n);
+  impostaLingua('en');
+  assert.deepEqual([voci(1), voci(3)], ['1 item', '3 items']);
+  impostaLingua('it');
+  assert.deepEqual([voci(1), voci(3)], ['1 voce', '3 voci']);
+  const sorgente = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src/legacy/app.js'), 'utf8');
+  assert.match(sorgente, /trn\('app\.settings\.localData\.itemsOne', 'app\.settings\.localData\.itemsMany', quante\)/u, 'la pagina sceglie il plurale con tn()');
+});

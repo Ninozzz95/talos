@@ -13,10 +13,13 @@ import { createContextEngine } from '../../context-engine/src/engine.mjs';
 
 const contatore = { countPreparedContext: async ({ messages, tools, model }) => ({ schema: 'talos.context.tokens.v1', inputTokens: Math.ceil(JSON.stringify({ messages, tools }).length / 4), windowTokens: model.windowTokens, responseReserve: model.responseReserve, method: 'heuristic', exact: false, requestHash: 'a'.repeat(64), provider: model.provider, model: model.model }) };
 const MODELLO = { provider: 'local', model: 'test', windowTokens: 200_000, responseReserve: 2048 };
+/* 05/11/2026 (3c128829d, B4: «an automatic job that cannot gain anything is not started»): i giri vecchi sono lunghi, così il
+   riassunto automatico ha qualcosa da liberare e nasce davvero — la prova resta su close che lo ferma in volo. */
+const LUNGO = (n) => `${n}: ${'dettagli del giro, letti e riletti. '.repeat(120)}`;
 const STORIA = [
   { role: 'system', content: 'Sei un assistente.' },
-  { role: 'user', content: 'primo' }, { role: 'assistant', content: 'uno' },
-  { role: 'user', content: 'secondo' }, { role: 'assistant', content: 'due' },
+  { role: 'user', content: 'primo' }, { role: 'assistant', content: LUNGO('uno') },
+  { role: 'user', content: 'secondo' }, { role: 'assistant', content: LUNGO('due') },
   { role: 'user', content: 'terzo' }, { role: 'assistant', content: 'tre' },
   { role: 'user', content: 'quarto' },
 ];

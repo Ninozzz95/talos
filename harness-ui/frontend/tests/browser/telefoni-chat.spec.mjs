@@ -18,7 +18,7 @@ for (const modo of ['dark', 'light']) {
       await page.addInitScript((colorMode) => {
         try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode } })); } catch { /* sandbox */ }
       }, modo);
-      await page.route('**/api/v1/sessions/telefoni-proof-*/events', () => { /* aperto e muto */ });
+      await page.route('**/api/v1/sessions/telefoni-proof-*/events*', () => { /* aperto e muto */ });
       await page.route(/\/api\/v1\/remote(\/.*)?$/u, async (route) => {
         const req = route.request();
         const url = new URL(req.url());

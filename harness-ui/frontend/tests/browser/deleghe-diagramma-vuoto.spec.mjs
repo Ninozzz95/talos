@@ -93,7 +93,7 @@ test('DELEGHE-VUOTO-04 — senza agenti non si offrono le viste né la ricerca n
   expect(misure.fili).toBe(0);
   // il modello sulla scheda della conversazione ha il nome corto, come sulle schede degli agenti; l'intero sta nel suggerimento
   const sotto = grafo.locator('.gv-sessione .talos-wfg__passo-modello');
-  await expect(sotto).toContainText('glm-5.3-flash');
+  await expect(sotto).toContainText('GLM 5.3 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   await expect(sotto).not.toContainText('z-ai/');
   await expect(sotto).toHaveAttribute('title', /z-ai\/glm-5\.3-flash/u);
   expect(errori).toEqual([]);

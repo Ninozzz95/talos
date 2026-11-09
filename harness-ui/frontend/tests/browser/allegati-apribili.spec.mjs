@@ -63,6 +63,8 @@ test('ALL-APRI-B01 il file mandato dal Pad si apre col clic sul chip, nel lettor
   const chip = page.locator('#conversation .talos-allegati-chip__apri');
   await expect(chip).toHaveCount(1);
   await expect(chip).toContainText('ordini-dal-pad.csv');
+  /* il glifo della Libreria nella scheda del file: l'estensione ha il suo stile anche fuori dalla Libreria (classe neutra, ATLAS-F3-08) */
+  await expect(chip.locator('.talos-scheda-file__glifo .talos-glifo-estensione')).toHaveCSS('font-size', '9.5px');
   await chip.click();
   await expect(page.locator('#railFileLettore')).toBeVisible();
   await expect(page.locator('#railFileLettore')).toContainText('Verdi');

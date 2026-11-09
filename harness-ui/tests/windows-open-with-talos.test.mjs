@@ -51,7 +51,7 @@ test('OPEN-WITH-TALOS-WINDOWS-01 — il launcher PowerShell attraversa il vero e
   mkdirSync(workspace);
   const credentialFile = join(root, 'launcher-token');
   const store = createWorkspaceLaunchStore({ credentialFile });
-  const server = createServer(createHttpApp({ staticHandler: async () => null, workspaceLaunchStore: store }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, workspaceLaunchStore: store }));
   await new Promise((resolveListen, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolveListen); });
   t.after(() => new Promise((resolveClose) => server.close(resolveClose)));
   const baseUrl = `http://127.0.0.1:${server.address().port}`;

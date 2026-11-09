@@ -872,7 +872,7 @@ test('SCHEDA-06 — il verdetto di memoria: i nove casi, i due numeri diversi, e
   const colonna = await page.evaluate(() => {
     const radice = document.querySelector('#c4-tela [data-scheda-modello]');
     return [...radice.querySelectorAll('.talos-kv')]
-      .filter((r) => /Contesto|Template di chat|Attrezzi|Chiamate di attrezzo|Ruolo di sistema/.test(r.querySelector('.talos-kv__k')?.textContent ?? ''))
+      .filter((r) => /Contesto|Template di chat|Strumenti|Chiamate di strumento|Ruolo di sistema/.test(r.querySelector('.talos-kv__k')?.textContent ?? ''))
       .map((r) => ({
         etichetta: r.querySelector('.talos-kv__k').textContent,
         destra: Math.round(r.querySelector('.talos-kv__v').getBoundingClientRect().right),
@@ -889,7 +889,7 @@ test('SCHEDA-06 — il verdetto di memoria: i nove casi, i due numeri diversi, e
   // le ragioni, con le due cifre che le spiegano
   expect(per['solo-chat-contesto'].dettaglio, 'la ragione «contesto» dice le due cifre').toContain('8k token');
   expect(per['solo-chat-contesto'].dettaglio).toContain('64k token');
-  expect(per['solo-chat'].dettaglio, 'e la ragione «modello» dice la sua').toContain('non dichiara il supporto agli attrezzi');
+  expect(per['solo-chat'].dettaglio, 'e la ragione «modello» dice la sua').toContain('non dichiara il supporto agli strumenti');
   expect(per['non-entra-memoria'].dettaglio).toContain('55,9 GB');
   expect(per['non-entra-memoria'].dettaglio).toContain('32 GB');
   expect(per['non-entra-spazio'].dettaglio).toContain('83,8 GB');
@@ -926,7 +926,7 @@ test('SCHEDA-06 — il verdetto di memoria: i nove casi, i due numeri diversi, e
   // i fatti osservati dal runtime, con la loro provenienza
   expect(per['entra'].kv['Contesto efficace'], 'i token si scrivono come li scrive la lista Installati').toBe('32k token');
   expect(per['entra'].kv['Contesto richiesto dalla verifica']).toBe('64k token');
-  expect(per['entra'].kv['Attrezzi']).toBe('Sì');
+  expect(per['entra'].kv['Strumenti']).toBe('Sì');
   expect(per['ignoto-coi-numeri'].kv['Modello servito dal runtime']).toBe('qwen2.5-7b-q4km');
   expect(per['entra'].dettaglio, 'la provenienza dei fatti si dichiara').toContain('osservato');
   expect(per['entra'].dettaglio, 'e quella dei dichiarati pure').toContain('dichiarato');

@@ -140,7 +140,7 @@ test('PK-07/10 — configurazione ufficiale via HTTP, persistenza v1 e nessun se
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   const runtimeFile = join(dir, 'preferenze.json');
   const s = createProviderCredentialStore({ env: {}, runtimeFile });
-  const base = await ascolta(t, createHttpApp({ providerStore: s, staticHandler: async () => null }));
+  const base = await ascolta(t, createHttpApp({ senzaGettone: 'prove', providerStore: s, staticHandler: async () => null }));
   const url = 'https://europe-west1-aiplatform.googleapis.com/v1/projects/progetto-pk/locations/europe-west1/endpoints/openapi';
   const r = await fetch(`${base}/api/v1/providers/vertex/runtime`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: url, timeoutSeconds: 35 }) });
   assert.equal(r.status, 200);

@@ -23,7 +23,7 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(testDir, '..', 'public');
 
 async function ascolta(t, extra = {}) {
-  const server = createServer(createHttpApp({ staticHandler: createStaticHandler(publicDir), ...extra }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: createStaticHandler(publicDir), ...extra }));
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;

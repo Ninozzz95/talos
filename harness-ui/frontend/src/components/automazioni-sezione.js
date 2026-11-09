@@ -105,7 +105,7 @@ export function aggiornaPaginaAutomazioni(schermo, elenco, opzioni = {}) {
   const visibili = montaSezione(schermo, {
     chiave: 'automazioni',
     nome: traduci('sezioni.automations.v2.section.name'),
-    icona: 'clock',
+    icona: 'calendar-clock',
     famiglia: 'td-automation',
     sostantivo: 'automazione',
     voci: lista,

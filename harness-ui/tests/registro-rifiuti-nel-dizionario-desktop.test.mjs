@@ -70,6 +70,7 @@ const TABELLA = [
   ['QUERY_INVALID', 'automation-run-link-invalid', 'Il legame del giro di automazione non è valido', 'The automation run link is not valid'],
   ['INTERNAL_ERROR', 'automation-run-not-started', 'Il giro dell\'automazione non è partito', 'The automation run did not start'],
   ['QUERY_INVALID', 'permission-request-not-automation', 'Questa richiesta non è una bozza di automazione da modificare', 'This request is not an automation draft that can be edited'],
+  ['QUERY_INVALID', 'permission-request-not-research', 'Questa richiesta non è una domanda di ricerca da modificare', 'This request is not a research question that can be edited'],
   ['NOT_FOUND', 'source-session-not-found', 'Sessione origine non trovata', 'Source session not found'],
   ['SESSION_NOT_READY', 'closing-turn-history-pending', 'La sessione sta chiudendo il giro: la sua cronologia non è ancora pronta. Riprova appena il giro è concluso.', 'The session is closing its turn: its history is not ready yet. Try again as soon as the turn is over.'],
   ['SESSION_NOT_READY', 'source-running', 'La sessione origine è ancora in corso: aspetta che concluda prima di forkarla', 'The source session is still running: wait for it to finish before forking it'],
@@ -103,12 +104,12 @@ const TABELLA = [
   ['SESSION_STORE_AMBIGUOUS', 'registry-unverifiable', 'Il registro della sessione non è verificabile. Conserva la diagnosi prima di riprovare.', 'The session registry cannot be verified. Keep the diagnosis before trying again.'],
   ['SESSION_NOT_READY', 'changed-during-registry-check', 'La sessione è cambiata durante la verifica del registro.', 'The session changed during the registry check.'],
   ['SESSION_STORE_AMBIGUOUS', 'registry-header-missing', 'Il registro della sessione non contiene un’intestazione ripristinabile. Non compattare questa sessione; conserva la diagnosi.', 'The session registry does not contain a restorable header. Do not compact this session; keep the diagnosis.'],
-  ['SESSION_NOT_READY', 'changed-during-summary', 'La sessione è cambiata mentre veniva preparato il riassunto. Nessuna cronologia è stata sostituita.', 'The session changed while the summary was being prepared. No history was replaced.'],
+  ['SESSION_NOT_READY', 'changed-during-summary', 'La sessione è cambiata mentre veniva preparata la compattazione. Nessuna cronologia è stata sostituita.', 'The session changed while the compaction was being prepared. No history was replaced.'],
   ['SESSION_NOT_READY', 'changed-during-compaction-job', 'La sessione è cambiata mentre il job di compattazione era in corso. Il contesto potrebbe essere stato aggiornato: verifica la tab Contesto prima di riprovare.', 'The session changed while the compaction job was running. The context may have been updated: check the Context tab before trying again.'],
   ['SESSION_MODEL_UNKNOWN', 'model-unknown-compact', 'Non so quale modello usare per compattare questa sessione, quindi non la compatto.', 'I do not know which model to use to compact this session, so I am not compacting it.'],
-  ['SESSION_NOT_READY', 'changed-during-summary-save', 'La sessione è cambiata mentre il riassunto attendeva il salvataggio. Nessuna cronologia è stata sostituita.', 'The session changed while the summary was waiting to be saved. No history was replaced.'],
+  ['SESSION_NOT_READY', 'changed-during-summary-save', 'La sessione è cambiata mentre la compattazione attendeva il salvataggio. Nessuna cronologia è stata sostituita.', 'The session changed while the compaction was waiting to be saved. No history was replaced.'],
   ['SESSION_STORE_AMBIGUOUS', 'save-outcome-uncertain-stop', 'L’esito del salvataggio è incerto. Interrompi i tentativi e verifica il registro prima di riprovare.', 'The outcome of the save is uncertain. Stop trying and check the registry before trying again.'],
-  ['SESSION_STORE_WRITE_FAILED', 'summary-not-saved', 'Il riassunto non è stato salvato. La cronologia originale resta disponibile; riprova.', 'The summary was not saved. The original history remains available; try again.'],
+  ['SESSION_STORE_WRITE_FAILED', 'summary-not-saved', 'La compattazione non è stata salvata. La cronologia originale resta disponibile; riprova.', 'The compaction was not saved. The original history remains available; try again.'],
   ['NOT_FOUND', 'hook-not-found', 'Hook "{hookId}" non trovato in .harness-ui-hooks.json', 'Hook "{hookId}" not found in .harness-ui-hooks.json'],
   ['NOT_FOUND', 'mcp-server-not-found', 'Server MCP "{serverId}" non trovato in .harness-ui-mcp.json', 'MCP server "{serverId}" not found in .harness-ui-mcp.json'],
   ['LIBRARY_NOT_FOUND', 'library-entry-not-found', 'Questa voce della Libreria non esiste', 'This Library entry does not exist'],
@@ -138,7 +139,8 @@ const TABELLA = [
   ['SESSION_STORE_WRITE_FAILED', 'redirect-message-not-saved', 'Non è stato possibile salvare il messaggio in coda. Riprova senza chiudere la sessione.', 'The queued message could not be saved. Try again without closing the session.'],
   ['SESSION_NOT_READY', 'redirect-cancelled-before-start', 'Il reindirizzamento è stato annullato prima dell’avvio', 'The redirect was cancelled before it started'],
   ['NOT_FOUND', 'project-not-found', 'Progetto non trovato', 'Project not found'],
-  ['SESSION_NOT_READY', 'workspace-unavailable', 'Workspace della sessione non disponibile', 'The session workspace is not available'],
+  // decisione 176 (owner 04/11, registro riga 323; commit 648274a38): «workspace» in italiano è «spazio di lavoro»; prima «Workspace della sessione non disponibile»
+  ['SESSION_NOT_READY', 'workspace-unavailable', 'Spazio di lavoro della sessione non disponibile', 'The session workspace is not available'],
   ['QUERY_INVALID', 'session-name-invalid', 'Nome non valido: serve 1-80 caratteri', 'Invalid name: 1-80 characters are needed'],
   ['QUERY_INVALID', 'message-reference-invalid', 'Riferimento del messaggio non valido', 'Invalid message reference'],
   ['SESSION_STILL_RUNNING', 'still-working-wait', 'La sessione sta ancora lavorando: aspetta la fine del giro, o fermalo.', 'The session is still working: wait for the end of the turn, or stop it.'],
@@ -191,11 +193,12 @@ const TABELLA = [
   ['SESSION_NOT_READY', 'undo-off', 'Qui non si possono annullare le modifiche ai file.', 'Undoing file changes is not available here.'],
   ['SESSION_NOT_READY', 'undo-while-working', 'Una conversazione sta lavorando in questa cartella: annulla quando ha finito.', 'A conversation is working in this folder: undo when it has finished.'],
   // R5.8 (18/10/2026): prova e riconnessione di un server MCP
-  ['SESSION_NOT_READY', 'mcp-not-trusted', 'Questo server MCP non è ancora fidato: rendilo fidato dal computer.', 'This MCP server is not trusted yet: trust it from the computer first.'],
+  ['SESSION_NOT_READY', 'mcp-not-trusted', 'Questo server MCP non è ancora fidato: rendilo fidato dal computer.', 'This MCP server is not trusted yet: trust it from the computer first.'],  // decisione 198 (04/11/2026): ▶ senza niente da riprendere
+  ['SESSION_NOT_READY', 'nothing-to-resume', 'L’ultimo giro è finito: non c’è niente da riprendere. Scrivi un messaggio, o usa Riprova sulla risposta.', 'The last turn finished: there is nothing to resume. Write a message, or use Retry on the answer.'],
 ];
 const NUOVE = new Set(['fork-not-saved', 'fork-point-compacted', 'fork-point-not-found', 'permission-answer-outside-chain',
   // automazioni a due porte (08/10/2026): nate in inglese, senza un italiano «di prima»
-  'automation-run-needs-store', 'automation-run-link-invalid', 'automation-run-not-started', 'permission-request-not-automation',
+  'automation-run-needs-store', 'automation-run-link-invalid', 'automation-run-not-started', 'permission-request-not-automation', 'permission-request-not-research',
   // /goal G2 (14/10/2026): il contratto
   'contract-empty', 'contract-too-many-criteria', 'criterion-invalid', 'criterion-text-invalid',
   'criterion-check-missing', 'criterion-check-unknown', 'criterion-command-invalid', 'criterion-exit-code-invalid',
@@ -210,7 +213,9 @@ const NUOVE = new Set(['fork-not-saved', 'fork-point-compacted', 'fork-point-not
   // R5.11 (18/10/2026): «Annulla le modifiche ai file»
   'undo-off', 'undo-while-working',
   // R5.8 (18/10/2026): prova e riconnessione di un server MCP
-  'mcp-not-trusted']);
+  'mcp-not-trusted',
+  // decisione 198 (04/11/2026): nata in inglese
+  'nothing-to-resume']);
 const chiaveDizionario = (code, reason) => `${code}.${reason.replace(/-/gu, '_')}`;
 const voce = (chiave, lingua) => AREE.errori[lingua][chiave];
 

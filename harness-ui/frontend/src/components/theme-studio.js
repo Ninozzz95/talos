@@ -696,7 +696,7 @@ function miniConversazione(doc) {
   const composer = nodo(doc, 'div', 'td-mini-composer');
   composer.append(nodo(doc, 'span', 'td-mini-placeholder', traduci('varie.themeStudio.mini.placeholder')));
   const invio = nodo(doc, 'span', 'td-mini-invio');
-  invio.append(icona(doc, 'send'));
+  invio.append(icona(doc, 'arrow-up'));
   composer.append(invio);
 
   scena.append(risposta, domanda, composer);

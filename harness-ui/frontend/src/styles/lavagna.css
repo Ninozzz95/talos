@@ -1,0 +1,14 @@
+/* FE-009: la lavagna, una vista della Bacheca. Dal bozzetto `bozzetto-superfici-vive`, righe 30419-30429; le colonne si piegano nelle finestre strette. */
+.lavagna{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start;margin-top:var(--talos-space-md)}
+.lavagna[hidden]{display:none}
+.lav-col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.lav-testa{display:flex;align-items:center;justify-content:space-between;padding:2px 4px}
+.lav-carta{display:flex;flex-direction:column;gap:6px;padding:10px 12px;min-width:0;cursor:pointer}
+.lav-carta .talos-board-session{text-align:left;font-weight:600;white-space:normal}
+.lav-riga{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;min-width:0}
+.lav-nota{margin:0;font-size:12.5px;overflow-wrap:anywhere}
+.lav-mod{font-size:11px}
+.lav-vuota{margin:0;padding:10px 4px;font-size:12.5px}
+.lavagna > .lav-vuota{grid-column:1 / -1}
+@media (max-width: 1040px) { .lavagna{grid-template-columns:repeat(2,minmax(0,1fr))} }
+@media (max-width: 520px) { .lavagna{grid-template-columns:minmax(0,1fr)} }

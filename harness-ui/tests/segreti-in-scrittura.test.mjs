@@ -9,12 +9,14 @@
  *   · owner 16/10 notte («No, separati»): il sì «per la sessione» dato per LEGGERE un segreto non vale per SCRIVERLO.
  * Ogni caso ha il suo verso contrario.
  */
+import { createHash } from 'node:crypto'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { talosLavora, verificaPermessoScrittura } from '../src/kernel/talosHarness.mjs'
+import { chiaveDelConsensoDi } from '../src/path-policy.mjs'
 import { createSessionRegistry } from '../src/session-registry.mjs'
 import { attendiScritture } from '../src/session-store.mjs'
 import { togliConfiniDati } from '../src/kernel/confine-dati.mjs'
@@ -151,18 +153,23 @@ test('SEGRETI-SCRITTURA-07: the «for this session» yes for READING .env does n
         return verificaPermessoScrittura(azione, { livelloAccesso: 'scrittura-progetto', cartella, consensiSessione: { segretiConsentiti }, chiediApprovazioneFn: async (a) => { chieste.push(a); return true } })
             .then((esito) => ({ esito, chieste }))
     }
-    const scritturaDopoLettura = await permesso({ tipo: 'scrivi', percorso: '.env' }, ['.env'])
+    /* decisione 107 (03/11): la chiave porta azione, motivo e percorso (`chiaveDelConsensoDi`); una chiave di prima non apre niente */
+    const scritturaDopoLettura = await permesso({ tipo: 'scrivi', percorso: '.env' }, ['lettura:segreto:.env'])
     assert.equal(scritturaDopoLettura.chieste.length, 1, 'the read yes does not open the write')
-    assert.equal(scritturaDopoLettura.chieste[0].segreto.chiaveDelConsenso, 'scrittura:.env', 'the registry saves this key on «for this session»')
-    const scritturaConsentita = await permesso({ tipo: 'scrivi', percorso: '.env' }, ['scrittura:.env'])
+    assert.equal(chiaveDelConsensoDi(scritturaDopoLettura.chieste[0].segreto, 'scrivi'), 'scrittura:segreto:.env', 'the registry saves this key on «for this session»')
+    const scritturaConsentita = await permesso({ tipo: 'scrivi', percorso: '.env' }, ['scrittura:segreto:.env'])
     assert.equal(scritturaConsentita.chieste.length, 0, 'the write yes covers the next write')
-    const letturaDopoScrittura = await permesso({ tipo: 'leggi', percorso: '.env' }, ['scrittura:.env'])
+    const letturaDopoScrittura = await permesso({ tipo: 'leggi', percorso: '.env' }, ['scrittura:segreto:.env'])
     assert.equal(letturaDopoScrittura.chieste.length, 1, 'the write yes does not open the read')
-    const letturaConsentita = await permesso({ tipo: 'leggi', percorso: '.env' }, ['.env'])
-    assert.equal(letturaConsentita.chieste.length, 0, 'the read yes keeps its old meaning')
+    const letturaConsentita = await permesso({ tipo: 'leggi', percorso: '.env' }, ['lettura:segreto:.env'])
+    assert.equal(letturaConsentita.chieste.length, 0, 'the read yes covers the next read')
+    for (const vecchia of ['.env', 'scrittura:.env']) {
+        assert.equal((await permesso({ tipo: 'leggi', percorso: '.env' }, [vecchia])).chieste.length, 1, `an old key (${vecchia}) does not open the read`)
+        assert.equal((await permesso({ tipo: 'scrivi', percorso: '.env' }, [vecchia])).chieste.length, 1, `an old key (${vecchia}) does not open the write`)
+    }
 })
 
-test('SEGRETI-SCRITTURA-08: the registry saves the write key on «for this session»; AL CONTRARIO a read keeps saving the bare path', async (t) => {
+test('SEGRETI-SCRITTURA-08: the registry saves the write key on «for this session»; AL CONTRARIO a read saves the read key (decisione 107: with the reason)', async (t) => {
     const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-segreti-registro-'))
     const runs = []
     const registry = createSessionRegistry({
@@ -196,8 +203,12 @@ test('SEGRETI-SCRITTURA-08: the registry saves the write key on «for this sessi
         assert.deepEqual(registry.rispondiApprovazione(sessionId, requestId, true, { ambito: 'percorso' }), { ok: true })
         await domanda
     }
-    await siPerLaSessione({ tipo: 'scrivi', percorso: '.env', segreto: { classe: 'segreto', percorso: '.env', chiaveDelConsenso: 'scrittura:.env' } })
-    assert.deepEqual([...input.consensiSessione.segretiConsentiti], ['scrittura:.env'], 'the write yes is saved under its own key')
+    /* il client manda solo `ambito: 'percorso'`: la chiave la compone il registro dalla domanda in attesa (condizione del Mobile) */
+    await siPerLaSessione({ tipo: 'scrivi', percorso: '.env', segreto: { classe: 'segreto', percorso: '.env' } })
+    assert.deepEqual([...input.consensiSessione.segretiConsentiti], ['scrittura:segreto:.env'], 'the write yes is saved under its own key')
     await siPerLaSessione({ tipo: 'leggi', percorso: 'id_rsa', segreto: { classe: 'segreto', percorso: 'id_rsa' } })
-    assert.deepEqual([...input.consensiSessione.segretiConsentiti], ['scrittura:.env', 'id_rsa'], 'a read keeps the bare path')
+    assert.deepEqual([...input.consensiSessione.segretiConsentiti], ['scrittura:segreto:.env', 'lettura:segreto:id_rsa'], 'a read saves the read key')
+    await siPerLaSessione({ tipo: 'shell', comando: 'bash -c x', segreto: { classe: 'segreto', percorso: 'biglietto-talos', perche: 'troppo-complesso' } })
+    /* S2 (Performance): oltre un tetto la chiave porta l'impronta del comando intero, non il percorso fisso della carta */
+    assert.equal([...input.consensiSessione.segretiConsentiti].at(-1), `lettura:troppo-complesso:sha256:${createHash('sha256').update('bash -c x').digest('hex')}`, 'the reason of the card and the whole command are in the key')
 })

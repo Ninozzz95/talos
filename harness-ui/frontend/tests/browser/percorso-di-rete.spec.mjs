@@ -74,7 +74,7 @@ for (const [nome, a] of AZIONI) {
     await scheda.getByRole('button', { name: 'Consenti una volta' }).click();
     await expect.poll(() => risposte.length).toBe(1);
     expect(risposte[0]).toEqual({ requestId: `rete-app-${nome}`, approvato: true });
-    expect(fermate, 'nessun permesso per attrezzo scritto').toEqual([]);
+    expect(fermate, 'nessun permesso per strumento scritto').toEqual([]);
   });
 }
 

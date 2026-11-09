@@ -40,6 +40,12 @@ export function dettaglioRuntime(grezzo){
 export function datiRuntimeModello(r={}){
  const raggiunto=r.state==='observed',models=Array.isArray(r.models)?r.models:[];
  const errore=r.modelsError||r.failureReason||'';
+ /* Revisione d'uso della candidata 04/11/2026, reperto 12: «Disponibilità non verificata» due righe sopra «Verifica 16:37:56 ·
+  * il servizio non ha risposto». Il controllo c'è stato (`detect` del server: data vera + `failureReason`), quindi la carta dice
+  * l'esito; «non verificata» resta solo quando nessuno ha controllato. Come Hermes (`app/shell/gateway-menu-panel.tsx:124-128`):
+  * «connecting» finché non si sa, «offline» quando si sa che non c'è. */
+ const controllato=!raggiunto&&Boolean(r.failureReason)&&typeof r.observedAt==='string'&&!Number.isNaN(Date.parse(r.observedAt));
+ const senzaRaggiungere=!controllato?t('modelli.runtime.availabilityUnverified'):r.failureReason==='RUNTIME_UNREACHABLE'?t('modelli.runtime.availabilityUnreachable'):t('modelli.runtime.modelsReadFailed');
  const locale=r.runtimeId==='llama.cpp',fasi={unavailable:t('modelli.runtime.notStarted'),stopped:t('modelli.runtime.notStarted'),loading:t('modelli.runtime.loading'),stopping:t('modelli.runtime.stopping'),failed:t('modelli.runtime.startFailed')};
  const stato=raggiunto?(locale?(r.runtimeState==='ready'?t('modelli.runtime.reached'):fasi[r.runtimeState]||t('modelli.runtime.stateUnknown')):t('modelli.runtime.reached')):t('modelli.runtime.unreached');
  // R-03 (13/09): il motore locale in parole della persona — «scheda grafica (Vulkan) · nome» o
@@ -51,7 +57,7 @@ export function datiRuntimeModello(r={}){
  const pronto=r.runtimeState==='ready';
  const avvisoMotore=!m?'':(m.ripiego&&pronto)?t('modelli.runtime.cpuFallback'):(m.ripiego&&r.runtimeState==='failed')?t('modelli.runtime.cpuFallbackFailed'):(m.proposta?.a==='cpu')?t('modelli.runtime.cpuProposal'):'';
  const riprovaGrafica=Boolean(m?.ripiego&&pronto);
- return {nome:nomi[r.runtimeId]||r.runtimeId||t('modelli.runtime.unknownEngine'),stato,tono:raggiunto&&(!locale||r.runtimeState==='ready')&&!errore?'success':'warning',motore,avvisoMotore,riprovaGrafica,modelli:!raggiunto?t('modelli.runtime.availabilityUnverified'):r.modelsError?t('modelli.runtime.modelsReadFailed'):models.length?tn('modelli.runtime.oneModelAvailable', 'modelli.runtime.manyModelsAvailable', models.length):t('modelli.runtime.noModels'),nomi:raggiunto&&!r.modelsError?models.map(m=>m.name||m.id).filter(Boolean):[],caricamento:raggiunto&&r.runtimeId==='llama.cpp'?(r.runtimeState==='ready'?t('modelli.runtime.modelLoaded'):['stopped','unavailable'].includes(r.runtimeState)?t('modelli.runtime.noModelLoaded'):t('modelli.runtime.notDetected')):t('modelli.runtime.notDetected'),indirizzo:r.baseUrl||t('modelli.runtime.addressNotExposed'),data:typeof r.observedAt==='string'&&!Number.isNaN(Date.parse(r.observedAt))?new Date(r.observedAt).toLocaleString(localeUI(),{timeZone:'Europe/Rome'}):t('modelli.runtime.dateNotDetected'),errore};
+ return {nome:nomi[r.runtimeId]||r.runtimeId||t('modelli.runtime.unknownEngine'),stato,tono:raggiunto&&(!locale||r.runtimeState==='ready')&&!errore?'success':'warning',motore,avvisoMotore,riprovaGrafica,modelli:!raggiunto?senzaRaggiungere:r.modelsError?t('modelli.runtime.modelsReadFailed'):models.length?tn('modelli.runtime.oneModelAvailable', 'modelli.runtime.manyModelsAvailable', models.length):t('modelli.runtime.noModels'),nomi:raggiunto&&!r.modelsError?models.map(m=>m.name||m.id).filter(Boolean):[],caricamento:raggiunto&&r.runtimeId==='llama.cpp'?(r.runtimeState==='ready'?t('modelli.runtime.modelLoaded'):['stopped','unavailable'].includes(r.runtimeState)?t('modelli.runtime.noModelLoaded'):t('modelli.runtime.notDetected')):t('modelli.runtime.notDetected'),indirizzo:r.baseUrl||t('modelli.runtime.addressNotExposed'),data:typeof r.observedAt==='string'&&!Number.isNaN(Date.parse(r.observedAt))?new Date(r.observedAt).toLocaleString(localeUI(),{timeZone:'Europe/Rome'}):t('modelli.runtime.dateNotDetected'),errore};
 }
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!=null)n.textContent=txt;return n;}
 export function creaRuntimeModello(runtime){

@@ -305,8 +305,10 @@ test('GUSCIO-03 — il conteggio dei download sta sulla scheda, e a zero non si 
      che le prova meglio: muove il denominatore e pretende che la barra lo segua.
    ⛔ Qui resta ciò che è di QUESTO modulo e che valeva anche prima: il nodo vero
      dentro la banda, la sua unicità, e la regola che il guscio non INVENTA un
-     rapporto quando la fonte non è misurabile. «Un'unità che non è GiB» e «non
-     ancora misurata» restano, perché sono la stessa regola di prima. */
+     rapporto quando la fonte non è misurabile.
+   ⛔ 04/11/2026, decisione owner 163: la cella è tornata alla RAM libera, ma MISURATA, con l'ora e nel formato del telefono, e
+     letta dai byte della card della memoria (non dal testo): «un'unità che non è GiB» non esiste più come caso, al suo posto
+     c'è la misura incoerente (libera oltre il totale). */
 test('GUSCIO-04 — la banda tiene il nodo vero, e non inventa un rapporto', async ({ page }) => {
   await apriEEmonta(page);
   const banda = page.locator('#modelLabCard [data-lab-banda]');
@@ -320,22 +322,28 @@ test('GUSCIO-04 — la banda tiene il nodo vero, e non inventa un rapporto', asy
   expect(modello.dentro).toBe(true);
   expect(modello.copie).toBe(1);
 
-  // Il denominatore è quello vero del pannello Sistema, rispecchiato.
-  await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '32 GiB'; });
+  /* decisione owner 163 (04/11/2026): la banda legge i BYTE misurati dalla card della memoria, nel formato del telefono. */
+  const scriviMisura = (m) => page.evaluate((x) => {
+    const memoria = document.querySelector('#modelLabCard [data-memory-meter]');
+    for (const [nome, v] of Object.entries(x)) {
+      if (v === null) memoria.removeAttribute(nome); else memoria.setAttribute(nome, String(v));
+    }
+  }, m);
+  await scriviMisura({ 'data-memory-misurato-il': '2026-11-04T15:37:56.000Z', 'data-memory-totale-byte': 32 * 1024 ** 3, 'data-memory-libera-byte': 12 * 1024 ** 3 });
   const barra = banda.locator('[data-lab-banda-track]');
-  await expect(banda.locator('[data-lab-banda-frazione]')).toHaveText('su 32 GiB');
+  await expect(banda.locator('[data-lab-banda-frazione]')).toHaveText('su 32 GB');
   await expect(barra).toBeVisible();
 
-  // Un'unità che non è GiB: il rapporto NON si inventa, la barra sparisce — e
-  // con lei la frazione: «18,6 GiB su 512 MiB» non è un rapporto.
-  await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '512 MiB'; });
+  // Una misura incoerente (più RAM libera che totale): il rapporto NON si inventa, la barra sparisce — e con lei la frazione.
+  await scriviMisura({ 'data-memory-libera-byte': 64 * 1024 ** 3 });
   await expect(barra).toBeHidden();
   await expect(banda.locator('[data-lab-banda-frazione]')).toHaveText('');
 
   // La fonte non è ancora misurata: stessa regola, mai uno zero.
-  await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '—'; });
+  await scriviMisura({ 'data-memory-misurato-il': null, 'data-memory-totale-byte': null, 'data-memory-libera-byte': null });
   await expect(barra).toBeHidden();
   await expect(banda.locator('[data-lab-banda-frazione]')).toHaveText('');
+  await expect(banda.locator('[data-lab-banda-valore]')).toHaveText('—');
 });
 
 test('GUSCIO-05 — su una sezione che non sa dove mettere, il guscio NEGA il montaggio', async ({ page }) => {

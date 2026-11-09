@@ -192,10 +192,16 @@ function enqueueUsage(sessionId, operationId, jobId, usage) {
   // The retained receipt includes acknowledged deliveries: retry cannot revive it.
   run('INSERT INTO context_outbox(session_id,id,event_json) VALUES(?,?,?) ON CONFLICT(session_id,id) DO NOTHING', sessionId, event.id, JSON.stringify(event));
 }
-function activate(sessionId, version, jobId, kind = 'context.version.committed') {
+function activate(sessionId, version, jobId, kind = 'context.version.committed', provenienza = null) {
   run('UPDATE context_sessions SET active_version_id=?,revision=revision+1,state_revision=state_revision+1 WHERE session_id=?', version.id, sessionId);
-  const event = { schema: 'talos.context.event.v1', id: randomUUID(), sessionId, ...(jobId ? { jobId } : {}), versionId: version.id, kind, createdAt: version.createdAt, payload: { coveredThrough: version.coveredThrough } };
+  const event = { schema: 'talos.context.event.v1', id: randomUUID(), sessionId, ...(jobId ? { jobId } : {}), versionId: version.id, kind, createdAt: version.createdAt, payload: { coveredThrough: version.coveredThrough, ...(provenienza ? { provenienza } : {}) } };
   run('INSERT INTO context_outbox(session_id,id,event_json) VALUES(?,?,?)', sessionId, event.id, JSON.stringify(event));
+}
+function enqueueNotice(sessionId, event) {
+  json(event);
+  if (!object(event) || event.sessionId !== sessionId) fail('A context notice belongs to its own session');
+  id(event.id);
+  run('INSERT INTO context_outbox(session_id,id,event_json) VALUES(?,?,?) ON CONFLICT(session_id,id) DO NOTHING', sessionId, event.id, JSON.stringify(event));
 }
 
 const methods = {
@@ -268,8 +274,11 @@ const methods = {
    *   né l'impronta né la sequenza: cambia solo sotto quale id stanno. I tre trigger si sospendono e si ricreano DENTRO la
    *   stessa transazione, col loro testo letto dal catalogo (mai riscritto a mano): o tutto, o niente, e fuori da qui la
    *   protezione non manca mai.
+   * RIP-3 (ripassata del Blocco 21, 01/11/2026): `event`, facoltativo, entra nella coda degli eventi dentro la stessa transazione, in fondo a ciò che aspettava già: o
+   *   archivio spostato e annuncio in coda, o nessuno dei due. Come Hermes, che scrive l'avanzamento con le sue righe (`hermes_state_search.py:361`, «crash-atomic») e
+   *   l'avviso con l'esito (`gateway/session_unattended_unknown.py:12`), clone del 22/10. Chi chiama consegna dopo, e una consegna fallita si riprova.
    */
-  setAsideSession({ sessionId, asideId }) {
+  setAsideSession({ sessionId, asideId, event = null }) {
     id(sessionId, 'sessionId'); id(asideId, 'asideId');
     if (asideId === sessionId) fail('The aside id must differ from the session id');
     return tx(() => {
@@ -295,6 +304,7 @@ const methods = {
       run("UPDATE protected_facts SET fact_json=json_set(fact_json,'$.sources',json('[]')) WHERE session_id=?", sessionId);
       run("UPDATE protected_facts SET fact_json=json_set(fact_json,'$.conflict.sources',json('[]')) WHERE session_id=? AND json_type(fact_json,'$.conflict') = 'object'", sessionId);
       run('UPDATE context_sessions SET revision=revision+1, state_revision=state_revision+1, head_sequence=0, active_version_id=NULL WHERE session_id=?', sessionId);
+      if (event) { enqueueNotice(sessionId, event); fault('aside-after-outbox'); }
       return snapshot(sessionId);
     });
   },
@@ -357,7 +367,7 @@ const methods = {
     id(sessionId, 'sessionId');
     return parseRows('SELECT version_json FROM context_versions WHERE session_id=? ORDER BY ordinal DESC', 'version_json', sessionId);
   },
-  commitContextVersion({ sessionId, expectedRevision, expectedStateRevision, jobId, version }) {
+  commitContextVersion({ sessionId, expectedRevision, expectedStateRevision, jobId, version, provenienza = null }) {
     return tx(() => {
       const row = session(sessionId);
       revision(row, expectedRevision, integer(expectedStateRevision, 'expectedStateRevision'));
@@ -382,7 +392,7 @@ const methods = {
       writeVersion(sessionId, version);
       fault('publish-after-version');
       run('UPDATE compaction_jobs SET state=?,job_json=? WHERE session_id=? AND id=?', completed.state, JSON.stringify(completed), sessionId, jobId);
-      activate(sessionId, version, jobId);
+      activate(sessionId, version, jobId, undefined, provenienza);
       fault('publish-after-outbox');
       return version;
     });
@@ -496,10 +506,8 @@ const methods = {
    *   dal motore) e `ON CONFLICT DO NOTHING`: ogni passo del giro che lo ripete non ne aggiunge un secondo.
    */
   recordContextNotice({ sessionId, event }) {
-    id(sessionId, 'sessionId'); json(event);
-    if (!object(event) || event.sessionId !== sessionId) fail('A context notice belongs to its own session');
-    id(event.id);
-    run('INSERT INTO context_outbox(session_id,id,event_json) VALUES(?,?,?) ON CONFLICT(session_id,id) DO NOTHING', sessionId, event.id, JSON.stringify(event));
+    id(sessionId, 'sessionId');
+    enqueueNotice(sessionId, event);
   },
   recordUsage({ sessionId, jobId = null, operationId, usage }) {
     id(operationId); json(usage);

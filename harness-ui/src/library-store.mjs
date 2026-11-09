@@ -702,7 +702,14 @@ export async function eliminaVoci({ cartella, ids }, deps = {}) {
  * ⛔ Assenti ⇒ il `meta.json` esce identico a ieri, campo per campo: nessun chiamante che non li
  *   passa cambia di un byte, e le voci vecchie restano leggibili con `sessione: null`.
  */
-export async function salvaVoce({ cartella, nome, mediaType, origine = 'uploaded', testo, base64, modello, provider, sessionId, sessionNome }, deps = {}) {
+/*
+ * ⭐ Decisione 142 (owner 04/11/2026, «Salva in Libreria» per i blocchi vivi): `blocco` facoltativo = `{ sessionId, id }`, la
+ *   conversazione e l'`id` del blocco salvato. È il LEGAME blocco → voce, come la coppia (sessione, slug) di Hermes
+ *   (`apps/desktop/src/store/artifacts.ts:14-17`): lo legge `trovaVocePerBlocco`, e il salvataggio dopo dello stesso blocco
+ *   aggiunge una versione invece di una voce nuova. Vive SOLO nel `meta.json`: `meta2voce` non lo copia, quindi l'elenco, il
+ *   modello e il telefono vedono la voce di sempre (condizione del Mobile sulla 142). Assente o malformato ⇒ meta.json di ieri.
+ */
+export async function salvaVoce({ cartella, nome, mediaType, origine = 'uploaded', testo, base64, modello, provider, sessionId, sessionNome, blocco }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
   const writeFileFn = deps.writeFileFn ?? fsp.writeFile;
   const randomUUIDFn = deps.randomUUIDFn ?? randomUUID;
@@ -729,6 +736,7 @@ export async function salvaVoce({ cartella, nome, mediaType, origine = 'uploaded
     ...(typeof sessionId === 'string' && sessionId.trim() && typeof sessionNome === 'string' && sessionNome.trim()
       ? { sessionNome: sessionNome.trim() }
       : {}),
+    ...(legameBloccoValido(blocco) ? { blocco: { sessionId: blocco.sessionId.trim(), id: blocco.id.trim() } } : {}),
   };
   await writeFileFn(join(cartellaVoce, NOME_FILE_META), JSON.stringify(meta, null, 2), 'utf8');
   if (typeof base64 === 'string') {
@@ -739,6 +747,76 @@ export async function salvaVoce({ cartella, nome, mediaType, origine = 'uploaded
   return id;
 }
 
+
+function legameBloccoValido(blocco) {
+  return Boolean(blocco && typeof blocco === 'object' && typeof blocco.sessionId === 'string' && blocco.sessionId.trim()
+    && typeof blocco.id === 'string' && blocco.id.trim());
+}
+
+/** Quanti `meta.json` legge insieme `trovaVocePerBlocco` (guardia EMFILE; il pool di libuv ne serve 4 alla volta). */
+const CONCORRENZA_META_BLOCCO = 16;
+
+/**
+ * Decisione 142: la voce che tiene il blocco `idBlocco` della conversazione `sessionId` (il legame scritto da `salvaVoce`), o
+ * `null`. Se per qualche motivo ce ne sono due (due processi, una copia a mano) vince quella aggiornata per ultima, così il
+ * salvataggio dopo continua la storia più recente. Un `meta.json` illeggibile si salta: una voce rotta non deve impedire di
+ * salvare un blocco (lo dice già `elencaVoci` a chi apre la Libreria).
+ * I `meta.json` si leggono a lotti, al massimo `CONCORRENZA_META_BLOCCO` insieme (D7, condizione di Performance del 04/11: la
+ * ricerca sta nel giro del modello con `creaVoceDiBlocco`); la scelta si fa dopo, nell'ordine del disco, così la risposta non
+ * dipende da quale lettura finisce prima. Hermes `apps/desktop/electron/fs-read-dir.ts:7,62-79` (16 lavoratori), come
+ * `plugin-registry.mjs` `improntePerFile`.
+ */
+export async function trovaVocePerBlocco({ cartella, sessionId, idBlocco }, deps = {}) {
+  if (!legameValido(sessionId, idBlocco)) return null;
+  return voceDaiLegami(await legamiDeiBlocchi({ cartella }, deps), sessionId, idBlocco);
+}
+
+export const legameValido = (sessionId, idBlocco) => typeof sessionId === 'string' && Boolean(sessionId.trim())
+  && typeof idBlocco === 'string' && Boolean(idBlocco.trim());
+const chiaveLegame = (sessionId, idBlocco) => `${sessionId}\u0000${idBlocco}`;
+
+/** La voce del blocco `idBlocco` di `sessionId` in una mappa di `legamiDeiBlocchi`, o `null` (anche per un legame non valido). */
+export function voceDaiLegami(legami, sessionId, idBlocco) {
+  if (!legameValido(sessionId, idBlocco)) return null;
+  return legami.get(chiaveLegame(sessionId.trim(), idBlocco.trim()))?.id ?? null;
+}
+
+/**
+ * UNA scansione della Libreria di `cartella`: per ogni blocco legato (`sessionId` + `id` del blocco, stringhe) la voce che vince
+ * secondo le regole di `trovaVocePerBlocco`. Mappa vuota se la Libreria non c'è.
+ * @returns {Promise<Map<string, { id: string, quando: string }>>}
+ */
+export async function legamiDeiBlocchi({ cartella }, deps = {}) {
+  const readdirFn = deps.readdirFn ?? fsp.readdir;
+  const readFileFn = deps.readFileFn ?? fsp.readFile;
+  const cartellaLibreria = join(cartella, CARTELLA_LIBRERIA);
+  const legami = new Map();
+  let voci;
+  try {
+    voci = await readdirFn(cartellaLibreria, { withFileTypes: true });
+  } catch (errore) {
+    if (errore?.code === 'ENOENT') return legami;
+    throw new LibraryStoreError(`Cannot read ${CARTELLA_LIBRERIA}: ${errore.message}`, 'LIBRARY_READ_FAILED');
+  }
+  const candidate = voci.filter((voce) => voce.isDirectory() && idVoceLibreriaValido(voce.name));
+  const metas = new Array(candidate.length);
+  let cursore = 0;
+  await Promise.all(Array.from({ length: Math.min(CONCORRENZA_META_BLOCCO, candidate.length) }, async () => {
+    for (let i = cursore++; i < candidate.length; i = cursore++) {
+      const nome = candidate[i].name;
+      try { metas[i] = await leggiMeta(join(cartellaLibreria, nome, NOME_FILE_META), readFileFn, nome); } catch { /* illeggibile: si salta */ }
+    }
+  }));
+  for (const [i, voce] of candidate.entries()) {
+    const blocco = metas[i]?.blocco;
+    if (typeof blocco?.sessionId !== 'string' || typeof blocco.id !== 'string') continue;
+    const chiave = chiaveLegame(blocco.sessionId, blocco.id);
+    const quando = typeof metas[i].aggiornatoIl === 'string' ? metas[i].aggiornatoIl : '';
+    const scelta = legami.get(chiave);
+    if (!scelta || quando > scelta.quando) legami.set(chiave, { id: voce.name, quando });
+  }
+  return legami;
+}
 
 /*
  * ⭐⭐⭐ LE VERSIONI DI UNA VOCE (owner 24/10/2026: «aggiorna la stessa», «si tengono tutte», «vedere e ripristinare»; contratto con la

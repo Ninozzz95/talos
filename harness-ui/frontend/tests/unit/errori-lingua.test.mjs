@@ -29,7 +29,7 @@ const ESEMPI = [
   ['llama-server non è diventato pronto', ''], ['llama-server non è diventato pronto entro 36 s', ''], ['runtime non pronto (modello di 12 GB)', ''],
   ['llama-server non è diventato pronto entro 36 s (modello di 12 GB)', ''],
   ['⛔ interrotto su richiesta.', 'fermato'], ['⛔ interrotto su richiesta: mentre aspettavo.', 'fermato'], ['', 'fermato'],
-  ['flusso SSE senza contenuto ne tool_calls', ''], ['x', 'PROVIDER_EMPTY_RESPONSE'], ['MALFORMED_FUNCTION_CALL ha risposto senza testo né attrezzi (motivo del fornitore: MALFORMED_FUNCTION_CALL)', ''],
+  ['flusso SSE senza contenuto ne tool_calls', ''], ['x', 'PROVIDER_EMPTY_RESPONSE'], ['MALFORMED_FUNCTION_CALL ha risposto senza testo né strumenti (motivo del fornitore: MALFORMED_FUNCTION_CALL)', ''],
   ['x', 'giri-esauriti'], ['canale di approvazione', ''], ['La risposta del fornitore si è interrotta', ''], ['Credenziale rifiutata dal fornitore', ''],
   ['Il fornitore non ha accettato la richiesta', ''], ['ECONNREFUSED', ''], ['HTTP 429', ''], ['qualcosa di mai visto', 'boh'],
 ];
@@ -42,6 +42,10 @@ test('ERRORI-LINGUA-01 — ogni chiave `errori.` scritta in errori.js esiste nel
   const composte = [];
   for (const f of ['budgetOccupato', 'limiteSpesaChiave', 'richiestaCostosa', 'creditoInsufficiente', 'limiteSpesaSconosciuto']) composte.push(`errori.turno.${f}.cosa`, `errori.turno.${f}.perche`, `errori.turno.${f}.rimedio1`);
   for (const forma of ['', 'Taglia', 'Attesa', 'TagliaAttesa']) composte.push(`errori.turno.runtimeNonPronto.perche${forma}`);
+  /* FE-051: le dice la carta del rifiuto (`carta-rifiuto.js`, e «scegli» in `app.js`), non `errori.js` */
+  for (const voce of ['scegli', 'scelto', 'mano', 'invia', 'fatto']) composte.push(`errori.turno.rifiuto.${voce}`);
+  /* decisione owner 166: il pulsante della nota della fermata lo dice `ripresa-dopo-lo-stop.js` */
+  composte.push('errori.turno.fermato.riprendi');
   assert.deepEqual(composte.filter((k) => TESTI.en[k] === undefined), []);
   const usate = new Set([...scritte, ...composte, 'errori.turno.limiteSpesaChiave.rimedio2', 'errori.turno.richiestaCostosa.rimedio2']);
   const inutilizzate = Object.keys(TESTI.en).filter((k) => k.startsWith('errori.turno.') && !usate.has(k));
@@ -117,15 +121,15 @@ test('ERRORI-LINGUA-05 — i no del kernel, la vestizione della carta e il tono 
   try {
     impostaLingua('it');
     assert.equal(spiegaRifiutoAttrezzo('REFUSED. Empty html: nothing was created.').detto, 'L’HTML era vuoto: non è stato creato niente.');
-    assert.equal(spiegaRifiutoAttrezzo('NOT FOUND x').detto, 'Quello che l’attrezzo cercava non c’è: non è cambiato niente.');
+    assert.equal(spiegaRifiutoAttrezzo('NOT FOUND x').detto, 'Quello che lo strumento cercava non c’è: non è cambiato niente.');
     assert.equal(spiegaRifiutoAttrezzo('tutto bene').rifiutato, false);
-    assert.deepEqual(vestizioneErrore({ famiglia: 'fermato' }), { badge: 'Fermato', titolo: 'TALOS · fermato', tono: 'accent' });
+    assert.deepEqual(vestizioneErrore({ famiglia: 'fermato' }), { badge: 'Fermato', titolo: 'Hai fermato il giro', tono: 'accent' }); // decisione 191
     assert.deepEqual(vestizioneErrore(null), { badge: 'Errore', titolo: 'TALOS · errore', tono: 'danger' });
     impostaLingua('en');
     assert.equal(spiegaRifiutoAttrezzo('REFUSED. Empty html: nothing was created.').detto, 'The HTML was empty: nothing was created.');
     assert.equal(spiegaRifiutoAttrezzo('AMBIGUOUS x').detto, 'The text to replace appears more than once: nothing changed.');
     assert.equal(spiegaRifiutoAttrezzo('REFUSED troppo grande').detto, 'The content was too large to be accepted.');
-    assert.deepEqual(vestizioneErrore({ famiglia: 'fermato' }), { badge: 'Stopped', titolo: 'TALOS · stopped', tono: 'accent' });
+    assert.deepEqual(vestizioneErrore({ famiglia: 'fermato' }), { badge: 'Stopped', titolo: 'You stopped the turn', tono: 'accent' }); // decisione 191
     assert.deepEqual(vestizioneErrore({ famiglia: 'reindirizzato' }), { badge: 'Redirected', titolo: 'TALOS · new direction', tono: 'accent', silenziosa: true });
     assert.deepEqual(vestizioneErrore(undefined), { badge: 'Error', titolo: 'TALOS · error', tono: 'danger' });
     // il tono non dipende dalla lingua, e l'oggetto che torna è una copia: cambiarlo non cambia la tabella

@@ -35,7 +35,7 @@ for (const modo of ['dark', 'light']) {
       await page.addInitScript((colorMode) => {
         localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode } }));
       }, modo);
-      await page.route('**/api/v1/sessions/redirect-proof-*/events', (route) => route.fulfill({ contentType: 'text/event-stream', body: '' }));
+      await page.route('**/api/v1/sessions/redirect-proof-*/events*', (route) => route.fulfill({ contentType: 'text/event-stream', body: '' }));
       await page.goto('/');
       await page.waitForFunction(() => window.__talosHarnessUiRuntime);
       /*

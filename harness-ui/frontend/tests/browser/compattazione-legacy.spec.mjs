@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PNG } from 'pngjs';
@@ -59,13 +60,18 @@ const ANNULLATA = { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 22, 
 const RIPARATO = { type: 'CUSTOM', name: 'talos.journal-riparato', _sequenza: 2, value: { riparato: true, completata: true, righeScartate: 3, byteScartati: 812, backup: 'C:\\Users\\prova\\.sessions-store\\cl-riparato.jsonl.bak' } };
 const RIPARATO_FALLITO = { type: 'CUSTOM', name: 'talos.journal-riparato', _sequenza: 2, value: { riparato: false, completata: false, righeScartate: 0, byteScartati: 0, backup: null, errore: 'EPERM: operation not permitted, rename' } };
 
-async function apri(page, id, eventi, { conclusa = false } = {}) {
-  await page.route(`**/api/v1/sessions/${id}/events`, (route) => route.fulfill({ contentType: 'text/event-stream', body: sse([...eventi, CONFINE]) }));
+/* e4955a8ee (06/11, punto 2; owner 06/11 14:20 «deve essere gestita automaticamente»): il kernel legacy compatta da solo alla soglia, e
+   l'avviso sopra il composer resta SOLO quando il motore della sessione dice `settings.auto === false` (`compattaDaSola`,
+   components/contesto-automatica.js). Le prove dell'avviso servono quindi quell'istantanea, come CTX-NOTICE-REMEASURE-03 in
+   avviso-soglia-misura.spec.mjs; senza `budget` la soglia resta quella della politica (`numeriSogliaContesto`, app.js). */
+const automaticaSpenta = (id) => ({ sessionId: id, revision: 7, settings: { auto: false }, facts: [], jobs: [] });
+async function apri(page, id, eventi, { conclusa = false, spenta = false } = {}) {
+  await page.route(`**/api/v1/sessions/${id}/events*`, (route) => route.fulfill({ contentType: 'text/event-stream', body: sse([...eventi, CONFINE]) }));
   /* C1 (10/10/2026): col motore di serie il server ha SEMPRE il servizio del contesto, e una sessione che non conosce (questa è
      una fixture) riceve 404. Una conversazione legacy VERA riceve 503 `CTX_NOT_ENABLED` (`context-desktop-service.mjs`): la
      fixture riceve quella, costruita dalla funzione del server (`bustaContesto`) col messaggio del servizio, non a mano. */
   const legacyVera = (route) => (route.request().method() === 'GET'
-    ? route.fulfill({ status: 503, json: bustaContesto('CTX_NOT_ENABLED', MOTORE_SPENTO_PER_LA_CONVERSAZIONE, () => new Date().toISOString()) })
+    ? spenta && new URL(route.request().url()).pathname.endsWith('/context') ? route.fulfill({ json: automaticaSpenta(id) }) : route.fulfill({ status: 503, json: bustaContesto('CTX_NOT_ENABLED', MOTORE_SPENTO_PER_LA_CONVERSAZIONE, () => new Date().toISOString()) })
     : route.fallback());
   await page.route(`**/api/v1/sessions/${id}/context`, legacyVera);
   await page.route(`**/api/v1/sessions/${id}/context/*`, legacyVera);
@@ -112,6 +118,12 @@ const erroriPagina = [];
 test.beforeEach(({ page }) => { erroriPagina.length = 0; page.on('pageerror', (e) => erroriPagina.push(String(e?.message || e))); });
 test.afterEach(() => { expect(erroriPagina, 'nessun errore JavaScript in pagina').toEqual([]); });
 const separatore = (page) => page.locator('#conversation [data-compattazione-riga]');
+/* 89c13b4d9 (revisione d'uso O4, 04/11): sotto 760 px di barra «Context Manager» sta nel menu «Altre azioni»
+   (`#altreAzioniChat` apre `#azioniRaccolteChat`); la finestra di serie 1280 dà 664 px. Si apre il menu solo se il tasto non si vede. */
+async function premiContextManager(page) {
+  if (!(await page.locator('#compactSessionBtn').isVisible())) await page.locator('#altreAzioniChat').click();
+  await page.locator('#compactSessionBtn').click();
+}
 const barra = (page) => page.locator('#conversation [data-compattazione-barra]');
 
 /*
@@ -130,13 +142,13 @@ test('CTX-UI-WINDOW-ALWAYS-OPENS — col trial spento il bottone apre la finestr
   await policyFixture(page, '**/api/v1/sessions/cl-legacy/compaction-policy');
   await apri(page, 'cl-legacy', giro(), { conclusa: true });
   const finestra = page.locator('#veloContesto');
-  await page.locator('#compactSessionBtn').click();
+  await premiContextManager(page);
   await expect(finestra, 'il bottone apre la finestra').toBeVisible();
   await expect(finestra).toHaveAttribute('data-context-modo', 'legacy');
   /* C1 (owner 10/10/2026, Context Manager rifatto): la frase lunga del «modo semplice» è diventata la riga sopra le schede, e le
      schede del motore non ci sono; i numeri dell'avviso sono nella testata, sul limite che agisce, e la barra ha la tacca. */
   await expect(finestra.locator('[data-context-legacy-note]')).toBeVisible();
-  await expect(finestra.locator('[data-context-tab]:not([hidden])')).toHaveCount(2);
+  await expect(finestra.locator('[data-context-tab]:not([hidden])')).toHaveCount(3); // variante B (owner 31/10/2026): Panoramica, Compattazioni, Richiesta inviata
   await expect(finestra.locator('[data-context-headline]'), 'gli stessi numeri dell’avviso (solo prompt_tokens dell’ultima richiesta)').toHaveText('52k di 150k · 34,6%'); // 13/10/2026 (bugfixer): 52.000 / 150.000 = 34,67% e la percentuale si TRONCA (owner 11/10 «Troncare in tutti e due», 9fcbb1a85): la prova, del 10/10, aspettava l'arrotondato
   await expect(finestra.locator('[data-context-measurement]')).toContainText('150k');
   await expect(finestra.locator('[data-context-gauge]')).toBeVisible();
@@ -155,12 +167,12 @@ test('CTX-UI-WINDOW-ALWAYS-OPENS — col trial spento il bottone apre la finestr
   // la conferma vera
   await finestra.locator('[data-context-start]').click();
   await conferma.getByRole('button', { name: 'Sì, compatta' }).click();
-  await expect(finestra.locator('[data-context-job]'), 'lo stato si vede DENTRO la finestra').toHaveText('Riassumo la conversazione…');
+  await expect(finestra.locator('[data-context-job]'), 'lo stato si vede DENTRO la finestra').toHaveText('Compattazione della conversazione…');
   await expect(finestra.locator('[data-context-progress-bar]')).toBeVisible();
   await expect(finestra.locator('[data-context-progress-bar]')).not.toHaveAttribute('value', /.*/);
   await expect(finestra.locator('[data-context-start]'), 'in volo: niente seconda richiesta').toBeDisabled();
-  await expect(barra(page), 'e anche in chat').toContainText('Riassumo il contesto'); // B1 21/10/2026: la riga viva, «Summarizing context»
-  await expect(finestra.locator('[data-context-job]')).toHaveText('Conversazione riassunta. La misura si aggiorna alla prossima risposta.');
+  await expect(barra(page), 'e anche in chat').toContainText('Compattazione del contesto'); // B1 21/10/2026: la riga viva, «Compacting the context»
+  await expect(finestra.locator('[data-context-job]')).toHaveText('Conversazione compattata. La misura si aggiorna alla prossima risposta.');
   await expect(finestra.locator('[data-context-progress-bar]')).toBeHidden();
   await expect(barra(page)).toHaveCount(0);
   await expect(separatore(page), 'esito: una riga persistente in chat').toContainText('Conversazione compattata');
@@ -186,7 +198,7 @@ test('CTX-UI-METER-IN-PALETTE — il misuratore della finestra si riempie con l�
   const pieno = giro(1, undefined, 130_000);
   await policyFixture(page, '**/api/v1/sessions/cl-misuratore/compaction-policy');
   await apri(page, 'cl-misuratore', pieno, { conclusa: true });
-  await page.locator('#compactSessionBtn').click();
+  await premiContextManager(page);
   // C1 (10/10/2026): il misuratore nativo è diventato la barra della panoramica; la regola resta: colori del tema, mai il verde di serie
   const meter = page.locator('#veloContesto [data-context-gauge]');
   await expect(meter).toBeVisible();
@@ -217,23 +229,34 @@ test('CTX-UI-WINDOW-ERROR-SAID — un rifiuto del server si legge nella finestra
     : route.fallback());
   await apri(page, 'cl-rifiuto', giro(), { conclusa: true });
   const finestra = page.locator('#veloContesto');
-  await page.locator('#compactSessionBtn').click();
+  await premiContextManager(page);
   await expect(finestra).toHaveAttribute('data-context-modo', 'legacy');
   await finestra.locator('[data-context-start]').click();
   await finestra.locator('[data-context-conferma-legacy]').getByRole('button', { name: 'Sì, compatta' }).click();
-  await expect(finestra.locator('[data-context-job]')).toHaveText('Conversazione non riassunta.');
+  await expect(finestra.locator('[data-context-job]')).toHaveText('Conversazione non compattata.');
   await expect(finestra.locator('[data-context-job-error]')).toHaveText('La sessione è ancora in corso: aspetta che concluda prima di compattarla');
   await expect(finestra.locator('[data-context-start]')).toBeEnabled();
   await page.keyboard.press('Escape');
 });
 
+test('CTX-UI-ORIGINALI — «gli originali restano» solo se l\'ultima compattazione si annulla; AL CONTRARIO resta su una che si annulla', async ({ page }) => {
+  for (const [id, annullabile, attesa] of [['cl-orig-no', false, 'Solo questa chat. I messaggi riassunti dall’ultima compattazione non si possono recuperare.'], ['cl-orig-si', true, 'Solo questa chat. Gli originali restano disponibili.']]) {
+    await apri(page, id, [...giro(), { ...FINE, value: { ...FINE.value, annullabile } }], { conclusa: true });
+    const finestra = page.locator('#veloContesto');
+    await premiContextManager(page);
+    await expect(finestra).toHaveAttribute('data-context-modo', 'legacy');
+    await expect(finestra.locator('#descrizioneContesto')).toHaveText(attesa, { timeout: 5_000 });
+    await page.keyboard.press('Escape');
+  }
+});
+
 test('CTX-UI-WINDOW-FOLLOWS-SERVER — a finestra aperta, un riassunto partito dal server si vede anche lì, e si spegne alla fine', async ({ page }) => {
   await apri(page, 'cl-segue', giro());
   const finestra = page.locator('#veloContesto');
-  await page.locator('#compactSessionBtn').click();
+  await premiContextManager(page);
   await expect(finestra).toHaveAttribute('data-context-modo', 'legacy');
   await eventi(page, [INIZIO]);
-  await expect(finestra.locator('[data-context-job]')).toHaveText('Riassumo la conversazione…');
+  await expect(finestra.locator('[data-context-job]')).toHaveText('Compattazione della conversazione…');
   await expect(finestra.locator('[data-context-start]')).toBeDisabled();
   await eventi(page, [FINE]);
   await expect(finestra.locator('[data-context-job]')).toHaveText('Nessuna compattazione in corso.');
@@ -276,10 +299,121 @@ test('CTX-UI-COMPACT-TRIAL-KEEPS-DIALOG (verso contrario) — col trial acceso r
   await page.route('**/api/v1/sessions/cl-trial/context', (route) => route.fulfill({ json: { sessionId: 'cl-trial', revision: 1, stateRevision: 1, jobs: [], settings: { auto: true }, facts: [], capabilities: { compact: true }, activeVersion: null } }));
   await page.route('**/api/v1/sessions/cl-trial/context/versions', (route) => route.fulfill({ json: { versions: [] } }));
   await apri(page, 'cl-trial', giro());
-  await page.locator('#compactSessionBtn').click();
+  await premiContextManager(page);
   await expect(page.locator('#veloContesto')).toBeVisible();
   await expect(page.locator('[data-context-start]')).toBeEnabled();
   expect(chiamate).toEqual([]);
+  await page.keyboard.press('Escape');
+});
+
+test('CTX-UI-LAVORO-FALLITO — un lavoro fallito dice la frase del codice; il testo del motore resta nel dettaglio chiuso', async ({ page }) => {
+  await apri(page, 'cl-fallito', giro());
+  /* dopo `apri`: l'ultima rotta vince, e `apri` spegne il motore del contesto */
+  await page.route('**/api/v1/sessions/cl-fallito/context', (route) => route.fulfill({ json: { sessionId: 'cl-fallito', revision: 1, stateRevision: 1, settings: { auto: true }, facts: [], capabilities: { compact: true }, activeVersion: null,
+    jobs: [{ id: 'j1', state: 'failed', idempotencyKey: 'manuale', createdAt: '2026-11-01T10:00:00.000Z', updatedAt: '2026-11-01T10:00:01.000Z', error: { code: 'CTX_HISTORY_DIVERGED', message: 'XYZZY raw engine text' } }] } }));
+  await page.route('**/api/v1/sessions/cl-fallito/context/versions', (route) => route.fulfill({ json: { versions: [] } }));
+  await premiContextManager(page);
+  const finestra = page.locator('#veloContesto');
+  await expect(finestra).toBeVisible();
+  await finestra.getByRole('tab', { name: 'Compattazioni' }).click();
+  const errore = finestra.locator('[data-context-job-error]');
+  await expect(errore).toHaveText('La conversazione è cambiata mentre si compattava. La conversazione resta intera. Riprova con Compatta ora.');
+  const dettaglio = finestra.locator('[data-context-job-detail]');
+  await expect(dettaglio).toBeVisible();
+  await expect(dettaglio.locator('code'), 'chiuso: il testo del motore non si vede').toBeHidden();
+  await dettaglio.locator('summary').click();
+  await expect(dettaglio.locator('code')).toHaveText('CTX_HISTORY_DIVERGED: XYZZY raw engine text');
+  await page.keyboard.press('Escape');
+});
+
+/* FE-053: la riga delle compattazioni dice chi ha scritto e perché, e la riga dell'avviso porta alla scelta. Le forme vengono da `session-registry.mjs:6652` e `:6370` */
+const INUTILIZZABILE = (valore) => ({ type: 'CUSTOM', name: 'talos.riassunto-modello-inutilizzabile', _sequenza: 22, value: { schema: 'talos.riassunto-modello-inutilizzabile.v1', at: AT, modello: 'z-ai/glm-5.3-flash', motivo: 'senza-chiave', scelto: 'persona', ruolo: 'scelto', ...valore } });
+const riga = (page) => page.locator('[data-compattazione-testo]').first();
+
+test('CTX-UI-CATENA-01 — la riserva firma la riga, col perché nel titolo', async ({ page }) => {
+  await apri(page, 'cl-riserva', [...giro(), { ...FINE, value: { ...FINE.value, dallaRiserva: true, riassuntoDi: 'qwen/qwen3.7-flash', nonDisponibile: { modello: 'z-ai/glm-5.3-flash', stato: 'bloccato', motivo: 'rete' } } }]);
+  await expect(riga(page)).toContainText('Compattazione di Qwen3.7 Flash (riserva)'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
+  await expect(riga(page)).toHaveAttribute('title', /GLM 5\.3 Flash non si raggiunge: niente rete\. Questa compattazione l’ha scritta la riserva\./u); // 68ebab480 (revisione d'uso 04/11, reperto 11): anche il titolo dice il nome del catalogo
+  await expect(page.getByText(/liberati .*dalla riserva/u), 'il pannello dice lo stesso della riga').toBeVisible();
+});
+
+test('CTX-UI-CATENA-02 — senza il modello dice il motivo; nessun modello: la riga lo dice', async ({ page }) => {
+  await apri(page, 'cl-senza', [...giro(), { ...FINE, value: { ...FINE.value, ripiego: true, ragione: 'errore', nonDisponibile: { modello: 'z-ai/glm-5.3-flash', stato: 'bloccato', motivo: 'limite', diAccount: true } } }]);
+  await expect(riga(page)).toContainText('Compattata senza il modello (limite del piano)');
+  await apri(page, 'cl-nessuno', [...giro(), { ...FINE_FALLITA, value: { ...FINE_FALLITA.value, nonDisponibile: { modello: 'z-ai/glm-5.3-flash', stato: 'bloccato', motivo: 'rete' } } }]);
+  await expect(riga(page)).toContainText('Conversazione non compattata · nessun modello disponibile');
+});
+
+test('CTX-UI-CATENA-03 — l\'avviso è una riga fissa: il tasto solo se l\'ha scelto la persona, e porta alla carta con Avanzate aperto', async ({ page }) => {
+  await apri(page, 'cl-avviso', [...giro(), INUTILIZZABILE()]);
+  const avviso = page.locator('[data-compattazione-inutilizzabile]');
+  await expect(avviso).toContainText('GLM 5.3 Flash non è disponibile:'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
+  await expect(avviso.locator('span')).toHaveAttribute('title', 'Manca la chiave per GLM 5.3 Flash.'); // 68ebab480 (revisione d'uso 04/11, reperto 11): anche il titolo dice il nome del catalogo
+  await page.route('**/api/v1/context-settings', (r) => r.fulfill({ json: { ok: true, data: { motore: 'engine', modelloDelRiassunto: 'z-ai/glm-5.3-flash', riservaDelRiassunto: null, catena: [{ ruolo: 'scelto', modello: 'z-ai/glm-5.3-flash', stato: 'inutilizzabile', motivo: 'senza-chiave', origine: 'scelta' }, { ruolo: 'senza-modello', modello: null, stato: 'pronto' }] } } }));
+  const tasto = avviso.getByRole('button', { name: 'Scegli un altro' });
+  const fondo = (el) => el.evaluate((n) => getComputedStyle(n).backgroundColor);
+  const tastoFermo = await fondo(tasto);
+  const rigaFerma = await fondo(avviso);
+  await tasto.hover();
+  await expect.poll(() => fondo(tasto), 'col puntatore si accende il tasto').not.toBe(tastoFermo);
+  expect(await fondo(avviso), 'e basta: la riga resta com\'era').toBe(rigaFerma);
+  await tasto.click();
+  await expect(page.locator('[data-setting-row="modelloDelRiassunto"]')).toBeVisible();
+});
+
+test('CTX-UI-CATENA-04 — AL CONTRARIO: un modello di serie non ha il tasto, e la rigiocata non raddoppia la riga', async ({ page }) => {
+  await apri(page, 'cl-serie', [...giro(), INUTILIZZABILE({ scelto: 'serie' }), { ...INUTILIZZABILE({ scelto: 'serie' }), _sequenza: 23 }]);
+  const avviso = page.locator('[data-compattazione-inutilizzabile]');
+  await expect(avviso).toHaveCount(1);
+  await expect(avviso.getByRole('button')).toHaveCount(0);
+});
+
+for (const [lingua, tema, larghezza] of [['it', 'dark', 1920], ['it', 'light', 1920], ['en', 'dark', 1440], ['en', 'light', 1024]]) {
+  test(`CTX-UI-CATENA-FOTO (${lingua}, ${tema}, ${larghezza})`, async ({ page }) => {
+    await page.setViewportSize({ width: larghezza, height: 1080 });
+    await page.addInitScript(({ colorMode, uiLanguage }) => {
+      if (window.top !== window) return;
+      try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiLanguage, uiFontScale: 'default' } })); } catch { /* niente */ }
+    }, { colorMode: tema, uiLanguage: lingua });
+    await apri(page, `cl-foto-${lingua}-${tema}`, [...giro(), { ...FINE, value: { ...FINE.value, dallaRiserva: true, riassuntoDi: 'qwen/qwen3.7-flash', nonDisponibile: { modello: 'z-ai/glm-5.3-flash', stato: 'bloccato', motivo: 'rete' } } }, INUTILIZZABILE()]);
+    const avviso = page.locator('[data-compattazione-inutilizzabile]');
+    await expect(avviso.getByRole('button')).toHaveCount(1);
+    await expect(riga(page)).toContainText('Qwen3.7 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
+    await avviso.scrollIntoViewIfNeeded();
+    const trabocca = await avviso.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+    expect(trabocca).toBe(false);
+    const cartella = `${homedir().replaceAll('\\', '/')}/Downloads/TALOS/frontend/in-corso/prove-fe-053`;
+    await mkdir(cartella, { recursive: true });
+    await page.screenshot({ path: `${cartella}/riga-${lingua}-${tema}-${larghezza}.png` });
+  });
+}
+
+test('CTX-UI-LAVORO-SCEGLI — un guasto che vuole un altro modello ha il tasto, che porta alla scelta', async ({ page }) => {
+  await apri(page, 'cl-scegli', giro());
+  await page.route('**/api/v1/sessions/cl-scegli/context', (route) => route.fulfill({ json: { sessionId: 'cl-scegli', revision: 1, stateRevision: 1, settings: { auto: true }, facts: [], capabilities: { compact: true }, activeVersion: null,
+    jobs: [{ id: 'j3', state: 'failed', idempotencyKey: 'manuale', createdAt: '2026-11-01T10:00:00.000Z', updatedAt: '2026-11-01T10:00:01.000Z', error: { code: 'CTX_SUMMARY_REFUSED', message: 'XYZZY' } }] } }));
+  await page.route('**/api/v1/sessions/cl-scegli/context/versions', (route) => route.fulfill({ json: { versions: [] } }));
+  await page.route('**/api/v1/context-settings', (r) => r.fulfill({ json: { ok: true, data: { motore: 'engine', modelloDelRiassunto: null, riservaDelRiassunto: null, catena: [{ ruolo: 'scelto', modello: null, stato: 'pronto', origine: 'serie' }, { ruolo: 'senza-modello', modello: null, stato: 'pronto' }] } } }));
+  await premiContextManager(page);
+  const finestra = page.locator('#veloContesto');
+  await finestra.getByRole('tab', { name: 'Compattazioni' }).click();
+  await finestra.locator('[data-context-job-scegli]').click();
+  await expect(finestra).toBeHidden();
+  await expect(page.locator('[data-setting-row="modelloDelRiassunto"]')).toBeVisible();
+});
+
+test('CTX-UI-LAVORO-IN-PAUSA — una pausa che aspetta è una riga in corso: oltre 2 s si anima e dice i secondi', async ({ page }) => {
+  await apri(page, 'cl-pausa', giro());
+  await page.route('**/api/v1/sessions/cl-pausa/context', (route) => route.fulfill({ json: { sessionId: 'cl-pausa', revision: 1, stateRevision: 1, settings: { auto: true }, facts: [], capabilities: { compact: true }, activeVersion: null,
+    jobs: [{ id: 'j2', state: 'paused', idempotencyKey: 'manuale', createdAt: '2026-11-01T10:00:00.000Z', updatedAt: '2026-11-01T10:00:01.000Z', error: { code: 'CTX_RESOURCE_BUSY', message: 'XYZZY raw engine text' } }] } }));
+  await page.route('**/api/v1/sessions/cl-pausa/context/versions', (route) => route.fulfill({ json: { versions: [] } }));
+  await premiContextManager(page);
+  const finestra = page.locator('#veloContesto');
+  await finestra.getByRole('tab', { name: 'Compattazioni' }).click();
+  const errore = finestra.locator('[data-context-job-error]');
+  await expect(errore).toContainText('Il modello è occupato. Può riprendere alla prossima richiesta.');
+  await expect(errore.locator('.talos-waiting__label')).toBeVisible({ timeout: 5000 });
+  await expect(errore.locator('.talos-caricamento__secondi')).not.toBeEmpty();
   await page.keyboard.press('Escape');
 });
 
@@ -288,7 +422,7 @@ test('CTX-UI-WARNING-BEFORE-THRESHOLD — sopra 0,8 della soglia compare l’avv
   const pieno = giro(1, undefined, 130_000);
   await policyFixture(page, '**/api/v1/sessions/cl-quasi-pieno/compaction-policy');
   await policyFixture(page, '**/api/v1/sessions/cl-leggera/compaction-policy');
-  await apri(page, 'cl-quasi-pieno', pieno);
+  await apri(page, 'cl-quasi-pieno', pieno, { spenta: true }); // e4955a8ee: l'avviso solo con l'automatica spenta
   const avviso = page.locator('#avvisoContesto');
   await expect(avviso).toBeVisible();
   await expect(avviso).toContainText('soglia prudenziale della route');
@@ -297,8 +431,14 @@ test('CTX-UI-WARNING-BEFORE-THRESHOLD — sopra 0,8 della soglia compare l’avv
   await expect(avviso.getByRole('button'), 'una sola azione più la chiusura').toHaveCount(2);
   await avriChiudi(page);
   // verso contrario: una conversazione piccola non avvisa
-  await apri(page, 'cl-leggera', giro());
+  await apri(page, 'cl-leggera', giro(), { spenta: true });
   await expect(page.locator('#avvisoContesto')).toBeHidden();
+  /* e4955a8ee, AL CONTRARIO: la stessa conversazione piena sul legacy (compatta da solo) non avvisa e non offre «Compatta ora» */
+  await policyFixture(page, '**/api/v1/sessions/cl-quasi-pieno-legacy/compaction-policy');
+  await apri(page, 'cl-quasi-pieno-legacy', pieno);
+  await page.waitForTimeout(800);
+  await expect(page.locator('#avvisoContesto')).toBeHidden();
+  await expect(page.locator('[data-avviso-contesto="compatta"]:visible')).toHaveCount(0);
 });
 
 test('CTX-WINDOW-UI — la policy verificata del server evita il falso avviso a 164k', async ({ page }) => {
@@ -306,7 +446,7 @@ test('CTX-WINDOW-UI — la policy verificata del server evita il falso avviso a 
     ok: true, data: { windowTokens: 1_000_000, triggerTokens: 750_000, warningTokens: 600_000,
       emergencyTokens: 900_000, source: 'route-minimum', modelId: MODELLO, inProgress: false }, meta: {},
   } }));
-  await apri(page, 'cl-finestra-verificata', giro(1, undefined, 163_901));
+  await apri(page, 'cl-finestra-verificata', giro(1, undefined, 163_901), { spenta: true }); // e4955a8ee: l'avviso solo con l'automatica spenta
   await expect(page.locator('#avvisoContesto')).toBeHidden();
   await eventi(page, giro(10, undefined, 650_000));
   await expect(page.locator('#avvisoContesto')).toBeVisible();
@@ -322,7 +462,7 @@ test('CTX-UI-POLICY-REREAD — dopo il refresh della route il confine di turno r
       ? { windowTokens: 262_144, triggerTokens: 196_608, warningTokens: 157_286, emergencyTokens: 235_929, source: 'route-minimum', modelId: MODELLO, inProgress: false }
       : { windowTokens: null, triggerTokens: 200_000, warningTokens: 160_000, emergencyTokens: 240_000, source: 'fallback', modelId: MODELLO, inProgress: false },
   } }));
-  await apri(page, 'cl-rilettura', giro(1, undefined, 158_000));
+  await apri(page, 'cl-rilettura', giro(1, undefined, 158_000), { spenta: true }); // e4955a8ee: l'avviso solo con l'automatica spenta
   await expect(page.locator('#avvisoContesto'), '158.000 è sotto l’avviso del fallback (160.000)').toBeHidden();
   routeVerificata = true;
   await eventi(page, giro(10, undefined, 158_000));
@@ -335,7 +475,7 @@ async function avriChiudi(page) { await page.locator('#avvisoContesto [data-avvi
 test('CTX-UI-DURING-STATE — a fase:inizio la barra parte per il legacy, altezza fissa; a fase:fine sparisce e resta la riga', async ({ page }) => {
   await apri(page, 'cl-durante', [...giro(), INIZIO_ATTESO]);
   await expect(barra(page)).toBeVisible();
-  await expect(barra(page)).toContainText('Riassumo il contesto'); // B1 21/10/2026: la riga viva, «Summarizing context»
+  await expect(barra(page)).toContainText('Compattazione del contesto'); // B1 21/10/2026: la riga viva, «Compacting the context»
   await expect(page.locator('#avvisoContesto'), 'mentre il server riassume, «Compatta ora» non si offre').toBeHidden();
   await expect(barra(page).locator('progress')).not.toHaveAttribute('value', /.*/);
   const prima = await barra(page).boundingBox();
@@ -355,15 +495,15 @@ test('CTX-UI-BACKGROUND-ONLY-SEPARATOR — la compattazione del server in sottof
   await expect(barra(page), 'nessuna attesa da mostrare: il giro non aspetta').toHaveCount(0);
   /* senza barra il riassunto c'è lo stesso: la finestra lo dice e non offre un secondo «Compatta» (la barra faceva da bandierina) */
   const finestra = page.locator('#veloContesto');
-  await page.locator('#compactSessionBtn').click();
-  await expect(finestra.locator('[data-context-job]')).toHaveText('Riassumo la conversazione…');
+  await premiContextManager(page);
+  await expect(finestra.locator('[data-context-job]')).toHaveText('Compattazione della conversazione…');
   await expect(finestra.locator('[data-context-start]')).toBeDisabled();
   await page.keyboard.press('Escape');
   await eventi(page, [FINE]);
   await expect(separatore(page)).toHaveCount(1);
   await expect(separatore(page)).toContainText('Conversazione compattata · 143.000 token risparmiati');
   await expect(barra(page)).toHaveCount(0);
-  await page.locator('#compactSessionBtn').click();
+  await premiContextManager(page);
   await expect(finestra.locator('[data-context-job]'), 'alla fine la finestra lo lascia').toHaveText('Nessuna compattazione in corso.');
   await page.keyboard.press('Escape');
   // AL CONTRARIO: la stessa conversazione con la compattazione che il giro aspetta la barra la apre
@@ -377,9 +517,9 @@ test('CTX-UI-BACKGROUND-NOTICE-SILENT — mentre il server riassume in sottofond
   await policyFixture(page, '**/api/v1/sessions/cl-avviso-contrario/compaction-policy');
   await policyFixture(page, '**/api/v1/sessions/cl-avviso-sottofondo/compaction-policy');
   // premessa, AL CONTRARIO: la stessa conversazione senza riassunto in corso l'avviso lo mostra
-  await apri(page, 'cl-avviso-contrario', pieno);
+  await apri(page, 'cl-avviso-contrario', pieno, { spenta: true }); // e4955a8ee: l'avviso solo con l'automatica spenta
   await expect(page.locator('#avvisoContesto')).toBeVisible();
-  await apri(page, 'cl-avviso-sottofondo', [...pieno, INIZIO]);
+  await apri(page, 'cl-avviso-sottofondo', [...pieno, INIZIO], { spenta: true }); // stessa premessa: senza, l'avviso mancherebbe comunque
   await expect(page.locator('#conversation')).toContainText('Ho letto la cartella dei test');
   await page.waitForTimeout(300); // l'avviso si ricalcola al confine della storia: si lascia passare
   await expect(page.locator('#avvisoContesto'), '«Compatta ora» mentre il server riassume sarebbe un secondo riassunto').toBeHidden();
@@ -391,7 +531,7 @@ test('CTX-UI-BACKGROUND-ERROR-CLEARS — un giro finito in ERRORE spegne anche i
   await eventi(page, [{ type: 'RunStarted', _sequenza: 30, threadId: 'cl-sottofondo-errore', runId: 'r2' },
     { type: 'RunError', _sequenza: 31, message: 'Il fornitore ha chiuso la connessione.' }]);
   const finestra = page.locator('#veloContesto');
-  await page.locator('#compactSessionBtn').click();
+  await premiContextManager(page);
   await expect(finestra.locator('[data-context-job]')).toHaveText('Nessuna compattazione in corso.');
   await expect(finestra.locator('[data-context-start]')).toBeEnabled();
   await page.keyboard.press('Escape');
@@ -414,31 +554,31 @@ test('CTX-UI-SEPARATOR-SURVIVES-RELOAD-LEGACY — la riga «X → Y token» si r
   // una riconnessione SSE rimanda lo stesso evento: la riga resta una (chiave = `at` del record)
   await eventi(page, [FINE]);
   await expect(separatore(page)).toHaveCount(1);
-  // il menu «⋯» porta Annulla; fuori dal menu niente. «Mostra cosa è stato riassunto» NON c'è: il riassunto non viaggia
+  // il menu «⋯» porta Annulla; fuori dal menu niente. «Mostra cosa è stato compattato» NON c'è: il riassunto non viaggia
   // nell'evento fuso (`session-registry.mjs:3111`), e non si inventa — dichiarato nel rapporto §6.
   await expect(separatore(page).getByRole('button', { name: /Annulla/ })).toHaveCount(0);
   await separatore(page).locator('[data-compattazione-menu]').click();
   const menu = page.locator('[role="menu"].talos-menu-azioni');
-  await expect(menu.getByRole('menuitem', { name: 'Annulla il riassunto' })).toHaveCount(1);
-  await expect(menu.getByRole('menuitem', { name: 'Mostra cosa è stato riassunto' })).toHaveCount(0);
+  await expect(menu.getByRole('menuitem', { name: 'Annulla la compattazione' })).toHaveCount(1);
+  await expect(menu.getByRole('menuitem', { name: 'Mostra cosa è stato compattato' })).toHaveCount(0);
   await page.keyboard.press('Escape');
 });
 
-test('CTX-UI-UNDO-CALLS-ROUTE-ONCE — Annulla chiama la rotta una volta sola e la riga diventa «Riassunto annullato»', async ({ page }) => {
+test('CTX-UI-UNDO-CALLS-ROUTE-ONCE — Annulla chiama la rotta una volta sola e la riga diventa «Compattazione annullata»', async ({ page }) => {
   const chiamate = await contaPost(page, `**/api/v1/sessions/cl-annulla/compaction/${encodeURIComponent(AT)}/undo`, { ok: true, data: { annullata: true }, meta: {} }, { ritardoMs: 1500 });
   await apri(page, 'cl-annulla', [...giro(), INIZIO, FINE]);
   await separatore(page).locator('[data-compattazione-menu]').click();
-  await page.locator('[role="menu"].talos-menu-azioni').getByRole('menuitem', { name: 'Annulla il riassunto' }).click();
+  await page.locator('[role="menu"].talos-menu-azioni').getByRole('menuitem', { name: 'Annulla la compattazione' }).click();
   // in volo: il menu non offre più l'annullo (l'unica guardia è lo stato della riga: M3b la rompe e questo diventa rosso)
   await separatore(page).locator('[data-compattazione-menu]').click();
-  await expect(page.locator('[role="menu"].talos-menu-azioni').getByRole('menuitem', { name: 'Annulla il riassunto' })).toHaveCount(0);
+  await expect(page.locator('[role="menu"].talos-menu-azioni').getByRole('menuitem', { name: 'Annulla la compattazione' })).toHaveCount(0);
   await page.keyboard.press('Escape');
-  await expect(separatore(page)).toContainText('Riassunto annullato');
+  await expect(separatore(page)).toContainText('Compattazione annullata') /* parola unica, owner 31/10/2026 */;
   expect(chiamate).toHaveLength(1);
   // l'evento del server arriva dopo: la riga resta una, e dice la stessa cosa
   await eventi(page, [ANNULLATA]);
   await expect(separatore(page)).toHaveCount(1);
-  await expect(separatore(page)).toContainText('Riassunto annullato');
+  await expect(separatore(page)).toContainText('Compattazione annullata') /* parola unica, owner 31/10/2026 */;
   await expect(separatore(page).locator('[data-compattazione-menu]'), 'niente più azioni su un riassunto annullato').toHaveCount(0);
 });
 
@@ -526,7 +666,7 @@ test('CTX-UI-BAR-RECONCILED-ON-ERROR — un giro finito in ERRORE spegne la barr
 test('CTX-UI-BAR-CLOSED-BY-RESTORE — la chiusura «interrotta» del ripristino spegne la barra e lo dice a parole, senza Annulla', async ({ page }) => {
   await apri(page, 'cl-barra-interrotta', [...giro(), INIZIO_ATTESO,
     { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 21, value: { fase: 'fine', compattato: false, motivo: 'interrotta', at: AT } }]);
-  await expect(separatore(page)).toContainText('il server si è fermato mentre riassumeva');
+  await expect(separatore(page)).toContainText('il server si è fermato durante la compattazione') /* parola unica, owner 31/10/2026 */;
   await expect(barra(page)).toHaveCount(0);
   await expect(separatore(page).locator('[data-compattazione-menu]')).toHaveCount(0);
 });
@@ -535,7 +675,7 @@ test('CTX-UI-COMPACTION-FAILED-ROW — una compattazione fallita con «errore: <
   await apri(page, 'cl-fallita', [...giro(), INIZIO, FINE_FALLITA]);
   await expect(barra(page)).toHaveCount(0);
   await expect(separatore(page)).toHaveCount(1);
-  await expect(separatore(page)).toContainText('Conversazione non riassunta · il fornitore ha risposto con un errore (HTTP 500 dal fornitore)');
+  await expect(separatore(page)).toContainText('Conversazione non compattata · il fornitore ha risposto con un errore (HTTP 500 dal fornitore)');
   await expect(separatore(page).locator('[data-compattazione-menu]')).toHaveCount(0);
 });
 
@@ -579,7 +719,7 @@ for (const modo of ['dark', 'light']) {
     await expect(page.locator('#conversation')).toContainText('Ho letto la cartella dei test');
     await expect(barra(page)).toHaveCount(0);
     await expect(separatore(page), 'rigiocata: nessuna riga').toHaveCount(0);
-    await expect(page.locator('#conversation')).not.toContainText('Conversazione non riassunta');
+    await expect(page.locator('#conversation')).not.toContainText('Conversazione non compattata');
     await apri(page, 'cl-ceduta-vivo', [...giro(), INIZIO]);
     await eventi(page, [FINE_CEDUTA]);
     await expect(barra(page)).toHaveCount(0);
@@ -612,7 +752,7 @@ for (const modo of ['dark', 'light']) {
     const foto = async (nome) => { for (const [w, h] of VIEWPORT) { await page.setViewportSize({ width: w, height: h }); await page.waitForTimeout(150); await page.screenshot({ path: join(FOTO, `${nome}-${modo}-${w}x${h}.png`), fullPage: false }); } };
     const pieno = giro(1, undefined, 130_000);
     await policyFixture(page, '**/api/v1/sessions/foto-*/compaction-policy');
-    await apri(page, `foto-${modo}-avviso`, pieno);
+    await apri(page, `foto-${modo}-avviso`, pieno, { spenta: true }); // e4955a8ee: l'avviso solo con l'automatica spenta
     await expect(page.locator('#avvisoContesto')).toBeVisible();
     await foto('1-avviso');
     await apri(page, `foto-${modo}-durante`, [...giro(), INIZIO_ATTESO]);
@@ -630,7 +770,7 @@ for (const modo of ['dark', 'light']) {
       await page.keyboard.press('Escape');
     }
     await eventi(page, [ANNULLATA]);
-    await expect(separatore(page)).toContainText('Riassunto annullato');
+    await expect(separatore(page)).toContainText('Compattazione annullata') /* parola unica, owner 31/10/2026 */;
     await foto('4-annullato');
     await apri(page, `foto-${modo}-errore`, [
       { type: 'RunStarted', _sequenza: 1, input: { consegna: 'Continua' } },
@@ -643,3 +783,105 @@ for (const modo of ['dark', 'light']) {
     await foto('6-riparato');
   });
 }
+
+/*
+ * «Mai aspettare» (owner 27/10/2026 notte, contratto C5; bozzetto approvato il 28/10). All'emergenza il giro parte col riassunto RAPIDO
+ *   senza il modello (`ripiego`, ragione 'in-arrivo'); quando arriva quello del modello prende il suo posto alla richiesta dopo, e
+ *   l'evento porta `migliora: { at }` del rapido. Le forme sono quelle del servizio (`agent-service.mjs`, ramo `compattazione-fine`).
+ *   In chat: UNA riga, che prima dice «Riassunto rapido…» (il perché nel title) e poi «Compattazione migliorata dal modello…»; il conto
+ *   delle compattazioni resta 1; l'annullo riguarda il riassunto del modello; ricaricando e rimandando gli eventi, la riga resta una.
+ */
+const AT_MODELLO = '2026-09-24T07:05:00.000Z';
+const FINE_RAPIDA = { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 21, value: { fase: 'fine', giro: 1, compattato: true, tokenPrima: 245_100, tokenDopo: 36_900, misura: 'stima', coveredThrough: 40, at: AT, modello: MODELLO, motivo: 'emergenza', ripiego: true, ragione: 'in-arrivo', classe: 'senza-modello' } };
+const FINE_MIGLIORATA = { type: 'CUSTOM', name: 'talos.compattazione', _sequenza: 36, value: { fase: 'fine', giro: 1, compattato: true, tokenPrima: 245_100, tokenDopo: 31_200, misura: 'stima', coveredThrough: 40, at: AT_MODELLO, modello: MODELLO, motivo: 'miglioramento', istantanea: true, migliora: { at: AT } } };
+test('CTX-UI-QUICK-THEN-IMPROVED — il rapido diventa «migliorato dal modello» nella stessa riga; il conto resta 1; l’annullo va al riassunto del modello', async ({ page }) => {
+  await apri(page, 'cl-migliora', [...giro(), INIZIO_ATTESO, FINE_RAPIDA]);
+  await expect(separatore(page)).toHaveCount(1);
+  await expect(separatore(page)).toContainText('Compattazione rapida senza il modello · 245,1k → 36,9k');
+  await expect(separatore(page).locator('[data-compattazione-testo]')).toHaveAttribute('title', 'La compattazione del modello sta arrivando: prenderà il posto di questa al prossimo messaggio. Non devi fare niente.');
+  const conto = () => page.evaluate(() => window.__talosHarnessUiRuntime.realSessionState.compattazioniLegacy?.numero ?? 0);
+  expect(await conto()).toBe(1);
+  await eventi(page, [...giro(30, 'E adesso la suite lenta'), FINE_MIGLIORATA]);
+  await expect(separatore(page)).toHaveCount(1);
+  await expect(separatore(page)).toContainText('Compattazione migliorata dal modello · 245,1k → 31,2k');
+  await expect(separatore(page).locator('[data-compattazione-testo]')).not.toHaveAttribute('title', /.+/);
+  expect(await conto(), 'il riassunto del modello prende il posto del rapido: non è una compattazione in più').toBe(1);
+  // una riconnessione rimanda tutto: niente doppione, niente ritorno a «rapido»
+  await eventi(page, [FINE_RAPIDA, FINE_MIGLIORATA]);
+  await expect(separatore(page)).toHaveCount(1);
+  await expect(separatore(page)).toContainText('Compattazione migliorata dal modello');
+  // ricaricando, la storia rigiocata dice lo stesso
+  await page.reload();
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+  await apri(page, 'cl-migliora', [...giro(), INIZIO_ATTESO, FINE_RAPIDA, ...giro(30, 'E adesso la suite lenta'), FINE_MIGLIORATA]);
+  await expect(separatore(page)).toHaveCount(1);
+  await expect(separatore(page)).toContainText('Compattazione migliorata dal modello · 245,1k → 31,2k');
+  expect(await conto()).toBe(1);
+  // l'annullo chiama la rotta del riassunto del MODELLO (l'`at` nuovo), una volta
+  const chiamate = await contaPost(page, `**/api/v1/sessions/cl-migliora/compaction/*/undo`, { ok: true, data: { annullata: true }, meta: {} });
+  await separatore(page).locator('[data-compattazione-menu]').click();
+  await page.locator('[role="menu"].talos-menu-azioni').getByRole('menuitem', { name: 'Annulla la compattazione' }).click();
+  await expect(separatore(page)).toContainText('Compattazione annullata') /* parola unica, owner 31/10/2026 */;
+  expect(chiamate).toHaveLength(1);
+  expect(decodeURIComponent(chiamate[0])).toContain(`/compaction/${AT_MODELLO}/undo`);
+});
+
+/*
+ * «Non arriva» (contratto con la CLI, 28/10/2026): il riassunto del modello per il rapido non arriverà. Forma del kernel
+ *   (`diciNonArriva`, `talosHarness.desktop-hotfix.mjs`) passata com'è dal servizio (`agent-service.mjs`, ramo `compattazione-preparata`).
+ */
+const NON_ARRIVA = { type: 'CUSTOM', name: 'talos.compattazione-preparata', _sequenza: 25, value: { fase: 'non-arriva', perIlRapido: { at: AT }, motivo: 'fallita' } };
+test('CTX-UI-QUICK-NOT-COMING — the quick line stops promising when the model summary will not come, live and after a reload', async ({ page }) => {
+  await apri(page, 'cl-non-arriva', [...giro(), INIZIO_ATTESO, FINE_RAPIDA]);
+  await expect(separatore(page)).toContainText('Compattazione rapida senza il modello · 245,1k → 36,9k');
+  await eventi(page, [NON_ARRIVA]);
+  await expect(separatore(page)).toHaveCount(1);
+  await expect(separatore(page)).toContainText('Compattata senza il modello · 245,1k → 36,9k');
+  await expect(separatore(page).locator('[data-compattazione-testo]')).toHaveAttribute('title', 'TALOS è andato avanti con una compattazione fatta senza il modello.');
+  await page.reload();
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+  await apri(page, 'cl-non-arriva', [...giro(), INIZIO_ATTESO, FINE_RAPIDA, NON_ARRIVA]);
+  await expect(separatore(page)).toHaveCount(1);
+  await expect(separatore(page)).toContainText('Compattata senza il modello · 245,1k → 36,9k');
+});
+
+/*
+ * Strada del MOTORE del contesto (contratto con la CLI, 28/10/2026): il rapido nato da «non pronto» porta il lavoro che scrive il
+ * riassunto (`lavoroDelMotore`); la versione di QUEL lavoro (`talos.context`, `context.version.committed`) migliora la stessa riga, la sua
+ * pausa la fa smettere di promettere. Prova del CABLAGGIO in app.js: il lavoro passa dall'evento alla riga, e le opzioni della riga
+ * (il menu con l'annullo) arrivano fino alla chiusura decisa dal motore. Le regole una per una stanno in RIGA-VIVA-20/21/22.
+ */
+const LAVORO = 'job-ctx-1';
+const FINE_RAPIDA_MOTORE = { ...FINE_RAPIDA, value: { ...FINE_RAPIDA.value, lavoroDelMotore: LAVORO } };
+const delMotore = (sessionId, extra) => ({ type: 'CUSTOM', name: 'talos.context', _sequenza: 30, value: { schema: 'talos.context.event.v1', id: `ev-${extra.kind}-${sessionId}`, sessionId, jobId: LAVORO, createdAt: AT_MODELLO, payload: { coveredThrough: 40 }, ...extra } });
+const righeDelContesto = (page) => page.locator('#conversation [data-compattazione-riga], #conversation [data-context-separator]');
+test('CTX-UI-QUICK-ENGINE-IMPROVED — engine path: the version of the job the quick line waits for improves the same line, with the engine\'s View; after a reload too', async ({ page }) => {
+  const versione = delMotore('cl-motore', { kind: 'context.version.committed', versionId: 'ver-1' });
+  await apri(page, 'cl-motore', [...giro(), INIZIO_ATTESO, FINE_RAPIDA_MOTORE]);
+  await expect(separatore(page)).toContainText('Compattazione rapida senza il modello · 245,1k → 36,9k');
+  await eventi(page, [versione]);
+  await expect(righeDelContesto(page)).toHaveCount(1);
+  await expect(separatore(page)).toContainText('Compattazione migliorata dal modello');
+  await expect(separatore(page).locator('[data-context-apri]')).toBeVisible();
+  await expect(separatore(page).locator('[data-compattazione-menu]')).toHaveCount(0);
+  await page.reload();
+  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
+  await apri(page, 'cl-motore', [...giro(), INIZIO_ATTESO, FINE_RAPIDA_MOTORE, versione]);
+  await expect(righeDelContesto(page)).toHaveCount(1);
+  await expect(separatore(page)).toContainText('Compattazione migliorata dal modello');
+});
+test('CTX-UI-QUICK-ENGINE-COOLING — the pause of that job: the quick line stops promising and keeps its menu; a quick line of the simple compaction alone is not touched', async ({ page }) => {
+  await apri(page, 'cl-motore-pausa', [...giro(), INIZIO_ATTESO, FINE_RAPIDA_MOTORE]);
+  await eventi(page, [delMotore('cl-motore-pausa', { kind: 'context.compaction.cooling', state: 'failed' })]);
+  await expect(separatore(page)).toHaveCount(1);
+  await expect(separatore(page)).toContainText('Compattata senza il modello · 245,1k → 36,9k');
+  await expect(separatore(page).locator('[data-compattazione-menu]')).toHaveCount(1);
+  // AL CONTRARIO: senza il lavoro (la compattazione semplice da sola) la versione del motore non la tocca
+  await apri(page, 'cl-motore-senza', [...giro(), INIZIO_ATTESO, FINE_RAPIDA]);
+  await eventi(page, [delMotore('cl-motore-senza', { kind: 'context.version.committed', versionId: 'ver-2' })]);
+  await expect(righeDelContesto(page)).toHaveCount(2);
+  await expect(separatore(page)).toContainText('Compattazione rapida senza il modello · 245,1k → 36,9k');
+});

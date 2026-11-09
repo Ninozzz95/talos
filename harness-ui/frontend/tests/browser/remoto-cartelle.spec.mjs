@@ -167,14 +167,14 @@ test('REMOTO-CARTELLE-03 — «Add folder» apre la scelta in una colonna senza 
   await expect(page.locator('.workspace-chooser-settings')).toBeVisible();
   await expect(page.locator('#workspaceChooserSubmit')).not.toHaveText('Allow this folder');
   await expect(page.locator('#workspaceChooserSubmit')).toBeEnabled();
-  await expect(page.locator('#workspaceChooserBrowserTitle')).toHaveText('Choose the working folder');
+  await expect(page.locator('#workspaceChooserBrowserTitle')).toHaveText('Where we work') /* FE-040 (31/10/2026) */;
   await alberoCheRiempie(page);
 });
 
 /* ---------------------------------------------------------------- la seconda porta: le carte nella chat (attrezzi del modello) */
 async function inChat(page, stato) {
   const risposte = [];
-  await page.route('**/api/v1/sessions/cartelle-proof/events', () => { /* aperto e muto */ });
+  await page.route('**/api/v1/sessions/cartelle-proof/events*', () => { /* aperto e muto */ });
   await page.route('**/api/v1/sessions/cartelle-proof/approve', async (route) => {
     risposte.push(JSON.parse(route.request().postData() ?? '{}'));
     return route.fulfill({ json: { ok: true, data: { ok: true } } });

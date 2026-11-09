@@ -105,13 +105,15 @@ test('ATLAS-F2-02 · Strumenti: gap 8, 14 sopra e sotto, ricerca che cresce, sel
   expect(nonGet).toEqual([]);
 });
 
-test('ATLAS-F2-03 · Riga della selezione: niente cornice, testo 11, margini 12 · 16', async ({ page }) => {
+test('ATLAS-F2-03 · Riga della selezione: la cornice di Attività e Memoria (decisione 177)', async ({ page }) => {
   const nonGet = await apri(page);
   await expect(page.locator(`${NOTA} .td-card`).first()).toBeVisible();
-  const riga = await stili(page.locator(`${NOTA} .td-bulk`), ['border-top-width', 'padding-top', 'margin-top', 'margin-bottom', 'font-size', 'background-color']);
-  expect([riga['border-top-width'], riga['padding-top'], riga['margin-top'], riga['margin-bottom'], riga['font-size'], riga['background-color']])
-    .toEqual(['0px', '0px', '12px', '16px', '11px', 'rgba(0, 0, 0, 0)']); // atlas.js:148 + CSS-0159
-  expect((await stili(page.locator(`${NOTA} .td-bulk-select`), ['gap'])).gap).toBe('9px'); // CSS-0188
+  /* Decisione 177 dell'owner (04/11/2026, reperto N9a): prima la riga era senza cornice (atlas.js:148, CSS-0159/0188); ora ha la
+     cornice della regola di base `.td-bulk`, la stessa di Attività e Memoria. Prova gemella in unità: UX177-A. */
+  const riga = await stili(page.locator(`${NOTA} .td-bulk`), ['border-top-width', 'padding-top', 'margin-top', 'margin-bottom', 'background-color']);
+  expect([riga['border-top-width'], riga['padding-top'], riga['margin-top'], riga['margin-bottom']]).toEqual(['1px', '7px', '0px', '14px']);
+  expect(riga['background-color']).not.toBe('rgba(0, 0, 0, 0)');
+  expect((await stili(page.locator(`${NOTA} .td-bulk-select`), ['gap'])).gap).toBe('8px');
   expect(nonGet).toEqual([]);
 });
 

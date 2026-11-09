@@ -8,7 +8,7 @@ const outputId='15743007-0583-4e50-b99a-a77e33d97115';
 
 test('OUTPUT15-HTTP-MISSING: authenticated page read reaches exactly the requested session/output',async t=>{
   let received;
-  const server=createServer(createHttpApp({staticHandler:()=>{},token:'fixture15',sessionRegistry:{
+  const server=createServer(createHttpApp({ senzaGettone: 'prove', staticHandler:()=>{},token:'fixture15',sessionRegistry:{
     leggiOutputProcesso:async(sessionId,args)=>{received={sessionId,args};return{schema:'talos.process-output-page.v1',outputId,text:'pagina15'};},
   }}));
   await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
@@ -24,7 +24,7 @@ async function realHttp(t){
   const id={sessionId:'s15',outputId,runId:'r15',toolCallId:'t15'},bytes=Buffer.from([0,255,65,66,67,68]);
   await store.begin(id);await store.append({...id,sequence:0,stream:'stdout',bytes});await store.finish({...id,sequence:1,termination:'exited',exitCode:0});
   let calls=0,corrupt=false;
-  const server=createServer(createHttpApp({staticHandler:()=>{},token:'fixture15',sessionRegistry:{
+  const server=createServer(createHttpApp({ senzaGettone: 'prove', staticHandler:()=>{},token:'fixture15',sessionRegistry:{
     leggiOutputProcesso:async(sessionId,args)=>{calls++;if(corrupt)throw Object.assign(Error('private/profile/path'),{code:'OUTPUT_INTEGRITY_FAILED'});return readProcessOutputPage(store,{...args,sessionId});},
   }}));
   await new Promise(r=>server.listen(0,'127.0.0.1',r));

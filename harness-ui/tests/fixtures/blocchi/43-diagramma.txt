@@ -1,0 +1,1 @@
+root = Diagramma("giro", null, [{id: "m", testo: "Messaggio"}, {id: "k", testo: "Kernel"}, {id: "t", testo: "Attrezzi"}, {id: "r", testo: "Risposta"}], [{da: "m", a: "k"}, {da: "k", a: "t", testo: "chiama"}, {da: "k", a: "r"}])

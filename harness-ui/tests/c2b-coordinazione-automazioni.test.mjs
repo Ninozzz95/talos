@@ -43,7 +43,7 @@ test('C2B-A-01 — lo store: spenta di serie, accesa alla creazione, si cambia d
 
 test('C2B-A-02 — le rotte: la creazione porta Coordinazione, la scheda la cambia; forme storte 400, id sconosciuto 404', CON_TEMPO, async (t) => {
   const store = createAutomationStore({ cartella: cartella(t, 'talos-c2b-auto-http-') })
-  const server = createServer(createHttpApp({ staticHandler: async () => null, automationStore: store }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, automationStore: store }))
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
   t.after(() => new Promise((ok) => { server.closeAllConnections(); server.close(() => ok()) }))
   const base = `http://127.0.0.1:${server.address().port}/api/v1/automations`

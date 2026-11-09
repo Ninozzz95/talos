@@ -356,7 +356,7 @@ test('PI-10 — fixture indipendente, catalogo models.dev e rotte prodotto senza
   const catalogo = createModelsDevCatalog({ cartellaStore, fetchFn: async () => Response.json(FIXTURE.fornitori) });
   const store = createProviderCredentialStore({ env: Object.fromEntries(Object.values(ATTESI).map(([, , v]) => [v, CHIAVE])) });
   const probe = createProviderProbe({ ...deps(store), fetchImpl: async u => Response.json(new URL(u).pathname === '/api/v1/models' ? pagina(1, 1) : { data: [{ id: 'modello-finto' }] }) });
-  const base = await ascolta(t, createHttpApp({ staticHandler: async () => null, providerStore: store, providerProbe: probe }));
+  const base = await ascolta(t, createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore: store, providerProbe: probe }));
   for (const id of Object.keys(ATTESI)) {
     const c = await catalogo.ottieni(id);
     assert.equal(c.disponibile, true);

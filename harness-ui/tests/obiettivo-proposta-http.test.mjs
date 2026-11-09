@@ -51,7 +51,7 @@ async function banco(t, cartellaStore, { rete, preambolo, localRuntimes, madre =
   const { registro, giri } = registroAGiri(cartellaStore);
   assert.equal((await registro.ripristina()).ripristinate, 3, 'premise: mother, sub-agent and step are restored');
   const chiamate = { rete: [], preambolo: [] };
-  const server = createServer(createHttpApp({
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     sessionRegistry: registro,
     providerStore: portachiavi(),

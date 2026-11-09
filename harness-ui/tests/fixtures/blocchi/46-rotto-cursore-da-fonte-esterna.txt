@@ -1,0 +1,1 @@
+root = Cursore("c", null, {id: "x", etichetta: "X", min: 0, max: 10, passo: 1}, [{id: "a", titolo: "A"}], [[1]], "a * x", null, {tipo: "pagina", nome: "esempio.com"})

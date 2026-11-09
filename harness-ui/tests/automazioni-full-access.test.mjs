@@ -65,7 +65,7 @@ test('FA-AUTO-02: AL CONTRARIO — in «Workspace write» la carta resta, e un �
   const { richieste, fasi, carte } = await giro({ livelloAccesso: 'scrittura-progetto', chiamate: [['a1', 'automation_create', { nome: 'X' }]] });
   assert.deepEqual(carte, ['automation_create']);
   assert.deepEqual(fasi.filter(([, f]) => f === 'esegui'), []);
-  assert.match(esitoDi(richieste, 'a1'), /^REFUSED\./u);
+  assert.match(esitoDi(richieste, 'a1'), /^DECLINED\. The person said no/u);
 });
 
 test('FA-AUTO-03: Full access — escludere e riammettere un fornitore non chiede; scollegare ChatGPT chiede SEMPRE', async () => {
@@ -77,7 +77,7 @@ test('FA-AUTO-03: Full access — escludere e riammettere un fornitore non chied
   assert.deepEqual(carte, ['chatgpt_account'], 'la sola carta è quella di ChatGPT');
   assert.deepEqual(fasi.filter(([, f]) => f === 'esegui').map(([n]) => n), ['provider_exclude', 'provider_allow']);
   assert.match(esitoDi(richieste, 'p1'), /Full access: done without asking the person\./u);
-  assert.match(esitoDi(richieste, 'p3'), /^REFUSED\./u);
+  assert.match(esitoDi(richieste, 'p3'), /^DECLINED\. The person said no/u);
 });
 
 test('FA-AUTO-04: senza niente da segnalare l\'esito dice solo che non si è chiesto', async () => {

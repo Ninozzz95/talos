@@ -107,6 +107,21 @@ test('WORKSPACE-CHOOSER-PERMISSION-05 — una directory non leggibile espone un 
   );
 });
 
+test('WORKSPACE-CHOOSER-MOTIVO-27 — «non esiste» e «senza permesso» sono due motivi distinti, mai il percorso', async (t) => {
+  const { root } = await fixture(t);
+  const conCodice = (code) => async () => { throw Object.assign(new Error(`${code} C:\\segreto`), { code }); };
+  for (const [code, atteso] of [['ENOENT', 'folder-missing'], ['ENOTDIR', 'folder-missing'], ['EACCES', 'folder-denied'], ['EPERM', 'folder-denied'], ['EIO', undefined]]) {
+    await assert.rejects(() => createWorkspaceBrowser({ rootDir: root, readdirFn: conCodice(code) }).browse(), (error) => {
+      assert.equal(error.code, 'WORKSPACE_NOT_AVAILABLE');
+      assert.equal(error.reason, atteso, code);
+      assert.equal(error.message, 'This folder is not available. Choose another or check Doctor.');
+      return true;
+    });
+    await assert.rejects(() => createWorkspaceBrowser({ rootDir: root, realpathFn: conCodice(code) }).browse(), (error) => error.reason === atteso);
+    await assert.rejects(() => createWorkspaceBrowser({ rootDir: root, lstatFn: conCodice(code) }).browse(`${root}\\sotto`.replaceAll('\\', root.includes('/') ? '/' : '\\')), (error) => error.reason === atteso);
+  }
+});
+
 test('WORKSPACE-CHOOSER-EMPTY-20 — una cartella vuota è uno stato valido, non un errore', async (t) => {
   const { root } = await fixture(t);
   const empty = join(root, 'Empty');

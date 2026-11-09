@@ -16,7 +16,7 @@ import WORKSPACE_EN from './workspace-en.js';
 export default Object.freeze({
   workspaceV2: WORKSPACE_EN,
   workspacePreferencesV2: {
-    'Riprendi il workspace all’avvio': 'Restore the workspace at startup',
+    'Riprendi lo spazio di lavoro all’avvio': 'Restore the workspace at startup',
     'Riapre l’ultima sessione disponibile senza avviare operazioni.': 'Reopens the last available session without starting operations.',
     'Preferenze salvate da una versione più recente: le modifiche restano temporanee.': 'Preferences were saved by a newer version: changes remain temporary.',
   },
@@ -78,7 +78,7 @@ export default Object.freeze({
     // sezioni
     'Aspetto e movimento': 'Appearance and motion', 'Chat e composer': 'Chat and composer', 'Laboratorio modelli': 'Model Lab',
     'Provider e accessi': 'Providers and access', 'Strumenti agente e permessi': 'Agent tools and permissions',
-    'Privacy e dati locali': 'Privacy and local data', 'File e workspace': 'Files and workspace', 'Account, Doctor e backup': 'Account, Doctor and backup',
+    'Privacy e dati locali': 'Privacy and local data', 'File e spazio di lavoro': 'Files and workspace', 'Diagnosi e configurazione': 'Diagnostics and configuration',
     // 06/09, D2/D13/D21/D22/D26 — le tre sezioni nuove delle Impostazioni
     'Memoria e contesto': 'Memory and context', 'Sicurezza e privacy': 'Security and privacy', 'Dispositivi collegati': 'Connected devices', 'Costi e consumo': 'Cost and usage',
     // titoli delle righe
@@ -87,11 +87,11 @@ export default Object.freeze({
     'Densità': 'Density', 'Densità delle liste': 'List density', 'Dimensione interfaccia': 'Interface size', 'Durata': 'Duration',
     'Feedback': 'Feedback', 'Finestre': 'Windows', 'Intensità': 'Intensity', 'Intensità UI': 'UI intensity',
     'Intestazione immersiva': 'Immersive header', 'Lingua dei menu': 'Menu language', 'Lingua delle risposte e della dettatura': 'Reply and dictation language', 'Automatica': 'Automatic', 'Messaggi': 'Messages', 'Modalità colore': 'Color mode',
-    'Navigazione': 'Navigation', 'Pannelli strumenti': 'Tool panels', 'Parallasse': 'Parallax', 'Profilo': 'Profile', 'Profondità': 'Depth',
+    'Navigazione': 'Navigation', 'Pannelli': 'Panels', 'Parallasse': 'Parallax', 'Profilo': 'Profile', 'Profondità': 'Depth',
     'Qualità': 'Quality', 'Renderer': 'Renderer', 'Riduci movimento': 'Reduce motion', 'Rispetta risparmio dati': 'Respect data saver',
-    'Ritardo progressivo': 'Stagger', 'Scie': 'Trails', 'Sfondo animato': 'Animated background', 'Sfondo attivo': 'Background on',
+    'Ritardo progressivo': 'Stagger', 'Scie': 'Trails', 'Sfondo animato': 'Animated background', 'Sfondo attivo': 'Background on', 'Scena dello sfondo': 'Background scene',
     'Sospendi finestra nascosta': 'Pause when hidden', 'Stile dei messaggi': 'Message style', 'Superfici': 'Surfaces', 'Tema TALOS': 'TALOS theme',
-    'Testo chat': 'Chat text', 'Velocità': 'Speed',
+    'Come si apre Nuova sessione': 'How New session opens', 'Cielo (Beta)': 'Sky (Beta)', 'Testo chat': 'Chat text', 'Velocità': 'Speed',
     // opzioni
     'Adattiva': 'Adaptive', 'Adattivo': 'Adaptive', 'Alta': 'High', 'Atlas': 'Atlas', 'Aurora': 'Aurora', 'Basicus': 'Basicus', 'Bassa': 'Low',
     'Bilanciata': 'Balanced', 'Bolle': 'Bubbles', 'Calm': 'Calm', 'Cassetto': 'Drawer', 'Chiaro': 'Light', 'Cinematografica': 'Cinematic',
@@ -112,9 +112,9 @@ export default Object.freeze({
   attrezzi: {
     'annullamento di una ricerca': 'cancelling a research', 'apertura di una pagina web': 'opening a web page',
     'avvio di una ricerca approfondita': 'starting a deep research', 'chiusura di un’attività': 'closing a task',
-    'comando nel terminale': 'terminal command', 'copia di un file di Libreria nel workspace': 'copying a Library file into the workspace',
+    'comando nel terminale': 'terminal command', 'copia di un file di Libreria nello spazio di lavoro': 'copying a Library file into the workspace',
     'correzione di una memoria': 'correcting a memory', 'creazione di un artefatto': 'creating an artifact',
-    'creazione di un attrezzo nuovo': 'creating a new tool', 'creazione di un documento': 'creating a document',
+    'creazione di un attrezzo nuovo': 'creating a new tool', 'creazione di uno strumento nuovo': 'creating a new tool', 'creazione di un documento': 'creating a document',
     'creazione di un’attività': 'creating a task', 'data e ora': 'date and time', 'delega a un sotto-agente': 'delegating to a sub-agent',
     'domanda alla persona': 'asking the user a question',
     'piano da approvare': 'plan awaiting approval', // 24/09/2026, decisione owner 36
@@ -148,7 +148,7 @@ export default Object.freeze({
     'Hai già {n} schede aperte: chiudine una': 'You already have {n} tabs open: close one', 'Chiudi': 'Close', 'Chiudi le altre': 'Close others',
     'Chiudi tutte': 'Close all', 'Rinomina': 'Rename', 'Nessuna scheda aperta': 'No tab open',
     "Ogni scheda dichiara chi l'ha aperta e dove.": 'Every tab says who opened it and where.', 'Aperta da te': 'Opened by you',
-    'Azioni sulla scheda': 'Tab actions', 'in corso': 'running', 'connessa': 'connected', 'connessione in corso': 'connecting', 'in attesa': 'waiting',
+    'Azioni sulla scheda': 'Tab actions', 'in corso': 'in progress', 'connessa': 'connected', 'connessione in corso': 'connecting', 'in attesa': 'waiting',
     'disconnessa': 'disconnected', 'shell chiusa': 'shell closed', 'shell ripresa': 'shell resumed',
     /* PO-10 passo 2 (02/10/2026): le schede dei comandi dell'agente, in sola lettura */
     'agente': 'agent', 'agente · giro {giro}': 'agent · turn {giro}', "Lanciata dall'agente al giro {giro}": 'Launched by the agent in turn {giro}',
@@ -292,14 +292,14 @@ export default Object.freeze({
     '1 attività interrotta': '1 step interrupted', '{n} attività interrotte': '{n} steps interrupted', 'interrotta': 'interrupted',
     '(1 errore)': '(1 error)', '({n} errori)': '({n} errors)', 'Attività…': 'Activity…',
     'lettura di 1 file…': 'reading 1 file…', 'lettura di {n} file…': 'reading {n} files…',
-    '1 ricerca in corso…': '1 search running…', '{n} ricerche in corso…': '{n} searches running…',
+    '1 ricerca in corso…': '1 search in progress…', '{n} ricerche in corso…': '{n} searches in progress…',
     'elenco di 1 cartella…': 'listing 1 folder…', 'elenco di {n} cartelle…': 'listing {n} folders…',
     'esecuzione di 1 comando…': 'running 1 command…', 'esecuzione di {n} comandi…': 'running {n} commands…',
     'scrittura di 1 file…': 'writing 1 file…', 'scrittura di {n} file…': 'writing {n} files…',
     'modifica di 1 file…': 'editing 1 file…', 'modifica di {n} file…': 'editing {n} files…',
     'ricerca sul web…': 'searching the web…', '{n} ricerche sul web…': '{n} web searches…',
     'apertura di una pagina…': 'opening a page…', 'apertura di {n} pagine…': 'opening {n} pages…',
-    '1 attività in corso…': '1 step running…', '{n} attività in corso…': '{n} steps running…',
+    '1 attività in corso…': '1 step in progress…', '{n} attività in corso…': '{n} steps in progress…',
     'file letto': 'file read', 'file letti': 'files read', 'letto': 'read', 'letti': 'read',
     'lettura non riuscita': 'read failed', 'letture non riuscite': 'reads failed', 'Letture': 'Reads',
     'ricerca': 'search', 'ricerche': 'searches', 'ricerca non riuscita': 'search failed', 'ricerche non riuscite': 'searches failed', 'Ricerche': 'Searches',
@@ -319,7 +319,7 @@ export default Object.freeze({
     'pagina non aperta': 'page not opened', 'pagine non aperte': 'pages not opened', 'Pagine': 'Pages',
     'delega': 'delegation', 'deleghe': 'delegations', 'delega non riuscita': 'delegation failed', 'deleghe non riuscite': 'delegations failed', 'Deleghe': 'Delegations',
     'ragionamento': 'reasoning', 'ragionamenti': 'reasonings', 'Ragionamenti': 'Reasonings', 'Tutte': 'All', 'Non riuscite': 'Failed',
-    'non riuscita': 'failed', 'non riuscito': 'failed', 'senza codice': 'no exit code', 'attrezzo': 'tool', /* «in corso» è già nel Terminale («running») */
+    'non riuscita': 'failed', 'non riuscito': 'failed', 'senza codice': 'no exit code', 'attrezzo': 'tool', 'strumento': 'tool', /* «in corso» è già nel Terminale («running») */
     'Letto': 'Read', 'Legge': 'Reading', 'Cercato': 'Searched', 'Cerca': 'Searching', 'Elencato': 'Listed', 'Elenca': 'Listing',
     'Modificato': 'Edited', 'Modifica': 'Editing', 'Scritto': 'Wrote', 'Scrive': 'Writing', 'Eseguito': 'Ran', 'Esegue': 'Running',
     'Test eseguiti': 'Tests run', 'Esegue i test': 'Running the tests', 'Cercato sul web': 'Searched the web', 'Cerca sul web': 'Searching the web',
@@ -341,7 +341,7 @@ export default Object.freeze({
     'Conversazione riassunta': 'Conversation summarized', 'token': 'tokens',
     'Riassunto annullato · la conversazione intera torna al modello': 'Summary undone · the whole conversation goes back to the model',
     'Conversazione non riassunta': 'Conversation not summarized',
-    'il modello ha risposto con un attrezzo invece del riassunto': 'the model answered with a tool instead of the summary',
+    'il modello ha risposto con un attrezzo invece del riassunto': 'the model answered with a tool instead of the summary', 'il modello ha risposto con uno strumento invece del riassunto': 'the model answered with a tool instead of the summary',
     'il riassunto è uscito troncato': 'the summary came out truncated', 'il modello ha risposto vuoto': 'the model answered with nothing',
     'il fornitore ha risposto con un errore': 'the provider answered with an error',
     'La conversazione non entrava nel modello: la riassumo e riprovo…': 'The conversation did not fit the model: summarizing it and retrying…',
@@ -550,8 +550,8 @@ export default Object.freeze({
     "Il ramo non è ancora su GitHub: la pull request aspetta l’invio.": "The branch is not on GitHub yet: the pull request waits for the push.",
     "1 fallito": "1 failed",
     "{n} falliti": "{n} failed",
-    "1 in corso": "1 running",
-    "{n} in corso": "{n} running",
+    "1 in corso": "1 in progress",
+    "{n} in corso": "{n} in progress",
     "1 annullato": "1 cancelled",
     "{n} annullati": "{n} cancelled",
     "1 passato": "1 passed",
@@ -564,7 +564,7 @@ export default Object.freeze({
     "{n} commit rispetto a {base}": "{n} commits compared with {base}",
     "{n} commit o più rispetto a {base}": "{n} or more commits compared with {base}",
     "fallito": "failed",
-    "in corso": "running",
+    "in corso": "in progress",
     "annullato": "cancelled",
     "passato": "passed",
     "saltato": "skipped",

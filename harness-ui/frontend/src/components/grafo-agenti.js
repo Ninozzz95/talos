@@ -6,7 +6,7 @@
  * con l'adattatore `grafo/run-dalle-deleghe.js`), dove tutto ciò che la classica faceva è stato portato (owner 13/10/2026).
  */
 import { t as tr } from './lingua.js';
-import { nomeBreve, nomeDellAgente } from './grafo/run-dalle-deleghe.js'; // L3-17: il nome dell'agente, una funzione sola
+import { chiaveCartella, nomeBreve, nomeDellAgente } from './grafo/run-dalle-deleghe.js'; // L3-17: il nome dell'agente, una funzione sola
 
 const idValido = v => typeof v === 'string' && v.length > 0 && v.length <= 2048;
 function stato(a) {
@@ -43,8 +43,9 @@ export function modelloGrafoAgenti({ corrente = {}, sessioni = [], figli = [] } 
     }
     return visitati;
   };
-  const inclusi = opzioni.ambito === 'workspace' && corrente.cartella
-    ? new Set([...mappa.values()].filter(a => a.cartella === corrente.cartella).map(a => a.sessionId).concat([...discendenti([corrente.sessionId])]))
+  const cartellaCorrente = chiaveCartella(corrente.cartella);
+  const inclusi = opzioni.ambito === 'workspace' && cartellaCorrente !== ''
+    ? new Set([...mappa.values()].filter(a => chiaveCartella(a.cartella) === cartellaCorrente).map(a => a.sessionId).concat([...discendenti([corrente.sessionId])]))
     : discendenti([corrente.sessionId]);
   const nascosti = new Set();
   for (const id of opzioni.collassati || []) for (const disc of discendenti([id])) if (disc !== id) nascosti.add(disc);

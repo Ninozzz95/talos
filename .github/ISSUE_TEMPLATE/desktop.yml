@@ -1,0 +1,42 @@
+name: TALOS desktop
+description: A problem, a wrong answer or an idea about the TALOS desktop app
+title: "[Bug] "
+labels: [desktop]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time.
+
+        The fastest way to fill this in is from the app: **the window menu (⋯) → Report a problem…**, or ask TALOS in the chat to
+        report it. The app writes the title, what happened and the diagnostics for you; you read them and send.
+
+        ⛔ This issue is public. Do not paste paths of your folders, message text, API keys or the name of anyone.
+        The diagnostics TALOS writes contain none of these: only versions, codes and on/off switches.
+
+  - type: textarea
+    id: cosa
+    attributes:
+      label: What happened
+      description: What you did, what you saw on screen. For a wrong answer, what you asked and what the model said.
+    validations:
+      required: true
+
+  - type: textarea
+    id: atteso
+    attributes:
+      label: What you expected instead
+      description: If you already said it above, you can leave this empty.
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostica
+    attributes:
+      label: Diagnostics
+      description: |
+        Written by TALOS: app version, system, model and provider, permission, the codes of the last errors, local engine and
+        remote control on or off. If the address was too long for it, paste it here with "Copy the text" from the app.
+      render: text
+    validations:
+      required: false

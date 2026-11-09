@@ -7,12 +7,12 @@ const conta=n=>tn('sezioni.memory.count.one','sezioni.memory.count.many',n,{n:ne
  */
 /* ⛔ Le etichette si leggono a ogni uso (getter), non alla creazione del modulo: seguono il cambio di lingua. */
 const GENERI = new Map([
- ['preference',{get testo(){return traduci('sezioni.memory.kind.preference');},icona:'brain',tono:'accent'}],
- ['project_fact',{get testo(){return traduci('sezioni.memory.kind.fact');},icona:'clock',tono:null}],
- ['procedure',{get testo(){return traduci('sezioni.memory.kind.procedure');},icona:'brain',tono:'accent'}],
- ['policy_note',{get testo(){return traduci('sezioni.memory.kind.rule');},icona:'bolt',tono:'info'}],
+ ['preference',{get testo(){return traduci('sezioni.memory.kind.preference');},icona:'book-marked',tono:'accent'}],
+ ['project_fact',{get testo(){return traduci('sezioni.memory.kind.fact');},icona:'book-marked',tono:null}],
+ ['procedure',{get testo(){return traduci('sezioni.memory.kind.procedure');},icona:'book-marked',tono:'accent'}],
+ ['policy_note',{get testo(){return traduci('sezioni.memory.kind.rule');},icona:'book-marked',tono:'info'}],
 ]);
-export function genereMemoria(genere) {return GENERI.get(genere) || {testo:traduci('sezioni.memory.kind.unknown'),icona:'brain',tono:null};}
+export function genereMemoria(genere) {return GENERI.get(genere) || {testo:traduci('sezioni.memory.kind.unknown'),icona:'book-marked',tono:null};}
 export function testiMemoria(memoria) {
  const contenuto=typeof memoria?.contenuto==='string'?memoria.contenuto:traduci('sezioni.memory.contentNotRecorded');
  const compatto=contenuto.replace(/\s+/g,' ').trim();

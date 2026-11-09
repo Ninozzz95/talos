@@ -149,7 +149,20 @@ function metaEsito(voce) {
     if (e.verdetto) return e.uscita === null ? t('chat.activity.noExitCode') : `exit ${e.uscita}`;
   }
   return voce.stato === 'fallito' ? t('chat.activity.state.failed') : voce.stato === 'interrotto' ? t('chat.activity.state.interrupted')
-    : voce.stato === 'non-eseguito' ? t('chat.activity.state.notRun') : voce.stato === 'doppione' ? t('chat.activity.state.duplicate') : '';
+    : voce.stato === 'non-eseguito' ? t('chat.activity.state.notRun') : voce.stato === 'doppione' ? t('chat.activity.state.duplicate')
+    : voce.stato === 'non-consentito' ? t('chat.activity.state.notAllowed') : ''; // D1 (03/11): il no della persona
+}
+
+/*
+ * D16 del collaudo del 02/11 (foto `a-corsa-02`): «13 files edited» su 2 file. Le frasi intere di queste specie nominano file o cartelle («{n} file modificati»,
+ * «{n} cartelle elencate»), quindi contano i percorsi diversi. Hermes conta le chiamate (`apps/desktop/src/components/assistant-ui/tool/run-summary.ts:163`,
+ * letto il 03/11/2026) con la stessa frase «Edited N files»: lo stesso difetto, non si copia.
+ */
+const SPECIE_DI_PERCORSI = new Set(['lettura', 'modifica', 'creazione', 'scrittura', 'elenco']);
+/** Lo stesso file scritto in due modi è lo stesso file: barre, `./` in testa, barra in coda. Le maiuscole contano: su Linux sono due file. */
+export function chiaveDelPercorso(percorso) {
+  if (typeof percorso !== 'string' || percorso.trim() === '') return null;
+  return percorso.trim().replace(/\\/gu, '/').replace(/^(?:\.\/)+/u, '').replace(/(?<=.)\/+$/u, '');
 }
 
 function ordinaSpecie(mappa) {
@@ -167,6 +180,8 @@ function ordinaSpecie(mappa) {
  */
 export function riassuntoVoci(voci) {
   const riusciti = new Map();
+  /* D16 del collaudo del 02/11: le specie la cui frase intera nomina file o cartelle contano i PERCORSI diversi, non le chiamate */
+  const percorsi = new Map();
   const falliti = new Map();
   let ragionamenti = 0;
   let durata = 0;
@@ -176,8 +191,11 @@ export function riassuntoVoci(voci) {
   let inCorso = null;
   let interrotti = 0;
   let nonEseguiti = 0;
+  let chiamateNonEseguite = 0;
   let doppioni = 0;
+  let nonConsentiti = 0;
   let attrezziInCorso = 0;
+  let inConsenso = 0;
   for (const v of voci || []) {
     if (!v) continue;
     if (v.tipo === 'reasoning') {
@@ -186,20 +204,33 @@ export function riassuntoVoci(voci) {
       if (Number.isFinite(v.durataMs)) durata += v.durataMs; else durateNote = false;
       continue;
     }
+    /* Revisione d'uso della candidata, reperto 4 (04/11/2026): una chiamata ferma alla carta del consenso NON è in corso, aspetta la
+       persona. La testa diceva «2 in corso» mentre il gruppo dentro diceva già «aspetta il tuo consenso» (`app.js`, `aggiornaRiassuntoBatch`):
+       stessa parola, stessa chiave. Hermes tiene «needs-input» come stato suo, distinto da «working» (`session-status-dot.tsx:30-37`). */
+    if (v.stato === 'in-corso' && v.inConsenso === true) { inConsenso += 1; continue; }
     if (v.stato === 'in-corso') { inCorso = v; attrezziInCorso += 1; continue; }
     if (v.stato === 'interrotto') { interrotti += 1; continue; } // 26/09: né riuscita né fallita — il giro si è fermato prima dell'esito
     /* R5.13 corsa 2 (24/10/2026, bozzetto 4b approvato: «Sending files to devices ×3»): un invio oltre i 25 MB è «non eseguito» sulla
        sua riga, ma nel conto del gruppo resta un invio — «· 1 prova non eseguita» direbbe una prova che non c'è (visto nella foto 4b) */
-    if (v.stato === 'non-eseguito' && v.nome !== 'remote_device_send_file') { nonEseguiti += 1; continue; } // owner 03/10/2026: una prova non eseguita, né riuscita né fallita
+    if (v.stato === 'non-eseguito' && (v.nome !== 'remote_device_send_file' || v.annullata === true)) { // owner 03/10/2026: una prova non eseguita, né riuscita né fallita
+      if (v.nome === 'prova') nonEseguiti += 1; else chiamateNonEseguite += 1; // R-44: «1 prova non eseguita» direbbe una prova che non c'è
+      continue;
+    }
     if (v.stato === 'doppione') { doppioni += 1; continue; } // owner 12/10/2026: una copia identica saltata, né riuscita né fallita
+    if (v.stato === 'non-consentito') { nonConsentiti += 1; continue; } // D1 (03/11/2026): la persona ha detto no, non è stato fatto niente
     if (v.stato === 'corretta') continue; // 27/09, decisione 47: la domanda respinta non è stata posta; la riga discreta basta
     const mappa = v.stato === 'fallito' ? falliti : riusciti;
     mappa.set(v.specie, (mappa.get(v.specie) || 0) + 1);
+    if (mappa === riusciti && SPECIE_DI_PERCORSI.has(v.specie)) {
+      if (!percorsi.has(v.specie)) percorsi.set(v.specie, new Set());
+      percorsi.get(v.specie).add(chiaveDelPercorso(v.argomenti?.percorso) ?? Symbol('no path')); // senza percorso: conta per sé
+    }
     if (v.diff) { conDiff = true; piu += v.diff.piu; meno += v.diff.meno; }
     const b = bersaglioAttrezzo(v.nome, v.argomenti, { corto: true });
     if (b && !bersagli.includes(b)) bersagli.push(b);
   }
-  const parti = ordinaSpecie(riusciti).map((s) => fraseSpecie(s, riusciti.get(s)));
+  /* la frase intera dice «2 file modificati», la breve «13 modifiche»: ognuna conta ciò che nomina */
+  const parti = ordinaSpecie(riusciti).map((s) => fraseSpecie(s, percorsi.get(s)?.size ?? riusciti.get(s)));
   const partiBrevi = ordinaSpecie(riusciti).map((s) => fraseSpecie(s, riusciti.get(s), { breve: true }));
   if (ragionamenti) {
     const parola = tn('chat.activity.reasoningsOne', 'chat.activity.reasoningsMany', ragionamenti);
@@ -222,12 +253,15 @@ export function riassuntoVoci(voci) {
   }
   /* 26/09, difetto (2): una chiamata rimasta senza esito quando il giro si è fermato si dice «interrotta» — né riuscita
      né fallita. Hermes fa lo stesso (`app/session/hooks/use-prompt-actions/rewind.ts:422-445`, clone 65ad529). */
+  if (inConsenso) { const parola = t('app.activity.awaitingConsent'); parti.push(parola); partiBrevi.push(parola); }
   if (interrotti) { const parola = tn('chat.activity.interruptedOne', 'chat.activity.interruptedMany', interrotti); parti.push(parola); partiBrevi.push(parola); }
   if (nonEseguiti) { const parola = tn('chat.activity.notRunOne', 'chat.activity.notRunMany', nonEseguiti); parti.push(parola); partiBrevi.push(parola); }
+  if (chiamateNonEseguite) { const parola = tn('chat.activity.callNotRunOne', 'chat.activity.callNotRunMany', chiamateNonEseguite); parti.push(parola); partiBrevi.push(parola); }
   if (doppioni) { const parola = tn('chat.activity.duplicateOne', 'chat.activity.duplicateMany', doppioni); parti.push(parola); partiBrevi.push(parola); }
+  if (nonConsentiti) { const parola = tn('chat.activity.notAllowedOne', 'chat.activity.notAllowedMany', nonConsentiti); parti.push(parola); partiBrevi.push(parola); }
   const erroriParti = ordinaSpecie(falliti).map((s) => fraseSpecie(s, falliti.get(s), { fallito: true }));
   const nFalliti = [...falliti.values()].reduce((a, b) => a + b, 0);
-  return { parti, partiBrevi, erroriParti, nFalliti, bersagli, diff: conDiff ? { piu, meno } : null, inCorso };
+  return { parti, partiBrevi, erroriParti, nFalliti, bersagli, diff: conDiff ? { piu, meno } : null, inCorso, inConsenso };
 }
 
 /**
@@ -281,8 +315,8 @@ export function testoDelSegmento(voci) {
       continue;
     }
     const a = v.argomenti || {};
-    const verbo = v.nome === 'shell' && a.descrizione ? String(a.descrizione) : verboAttrezzo(v.nome)[v.stato === 'in-corso' || v.stato === 'interrotto' ? 1 : 0]; // 26/09: interrotta = l'azione che si è fermata, non «Letto»
-    const esito = v.stato === 'fallito' ? ` (${t('chat.activity.state.failed')})` : v.stato === 'interrotto' ? ` (${t('chat.activity.state.interrupted')})` : v.stato === 'non-eseguito' ? ` (${t('chat.activity.state.notRun')})` : v.stato === 'doppione' ? ` (${t('chat.activity.state.duplicate')})` : v.stato === 'in-corso' ? ` (${t('chat.activity.state.running')})` : v.stato === 'corretta' ? ` (${t('chat.activity.state.rejectedAndRephrased')})` : ''; // 27/09, decisione 47
+    const verbo = v.nome === 'shell' && a.descrizione ? String(a.descrizione) : verboAttrezzo(v.nome)[v.stato === 'in-corso' || v.stato === 'interrotto' || v.stato === 'non-eseguito' || v.stato === 'non-consentito' ? 1 : 0]; // 26/09: interrotta = l'azione che si è fermata, non «Letto»
+    const esito = v.stato === 'fallito' ? ` (${t('chat.activity.state.failed')})` : v.stato === 'interrotto' ? ` (${t('chat.activity.state.interrupted')})` : v.stato === 'non-eseguito' ? ` (${t('chat.activity.state.notRun')})` : v.stato === 'doppione' ? ` (${t('chat.activity.state.duplicate')})` : v.stato === 'non-consentito' ? ` (${t('chat.activity.state.notAllowed')})` : v.stato === 'in-corso' ? ` (${t('chat.activity.state.running')})` : v.stato === 'corretta' ? ` (${t('chat.activity.state.rejectedAndRephrased')})` : ''; // 27/09, decisione 47
     righe.push(`- ${verbo} ${bersaglioAttrezzo(v.nome, a)}${esito}`.replace(/\s+\(/, ' (').trimEnd());
   }
   return righe.join('\n');
@@ -301,7 +335,8 @@ function normalizzaVoce(elemento, dati) {
   const info = dati.info;
   /* 27/09, decisione owner 47: `corretta` — una domanda respinta per la forma e riformulata dal modello. */
   const stato = info.stato === 'running' ? 'in-corso' : info.stato === 'error' ? 'fallito' : info.stato === 'interrotto' ? 'interrotto'
-    : info.stato === 'non-eseguito' ? 'non-eseguito' : info.stato === 'corretta' ? 'corretta' : info.stato === 'doppione' ? 'doppione' : 'riuscito';
+    : info.stato === 'non-eseguito' ? 'non-eseguito' : info.stato === 'corretta' ? 'corretta' : info.stato === 'doppione' ? 'doppione'
+    : info.stato === 'non-consentito' ? 'non-consentito' : 'riuscito'; // D1 (03/11/2026): il no della persona
   let diff = null;
   const badge = elemento.querySelector(':scope > .tool-note-diff');
   if (badge) {
@@ -310,9 +345,14 @@ function normalizzaVoce(elemento, dati) {
     if (Number.isFinite(piu) && Number.isFinite(meno)) diff = { piu, meno };
   }
   return {
-    tipo: 'tool', id: elemento, nome: info.nome, argomenti: info.argomentiParsati || {}, stato,
+    tipo: 'tool', id: elemento, nome: info.nome, argomenti: info.argomentiParsati || {}, stato, annullata: info.annullata === true,
     specie: specieAttrezzo(info.nome, info.operazione), esito: typeof info.esito === 'string' ? info.esito : '',
     diff, inizio: Number.isFinite(info.iniziatoA) ? info.iniziatoA : null, comandoDellaPersona: Boolean(info.comandoDellaPersona),
+    inConsenso: stato === 'in-corso' && Boolean(info.richiestaConsenso), // reperto 4: la carta del consenso è aperta per questa chiamata
+    /* Revisione del blocco interfaccia (05/11/2026): «dopo il sì» è uno stato della chiamata (la carta l'ha fermata, il consenso è deciso
+       e gira), rifatto dagli eventi anche in una rigiocata; non più la memoria della vista, che una ricarica perdeva. Mentre la carta è
+       ancora aperta vale anche `inConsenso`, e in `aggiorna` l'attesa vince (`!inAttesa`): un controllo solo, in un posto solo. */
+    dopoIlSi: stato === 'in-corso' && info.consensoChiesto === true,
   };
 }
 
@@ -380,6 +420,8 @@ class VistaSegmento {
     this.annunciati = new WeakSet();
     this.decorati = new WeakSet();
     this.eraVivo = false;
+    this.eraInAttesa = false;
+    this.eraDopoIlSi = false;
     this.vivo = false;
     this.inizio = null;
     this.fine = null;
@@ -581,7 +623,7 @@ class VistaSegmento {
     const nostra = !voce.comandoDellaPersona && ATTREZZI_CON_VERBO.has(voce.nome);
     if (nostra) {
       const [passato, presente] = verboAttrezzo(voce.nome);
-      const verbo = voce.nome === 'shell' && a.descrizione ? accorciaTesto(String(a.descrizione), 92) : voce.stato === 'in-corso' || voce.stato === 'interrotto' ? presente : passato; // 26/09: il passato direbbe che è finita
+      const verbo = voce.nome === 'shell' && a.descrizione ? accorciaTesto(String(a.descrizione), 92) : voce.stato === 'in-corso' || voce.stato === 'interrotto' || voce.stato === 'non-eseguito' ? presente : passato; // 26/09: il passato direbbe che è finita
       if (nome && nome.textContent !== verbo) nome.textContent = verbo;
       const oggetto = bersaglioAttrezzo(voce.nome, a);
       if (dettaglio && dettaglio.textContent !== oggetto) dettaglio.textContent = oggetto;
@@ -608,11 +650,13 @@ class VistaSegmento {
 
   /* -------------------------------------------------------------- l'aggiornamento */
   /**
-   * @param {{vivo:boolean, misurato:boolean}} stato vivo = è la coda aperta del giro; misurato = nato dal vivo (il tempo si scrive solo allora)
+   * @param {{vivo:boolean, misurato:boolean, inizio?:number|null}} stato vivo = è la coda aperta del giro; misurato = nato dal vivo (il tempo
+   *   si scrive solo allora); inizio = l'origine vera del segmento sull'orologio della vista, quando chi la guida la conosce (una vista
+   *   ricreata da una ricarica mentre il comando approvato gira: i secondi contano dall'avvio vero, non da zero)
    */
-  aggiorna({ vivo = false, misurato = false } = {}) {
+  aggiorna({ vivo = false, misurato = false, inizio = null } = {}) {
     this.ultimo = { vivo, misurato };
-    if (misurato && this.inizio === null) this.inizio = this.orologio();
+    if (misurato && this.inizio === null) this.inizio = Number.isFinite(inizio) ? inizio : this.orologio();
     const coppie = this.vociNormalizzate();
     for (const { riga, voce } of coppie) this.aggiornaRiga(riga, voce);
     const voci = coppie.map((c) => c.voce);
@@ -622,15 +666,32 @@ class VistaSegmento {
     /* ⛔ Vivo = il segmento è la CODA aperta del giro, non «c'è una voce in corso»: fra due chiamate non c'è
        niente in corso, e la riga lampeggiava vivo→concluso→vivo (prova V7). Hermes lo scrive nel suo test:
        «stays live in the gap between two sequential calls» (`tool/tool-group.test.tsx:465-475`). */
-    this.vivo = vivo;
-    this.card.dataset.stato = vivo ? 'vivo' : r.nFalliti ? 'errore' : 'concluso';
-    this.card.setAttribute('aria-busy', String(vivo));
-    if (!vivo && this.eraVivo && this.fine === null && misurato) this.fine = this.orologio();
+    /* Reperto 4 dopo il sì (decisione 175 dell'owner, 04/11/2026, reperto N1): la carta del consenso ha chiuso la coda del giro, e dato il
+       sì la chiamata approvata gira DENTRO questo segmento chiuso. Prima la testa tornava «N in corso» con la card `concluso`, non occupata
+       e l'orologio fermo, mentre il comando girava. Finché una chiamata che ha aspettato la carta gira ancora, il segmento è vivo come la coda
+       del giro: stato, `aria-busy`, punto vivo e secondi. Solo per una chiamata che ha aspettato la carta e gira (`voce.dopoIlSi`, lo stato
+       della chiamata): in un segmento chiuso per altro non si accende niente. Revisione del blocco (05/11/2026): prima lo diceva la memoria
+       della vista (`eraInAttesa`/`eraDopoIlSi`), e una ricarica o un cambio di sessione la perdeva; ora sopravvive perché viene dallo stato,
+       come Hermes deriva `hasLiveTurn` dallo store (`store/session-dot-state.ts:52-69`, `:85`) e Codex rifà i comandi in corso dagli eventi
+       (`tui/src/chatwidget/command_lifecycle.rs:259-265`, `:361`). Una chiamata interrotta dallo Stop non è più «in corso»
+       (`chiudiAttrezziInterrotti`). Prove: UX175-N1, N1c, N1d, UX175-DOPO-IL-SI. */
+    const inAttesa = !vivo && misurato && r.inConsenso > 0;
+    const dopoIlSi = !vivo && misurato && !inAttesa && voci.some((v) => v.tipo === 'tool' && v.dopoIlSi === true);
+    const gira = vivo || dopoIlSi;
+    this.vivo = gira;
+    this.card.dataset.stato = gira ? 'vivo' : r.nFalliti ? 'errore' : 'concluso';
+    this.card.setAttribute('aria-busy', String(gira));
+    /* Reperto 4 (04/11/2026): la carta del consenso chiude la coda del giro (`ApprovalRequested` → `chiudiSegmentoAttivo`), e il tempo
+       della testa restava fermo a «0 s» per tutta l'attesa, mentre la riga dentro contava. Finché una chiamata aspetta la persona il
+       giro è vivo (Hermes, `store/session-dot-state.ts:85`: `hasLiveTurn` vale anche per «needs-input»): i secondi scorrono, e si
+       fermano quando la carta si chiude. Regola dell'owner del 27/10: ogni riga in corso animata e coi secondi. */
+    if (inAttesa || dopoIlSi) this.fine = null;
+    else if (!vivo && (this.eraVivo || this.eraInAttesa || this.eraDopoIlSi) && this.fine === null && misurato) this.fine = this.orologio();
 
     this.statoEl.replaceChildren();
-    if (vivo) { const p = el('span', 'talos-dot talos-dot--live'); p.setAttribute('aria-hidden', 'true'); this.statoEl.append(p); }
+    if (gira) { const p = el('span', 'talos-dot talos-dot--live'); p.setAttribute('aria-hidden', 'true'); this.statoEl.append(p); }
 
-    this.adessoMostrato = this.regolaAdesso.prossimo({ vivo, inCorso: r.inCorso });
+    this.adessoMostrato = this.regolaAdesso.prossimo({ vivo: gira, inCorso: r.inCorso });
     this.adessoDalModello = this.regolaAdesso.dalModello === true;
     this.scriviConteggi(false);
     const bersagli = r.bersagli.join(', ');
@@ -657,7 +718,7 @@ class VistaSegmento {
       if (errori) this.erroreEl.append(icona('i-x'), errori);
     }
     /* Il tempo solo se misurato dal vivo: in una rigiocata non si scrive (regola di casa; Hermes, `activity-timer.ts:81-82`). */
-    const tempo = misurato && this.inizio !== null ? formattaDurataRagionamento(((vivo ? this.orologio() : (this.fine ?? this.orologio())) - this.inizio) / 1000) : '';
+    const tempo = misurato && this.inizio !== null ? formattaDurataRagionamento(((gira || inAttesa ? this.orologio() : (this.fine ?? this.orologio())) - this.inizio) / 1000) : '';
     if (this.tempoEl.textContent !== tempo) this.tempoEl.textContent = tempo;
 
     this.aggiornaFiltri(r, voci);
@@ -671,9 +732,11 @@ class VistaSegmento {
         annuncia(`${t('chat.common.failed')}: ${verboAttrezzo(voce.nome)[0]} ${bersaglioAttrezzo(voce.nome, voce.argomenti, { corto: true })}`.trim());
       }
     }
-    if (this.eraVivo && !vivo) annuncia(`${t('chat.activity.finished')}: ${descrizione}`);
+    if ((this.eraVivo || this.eraDopoIlSi) && !gira && !inAttesa) annuncia(`${t('chat.activity.finished')}: ${descrizione}`); // reperto 4: la carta del consenso non è la fine
     this.eraVivo = vivo;
-    if (vivo) this.avviaOrologio(); else this.fermaOrologio();
+    this.eraInAttesa = inAttesa;
+    this.eraDopoIlSi = dopoIlSi;
+    if (gira || inAttesa) this.avviaOrologio(); else this.fermaOrologio();
   }
 
   avviaOrologio() {

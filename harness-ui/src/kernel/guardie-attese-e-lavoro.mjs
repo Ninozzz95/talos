@@ -19,6 +19,7 @@
  *   variabile che contiene il comando non si riconoscono. Il riconoscimento non è un confine: la foto del turno (R5.11) resta.
  */
 import { spawn } from 'node:child_process'
+import { ambienteGitSicuro } from './git-sicuro.mjs'
 import { createHash } from 'node:crypto'
 import { realpathSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -321,12 +322,17 @@ export function messaggioLavoroProtetto(azione, dellaPersona) {
 
 /* ── R-26 B: chi ha scritto cosa ────────────────────────────────────────────────────────────────────────────────────────── */
 const TEMPO_GIT_MS = 10_000
-function eseguiGit(cwd, argomenti) {
+async function eseguiGit(cwd, argomenti) {
+    /* ⛔ 31/10/2026 (PROPOSTA-GIT-SICURO): `git status` esegue le chiavi e i ganci che la cartella porta con sé (misurato): qui si
+       spengono. Se Git non sa dire quali sono, la chiamata vale come «git non ha risposto», mai come una lettura senza cura. */
+    const base = { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' }
+    const sicuro = await ambienteGitSicuro(cwd, base)
+    if (!sicuro) return { codice: -1, stdout: '', errore: new Error('git could not say which commands the folder configuration carries') }
     return new Promise((fine) => {
         let figlio
         try {
             /* stdin chiuso: git qui non legge niente, e un canale aperto che nessuno ascolta è uno che può far cadere il server */
-            figlio = spawn('git', argomenti, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' } })
+            figlio = spawn('git', argomenti, { cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...base, ...sicuro } })
         } catch (errore) { fine({ codice: -1, stdout: '', errore }); return }
         const pezzi = []
         const orologio = setTimeout(() => { try { figlio.kill() } catch { /* già uscito */ } }, TEMPO_GIT_MS)

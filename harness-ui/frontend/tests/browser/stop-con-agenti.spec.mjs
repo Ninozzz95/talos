@@ -172,6 +172,36 @@ test.describe('Stop con sotto-agenti al lavoro', () => {
   });
 });
 
+/*
+ * Revisione del blocco 25, R11: con «Ferma tutto» `stopRealSession('tutte')` non mette l'avviso «Fermata» (vivi = 0), e su una chat che nel frattempo si è
+ *   fermata non nasce nemmeno la carta «Hai fermato il giro». Il riscontro è la riga dell'evento durevole `talos.figlie-fermate`, che il server manda con
+ *   `chatFerma: true` proprio in quel caso (`tests/stop-a-chat-ferma.test.mjs` SAF-01, `session-registry.mjs`). Qui il caso peggiore dal browser: il velo
+ *   «Fermo il giro?» aperto col giro vivo, il giro che finisce prima del clic, poi «Ferma tutto».
+ */
+test('STOP-AG-10 (R11) «Ferma tutto» quando il giro è appena finito: nessun avviso doppio, e in chat la riga «Fermati 2 agenti» dice cosa è successo', async ({ page }) => {
+  const conto = await apri(page);
+  await page.locator('#conversation').click({ position: { x: 20, y: 20 } });
+  await page.keyboard.press('Escape');
+  const velo = page.locator('#veloFermaGiro');
+  await expect(velo.locator('#fermaGiroTutto')).toBeVisible();
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    r.handleRealEvent({ type: 'RunFinished', threadId: 't', runId: 'r-1', _sequenza: 40 }, r.realSessionState.generation);
+  });
+  // il velo non si chiude a giro finito (nessun `chiudiVeloMockup('veloFermaGiro')` sulla fine del giro): «Ferma tutto» parte su una chat già ferma
+  await expect(velo.locator('#fermaGiroTutto')).toBeVisible();
+  await velo.locator('#fermaGiroTutto').click();
+  await expect.poll(() => conto.stop).toEqual([{ figlie: 'tutte' }]);
+  await page.evaluate(() => {
+    const r = window.__talosHarnessUiRuntime;
+    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.figlie-fermate', value: { quante: 2, ids: ['sp-f1', 'sp-f2'], da: 'persona', chatFerma: true }, _sequenza: 41 }, r.realSessionState.generation);
+  });
+  const conv = page.locator('#conversation');
+  await expect(conv.getByText('Fermati 2 agenti', { exact: true })).toBeVisible();
+  await expect(page.locator('.talos-toast, [role="status"]').filter({ hasText: 'Fermata' })).toHaveCount(0);
+  await page.screenshot({ path: fotoDi('r11-ferma-tutto-chat-appena-ferma-chiaro') });
+});
+
 test('STOP-AG-09 la carta del permesso dice cosa e quanti: «tutti i sotto-agenti» con childId "all", «un sotto-agente» col singolo', async ({ page }) => {
   await apri(page);
   await page.evaluate(() => {

@@ -112,6 +112,16 @@ async function altriGiri(registro, g, sessionId, storia, cartellaStore, { coda =
   return nuova;
 }
 
+test('PASSI-15c — il riassunto di fine giro riporta le voci aperte dei Passi', async (t) => {
+  const { registro, g, avvia } = ambiente(t, { tetto: SCENA_GRANDE.tetto });
+  const sessionId = avvia();
+  g.tutti[0].input.onEvento({ type: 'CUSTOM', name: 'talos.passi.v1', value: { revisione: 1, voci: [{ testo: 'VOCE-APERTA-DELLA-PROVA', stato: 'pending' }] } });
+  const storia = storiaGrande(SCENA_GRANDE.letture);
+  g.tutti[0].concludi(storia);
+  await attendi(() => registro.statoCompattazione(sessionId)?.record?.coveredThrough === storia.length, 'il riassunto di fine giro non ha scritto il record');
+  assert.ok(JSON.stringify(registro.statoCompattazione(sessionId).record.riassunto).includes('VOCE-APERTA-DELLA-PROVA'));
+});
+
 test('S2A-01 — dopo un riassunto di fine giro, il /compact a mano SOSTITUISCE il record: il giro dopo vede il riassunto manuale, non quello vecchio', async (t) => {
   const { registro, r, g, avvia, cartellaStore } = ambiente(t, { tetto: SCENA_GRANDE.tetto });
   const sessionId = avvia();
@@ -586,4 +596,39 @@ test('K-REGISTRO-01 — fine giro del registro: le richieste vecchie lunghe si a
     assert.ok(intero === log(1) || intero === log(2), 'e ha il testo intero');
   }
   assert.ok(!record.riassunto.some((m) => typeof m.content === 'string' && (m.content === log(1) || m.content === log(2))), 'nessun log intero resta nella proiezione');
+});
+
+/* Spesa di servizio (owner 30/10/2026; contratto CONTRATTO-SPESA-DI-SERVIZIO §1-2; prova chiesta dalla CLI): il riassunto pagato del
+   /compact è una riga `consumo-di-servizio` con scopo 'compact' e inPrimoPiano true (la persona lo aspetta); quello di fine giro 'riassunto'. */
+test('SERVIZIO-COMPACT-01 — il /compact a mano lascia UNA riga scopo «compact» in primo piano; il fine giro prima resta «riassunto», non in primo piano', async (t) => {
+  const { registro, g, avvia, cartellaStore } = ambiente(t, { tetto: SCENA_GRANDE.tetto, consumoDiServizioDurevole: true });
+  const sessionId = avvia();
+  const storia = storiaGrande(SCENA_GRANDE.letture);
+  g.tutti[0].concludi(storia);
+  await attendi(() => registro.statoCompattazione(sessionId)?.record?.coveredThrough === storia.length, 'il riassunto di fine giro non ha scritto il record');
+  await altriGiri(registro, g, sessionId, storia, cartellaStore, { coda: SCENA_GRANDE.coda, richieste: SCENA_GRANDE.richieste });
+  const esito = await registro.compatta(sessionId);
+  assert.equal(esito.compattato, true, JSON.stringify(esito));
+  await attendiScritture({ cartellaStore, sessionId });
+  const spese = righe(cartellaStore, sessionId).filter((r) => r?.type === 'CUSTOM' && r.name === 'consumo-di-servizio').map((r) => r.value);
+  assert.deepEqual(spese.map((v) => [v.scopo, v.inPrimoPiano, v.esito]), [['riassunto', false, 'completato'], ['compact', true, 'completato']], JSON.stringify(spese));
+  assert.equal('runId' in spese[1], false, 'un /compact a mano fra due giri non è di nessun giro (CLI)');
+  assert.equal(typeof spese[0].runId, 'string', 'il fine giro sì');
+  /* Spesa dei riassunti nella scheda Contesto (owner 30/10 sera; Mobile 4: tutto dal GIORNALE, come alla riapertura): ogni riga di spesa
+     porta l'id del suo riassunto, la fine applicata e il record lo stesso id; due riassunti, due id (CLI 2) */
+  const fini = righe(cartellaStore, sessionId).filter((r) => r?.type === 'CUSTOM' && r.name === 'talos.compattazione' && r.value?.fase === 'fine' && r.value.compattato)
+    .map((r) => r.value);
+  const records = righe(cartellaStore, sessionId).filter((x) => x?.tipo === 'compattazione').map((x) => x.record);
+  assert.equal(fini.length, 2, JSON.stringify(fini));
+  for (const [i, v] of spese.entries()) {
+    assert.match(String(v.idRiassunto), /^rias-[0-9a-f]{12}-\d+$/u, `riga ${i} senza id`);
+    assert.equal(fini[i].idRiassunto, v.idRiassunto, `la fine ${i} e la sua riga di spesa`);
+    assert.equal(records[i]?.idRiassunto, v.idRiassunto, `il record ${i} e la sua riga di spesa`);
+  }
+  assert.notEqual(spese[0].idRiassunto, spese[1].idRiassunto, 'fine giro e /compact sono due riassunti');
+  /* il totale «dove c'è già» (owner 30/10 sera): l'elenco delle sessioni porta il campo `servizio`; il riassuntore di questa prova non
+     dichiara l'uso ⇒ due righe non misurate e nessun token inventato */
+  const riga = registro.elenca().find((r) => r.sessionId === sessionId || r.id === sessionId);
+  assert.ok(riga, 'la sessione è nell\'elenco');
+  assert.deepEqual(riga.servizio, { prompt_tokens: 0, completion_tokens: 0, misurate: 0, nonMisurate: 2 });
 });

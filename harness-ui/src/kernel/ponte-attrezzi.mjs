@@ -67,7 +67,11 @@ export const ATTREZZI_DIFFERIBILI = Object.freeze(new Set([
     'remote_device_send_file', // R5.13 (24/10/2026): mandare un file a un dispositivo, come gli altri del remoto
     'view_image', // owner 27/10/2026: nato dopo il 17/10, come gli altri (regola del 24/10)
     'report_problem', // «Segnala un problema» (29/10/2026): nato dopo il 17/10, dietro il ponte come gli altri (regola del 24/10)
+    'local_model', // 01/11/2026: aprire, cambiare e chiudere i modelli locali dalla chat, dietro il ponte (regola del 24/10, Desktop)
     'local_page', // owner 27/10/2026 (server locali), scritto il 29/10: nato dopo il 17/10, come gli altri (regola del 24/10)
+    'browser_page', // decisione 201 (04/11/2026): nato dopo il 17/10, dietro il ponte come gli altri (regola del 24/10)
+    'talos_help', // Centro assistenza (owner 01/11/2026): dietro il ponte, una riga nel catalogo (condizione di Performance)
+    'app_settings', // Fase 8 «Impostazioni dalla chat» (owner 01/11/2026): dietro il ponte, una riga < 200 caratteri (Performance 2)
 ]))
 
 /*

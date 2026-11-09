@@ -388,3 +388,13 @@ test('F15 — la classe è DICHIARATA e congelata: chi la legge non può cambiar
   assert.ok(PERCORSI_SEGRETI.nomiFile.includes('.provider-runtime.json'));
   assert.ok(FILE_DI_CONTROLLO.file.includes('.provider-runtime.json'));
 });
+
+test('ePercorsoDiControllo: la scelta «Uso del computer» e i luoghi sono file di controllo (decisione 310, revisione dei permessi 06/11) — nominati a mano', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'talos-controllo-cu-'));
+  t.after(() => rimuoviCartellaDiProvaAttesa(root));
+  for (const nome of ['.computer-use-impostazione.json', '.computer-use-luoghi.json']) {
+    assert.equal(ePercorsoDiControllo(root, nome), true, nome + ' alla radice');
+    assert.equal(ePercorsoDiControllo(root, 'harness-ui/' + nome), true, nome + ' annidato');
+  }
+  assert.equal(ePercorsoDiControllo(root, 'computer-use-impostazione.json'), false, 'un nome vicino del progetto resta normale');
+});

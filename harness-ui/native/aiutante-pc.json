@@ -1,0 +1,8 @@
+{
+  "nota": "L'aiutante del PC per il computer use (cua-driver.exe potato, MIT): nel repo NON c'è l'exe, c'è questo riferimento. scripts/scarica-aiutante-pc.mjs scarica i due asset di questa release interna con gh release download, controlla dimensione e sha256 PRIMA di copiarli e li posa in native/aiutante-pc/. L'impronta dell'exe sta SOLO in IMPRONTA_AIUTANTE_PC (src/computer-use/aiutante-mcp.mjs) e il tag ne deriva; quella degli avvisi è la riga rust/THIRD_PARTY_NOTICES.md di native/aiutante-nativo/IMPRONTE.sha256. Exe ricostruito ⇒ impronta nuova nel codice, release nuova col tag nuovo, byte qui. Decisione dell'owner del 09/11/2026, strada A.",
+  "repository": "Ninozzz95/talos",
+  "tag": "aiutante-pc-592abc5c72494fb8",
+  "asset": "cua-driver.exe",
+  "avvisi": "THIRD_PARTY_NOTICES.md",
+  "byte": 54299071
+}

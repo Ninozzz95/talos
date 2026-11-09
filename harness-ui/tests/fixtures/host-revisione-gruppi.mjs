@@ -6,4 +6,5 @@ if (process.argv[4] === 'gestore') process.on('SIGINT', () => console.log('host:
 if (process.argv[4] === 'gestore-term') process.on('SIGTERM', () => console.log('host: SIGTERM gestito, resto vivo'));
 void eseguiComandoSandboxato(process.argv[3], process.argv[2], { timeoutMs: 120_000, onAvvio: (pid) => console.log(`GRUPPO ${typeof pid === 'object' ? pid?.pid : pid}`) });
 console.log('HOST PRONTO');
-setInterval(() => {}, 1000);
+// Fuga trovata il 31/10/2026 in WSL: 32 host vivi da due giorni. Un host che nessuno chiude (prova caduta prima del suo finally, corsa uccisa) esce da solo.
+setTimeout(() => process.exit(0), Number(process.env.TALOS_HOST_PROVA_MS) || 300_000);

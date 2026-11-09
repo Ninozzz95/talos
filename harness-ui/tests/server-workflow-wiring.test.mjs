@@ -33,7 +33,7 @@ async function boot(root, port, extraEnv = {}) {
      2 cartelle restavano nella TEMP di chi lanciava la suite. Dentro `root` spariscono con lui. */
   const tempDelServer = join(root, 'temp');
   mkdirSync(tempDelServer, { recursive: true });
-  const child = spawn(process.execPath, ['server.mjs'], {
+  const child = spawn(process.execPath, ['server.mjs', '--senza-gettone=prove'], {
     cwd: harnessDir, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,

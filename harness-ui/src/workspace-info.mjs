@@ -21,6 +21,7 @@
  * `mobile/`, `packages/*` e i vendor, senza camminare l'albero intero.
  */
 import { readdir, readFile, stat } from 'node:fs/promises';
+import { ambienteGitSicuro } from './kernel/git-sicuro.mjs';
 import { join, parse, sep } from 'node:path';
 import { spawn } from 'node:child_process';
 import { ambienteSenzaVariabiliDelServer } from './ambiente-solo-server.mjs';
@@ -88,13 +89,22 @@ export async function contaFile(percorso, { tetto = TETTO_FILE, salta = SALTA } 
   return { file, cartelle, oltre };
 }
 
-function git(argomenti, cwd) {
+/* `rev-parse` non esegue niente della cartella (misurato il 31/10 con tutti i vettori insieme: fsmonitor, filtri, textconv, ganci, firma) */
+const SENZA_CURA = Object.freeze({});
+
+async function git(argomenti, cwd, cura = undefined) {
+  /* ⛔ 31/10/2026 (PROPOSTA-GIT-SICURO, misurato su QUESTA funzione: un `core.fsmonitor` della cartella partiva a ogni inizio giro):
+     le chiavi eseguibili che la cartella porta, i suoi ganci e i sottomoduli spenti; se Git non sa dirle, la lettura si salta.
+     `cura` già pronta: chi chiama la legge una volta e la passa (patto con Performance: mai in fila davanti alla richiesta). */
+  const base = ambienteSenzaVariabiliDelServer();
+  const sicuro = cura ?? await ambienteGitSicuro(cwd, base);
+  if (!sicuro) return null;
   return new Promise((risolvi) => {
     let uscita = '';
     let processo;
     try {
       /* ⛔ 17/09/2026 (A-bis): `env` dichiarato — senza, il figlio eredita l'ambiente INTERO del server (token e chiavi compresi). */
-      processo = spawn('git', argomenti, { cwd, windowsHide: true, env: ambienteSenzaVariabiliDelServer() });
+      processo = spawn('git', argomenti, { cwd, windowsHide: true, env: { ...base, ...sicuro } });
     } catch { risolvi(null); return; }
     const timer = setTimeout(() => { try { processo.kill(); } catch { /* già morto */ } risolvi(null); }, 4000);
     processo.stdout?.on('data', (pezzo) => { uscita += String(pezzo); });
@@ -105,13 +115,19 @@ function git(argomenti, cwd) {
 
 /** Ramo, modifiche non salvate, repo annidati (F19-F21). Se non è un repo, torna `null` senza rumore. */
 export async function statoGit(percorso, { profondita = PROFONDITA_REPO_ANNIDATI, eseguiGit = git } = {}) {
-  const dentro = await eseguiGit(['rev-parse', '--is-inside-work-tree'], percorso);
+  /* Patto con Performance (31/10/2026, misurato da loro: `git config --show-scope` ~13 ms contro ~36 dello `status`): le chiavi della
+     cartella si leggono UNA volta e IN PARALLELO al primo `rev-parse`, che non ne ha bisogno; mai una chiamata in fila in più. */
+  const [dentro, cura] = await Promise.all([
+    eseguiGit(['rev-parse', '--is-inside-work-tree'], percorso, SENZA_CURA),
+    ambienteGitSicuro(percorso, ambienteSenzaVariabiliDelServer()),
+  ]);
   if (!dentro || dentro.trim() !== 'true') return null;
   /* P18 (26/09/2026): ramo e stato sono indipendenti, si chiedono INSIEME (misurato all'avvio di un turno: ~55 ms
      in meno, due processi git in fila diventano uno accanto all'altro). */
   const [ramoGrezzo, stato] = await Promise.all([
-    eseguiGit(['rev-parse', '--abbrev-ref', 'HEAD'], percorso),
-    eseguiGit(['status', '--porcelain'], percorso),
+    eseguiGit(['rev-parse', '--abbrev-ref', 'HEAD'], percorso, SENZA_CURA),
+    /* se Git non ha saputo dire le chiavi, lo stato non si legge (mai senza cura) */
+    cura ? eseguiGit(['status', '--porcelain'], percorso, cura) : Promise.resolve(null),
   ]);
   const ramo = (ramoGrezzo || '').trim() || null;
   const nonSalvate = stato === null ? null : stato.split('\n').filter((r) => r.trim()).length;

@@ -38,7 +38,10 @@ const input = Object.freeze({
 const RITIRATE = Object.freeze({
   // D21 (PR #27), owner approval: the wizard is removed, not silently marked completed.
   // No key is read/written and existing legacy markers must never reopen the wizard.
-  storageKeys: ['talos.harness.desktop.intro.v1'],
+  storageKeys: ['talos.harness.desktop.intro.v1',
+    /* 31/10/2026 (FE-043, consegna della Frontend; owner 30/10 «visto uguale ovunque»): il «visto» delle notifiche sta nel registro
+       del server (`POST /api/v1/notifications/seen`), non più nel localStorage di un browser solo */
+    'talos.harness.desktop.notifiche.v1'],
   endpointFragments: [
     '/api/v1/chat', // owner 24/8: niente sezione chat separata — l'harness è l'unica chat
     /* 18/09/2026 — qui stava «/api/v1/setup» come rotta RITIRATA (PO-27 aveva tolto il suo unico chiamante, la modale del

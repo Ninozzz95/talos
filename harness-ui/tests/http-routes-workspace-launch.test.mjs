@@ -37,7 +37,7 @@ function registryFinto() {
 async function listen(t) {
   const workspaceLaunchStore = launchStoreFinto();
   const sessionRegistry = registryFinto();
-  const app = createHttpApp({ staticHandler: async () => null, workspaceLaunchStore, sessionRegistry });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, workspaceLaunchStore, sessionRegistry });
   const server = createServer(app);
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise((resolve) => server.close(resolve)));

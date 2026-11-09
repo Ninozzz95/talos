@@ -22,8 +22,8 @@
  */
 
 import { ALPN_ACCOPPIAMENTO, ALPN_LAVORO } from './accoppiamento.mjs';
-import { codifica, creaLettore, messaggioDiErrore } from './filo.mjs';
-import { senzaPercorsiAssoluti } from './operazioni.mjs';
+import { BYTE_MASSIMI, codifica, creaLettore, messaggioDiErrore } from './filo.mjs';
+import { LETTURE_DEL_CONTRATTO, senzaPercorsiAssoluti } from './operazioni.mjs';
 
 /*
  * D-RM4-5 (Mobile, 20/10/2026): il MOTIVO di un rifiuto, per il telefono. Solo un identificatore corto (`provider-key-missing-named`)
@@ -39,6 +39,7 @@ export function spiegazionePerIlTelefono(e) {
 }
 export function motivoPerIlTelefono(e) {
   if (typeof e?.reason !== 'string' || !MOTIVO_VALIDO.test(e.reason)) return {};
+  if (e.paramsControllati === true) return { reason: e.reason, params: e.params };
   const params = {};
   if (e.params && typeof e.params === 'object' && !Array.isArray(e.params)) {
     for (const [k, v] of Object.entries(e.params).slice(0, 10)) {
@@ -56,9 +57,35 @@ export const MEMORIA_IDEMPOTENZA_MS = 10 * 60_000;
  *   base64url): ricordandole, uno scarico da 25 MiB terrebbe ~34 MiB per 10 minuti e il tetto di 512 risposte arriverebbe a ~350 MiB
  *   per dispositivo. E non serve: rileggere lo stesso intervallo è già idempotente, e se il file è cambiato nel frattempo la risposta
  *   giusta è `FILE_GONE`, non i byte di prima.
+ * D-29 (revisione del blocco 14): lo stesso vale per un diff, fino a 512 KB a risposta. Ridarne uno vecchio sarebbe anche sbagliato: il file può essere cambiato.
  */
-export const RISPOSTE_NON_RICORDATE = Object.freeze(new Set(['file.read']));
+export const RISPOSTE_NON_RICORDATE = Object.freeze(new Set(['file.read', ...LETTURE_DEL_CONTRATTO]));
 export const RISPOSTE_RICORDATE_MASSIME = 512;
+/*
+ * Punto 14 del Mobile: le richieste di una connessione vanno in fila, e `session.git.fetch-stop` restava dietro il `fetch` che doveva fermare (nemmeno il ping passava). Le voci che
+ *   aspettano la rete o un modello girano accanto alla fila, al più `VOCI_LUNGHE_INSIEME` per connessione: oltre, la fila aspetta che una finisca. Le risposte si abbinano con `n`.
+ */
+export const VOCI_LUNGHE = Object.freeze(new Set(['session.git.fetch', 'session.git.pull', 'session.git.push', 'session.git.commit-message', 'session.research.recheck']));
+const VOCI_LUNGHE_INSIEME = 4;
+/*
+ * B3 (revisione 3 del Mobile): chi legge i messaggi non aspetta più chi li esegue. Il ping e `.fetch-stop` passano anche con le voci lunghe al tetto o una voce normale appesa, e il
+ *   resto va in fila, nell'ordine in cui è arrivato. La fila ha un tetto: una richiesta pesa fino a 1 MiB, e oltre si smette di leggere, come prima. `.fetch-stop` sta fuori perché ferma una
+ *   voce che gira accanto alla fila: non ha un ordine da rispettare. Le altre voci che fermano restano in fila: `session.stop` deve arrivare dopo il messaggio che lo precede.
+ * ⛔ N7, limite dichiarato: con 64 voci in fila il ping e `.fetch-stop` aspettano anche loro. Per farli passare si dovrebbe continuare a leggere, quindi tenere senza tetto richieste da 1 MiB, o
+ *   rifiutarle con una risposta che il contratto non ha.
+ * N5: `.fetch-stop` ferma anche il `.fetch` che non è ancora partito, su ogni connessione del dispositivo. Quel `.fetch` resta al suo posto e al suo turno risponde `GIT_ABORTED`, senza partire.
+ */
+const FILA_MASSIMA = 64;
+const VOCE_FUORI_FILA = 'session.git.fetch-stop';
+const VOCE_CHE_SI_FERMA = 'session.git.fetch';
+/*
+ * Sospetto del Mobile: con più voci insieme e gli eventi non attesi, due scritture potevano sovrapporsi, e `writeAll` di iroh non dichiara che cosa succede. Una alla volta, nell'ordine in cui
+ *   sono state chieste. `scrivi` resta sincrona per chi la chiama: `codifica` lancia prima di arrivare qui, ed è quel lancio che D-44 raccoglie.
+ */
+function scrittureInOrdine(stream) {
+  let ultima = Promise.resolve();
+  return { ...stream, scrivi(byte) { const questa = ultima.then(() => stream.scrivi(byte)); ultima = questa.catch(() => {}); return questa; } };
+}
 const N_VALIDO = /^[A-Za-z0-9_-]{8,64}$/;
 
 /**
@@ -90,6 +117,11 @@ export function creaServizioRemoto({
   const vive = new Map();
   /** id del dispositivo → Map n → { quando, risposta } */
   const ricordate = new Map();
+  /* B9: id del dispositivo → Map n → promessa della risposta, per le voci che si ricordano. La memoria qui sopra vale dalla fine della voce: mentre gira, lo stesso `n` su una connessione
+     nuova la rifaceva, e un invio partiva due volte. Si aspetta la prima, come `lunghe` fa sulla stessa connessione, invece di un rifiuto: il telefono ha già la risposta che gli serve. */
+  const inVolo = new Map();
+  /* N5: id del dispositivo → Set delle funzioni che fermano i `.fetch` non ancora partiti, una per connessione */
+  const fileVive = new Map();
 
   const scrivi = (stream, m) => stream.scrivi(codifica(m));
   const ricorda = (dispositivoId, n, risposta) => {
@@ -177,46 +209,155 @@ export function creaServizioRemoto({
     avvisa({ tipo: 'telefono-collegato', id: dispositivo.id });
     dispositivi.visto?.(dispositivo.id)?.catch?.(() => {});
     const iscrizioni = new Map();
-    try {
-      for await (const m of messaggi(stream)) {
-        if (!(await dispositivi.ammesso(remoteId))) { await scrivi(stream, messaggioDiErrore('REVOKED')); break; }
-        if (m.t === 'ping') { await scrivi(stream, { t: 'pong', s: m.s ?? null }); continue; }
-        if (m.t !== 'req') { await scrivi(stream, messaggioDiErrore('BAD_MESSAGE')); continue; }
-        if (typeof m.n !== 'string' || !N_VALIDO.test(m.n) || typeof m.op !== 'string') { await scrivi(stream, messaggioDiErrore('BAD_MESSAGE', { n: typeof m.n === 'string' ? m.n.slice(0, 64) : undefined })); continue; }
-        const gia = giaRisposta(dispositivo.id, m.n);
-        if (gia) { await scrivi(stream, gia); continue; }
-        let risposta;
-        /* Ciò che deve succedere DOPO che il telefono ha la risposta (chiudere la connessione dopo «Dimentica questo computer»). */
-        const dopo = [];
-        try {
-          /* 26/10/2026 (Mobile, contratto `spazio`): un PC già accoppiato e poi aggiornato dice chi è e che cosa sa fare anche alla
-             RICONNESSIONE, non solo in `pair.code`/`pair.ok`. Sola lettura, dal servizio stesso (non è una rotta HTTP). Un PC più vecchio
-             risponde UNKNOWN_OPERATION, che il telefono legge come «nessuna capacità». */
-          const data = m.op === 'pc.info'
-            ? { id: pcId, nome: nomePc, programma, ...(effimero === true ? { effimero: true } : {}), ...conCapacita }
-            : await operazioni.esegui(m.op, m.args ?? {}, {
-            dispositivo, n: m.n, iscrizioni, dopoLaRisposta: (fn) => { dopo.push(fn); },
-            /* un'iscrizione agli eventi: `emetti` manda sullo stesso stream; `fine` la chiude quando si chiude la connessione */
-            iscrivi: (sub, chiudi) => { iscrizioni.set(sub, chiudi); return (data) => scrivi(stream, { t: 'evt', sub, data }); },
-          });
-          risposta = { t: 'res', n: m.n, ok: true, data: data ?? null };
-        } catch (e) {
-          risposta = { t: 'res', n: m.n, ok: false, code: typeof e?.code === 'string' ? e.code : 'OPERATION_FAILED', message: String(e?.message ?? '').slice(0, 300),
-            ...motivoPerIlTelefono(e), // D-RM4-5: il telefono sceglie la frase giusta dal motivo, come la finestra del PC
-            ...spiegazionePerIlTelefono(e), // Mobile 27/10/2026: la frase precisa, come la vede la finestra del PC
-            /* RA-04 (Mobile, 20/10/2026): lo stato HTTP della rotta, quando c'è. Senza, il telefono lo ricavava dal codice e per i codici
-               che non conosce metteva 500: una risposta rifiutata per validazione (400/422) o non più attuale (409) diventava «esito
-               incerto» e la carta restava bloccata. Solo un intero fra 400 e 599: mai un numero che arrivi da altrove. */
-            ...(Number.isInteger(e?.stato) && e.stato >= 400 && e.stato <= 599 ? { stato: e.stato } : {}) };
-        }
-        if (!RISPOSTE_NON_RICORDATE.has(m.op)) ricorda(dispositivo.id, m.n, risposta);
-        await scrivi(stream, risposta);
-        for (const fn of dopo) { try { await fn(); } catch { /* la risposta è già partita */ } }
+    const filo = scrittureInOrdine(stream);
+    /* gli `n` di questa connessione in fila o al lavoro: lo stesso `n` mentre gira non dà una seconda risposta */
+    const presenti = new Set();
+    /* N5: gli `n` dei `.fetch` fermati prima di partire, e dei `.fetch-stop` che ne hanno fermato qualcuno */
+    const fermate = new Set();
+    const conFermate = new Set();
+    const rispondiOra = async (m, consegna) => {
+      let risposta;
+      /* Ciò che deve succedere DOPO che il telefono ha la risposta (chiudere la connessione dopo «Dimentica questo computer»). */
+      const dopo = [];
+      try {
+        /* 26/10/2026 (Mobile, contratto `spazio`): un PC già accoppiato e poi aggiornato dice chi è e che cosa sa fare anche alla
+           RICONNESSIONE, non solo in `pair.code`/`pair.ok`. Sola lettura, dal servizio stesso (non è una rotta HTTP). Un PC più vecchio
+           risponde UNKNOWN_OPERATION, che il telefono legge come «nessuna capacità». */
+        if (fermate.delete(m.n)) throw Object.assign(new Error('The computer refused this action.'), { code: 'GIT_ABORTED', stato: 409 });
+        const haFermato = conFermate.delete(m.n);
+        const data = m.op === 'pc.info'
+          ? { id: pcId, nome: nomePc, programma, ...(effimero === true ? { effimero: true } : {}), ...conCapacita }
+          : await operazioni.esegui(m.op, m.args ?? {}, {
+          dispositivo, n: m.n, iscrizioni, dopoLaRisposta: (fn) => { dopo.push(fn); },
+          /* un'iscrizione agli eventi: `emetti` manda sullo stesso stream; `fine` la chiude quando si chiude la connessione */
+          iscrivi: (sub, chiudi) => { iscrizioni.set(sub, chiudi); return (data) => scrivi(filo, { t: 'evt', sub, data }); },
+        });
+        risposta = { t: 'res', n: m.n, ok: true, data: haFermato && data ? { ...data, fermato: true } : (data ?? null) };
+      } catch (e) {
+        /* D-37: prima il filtro, poi il taglio: un percorso a cavallo dei 300 caratteri uscirebbe a metà, e a metà il filtro non lo riconosce */
+        risposta = { t: 'res', n: m.n, ok: false, code: typeof e?.code === 'string' ? e.code : 'OPERATION_FAILED', message: senzaPercorsiAssoluti(String(e?.message ?? '')).slice(0, 300),
+          ...motivoPerIlTelefono(e), // D-RM4-5: il telefono sceglie la frase giusta dal motivo, come la finestra del PC
+          ...spiegazionePerIlTelefono(e), // Mobile 27/10/2026: la frase precisa, come la vede la finestra del PC
+          /* RA-04 (Mobile, 20/10/2026): lo stato HTTP della rotta, quando c'è. Senza, il telefono lo ricavava dal codice e per i codici
+             che non conosce metteva 500: una risposta rifiutata per validazione (400/422) o non più attuale (409) diventava «esito
+             incerto» e la carta restava bloccata. Solo un intero fra 400 e 599: mai un numero che arrivi da altrove. */
+          ...(Number.isInteger(e?.stato) && e.stato >= 400 && e.stato <= 599 ? { stato: e.stato } : {}) };
       }
+      /* D-29: `codifica` lancia oltre il tetto del filo, e fuori dal `try` qui sopra quel lancio chiudeva la connessione con tutte le iscrizioni. Una risposta troppo grande è il
+         rifiuto di QUELLA richiesta; si ricorda il rifiuto, o lo stesso `n` la rifarebbe. Le voci con molte righe hanno il loro tetto: questa è la rete per tutte le altre. */
+      let uscita;
+      try { uscita = codifica(risposta); } catch (e) {
+        if (e?.code !== 'TOO_LARGE') throw e;
+        /* revisione del blocco 25 (R10): una frase sola per codice — quella del filo, del server e del dizionario del PC */
+        risposta = { t: 'res', n: m.n, ok: false, code: 'TOO_LARGE', message: `A message cannot exceed ${BYTE_MASSIMI} bytes.`, stato: 413 };
+        uscita = codifica(risposta);
+      }
+      if (!RISPOSTE_NON_RICORDATE.has(m.op)) ricorda(dispositivo.id, m.n, risposta);
+      consegna(risposta);
+      presenti.delete(m.n); // da qui lo stesso `n` è una richiesta nuova, che trova la risposta ricordata
+      await filo.scrivi(uscita);
+      for (const fn of dopo) { try { await fn(); } catch { /* la risposta è già partita */ } }
+    };
+    /* ⛔ Il posto in `inVolo` si prende prima del primo `await`: controllo e presa stanno nello stesso giro, e due connessioni non passano insieme */
+    const rispondi = async (m) => {
+      if (RISPOSTE_NON_RICORDATE.has(m.op)) return rispondiOra(m, () => {});
+      const voli = inVolo.get(dispositivo.id) ?? new Map();
+      inVolo.set(dispositivo.id, voli);
+      let consegna;
+      voli.set(m.n, new Promise((r) => { consegna = r; }));
+      try { return await rispondiOra(m, consegna); } finally {
+        consegna(null);
+        voli.delete(m.n);
+        if (!voli.size && inVolo.get(dispositivo.id) === voli) inVolo.delete(dispositivo.id);
+      }
+    };
+    const lunghe = new Map();
+    /* F2: un guasto del filo resta un errore anche qui; se nemmeno quello si scrive, la connessione è chiusa e lo vede il ciclo */
+    const accanto = (m, lavoro) => { lunghe.set(m.n, lavoro.catch(() => scrivi(filo, messaggioDiErrore('BAD_MESSAGE', { n: m.n })).catch(() => {})).finally(() => { lunghe.delete(m.n); presenti.delete(m.n); })); };
+    /* Lo stesso `n` già risposto, o al lavoro su un'altra connessione: la prima risposta vale per tutte. `null` se è nuovo. ⛔ Sincrona: fra questo controllo e `rispondi` nessun `await` (SRV-26) */
+    const giaVista = (m) => {
+      const gia = giaRisposta(dispositivo.id, m.n);
+      if (gia) return scrivi(filo, gia);
+      const altrove = inVolo.get(dispositivo.id)?.get(m.n);
+      if (!altrove) return null;
+      presenti.add(m.n);
+      accanto(m, altrove.then((r) => (r ? filo.scrivi(codifica(r)) : undefined)));
+      return Promise.resolve();
+    };
+    let inMano = null; // la voce uscita dalla fila e non ancora partita: aspetta l'elenco o un posto
+    const dallaFila = async (m) => {
+      inMano = m;
+      if (!(await dispositivi.ammesso(remoteId))) { inMano = null; await scrivi(filo, messaggioDiErrore('REVOKED')); return false; }
+      /* ⛔ L'attesa di un posto sta prima dei controlli: fra il controllo e `rispondi` nessun `await`, o lo stesso `n` partirebbe intanto da un'altra connessione (SRV-26) */
+      if (VOCI_LUNGHE.has(m.op) && lunghe.size >= VOCI_LUNGHE_INSIEME && !fermate.has(m.n)) await Promise.race(lunghe.values());
+      inMano = null;
+      const ripetuta = giaVista(m);
+      if (ripetuta) { fermate.delete(m.n); await ripetuta; return true; }
+      if (!VOCI_LUNGHE.has(m.op)) { await rispondi(m); return true; }
+      accanto(m, rispondi(m));
+      return true;
+    };
+    let fila = [];
+    const fermaInFila = (sessionId) => {
+      if (typeof sessionId !== 'string') return 0; // un `.fetch-stop` senza sessione è rifiutato: non ferma niente
+      const daFermare = [...fila, ...(inMano ? [inMano] : [])].filter((m) => m.op === VOCE_CHE_SI_FERMA && m.args?.sessionId === sessionId && !fermate.has(m.n));
+      for (const m of daFermare) fermate.add(m.n);
+      return daFermare.length;
+    };
+    const fileDelDispositivo = fileVive.get(dispositivo.id) ?? new Set();
+    fileVive.set(dispositivo.id, fileDelDispositivo);
+    fileDelDispositivo.add(fermaInFila);
+    let lavoratore = null;
+    let guasto = null;
+    let spazio = () => {};
+    let ferma;
+    const fermata = new Promise((r) => { ferma = r; });
+    const svuota = async () => {
+      try {
+        while (fila.length) {
+          const m = fila.shift();
+          spazio();
+          const avanti = await dallaFila(m);
+          if (!lunghe.has(m.n)) presenti.delete(m.n);
+          if (!avanti) { fila = []; ferma(); }
+        }
+      } catch (e) { fila = []; guasto = e; ferma(); } finally { lavoratore = null; }
+    };
+    try {
+      try {
+        const giro = messaggi(stream);
+        for (;;) {
+          const letto = await Promise.race([giro.next(), fermata]);
+          if (!letto || letto.done) break;
+          const m = letto.value;
+          const richiesta = m.t === 'req' && typeof m.n === 'string' && N_VALIDO.test(m.n) && typeof m.op === 'string';
+          if (richiesta && presenti.has(m.n)) continue;
+          if (richiesta && m.op !== VOCE_FUORI_FILA) {
+            presenti.add(m.n);
+            fila.push(m);
+            lavoratore ??= svuota();
+            if (fila.length >= FILA_MASSIMA) await Promise.race([new Promise((r) => { spazio = r; }), fermata]);
+            continue;
+          }
+          if (!(await dispositivi.ammesso(remoteId))) { await scrivi(filo, messaggioDiErrore('REVOKED')); break; }
+          if (m.t === 'ping') { await scrivi(filo, { t: 'pong', s: m.s ?? null }); continue; }
+          if (m.t !== 'req') { await scrivi(filo, messaggioDiErrore('BAD_MESSAGE')); continue; }
+          if (!richiesta) { await scrivi(filo, messaggioDiErrore('BAD_MESSAGE', { n: typeof m.n === 'string' ? m.n.slice(0, 64) : undefined })); continue; }
+          /* N6: la stessa regola della fila. Senza, il secondo `.fetch-stop` riscriveva il posto del primo in `inVolo` */
+          const ripetuta = giaVista(m);
+          if (ripetuta) { await ripetuta; continue; }
+          presenti.add(m.n);
+          if ([...fileDelDispositivo].reduce((quante, ferma) => quante + ferma(m.args?.sessionId), 0) > 0) conFermate.add(m.n);
+          accanto(m, rispondi(m));
+        }
+      } finally { await lavoratore; } // chi ha chiuso dopo aver chiesto riceve lo stesso le sue risposte, come quando la fila non c'era
+      if (guasto) throw guasto;
     } catch (e) {
-      try { await scrivi(stream, messaggioDiErrore(e.code === 'TOO_LARGE' || e.code === 'VERSION_UNSUPPORTED' ? e.code : 'BAD_MESSAGE')); } catch { /* già chiuso */ }
+      try { await scrivi(filo, messaggioDiErrore(e.code === 'TOO_LARGE' || e.code === 'VERSION_UNSUPPORTED' ? e.code : 'BAD_MESSAGE')); } catch { /* già chiuso */ }
     } finally {
       for (const chiudi of iscrizioni.values()) { try { chiudi?.(); } catch { /* niente */ } }
+      fileDelDispositivo.delete(fermaInFila);
+      if (!fileDelDispositivo.size && fileVive.get(dispositivo.id) === fileDelDispositivo) fileVive.delete(dispositivo.id);
       insieme.delete(connessione);
       if (!insieme.size) { vive.delete(dispositivo.id); avvisa({ tipo: 'telefono-scollegato', id: dispositivo.id }); }
       connessione.chiudi('DONE');

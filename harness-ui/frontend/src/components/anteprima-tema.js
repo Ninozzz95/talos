@@ -159,9 +159,7 @@ function nodo(doc, tag, classe, testo) {
  *   riceve (NousResearch/hermes-agent, PR #48615, «the prefix slot clones the icon, overwriting its
  *   className», letto il 18/09/2026) — qui si sta dalla parte opposta, e per non ripetere quella
  *   fragilita' la stringa si scrive nella forma che il prodotto riconosce.
- * ⛔ Il marchio d'invio del mockup e' un simbolo `arrow` che nel sprite del prodotto NON esiste
- *   (`#i-arrow` assente): si usa `send`, che e' cio' che il prodotto mette nella stessa posizione
- *   nel composer vero e in `miniConversazione()`. Sostituzione dichiarata nel referto.
+ * ⛔ Il marchio d'invio è `arrow-up`, lo stesso del composer vero e di `miniConversazione()`.
  */
 function icona(doc, nome, classe = '') {
   const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -235,7 +233,7 @@ export function montaAnteprimaTema(contenitore, {
      si legge come una conversazione vera. Il `+` e' un `<span>`, non un `<button>` come nel mockup:
      li' apriva un cassetto che nel prodotto non esiste, e un comando che non comanda e' peggio di
      un disegno ([[app-distributed-nothing-static]]). Il marchio d'invio, in quella posizione, e'
-     quello del composer vero (`i-send`, sprite del prodotto). */
+     quello del composer vero (`i-arrow-up`, sprite del prodotto). */
   const corpo = nodo(doc, 'div', 'preview-body');
   corpo.setAttribute('inert', '');
   corpo.setAttribute('aria-hidden', 'true');
@@ -254,7 +252,7 @@ export function montaAnteprimaTema(contenitore, {
   composer.append(
     nodo(doc, 'span', 'preview-plus', '+'),
     invito,
-    icona(doc, 'send', 'i i--sm'),
+    icona(doc, 'arrow-up', 'i i--sm'),
   );
 
   corpo.append(data, titolo, sottotitolo, domanda, risposta, composer);
@@ -286,9 +284,8 @@ export function montaAnteprimaTema(contenitore, {
   comando.type = 'button';
   comando.setAttribute('aria-pressed', 'false');
   const comandoTesto = doc.createTextNode('');
-  /* ⛔ `stop` E `play` — non `pause`, che NON esiste fra gli sprite del progetto: il test
-     `icone-ripiego`/`sprite` l'avrebbe preso. Le due che servono ci sono. */
-  const comandoIcona = icona(doc, 'stop', 'i i--xs');
+  /* 31/10/2026: fermare un'anteprima è una pausa, non lo Stop di un giro */
+  const comandoIcona = icona(doc, 'pausa', 'i i--xs');
   comando.append(comandoIcona, comandoTesto);
   /*
    * ⛔ SI USA `alterna()` DELLA VISTA, non `ferma()`. Misurato leggendo l'API:
@@ -302,18 +299,22 @@ export function montaAnteprimaTema(contenitore, {
   /* ⛔ FUNCTION DECLARATION, non `const … = () =>`: `aggiorna()` (riga 362) le chiama, e con una
      `const` il riferimento sarebbe nella zona morta temporale se `aggiorna` girasse prima
      dell'assegnazione. Una funzione dichiarata è issata e non ha questo problema. */
-  function etichettaComando() { return vista.inPausa?.() ? t(testi.riprendi) : t(testi.ferma); }
+  /* Revisione UX del 04/11/2026, riga 21: «Ferma anteprima» restava nella lingua del MONTAGGIO (`testi`), mentre il resto della colonna
+     seguiva `linguaCorrente` (`rifaiTesti`). Il comando legge la lingua di adesso; lo chiamano solo `aggiorna` e il clic, dopo la riga
+     che dichiara `linguaCorrente`. */
+  const testiDiAdesso = () => testiAnteprima(linguaCorrente);
+  function etichettaComando() { return vista.inPausa?.() ? t(testiDiAdesso().riprendi) : t(testiDiAdesso().ferma); }
   /* ⛔ 28/10/2026 (sfondo acceso di serie): `aggiorna()` scatta anche a ogni pausa dello scorrimento (classe del body), e riscriveva
      comando, didascalia e stato uguali a prima — 14 scritture fuori dal messaggio mentre il testo scorre (STREAMING-FLUIDO-06). Si scrive
      solo ciò che cambia. */
   function scriviAttributo(el, nome, valore) { if (el && el.getAttribute(nome) !== valore) el.setAttribute(nome, valore); }
   function disegnaComando() {
     const fermo = Boolean(vista.inPausa?.());
-    const testo = fermo ? t(testi.riprendi) : t(testi.ferma);
+    const testo = fermo ? t(testiDiAdesso().riprendi) : t(testiDiAdesso().ferma);
     if (comandoTesto.nodeValue !== testo) comandoTesto.nodeValue = testo;
     scriviAttributo(comando, 'aria-pressed', String(fermo));
     scriviAttributo(comando, 'aria-label', etichettaComando());
-    scriviAttributo(comandoIcona.querySelector('use'), 'href', fermo ? '#i-play' : '#i-stop');
+    scriviAttributo(comandoIcona.querySelector('use'), 'href', fermo ? '#i-play' : '#i-pausa');
   }
   comando.addEventListener('click', () => {
     vista.alterna?.();

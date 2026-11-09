@@ -48,7 +48,7 @@ async function apri(page, { modo = 'dark', aspetto = {}, lingua = 'it', forza = 
     try { if (forza || !localStorage.getItem('talos.harness.desktop.settings.v1')) localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiLanguage, ...extra } })); } catch { /* storage assente */ }
   }, [modo, aspetto, lingua, forza]);
   const tentate = await guardiaScritture(page);
-  await page.route(`**/api/v1/sessions/${ID}/events`, () => { /* resta aperto e muto */ });
+  await page.route(`**/api/v1/sessions/${ID}/events*`, () => { /* resta aperto e muto */ });
   await page.goto('/');
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 10_000 });
@@ -296,6 +296,13 @@ test('BOLLE-05 · «Domande a tutta larghezza»: spenta la bolla non cambia di u
 
 test('BOLLE-06 · l’impostazione si accende dalle Impostazioni e resta dopo una ricarica', async ({ page }) => {
   const tentate = await apri(page);
+  /* Fase 8 (D2): quando la persona cambia una preferenza la finestra manda UNA copia al server. È la sola scrittura ammessa qui, e risponde come il server;
+     la revisione tiene la copia di questa finestra (le prove condividono il server). */
+  await page.route('**/api/v1/app-settings/window', (route) => {
+    if (route.request().method() === 'GET') return route.fallback();
+    tentate.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
+    return route.fulfill({ json: { ok: true, data: { revisione: Number.MAX_SAFE_INTEGER } } });
+  });
   await page.evaluate(() => window.__talosHarnessUiRuntime.setSettingsSection('chat', { persist: false }));
   await page.evaluate(() => {
     const voce = document.querySelector('.talos-sidebar [data-vaia="impostazioni"]');
@@ -315,10 +322,11 @@ test('BOLLE-06 · l’impostazione si accende dalle Impostazioni e resta dopo un
   await expect(interruttore).toHaveAttribute('aria-checked', 'true');
   const salvato = await page.evaluate(() => JSON.parse(localStorage.getItem('talos.harness.desktop.settings.v1')).appearance.userBubbleFullWidth);
   expect(salvato).toBe(true);
+  await expect.poll(() => tentate.length).toBe(1);
   await page.reload();
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await expect(page.locator('html')).toHaveClass(/user-bubble-full-width/);
-  expect(tentate).toEqual([]);
+  expect(tentate).toEqual(['POST /api/v1/app-settings/window']); // una, e la ricarica non ne manda un'altra
 });
 
 test('BOLLE-07 · rigiocata dalla storia salvata: la domanda si ferma in cima come dal vivo', async ({ page }) => {
@@ -465,11 +473,13 @@ test('BOLLE-14 · cambiata la lingua, «Domanda intera» parla la lingua nuova (
   /* la conversazione si rilegge dal server al cambio lingua (`collegaRidisegnoLingua`, app.js): il server finto la ridà ogni volta */
   const storia = [...eventiTurni(5, { lunghe: [2] }), { type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }].map((e, i) => ({ ...e, _sequenza: i + 1 }));
   await page.addInitScript(() => { if (!localStorage.getItem('talos.harness.desktop.settings.v1')) localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { uiLanguage: 'it', colorMode: 'dark' } })); });
-  let nonGet = 0;
+  let nonGet = 0; let copie = 0;
   await page.route('**/api/v1/**', (route) => {
     const req = route.request();
-    if (req.method() !== 'GET') { nonGet += 1; return route.abort(); }
     const url = new URL(req.url());
+    /* Fase 8 (D2): cambiata la lingua, la finestra manda UNA copia al server; ogni altra scrittura resta vietata */
+    if (req.method() === 'POST' && url.pathname === '/api/v1/app-settings/window') { copie += 1; return route.fulfill({ json: { ok: true, data: { revisione: Number.MAX_SAFE_INTEGER } } }); }
+    if (req.method() !== 'GET') { nonGet += 1; return route.abort(); }
     if (url.pathname === `/api/v1/sessions/${ID}/events`) return route.fulfill({ contentType: 'text/event-stream', body: `retry: 3600000
 ${storia.map((e) => `data: ${JSON.stringify(e)}
 
@@ -495,6 +505,7 @@ ${storia.map((e) => `data: ${JSON.stringify(e)}
   await scorriA(page, 5, 900);
   await expect(pulsante).toHaveText('Whole question');
   await expect(pulsante).toHaveAccessibleName('Show the whole question');
+  await expect.poll(() => copie).toBe(1);
   expect(nonGet).toBe(0);
 });
 

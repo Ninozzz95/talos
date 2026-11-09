@@ -1,0 +1,1 @@
+root = Avviso("a", null, "info", Avviso("b", null, "info", "x"))

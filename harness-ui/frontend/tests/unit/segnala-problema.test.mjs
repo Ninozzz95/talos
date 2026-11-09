@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   INDIRIZZO_NUOVA_SEGNALAZIONE, MODELLO_GITHUB, TETTO_INDIRIZZO, ETICHETTE_DEL_TIPO,
   indirizzoSegnalazione, righeDiagnostica, testoDaCopiare, creaCartaBozza,
@@ -138,4 +139,15 @@ test('SEGN-UI-06 — la carta della bozza: tipo e titolo, «Rivedi e apri» chia
   impostaLingua('en');
   assert.match(creaCartaBozza(doc, { kind: 'idea', title: 'x' }).textContent, /^Draft report · Idea“x”Review and openDiscard$/u);
   impostaLingua('it');
+});
+
+/* Ricognizione 01/11/2026: il pulsante puntava a `desktop.yml`, che stava solo nella cartella di lavoro e non nel repo.
+   Il modello si legge dal repo, e ogni campo dell'indirizzo deve esistere lì col suo id. */
+test('SEGN-UI-MODELLO — il modello citato dal pulsante sta nel repo, coi campi che l\'indirizzo riempie', () => {
+  const modello = readFileSync(new URL(`../../../../.github/ISSUE_TEMPLATE/${MODELLO_GITHUB}`, import.meta.url), 'utf8');
+  const u = new URL(indirizzoSegnalazione({ tipo: 'bug', titolo: 't', descrizione: 'd', diagnostica: DIAG }).url);
+  const campi = [...u.searchParams.keys()].filter((k) => !['template', 'title'].includes(k));
+  assert.ok(campi.includes('diagnostica'), `campi: ${campi}`);
+  for (const campo of campi) assert.match(modello, new RegExp(`^\\s+id: ${campo}$`, 'mu'), `manca il campo ${campo}`);
+  assert.match(modello, /^labels: \[desktop\]$/mu);
 });

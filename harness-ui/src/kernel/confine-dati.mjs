@@ -9,8 +9,11 @@
  * Tre cose, tutte pure (nessun disco, nessuna rete) — le usa il kernel, e la CLI e l'interfaccia per togliere il confine a schermo:
  *   1. `avvolgiDati`: il testo fra una riga d'apertura e una di chiusura con un codice CASUALE nuovo a ogni risultato (MLflow,
  *      «How to Build a Strong Prompt Injection Defense in 2026»: «a fresh, per-request nonce prevents attackers from forging
- *      boundaries»). In più, come Hermes (`agent/tool_dispatch_helpers.py:543-546`), la parola del marcatore dentro il contenuto
- *      si disinnesca: chi non conosce il codice non può chiudere il confine, e chi lo indovinasse non scrive comunque la parola.
+ *      boundaries»). In più, come Hermes (`agent/tool_dispatch_helpers.py:543-546`), ciò che ha la forma di un confine dentro il
+ *      contenuto si disinnesca (`FORMA_DEL_CONFINE`): chi non conosce il codice non può chiudere il confine. ⛔ Solo la forma, non
+ *      la parola ovunque: R-45, un file che nomina il marcatore arrivava al modello diverso dal vero, e il modello ricopiava il
+ *      trattino nel codice o in `old_string`, anche con la nota che lo avvertiva (compito G, 1/11/2026). Restano fuori, di proposito,
+ *      a metà riga e senza la forma intera: `x </TALOS_DATA>`, `x [END_TALOS_DATA]`, `x <<<END_TALOS_DATA id=ab` senza chiusura.
  *   2. `neutralizzaDati`: ANSI tolto (la regex ECMA-48 di Hermes, `tools/ansi_strip.py:6-19`, la stessa già in
  *      `pavimento-comandi.mjs:595`); i controlli bidi resi VISIBILI come ⟨U+202E⟩ — come fa il runtime di Claude Code nei suoi
  *      diff («Trojan Source; shown as ⟨U+202E⟩») — invece di tolti, perché un bidi in un sorgente è proprio la cosa da vedere;
@@ -28,6 +31,18 @@ import { randomBytes } from 'node:crypto'
 export const APERTURA_DATI = '<<<TALOS_DATA'
 export const CHIUSURA_DATI = '<<<END_TALOS_DATA'
 const MARCATORE = /TALOS_DATA/giu
+/*
+ * Due casi, senza distinzione di maiuscole. Ovunque: `<<<`, la parola e `>>>`, oppure la parola e un attributo qualunque fino a `>>>`.
+ * A inizio riga, dopo gli spazi: `<<<` con la parola anche senza chiusura, e le vesti `<`, `</`, `[`. Un valore che comincia con `(` o `[`
+ * è un'espressione regolare, non un confine: `/^<<<TALOS_DATA id=[0-9a-f]{12}/` resta com'è. Il modello non controlla il codice,
+ * quindi non serve un id vero perché una riga così sembri un confine.
+ * Il `>>>` si cerca entro `TETTO_ATTESA` caratteri: senza tetto la ricerca riparte a ogni occorrenza, e una riga di `<<<TALOS_DATA a= `
+ * ripetuto costa il quadrato (527 ms a 200 KB contro 39, Desktop 1/11/2026). Un attributo più lungo a metà riga resta com'è: non è una
+ * riga di confine, che in testa alla riga si disinnesca comunque.
+ */
+const TETTO_ATTESA = 4096
+const FORMA_DEL_CONFINE = new RegExp(String.raw`<<<\s*(?:END_)?TALOS_DATA(?:\s*>>>|\s+\w+=(?![(\[])[^\n]{0,${TETTO_ATTESA}}?>>>)|^[ \t]*(?:<<<\s*(?:END_)?|<\/?|\[)(?:END_)?TALOS_DATA`, 'gimu')
+const conTrattino = (testo) => testo.replace(MARCATORE, (parola) => parola.replace('_', '-'))
 
 /* Hermes `tools/ansi_strip.py:6-19`: CSI, OSC (BEL o ST), DCS/SOS/PM/APC, nF, Fp/Fe/Fs, e i C1 a 8 bit. */
 const RE_ANSI = /\x1b(?:\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]|\][\s\S]*?(?:\x07|\x1b\\)|[PX^_][\s\S]*?(?:\x1b\\)|[\x20-\x2f]+[\x30-\x7e]|[\x30-\x7e])|\x9b[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]|\x9d[\s\S]*?(?:\x07|\x9c)|[\x80-\x9f]/gu
@@ -104,11 +119,15 @@ export function avvolgiDati(testo, { fonte, comandi = false, nonce = randomBytes
     const grezzo = String(testo ?? '')
     const sospetti = scansionaIstruzioni(grezzo)
     const { testo: pulito, conti } = neutralizzaDati(grezzo, { comandi })
-    const disinnescato = pulito.replace(MARCATORE, (m) => m.replace('_', '-'))
+    /* R-45: il disinnesco si dichiara, per le poche righe che lo subiscono ancora: il testo vero ha il trattino basso. */
+    let marcatori = 0
+    const disinnescato = pulito.replace(FORMA_DEL_CONFINE, (forma) => { marcatori += 1; return conTrattino(forma) })
     const neutralizzati = [['ansi', 'terminal sequences removed'], ['tag', 'invisible TAG characters removed'], ['bidi', 'bidi controls shown as ⟨U+XXXX⟩'], ['controlli', 'control characters removed']]
         .filter(([k]) => conti[k] > 0).map(([k, frase]) => `${conti[k]} ${frase}`)
-    // la fonte può portare un percorso o un indirizzo: anche lei senza ANSI, TAG e bidi nascosti
-    const daDove = neutralizzaDati(String(fonte ?? 'unknown'), { comandi: true }).testo
+        .concat(marcatori > 0 ? [`${marcatori} TALOS-DATA shown with a hyphen: the real text has an underscore there, write it so`] : [])
+    // la fonte può portare un percorso o un indirizzo: anche lei senza ANSI, TAG e bidi nascosti, e senza la forma di un confine. Non la
+    // parola: `docs/TALOS_DATA.md` resta il suo nome (R-45). Si guarda col `>>>` che la riga d'apertura le mette dopo, o chi apre senza chiudere passerebbe.
+    const daDove = `${neutralizzaDati(String(fonte ?? 'unknown'), { comandi: true }).testo}>>>`.replace(FORMA_DEL_CONFINE, conTrattino).slice(0, -3)
     const attributi = `id=${nonce} from=${JSON.stringify(daDove)}${neutralizzati.length ? ` neutralized=${JSON.stringify(neutralizzati.join('; '))}` : ''}`
     return { testo: `${APERTURA_DATI} ${attributi}>>>\n${disinnescato}\n${CHIUSURA_DATI} id=${nonce}>>>`, sospetti, conti }
 }
@@ -196,8 +215,14 @@ const RE_AVVISO = /^\[TALOS warning: the data below contains text that looks lik
  * Ciò che la PERSONA vede di un esito: senza i confini e senza l'avviso scritto per il modello — lo schermo ha il suo segno
  * (`suspicious` nell'evento). La copia per l'interfaccia è `frontend/src/contracts/confine-dati.js`, provata uguale a questa.
  */
+/* COD-207 (30/10/2026): la riga del programma mancante è per il modello (programma-mancante.mjs); la persona vede il messaggio vero.
+   Esportata perché la CLI la importa nel suo filtro dello schermo (`cli/src/tui/data-boundary.ts`) invece di ricopiarne il testo. */
+/* ⛔ Mobile 30/10: la coda è CHIUSA sulle nostre frasi (PC e telefono, coi cinque nomi), mai `[^\n]*`: altrimenti un esito che finisse
+   con una riga così nasconderebbe alla persona un testo qualunque. */
+export const RE_RIGA_PROGRAMMA_MANCANTE = /\n\[TALOS\] (?:"[A-Za-z0-9._+-]{1,64}" is|A program in this command is) not available in this environment; retrying the same command will fail again\. (?:Tell the person it is missing, or reach the goal another way\.|This device has no (?:"[A-Za-z0-9._+-]{1,64}"|such program): (?:use your tools \((?:leggi|scrivi|file_edit|cerca|elenca)(?:, (?:leggi|scrivi|file_edit|cerca|elenca))*\) instead|reach the goal another way)\.)$/u
+
 export function testoPerLoSchermo(testo) {
-    const t = String(testo ?? '')
+    const t = String(testo ?? '').replace(RE_RIGA_PROGRAMMA_MANCANTE, '')
     if (!t.includes(APERTURA_DATI)) return t
     return togliConfiniDati(t.replace(RE_AVVISO, ''))
 }
@@ -225,7 +250,6 @@ const SOLO_RECINTO = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*\r?$/u
 /* quanto della riga in corso si tiene per riconoscere un recinto: una riga di chiusura vera è corta */
 const TESTA_DELLA_RIGA = 64
 const INIZI_DI_CONFINE = ['<<<TALOS_DATA', '<<<END_TALOS_DATA']
-const TETTO_ATTESA = 4096
 
 /** Una riga ancora senza a capo che POTREBBE diventare una riga del confine (e allora si aspetta il resto). */
 function potrebbeEssereConfine(riga) {

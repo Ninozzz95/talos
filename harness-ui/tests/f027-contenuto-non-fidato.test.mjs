@@ -166,7 +166,7 @@ test('F027-CONFERMA: dopo un contenuto sospetto, la scrittura chiede anche con Â
   assert.equal(domande[0].contenutoSospetto.fonte, 'leggi trappola.md');
   /* 03/10/2026 (owner: ogni parola in due lingue): il kernel manda i DATI, la domanda la scrive l'interfaccia */
   assert.deepEqual(domande[0].contenutoSospetto, {fonte: 'leggi trappola.md', motivi: ['fake_role_tag', 'priority_override'], luogo: {tipo: 'file', nome: 'trappola.md'}});
-  assert.match(esito('s'), /^REFUSED\./u);
+  assert.match(esito('s'), /^DECLINED\. The person said no/u);
   assert.throws(() => readFileSync(join(c, 'esito.txt')));
 });
 

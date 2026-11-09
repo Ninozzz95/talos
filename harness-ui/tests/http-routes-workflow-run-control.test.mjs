@@ -76,7 +76,7 @@ async function banco(t, { conRuntime = true } = {}) {
   const scheduler = createWorkflowScheduler({ orchestrator, store, capacita, onErrore: (errore) => errori.push(errore) });
   await orchestrator.recover();
   const registry = { leggiSessioneContesto: (id) => ([sessionId, altraSessione].includes(id) ? { sessionId: id } : null) };
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registry, workflowStore: store,
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registry, workflowStore: store,
     workflowRuntime: conRuntime ? { orchestrator, scheduler, capacita } : null, token: 'secret' }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {

@@ -246,6 +246,10 @@ test('WF-UI-TIME: the Time view draws one bar per attempt from the state history
   const scena = costruisciScena(14, { sessionId: 'wf-ui-tempo' });
   const { scritture } = await instradaScena(page, scena);
   const grafo = await apriDiagrammaDellaScena(page, scena);
+  /* 30/10/2026 (rossa solo sotto carico: suite a 4 lavoratori con la CPU all'86-100%, 2/2 verde da sola): le barre vengono dalla STORIA
+     degli stati, che arriva dopo l'apertura; sotto carico arrivava oltre i 5 s dell'attesa di serie e la vista contava 0 barre. Si
+     aspetta l'evento vero — la storia pronta, lo stesso segno della riproduzione (`data-pronta`) — non un tempo più lungo (regola 6). */
+  await expect(grafo.locator('.gv-rip')).toHaveAttribute('data-pronta', 'true', { timeout: 30_000 });
   await grafo.getByRole('radio', { name: 'Tempo' }).click();
   const tempo = grafo.locator('.gv-tempo');
   await expect(tempo).toBeVisible();

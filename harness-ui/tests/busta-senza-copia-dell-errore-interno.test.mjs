@@ -45,7 +45,7 @@ test('BUSTA-03 dalla rotta vera (la prova D1 del revisore): PROVIDER_KEY_MISSING
   const cartella = cartellaDiProva('talos-busta-neutra-');
   t.after(() => rimuoviCartellaDiProva(cartella));
   const sessionRegistry = { elenca: () => [], avviaLibero: () => ({ erroreAvvio: 'No API key for OpenAI.', code: 'PROVIDER_KEY_MISSING' }) };
-  const server = http.createServer(createHttpApp({ sessionRegistry }));
+  const server = http.createServer(createHttpApp({ senzaGettone: 'prove', sessionRegistry }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => server.close(r)));
   const r = await fetch(`http://127.0.0.1:${server.address().port}/api/v1/sessions/custom`, {

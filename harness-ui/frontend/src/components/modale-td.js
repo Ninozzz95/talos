@@ -61,7 +61,7 @@ export function modaleAperta() { return aperta; }
  * @param {{document?:Document, ampia?:boolean, suChiusura?:Function}} [opzioni]
  * @returns {{dialogo:HTMLElement, contenuto:HTMLElement, chiudi:Function}|null}
  */
-export function apriModale(titolo, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null } = {}) {
+export function apriModale(titolo, contenuto, { document: doc = globalThis.document, ampia = false, suChiusura = null, occhiello = '' } = {}) {
   if (!doc?.body) return null;
   chiudiModale({ immediata: true }); // una alla volta: l'uscita della precedente sotto l'entrata della nuova sarebbe rumore
   const manager = registeredOverlayManager(doc); const opener = doc.activeElement;
@@ -78,7 +78,13 @@ export function apriModale(titolo, contenuto, { document: doc = globalThis.docum
   chiudiBtn.setAttribute('aria-label', t('chat.common.close'));
   chiudiBtn.append(icona(doc, 'x'));
   chiudiBtn.addEventListener('click', () => chiudiModale());
-  testa.append(h2, chiudiBtn);
+  /* 01/11/2026 (Nuova ricerca, foto F del bozzetto): un occhiello facoltativo sopra il titolo, il `talos-eyebrow` delle sezioni. Senza, la
+     testata è quella di sempre, nodo per nodo. */
+  if (occhiello) {
+    const gruppo = nodo(doc, 'div', 'talos-grow td-modal-head__titoli');
+    gruppo.append(nodo(doc, 'span', 'talos-eyebrow', occhiello), h2);
+    testa.append(gruppo, chiudiBtn);
+  } else testa.append(h2, chiudiBtn);
 
   const corpo = nodo(doc, 'div', 'td-modal-content');
   for (const pezzo of [contenuto].flat().filter(Boolean)) corpo.append(pezzo);

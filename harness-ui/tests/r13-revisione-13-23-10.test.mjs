@@ -340,15 +340,21 @@ test('R13-3-B — un riassunto preparato dal registro sulla storia INTERA resta 
   writeFileSync(join(incollati, nomeDellaRichiestaSalvata(grande)), grande);
   /* `inArrivo`: il riassunto di fine giro ancora IN VOLO (arriva dopo 150 ms), con la sua firma — la strada del caso della CLI, dove è
      la firma a decidere se aspettarlo; altrimenti già pronto */
+  /* ⛔ 28/10/2026 — contratto C1, owner 27/10/2026, «Sì, mai aspettare»: quello in volo non si aspetta più all'emergenza; si adotta alla
+     prima richiesta dopo il suo arrivo. L'intento della prova (la forma corta dell'incollato non cambia le impronte: il riassunto
+     preparato sulla storia INTERA vale ancora, e non si paga niente) si controlla quindi lì: con `inArrivo` il giro ha DUE richieste — la
+     prima risponde con una lettura dopo che quello in volo è arrivato (300 ms), la seconda è quella che lo adotta. Senza `inArrivo` (già
+     pronto) la scena è quella di prima, una richiesta sola. */
   const intera = [...storia, { role: 'user', content: 'Ora rispondi OK.' }];
   const giroCon = async (pronta, { inArrivo = false } = {}) => {
     const conti = { riassunti: 0, corpi: [] };
     const fini = [];
+    let lavoro = 0;
     const firma = { coveredThrough: pronta.record.coveredThrough, impronta: pronta.impronta, base: pronta.base };
     const inVolo = () => Object.assign(new Promise((ok) => { setTimeout(() => ok(pronta), 150); }), { firma });
     const esito = await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Ora rispondi OK.' }, messaggiIniziali: intera,
       ...(inArrivo ? { compattazioneInArrivo: inVolo() } : { compattazionePronta: pronta }),
-      cartellaIncollati: incollati, contestoDelProgetto: 'Project files:\n',
+      cartellaIncollati: incollati, contestoDelProgetto: 'Project files:\n', permessi: 'Full access',
       onGiro: (e) => { if (e?.tipo === 'compattazione-fine') fini.push({ compattato: e.compattato === true, istantanea: e.istantanea === true, motivo: e.motivo ?? null }); },
       fetchDiRete: async (_u, o) => {
         const corpo = corpoSenzaMarcatori(o.body);
@@ -356,6 +362,15 @@ test('R13-3-B — un riassunto preparato dal registro sulla storia INTERA resta 
         if (!corpo.tools?.length) {
           conti.riassunti += 1;
           return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nbreve.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
+        }
+        lavoro += 1;
+        if (inArrivo && lavoro === 1) {
+          await new Promise((ok) => { setTimeout(ok, 300); });
+          const nome = corpo.tools.map((x) => x.function?.name).find((n) => /^(leggi|read|read_file)$/u.test(n));
+          /* il fornitore conta anche gli schemi degli attrezzi (come uno vero): la richiesta dopo resta oltre l'emergenza, ed è lì che
+             quello arrivato si adotta */
+          return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: null, tool_calls: [{ id: 'l1', type: 'function', function: { name: nome, arguments: JSON.stringify({ percorso: 'nota.txt', path: 'nota.txt' }) } }] }, finish_reason: 'tool_calls' }],
+            usage: { prompt_tokens: stimaConversazione(corpo.messages) + compattazione.stimaDegliAttrezzi(corpo.tools), completion_tokens: 1 } });
         }
         return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'fatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: stimaConversazione(corpo.messages), completion_tokens: 1 } });
       } });

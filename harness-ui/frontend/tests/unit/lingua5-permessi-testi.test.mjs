@@ -40,7 +40,7 @@ test('L5-02 la finestra dei permessi non dice parole interne, e il toast non dic
   assert.equal(testiApp.en['permissions.policyUpdated'], 'Permissions updated');
 });
 
-test('L5-03 il nome di un attrezzo diventa titolo con la maiuscola (nella lingua dell interfaccia), e solo lì', () => {
+test('L5-03 il nome di uno strumento diventa titolo con la maiuscola (nella lingua dell interfaccia), e solo lì', () => {
   const APP = readFileSync(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
   const riga = APP.match(/  const comeTitolo = \([^\n]*\n/)?.[0];
   assert.ok(riga, 'comeTitolo esiste');

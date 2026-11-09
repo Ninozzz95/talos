@@ -216,6 +216,11 @@
   background: var(--talos-muted);
 }
 
+/* decisione owner 163 (bozzetto variante-13-budget-ram A, `.caldo`): la barra è la RAM IN USO e si scalda con le stesse soglie
+   della card della memoria — dal 75 % l'avviso, dal 90 % il pericolo */
+.talos-lab__banda-track[data-livello="alto"] > span { background: var(--talos-warning); }
+.talos-lab__banda-track[data-livello="critico"] > span { background: var(--talos-danger); }
+
 /* --- 3. LA POLITICA ------------------------------------------------------ */
 
 .talos-lab__banda-policy {

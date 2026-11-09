@@ -10,7 +10,7 @@ import test from 'node:test';
 import { createHttpApp } from '../src/http-app.mjs';
 
 async function banco(t, cartelle) {
-  const server = http.createServer(createHttpApp({ staticHandler: async () => null, remotoFn: () => ({ cartelle }) }));
+  const server = http.createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, remotoFn: () => ({ cartelle }) }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => server.close(r)));
   const base = `http://127.0.0.1:${server.address().port}`;

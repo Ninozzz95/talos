@@ -28,6 +28,9 @@ test('CTX-REG-AGENT-SERVICE-COMPACTION-EVENTS — inizio e fine della compattazi
   assert.deepEqual(custom[0], { fase: 'inizio', giro: 2, tokenPrima: 9_000, soglia: 8_000, motivo: 'soglia' });
   assert.deepEqual(custom[1], { fase: 'fine', giro: 2, compattato: true, tokenPrima: 9_000, tokenDopo: 700, misura: 'fornitore', coveredThrough: 7, at: record.at, modello: 'z-ai/glm-5.3-flash', motivo: 'soglia' });
   assert.equal(custom[1].record, undefined, 'il riassunto NON viaggia nell’evento: sta nella riga `compattazione` del journal (una fonte sola)');
+  /* Revisione del blocco 25, R2 (condizione del Mobile, 01/11/2026): nessun evento, con NESSUN nome di campo, porta il testo del riassunto
+     (la compattazione semplice lo scrive col prompt di sistema dentro). `session.events` rigioca questi eventi al dispositivo senza consenso. */
+  assert.equal(eventi.some((e) => JSON.stringify(e).includes('RIASSUNTO LUNGO')), false, 'il testo del riassunto non è in nessun evento');
   assert.deepEqual(custom[2], { fase: 'inizio', giro: 3, tokenPrima: 9_500, soglia: 8_000, motivo: 'emergenza' });
   assert.deepEqual(custom[3], { fase: 'fine', giro: 3, compattato: false, motivo: 'troncato' });
   const indiceInizio = eventi.findIndex((e) => e.name === 'talos.compattazione');
@@ -156,4 +159,54 @@ test('CTX-REG-AGENT-SERVICE-PREPARED — i riassunti preparati in sottofondo (pa
   ]);
   assert.ok(preparate.every(({ durevole }) => durevole), 'durevoli: sono riassunti pagati');
   assert.equal(eventi.filter(({ e }) => e.name === 'talos.compattazione').length, 0, 'e non diventano compattazioni per l interfaccia');
+});
+
+/*
+ * «Mai aspettare» (owner 27/10/2026 notte, contratto C5 con la CLI): il riassunto del modello che prende il posto del rapido porta
+ *   `migliora: { at }` dal kernel (`annunciaCompattazione`). Questo servizio passa i campi uno per uno: senza la sua riga `migliora` si
+ *   perdeva qui e l'interfaccia disegnava una SECONDA riga (la trappola di `attrezziDifferiti`, 17/10).
+ */
+test('CTX-REG-AGENT-SERVICE-IMPROVES — il rapido arriva con la sua ragione, il riassunto del modello col suo `migliora`; AL CONTRARIO un at che non è un istante non passa', async () => {
+  const eventi = [];
+  const rapido = creaRecord({ coveredThrough: 5, riassunto: [{ role: 'user', content: 'R' }], tokenPrima: 245_100, tokenDopo: 36_900, misura: 'fornitore', at: '2026-10-28T08:00:00.000Z', modello: 'z-ai/glm-5.3-flash' });
+  const delModello = creaRecord({ coveredThrough: 5, riassunto: [{ role: 'user', content: 'M' }], tokenPrima: 245_100, tokenDopo: 31_200, misura: 'fornitore', at: '2026-10-28T08:01:00.000Z', modello: 'z-ai/glm-5.3-flash' });
+  await avviaSessione({
+    cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+    onEvento: (e) => { eventi.push(e); },
+    talosLavoraFn: async ({ onGiro }) => {
+      onGiro({ giro: 3, tipo: 'compattazione-inizio', tokenMisurati: 245_100, soglia: 150_000, motivo: 'emergenza' });
+      onGiro({ giro: 3, tipo: 'compattazione-fine', compattato: true, record: rapido, ripiego: true, classe: 'senza-modello', ragione: 'in-arrivo' });
+      onGiro({ giro: 4, tipo: 'compattazione-fine', compattato: true, record: delModello, istantanea: true, motivo: 'miglioramento',
+        migliora: { at: '2026-10-28T08:00:00.000Z', testo: 'testo del fornitore' } });
+      onGiro({ giro: 5, tipo: 'compattazione-fine', compattato: true, record: delModello, istantanea: true, motivo: 'miglioramento', migliora: { at: 'non un istante' } });
+      onGiro({ giro: 6, tipo: 'compattazione-fine', compattato: true, record: delModello, istantanea: true, motivo: 'miglioramento', migliora: '2026-10-28T08:00:00.000Z' });
+      return { comeFinita: 'concluso', detto: 'fatto', messaggiFinali: [], recordDiCompattazione: [delModello] };
+    },
+  });
+  const fini = eventi.filter((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione' && e.value.fase === 'fine').map((e) => e.value);
+  assert.equal(fini[0].ripiego, true); assert.equal(fini[0].ragione, 'in-arrivo');
+  assert.equal(fini[0].migliora, undefined, 'il rapido non migliora niente');
+  assert.deepEqual(fini[1].migliora, { at: '2026-10-28T08:00:00.000Z' }, 'il segno arriva, solo col suo at');
+  assert.equal(fini[1].at, '2026-10-28T08:01:00.000Z', 'e la riga prende l’at nuovo');
+  assert.equal(fini[2].migliora, undefined, 'un at che non è un istante non passa');
+  assert.equal(fini[3].migliora, undefined, 'un segno che non è un oggetto non passa');
+});
+
+/* M3 della revisione del Blocco 21: chi legge la riga («fino alle 14:30», «limite del piano») ha bisogno di quei due campi, e l'evento li ricostruisce uno per uno */
+test('CTX-REG-AGENT-SERVICE-NON-DISPONIBILE — il ripiego dice perché: `finoAlle` e `diAccount` arrivano all\'evento, solo se ci sono', async () => {
+  const eventi = [];
+  const finoAlle = Date.parse('2026-11-01T14:30:00.000Z');
+  await avviaSessione({
+    cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k',
+    onEvento: (e) => { eventi.push(e); },
+    talosLavoraFn: async ({ onGiro }) => {
+      const base = { tipo: 'compattazione-fine', compattato: true, record: { tokenPrima: 10, tokenDopo: 5 }, ripiego: true, ragione: 'esaurito' };
+      onGiro({ ...base, giro: 1, nonDisponibile: { modello: 'autore/m', stato: 'bloccato', motivo: 'limite', finoAlle, diAccount: true } });
+      onGiro({ ...base, giro: 2, nonDisponibile: { modello: 'autore/m', stato: 'bloccato', motivo: 'rete', finoAlle: 'domani', diAccount: 1 } });
+      return { comeFinita: 'concluso', detto: 'fatto', messaggiFinali: [] };
+    },
+  });
+  const custom = eventi.filter((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione').map((e) => e.value);
+  assert.deepEqual(custom[0].nonDisponibile, { modello: 'autore/m', stato: 'bloccato', motivo: 'limite', finoAlle, diAccount: true });
+  assert.deepEqual(custom[1].nonDisponibile, { modello: 'autore/m', stato: 'bloccato', motivo: 'rete' }, 'al contrario: niente che non sia un\'ora o un sì');
 });

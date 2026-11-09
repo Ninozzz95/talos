@@ -129,8 +129,8 @@ test.describe('C1 — la scheda Contesto', () => {
     await apriPiegaContesto(page, 'dettagli-finestra');
     const f = finestra(page);
     await expect(f.locator('[data-contesto-perche]')).toContainText('75%');
-    await expect(riga(f, 'Attrezzi MCP')).toHaveText('2,4k · 1,6%');
-    await expect(riga(f, 'Attrezzi MCP')).toHaveClass(/talos-measure--estimate/);
+    await expect(riga(f, 'Strumenti MCP')).toHaveText('2,4k · 1,6%');
+    await expect(riga(f, 'Strumenti MCP')).toHaveClass(/talos-measure--estimate/);
     await expect(riga(f, 'In uso (misurato)')).toContainText('98');
     await expect(riga(f, 'Prima della compattazione')).toContainText('52');
     await apriPiegaContesto(page, 'dettagli-compattazioni');
@@ -159,11 +159,11 @@ test.describe('C1 — la scheda Contesto', () => {
   });
 
   /* pannello v2: la conferma sta NELLA testa della scheda, non in una modale (le conferme del pannello, decisione owner 2) */
-  test('C1-SCHEDA-03 — «Riassumi adesso» chiede conferma, e annullando non parte niente', async ({ page }) => {
+  test('C1-SCHEDA-03 — «Compatta ora» chiede conferma, e annullando non parte niente', async ({ page }) => {
     const c = await apri(page, 'legacy');
-    await menuTesta(page, 'Riassumi adesso');
+    await menuTesta(page, 'Compatta ora');
     const conferma = page.locator('#railContesto .pn-conferma--testa');
-    await expect(conferma).toContainText('Riassumere adesso la conversazione?');
+    await expect(conferma).toContainText('Compattare adesso la conversazione?');
     await conferma.locator('[data-controllo="conferma-no"]').click();
     await expect(conferma).toHaveCount(0);
     await page.waitForTimeout(300);
@@ -224,7 +224,7 @@ test.describe('C1 — la scheda Contesto', () => {
   test('C1-SCHEDA-09 — a long number in the header count is never cut', async ({ page }) => {
     const c = await apri(page, 'legacy');
     await expect(contoTesta(page)).toContainText('150k', { timeout: 10_000 });
-    for (const valore of ['417,4k di 750k prima del riassunto', '1,24M di 1,5M prima del riassunto · 12 riassunti · questo invio: 23 di 24']) {
+    for (const valore of ['417,4k di 750k prima della compattazione', '1,24M di 1,5M prima della compattazione · 12 compattazioni · questo invio: 23 di 24']) {
       const m = await contoTesta(page).evaluate((el, v) => {
         el.textContent = v;
         return { tagliato: el.scrollWidth > el.clientWidth + 1, alto: el.getBoundingClientRect().height };
@@ -344,15 +344,21 @@ test.describe('C1 — la scheda Contesto', () => {
     await cm(page).locator('[data-context-tab="impostazioni"]').click();
     await expect(cm(page).locator('.talos-cm__auto')).toBeVisible();
     await expect(cm(page).locator('[data-context-auto]')).toHaveClass(/talos-switch/);
-    await cm(page).locator('[data-context-tab="tenuto"]').click();
-    expect(await schedeVisibili(page)).toEqual(['tenuto', 'fatti', 'versioni', 'richiesta', 'impostazioni']);
+    // variante B (owner 31/10/2026 notte): indice a sinistra; «Cosa ha tenuto» sta dentro le Compattazioni, che restano accese
+    expect(await schedeVisibili(page)).toEqual(['panoramica', 'compattazioni', 'fatti', 'versioni', 'richiesta', 'impostazioni']);
+    await cm(page).locator('[data-context-tab="compattazioni"]').click();
+    await cm(page).locator('[data-context-apri-tenuto]').click();
     await expect(cm(page).locator('[data-context-panel="tenuto"]')).toContainText('Non toccare i file di rilascio');
-    await expect(cm(page).locator('details, summary')).toHaveCount(0);
+    await expect(cm(page).locator('[data-context-tab="compattazioni"]')).toHaveAttribute('aria-selected', 'true');
+    /* variante B (owner 31/10 notte): nelle Impostazioni c'è anche la sezione «Avanzate», chiusa (`data-context-advanced`); ogni altra
+       fisarmonica resta vietata */
+    await expect(cm(page).locator('details:not([data-context-job-detail]):not([data-context-advanced]), summary:not([data-context-job-detail] summary):not([data-context-advanced] > summary)'), 'schede, non fisarmoniche: il solo «Dettagli tecnici» di un lavoro fallito resta, con «Avanzate» delle Impostazioni').toHaveCount(0);
+    await expect(cm(page).locator('[data-context-job-detail]'), 'e senza un guasto non si vede').toBeHidden();
     await expect(cm(page).locator('[data-context-refresh], .talos-dialog__footer')).toHaveCount(0);
     // un clic su «Compatta ora…» NON parte: chiede conferma; «Annulla» la toglie
     await cm(page).locator('[data-context-start]').click();
     const conferma = cm(page).locator('[data-context-conferma-legacy]');
-    await expect(conferma).toContainText('Il passato si riassume');
+    await expect(conferma).toContainText('Il passato si compatta') /* parola unica, owner 31/10/2026 */;
     expect(c.nonGet).toBe(0);
     await conferma.locator('[data-context-conferma-no]').click();
     await expect(conferma).toHaveCount(0);
@@ -368,16 +374,18 @@ test.describe('C1 — la scheda Contesto', () => {
     await apriCm(page);
     await expect(cm(page).locator('[data-context-headline]')).toHaveText('98k di 150k · 65,3%');
     await expect(cm(page).locator('[data-context-measurement]')).toContainText('75%');
-    expect(await schedeVisibili(page)).toEqual(['tenuto', 'richiesta']);
+    expect(await schedeVisibili(page)).toEqual(['panoramica', 'compattazioni', 'richiesta']);
     await expect(cm(page).locator('[data-context-legacy-note]')).toBeVisible();
     await expect(cm(page).locator('.talos-cm__auto')).toBeHidden();
     await expect(cm(page).locator('[data-context-status]')).toHaveText('');
+    await cm(page).locator('[data-context-tab="compattazioni"]').click();
+    await cm(page).locator('[data-context-apri-tenuto]').click();
     await expect(cm(page).locator('[data-context-panel="tenuto"]')).toContainText('Riassunto legacy: cache preparata.');
     await cm(page).locator('[data-context-tab="richiesta"]').click();
     await expect(cm(page).locator('[data-context-panel="richiesta"]')).toContainText('You are TALOS, a coding agent.');
     await expect(cm(page).locator('[data-context-panel="richiesta"]')).toContainText('[immagine non mostrata]');
     await cm(page).locator('[data-context-start]').click();
-    await expect(cm(page).locator('[data-context-conferma-legacy]')).toContainText('Il modello vedrà un riassunto');
+    await expect(cm(page).locator('[data-context-conferma-legacy]')).toContainText('Il modello vedrà una versione compattata') /* parola unica, owner 31/10/2026 */;
     expect(c.nonGet).toBe(0);
   });
 
@@ -457,16 +465,45 @@ test.describe('C1 — la scheda Contesto', () => {
   test('C1-CM-04 — le schede si percorrono con le frecce (APG Tabs), una alla volta', async ({ page }) => {
     await apri(page, 'motore');
     await apriCm(page);
-    await cm(page).locator('[data-context-tab="tenuto"]').focus();
-    await page.keyboard.press('ArrowRight');
-    await expect(cm(page).locator('[data-context-tab="fatti"]')).toHaveAttribute('aria-selected', 'true');
-    await expect(cm(page).locator('[data-context-tab="fatti"]')).toBeFocused();
-    await expect(cm(page).locator('[data-context-panel="fatti"]')).toBeVisible();
-    await expect(cm(page).locator('[data-context-panel="tenuto"]')).toBeHidden();
+    // variante B: l'indice è verticale, quindi su e giù (APG Tabs con aria-orientation=vertical); destra e sinistra restano
+    await expect(cm(page).locator('[data-context-tabs]')).toHaveAttribute('aria-orientation', 'vertical');
+    await cm(page).locator('[data-context-tab="panoramica"]').focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(cm(page).locator('[data-context-tab="compattazioni"]')).toHaveAttribute('aria-selected', 'true');
+    await expect(cm(page).locator('[data-context-tab="compattazioni"]')).toBeFocused();
+    await expect(cm(page).locator('[data-context-panel="compattazioni"]')).toBeVisible();
+    await expect(cm(page).locator('[data-context-panel="panoramica"]')).toBeHidden();
     await page.keyboard.press('End');
     await expect(cm(page).locator('[data-context-tab="impostazioni"]')).toHaveAttribute('aria-selected', 'true');
-    await page.keyboard.press('ArrowRight');
-    await expect(cm(page).locator('[data-context-tab="tenuto"]')).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('ArrowDown');
+    await expect(cm(page).locator('[data-context-tab="panoramica"]')).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('ArrowUp');
+    await expect(cm(page).locator('[data-context-tab="impostazioni"]')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  /* Variante B (owner 31/10/2026 notte, «Indice a sinistra»): le pagine Panoramica e Compattazioni sono le sezioni VERE della scheda
+     Contesto (`disegnaContesto` con `solo`), senza la testata della scheda (il numero sta già in alto) e senza l'indice dei giri. */
+  test('C1-CM-08 variante B — si apre sulla Panoramica coi pezzi della scheda Contesto; Compattazioni ha il suo elenco', async ({ page }) => {
+    const c = await apri(page, 'motore');
+    await apriCm(page);
+    await expect(cm(page).locator('[data-context-tab="panoramica"]')).toHaveAttribute('aria-selected', 'true');
+    const panoramica = cm(page).locator('[data-context-pagina="panoramica"]');
+    await expect(panoramica.locator('[data-sezione="categorie"]')).toBeVisible();
+    await expect(panoramica.locator('[data-sezione="riassunti"]'), 'le compattazioni stanno nella loro pagina').toHaveCount(0);
+    await expect(panoramica.locator('[data-c="TurnIndex"]'), 'niente indice dei giri nella finestra').toHaveCount(0);
+    const indice = await cm(page).locator('[data-context-tabs]').boundingBox();
+    const pagina = await cm(page).locator('[data-context-panel="panoramica"]').boundingBox();
+    expect(indice.x + indice.width, 'l’indice sta a sinistra della pagina').toBeLessThanOrEqual(pagina.x + 1);
+    await cm(page).locator('[data-context-tab="compattazioni"]').click();
+    const compattazioni = cm(page).locator('[data-context-pagina="compattazioni"]');
+    await expect(compattazioni.locator('[data-sezione="riassunti"]')).toBeVisible();
+    await expect(compattazioni.locator('[data-sezione="categorie"]')).toHaveCount(0);
+    /* 31/10/2026 (foto sulla 4177): la pagina SCORRE, quindi le sue sezioni non si ripiegano per entrare come nel pannello — prima
+       «Compattazioni» e «Nel tempo» arrivavano chiuse e la pagina sembrava vuota */
+    await expect(compattazioni.locator('[data-controllo="piega-sezione-riassunti"]')).toHaveAttribute('aria-expanded', 'true');
+    await cm(page).locator('[data-context-tab="panoramica"]').click();
+    for (const piega of await panoramica.locator('.pn-sezione__comprimi').all()) await expect(piega).toHaveAttribute('aria-expanded', 'true');
+    expect(c.nonGet).toBe(0);
   });
 
   for (const tema of ['dark', 'light']) {

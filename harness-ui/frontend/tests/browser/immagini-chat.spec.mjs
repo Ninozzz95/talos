@@ -18,7 +18,7 @@ async function attach(page) {
   await (await chooser).setFiles({ name: 'prova.png', mimeType: 'image/png', buffer: bytes });
 }
 test.beforeEach(async ({ page }) => {
-  await page.route('**/api/v1/sessions/image-proof-*/events', flussoConConfine);
+  await page.route('**/api/v1/sessions/image-proof-*/events*', flussoConConfine);
   await page.route('**/api/v1/chat-images', r => r.fulfill({ json: envelope(image) }));
   await page.route('**/api/v1/chat-images/' + image.id, r => r.fulfill({ contentType: 'image/png', body: bytes }));
   await page.goto('/');
@@ -77,7 +77,9 @@ test('NATIVE-UI-02 la scheda del fornitore diretto cerca e salva il modello scel
      pretende il nome CON l'origine, e il «prima» (OpenRouter) resta senza. */
   const pillola = page.locator('[data-open-sheet="model"]');
   await expect(pillola).toHaveAttribute('title', 'Cambia modello · google/gemini-3.8-flash');
-  await page.getByRole('button',{name:'gemini-3.8-flash',exact:true}).click();
+  /* 07/11/2026 (curatore, rossa del treno M): 68ebab480 (revisione d'uso 04/11, reperto 11) — la pillola dice il nome del catalogo
+     («Gemini 3.8 Flash», da `adottaCatalogoModelli` + `nomeBreve` di selettore-modelli.js:80-83), non più l'id: l'id resta nel suggerimento. */
+  await page.getByRole('button',{name:'Gemini 3.8 Flash',exact:true}).click();
   // ⛔ AGGIORNATA il 18/09/2026 — il difetto era della PROVA, non del prodotto.
   // «Diretti» non è più una scheda: l'owner l'11/09/2026 ha chiesto una tab PER FORNITORE
   // («diretti deve diventare per provider, quindi una tab dedicata per gemini openai e
@@ -99,7 +101,8 @@ test('NATIVE-UI-02 la scheda del fornitore diretto cerca e salva il modello scel
   await expect.poll(()=>saved?.modello).toBe('gemini:gemini-3.8-flash');
   await expect(pillola, 'il modello salvato è quello diretto: lo dice il suggerimento').toHaveAttribute('title', 'Cambia modello · gemini:gemini-3.8-flash');
   /* owner 28/10/2026 (parità col Mobile): nella pillola SOLO il nome; l'origine diretta la dice il LOGO della via d'accesso (supera L3-10) */
-  await expect(page.getByRole('button',{name:'gemini-3.8-flash',exact:true}), 'a schermo solo il nome del modello').toBeVisible();
+  /* 68ebab480 (reperto 11): anche il diretto scelto dal selettore registra il suo nome (app.js voceDiModello), qui «Gemini Flash» */
+  await expect(page.getByRole('button',{name:'Gemini Flash',exact:true}), 'a schermo solo il nome del modello').toBeVisible();
   await expect(pillola.locator(':scope > [data-via-del-modello="gemini"]'), 'e il logo della via diretta').toHaveCount(1);
   await expect(page.getByRole('button',{name:'gemini:gemini-3.8-flash',exact:true}), 'mai il prefisso d’instradamento grezzo').toHaveCount(0);
 });

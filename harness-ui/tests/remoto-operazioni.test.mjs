@@ -37,7 +37,7 @@ function registroFinto() {
 
 function banco(opzioni = {}) {
   const sessionRegistry = registroFinto();
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   const operazioni = creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, ...opzioni });
   const iscrizioni = new Map();
@@ -80,10 +80,10 @@ test('OPS-04 elenco chiuso: operazioni fuori elenco e id di sessione che cercano
   assert.ok(Object.values(OPERAZIONI_HTTP).every((v) => typeof v.percorso === 'function' && /^(GET|POST|PATCH|DELETE)$/.test(v.metodo)));
   /* owner 27/10/2026 («il dispositivo cambia tutte le impostazioni»): il primo PATCH, le impostazioni del motore del contesto. Il cancello del
      consenso del server guarda ogni metodo che non sia GET/HEAD (`http-app.mjs`), quindi anche questo; l'elenco dei PATCH è chiuso qui */
-  assert.deepEqual(Object.entries(OPERAZIONI_HTTP).filter(([, v]) => v.metodo === 'PATCH').map(([n]) => n), ['session.context.settings']);
+  assert.deepEqual(Object.entries(OPERAZIONI_HTTP).filter(([, v]) => v.metodo === 'PATCH').map(([n]) => n), ['session.context.settings', 'session.context.fact.upsert', 'session.library.rename']);
   /* parità, punto 4 (24/10): il primo DELETE — ammesso solo dopo che il cancello del consenso del server guarda OGNI scrittura, non solo
      POST (`http-app.mjs`); l'elenco dei DELETE è chiuso qui, e il consenso lo provano `remoto-chat-dispositivi` CHD-04 */
-  assert.deepEqual(Object.entries(OPERAZIONI_HTTP).filter(([, v]) => v.metodo === 'DELETE').map(([n]) => n), ['session.message.delete']);
+  assert.deepEqual(Object.entries(OPERAZIONI_HTTP).filter(([, v]) => v.metodo === 'DELETE').map(([n]) => n), ['session.context.job.cancel', 'session.context.fact.remove', 'session.message.delete', 'session.research.delete', 'session.library.delete']);
 });
 
 test('OPS-05 eventi dal numero N: la storia coalescente come /events, la fine della storia, la coda, poi il presente; disiscrivere ferma', async () => {
@@ -186,7 +186,7 @@ test('ORI-01 un messaggio dal telefono arriva nella storia con «dal telefono X�
 
 test('ORI-02 al contrario: un client HTTP che scrive bolla.origine la perde al confine', async (t) => {
   const sessionRegistry = registroFinto();
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => server.close(r)));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -224,7 +224,7 @@ test('OPS-07 (revisione 19/10) un id fatto di soli punti non esce dal percorso f
   for (const sessionId of ['..', '.']) await assert.rejects(soloElenco.esegui('session.settings', { sessionId, corpo: {} }, b.contesto), { code: 'BAD_MESSAGE' });
   assert.deepEqual(chiamati, []);
   /* la difesa in profondità: la chiamata interna presa da sola */
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry: registroFinto() });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registroFinto() });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   for (const percorso of ['/api/v1/sessions/../settings', '/api/v1/sessions/./s-1/stop', '/api/v1/sessions/%2e%2e/settings', 'api/v1/sessions', '//evil/x']) {
     await assert.rejects(chiama({ metodo: 'POST', percorso, corpo: {} }), { code: 'BAD_MESSAGE' }, percorso);

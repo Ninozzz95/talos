@@ -21,6 +21,7 @@ import { attendiScritture } from '../src/session-store.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { attendiFigliSullaCartella } from './aiuto/attendi-figli-sulla-cartella.mjs';
 
 const talosLavora = (input) => talosLavoraVero({ scartoMisurato: 0, ...input });
 const MODELLO = 'z-ai/glm-5.3-flash';
@@ -141,7 +142,7 @@ function fornitore({ riassunto = '## Riassunto\nbreve.', prompt = (corpo) => sti
 }
 async function giro(t, { messaggiIniziali, rete, ...resto }) {
   const cartella = cartellaDiProva('talos-d-freno-');
-  t.after(() => rimuoviCartellaDiProva(cartella));
+  t.after(async () => { await attendiFigliSullaCartella(cartella); rimuoviCartellaDiProva(cartella); }); // il git del riassunto in sottofondo (aiuto/attendi-figli-sulla-cartella.mjs)
   const eventi = [];
   const esito = await talosLavora({ cartella, modello: MODELLO, chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali,
     contestoDelProgetto: 'Project files:\n', fetchDiRete: rete.fetchDiRete, permessi: 'Full access',
@@ -213,12 +214,40 @@ test('D-VERDETTO-01 — il verdetto in attesa (record di fine giro): il primo nu
   assert.equal(consumato.esito.freno?.colpi ?? 0, 0, `primo numero sotto la soglia, il secondo alto non giudica più (${JSON.stringify(consumato.esito.freno)})`);
 });
 
+/* ⛔ 28/10/2026 — contratto C1, owner 27/10/2026, «Sì, mai aspettare». L'intento resta: un riassunto PAGATO applicato nel giro mette in
+   attesa il verdetto, e il numero vero dopo, ancora oltre la soglia, è un colpo. Cambia la strada: all'emergenza la richiesta parte col
+   riassunto senza modello (che non è un riassunto pagato: non mette in attesa nessun verdetto), e il riassunto del modello, preparato in
+   sottofondo, si applica alla richiesta DOPO il suo arrivo (lo scambio «miglioramento»). La scena ha quindi due richieste: la prima
+   risponde con una lettura solo quando il riassunto del modello è arrivato, la seconda porta il riassunto pagato e il suo numero giudica. */
+function reteDelVerdetto(prompt) {
+  const conti = { riassunti: 0, corpi: [] };
+  let servito;
+  const riassuntoServito = new Promise((r) => { servito = r; });
+  const fetchDiRete = async (_u, o) => {
+    const corpo = JSON.parse(o.body);
+    if (!corpo.tools?.length) {
+      conti.riassunti += 1;
+      setTimeout(servito, 300); // il kernel lo prende e lo prepara (cornice, git) prima della risposta alla prima richiesta
+      return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nRIASSUNTO-PAGATO breve.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
+    }
+    conti.corpi.push(corpo);
+    if (conti.corpi.length === 1) {
+      await riassuntoServito;
+      return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: null, tool_calls: [{ id: 'v1', type: 'function', function: { name: 'leggi', arguments: '{"percorso":"g.txt"}' } }] }, finish_reason: 'tool_calls' }], usage: { prompt_tokens: prompt(corpo), completion_tokens: 1 } });
+    }
+    return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'fatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: prompt(corpo), completion_tokens: 1 } });
+  };
+  return { fetchDiRete, conti };
+}
 test('D-VERDETTO-02 — una compattazione applicata NEL giro mette in attesa il verdetto: il numero vero dopo, ancora oltre la soglia, è un colpo; AL CONTRARIO sotto no', async (t) => {
   conTetto(t, 4_000);
-  const oltre = await giro(t, { messaggiIniziali: inEmergenza(), rete: fornitore({ prompt: () => 190_000 }), freno: { modello: MODELLO } });
-  assert.ok(oltre.eventi.some((e) => e.tipo === 'compattazione-fine' && e.compattato === true), 'premessa: il giro ha compattato');
+  const reteOltre = reteDelVerdetto(() => 190_000);
+  const oltre = await giro(t, { messaggiIniziali: inEmergenza(), rete: reteOltre, freno: { modello: MODELLO } });
+  assert.ok(oltre.eventi.some((e) => e.tipo === 'compattazione-fine' && e.compattato === true && e.ripiego === true), 'premessa: il giro ha compattato, senza aspettare il modello');
+  assert.ok(oltre.eventi.some((e) => e.tipo === 'compattazione-fine' && e.compattato === true && e.migliora), `premessa: il riassunto pagato si è applicato nel giro (${JSON.stringify(oltre.eventi.map((e) => [e.tipo, e.motivo, e.ragione]))})`);
+  assert.ok(JSON.stringify(reteOltre.conti.corpi[1]?.messages ?? '').includes('RIASSUNTO-PAGATO'), 'premessa: la seconda richiesta porta il riassunto pagato');
   assert.equal(oltre.esito.freno?.colpi, 1, JSON.stringify(oltre.esito.freno));
-  const dentro = await giro(t, { messaggiIniziali: inEmergenza(), rete: fornitore({ prompt: () => 10 }), freno: { modello: MODELLO } });
+  const dentro = await giro(t, { messaggiIniziali: inEmergenza(), rete: reteDelVerdetto(() => 10), freno: { modello: MODELLO } });
   assert.equal(dentro.esito.freno?.colpi ?? 0, 0, JSON.stringify(dentro.esito.freno));
 });
 
@@ -267,11 +296,39 @@ test('D-RICARICHE-01 — tre riassunti pagati in tre giri fanno tirare il freno 
   assert.ok(!compattazione.frenoTirato(lontano.esito.freno), JSON.stringify(lontano.esito.freno));
 });
 
+/* ⛔ 28/10/2026 (C-4, contratto C1 «mai aspettare»): trasformata. All'emergenza il riassunto pagato arriva in SOTTOFONDO: il colpo si dà al
+   suo arrivo (la guardia «inefficace» del sottofondo). Due cose della scena cambiano perché il colpo resti osservabile nel giro:
+   - la risposta del giro aspetta che il riassunto di sottofondo sia arrivato (`pronta` o l'«inefficace»), al più 5 s: senza, il giro
+     finirebbe prima e `esito.freno` (fotografato a fine giro) non lo vedrebbe;
+   - il fornitore conta la richiesta oltre la soglia (190.000): la richiesta parte col rapido, e una lettura SOTTO la soglia azzererebbe i
+     colpi (Hermes: ogni lettura sotto la soglia li azzera) — che è giusto, ma qui si prova il colpo, non l'azzeramento. */
+async function giroColSottofondo(t, { riassunto }) {
+  let arrivato;
+  const segnale = new Promise((ok) => { arrivato = ok; });
+  const base = fornitore({ ...(riassunto ? { riassunto } : {}), prompt: () => 190_000 });
+  const rete = { fetchDiRete: async (u, o) => {
+    if (JSON.parse(o.body).tools?.length) await Promise.race([segnale, new Promise((ok) => { setTimeout(ok, 5_000).unref(); })]);
+    return base.fetchDiRete(u, o);
+  } };
+  const cartella = cartellaDiProva('talos-d-freno-');
+  t.after(async () => { await attendiFigliSullaCartella(cartella); rimuoviCartellaDiProva(cartella); }); // il git del riassunto in sottofondo (aiuto/attendi-figli-sulla-cartella.mjs)
+  const eventi = [];
+  const esito = await talosLavora({ cartella, modello: MODELLO, chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: inEmergenza(),
+    contestoDelProgetto: 'Project files:\n', fetchDiRete: rete.fetchDiRete, permessi: 'Full access', freno: { modello: MODELLO },
+    onGiro: (e) => {
+      if (e?.tipo === 'compattazione-preparata' && (e.fase === 'pronta' || e.compattato === false)) arrivato();
+      if (String(e?.tipo).startsWith('compattazione-') && e.tipo !== 'compattazione-progresso') eventi.push(e);
+    } });
+  return { esito, eventi, conti: base.conti };
+}
 test('D-INEFFICACE-01 — un riassunto pagato che allunga è un colpo; AL CONTRARIO uno che accorcia no', async (t) => {
   conTetto(t, 4_000);
-  const lungo = await giro(t, { messaggiIniziali: inEmergenza(), rete: fornitore({ riassunto: `## Riassunto\n${'dettaglio '.repeat(9000)}` }), freno: { modello: MODELLO } });
+  const lungo = await giroColSottofondo(t, { riassunto: `## Riassunto\n${'dettaglio '.repeat(9000)}` });
+  assert.equal(lungo.conti.riassunti, 1, 'premessa: il riassunto si è pagato');
+  assert.ok(lungo.eventi.some((e) => e.tipo === 'compattazione-preparata' && e.motivo === 'inefficace'), 'premessa: arrivato, e «inefficace»');
   assert.ok((lungo.esito.freno?.colpi ?? 0) >= 1, JSON.stringify(lungo.esito.freno));
-  const corto = await giro(t, { messaggiIniziali: inEmergenza(), rete: fornitore(), freno: { modello: MODELLO } });
+  const corto = await giroColSottofondo(t, {});
+  assert.ok(corto.eventi.some((e) => e.tipo === 'compattazione-preparata' && e.fase === 'pronta'), 'premessa: arrivato, e pronto');
   assert.equal(corto.esito.freno?.colpi ?? 0, 0, JSON.stringify(corto.esito.freno));
 });
 
@@ -562,12 +619,18 @@ test('R10-3 nel giro — il registro tira il freno mentre il giro lavora (riassu
 test('R10-3 nel giro, una volta sola — la copia viva cambiata si unisce UNA volta: i colpi che una lettura sotto la soglia ha azzerato non tornano alla compattazione dopo, nello stesso giro; le ricariche del registro restano', async (t) => {
   conTetto(t, 4_000);
   const cartella = cartellaDiProva('talos-r10-3-una-volta-');
-  t.after(() => rimuoviCartellaDiProva(cartella));
+  t.after(async () => { await attendiFigliSullaCartella(cartella); rimuoviCartellaDiProva(cartella); }); // il git del riassunto in sottofondo (aiuto/attendi-figli-sulla-cartella.mjs)
   writeFileSync(join(cartella, 'grande.txt'), 'contenuto del file grande, riga dopo riga.\n'.repeat(2_000));
   let richieste = 0;
   const fetchDiRete = async (_u, o) => {
     const corpo = JSON.parse(o.body);
-    if (!corpo.tools?.length) return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nbreve.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
+    /* ⛔ 28/10/2026 (contratto C1): all'emergenza il riassunto pagato arriva in sottofondo; se arrivava DENTRO il giro, la richiesta dopo lo
+       scambiava («miglioramento») e il suo verdetto oltre la soglia era un colpo VERO (D-VERDETTO-02) — rossa 1 volta su ~5, a seconda di
+       quando arrivava. Qui si prova l'unione della copia viva, non quel verdetto: il riassunto arriva dopo la fine del giro. */
+    if (!corpo.tools?.length) {
+      await new Promise((ok) => { setTimeout(ok, 2_000).unref(); });
+      return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nbreve.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
+    }
     richieste += 1;
     /* la prima lettura, dopo il riassunto, sta sotto la soglia (azzera i colpi); poi un esito d'attrezzo grande porta la richiesta dopo
        oltre l'emergenza (seconda compattazione, la sola coda), e la risposta finale */

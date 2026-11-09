@@ -261,7 +261,7 @@ test('D-10S, la rotta: accende, rifiuta ciò che non è booleano con 400, e la s
   const { createHttpApp } = await import('../src/http-app.mjs');
   const { createServer } = await import('node:http');
 
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     listaTaskDisponibili: () => [],
     elencaCartelleProgetto: () => [],

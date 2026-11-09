@@ -236,7 +236,7 @@ test('C2B-R-11 — HTTP: la rotta delle impostazioni accetta la chiave di Coordi
   const { createServer } = await import('node:http')
   const { createHttpApp } = await import('../src/http-app.mjs')
   const { registry, sessionId, input } = await scena(t)
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registry }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registry }))
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
   t.after(() => new Promise((ok) => { server.closeAllConnections(); server.close(() => ok()) }))
   const url = `http://127.0.0.1:${server.address().port}/api/v1/sessions/${encodeURIComponent(sessionId)}/settings`

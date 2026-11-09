@@ -16,7 +16,7 @@ const testDir = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(testDir, '..', 'public');
 
 function realApp() {
-  return createHttpApp({ staticHandler: createStaticHandler(publicDir) });
+  return createHttpApp({ senzaGettone: 'prove', staticHandler: createStaticHandler(publicDir) });
 }
 
 async function listen(t, app = realApp()) {
@@ -67,8 +67,23 @@ test('GET /api/v1/runtime/bootstrap non inventa un elenco quando il runtime non 
   assert.equal(body.data.runtime.consulted, false);
 });
 
+test('GET /api/v1/runtime/caricamento: lo stato in memoria del motore, null quando non c\'è motore, nessuna sonda', async (t) => {
+  const { base } = await listen(t);
+  const vuoto = await (await fetch(`${base}/api/v1/runtime/caricamento`)).json();
+  assert.equal(vuoto.data.caricamento, null);
+  assert.equal(Number.isFinite(Date.parse(vuoto.data.observedAt)), true);
+  let sonde = 0;
+  const caricamento = { modelId: 'a', nome: 'Gemma 4', fase: 'text_model', percentuale: 40, iniziatoIl: '2026-11-01T10:00:00.000Z', motivo: 'apertura', altroMotore: false };
+  const { base: conMotore } = await listen(t, createHttpApp({ senzaGettone: 'prove', staticHandler: createStaticHandler(publicDir), localRuntimes: { 'llama.cpp': {
+    detect: async () => { sonde += 1; return { state: 'observed' }; }, caricamento: () => ({ caricamento, observedAt: '2026-11-01T10:00:12.000Z' }) } } }));
+  const pieno = await (await fetch(`${conMotore}/api/v1/runtime/caricamento`)).json();
+  assert.deepEqual(pieno.data, { caricamento, observedAt: '2026-11-01T10:00:12.000Z' });
+  assert.equal(sonde, 0, 'la lettura ogni mezzo secondo non passa dalle sonde dei fornitori');
+  assert.equal((await fetch(`${conMotore}/api/v1/runtime/caricamento?x=1`)).status, 400);
+});
+
 test('GET /api/v1/runtime/bootstrap valida il contratto backend e distingue elenco vuoto', async (t) => {
-  const { base } = await listen(t, createHttpApp({
+  const { base } = await listen(t, createHttpApp({ senzaGettone: 'prove', 
     staticHandler: createStaticHandler(publicDir),
     runtimeBootstrapFn: async () => ({
       schema: 'talos.harness-ui.runtime-bootstrap.v1',
@@ -169,7 +184,7 @@ test('OPTIONS answers a CORS preflight, and Access-Control-Allow-Origin reflects
  * conto suo in frequent-dirs.test.mjs).
  */
 test('GET /api/v1/frequent-dirs torna gli item di cartelleFrequentiFn, avvolti nella busta standard', async (t) => {
-  const { base } = await listen(t, createHttpApp({
+  const { base } = await listen(t, createHttpApp({ senzaGettone: 'prove', 
     staticHandler: createStaticHandler(publicDir),
     cartelleFrequentiFn: () => [{ etichetta: 'Desktop', percorso: 'C:/Users/prova/Desktop' }],
   }));
@@ -225,6 +240,23 @@ test('static index accepts only the six canonical qa states and rejects every ot
   assert.equal((await fetch(`${base}/app.js?qa=desktop`)).status, 400);
 });
 
+/* FE-070 (05/11): il guscio apre `segno.html?fx=&fy=&fw=&fh=&scala=` (il rettangolo dello schermo in pixel fisici e la sua scala). Solo quelle cinque chiavi, una volta
+   ciascuna, numeri semplici, e solo su quella pagina: tutto il resto si rifiuta come prima. */
+test('FE-070 segno.html accepts exactly the five screen numbers and nothing else', async (t) => {
+  const pagina = { readFile: async (percorso) => { if (/segno\.(html|js)$/u.test(percorso)) return Buffer.from('<!doctype html><title>segno</title>'); return readFileSync(percorso); } };
+  const { base } = await listen(t, createHttpApp({ senzaGettone: 'prove', staticHandler: createStaticHandler(publicDir, pagina) }));
+  for (const query of ['fx=0&fy=0&fw=1440&fh=900&scala=1', 'fx=-1920&fy=-120&fw=1920&fh=1080&scala=1.25', 'scala=1.5&fh=900&fw=1440&fy=0&fx=2560']) {
+    assert.equal((await fetch(`${base}/segno.html?${query}`)).status, 200, query);
+  }
+  for (const query of ['fx=0&fy=0&fw=1440&fh=900', 'fx=0&fy=0&fw=1440&fh=900&scala=1&extra=1', 'fx=0&fx=1&fy=0&fw=1440&fh=900&scala=1',
+    'fx=uno&fy=0&fw=1440&fh=900&scala=1', 'fx=0&fy=0&fw=1440&fh=900&scala=1e3', 'fx=0&fy=0&fw=1440&fh=900&scala=', 'qa=desktop']) {
+    assert.equal((await fetch(`${base}/segno.html?${query}`)).status, 400, query);
+  }
+  assert.equal((await fetch(`${base}/segno.html`)).status, 200);
+  assert.equal((await fetch(`${base}/segno.js?fx=0&fy=0&fw=1440&fh=900&scala=1`)).status, 400);
+  assert.equal((await fetch(`${base}/?fx=0&fy=0&fw=1440&fh=900&scala=1`)).status, 400);
+});
+
 test('response headers apply CSP, nosniff, frame denial and no-store to data', async (t) => {
   const { base } = await listen(t);
   const response = await fetch(`${base}/api/v1/health`);
@@ -247,7 +279,7 @@ test('errors never expose absolute paths, stack or row evidence', async (t) => {
   const catalogoModelliFn = async () => {
     throw new Error('C:\\secret\\banco\\alpha.jsonl detto-segreto\n    at private-stack');
   };
-  const { base } = await listen(t, createHttpApp({
+  const { base } = await listen(t, createHttpApp({ senzaGettone: 'prove', 
     staticHandler: createStaticHandler(publicDir),
     catalogoModelliFn,
   }));
@@ -266,7 +298,7 @@ test('errors never expose absolute paths, stack or row evidence', async (t) => {
  */
 test('a dependency throwing PAYLOAD_LIMIT returns a bounded 413, not a generic 500', async (t) => {
   const catalogoModelliFn = async () => { throw Object.assign(new Error('private'), { code: 'PAYLOAD_LIMIT' }); };
-  const { base } = await listen(t, createHttpApp({ staticHandler: createStaticHandler(publicDir), catalogoModelliFn }));
+  const { base } = await listen(t, createHttpApp({ senzaGettone: 'prove', staticHandler: createStaticHandler(publicDir), catalogoModelliFn }));
   const response = await fetch(`${base}/api/v1/models`);
   assert.equal(response.status, 413);
   assert.equal((await response.json()).error.code, 'PAYLOAD_LIMIT');
@@ -288,7 +320,7 @@ test('client abort closes work cleanly', async (t) => {
     resolved = true;
     return { items: [] };
   };
-  const { base } = await listen(t, createHttpApp({ staticHandler: createStaticHandler(publicDir), catalogoModelliFn }));
+  const { base } = await listen(t, createHttpApp({ senzaGettone: 'prove', staticHandler: createStaticHandler(publicDir), catalogoModelliFn }));
   const controller = new AbortController();
   const request = fetch(`${base}/api/v1/models`, { signal: controller.signal });
   await started;
@@ -305,7 +337,7 @@ test('client abort closes work cleanly', async (t) => {
  * (che vieterebbe lo script inline del modello).
  */
 test('⭐⭐⭐ GET /api/v1/artifacts/:id: HTML intero, CON la sua CSP permissiva — MAI quella globale script-src \'self\'', async (t) => {
-  const { base } = await listen(t, createHttpApp({
+  const { base } = await listen(t, createHttpApp({ senzaGettone: 'prove', 
     staticHandler: createStaticHandler(publicDir),
     leggiArtefattoFn: (id) => (id === 'a1' ? '<!doctype html><html><body>ciao</body></html>' : null),
   }));
@@ -330,7 +362,7 @@ test('⭐⭐⭐ GET /api/v1/artifacts/:id: HTML intero, CON la sua CSP permissiv
 });
 
 test('⛔ GET /api/v1/artifacts/:id con un id ignoto: 404 onesto, non un 200 vuoto', async (t) => {
-  const { base } = await listen(t, createHttpApp({
+  const { base } = await listen(t, createHttpApp({ senzaGettone: 'prove', 
     staticHandler: createStaticHandler(publicDir),
     leggiArtefattoFn: () => null,
   }));

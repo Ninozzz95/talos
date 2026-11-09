@@ -27,7 +27,7 @@ function remotoFinto() {
 }
 
 async function banco(t, { remoto = remotoFinto(), token = null } = {}) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, remotoFn: () => remoto, token }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, remotoFn: () => remoto, token }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => server.close(r)));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -82,7 +82,9 @@ test('ROT-05 nessuna operazione del telefono porta sotto /api/v1/remote', () => 
   for (const [nome, voce] of Object.entries(OPERAZIONI_HTTP)) {
     const percorso = voce.percorso({ sessionId: 's-1', turn: 1, serverId: 'srv', provider: ID_CATALOGO_IN_UI[0], // R5.11 il turno, R5.8 il server MCP, R-M4 bis il fornitore
       compactionAt: '2026-10-24T09:00:00.000Z', toolCallId: 'call_1', messageId: 'm-1', // parità punti 2 e 4 (24/10): compattazione, processo, messaggio
-      action: 'pausa' }); // owner 27/10/2026: l'azione dell'obiettivo dal dispositivo
+      action: 'pausa', ricercaId: 'r-1', voceId: 'v-1', versione: 'v-2', // owner 27/10/2026: l'azione dell'obiettivo dal dispositivo
+      /* blocco 23, Context Manager dal dispositivo (rossa della suite del blocco 24, classificata il 01/11: la prova non dava gli id nuovi) */
+      jobId: 'j-1', versionId: 'v-1', factId: 'f-1', sourceId: 'message-1', indice: 0, impronta: 'a'.repeat(64), daByte: 0, quantiByte: 10 });
     assert.ok(!percorso.startsWith(PREFISSO_ROTTE_REMOTO), `${nome} → ${percorso}`);
   }
 });

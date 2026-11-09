@@ -1,0 +1,1 @@
+{"stato":"completo","blocco":{"tipo":"tabella","id":"vendite","titolo":"Vendite per mese","colonne":[{"id":"mese","titolo":"Mese","tipo":"testo"},{"id":"euro","titolo":"Euro","tipo":"soldi"}],"righe":[["Gennaio",1200],["Febbraio",980.5],["Marzo",null]],"ordinabile":true}}

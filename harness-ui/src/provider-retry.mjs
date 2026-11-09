@@ -109,16 +109,45 @@ export function leggiAttesaRichiestaDalFornitore(headers, now = Date.now()) {
   return leggiAttesaRetryAfter(leggi('retry-after'), now);
 }
 
+/*
+ * Rete irraggiungibile (Performance, banco della compattazione, 04/11/2026): una connessione rifiutata usciva «esito incerto, una nuova
+ * richiesta può costare di nuovo», ma la richiesta non era mai partita. Il confine è «la richiesta ha lasciato la macchina?»: questi
+ * codici nascono solo mentre si cerca il nome o si apre la connessione, prima di scrivere un byte (Node `errors.md`, «Common system
+ * errors»; undici `ConnectTimeoutError`). Stesso elenco di Hermes (`apps/desktop/electron/api-transport.ts:78`, NEVER_SENT_CODES) più il
+ * tempo di connessione di undici; Codex separa allo stesso modo `is_connect()` (`http-client/src/transport.rs:124`). ECONNRESET, EPIPE,
+ * ETIMEDOUT e UND_ERR_SOCKET restano fuori: possono arrivare DOPO l'invio, e lì l'esito resta incerto.
+ */
+const CODICI_RICHIESTA_NON_PARTITA = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'EHOSTUNREACH', 'ENETUNREACH', 'UND_ERR_CONNECT_TIMEOUT']);
+
+/** Il codice di connessione che prova che la richiesta non è partita, o null. undici lo mette in `cause` (a volte più giù, o in un
+ *  `AggregateError` con `errors[]` per happy eyeballs): si scende in ampiezza per pochi livelli, come `catena-del-riassunto.mjs`. */
+export function codiceDiRichiestaNonPartita(errore) {
+  if (!errore || typeof errore !== 'object' || errore.esitoIncerto === true) return null;
+  const coda = [errore];
+  for (let visti = 0; coda.length && visti < 12; visti += 1) {
+    const e = coda.shift();
+    if (!e || typeof e !== 'object') continue;
+    if (typeof e.code === 'string' && CODICI_RICHIESTA_NON_PARTITA.has(e.code)) return e.code;
+    if (e.cause) coda.push(e.cause);
+    if (Array.isArray(e.errors)) coda.push(...e.errors.slice(0, 4));
+  }
+  return null;
+}
+
 /** A lost response cannot establish that a generation (or its cost) never happened. */
 export function erroreEsitoProviderIncerto(causa) {
   const causaDiTrasporto = ['PROVIDER_SILENCE', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'PROVIDER_FIRST_RESPONSE_TIMEOUT', 'PROVIDER_STREAM_ERROR', 'PROVIDER_STREAM_INCOMPLETE', 'PROVIDER_STREAM_INVALID']
     .find(codice => codice === causa?.causaDiTrasporto || codice === causa?.code);
   const silenzio = causaDiTrasporto === 'PROVIDER_SILENCE';
-  const errore = new Error(silenzio ? "The provider response was interrupted by prolonged silence and the outcome of the request is uncertain. Resume explicitly when you want to continue: a new request may incur another cost." : "The provider response was interrupted and the outcome of the request is uncertain. Resume explicitly when you want to continue: a new request may incur another cost.");
-  errore.chiave = silenzio ? 'server.providerOutcome.silence' : 'server.providerOutcome.interrupted';
+  /* R-47: qui l'esito non è incerto per la chiamata: si sa che non è partita, e la persona deve leggere questo (Desktop, 1/11/2026) */
+  const senzaFine = causa?.argomentiSenzaFine === true;
+  const errore = new Error(senzaFine ? 'The model filled a tool call with blank space, so that call was not run. Resume explicitly when you want to continue: a new request may incur another cost.'
+    : silenzio ? "The provider response was interrupted by prolonged silence and the outcome of the request is uncertain. Resume explicitly when you want to continue: a new request may incur another cost." : "The provider response was interrupted and the outcome of the request is uncertain. Resume explicitly when you want to continue: a new request may incur another cost.");
+  errore.chiave = senzaFine ? 'server.providerOutcome.blankToolCall' : silenzio ? 'server.providerOutcome.silence' : 'server.providerOutcome.interrupted';
   return Object.assign(errore, {
     code: 'PROVIDER_OUTCOME_UNKNOWN', esitoIncerto: true, transitorio: false,
     classe: typeof causa?.classe === 'string' ? causa.classe : 'esito-incerto',
+    ...(senzaFine ? { argomentiSenzaFine: true } : {}),
     ...(causaDiTrasporto ? { causaDiTrasporto } : {}),
     ...(causa?.parziale ? { parziale: causa.parziale } : {}),
     ...(consumoPubblico(causa?.usage) ? { usage: consumoPubblico(causa.usage) } : {}),
@@ -151,11 +180,13 @@ export function erroreEsitoProviderIncertoEsaurito(causa, esitiRitentati) {
      La chiave ha le forme One/Many (`testoDelServer` sceglie con `tn` sul numero). */
   return Object.assign(errore, {
     code: 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO',
-    message: 'The provider response was interrupted and its outcome remained uncertain even after '
-      + `${esitiRitentati} automatic ${esitiRitentati === 1 ? 'resend' : 'resends'} with no intermediate effects. `
-      + 'The request may have been produced and paid for: resume explicitly when you want to continue.',
-    chiave: 'server.providerOutcome.exhausted',
-    params: { n: esitiRitentati },
+    ...(errore.argomentiSenzaFine ? {} : {
+      message: 'The provider response was interrupted and its outcome remained uncertain even after '
+        + `${esitiRitentati} automatic ${esitiRitentati === 1 ? 'resend' : 'resends'} with no intermediate effects. `
+        + 'The request may have been produced and paid for: resume explicitly when you want to continue.',
+      chiave: 'server.providerOutcome.exhausted',
+      params: { n: esitiRitentati },
+    }),
     ritentabile: true,
     esitiIncertiRitentati: esitiRitentati,
   });

@@ -211,7 +211,7 @@ test('FORN-13 AL CONTRARIO — chatgpt_account: azione sbagliata rifiutata; un g
   const { ospite, delGiro } = scenaChatgpt(t, accesso)
   const sbagliata = await ospite('chatgpt_account', { action: 'login' }, { fase: 'anteprima' })
   assert.equal(sbagliata.ok, false)
-  assert.match(sbagliata.messaggio, /needs action "status" or "disconnect"/u)
+  assert.match(sbagliata.messaggio, /needs action "status", "disconnect" or "sign_in"/u)
   const automazione = await delGiro('chatgpt_account', { action: 'disconnect' }, { fase: 'anteprima' })
   assert.equal(automazione.ok, false)
   assert.match(automazione.messaggio, /automation run cannot disconnect ChatGPT/u)

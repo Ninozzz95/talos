@@ -27,6 +27,7 @@
  */
 
 import { expect, test } from '@playwright/test';
+import { TESTI } from '../../src/i18n/testi/index.js';
 
 /** `/api/v1/search-source` — cinque fonti, `duckduckgo` pronta: nessuna chiave e nessun indirizzo. */
 const FONTI_RICERCA = {
@@ -70,8 +71,13 @@ const SEZIONI = [
     idAttesi: [
       'settings-group-tools-policy', 'settings-group-tools-search', 'settingsToolsFacts',
       'settings-group-tools-dove-girano', // owner 27/10/2026: «Dove girano i comandi» di serie (c71639d26)
+      'settings-group-tools-pc-sveglio', 'setting-pc-sveglio-modo', 'setting-pc-sveglio-modo--calm', // 01/11/2026: «Tieni sveglio il PC» (77bf7608e)
       'setting-source-preview', 'searchSourceMount', 'fonte-label-duckduckgo', 'fonte-label-tavily',
       'fonte-label-brave', 'fonte-label-searxng', 'fonte-label-custom', 'fonte-label-off', 'fonte-query',
+      // 07/11/2026 (curatore): la carta «Uso del computer» in Anteprima (17b6c7a17 + 92607b484, decisione 310, 06/11), con la testata
+      // delle sorelle data da cdb475867 (decisioni 331, 335, 339): titolo, distintivo, interruttore, sua copia calma e suo aiuto.
+      'settings-group-tools-computer-use', 'settings-group-tools-computer-use-segno',
+      'setting-computerUseToggle', 'setting-computerUseToggle--calm', 'settingsHelp-computerUseToggle',
     ],
   },
 ];
@@ -89,7 +95,9 @@ async function apriSezione(page, sezione) {
   await expect(page.locator('#schermoImpostazioni')).toBeVisible({ timeout: 10_000 });
 }
 
-async function avvia(page, { lingua = 'it' } = {}) {
+/* `lente`: indirizzi le cui GET si fanno attendere `ritardo` ms prima di passare (FORME-07, decisione 331, 07/11/2026). Le rotte stanno
+   DOPO quella generale, così Playwright le sceglie per prime; il resto della pagina non cambia. */
+async function avvia(page, { lingua = 'it', lente = [], ritardo = 400 } = {}) {
   const tentate = [];
   await page.route('**/*', (route) => {
     const metodo = route.request().method();
@@ -104,6 +112,13 @@ async function avvia(page, { lingua = 'it' } = {}) {
   await page.addInitScript((dati) => {
     window.localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify(dati));
   }, { version: 1, appearance: { uiLanguage: lingua, colorMode: 'dark' }, chat: {}, workspaces: {} });
+  for (const indirizzo of lente) {
+    await page.route(indirizzo, async (route) => {
+      if (route.request().method() !== 'GET') return route.fallback();
+      await new Promise((fatto) => setTimeout(fatto, ritardo));
+      return route.continue();
+    });
+  }
   await page.goto('/');
   await expect(page.locator('.talos-sidebar [data-vaia="impostazioni"]')).toBeVisible({ timeout: 15_000 });
   return tentate;
@@ -113,11 +128,17 @@ test('FORME-01 · ogni carta delle tre sezioni ha la sua TESTATA, col titolo dal
   const tentate = await avvia(page);
   /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni: la carta «Stato degli accessi» non esiste più. */
   const attese = {
-    privacy: ['Dati locali del browser', 'Trasferisci le preferenze', 'Link dalla chat'],
-    tools: ['Policy della sessione', 'Origine della ricerca web'],
+    privacy: ['Link dalla chat', 'Dati locali del browser', 'Trasferisci le preferenze'], // decisione owner 164 (bozzetto 14 B): «Link dalla chat» in cima, la banda resta in fondo
+    /* «Dove girano i comandi» (owner 27/10) arriva dopo una lettura dal server: la prova leggeva le carte prima, e passava per tempismo
+       (rossa nel blocco 12 quando la risposta è arrivata prima). Si aspetta la carta, poi si contano tutte. */
+    tools: ['Policy della sessione', 'Dove girano i comandi · conversazioni nuove', 'Tieni sveglio il PC', 'Uso del computer', 'Origine della ricerca web'], // 01/11: «Tieni sveglio il PC» (77bf7608e)
   };
   for (const sezione of Object.keys(attese)) {
     await apriSezione(page, sezione);
+    if (sezione === 'tools') {
+      await expect(page.locator('#setting-panel-tools [data-settings-card="tools-dove-girano"]')).toBeAttached();
+      await expect(page.locator('#setting-panel-tools [data-settings-card="tools-pc-sveglio"]')).toBeAttached(); // anche lei dopo una lettura dal server
+    }
     const carte = await page.evaluate((s) => [...document.querySelectorAll(`#setting-panel-${s} [data-settings-card]`)].map((carta) => ({
       chiave: carta.dataset.settingsCard,
       titolo: carta.querySelector(':scope > .settings-group__head > .settings-group__title, :scope > .settings-group__head > .settings-group__copy > .settings-group__title')?.textContent,
@@ -230,7 +251,7 @@ test('FORME-06 · il RIMONTAGGIO non duplica la testata', async ({ page }) => {
   const prima = await forma();
   expect(prima.testate).toBe(3);
   expect(prima.carte).toBe(3);
-  expect(prima.titoli).toEqual(['Dati locali del browser', 'Trasferisci le preferenze', 'Link dalla chat']);
+  expect(prima.titoli).toEqual(['Link dalla chat', 'Dati locali del browser', 'Trasferisci le preferenze']);
   await page.locator('#settingsRipristina').click();
   await page.getByRole('button', { name: 'Ripristina', exact: true }).click();
   await page.waitForTimeout(400);
@@ -258,13 +279,13 @@ test('FORME-05 · la copia che la testata ha spostato c\'è ancora, in italiano 
   const attesi = {
     /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni: niente più «Stato degli accessi» / «Access state». */
     it: {
-      privacy: ['Dati locali del browser', 'Trasferisci le preferenze', 'Link dalla chat'],
-      tools: ['Policy della sessione', 'Dove girano i comandi', 'Origine della ricerca web'], // 27/10: la carta di serie dei comandi
+      privacy: ['Link dalla chat', 'Dati locali del browser', 'Trasferisci le preferenze'],
+      tools: ['Policy della sessione', 'Dove girano i comandi · conversazioni nuove', 'Tieni sveglio il PC', 'Uso del computer', 'Origine della ricerca web'], // 27/10: la carta di serie dei comandi; 01/11: il PC sveglio
       costi: ['Consumo registrato'],
     },
     en: {
-      privacy: ['Local browser data', 'Transfer preferences', 'Links from chat'],
-      tools: ['Session policy', 'Where commands run', 'Web search source'],
+      privacy: ['Links from chat', 'Local browser data', 'Transfer preferences'],
+      tools: ['Session policy', 'Where commands run · new conversations', 'Keep the PC awake', 'Computer use', 'Web search source'],
       costi: ['Recorded usage'],
     },
   };
@@ -277,3 +298,211 @@ test('FORME-05 · la copia che la testata ha spostato c\'è ancora, in italiano 
     expect(tentate).toEqual([]);
   }
 });
+
+/*
+ * FORME-07 — decisione 331 (07/11/2026), secondo giro: il posto della carta «Uso del computer» non dipende da chi risponde prima.
+ * Il revisore della vista l'ha vista finire sotto «Origine della ricerca web» 3 volte su 3 rallentando di 400 ms le letture delle
+ * sorelle (`c331-revisione-vista.md`). Si prova nei due versi: sorelle lente, poi la carta lenta lei. L'ordine atteso è quello di FORME-01.
+ */
+const ORDINE_STRUMENTI = ['tools-policy', 'tools-dove-girano', 'tools-pc-sveglio', 'tools-computer-use', 'tools-search'];
+for (const [nome, lente] of [
+  ['le sorelle rispondono 400 ms dopo', ['**/api/v1/keep-awake-settings', '**/api/v1/command-settings']],
+  ['la carta risponde 400 ms dopo', ['**/api/v1/computer-use/settings']],
+]) {
+  test(`FORME-07 · il posto della carta «Uso del computer» è fisso: ${nome}`, async ({ page }) => {
+    const tentate = await avvia(page, { lente });
+    await apriSezione(page, 'tools');
+    for (const chiave of ['tools-dove-girano', 'tools-pc-sveglio', 'tools-computer-use']) {
+      await expect(page.locator(`#setting-panel-tools [data-settings-card="${chiave}"]`)).toBeAttached({ timeout: 8000 });
+    }
+    /* le letture lente devono essere finite: l'interruttore si accende e il menu del PC sveglio ha il suo valore solo dopo la risposta */
+    await expect(page.locator('#setting-computerUseToggle')).toBeEnabled({ timeout: 8000 });
+    await page.waitForTimeout(500);
+    const ordine = await page.evaluate(() => [...document.querySelectorAll('#setting-panel-tools > [data-settings-card]')].map((c) => c.dataset.settingsCard));
+    expect(ordine).toEqual(ORDINE_STRUMENTI);
+    expect(tentate).toEqual([]);
+  });
+}
+
+/*
+ * FORME-08 — decisione 331 (07/11/2026), secondo giro: il segno «Anteprima» sta ACCANTO al titolo (non al bordo destro della carta),
+ * sotto la testata c'è la spiegazione come nelle sorelle (`pc-sveglio-impostazioni.js`, `dove-girano-di-serie.js`), e l'aiuto della
+ * riga ha la misura della spiegazione delle sorelle (13 px), non 12 px su 49 caratteri.
+ */
+test('FORME-08 · il segno «Anteprima» sta accanto al titolo, e la carta ha la spiegazione delle sorelle', async ({ page }) => {
+  const tentate = await avvia(page);
+  await apriSezione(page, 'tools');
+  await expect(page.locator('#setting-computerUseToggle')).toBeEnabled({ timeout: 8000 });
+  const m = await page.evaluate(() => {
+    const carta = document.querySelector('#setting-panel-tools [data-settings-card="tools-computer-use"]');
+    const titolo = carta.querySelector('.settings-group__title').getBoundingClientRect();
+    const segno = carta.querySelector('[data-c="PreviewBadge"]').getBoundingClientRect();
+    const testata = carta.querySelector(':scope > .settings-group__head');
+    const spiegazione = testata.nextElementSibling;
+    const sorella = document.querySelector('#setting-panel-tools [data-settings-card="tools-pc-sveglio"] > .settings-group__head + p');
+    const aiuto = carta.querySelector('.talos-setting__help');
+    return {
+      distanza: segno.left - titolo.right,
+      centri: Math.abs((segno.top + segno.height / 2) - (titolo.top + titolo.height / 2)),
+      spiegazione: spiegazione?.tagName === 'P' ? spiegazione.textContent.trim() : null,
+      corpoSpiegazione: spiegazione ? getComputedStyle(spiegazione).fontSize : null,
+      corpoSorella: sorella ? getComputedStyle(sorella).fontSize : null,
+      corpoAiuto: getComputedStyle(aiuto).fontSize,
+      larghezzaAiuto: aiuto.getBoundingClientRect().width,
+      larghezzaRiga: aiuto.closest('.talos-setting').getBoundingClientRect().width,
+    };
+  });
+  expect(m.distanza, 'il segno è lontano dal titolo').toBeGreaterThanOrEqual(0);
+  expect(m.distanza, 'il segno è lontano dal titolo').toBeLessThanOrEqual(12);
+  expect(m.centri, 'il segno non è sulla riga del titolo').toBeLessThanOrEqual(4);
+  expect(m.spiegazione, 'manca la spiegazione sotto la testata').toBeTruthy();
+  expect(m.corpoSorella).toBe('13px');
+  expect(m.corpoSpiegazione).toBe(m.corpoSorella);
+  expect(m.corpoAiuto, 'l\'aiuto della riga non ha la misura delle sorelle').toBe(m.corpoSorella);
+  expect(m.larghezzaAiuto, 'l\'aiuto è stretto e lascia un vuoto prima dell\'interruttore').toBeGreaterThan(m.larghezzaRiga / 2);
+  expect(tentate).toEqual([]);
+});
+
+/*
+ * FORME-09 — decisione 331 (07/11/2026), terzo giro: la revisione di correttezza del secondo giro (ROSSO) ha visto che la riga
+ * `#setting-panel-tools > .talos-card > p` di `static-copy.ts` scriveva «Regole salvate con la sessione…» in OGNI paragrafo figlio di
+ * OGNI carta degli Strumenti, a ogni `render()` delle Impostazioni: dopo una ricerca scritta e cancellata, o entrando negli Strumenti
+ * dal selettore di sezione (senza il clic sulla scheda), la spiegazione di «Uso del computer», quella e la riga di stato di «Tieni
+ * sveglio il PC» e la spiegazione di «Dove girano i comandi» diventavano la frase della politica. Si leggono i testi ESATTI, dal
+ * dizionario, nelle due lingue e nei due percorsi. Il server di prova non è l'app installata (`http-app.mjs:3604`,
+ * `nellAppInstallata = () => false`), quindi la riga di stato del PC sveglio dice «Solo nell'app installata.».
+ */
+const ATTESI_STRUMENTI = (l) => ({
+  politica: TESTI[l]['impostazioni.copy.rulesSavedWithTheSession'],
+  computerUse: TESTI[l]['computer.settings.description'],
+  pcSveglio: TESTI[l]['varie.keepAwake.help'],
+  pcSveglioStato: TESTI[l]['varie.keepAwake.onlyInApp'],
+  doveGirano: TESTI[l]['varie.commandsDefault.description'],
+});
+const leggiStrumenti = (page) => page.evaluate(() => {
+  const p = (s) => document.querySelector(`#setting-panel-tools ${s}`)?.textContent ?? null;
+  return {
+    politica: p('[data-settings-card="tools-policy"] > p'),
+    computerUse: p('[data-settings-card="tools-computer-use"] > [data-computer-use-descrizione]'),
+    pcSveglio: p('[data-settings-card="tools-pc-sveglio"] > [data-pc-sveglio-aiuto]'),
+    pcSveglioStato: p('[data-settings-card="tools-pc-sveglio"] > [data-pc-sveglio-stato]'),
+    doveGirano: p('[data-settings-card="tools-dove-girano"] > [data-dove-serie-descrizione]'),
+  };
+});
+/* I tre percorsi che ridisegnano le Impostazioni, per una sezione qualunque (`sezione`), con `privacy` come sezione «altrove». */
+const PERCORSI = [
+  ['una ricerca scritta e poi cancellata', async (page, sezione) => {
+    const ricerca = page.locator('#settingsSearch');
+    /* revisione prove c331 giro 3, reperto 1 (c331g3-revisione-prove.md:15, 07/11/2026): «sveglio» nascondeva il pannello solo perché le carte
+       dinamiche non sono indicizzate (schema.ts:131), un difetto noto. Una parola che non trova NIENTE nasconde ogni pannello e mostra il vuoto,
+       oggi e il giorno in cui quel difetto si cura. */
+    await ricerca.fill('zqxjvw');
+    await expect(page.locator(`#setting-panel-${sezione}`)).toBeHidden();
+    await expect(page.locator('#schermoImpostazioni .settings-empty')).toBeVisible();
+    await ricerca.fill('');
+    await expect(page.locator(`#setting-panel-${sezione}`)).toBeVisible();
+  }],
+  ['il selettore di sezione, via e ritorno', async (page, sezione) => {
+    const scegli = (s) => page.evaluate((v) => {
+      const sel = document.querySelector('#settingsSectionSelect'); sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }, s);
+    await scegli('privacy');
+    await expect(page.locator(`#setting-panel-${sezione}`)).toBeHidden();
+    await scegli(sezione);
+    await expect(page.locator(`#setting-panel-${sezione}`)).toBeVisible();
+  }],
+  /* revisione prove c331 giro 3, reperto 2 (c331g3-revisione-prove.md:16, 07/11/2026): sul PC il selettore è nascosto (settings.css:81, si mostra
+     solo sotto i 660 px del contenitore, settings.css:548); il percorso vero è il clic su un'altra scheda e il ritorno, a 1920×1080. */
+  ['il clic su un\'altra scheda e il ritorno, sul PC', async (page, sezione) => {
+    await page.locator('#setting-tab-privacy').click();
+    await expect(page.locator(`#setting-panel-${sezione}`)).toBeHidden();
+    await page.locator(`#setting-tab-${sezione}`).click();
+    await expect(page.locator(`#setting-panel-${sezione}`)).toBeVisible();
+  }, { pc: true }],
+];
+for (const lingua of ['it', 'en']) {
+  for (const [nome, percorso, { pc = false } = {}] of PERCORSI) {
+    test(`FORME-09 · ${lingua}: le spiegazioni delle carte degli Strumenti restano le loro dopo ${nome}`, async ({ page }) => {
+      if (pc) await page.setViewportSize({ width: 1920, height: 1080 }); // revisione prove c331 giro 3, reperto 2 (07/11/2026)
+      const tentate = await avvia(page, { lingua });
+      await apriSezione(page, 'tools');
+      await expect(page.locator('#setting-computerUseToggle')).toBeEnabled({ timeout: 8000 });
+      await expect(page.locator('#setting-panel-tools [data-pc-sveglio-stato]')).toBeVisible({ timeout: 8000 });
+      await expect(page.locator('#setting-panel-tools [data-dove-serie-descrizione]')).toHaveText(ATTESI_STRUMENTI(lingua).doveGirano, { timeout: 8000 });
+      expect(await leggiStrumenti(page), 'prima del percorso').toEqual(ATTESI_STRUMENTI(lingua));
+      await percorso(page, 'tools');
+      expect(await leggiStrumenti(page), `dopo ${nome}`).toEqual(ATTESI_STRUMENTI(lingua));
+      expect(tentate).toEqual([]);
+    });
+  }
+}
+
+/*
+ * FORME-10 — decisione 331 (07/11/2026), quarto giro: le revisioni di correttezza (c331g3-revisione-correttezza.md:12-17) e di vista
+ * (c331g3-revisione-vista.md:10) del terzo giro hanno visto la stessa classe di FORME-09 nella Memoria: `#setting-panel-memoria > .talos-card
+ * > p:first-of-type` di `static-copy.ts` scriveva a ogni `render()` la frase di «Ripartizione del contesto» nella spiegazione di «Motore del
+ * contesto» e di «Compattazione della conversazione», le due carte che si montano dopo. Si leggono i testi ESATTI di ogni carta, dal
+ * dizionario, nelle due lingue e nei tre percorsi.
+ */
+const ATTESI_MEMORIA = (l) => ({
+  ripartizione: TESTI[l]['impostazioni.copy.contextAlreadyOccupiedBeforeYou'],
+  ripartizioneStima: TESTI[l]['impostazioni.copy.toolUsageIsAnEstimate'],
+  motore: TESTI[l]['varie.contextEngine.card.description'],
+  compattazione: TESTI[l]['varie.compaction.card.description'],
+});
+const leggiMemoria = (page) => page.evaluate(() => {
+  const p = (s) => document.querySelector(`#setting-panel-memoria ${s}`)?.textContent ?? null;
+  return {
+    ripartizione: p('[data-settings-card="memoria-context"] > p:first-of-type'),
+    ripartizioneStima: p('[data-settings-card="memoria-context"] > p:last-child'),
+    motore: p('[data-settings-card="memoria-motore-contesto"] > [data-motore-contesto-descrizione]'),
+    compattazione: p('[data-settings-card="memoria-compattazione"] > [data-compattazione-descrizione]'),
+  };
+});
+for (const lingua of ['it', 'en']) {
+  for (const [nome, percorso, { pc = false } = {}] of PERCORSI) {
+    test(`FORME-10 · ${lingua}: le spiegazioni delle carte della Memoria restano le loro dopo ${nome}`, async ({ page }) => {
+      if (pc) await page.setViewportSize({ width: 1920, height: 1080 });
+      const tentate = await avvia(page, { lingua });
+      await apriSezione(page, 'memoria');
+      /* le due carte dinamiche si montano dopo la lettura di `/api/v1/context-settings` (motore-contesto.js:68, carta-compattazione.js:182) */
+      await expect(page.locator('#setting-panel-memoria [data-motore-contesto-descrizione]')).toHaveText(ATTESI_MEMORIA(lingua).motore, { timeout: 8000 });
+      await expect(page.locator('#setting-panel-memoria [data-compattazione-descrizione]')).toHaveText(ATTESI_MEMORIA(lingua).compattazione, { timeout: 8000 });
+      expect(await leggiMemoria(page), 'prima del percorso').toEqual(ATTESI_MEMORIA(lingua));
+      await percorso(page, 'memoria');
+      expect(await leggiMemoria(page), `dopo ${nome}`).toEqual(ATTESI_MEMORIA(lingua));
+      expect(tentate).toEqual([]);
+    });
+  }
+}
+
+/*
+ * FORME-11 — stesso giro: costi e spazio di lavoro avevano la stessa forma per posizione (`> .talos-card > p`). Oggi nessuna carta dinamica
+ * si monta lì (revisione correttezza g3, c331g3-revisione-correttezza.md:19), quindi questa è una GUARDIA, non una prova rossa: inchioda i
+ * testi esatti delle carte dei due pannelli dopo i tre percorsi, nelle due lingue.
+ */
+const ATTESI_ALTRI = (l) => ({
+  costi: TESTI[l]['impostazioni.copy.usageByDayAndModel'],
+  costiNota: TESTI[l]['impostazioni.copy.currencyAmountsAreReportedBy'],
+  spazio: TESTI[l]['impostazioni.copy.folderAndDataForThe'],
+});
+const leggiAltri = (page) => page.evaluate(() => {
+  const p = (s) => document.querySelector(s)?.textContent ?? null;
+  return {
+    costi: p('#setting-panel-costi > [data-settings-card="costi-usage"] > p:first-of-type'),
+    costiNota: p('#setting-panel-costi > [data-settings-card="costi-usage"] > #costiNota'),
+    spazio: p('#setting-panel-workspace > [data-settings-card="workspace-session"] > p'),
+  };
+});
+for (const lingua of ['it', 'en']) {
+  test(`FORME-11 · ${lingua}: le spiegazioni dei costi e dello spazio di lavoro restano le loro dopo i tre percorsi`, async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    const tentate = await avvia(page, { lingua });
+    for (const sezione of ['costi', 'workspace']) {
+      await apriSezione(page, sezione);
+      for (const [, percorso] of PERCORSI) await percorso(page, sezione);
+    }
+    expect(await leggiAltri(page)).toEqual(ATTESI_ALTRI(lingua));
+    expect(tentate).toEqual([]);
+  });
+}

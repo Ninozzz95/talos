@@ -242,7 +242,7 @@ for (const modo of ['dark', 'light']) {
       const icona = await riga.locator('use').first().getAttribute('href');
       misura(`bc59.rigaAttivita.${modo}`, { testo: testo.trim().slice(0, 140), icona });
       expect(testo, `la riga diceva: «${testo.trim()}»`).toMatch(/Modificato src\/prezzo\.mjs/u);
-      expect(icona, 'un attrezzo che cambia i file non può restare sull’icona generica').toBe('#i-code');
+      expect(icona, 'uno strumento che cambia i file non può restare sull’icona generica').toBe('#i-code');
 
       /* ⛔ E il nome tecnico non deve comparire da NESSUNA parte nella conversazione — non solo in
          quella riga: è la regola dell'owner del 04/09, e si controlla su tutto il testo visibile. */
@@ -308,7 +308,7 @@ for (const modo of ['dark', 'light']) {
       /* 2. `prova` è una riga di processo, col comando preso dal risultato e la famiglia «prove» (owner 29/10 sera: il TIPO nell'icona) */
       expect(prova, '`prova` non è diventata una riga di processo').toBeTruthy();
       expect(prova.famiglia).toBe('test');
-      expect(prova.icona, 'l’icona della riga è quella della famiglia «prove»').toBe('#i-check-sq');
+      expect(prova.icona, 'l’icona della riga è quella della famiglia «prove»').toBe('#i-test-tube');
       /* ⛔ Non eseguita: nessuna durata inventata. «uscita 127» sì, «0 s» mai. */
       expect(prova.misura, `la riga della prova rifiutata diceva: «${prova.misura}»`).not.toMatch(/\b0 s\b/u);
       expect(prova.misura).toContain('127');

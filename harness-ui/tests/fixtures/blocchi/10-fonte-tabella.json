@@ -1,0 +1,1 @@
+{"stato":"completo","blocco":{"tipo":"tabella","id":"prezzi-web","titolo":"Prezzi letti dalla pagina","colonne":[{"id":"p","titolo":"Prodotto","tipo":"testo"},{"id":"e","titolo":"Prezzo","tipo":"soldi"}],"righe":[["Pane",2.5]],"filtrabile":true,"fonte":{"tipo":"pagina","nome":"esempio.it","quando":"2026-11-02"}}}

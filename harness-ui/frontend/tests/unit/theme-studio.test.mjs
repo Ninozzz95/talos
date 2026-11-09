@@ -167,8 +167,11 @@ test('STUDIO-TITOLI: nel pannello «Sfondo attivo» e «Sfondo animato» non sta
   assert.equal(titoloStudio('sceneOverrideSelect'), 'Scena');
   assert.equal(titoloStudio('motionModeSelect'), 'Modo di disegno');
   // ⛔ e il contratto NON è stato toccato: nelle Impostazioni quelle righe si chiamano ancora così
-  assert.equal(campoDi('backgroundMotionToggle').titolo, 'Sfondo attivo');
-  assert.equal(campoDi('sceneOverrideSelect').titolo, 'Sfondo animato');
+  /* fase 8, forma §5 e §5-bis (Frontend 01/11 notte): nelle Impostazioni l'interruttore è «Sfondo animato» e la scena ha il SUO
+     nome, «Scena dello sfondo» — due cose diverse non hanno lo stesso nome */
+  assert.equal(campoDi('backgroundMotionToggle').titolo, 'Sfondo animato');
+  assert.equal(campoDi('sceneOverrideSelect').titolo, 'Scena dello sfondo');
+  assert.notEqual(campoDi('backgroundMotionToggle').titolo, campoDi('sceneOverrideSelect').titolo);
   // chi non è riscritto usa il titolo del contratto, e un id sconosciuto non diventa «undefined»
   assert.equal(titoloStudio('motionIntensityRange'), 'Intensità');
   assert.equal(titoloStudio('controlloInesistente'), 'controlloInesistente');

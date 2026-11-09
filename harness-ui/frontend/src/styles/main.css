@@ -10,6 +10,7 @@
 @import './modalita-shell.css';
 @import './fascia-modo.css'; /* F3-12, 24/09/2026: la fascia del modo Workflow tolto, sopra il composer */
 @import './avviso-piano.css'; /* D4, 24/09/2026: l'avviso «Piano aggiornato» sopra il composer */
+@import './accesso-perso.css'; /* revisione d'uso 04/11/2026, reperto 15: la fascia della finestra che ha perso l'accesso */
 @import './compattazione-legacy.css'; /* F5, 24/09/2026: avviso «contesto quasi pieno», barra e riga della compattazione legacy */
 @import './server-locali.css'; /* owner 27/10/2026: la riga «Server pronto» in chat e la striscia «Server locali» nel Browser */
 @import './piano-rivisto.css'; /* owner 27/10/2026: la revisione nuova del piano in fondo, la vecchia chiusa in una riga */
@@ -129,8 +130,16 @@
 @import './segnala-problema.css'; /* 29/10/2026: «Segnala un problema» (bozzetto approvato) */
 @import './streaming-fluido.css'; /* 22/10/2026: la dissolvenza per parola, il cursore e i turni chiusi fuori vista che non si impaginano (streaming fluido) */
 @import './pillola-ragionamento.css'; /* 24/10/2026: la pillola del ragionamento nel compositore e il suo menu (bozzetto approvato) */
+@import './ricerca-due-porte.css'; /* 01/11/2026: la modale «Nuova ricerca» della sezione (bozzetto del 22/10; niente pillola, owner 01/11 sera) */
 @import './rami.css'; /* 24/10/2026: «Riprova» e «Modifica e rimanda» come rami (bozzetto approvato) */
 @import './invio-file.css'; /* 24/10/2026: R5.13, mandare un file a un dispositivo (bozzetti approvati D1-D8) */
 @import './domanda-appiccicata.css'; /* 27/10/2026: la domanda ferma in cima mentre si legge la sua risposta, e la bolla a tutta larghezza (come Hermes) */
 @import './pannello.css'; /* 29/10/2026: il pannello di destra v2 (Contesto · File · Git · Agenti · Processi), tutto dentro .talos-pannello */
 @import './selettore-modelli.css'; /* 29/10/2026: il selettore dei modelli rifatto dal bozzetto approvato (fonti in colonna, filtri, preferiti, prezzi) */
+@import './cielo.css'; /* 03/11/2026: il cielo beta di Nuova sessione (FE-040) */
+@import './a-lato.css'; /* 03/11/2026: la chat a lato nel pannello (FE-010) */
+@import './passi-del-giro.css'; /* 03/11/2026: i Passi sopra la riga viva (FE-008) */
+@import './lavagna.css'; /* 03/11/2026: la vista Lavagna della Bacheca (FE-009) */
+@import './barra-approvazioni.css'; /* 03/11/2026: la barra delle approvazioni (FE-011) */
+@import './blocchi.css'; /* 03/11/2026: i blocchi dell'interfaccia generativa nella chat (FE-003) */
+@import './impostazioni-dalla-chat.css'; /* 02/11/2026: fase 8 «Impostazioni dalla chat» (bozzetto chiuso FE-055): carta, riga con Annulla, segno, /settings */

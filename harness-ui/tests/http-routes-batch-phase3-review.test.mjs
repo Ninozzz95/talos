@@ -15,7 +15,7 @@ async function serverDiProva(t) {
       return { ok: true, id };
     },
   };
-  const server = createServer(createHttpApp({
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     listaTaskDisponibili: () => [],
     elencaCartelleProgetto: () => [],

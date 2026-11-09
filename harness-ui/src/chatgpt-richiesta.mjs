@@ -64,7 +64,7 @@ export function chiaveDellaCacheDelPiano(corpo) {
 }
 
 /** Il corpo come il piano lo accetta. Torna `{ corpo, volevaIlFlusso, tolti }`; non tocca l'oggetto ricevuto. */
-export function adattaCorpoAlPiano(corpo) {
+export function adattaCorpoAlPiano(corpo, { fasciaDiServizio = null } = {}) {
   if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)) throw Object.assign(new Error('The request for the ChatGPT plan has no body.'), { code: 'CHATGPT_RICHIESTA_INCOMPLETA' });
   const nuovo = { ...corpo };
   const tolti = CAMPI_VIETATI_DAL_PIANO.filter((campo) => Object.hasOwn(nuovo, campo));
@@ -75,6 +75,14 @@ export function adattaCorpoAlPiano(corpo) {
   nuovo.store = false;
   nuovo.stream = true;
   if (typeof nuovo.prompt_cache_key !== 'string' || nuovo.prompt_cache_key === '') nuovo.prompt_cache_key = chiaveDellaCacheDelPiano(nuovo);
+  /* PERF R-35, P1 (owner 30/10/2026 «Tutti e tre»; forma approvata da Desktop, CLI e Mobile): con attrezzi, più chiamate nella stessa
+     risposta. Misurato sul piano (campagna pubblica-luna-ebb04d2c1): senza il campo, 85 risposte su 96 chiedevano UN attrezzo e i passi
+     erano 100–111 contro 17–23 di Codex, che lo manda `true` per i modelli del piano (`codex-rs/models-manager/models.json:539`,
+     `core/src/client.rs:1083`). Il nucleo tiene già in fila shell e scritture e fa in parallelo solo le letture pure. Una scelta di chi
+     chiama resta sua. */
+  if (Array.isArray(nuovo.tools) && nuovo.tools.length > 0 && !Object.hasOwn(nuovo, 'parallel_tool_calls')) nuovo.parallel_tool_calls = true;
+  /* Modalità veloce (owner 31/10/2026): solo se la persona l'ha accesa. Il servizio la accetta ma risponde `default`, quindi a schermo «chiesta», mai «attiva». */
+  if (fasciaDiServizio) nuovo.service_tier = fasciaDiServizio;
   return { corpo: nuovo, volevaIlFlusso, tolti };
 }
 
@@ -138,14 +146,20 @@ export function intestazioniDiSessione(intestazioniDiPrima, chiave) {
 
 /* `onRisposta(intestazioni, stato)`: ogni risposta del piano, riuscita o no, passa di qui — è dove si leggono i limiti d'uso che il
    servizio dichiara (`chatgpt-limiti.mjs`). Un ascoltatore che lancia non ferma la richiesta. */
-export function creaFetchDelPiano(fetchDiRete = globalThis.fetch, { onRisposta = null } = {}) {
+/* `collegamenti` (31/10/2026, `chatgpt-collegamento.mjs`): il piano su collegamento aperto, dentro questa `fetch`. Solo chi lo passa: una prova con
+   `fetch` finta non apre mai una connessione vera. `null` da lì vuol dire HTTP, e il 429 vero con le sue intestazioni lo mostra HTTP. */
+export function creaFetchDelPiano(fetchDiRete = globalThis.fetch, { onRisposta = null, collegamenti = null, fasciaDiServizioFn = null } = {}) {
   return async function fetchDelPiano(indirizzo, opzioni = {}) {
     const url = String(typeof indirizzo === 'string' || indirizzo instanceof URL ? indirizzo : indirizzo?.url ?? '');
     const metodo = String(opzioni.method ?? 'GET').toUpperCase();
     if (metodo !== 'POST' || !/\/responses(?:\?|$)/u.test(url) || typeof opzioni.body !== 'string') return fetchDiRete(indirizzo, opzioni);
     let originale;
     try { originale = JSON.parse(opzioni.body); } catch { return fetchDiRete(indirizzo, opzioni); }
-    const { corpo, volevaIlFlusso } = adattaCorpoAlPiano(originale);
+    const { corpo, volevaIlFlusso } = adattaCorpoAlPiano(originale, { fasciaDiServizio: typeof fasciaDiServizioFn === 'function' ? await fasciaDiServizioFn() : null });
+    if (collegamenti && volevaIlFlusso) {
+      const suCollegamento = await collegamenti.invia(url, opzioni, corpo, intestazioniDiSessione(opzioni.headers, corpo.prompt_cache_key));
+      if (suCollegamento) return suCollegamento;
+    }
     const risposta = await fetchDiRete(indirizzo, { ...opzioni, headers: intestazioniDiSessione(opzioni.headers, corpo.prompt_cache_key), body: JSON.stringify(corpo) });
     if (typeof onRisposta === 'function') { try { onRisposta(risposta.headers, risposta.status); } catch { /* la lettura dei limiti è un di più */ } }
     if (volevaIlFlusso || !risposta.ok) return risposta;
@@ -187,6 +201,8 @@ export function erroreDelPiano(guasto) {
   const stato = Number.isInteger(guasto?.statusCode) ? guasto.statusCode : Number.isInteger(guasto?.status) ? guasto.status : Number.isInteger(guasto?.stato) ? guasto.stato : null;
   let corpo = guasto?.data ?? null;
   if (!corpo && typeof guasto?.responseBody === 'string') { try { corpo = JSON.parse(guasto.responseBody); } catch { corpo = null; } }
+  /* Un evento d'errore che lo schema dell'SDK non riconosce resta dentro l'errore di validazione. */
+  if (!corpo && (guasto?.value?.type === 'error' || guasto?.value?.type === 'response.failed')) corpo = guasto.value;
   /* L3-16 (15/10/2026, dal mobile): un rifiuto che il servizio manda DENTRO un 200, come primo evento del flusso, arriva qui col corpo
      del FOTOGRAMMA, non con `{ error }`: `{ type: 'error', code, message }` o `{ type: 'response.failed', response: { error } }`
      (l'SDK lo lancia prima di ogni uscita con `responseBody: JSON.stringify(frame)` e, per un codice che non conosce, stato 500:
@@ -202,7 +218,7 @@ export function erroreDelPiano(guasto) {
   const intestazioni = guasto?.responseHeaders ?? null;
   const idRichiesta = intestazioni ? (intestazioni['x-oai-request-id'] ?? intestazioni['x-request-id'] ?? null) : null;
   return Object.assign(new Error(noto?.messaggio ?? 'The request to the ChatGPT plan did not complete.'), {
-    code: noto?.code ?? 'CHATGPT_ERRORE', transitorio: noto ? noto.transitorio : (stato === null || stato >= 500),
+    code: noto?.code ?? 'CHATGPT_ERRORE', transitorio: noto ? noto.transitorio : (stato === null || stato >= 500), dichiarato: Boolean(erroreDelCorpo),
     stato, codiceOpenAi, parametro: typeof erroreDelCorpo?.param === 'string' ? erroreDelCorpo.param : null, idRichiesta, fornitore: 'chatgpt',
     ...(intestazioni ? { intestazioni } : {}),
   });

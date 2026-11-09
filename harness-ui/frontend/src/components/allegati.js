@@ -25,6 +25,8 @@
 /* 03/10/2026, seconda ondata della lingua: etichetta e aiuto si leggono dal dizionario (`chat.attachments.via.*`), nella lingua
    corrente; `id` e `icona` sono dati di logica. */
 import { t, linguaCorrenteDiT } from './lingua.js';
+import { presentazioneFileLibreria } from './libreria-scheda.js';
+import { dimensioneLeggibile } from './conversazione.js';
 /* Owner 03/10/2026 «ogni parola in inglese e italiano»: anche il numero del costo segue la lingua (1.3k / 1,3k). */
 const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 const via = (id, icona) => Object.freeze(Object.defineProperties({ id, icona }, {
@@ -47,6 +49,44 @@ export const TETTI_ALLEGATI = Object.freeze({
   quanti: 10,
   caratteriPerAllegato: 200_000, // ~50k token: oltre, un file da solo mangia mezza finestra
 });
+
+/**
+ * D28 del collaudo del 02/11: più file scelti insieme. Entrano i primi che stanno nel tetto, contando `dentro` (già allegati e in caricamento); gli altri si
+ * CONTANO, così la riga dice quanti sono rimasti fuori invece di un avviso per ogni file. open-webui li rifiuta tutti se superano il tetto
+ * (`src/lib/components/chat/MessageInput.svelte:1153-1165`, letto il 03/11/2026): qui si tiene ciò che sta, come la bozza (`dividiBozza`, BD24).
+ */
+/* N8 della seconda revisione: `valido` dice quali file `allegaFile` terrà. Uno che verrà scartato passa (lo scarto lo dice lui, col suo perché) ma non occupa un posto. */
+export function sceltiNelTetto(file, { dentro = 0, tetto = TETTI_ALLEGATI.quanti, valido = () => true } = {}) {
+  let liberi = Math.max(0, tetto - dentro);
+  const entrano = [];
+  let fuori = 0;
+  for (const f of [...(file ?? [])]) {
+    if (!valido(f)) entrano.push(f);
+    else if (liberi > 0) { entrano.push(f); liberi -= 1; } else fuori += 1;
+  }
+  return { entrano, fuori };
+}
+
+const MB = 1024 * 1024;
+/** N8: perché `allegaFile` scarterebbe un file prima di caricarlo (le chiavi del titolo e del corpo dell'avviso), o `null`. Una regola sola, per il tetto e per l'avviso. */
+export function scartoDelFile(file) {
+  const tipo = String(file?.type || '');
+  if (/^image\//u.test(tipo)) {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(tipo)) return ['app.attachments.imageFormat', 'app.attachments.imageFormatBody'];
+    if (file.size > 5 * MB) return ['app.attachments.imageTooLarge', 'app.attachments.imageTooLargeBody'];
+    return null;
+  }
+  return file?.size > 100 * MB ? ['app.attachments.fileTooLarge', 'app.attachments.fileTooLargeBody'] : null;
+}
+
+/** N8: i file che il selettore ha già accettato e che aspettano il loro turno di caricamento, per bozza. Un trascinamento nel frattempo li conta. */
+export function creaPrenotazioni() {
+  const perBozza = new Map();
+  return {
+    prenota(chiave, n) { perBozza.set(chiave, Math.max(0, (perBozza.get(chiave) ?? 0) + n)); },
+    quante(chiave) { return perBozza.get(chiave) ?? 0; },
+  };
+}
 
 /** La frase che dichiara i tetti, quella che si legge PRIMA di sbatterci. */
 export function frasiTetti() {
@@ -202,6 +242,15 @@ export function relativoNellaRadice(destinazione, radice = '') {
   return segmentiSani(rel) ? rel : '';
 }
 
+/* Il riferimento che il server dà a un allegato nei suoi dati (`riferimentoAllegato`, allegati-dati.mjs): `attachments/<24 esadecimali>/<nome>` */
+const RIFERIMENTO_ALLEGATO = /^attachments\/([0-9a-f]{24})\/[^/]+$/u;
+/** L'`allegatoId` scritto nel percorso di un chip, se il percorso è il riferimento di un allegato nei dati di TALOS; altrimenti ''. */
+export function idDalRiferimento(allegato) {
+  if (!allegato || allegato.daBrowser) return '';
+  const trovato = RIFERIMENTO_ALLEGATO.exec(normaPercorso(allegato.percorso));
+  return trovato ? trovato[1] : '';
+}
+
 /** Comodità per le prove: il relativo con cui si aprirebbe adesso (base = radice se non detta). */
 export function percorsoApribile(allegato, radice = '', base = '') {
   return relativoNellaRadice(destinazioneAllegato(allegato, { base: base || radice }), radice);
@@ -224,6 +273,13 @@ export function chipAllegato(allegato, modello = '', { radice = '', base = '' } 
     nome = nomeBreveAllegato(allegato.percorso || allegato.nome, 32);
   }
   const { etichetta } = costoAllegato(allegato, modello);
+  /* Decisioni 43 e 47: un allegato nei dati di TALOS non sta nella cartella: si apre per riferimento, e il nome corto non si mostra */
+  if (allegato.allegatoId) return { genere, nome, costo: etichetta, titolo: allegato.nome || '', apribile: '', allegatoId: allegato.allegatoId };
+  /* Owner 04/11/2026 («Il file non si è aperto: File not found»): un chip rifatto dal TESTO del messaggio (`bollaDaConsegna`: un
+     messaggio accodato senza bolla, una sessione vecchia) ha perso `allegatoId` e porta solo il riferimento `attachments/<id>/<nome>`.
+     Cercato nella cartella della chat non c'è mai: si apre per riferimento, e il server dice se è ancora di questa chat. */
+  const daRiferimento = idDalRiferimento(allegato);
+  if (daRiferimento) return { genere, nome, costo: etichetta, titolo: allegato.nome || '', apribile: '', allegatoId: daRiferimento };
   const destinazione = destinazioneAllegato(allegato, { base: base || radice });
   const apribile = destinazione && (!radice || relativoNellaRadice(destinazione, radice)) ? destinazione : '';
   return { genere, nome, costo: etichetta, titolo: allegato.percorso || allegato.nome || '', apribile };
@@ -232,4 +288,23 @@ export function chipAllegato(allegato, modello = '', { radice = '', base = '' } 
 /** I chip di un messaggio, nell'ordine in cui sono stati allegati. */
 export function chipDegliAllegati(allegati, modello = '', opzioni = {}) {
   return (Array.isArray(allegati) ? allegati : []).map((a) => chipAllegato(a, modello, opzioni)).filter(Boolean);
+}
+
+/*
+ * FE-065 (owner 02/11/2026: «il file deve essere stilizzato bene con icona e nome estensione»; versione B, schede sopra la bolla).
+ * La scheda di un file del messaggio: estensione e famiglia come la Libreria (`presentazioneFileLibreria`, la stessa del telefono,
+ * che sceglie anche l'icona), il tipo in parole e il peso solo se misurato (`dimensioneLeggibile`: un dato assente non diventa 0).
+ */
+const PAROLA_DELLA_FAMIGLIA = Object.freeze({
+  image: 'chat.attachments.kind.image', pdf: 'chat.attachments.kind.pdf', word: 'chat.attachments.kind.word',
+  spreadsheet: 'chat.attachments.kind.spreadsheet', presentation: 'chat.attachments.kind.presentation', code: 'chat.attachments.kind.code',
+  data: 'chat.attachments.kind.data', archive: 'chat.attachments.kind.archive', text: 'chat.attachments.kind.text', file: 'chat.attachments.kind.file',
+});
+
+/** @returns {{ estensione: string, famiglia: string, tipo: string, peso: string } | null} */
+export function schedaDelFile(allegato) {
+  if (!allegato) return null;
+  /* la Libreria toglie da sé le cartelle, con tutte e due le barre (`estensioneDalNome`) */
+  const { estensione, famiglia } = presentazioneFileLibreria(allegato.nome || allegato.percorso || '', allegato.mediaType || allegato.formato);
+  return { estensione, famiglia, tipo: t(PAROLA_DELLA_FAMIGLIA[famiglia] || PAROLA_DELLA_FAMIGLIA.file), peso: dimensioneLeggibile(allegato.byte) };
 }

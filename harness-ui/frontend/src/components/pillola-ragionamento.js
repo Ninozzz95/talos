@@ -77,13 +77,14 @@ export function statoDelLivello({ livelli, valoreIniziale = null, filo = null })
 
 /**
  * La pillola e il suo menu. `leggi()` dà lo stato da disegnare, già tradotto:
- *   `{ nascosta, etichetta, titolo, modello, intestazione, voci: [{valore, etichetta, scelta}], nota, mostra, etichettaMostra }`.
- * `alScelto(valore)` cambia il livello; `alMostra(acceso)` l'interruttore; `allaChiusura({dopoScelta})` riceve il fuoco dopo una
- * scelta (al compositore). Tutto il resto — apertura, tastiera, clic fuori — sta qui.
+ *   `{ nascosta, etichetta, titolo, modello, intestazione, voci: [{valore, etichetta, scelta}], nota, mostra, etichettaMostra, veloce }`;
+ *   `veloce` (FE-047) è `null` dove la modalità veloce non c'è, altrimenti `{ acceso, etichetta, nota }`.
+ * `alScelto(valore)` cambia il livello; `alMostra(acceso)` e `alVeloce(acceso)` gli interruttori; `allaChiusura({dopoScelta})` riceve il
+ * fuoco dopo una scelta (al compositore). Tutto il resto — apertura, tastiera, clic fuori — sta qui.
  * @param {Document} doc
- * @param {{pillola: HTMLElement, leggi: () => any, alScelto: (v: string) => void, alMostra: (acceso: boolean) => void, allaChiusura?: (o: {dopoScelta: boolean}) => void}} o
+ * @param {{pillola: HTMLElement, leggi: () => any, alScelto: (v: string) => void, alMostra: (acceso: boolean) => void, alVeloce?: (acceso: boolean) => void, allaChiusura?: (o: {dopoScelta: boolean}) => void}} o
  */
-export function creaPillolaRagionamento(doc, { pillola, leggi, alScelto, alMostra, allaChiusura = () => {} }) {
+export function creaPillolaRagionamento(doc, { pillola, leggi, alScelto, alMostra, alVeloce = () => {}, allaChiusura = () => {} }) {
   const finestra = doc.defaultView;
   let menu = null;
   const etichetta = pillola.querySelector('.talos-chip__label');
@@ -100,6 +101,23 @@ export function creaPillolaRagionamento(doc, { pillola, leggi, alScelto, alMostr
 
   function voci() { return menu ? [...menu.querySelectorAll('[role="menuitemradio"], [role="menuitemcheckbox"]')] : []; }
   function voceAttiva() { return voci().indexOf(doc.activeElement); }
+
+  function rigaInterruttore(id, etichetta, acceso, alCambio) {
+    const riga = doc.createElement('button');
+    riga.type = 'button'; riga.tabIndex = -1;
+    riga.className = 'talos-menu__voce talos-pillola-ragionamento__mostra';
+    riga.setAttribute('role', 'menuitemcheckbox');
+    riga.setAttribute('aria-checked', String(Boolean(acceso)));
+    riga.id = id;
+    const testo = doc.createElement('span'); testo.textContent = etichetta;
+    const interruttore = doc.createElement('span'); interruttore.className = 'talos-switch'; interruttore.setAttribute('aria-hidden', 'true');
+    interruttore.setAttribute('aria-checked', String(Boolean(acceso)));
+    const pallino = doc.createElement('span'); pallino.className = 'talos-switch__thumb'; interruttore.append(pallino);
+    riga.append(testo, interruttore);
+    /* l'interruttore non chiude il menu: si vede cambiare, come una casella in un menu */
+    riga.addEventListener('click', () => { alCambio(riga.getAttribute('aria-checked') !== 'true'); });
+    return riga;
+  }
 
   function disegnaMenu(s, fuoco = -1) {
     menu.replaceChildren();
@@ -130,22 +148,18 @@ export function creaPillolaRagionamento(doc, { pillola, leggi, alScelto, alMostr
       const p = doc.createElement('p'); p.className = 'talos-menu__nota talos-pillola-ragionamento__nota'; p.textContent = s.nota;
       menu.append(p);
     }
-    const mostra = doc.createElement('button');
-    mostra.type = 'button'; mostra.tabIndex = -1;
-    mostra.className = 'talos-menu__voce talos-pillola-ragionamento__mostra';
-    mostra.setAttribute('role', 'menuitemcheckbox');
-    mostra.setAttribute('aria-checked', String(Boolean(s.mostra)));
-    mostra.id = 'showReasoningToggle';
-    const testo = doc.createElement('span'); testo.textContent = s.etichettaMostra;
-    const interruttore = doc.createElement('span'); interruttore.className = 'talos-switch'; interruttore.setAttribute('aria-hidden', 'true');
-    interruttore.setAttribute('aria-checked', String(Boolean(s.mostra)));
-    const pallino = doc.createElement('span'); pallino.className = 'talos-switch__thumb'; interruttore.append(pallino);
-    mostra.append(testo, interruttore);
-    /* l'interruttore non chiude il menu: si vede cambiare, come una casella in un menu */
-    mostra.addEventListener('click', () => { alMostra(mostra.getAttribute('aria-checked') !== 'true'); });
-    menu.append(mostra);
+    menu.append(rigaInterruttore('showReasoningToggle', s.etichettaMostra, s.mostra, alMostra));
+    /* FE-047: sotto «Mostra ragionamento», con la frase del costo sotto, come nel bozzetto approvato; dove non c'è non si mostra niente */
+    if (s.veloce) {
+      const veloce = rigaInterruttore('veloceToggle', s.veloce.etichetta, s.veloce.acceso, alVeloce);
+      veloce.setAttribute('aria-describedby', 'veloceNota'); // il costo si dice anche a chi non lo vede
+      const costo = doc.createElement('p'); costo.className = 'talos-menu__nota talos-pillola-ragionamento__nota talos-pillola-ragionamento__nota--veloce';
+      costo.id = 'veloceNota'; costo.textContent = s.veloce.nota;
+      menu.append(veloce, costo);
+    }
     const tutte = voci();
-    if (fuoco >= 0 && tutte[fuoco]) tutte[fuoco].focus();
+    /* FE-047: la riga che aveva il fuoco può sparire (spenta senza catalogo). Il fuoco resta nel menu, o Esc e le frecce non arrivano più. */
+    if (fuoco >= 0) (tutte[fuoco] ?? tutte.at(-1))?.focus();
   }
 
   function posiziona() {

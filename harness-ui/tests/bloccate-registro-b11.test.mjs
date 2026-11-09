@@ -163,7 +163,7 @@ test('B11-BLOC-A2-comando un comando del contratto che NOMINA la bloccata non gi
 
 test('B11-BLOC-A7 il /goal impostato e ripreso DAL DISPOSITIVO (rotta vera): i giri del ciclo hanno i blocchi, anche se l\'ultimo messaggio era del PC', async (t) => {
   const b = await banco(t, { obiettiviNellaChat: true });
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry: b.registro });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: b.registro });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   await b.chiudi(0); // l'ultimo messaggio della persona è del PC
   const dalPad = { tipo: 'telefono', nome: 'Pad', dispositivoId: PAD.id };
@@ -183,7 +183,7 @@ test('B11-BLOC-A7 il /goal impostato e ripreso DAL DISPOSITIVO (rotta vera): i g
 
 test('B11-BLOC-A7-contrario il /goal impostato e ripreso DAL PC in una conversazione del PC: nessun blocco', async (t) => {
   const b = await banco(t, { obiettiviNellaChat: true });
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry: b.registro });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: b.registro });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   await b.chiudi(0);
   const criteri = [{ testo: 'riassunto scritto', verifica: { tipo: 'file', percorso: 'riassunto.txt', fatto: 'esiste' } }];

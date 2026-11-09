@@ -16,7 +16,7 @@ const routes=[
   ['tasks_create','onAttivitaCrea'],['tasks_complete','onAttivitaCompleta'],
   ['tasks_update','onAttivitaAggiorna'],['tasks_delete','onAttivitaElimina'],
   ['memory_write','onMemoriaScrivi'],['memory_update','onMemoriaAggiorna'],['memory_delete','onMemoriaElimina'],
-  ['research_start','onRicercaAvvia'],['research_rename','onRicercaRinomina'],
+  ['research_start','onRicercaAvvia',{question:'Verify the requested tool result.'}],['research_rename','onRicercaRinomina'],
   // C5 (10/10/2026): pause/resume/cancel arrivano da research_control con `action`; la ricevuta resta quella dell'azione
   ['research_control','onRicercaPausa',{action:'pause'}],['research_control','onRicercaRiprendi',{action:'resume'}],
   ['research_control','onRicercaAnnulla',{action:'cancel'}],['research_delete','onRicercaElimina'],

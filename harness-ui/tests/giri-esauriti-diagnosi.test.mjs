@@ -171,11 +171,11 @@ test('O-02 — testoDiagnosiGiri: i primi TRE attrezzi col conteggio, e quante c
       { nome: 'leggi', chiamate: 3, ripetute: 0 },
     ],
   });
-  ok(testo, /34 chiamate ad attrezzi/);
+  ok(testo, /34 chiamate a strumenti/);
   ok(testo, /comando nel terminale 18/);
   ok(testo, /ricerca nei file 8/);
   ok(testo, /elenco della cartella 5/);
-  ok(testo, /altri 1 attrezzi/, 'gli attrezzi oltre i primi tre si contano, non spariscono — e si dice che sono ATTREZZI, non chiamate');
+  ok(testo, /altri 1 strumenti/, 'gli strumenti oltre i primi tre si contano, non spariscono — e si dice che sono STRUMENTI, non chiamate (owner 02/11: «strumenti» a schermo)');
   ok(testo, /5 identiche a una precedente/);
   ok(testo, /elenco della cartella 3/, 'le ripetizioni sono attribuite, in ordine di quante sono');
   // ⛔⛔⛔ owner 04/9: «nella UI non compaiono nomi tecnici degli attrezzi».

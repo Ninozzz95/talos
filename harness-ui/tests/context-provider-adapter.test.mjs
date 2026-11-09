@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createContextModelAdapter, prepareProviderContext, buildPreparedProviderRequest } from '../src/context-provider-adapter.mjs';
+import { createContextEngine } from '../../context-engine/src/engine.mjs';
+import { createSqliteContextStore } from '../../context-engine/src/node/sqlite-store.mjs';
+import { parseContextSettings } from '../../context-engine/src/contracts.mjs';
+import { REASONING_KEEP_CHARS } from '../../context-engine/src/tool-output-clearing.mjs';
 
 const local = { provider: 'local', model: 'qwen', windowTokens: 16384, responseReserve: 2048, local: true, capabilities: {} };
 const call = { id: 'c1', type: 'function', function: { name: 'read', arguments: '{"path":"note"}' } };
@@ -31,6 +35,103 @@ test('CTX-MODEL-SUMMARY calls one injected model without tools or retries and pr
 test('CTX-MODEL-SUMMARY rejects absent finish reason and keeps billed usage on failure', async () => {
   const model = createContextModelAdapter({ resolveModel: async () => local, callModel: async () => ({ text: 'partial', usage: { inputTokens: 12 } }) });
   await assert.rejects(model.summarize({ model: local, messages: [], maxOutputTokens: 20 }), e => e.code === 'CTX_SUMMARY_RESPONSE_INVALID' && e.usage.inputTokens === 12);
+});
+
+/* R-49 (banco del 01/11/2026): dopo un riassunto `reset` vale per ogni richiesta, e toglieva il ragionamento in chiaro da tutta la coda.
+   `reflection/beam` su DigitalOcean rifiutava con 400 «missing its reasoning», DeepSeek con `tools` lo pretende su tutti i turni. */
+test('R49-01: il reset da riassunto toglie lo stato opaco e tiene il ragionamento in chiaro di TUTTI i turni dello stesso modello', () => {
+  const stato = { version: 1, provider: 'openrouter', model: 'r/beam', content: [{ type: 'reasoning', text: 'x' }] };
+  const messaggi = [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b', reasoning_content: 'vecchio' }, { role: 'user', content: 'c' },
+    { role: 'assistant', content: 'd', reasoning_content: 'nuovo', talos_provider_state: stato }, { role: 'user', content: 'e' }];
+  const prepared = prepareProviderContext({ messages: messaggi, provider: 'openrouter', model: 'r/beam', reset: true });
+  assert.equal(prepared.messages[1].reasoning_content, 'vecchio', 'non solo il più nuovo: i byte della coda restano fermi per la cache');
+  assert.equal(prepared.messages[3].reasoning_content, 'nuovo');
+  assert.equal(prepared.messages[3].talos_provider_state, undefined, 'lo stato opaco si toglie sempre');
+  assert.equal(prepared.resetApplied, true);
+  assert.deepEqual(prepared.warnings, ['CTX_NATIVE_STATE_RESET']);
+});
+
+test('R49-03: i motori locali restano come prima: sul reset il ragionamento in chiaro va via (Mobile, finestre piccole); senza reset resta', () => {
+  const messaggi = () => [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b', reasoning_content: 'pensato' }, { role: 'user', content: 'c' }];
+  for (const provider of ['local', 'locale-ospite', 'ollama', 'lmstudio', 'llama.cpp']) {
+    assert.equal(prepareProviderContext({ messages: messaggi(), provider, model: 'm', reset: true }).messages[1].reasoning_content, undefined, provider);
+    assert.equal(prepareProviderContext({ messages: messaggi(), provider, model: 'm', reset: false }).messages[1].reasoning_content, 'pensato', provider);
+  }
+});
+
+/* D3 (revisione di fine fase, 01/11/2026): R-49 tornava dal livello 1, che toglieva il ragionamento dai turni vecchi: motore e archivio veri, porta vera */
+const pensiero = (i) => `Devo controllare il file ${i} e poi decidere. `.repeat(30);
+function giroLungo(turni) {
+  const messaggi = [{ role: 'user', content: 'Leggi tutti i file.' }];
+  for (let i = 0; i < turni; i++) {
+    messaggi.push({ role: 'assistant', content: '', tool_calls: [{ id: `c${i}`, type: 'function', function: { name: 'leggi', arguments: JSON.stringify({ percorso: `f${i}` }) } }], reasoning_content: pensiero(i) });
+    messaggi.push({ role: 'tool', content: `riga ${i}\n`.repeat(300), tool_call_id: `c${i}` });
+  }
+  return [...messaggi, { role: 'assistant', content: 'Fatto.', reasoning_content: 'ok' }, { role: 'user', content: 'Ora dimmi quanti sono.' }];
+}
+async function preparaSottoPressione(t, provider) {
+  const store = createSqliteContextStore({ databasePath: ':memory:' });
+  t.after(() => store.close());
+  await store.initSession({ sessionId: 'chat', settings: parseContextSettings({}) });
+  const porta = createContextModelAdapter({ resolveModel: async () => { throw new Error('nessun riassunto in questa prova'); }, callModel: async () => { throw new Error('nessun riassunto in questa prova'); } });
+  const contatore = { countPreparedContext: async ({ messages, tools, model }) => ({ schema: 'talos.context.tokens.v1', inputTokens: Math.ceil(JSON.stringify({ messages, tools }).length / 4), windowTokens: model.windowTokens, responseReserve: model.responseReserve, method: 'heuristic', exact: false, requestHash: 'a'.repeat(64), provider: model.provider, model: model.model }) };
+  const engine = createContextEngine({ store, model: { ...porta, resolveModel: async ({ sessionModel }) => sessionModel, summarize: async () => { throw new Error('nessun riassunto in questa prova'); } }, tokenCounter: contatore });
+  const at = '2026-11-01T10:00:00.000Z';
+  for (const [i, message] of giroLungo(30).entries()) await engine.appendOriginal({ sessionId: 'chat', record: { id: `m${i}`, message, createdAt: at } });
+  return engine.prepareForRequest({ sessionId: 'chat', sessionModel: { provider, model: 'reflection/beam-1.0-501b-a23b', windowTokens: 33_024, responseReserve: 2048 }, summaryCeilingMs: 0 });
+}
+const turniConAttrezzi = (messaggi) => messaggi.filter((m) => m.role === 'assistant' && m.tool_calls?.length);
+
+test('R49-04: il livello 1 sopra la soglia: su un fornitore in rete ogni turno con attrezzi tiene il suo ragionamento, accorciato sui vecchi e intero sui recenti', async (t) => {
+  const preparata = await preparaSottoPressione(t, 'openrouter');
+  assert.equal(preparata.level1?.cleared, 16, 'premessa: le uscite vecchie si sono tolte');
+  const turni = turniConAttrezzi(preparata.messages);
+  assert.equal(turni.length, 30);
+  for (const [i, turno] of turni.entries()) {
+    const intero = pensiero(i);
+    assert.ok(turno.reasoning_content, `turno ${i}: un fornitore severo risponde 400 senza il campo`);
+    assert.equal(turno.reasoning_content, i < 16 ? intero.slice(0, REASONING_KEEP_CHARS) : intero, `turno ${i}`);
+  }
+});
+
+test('R49-06: senza un modello la porta risponde «no» invece di esplodere: il livello 1 non fa cadere la richiesta', () => {
+  const porta = createContextModelAdapter({ resolveModel: async () => null, callModel: async () => null });
+  assert.equal(porta.accorciaIlRagionamento(undefined), false);
+  assert.equal(porta.accorciaIlRagionamento({ provider: 'openrouter' }), true);
+  assert.equal(porta.accorciaIlRagionamento({ provider: 'local' }), false);
+});
+
+test('R49-07: Z.AI e Qwen diretti restano sul togliere: la loro documentazione vieta il blocco modificato; OpenRouter accorcia anche z-ai', async (t) => {
+  for (const provider of ['zai', 'qwen']) {
+    const preparata = await preparaSottoPressione(t, provider);
+    assert.equal(preparata.level1?.cleared, 16, provider);
+    for (const [i, turno] of turniConAttrezzi(preparata.messages).entries()) {
+      assert.equal(turno.reasoning_content, i < 16 ? undefined : pensiero(i), `${provider}, turno ${i}`);
+    }
+  }
+  const porta = createContextModelAdapter({ resolveModel: async () => null, callModel: async () => null });
+  assert.equal(porta.accorciaIlRagionamento({ provider: 'openrouter', model: 'z-ai/glm-5.3-flash' }), true);
+  assert.equal(porta.accorciaIlRagionamento({ provider: 'fornitore-sconosciuto' }), true);
+});
+
+test('R49-05: i motori locali restano come oggi: il livello 1 toglie il ragionamento vecchio; un solo elenco, lo stesso del reset', async (t) => {
+  const preparata = await preparaSottoPressione(t, 'local');
+  const turni = turniConAttrezzi(preparata.messages);
+  assert.equal(preparata.level1?.cleared, 16);
+  assert.equal(turni.filter((turno) => Object.hasOwn(turno, 'reasoning_content')).length, 14, 'restano solo i recenti');
+  const porta = createContextModelAdapter({ resolveModel: async () => ({}), callModel: async () => ({}) });
+  for (const provider of ['local', 'locale-ospite', 'ollama', 'lmstudio', 'llama.cpp']) assert.equal(porta.accorciaIlRagionamento({ provider }), false, provider);
+  for (const provider of ['openrouter', 'deepseek', 'chatgpt', 'anthropic', 'ollama-cloud']) assert.equal(porta.accorciaIlRagionamento({ provider }), true, provider);
+});
+
+test('R49-02: AL CONTRARIO: il cambio di modello toglie ancora il ragionamento, con o senza reset', () => {
+  const stato = { version: 1, provider: 'openrouter', model: 'r/altro', content: [{ type: 'reasoning', text: 'x' }] };
+  const messaggi = () => [{ role: 'user', content: 'a' }, { role: 'assistant', content: 'b', reasoning_content: 'di un altro modello', talos_provider_state: stato }, { role: 'user', content: 'c' }];
+  for (const reset of [true, false]) {
+    const prepared = prepareProviderContext({ messages: messaggi(), provider: 'deepseek', model: 'r/beam', reset });
+    assert.equal(prepared.messages[1].reasoning_content, undefined, `reset ${reset}`);
+    assert.equal(prepared.messages[1].talos_provider_state, undefined, `reset ${reset}`);
+  }
 });
 
 test('CTX-NATIVE-PREFIX reset strips stale opaque state on a copy and keeps the exchange native', () => {

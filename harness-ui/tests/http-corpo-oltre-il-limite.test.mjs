@@ -41,7 +41,7 @@ const QUATTRO_KB = 4096; // il tetto di PRIMA, iniettato: così la prova raccont
 
 test('CORPO-413-01 — un corpo oltre il limite riceve una RISPOSTA 413 con la sua copia, non una connessione morta', async (t) => {
   const registro = registroFinto();
-  const base = await conServer(t, createHttpApp({ sessionRegistry: registro, limiteCorpoByte: QUATTRO_KB }));
+  const base = await conServer(t, createHttpApp({ senzaGettone: 'prove', sessionRegistry: registro, limiteCorpoByte: QUATTRO_KB }));
   const risposta = await resume(base, 'y'.repeat(5_000));
   assert.equal(risposta.status, 413);
   const busta = await risposta.json();
@@ -53,7 +53,7 @@ test('CORPO-413-01 — un corpo oltre il limite riceve una RISPOSTA 413 con la s
 });
 
 test('CORPO-413-02 — anche un corpo TRE volte oltre il limite riceve il 413: il server drena, non chiude in faccia', async (t) => {
-  const base = await conServer(t, createHttpApp({ sessionRegistry: registroFinto(), limiteCorpoByte: QUATTRO_KB }));
+  const base = await conServer(t, createHttpApp({ senzaGettone: 'prove', sessionRegistry: registroFinto(), limiteCorpoByte: QUATTRO_KB }));
   const risposta = await resume(base, 'y'.repeat(12_000));
   assert.equal(risposta.status, 413);
   assert.equal((await risposta.json()).error.code, 'PAYLOAD_LIMIT');
@@ -61,7 +61,7 @@ test('CORPO-413-02 — anche un corpo TRE volte oltre il limite riceve il 413: i
 
 test('CORPO-12KB-01 — il percorso dell\'owner col tetto DI SERIE: un messaggio da 12 KB incollato in una chat aperta ARRIVA al registro', async (t) => {
   const registro = registroFinto();
-  const base = await conServer(t, createHttpApp({ sessionRegistry: registro }));
+  const base = await conServer(t, createHttpApp({ senzaGettone: 'prove', sessionRegistry: registro }));
   const messaggio = 'Voglio condurre un audit tecnico approfondito dell’ambiente agentico in cui stai operando.\n'.repeat(140).trim();
   assert.ok(Buffer.byteLength(messaggio) > 12_000, `il messaggio di prova deve essere >12 KB, è ${Buffer.byteLength(messaggio)}`);
   const risposta = await resume(base, messaggio);
@@ -73,7 +73,7 @@ test('CORPO-12KB-01 — il percorso dell\'owner col tetto DI SERIE: un messaggio
 
 test('CORPO-INIETTATO-01 — il tetto è iniettabile: con 1 KB lo stesso percorso riceve il 413 (il verso che prova che il tetto morde)', async (t) => {
   const registro = registroFinto();
-  const base = await conServer(t, createHttpApp({ sessionRegistry: registro, limiteCorpoByte: 1024 }));
+  const base = await conServer(t, createHttpApp({ senzaGettone: 'prove', sessionRegistry: registro, limiteCorpoByte: 1024 }));
   const risposta = await resume(base, 'x'.repeat(2_000));
   assert.equal(risposta.status, 413);
   assert.equal((await risposta.json()).error.code, 'PAYLOAD_LIMIT');
@@ -81,7 +81,7 @@ test('CORPO-INIETTATO-01 — il tetto è iniettabile: con 1 KB lo stesso percors
 });
 
 test('⛔ AL CONTRARIO — oltre il tetto di DRENAGGIO (4× il limite) il server chiude davvero: un corpo enorme non si legge fino in fondo', async (t) => {
-  const base = await conServer(t, createHttpApp({ sessionRegistry: registroFinto(), limiteCorpoByte: QUATTRO_KB }));
+  const base = await conServer(t, createHttpApp({ senzaGettone: 'prove', sessionRegistry: registroFinto(), limiteCorpoByte: QUATTRO_KB }));
   let esito;
   try {
     const risposta = await resume(base, 'y'.repeat(65_536)); // 64 KB: 16× il limite, ben oltre il 4× drenato

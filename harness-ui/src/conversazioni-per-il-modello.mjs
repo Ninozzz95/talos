@@ -50,7 +50,7 @@ const STATI_FILTRO = Object.freeze({
 });
 export const FILTRI_DI_STATO = Object.freeze(Object.keys(STATI_FILTRO));
 
-const MOTIVI = Object.freeze({ 'fine-lavoro': 'finished the work', 'giri-finiti': 'ran out of turns', fermata: 'stopped by the person', errore: 'error' });
+const MOTIVI = Object.freeze({ 'fine-lavoro': 'finished the work', 'giri-finiti': 'ran out of turns', fermata: 'stopped by the person', rifiuto: 'the model refused', errore: 'error' });
 
 const intero = (valore, predefinito, minimo, massimo) => {
   const n = Math.trunc(Number(valore));
@@ -168,7 +168,9 @@ export function sfogliaConversazioni(righe, { limit, status, folder, correnteId 
     if (r.modello) parti.push(`model ${r.modello}`);
     const giri = giriDellaRiga(r);
     if (giri !== null) parti.push(`${giri} ${giri === 1 ? 'turn' : 'turns'}`);
-    const token = (r.usageSessione?.prompt_tokens ?? 0) + (r.usageSessione?.completion_tokens ?? 0);
+    /* spesa dei riassunti (owner 30/10 sera, «dove c'è già»): lo stesso totale che vede la persona — usageSessione più `servizio` */
+    const token = (r.usageSessione?.prompt_tokens ?? 0) + (r.usageSessione?.completion_tokens ?? 0)
+      + (r.servizio?.prompt_tokens ?? 0) + (r.servizio?.completion_tokens ?? 0);
     if (token > 0) parti.push(`${migliaia(token)} tokens`);
     if (r.motivoChiusura && MOTIVI[r.motivoChiusura]) parti.push(`closed: ${MOTIVI[r.motivoChiusura]}`);
     if (r.senzaInterfaccia) parti.push('automation');

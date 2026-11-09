@@ -370,7 +370,10 @@
 .gv-passo-attivita[data-vivo="true"] { color: var(--talos-text); }
 /* 14/10/2026, misurato: accanto a «Non riuscito» il nome corto del modello («glm-5.3-flash», 73 px) aveva 67 px e usciva tagliato.
    Lo spazio a destra è quello dell'icona del ruolo (12 px dentro il contenuto) più 4: prima erano 10 di troppo. */
-.gv-passo-piede { display: flex; align-items: center; gap: 6px; min-width: 0; padding-inline-end: 16px; }
+/* 07/11/2026 (cura 331, DELEGHE-PAROLE-06), misurato: dal 04/11 il nome corto è quello del catalogo («GLM 5.3 Flash», 77 px,
+   commit 68ebab480) e accanto a «Non riuscito» ne aveva 74. L'icona del ruolo comincia 11 px dentro il contenuto: 13 di margine
+   lasciano 2 px fra il nome e l'icona; lo spazio dopo la pastiglia scende da 6 a 4. Guadagno 5 px, il nome entra intero. */
+.gv-passo-piede { display: flex; align-items: center; gap: 4px; min-width: 0; padding-inline-end: 13px; }
 .gv-passo-piede > .gv-passo-pill { flex: none; }
 .gv-passo-piede > .gv-passo-modello { flex: 1 1 auto; min-width: 0; padding-inline-start: 0; }
 /* il palco: la tela e, accanto, la colonna; i margini che erano dell'area passano al palco */

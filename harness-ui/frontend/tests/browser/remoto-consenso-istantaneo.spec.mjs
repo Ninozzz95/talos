@@ -189,7 +189,12 @@ test('REMOTO-ISTANTANEO-04 — il server VERO: lo stream della finestra passa la
     s.onmessage = (m) => { visti.push(JSON.parse(m.data)); if (visti.at(-1).type === 'remote.changed') { s.close(); ok(visti); } };
     s.onerror = () => { s.close(); ko(new Error('stream rifiutato')); };
   }));
-  expect(primi).toEqual([{ type: 'remote.changed', motivo: 'connesso' }]);
+  /* Contratto «notifiche» (31/10/2026): lo stesso flusso porta all'apertura anche la foto delle notifiche del PC (`talos.notifica` con
+     `voce: null`, l'ultimo `seq` e quante cose aspettano). Le richieste dei dispositivi restano quelle di prima: nessuna, poi «connesso». */
+  const notifiche = primi.filter((e) => e.type === 'talos.notifica');
+  expect(notifiche.length, 'the opening photo of the notifications').toBeLessThanOrEqual(1);
+  if (notifiche[0]) { expect(notifiche[0].voce).toBeNull(); expect(Number.isSafeInteger(notifiche[0].ultimoSeq)).toBe(true); }
+  expect(primi.filter((e) => e.type !== 'talos.notifica')).toEqual([{ type: 'remote.changed', motivo: 'connesso' }]);
   /* AL CONTRARIO: la stessa rotta letta da un'altra origine no (la richiesta di Playwright non è un browser e non ha il gettone) */
   const estranea = await page.request.get('/api/v1/remote/events', { headers: { origin: 'http://sito-estraneo.example', 'sec-fetch-site': 'cross-site' } });
   expect(estranea.status()).toBe(403);

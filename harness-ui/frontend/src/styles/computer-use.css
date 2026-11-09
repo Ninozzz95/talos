@@ -1,0 +1,47 @@
+/*
+ * FE-016, 057, 063, 064: gli schermi del computer use, copiati dal bozzetto (`bozzetto-computer-use-pc/index.html:757-794`, `bozzetto-computer-use-posso/posso.css`) sui token del PC.
+ * ⛔ NON caricato da `main.css`: gli schermi non sono montati. Si importa quando il Desktop lega il guscio.
+ */
+.cs{display:flex;max-height:85vh;max-width:560px;flex-direction:column;border-radius:16px;border:1px solid var(--talos-border);background:var(--talos-panel);padding:16px;box-shadow:0 25px 50px -12px rgb(0 0 0/.25);color:var(--talos-text)}
+.cs-alto{display:flex;align-items:flex-start;gap:12px}
+.cs-testa{min-width:0;flex:1}
+.cs-da{margin:0;font-size:12px;color:var(--talos-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cs h2{margin:2px 0 0;font-size:16px;font-weight:600}
+.cs-x{padding:0 4px;border:0;background:none;color:var(--talos-muted);cursor:pointer}
+.cs-nota{margin:8px 0 0;font-size:12px;line-height:16px;color:var(--talos-muted)}
+.cs dl{margin:12px 0 0;max-height:240px;overflow:auto;border-radius:12px;border:1px solid var(--talos-border);background:var(--talos-panel-soft);padding:8px}
+.cs dl div{display:flex;flex-direction:column;gap:2px;padding:4px 0}
+.cs dt{font-size:12px;color:var(--talos-muted)}
+.cs dd{margin:0;overflow-wrap:break-word;font-size:13px;line-height:20px}
+.cs-bott{margin-top:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cs-bott button{min-height:36px;border-radius:10px;border:1px solid var(--talos-border);background:transparent;color:var(--talos-text);font:inherit;font-size:13px;cursor:pointer}
+.cs-bott .cs-si{border-color:var(--talos-accent);background:var(--talos-accent);color:var(--talos-on-accent, var(--talos-background));font-weight:500}
+.cs-bott .cs-sempre{border-color:var(--talos-accent);color:var(--talos-accent-text);font-weight:500}
+.talos-scheda{margin-top:8px;overflow:hidden;border:1px solid var(--talos-border);background:var(--talos-panel);max-inline-size:24rem;border-radius:var(--talos-radius-card)}
+.talos-scheda-corpo{padding:12px}
+.talos-domanda{margin:0 0 6px;font-size:12.5px;color:var(--talos-muted)}
+.talos-controllo{display:flex;align-items:center;gap:10px;width:100%;padding:10px;border-radius:10px;border:1px solid var(--talos-border);background:var(--talos-panel-soft);color:var(--talos-text);font:inherit;text-align:left}
+button.talos-controllo{cursor:pointer}
+.talos-controllo + .talos-controllo{margin-block-start:6px}
+.talos-nome{min-width:0;flex:1;font-size:14px}
+.talos-nome small{display:block;margin-top:1px;font-size:12.5px;color:var(--talos-muted)}
+.talos-freccia{flex:none;color:var(--talos-muted);font-size:16px;line-height:1}
+.talos-levetta{position:relative;flex:none;inline-size:46px;block-size:27px;padding:0;border-radius:99px;border:1px solid var(--talos-accent);background:var(--talos-accent);cursor:pointer}
+.talos-levetta::after{content:"";position:absolute;inset-block-start:2px;inset-inline-end:2px;inline-size:20px;block-size:20px;border-radius:50%;background:var(--talos-background)}
+.talos-levetta[aria-checked="false"]{border-color:var(--talos-border);background:var(--talos-panel-soft)}
+.talos-levetta[aria-checked="false"]::after{inset-inline-end:auto;inset-inline-start:2px;background:var(--talos-muted)}
+.talos-levetta:focus-visible,.talos-codice-r4-stati > button:focus-visible{outline:2px solid var(--talos-accent);outline-offset:2px}
+.cu-voce[data-spenta="true"] .talos-nome{text-decoration:line-through;color:var(--talos-muted)}
+.posso{flex-wrap:wrap}
+.posso .talos-nome{flex:0 0 auto}
+.talos-codice-r4-stati{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.talos-codice-r4-stati > button{flex:none;min-height:32px;padding:0 12px;border:1px solid var(--talos-border);border-radius:999px;background:transparent;color:var(--talos-muted);font:inherit;font-size:12.5px;white-space:nowrap;text-decoration:line-through;cursor:pointer}
+.talos-codice-r4-stati > button[aria-pressed="true"]{border-color:var(--talos-accent);color:var(--talos-text);text-decoration:none}
+.cu-tetto{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;color:var(--talos-muted);white-space:nowrap}
+.cu-tetto[hidden]{display:none}
+.cu-tetto__campo{width:72px;min-height:32px;padding:0 8px;border:1px solid var(--talos-border);border-radius:10px;background:transparent;color:var(--talos-text);font:inherit;text-align:right}
+.cu-pillola{display:flex;align-items:center;gap:8px;padding:6px 8px 6px 14px;border-radius:999px;border:1px solid var(--talos-border);background:var(--talos-panel);color:var(--talos-text);font-size:13px}
+.cu-pillola[hidden]{display:none}
+.cu-pillola__fase{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cu-pillola__sec{flex:none;color:var(--talos-muted);font-variant-numeric:tabular-nums}
+.cu-pillola__ferma{flex:none;width:30px;height:30px;border:0;border-radius:50%;background:var(--talos-panel-soft);color:var(--talos-text);cursor:pointer}

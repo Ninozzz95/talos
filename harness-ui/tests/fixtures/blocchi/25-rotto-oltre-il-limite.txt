@@ -1,0 +1,1 @@
+root = Scelte("s", null, null, [{testo: "1"}, {testo: "2"}, {testo: "3"}, {testo: "4"}, {testo: "5"}, {testo: "6"}, {testo: "7"}])

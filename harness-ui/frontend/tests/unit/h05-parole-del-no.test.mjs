@@ -29,7 +29,17 @@ test('H-05: ogni «no» del kernel si spiega con le sue parole, e le traduzioni 
   assert.equal(vuoto.tipo, 'non-valido');
   assert.equal(vuoto.detto, 'L’HTML era vuoto: non è stato creato niente.', 'la traduzione di prima, ora sotto INVALID');
   const rifiuto = spiegaRifiutoAttrezzo('REFUSED. the person did not allow it. Nothing was written.');
-  assert.deepEqual([rifiuto.rifiutato, rifiuto.tipo, rifiuto.detto], [true, 'rifiuto', 'L’attrezzo ha rifiutato la richiesta.']);
+  assert.deepEqual([rifiuto.rifiutato, rifiuto.tipo, rifiuto.detto], [true, 'rifiuto', 'Lo strumento ha rifiutato la richiesta.']);
   const nessuno = spiegaRifiutoAttrezzo('NO CHANGE. The edit looks already applied');
   assert.deepEqual([nessuno.rifiutato, nessuno.tipo], [false, null], '«già applicata» non è un no');
+});
+
+/* Tester R2-R4 (03/11/2026): il no della persona arriva come DECLINED; l'interfaccia lo dice come una scelta sua, non come un rifiuto dello strumento */
+test('H05-DECLINED il no della persona si spiega «Hai detto di no»; AL CONTRARIO REFUSED resta un rifiuto', async () => {
+  const { spiegaRifiutoAttrezzo } = await import('../../src/components/errori.js');
+  const no = spiegaRifiutoAttrezzo('DECLINED. The person said no to this. Do not ask again for it, by a card or a question, unless the person brings it up. Go on without it, or say in one line what you can do instead. Nothing was written.');
+  assert.equal(no.rifiutato, true);
+  assert.equal(no.tipo, 'detto-no');
+  const rifiuto = spiegaRifiutoAttrezzo('REFUSED. "x" is inside a folder the person blocked.');
+  assert.equal(rifiuto.tipo, 'rifiuto');
 });

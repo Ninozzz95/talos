@@ -46,6 +46,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { numeroItaliano, statoGit, istruzioniPresenti } from './workspace-info.mjs';
 import { ambienteSenzaVariabiliDelServer } from './ambiente-solo-server.mjs';
+import { ambienteGitSicuro } from './kernel/git-sicuro.mjs';
 
 /** Hermes `_MAX_VERIFY_COMMANDS = 8`: oltre, la scheda smette di essere una scheda. */
 export const MASSIMO_COMANDI_VERIFICA = 8;
@@ -235,12 +236,19 @@ export async function ultimiCommit(cartella, { eseguiGit } = {}) {
     /* Nessun esecutore iniettato: si usa quello di `workspace-info.mjs` passando da `statoGit`?
        No — quello non espone `git log`. Si fa qui, con lo stesso stile: spawn, timeout, mai throw. */
     const { spawn } = await import('node:child_process');
+    /* ⛔ Blocco 9 del Git sicuro (31/10/2026, misurato): questo `git log` parte da solo all'inizio del lavoro, e con una cartella copiata
+       che porta `log.showSignature` + `gpg.program` e un commit firmato faceva partire quel programma. Ora con la cura delle letture
+       (chiavi eseguibili della cartella spente, `log.showSignature=false`); se Git non sa dirle, la scheda resta senza commit. */
+    const base = ambienteSenzaVariabiliDelServer();
+    const sicuro = await ambienteGitSicuro(cartella, base);
+    if (!sicuro) return [];
     return await new Promise((risolvi) => {
       let uscita = '';
       let processo;
       /* ⛔ 17/09/2026 (A-bis): `env` dichiarato — senza, il figlio eredita l'ambiente INTERO del server (token e chiavi compresi). */
-      try { processo = spawn('git', ['log', '-3', '--pretty=%h %s'], { cwd: cartella, windowsHide: true, env: ambienteSenzaVariabiliDelServer() }); }
+      try { processo = spawn('git', ['log', '-3', '--pretty=%h %s'], { cwd: cartella, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'], env: { ...base, ...sicuro } }); }
       catch { risolvi([]); return; }
+      processo.stdout?.on('error', () => {}); // L-2: con una cartella oltre i 260 caratteri il canale emette `read ENOTCONN`
       const timer = setTimeout(() => { try { processo.kill(); } catch { /* già morto */ } risolvi([]); }, 4000);
       processo.stdout?.on('data', (pezzo) => { uscita += String(pezzo); });
       processo.on('error', () => { clearTimeout(timer); risolvi([]); });

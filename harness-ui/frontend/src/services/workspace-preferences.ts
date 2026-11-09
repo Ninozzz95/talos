@@ -45,6 +45,25 @@ function inspect(raw: string | null): { kind: 'missing' | 'supported' | 'future'
     return record(value) && value.version === 2 ? { kind: 'supported', value } : { kind: 'corrupt' };
   } catch { return { kind: 'corrupt' }; }
 }
+/*
+ * Decisione 42 dell'owner (02/11/2026, reperti D12 e D31) — la ricarica riapre la chat aperta, quella giusta. `lastSession` sta in
+ * `localStorage`, comune a tutte le finestre: serve solo a una finestra nuova o al programma riaperto. La chat di QUESTA finestra sta in
+ * `sessionStorage`, che è della scheda e sopravvive alla ricarica. Hermes e LibreChat ottengono lo stesso con la rotta della finestra
+ * (`apps/desktop/src/app/session/hooks/use-route-resume.ts`, `client/src/routes/index.tsx:143`); qui non c'è rotta della chat.
+ */
+export const TAB_SESSION_KEY = 'talos.desktop.workspace.tabSession.v1';
+type TabStorage = Pick<PreferenceStorage, 'getItem' | 'setItem'> | undefined;
+export function rememberOpenSession(preferences: { update: (patch: { lastSession: string }) => unknown }, sessionId: string, getTabStorage: () => TabStorage = () => globalThis.sessionStorage): void {
+  preferences.update({ lastSession: sessionId });
+  try { getTabStorage()?.setItem(TAB_SESSION_KEY, sessionId); } catch { /* resta la memoria comune */ }
+}
+export function sessionToRestore(preferences: { read: () => WorkspacePreferences }, getTabStorage: () => TabStorage = () => globalThis.sessionStorage): string | null {
+  try {
+    const id = getTabStorage()?.getItem(TAB_SESSION_KEY);
+    if (validId(id)) return id;
+  } catch { /* resta la memoria comune */ }
+  return preferences.read().lastSession;
+}
 export function createWorkspacePreferences(getStorage: () => PreferenceStorage | undefined = () => globalThis.localStorage) {
   let state = normalizeWorkspacePreferences(null);
   let problem: PersistenceProblem = null;

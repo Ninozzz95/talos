@@ -1,10 +1,15 @@
 import { preparaMisuraDialogo, collegaRidimensionamentoDialoghi } from './dialoghi.js';
 import { t, linguaCorrenteDiT, EVENTO_LINGUA } from './lingua.js';
+import { fraseDelLavoro } from './frase-lavoro-contesto.js';
+import { mostraCaricamentoVivo } from './caricamento-vivo.js';
+import { EVENTO_APRI_SCELTA_DAL_CONTESTO } from './motivi-compattazione.js';
 import { chiaveNotaCompactManuale } from './compattazione-legacy.js'; // 22/10: la stessa frase della nota per «al-minimo» e «inefficace»
 import { TESTI } from '../i18n/testi/index.js';
 // C1 (owner 10/10/2026): la panoramica e le schede usano gli stessi dati e le stesse finestre della scheda Contesto della colonna
 import { limiteCheAgisce, percheDelLimite, misuraDellaPanoramica, compattazioniDellaConversazione, cosaHaTenuto, CHIAVI_CATEGORIA } from './contesto-scheda.js';
 import { nodiRichiestaInviata, nodiCosaHaTenuto } from './contesto-finestre.js';
+import { disegnaCatenaContesto } from './contesto-catena.js'; // FE-039: «se il modello non va», scritto prima che serva
+import { disegnaContesto } from './pannello/contesto.js'; // variante B (owner 31/10/2026 notte): le pagine coi pezzi VERI della scheda Contesto
 
 const ACTIVE = new Set(['queued', 'preparing', 'summarizing', 'validating', 'ready', 'paused']);
 const JOB_LABELS = { get queued() { return t('chat.context.job.queued'); }, get preparing() { return t('chat.context.job.preparing'); }, get summarizing() { return t('chat.context.job.compacting'); }, get validating() { return t('chat.context.job.validating'); }, get ready() { return t('chat.context.job.publishing'); }, get committed() { return t('chat.context.job.updated'); }, get paused() { return t('chat.context.job.paused'); }, get cancelled() { return t('chat.context.job.cancelled'); }, get failed() { return t('chat.context.job.failed'); } };
@@ -43,11 +48,17 @@ export function descriviContextCompactor(state) {
   const method = m?.method === 'runtime' ? t('chat.context.measure.runtime') : m?.method === 'provider' ? t('chat.context.measure.provider') : m?.method === 'heuristic' ? t('chat.context.measure.heuristic') : t('chat.common.notAvailable');
   const jobs = Array.isArray(state?.jobs) ? state.jobs : [];
   const job = jobs.find(j => ACTIVE.has(j.state)) ?? [...jobs].sort((a, b) => String(b.updatedAt ?? b.createdAt).localeCompare(String(a.updatedAt ?? a.createdAt)))[0] ?? null;
+  /* Contratto «niente da compattare» (31/10/2026, OK di Performance, Mobile e CLI): una compattazione CHIESTA dalla persona (chiave non
+     `auto-`, riservate al motore) che ha passato il controllo prima di pagare ma non ha liberato spazio. Non era «già corta» (quello è
+     CTX_NOTHING_TO_COMPACT, prima di pagare): non è riuscita a ridurla. Si dice così, senza il rosso dell'errore, e il motore non apre
+     la pausa; il costo lo dice la sua riga (gratis coi modelli locali). Gli automatici restano «non riuscita». */
+  const esitoNeutro = job?.state === 'failed' && job?.error?.code === 'CTX_NO_REDUCTION' && typeof job?.idempotencyKey === 'string' && !job.idempotencyKey.startsWith('auto-');
   return {
+    esitoNeutro,
     measurement: { known, method: typeof m?.method === 'string' ? m.method : null, inputTokens: number(m?.inputTokens) ? m.inputTokens : null, windowTokens: number(m?.windowTokens) ? m.windowTokens : null, responseReserve: number(m?.responseReserve) ? m.responseReserve : null,
       ratio: known ? m.inputTokens / m.windowTokens : null, exact, current, measuredAt: meta?.measuredAt ?? null,
       methodLabel: `${method}${known && m?.method !== 'heuristic' ? ` (${exact ? t('chat.context.measure.exact') : t('chat.context.measure.estimate')})` : ''}${oraMisura ? ` · ${t('chat.context.measure.measuredAt')} ${oraMisura}` : ''}${known && dichiaraFreschezza && !current ? ` · ${t('chat.context.measure.stale')}` : ''}` },
-    job, jobLabel: job ? JOB_LABELS[job.state] ?? t('chat.common.notAvailable') : t('chat.context.noCompaction'),
+    job, jobLabel: esitoNeutro ? t('chat.context.job.freedNothing') : job ? JOB_LABELS[job.state] ?? t('chat.common.notAvailable') : t('chat.context.noCompaction'),
     auto: state?.settings?.auto !== false, canCompact: Boolean(state) && state?.capabilities?.compact !== false && !ACTIVE.has(job?.state),
   };
 }
@@ -73,7 +84,7 @@ const MOUNTED = new WeakMap();
  *   compatta(sessionId) → Promise<{ stato: 'riassunta'|'invariata'|'errore'|'in-corso', messaggio? }> }.
  */
 /** Mount the canonical #veloContesto markup. Transport, session and snapshots are injected. */
-export function montaContextCompactor(root, { client, sessionId, state = null, document: doc = root?.ownerDocument ?? globalThis.document, onState, onClose, modalManager = null, translate = translateDefault, legacy = null, scheda = null, richiesta = null, esporta = null } = {}) {
+export function montaContextCompactor(root, { client, sessionId, state = null, document: doc = root?.ownerDocument ?? globalThis.document, onState, onClose, modalManager = null, translate = translateDefault, catena = null, legacy = null, scheda = null, richiesta = null, esporta = null, pannello = null } = {}) {
   if (MOUNTED.has(root)) return MOUNTED.get(root);
   if (!root?.querySelector('[data-context-body]') || !client) throw new TypeError('ContextCompactor richiede markup canonico e client.');
   const win = doc.defaultView ?? globalThis.window;
@@ -87,11 +98,21 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   // modo semplice (trial spento, host con `legacy`): misura dell'ultima richiesta, conferma aperta, esito dell'ultima compattazione
   let modoLegacy = false, confermaLegacy = false, esitoLegacy = null, misuraLegacy = null;
   // C1 (10/10): la scheda aperta, e le chiavi che evitano di ridisegnare ciò che non è cambiato
-  let schedaAttiva = 'tenuto', tenutoKey = '', richiestaLetta = 0;
+  /* variante B (owner 31/10/2026 notte, «Indice a sinistra»): si apre sulla Panoramica; «Cosa ha tenuto» non ha più una voce nell'indice
+     (ci si arriva dalla riga di una compattazione) e accende la voce «Compattazioni», da cui viene. */
+  let schedaAttiva = 'panoramica', tenutoKey = '', richiestaLetta = 0;
+  const PAGINE_DEL_PANNELLO = Object.freeze({ panoramica: ['tempo', 'categorie', 'cache', 'attenzione'], compattazioni: ['riassunti'] });
   const SCHEDE_DEL_MOTORE = new Set(['fatti', 'versioni', 'impostazioni']);
   // lo stesso formato della colonna (inspector.js): un numero solo in tutta l'app, anche nell'arrotondamento
   const kilo = (n) => { if (n === null || n === undefined) return '—'; const v = Number(n); if (!Number.isFinite(v)) return '—'; const f = new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT', { maximumFractionDigits: 1 }); return v >= 1000 ? `${f.format(v / 1000)}k` : String(Math.round(v)); };
   const num = value => number(value) ? new Intl.NumberFormat(linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT').format(value) : t('chat.common.notAvailable');
+  /* il testo del motore, col codice: chiuso, per chi lo cerca */
+  /* una scelta sola per tutta l'app (FE-053): da qui si arriva alla carta delle Impostazioni, col menu giusto aperto */
+  function scegliNelleImpostazioni(scelta) { doc.dispatchEvent(new win.CustomEvent(EVENTO_APRI_SCELTA_DAL_CONTESTO, { detail: { scelta } })); }
+  listen(q('job-scegli'), 'click', () => scegliNelleImpostazioni('modello'));
+  listen(q('chain-model'), 'click', () => scegliNelleImpostazioni('modello'));
+  listen(q('chain-backup'), 'click', () => scegliNelleImpostazioni('riserva'));
+  function mostraDettaglioLavoro(testo) { const d = q('job-detail'); if (!d) return; d.hidden = !testo; if (!testo) d.open = false; d.querySelector('code').textContent = testo ?? ''; }
   function element(tag, text, className) { const node = doc.createElement(tag); if (text != null) node.textContent = text; if (className) node.className = className; return node; }
   function button(text, action) { const node = element('button', text, 'talos-button talos-button--ghost talos-button--sm'); node.type = 'button'; node.dataset.contextMutation = ''; node.disabled = busy || !snapshot; node.addEventListener('click', action); return node; }
   function say(message, error = false) { statusText = message; const node = q('status'); node.textContent = message; node.setAttribute('role', error ? 'alert' : 'status'); }
@@ -168,7 +189,7 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     for (const node of root.querySelectorAll('[data-context-label]')) node.textContent = translate(node.dataset.contextLabel);
     if (!busy) q('auto').checked = view.auto;
     if (!modoLegacy) renderPanoramica({ usati: m.known ? m.inputTokens : null, limite: limiteCheAgisce({ budget: snapshot?.budget ?? null, politica: scheda?.()?.politica ?? null }), metodo: m.known ? m.methodLabel : null });
-    q('job').textContent = view.jobLabel;
+    if (!modoLegacy) scriviLavoro(view.jobLabel, ACTIVE.has(view.job?.state) && view.job?.state !== 'paused', view.job?.id, Date.parse(view.job?.createdAt));
     // C1 (owner 10/10, «non troppo affollata»): la riga del lavoro c'è solo quando ha qualcosa da dire, non «nessuna compattazione» fisso
     q('job').hidden = !(ACTIVE.has(view.job?.state) || view.job?.state === 'failed');
     const p = view.job?.progress; q('progress').textContent = number(p?.completed) && number(p?.total) && p.total > 0 && p.completed <= p.total ? t('chat.context.progress.completedOf', { n: num(p.completed), totale: num(p.total) }) : '';
@@ -177,7 +198,12 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     progress.setAttribute('aria-label', view.jobLabel);
     if (number(p?.completed) && number(p?.total) && p.total > 0 && p.completed <= p.total) { progress.max = p.total; progress.value = p.completed; }
     else progress.removeAttribute('value');
-    q('job-error').textContent = view.job?.error?.message ?? ''; q('job-error').hidden = !view.job?.error;
+    const esitoLavoro = view.esitoNeutro ? null : fraseDelLavoro(view.job); // un «non riduce» chiesto non è un errore
+    if (esitoLavoro?.attesa) mostraCaricamentoVivo(q('job-error'), esitoLavoro.testo, { chiave: `contesto-pausa-${view.job.id}` });
+    else q('job-error').textContent = esitoLavoro?.testo ?? '';
+    q('job-error').hidden = !esitoLavoro;
+    mostraDettaglioLavoro(esitoLavoro?.dettaglio ?? null);
+    q('job-scegli').hidden = esitoLavoro?.scegli !== true; // Frontend 01/11/2026: «Scegli un altro» è un'azione, lo stesso tasto della carta (revisione del Blocco 21, R15)
     renderSettings(); renderFacts(); renderVersions();
     const refs = snapshot?.activeVersion?.summary?.sources ?? []; const key = JSON.stringify(refs);
     if (key !== sourcesKey) { sourcesKey = key; q('sources').replaceChildren(); if (!refs.length) q('sources').append(element('p', t('chat.context.source.empty'), 'talos-muted')); else sourceLinks(q('sources'), refs); }
@@ -191,10 +217,27 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     root.setAttribute('aria-busy', String(busy));
     root.querySelector('[data-context-close]').setAttribute('aria-label', t('chat.common.close'));
     if (modoLegacy) renderLegacy(); else delete root.dataset.contextModo;
+    renderAmbito();
     renderConferma();
-    renderSchede(); renderTenuto();
+    renderSchede(); renderTenuto(); renderPagine();
     // `doc.activeElement === focused`: se il render ha già spostato il fuoco (la conferma lo porta su «Sì, compatta»), non si ruba
     if (opened && focused?.disabled && root.contains(focused) && doc.activeElement === focused) q('title').focus({ preventScroll: true });
+  }
+  /* FE-039 (bozzetto: «riga con i secondi e la barra»; owner 27/10: ogni riga in corso animata e coi secondi). Il ridisegno passa spesso: la chiave tiene il conto, e lo
+     stesso testo non ricrea l'etichetta. Ferma, la riga è testo e basta. */
+  function scriviLavoro(testo, vivo, chiave, inizio) {
+    const riga = q('job');
+    if (vivo) mostraCaricamentoVivo(riga, testo, { chiave: `contesto-${chiave}`, inizio });
+    else if (riga.textContent !== testo || riga.childElementCount > 0) riga.textContent = testo;
+  }
+  /* La frase sotto il titolo (revisione del 30/10, con Mobile e Frontend): sul motore gli originali stanno sempre nell'archivio; sul modo semplice solo se l'ultima
+     compattazione si può annullare. Le righe della via manuale prima del 22/10 non si annullano: lì la frase era falsa */
+  function renderAmbito() {
+    const frase = root.querySelector('#descrizioneContesto');
+    if (!frase) return;
+    const perse = modoLegacy && legacy?.originaliDisponibili?.(sessionId) === false;
+    const testo = t(perse ? 'chat.context.label.scopeOriginalsGone' : 'chat.context.label.scope');
+    if (frase.textContent !== testo) frase.textContent = testo;
   }
   /* Il modo semplice sovrascrive SOLO ciò che ha una sorgente vera: misura, stato del riassunto, «Compatta ora».
      Fatti, versioni e impostazioni restano spenti da `available = false`, come prima. */
@@ -208,13 +251,15 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
     const inCorso = Boolean(legacy?.inCorso?.(sessionId));
     const errore = !inCorso && esitoLegacy?.stato === 'errore';
     q('job').hidden = !inCorso && !esitoLegacy;
-    q('job').textContent = inCorso ? t('chat.context.summarizing')
+    scriviLavoro(inCorso ? t('chat.context.summarizing')
       : esitoLegacy?.stato === 'riassunta' ? t('chat.context.legacy.summarizedWithUpdate')
         : esitoLegacy?.stato === 'invariata' ? (['al-minimo', 'inefficace'].includes(esitoLegacy.motivo) ? t(chiaveNotaCompactManuale(esitoLegacy.motivo)) : t('chat.context.legacy.unchanged'))
-          : errore ? t('chat.context.legacy.notSummarized') : t('chat.context.noCompaction');
+          : errore ? t('chat.context.legacy.notSummarized') : t('chat.context.noCompaction'), inCorso, sessionId);
     q('progress').textContent = '';
     const bar = q('progress-bar'); bar.hidden = !inCorso; bar.removeAttribute('value'); bar.setAttribute('aria-label', t('chat.context.summaryInProgress'));
     q('job-error').hidden = !errore; q('job-error').textContent = errore ? (esitoLegacy.messaggio || t('chat.common.operationFailed')) : '';
+    mostraDettaglioLavoro(null);
+    q('job-scegli').hidden = true;
     q('start').disabled = busy || inCorso || confermaLegacy || !sessionId;
   }
   /* C1 (owner 10/10/2026, «Pulsante in panoramica, con conferma»): «Compatta ora…» chiede conferma in linea in TUTTI E DUE i modi —
@@ -286,21 +331,45 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   function renderSchede() {
     const schede = [...root.querySelectorAll('[data-context-tab]')];
     for (const s of schede) s.hidden = modoLegacy && SCHEDE_DEL_MOTORE.has(s.dataset.contextTab);
-    if (schede.find((s) => s.dataset.contextTab === schedaAttiva)?.hidden) schedaAttiva = 'tenuto';
-    for (const s of schede) { const attiva = s.dataset.contextTab === schedaAttiva; s.setAttribute('aria-selected', String(attiva)); s.tabIndex = attiva ? 0 : -1; }
+    if (schede.find((s) => s.dataset.contextTab === schedaAttiva)?.hidden) schedaAttiva = 'panoramica';
+    const voce = schedaAttiva === 'tenuto' ? 'compattazioni' : schedaAttiva; // «Cosa ha tenuto» sta dentro le Compattazioni
+    for (const s of schede) { const attiva = s.dataset.contextTab === voce; s.setAttribute('aria-selected', String(attiva)); s.tabIndex = attiva ? 0 : -1; }
     for (const pannello of root.querySelectorAll('[data-context-panel]')) pannello.hidden = pannello.dataset.contextPanel !== schedaAttiva;
     q('legacy-note').hidden = !modoLegacy;
   }
   function apriScheda(chiave, { fuoco = false } = {}) {
-    schedaAttiva = chiave; renderSchede();
+    schedaAttiva = chiave; renderSchede(); renderPagine();
     if (fuoco) root.querySelector(`[data-context-tab="${chiave}"]`)?.focus();
     if (chiave === 'richiesta') void caricaRichiesta();
+    if (chiave === 'impostazioni') void caricaCatena();
+  }
+  /* Le pagine Panoramica e Compattazioni: le sezioni della scheda Contesto del pannello di destra (`disegnaContesto` con `solo`), con gli
+     stessi dati (`pannello()` = l'ultimo `datiPannelloContesto` dell'app). «Cosa ha tenuto» apre la sua pagina qui dentro, e «Compatta
+     ora» passa dalla conferma di questa finestra: le altre azioni sono quelle del pannello. */
+  function renderPagine() {
+    const fonte = typeof pannello === 'function' ? pannello() : null;
+    for (const [chiave, solo] of Object.entries(PAGINE_DEL_PANNELLO)) {
+      const nodo = root.querySelector(`[data-context-pagina="${chiave}"]`);
+      if (!nodo || schedaAttiva !== chiave) continue;
+      const azioni = { ...(fonte?.azioni ?? {}), cosaHaTenuto: () => apriScheda('tenuto', { fuoco: false }) };
+      if (q('start')) azioni.riassumi = () => q('start').click();
+      disegnaContesto(nodo, fonte?.dati ?? {}, azioni, { solo });
+    }
   }
   function renderTenuto() {
     const dati = scheda?.() ?? null;
     const tenuto = cosaHaTenuto({ activeVersion: modoLegacy ? null : snapshot?.activeVersion ?? null, facts: modoLegacy ? [] : snapshot?.facts ?? [], recordLegacy: dati?.recordLegacy ?? null });
     const key = JSON.stringify([tenuto, linguaCorrenteDiT()]); if (key === tenutoKey) return; tenutoKey = key;
     q('kept').replaceChildren(...nodiCosaHaTenuto(doc, tenuto));
+  }
+  /* FE-039: la frase si legge quando si apre la pagina, come la Richiesta inviata: ogni apertura dice lo stato di adesso (un limite che scade, una chiave tolta) */
+  async function caricaCatena() {
+    if (typeof catena !== 'function') return;
+    const current = epoch;
+    let stato = null;
+    try { stato = await catena(); } catch { stato = null; }
+    if (current !== epoch || destroyed) return;
+    disegnaCatenaContesto({ testo: q('chain-text'), avviso: q('chain-alert') }, stato);
   }
   async function caricaRichiesta() {
     if (typeof richiesta !== 'function' || !sessionId) { q('request').replaceChildren(...nodiRichiestaInviata(doc, null)); return; }
@@ -387,13 +456,16 @@ export function montaContextCompactor(root, { client, sessionId, state = null, d
   listen(q('tabs'), 'click', (event) => { const s = event.target.closest('[data-context-tab]'); if (s && !s.hidden) apriScheda(s.dataset.contextTab); });
   listen(q('tabs'), 'keydown', (event) => {
     const visibili = [...root.querySelectorAll('[data-context-tab]')].filter((s) => !s.hidden);
-    const i = visibili.findIndex((s) => s.dataset.contextTab === schedaAttiva);
-    const prossima = event.key === 'ArrowRight' ? visibili[(i + 1) % visibili.length] : event.key === 'ArrowLeft' ? visibili[(i - 1 + visibili.length) % visibili.length]
+    const i = visibili.findIndex((s) => s.dataset.contextTab === (schedaAttiva === 'tenuto' ? 'compattazioni' : schedaAttiva));
+    /* indice verticale (variante B): su e giù come l'APG di WAI-ARIA per `aria-orientation="vertical"`; destra e sinistra restano */
+    const avanti = event.key === 'ArrowDown' || event.key === 'ArrowRight'; const indietro = event.key === 'ArrowUp' || event.key === 'ArrowLeft';
+    const prossima = avanti ? visibili[(i + 1) % visibili.length] : indietro ? visibili[(i - 1 + visibili.length) % visibili.length]
       : event.key === 'Home' ? visibili[0] : event.key === 'End' ? visibili.at(-1) : null;
     if (!prossima) return;
     event.preventDefault(); apriScheda(prossima.dataset.contextTab, { fuoco: true });
   });
   listen(q('export'), 'click', () => { esporta?.(); });
+  listen(q('apri-tenuto'), 'click', () => apriScheda('tenuto')); // variante B: «Cosa ha tenuto» sta dentro le Compattazioni
   listen(q('retry'), 'click', () => { q('retry').hidden = true; void refresh(); });
   listen(q('regenerate'), 'click', () => mutate(() => client.startCompaction(requestOptions({ kind: 'regenerate' }))));
   listen(q('cancel'), 'click', () => mutate(() => client.cancelCompaction(requestOptions({ jobId: descriviContextCompactor(snapshot).job.id }))));

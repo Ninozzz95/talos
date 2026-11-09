@@ -1,0 +1,1 @@
+{"stato":"completo","blocco":{"tipo":"chiave-valore","id":"server","titolo":"Server","righe":[{"chiave":"CPU","valore":"42%","stato":"ok"},{"chiave":"Disco","valore":91,"stato":"attenzione"},{"chiave":"Acceso da","valore":"3 giorni"}]}}

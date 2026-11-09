@@ -251,6 +251,9 @@ test('⛔⛔⛔⛔ FIG-02 — la RICERCA approfondita avviata da una madre local
   spegniTutteAllaFine(fixture, registro, { ricercaIds: () => ricercaId ? [ricercaId] : [] });
 
   const { sessionId } = registro.avvia('task-vero', { provider: 'local', runtimeId: 'llama.cpp', modelId: 'mio.gguf' });
+  /* D4: dalla chat la ricerca parte col sì sulla sua carta */
+  const carta = setInterval(() => { const d = registro.domandaInAttesa(sessionId); if (d?.azione?.tipo === 'research_start') void registro.rispondiApprovazione(sessionId, d.requestId, true); }, 20);
+  t.after(() => clearInterval(carta));
   const figlia = await attendiFigliaEFermala(registro, sessionId);
   ricercaId = figlia.sessionId;
   try { await attendiFine(registro, sessionId, 10_000); } catch { /* la madre puo restare appesa sull attrezzo della figlia fermata: non e cio che si misura qui */ }

@@ -72,9 +72,15 @@ async function apriInPseudo(page) {
      sessioni. Su un server di prova senza sessioni il progetto di serie porta il nome della cartella (`AVM-integrazione-r4`,
      o quello del worktree): la prova lo contava come testo sfuggito, e il suo esito dipendeva dal nome della cartella. */
   const progetti = await (await page.request.get('/api/v1/projects')).json();
+  /* 07/11/2026 (curatore, rossa del treno M): 68ebab480 (revisione d'uso 04/11, reperto 11) fa dire al chip e alla testata il NOME del
+     catalogo («GLM 5.3 Flash») al posto dell'id, che la regola di forma `MARCHIO_E_ID` lasciava passare. Il nome viene dal catalogo del
+     fornitore, non dal dizionario: è della persona come l'id. Si tolgono i nomi del catalogo letto, nella stessa forma breve del
+     selettore (`nomeBreve`, selettore-modelli.js:80-83: via «Autore: »); ogni altro testo resta contato come prima. */
+  const catalogo = await (await page.request.get('/api/v1/models')).json().catch(() => null);
   const dellaPersona = [...new Set([
     ...(elenco?.data?.items ?? []).flatMap((s) => [s.nome, s.progetto, s.modello, s.modelId, s.taskId]),
     ...(progetti?.data?.items ?? []).map((p) => p?.nome),
+    ...(catalogo?.data?.modelli ?? []).flatMap((m) => [m?.nome, typeof m?.nome === 'string' ? m.nome.replace(/^[^:]{1,40}:\s+/u, '') : null]),
   ].filter((v) => typeof v === 'string' && v))];
   return { conti, errori, dellaPersona };
 }

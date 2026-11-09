@@ -14,13 +14,14 @@ interface SettingsViewOptions {
 }
 /*
  * ⭐ 18/09/2026 — LA MAPPA DELLE ICONE DELLE SEZIONI, in un posto solo.
- * Lo schema porta il nome dello sprite che il mockup disegna (`SETTINGS_SECTIONS[].icon`); sei
- * di quelli non esistono fra gli sprite del progetto, e al loro posto si usa il segno PIU'
- * VICINO fra i 49 che ci sono — mai un disegno nuovo, che sarebbe l'unica icona di un
- * vocabolario inventato.
+ * Lo schema porta il nome dello sprite che il mockup disegna (`SETTINGS_SECTIONS[].icon`). Due non esistono fra gli sprite, e
+ * al loro posto si usa il segno più vicino. `cpu` e `key` esistono dal 31/10/2026: non passano più di qui.
+ * Decisione 186 dell'owner (04/11/2026, reperto N7, bozzetto `variante-n7-agente-diagnostica.html`, variante A): `activity` finiva
+ * sulla persona (`user`), che fa pensare al profilo; «Diagnosi e configurazione» ora porta `stethoscope`, lo stesso segno di
+ * «Doctor» negli Strumenti della barra, e non passa più di qui.
  */
 const SPRITE_SEZIONE: Record<string, string> = {
-  chat: 'send', sliders: 'settings', cpu: 'command', key: 'link', chart: 'bolt', activity: 'user',
+  sliders: 'settings', chart: 'gauge',
 };
 /*
  * ⛔ B3 (09/10/2026, streaming di una risposta dopo 200 giri, 4176) — `:root:has(dialog.settings-palette[open]:modal)` e il gemello

@@ -73,6 +73,14 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
    *   (`apps/examples/desktop-app/webview/app/page.tsx:2515-2523`): mai accesa durante il caricamento.
    */
   let providerMancante = false;
+  /*
+   * UX 37, 04/11/2026 (revisione della candidata): dalla Home «Scegli un modello» → «Fatto», e «Il tuo agente» restava su «Nessun
+   * modello selezionato» mentre il piede della barra diceva già il modello. La Home si ridisegnava solo entrando o a fine lettura.
+   * `modelChanged()` la ridisegna quando il modello scelto è diverso da quello già a schermo (il piede la chiama a ogni ridisegno della
+   * barra: con lo stesso modello non si tocca niente). Hermes fa lo stesso con uno stato osservato: la pillola legge `currentModel` dal
+   * negozio della sessione e si ridisegna a ogni cambio (`apps/desktop/src/app/chat/composer/model-pill.tsx:140-147`).
+   */
+  let modelloDisegnato = '';
   let renderScope = createScope();
   let currentView: View = 'home';
   let readController: AbortController | null = null;
@@ -109,8 +117,8 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     for (const [label, subtitle, symbol, action] of [
       ['home.conversation', 'home.writeAndWorkWithYour', 'i-list', () => options.navigate('chat')],
       ['home.terminal', 'home.openYourComputersShell', 'i-terminal', () => options.navigate('terminal')],
-      ['home.documents', 'home.browseYourLibrary', 'i-doc', () => options.navigate('libreria')],
-      ['home.research', 'home.gatherAndCompareSources', 'i-globe', () => options.navigate('ricerca')],
+      ['home.documents', 'home.browseYourLibrary', 'i-library', () => options.navigate('libreria')],
+      ['home.research', 'home.gatherAndCompareSources', 'i-telescope', () => options.navigate('ricerca')],
     ] as const) {
       const b = button(label, action, 'workspace-action', symbol);
       b.append(node('small', '', subtitle), icon('i-chevron-right')); actions.append(b);
@@ -119,7 +127,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     if (notice) { const n = node('p', 'workspace-notice', notice); n.setAttribute('role', 'status'); fragment.append(n); }
     if (providerMancante) {
       const avviso = node('div', 'workspace-notice workspace-notice--provider'); avviso.setAttribute('role', 'status');
-      const imposta = button('home.setUpAProvider', options.openProviders, 'talos-button talos-button--secondary', 'i-shield');
+      const imposta = button('home.setUpAProvider', options.openProviders, 'talos-button talos-button--secondary', 'i-key');
       imposta.dataset.homeAction = 'provider-setup';
       avviso.append(node('p', '', 'home.noProviderIsSetUp'), imposta);
       fragment.append(avviso);
@@ -128,7 +136,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
     const recent = node('section', 'workspace-card workspace-recents'); recent.setAttribute('aria-labelledby', 'homeRecentTitle');
     const titlebar = node('div', 'workspace-card__heading');
     const title = node('h2', '', 'home.pickUpYourWork'); title.id = 'homeRecentTitle';
-    const refresh = button('home.refresh', () => { void load(); }, 'talos-button talos-button--ghost', 'i-history'); refresh.disabled = loading;
+    const refresh = button('home.refresh', () => { void load(); }, 'talos-button talos-button--ghost', 'i-refresh'); refresh.disabled = loading;
     refresh.dataset.homeAction = 'refresh'; titlebar.append(title, refresh); recent.append(titlebar);
     recent.setAttribute('aria-busy', String(loading));
     if (loading && !hasLoaded) {
@@ -159,25 +167,26 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
         if (modelName) { const modelLabel = node('span', ''); modelLabel.textContent = modelName; details.append(modelLabel); }
         b.append(details, icon('i-chevron-right')); li.append(b); list.append(li);
       }
-      recent.append(list, button('home.allSessions', () => options.navigate('dashboard'), 'talos-button talos-button--ghost', 'i-grid'));
+      recent.append(list, button('home.allSessions', () => options.navigate('dashboard'), 'talos-button talos-button--ghost workspace-recent__tutte', 'i-grid'));
     }
     const aside = node('aside', 'workspace-home__aside');
     const readiness = node('section', 'workspace-card');
     readiness.append(node('p', 'workspace-eyebrow', 'home.beforeYourNextRequest'), node('h2', '', 'home.yourAgent'));
-    const model = options.currentModel();
+    const model = options.currentModel(); modelloDisegnato = model || '';
     const provider = setup && isObject(setup.provider) ? setup.provider : null;
     const ready = provider?.pronto === true;
     const modelLabel = node('p', 'workspace-model', 'home.noModelSelected');
-    if (model) modelLabel.textContent = model; readiness.append(modelLabel);
+    // UX 37 (04/11): il nome della barra (`nomeModello`), come la riga di «Riprendi il lavoro», mai il valore grezzo del selettore
+    if (model) modelLabel.textContent = nomeModello(model) || model; readiness.append(modelLabel);
     readiness.append(node('p', 'workspace-muted', model && ready
       ? 'home.modelSelectedPermissionsWillBe'
       : 'home.youCanExploreYourWorkspace'));
-    readiness.append(button(model ? 'home.changeModel' : 'home.chooseAModel', options.openModel, 'talos-button talos-button--secondary', 'i-bolt'));
+    readiness.append(button(model ? 'home.changeModel' : 'home.chooseAModel', options.openModel, 'talos-button talos-button--secondary', 'i-cpu'));
     // Una porta sola verso lo stesso posto nella stessa schermata: con la banda accesa, la porta è la sua.
-    if (!providerMancante) readiness.append(button('home.providersAndAccess', options.openProviders, 'talos-button talos-button--ghost', 'i-shield'));
+    if (!providerMancante) readiness.append(button('home.providersAndAccess', options.openProviders, 'talos-button talos-button--ghost', 'i-key'));
     const shortcuts = node('section', 'workspace-card workspace-links');
     shortcuts.append(node('h2', '', 'home.organizeYourWork'));
-    for (const [label, view, symbol] of [['home.projects', 'progetti', 'i-folder'], ['home.tasks', 'attivita', 'i-check-sq'], ['home.notes', 'note', 'i-edit'], ['home.automations', 'automations', 'i-clock']] as const) {
+    for (const [label, view, symbol] of [['home.projects', 'progetti', 'i-folder'], ['home.tasks', 'attivita', 'i-list-todo'], ['home.notes', 'note', 'i-sticky-note'], ['home.automations', 'automations', 'i-calendar-clock']] as const) {
       shortcuts.append(button(label, () => options.navigate(view), 'talos-button talos-button--ghost', symbol));
     }
     aside.append(readiness, shortcuts); columns.append(recent, aside); fragment.append(columns);
@@ -258,6 +267,7 @@ export function createWorkspaceChrome(options: WorkspaceChromeOptions) {
       if (view === 'home') { if (entered) providerMancante = false; if (entered || !hasLoaded) void load(); else render(); }
     },
     acceptSessions(items: unknown): void { sessions = normalizeSessions({ items }); hasLoaded = true; if (currentView === 'home' && !loading) render(); },
+    modelChanged(): void { if (currentView === 'home' && (options.currentModel() || '') !== modelloDisegnato) render(); },
     showNotice(text: string): void { notice = text; render(); },
     dispose: () => { requests.next(); renderScope.dispose(); scope.dispose(); },
   };

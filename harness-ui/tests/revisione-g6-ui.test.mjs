@@ -66,7 +66,7 @@ test('G6UI-RIV-04 CONTROLLO — `/goal/proposta` con `lingua`: la lingua NOMINAT
   const { registro } = registroAGiri(cartellaStore);
   await registro.ripristina();
   const chiamate = [];
-  const server = createServer(createHttpApp({
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null, sessionRegistry: registro,
     providerStore: { getKey: (p) => (p === 'openrouter' ? 'sk-or-v1-finta' : null), getRuntime: () => ({ provider: 'openrouter', endpoint: 'https://openrouter.example/api/v1', endpointConfigured: false, timeoutSeconds: 60 }) },
     fetchPropostaObiettivoFn: async (_u, opzioni) => { chiamate.push(JSON.parse(opzioni.body)); return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ criteria: [{ type: 'judgement', text: 'Va bene' }] }) } }] }) }; },

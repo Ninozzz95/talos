@@ -5,9 +5,9 @@ import {accorciaTesto, CARATTERI_MINIMI_RIDUCIBILI, MARCATORE_ACCORCIATO, riduci
 test('READ23-PROVENANCE: context omission identifies TALOS and cannot be mistaken for a file byte range',()=>{
   const shortened=accorciaTesto('€'.repeat(9000));
   assert.ok(shortened.includes(MARCATORE_ACCORCIATO));
-  assert.match(shortened,/TALOS context projection/);
-  assert.match(shortened,/not a byte range/);
-  assert.match(shortened,/7,400 characters omitted/);
+  assert.match(shortened,/trimmed by TALOS/);
+  assert.match(shortened,/context projection, not a byte range/);
+  assert.match(shortened,/7,400 characters trimmed by TALOS/);
 });
 
 test('READ23-RECOVERY: recover retained bytes with read tools, never by repeating a command',()=>{
@@ -26,7 +26,7 @@ test('READ23-BUDGET: recovery instructions still fit the existing projection and
   assert.ok(shortened.startsWith('HEAD\n'));assert.ok(shortened.endsWith('\nTAIL'));
   assert.ok(shortened.length<CARATTERI_MINIMI_RIDUCIBILI);
   assert.equal(accorciaTesto(shortened),shortened);
-  assert.match(shortened,/Original message kept in session history/);
+  assert.match(shortened,/the full text is kept in session history/);
 });
 
 test('READ23-ARCHIVE: pressure shortens only the projection, preserving original tool text and identity',()=>{
@@ -40,6 +40,6 @@ test('READ23-ARCHIVE: pressure shortens only the projection, preserving original
   assert.deepEqual(original,before);
   assert.equal(result.coda[1].tool_call_id,'read23');
   assert.ok(result.coda[1].content.length<original[1].content.length);
-  assert.match(result.coda[1].content,/TALOS context projection/);
+  assert.match(result.coda[1].content,/trimmed by TALOS; the full text is kept in session history \(context projection/);
   assert.equal(result.alMinimo,false);
 });

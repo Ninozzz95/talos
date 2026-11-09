@@ -175,11 +175,15 @@ export function conteggio(n) {
  * 28/10/2026 sera (trovato confrontando col Mobile): «mmproj-F16.gguf» diventava una variante «F16» in cima, e la preselezione poteva cadere su
  * di lui. Regola del motore che poi carica il file, llama.cpp `common/download.cpp:617-623` (tabella `sidecars`) e `:668-690`
  * (`gguf_filename_is_model`), commit f849095 del 21/10/2026: un .gguf è un MODELLO solo se il NOME del file (senza cartelle) non contiene
- * «imatrix» né la parola di un file di servizio. Owner 28/10 sera: maiuscole e minuscole si ignorano (llama.cpp le guarda), uguale sul Mobile.
+ * «imatrix» né la parola di un file di servizio.
+ * ⛔ Owner 02/11/2026 pomeriggio (supera il 28/10 «maiuscole ignorate»): lettere ESATTE, identico a llama.cpp
+ * (`common/download.cpp:718-737`, clone llama.cpp-2026-11-01). Con le maiuscole ignorate il repository vero Tiel-Coder-…-GGUF-MTP
+ * («…-MTP-UD-Q4_K_XL.gguf») aveva zero varianti, e il motore che carica i file li tratta da modelli. Ledger comune col Mobile:
+ * `Downloads/TALOS/desktop/riferimenti/REGOLA-FILE-DI-SERVIZIO-GGUF-2026-10-28.md`.
  */
 const PAROLE_DEI_FILE_DI_SERVIZIO = Object.freeze(['imatrix', 'mmproj', 'mtp-', 'dflash-', 'eagle3-', 'dspark-']);
 export function eFileDiModello(percorso = '') {
-  const nome = String(percorso).split('/').pop().toLowerCase();
+  const nome = String(percorso).split('/').pop();
   return nome.endsWith('.gguf') && !PAROLE_DEI_FILE_DI_SERVIZIO.some((parola) => nome.includes(parola));
 }
 
@@ -240,8 +244,8 @@ export function ordinaVarianti(gruppi = []) {
  *  · mai i pesi pieni (F16/BF16/F32): sono per chi converte — SOFFITTO;
  *  · mai sotto i 4 bit per peso: sotto quella soglia la perdita di qualità
  *    è troppo severa — PAVIMENTO;
- *  · fra quelle rimaste si prende **la più fedele che ci sta davvero**:
- *    prima le `compatible`, e solo se non ce n'è nessuna le `tight`.
+ *  · fra quelle rimaste (owner 02/11) si prende la prima della FILA Q4_K_M → IQ4_XS → Q4_K_S → Q4_0 che ci sta
+ *    davvero, se no la più fedele che ci sta: prima le `compatible`, e solo se non ce n'è nessuna le `tight`.
  *
  * ⛔ Senza misura NON si inventa un verdetto: si ripiega sulla banda che le
  * fonti indicano come predefinita (Q4_K_M/Q5_K_M, cioè 4-5,5 bit per peso),
@@ -268,9 +272,22 @@ export function varianteConsigliata(gruppi = [], stima = new Map()) {
    * esattamente il difetto che stavo curando. Senza verdetto si ripiega sulla
    * convenzione, che è ciò che fa una persona quando non può misurare.
    */
+  /*
+   * ⛔ Owner 02/11/2026 pomeriggio: la stessa fila del telefono (bozzetto del 28/10, `varianteConsigliata.ts` del Mobile) e di llama.cpp
+   * (`common/download.cpp:747`, Q4_K_M per prima): Q4_K_M → IQ4_XS → Q4_K_S → Q4_0 se entra; poi la più fedele che entra. Più veloce e
+   * lascia memoria alla finestra lunga dell'agente. Prima il PC sceglieva la più fedele che entra (Q8_0 su una scheda da 16 GB).
+   */
+  const dellaFila = (lista) => {
+    for (const preferita of FILA_CONSIGLIATA) {
+      const trovata = lista.find((g) => String(g.quant ?? '').toUpperCase() === preferita);
+      if (trovata) return trovata;
+    }
+    return null;
+  };
   const misurate = ammesse.filter((g) => { const v = leggi(g.chiave); return v && !v.inCorso && ['compatible', 'tight', 'blocked'].includes(v.state); });
   if (misurate.length) {
-    const entra = misurate.find((g) => leggi(g.chiave).state === 'compatible');
+    const entrano = misurate.filter((g) => leggi(g.chiave).state === 'compatible');
+    const entra = dellaFila(entrano) ?? entrano[0];
     if (entra) return { gruppo: entra, motivo: 'misura' };
     const limite = misurate.find((g) => leggi(g.chiave).state === 'tight');
     if (limite) return { gruppo: limite, motivo: 'limite' };
@@ -278,8 +295,10 @@ export function varianteConsigliata(gruppi = [], stima = new Map()) {
   }
   // ⛔ la banda si misura sulla FAMIGLIA (4…5,5 = Q4_K/Q5_K): il ritocco del suffisso serve a ordinare, non a decidere.
   const banda = ammesse.filter((g) => { const b = bitPerPesoFamiglia(g.quant); return b >= 4 && b <= 5.5; });
-  return { gruppo: banda[0] || ammesse[ammesse.length - 1], motivo: 'convenzione' };
+  return { gruppo: dellaFila(ammesse) || banda[0] || ammesse[ammesse.length - 1], motivo: 'convenzione' };
 }
+/** La fila delle preferite, in ordine: identica a `TALOS_FILA_CONSIGLIATA` del Mobile (owner 02/11). */
+export const FILA_CONSIGLIATA = Object.freeze(['Q4_K_M', 'IQ4_XS', 'Q4_K_S', 'Q4_0']);
 
 /** La stima di una variante in parole del mockup: «~8,1 GB di memoria · entra». */
 export function descriviStima(stima, bytes) {
@@ -769,7 +788,7 @@ export function creaRigaHf(dati, { selezionato = false, seleziona, document: d =
   b.setAttribute('aria-pressed', String(Boolean(selezionato)));
   const nome = String(dati.titolo || '').replace(/\s*\/\s*/u, ' / ');
   b.setAttribute('aria-label', dati.capacita.misura ? t('modelli.hf.repositoryDownloadLabel', { name: nome, status: dati.stato.testo, count: dati.capacita.misura }) : t('modelli.hf.repositoryLabel', { name: nome, status: dati.stato.testo }));
-  const ic = el(d, 'span', 'talos-list-row__icon'); ic.dataset.c = 'Glyph'; ic.appendChild(icona(d, 'i-files'));
+  const ic = el(d, 'span', 'talos-list-row__icon'); ic.dataset.c = 'Glyph'; ic.appendChild(icona(d, 'i-doc'));
   const testo = el(d, 'span', 'talos-list-row__text');
   const titolo = el(d, 'span', 'talos-list-row__title', nome);
   if (dati.badge) titolo.appendChild(badge(d, dati.badge.testo, dati.badge.tono));

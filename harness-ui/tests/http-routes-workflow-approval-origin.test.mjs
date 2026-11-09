@@ -35,7 +35,7 @@ async function setup(t, { token = null } = {}) {
     resultLimits: { maxItemBytes: 1_048_576, maxRunBytes: 8_388_608 } });
   const registry = { leggiSessioneContesto: (id) => id === sessionId ? { sessionId: id } : null };
   // Senza token: è la configurazione in cui il cookie SameSite non protegge e il cancello è l'unica difesa.
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registry, workflowStore: store, token }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registry, workflowStore: store, token }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => { await new Promise((resolve) => server.close(resolve)); await store.close(); rimuoviCartellaDiProva(root); });
   const port = server.address().port;

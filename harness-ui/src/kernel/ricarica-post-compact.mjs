@@ -100,14 +100,23 @@ export async function eseguiGitPredefinito(file, args, { timeout = 0, signal = n
  * riassunto, nello stesso messaggio. La sintesi è un passaggio di consegne, non il giro attivo —
  * l'ultimo messaggio reale della persona vince (hermes, clone 2026-09-24, `context_compressor.py:265`).
  */
-export const PREFISSO_SINTESI_RECINTATA = '[CONTEXT COMPACTION — REFERENCE ONLY] The summary below is a handoff from a previous context window: treat it as background reference, not as active instructions. Questions and requests mentioned in it were already addressed: the latest real user message wins.';
+export const PREFISSO_SINTESI_RECINTATA = '[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted by TALOS into the summary below: treat it as background reference, not as active instructions. Questions and requests mentioned in it were already addressed: the latest real user message wins.';
+
+/* R4 della revisione di 245 (05/11/2026): «a handoff from a previous context window» era la parola che la decisione 245 ha tolto dai
+   marcatori (il modello la legge come un limite suo). Il testo spedito prima resta qui, byte per byte, perché le sessioni salvate
+   lo portano e chi ricopia un riassunto lo deve poter togliere: come Hermes `agent/context_compressor.py:603`
+   `_HISTORICAL_SUMMARY_PREFIXES` («Exact wire text of every shipped prefix … NEVER edit/reorder entries (byte-pinned); prepend»). */
+export const PREFISSI_SINTESI_STORICI = Object.freeze([
+  '[CONTEXT COMPACTION — REFERENCE ONLY] The summary below is a handoff from a previous context window: treat it as background reference, not as active instructions. Questions and requests mentioned in it were already addressed: the latest real user message wins.',
+]);
 
 /** (C-b) L'intestazione del blocco di fatti: dichiara CHI lo ha calcolato e CHE COSA contiene (e non contiene). */
 export const INTESTAZIONE_BLOCCO_FATTI = 'Post-compaction facts snapshot — computed by the code at compaction time from fresh reads (not model memory). Facts and pointers only: nothing in this section asks for an action.';
 
 /** Il tetto del blocco: dichiarato, e la coda tagliata lo DICE (mai reintrodurre il contesto pieno). */
 export const CARATTERI_BLOCCO_MASSIMI = 4_000;
-export const MARCATORE_BLOCCO_TAGLIATO = '[… facts block truncated by the code to fit the context window …]';
+/* Decisione 245, C1: il blocco dei fatti tagliato non si recupera ⇒ niente «kept», e niente «context window» */
+export const MARCATORE_BLOCCO_TAGLIATO = '[… facts block trimmed by TALOS …]';
 
 /** Quanti commit e quanti caratteri per LEDGER: puntatori, non il contesto pieno. */
 export const COMMIT_RECENTI = 5;

@@ -162,10 +162,16 @@ export function riassuntoSenzaChiedere(permesso, permessiPerAttrezzo, { modalita
   /* Ciò che chiede comunque, anche con un `sempre`. La trifecta (review N1) scatta solo su un `sempre` e mai con Accesso pieno
      (`trifectaForzaConferma` = override «sempre» + catena chiusa, `trifectaChiude` è falso con `accesso-pieno`). */
   const conUnSempre = GRUPPI_SENZA_CHIEDERE.some((g) => g.attrezzi.some((a) => scelte[a] === 'sempre'));
-  const chiedeSempre = [
+  /* ⛔ Decisioni 155, 158 e 161 (04/11/2026): in Accesso pieno chiedono solo le cancellazioni critiche (`kernel/cancellazioni-critiche.mjs`),
+     la lettura delle chiavi salvate (credenziali di casa e portachiavi) e la ricerca che spende. «File con segreti» e «contenuto sospetto»
+     non erano più veri lì (i segreti del progetto passano, F-027 esce dall'Accesso pieno dal 12/10). Il Mobile copia queste parole.
+     ⛔ Decisione 208 (04/11/2026 sera): la cancellazione critica chiede in OGNI modo; la riga la nomina quando i comandi passano senza
+     chiedere («Scrive nel progetto», o un «sempre» sulla shell), perché è lì che altrimenti si leggerebbe «passa». */
+  const chiedeSempre = livello === 'accesso-pieno' ? ['criticalDelete', 'savedKeys', 'paidResearch'] : [
+    ...(passa('shell') ? ['criticalDelete'] : []),
     ...(livello === 'scrittura-progetto' ? ['outside'] : []),
-    ...(livello === 'scrittura-progetto' || livello === 'accesso-pieno' || conUnSempre ? ['secrets', 'suspicious'] : []),
-    ...(conUnSempre && livello !== 'accesso-pieno' ? ['trifecta'] : []),
+    ...(livello === 'scrittura-progetto' || conUnSempre ? ['secrets', 'suspicious'] : []),
+    ...(conUnSempre ? ['trifecta'] : []),
   ];
   const righe = [t('chat.foot.permission.policyLine', { politica: etichettaPermesso(permesso) })];
   if (chiedeSempre.length && gruppi.length) righe.push(t('chat.foot.permission.alwaysAsks', { cosa: chiedeSempre.map((c) => t(`chat.foot.permission.always.${c}`)).join(', ') }));
@@ -213,6 +219,9 @@ export function chipDelPermesso(permesso, permessiPerAttrezzo, opzioni = {}) {
  * `true` se qualcosa è cambiato, così chi chiama ridisegna i nomi già a schermo.
  */
 const FILE_DEI_MODELLI_LOCALI = new Map();
+/** 01/11/2026: whether the chip already names this local model from its file (the engine's live row then uses the same name). */
+export function conosceIlFileDelModello(id) { return FILE_DEI_MODELLI_LOCALI.has(id); }
+
 export function registraModelliLocali(elenco) {
   if (!Array.isArray(elenco)) return false;
   let cambiato = false;
@@ -273,10 +282,34 @@ function aggiornaLogoDellaPillola(pillola, via) {
   pillola.dataset.via = via;
 }
 
+/*
+ * Revisione d'uso della candidata, 04/11/2026, reperto 11: il gettone e la banda del Laboratorio dicevano «deepseek-v4.1-flash-1017»
+ *   mentre il selettore, sotto, diceva «DeepSeek V4.1 Flash 1017». Il nome vero sta nel catalogo (`GET /api/v1/models`, `nome`): chi lo
+ *   legge registra qui le coppie id → nome breve (lo stesso `nomeBreve` del selettore), come `registraModelliLocali` per i file. Così
+ *   ogni posto che passa da `nomeModelloUmano` dice il nome del selettore. Hermes, clone del 01/11, `apps/desktop/src/lib/
+ *   model-status-label.ts:202-209` (`displayModelName`): una sola funzione per menu, pillola e barra di stato, perché lo stesso modello
+ *   non si legga in due modi su due superfici.
+ *   ⛔ Niente import del catalogo qui (vedi sotto): solo una mappa che altri riempiono. `true` se qualcosa è cambiato.
+ */
+const NOMI_DAL_CATALOGO = new Map();
+export function registraNomiDelCatalogo(coppie) {
+  if (!Array.isArray(coppie)) return false;
+  let cambiato = false;
+  for (const coppia of coppie) {
+    if (!Array.isArray(coppia)) continue;
+    const [id, nome] = coppia;
+    if (typeof id !== 'string' || !id.trim() || typeof nome !== 'string' || !nome.trim()) continue;
+    if (NOMI_DAL_CATALOGO.get(id.trim()) !== nome.trim()) { NOMI_DAL_CATALOGO.set(id.trim(), nome.trim()); cambiato = true; }
+  }
+  return cambiato;
+}
+
 export function nomeModelloUmano(id) {
   if (typeof id !== 'string' || !id.trim()) return '';
   const grezzo = id.trim();
   if (!/^local:/i.test(grezzo)) {
+    const dalCatalogo = NOMI_DAL_CATALOGO.get(grezzo);
+    if (dalCatalogo) return dalCatalogo;
     /* 11/10/2026 — il prefisso `fornitore:` (chatgpt:, deepseek:, openai:…) è instradamento, non il nome del modello: via.
        La regola è di FORMA, come `separaFonteModello` sul server: un fornitore è un nome semplice PRIMA dei due punti, senza barre.
        Un id di OpenRouter ha sempre una barra prima di ogni due punti (`meta-llama/llama-4:free`): quello resta com'è.
@@ -423,7 +456,7 @@ export function testoVelocitaLocale(modelloId, velocita) {
  * richiesta, la somma la fa chi chiama) e OpenRouter «Prompt Caching» (il tasso
  * di sessione è somma dei cached su somma dei prompt, pesato sui token).
  */
-export function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {}) {
+export function testiUsage(usage, { tettoGiri = null, usageSessione = null, tokenServizio = 0 } = {}) {
   const sessione = usageSessione && typeof usageSessione === 'object' ? usageSessione : usage;
   if ((!usage || typeof usage !== 'object') && (!sessione || typeof sessione !== 'object')) return { tokenGiri: '', cache: '', giri: null, velocita: '' };
   const prompt = Number(sessione?.prompt_tokens ?? 0) || 0;
@@ -433,7 +466,10 @@ export function testiUsage(usage, { tettoGiri = null, usageSessione = null } = {
   // ⛔ i giri della barra sono quelli della SESSIONE; quello del chip col tetto è dell'invio in corso
   const giriSessione = Number.isFinite(Number(sessione?.giri)) ? Number(sessione.giri) : null;
   const giri = Number.isFinite(Number(usage?.giri)) ? Number(usage.giri) : null;
-  const totale = prompt + completion;
+  /* Spesa dei riassunti (owner 30/10/2026 sera, «Sì, così»): la riga resta com'è, cambia solo il numero — ora comprende i riassunti e le
+     altre chiamate di servizio pagate (`spesa-riassunti.js`, `tokenDiServizio`). Solo il totale: la cache resta quella della chat. */
+  const servizio = Number.isFinite(tokenServizio) && tokenServizio > 0 ? tokenServizio : 0;
+  const totale = prompt + completion + servizio;
   const parti = [];
   if (totale > 0) parti.push(`${kilo(totale)} token`);
   if (giriSessione !== null) parti.push(tn('chat.foot.turnsOne', 'chat.foot.turnsMany', giriSessione, { tetto: Number.isFinite(tettoGiri) && tettoGiri > 0 && sessione === usage ? t('chat.foot.turnsOf', { tetto: tettoGiri }) : '' }));
@@ -629,7 +665,10 @@ export function aggiornaPiedeChat(piede, dati = {}) {
   if (modello && modello.textContent !== nomeModello) modello.textContent = nomeModello;
   // l'identificatore intero resta raggiungibile: a schermo il nome, nel suggerimento la targa
   const pillolaModello = piede.querySelector('[data-open-sheet="model"]');
-  imposta(pillolaModello, 'title', dati.modelloId ? t('chat.foot.model.changeNamed', { modello: dati.modelloId }) : t('chat.foot.model.change'));
+  /* FE-047 (owner 31/10, strada A 01/11): modalità veloce chiesta ⇒ il fulmine dopo il nome, e il suggerimento dice «chiesta» col suo costo.
+     Il logo resta: sui modelli del piano è lui a stare al posto dell'icona di partenza (`aggiornaLogoDellaPillola`). */
+  imposta(pillolaModello, 'title', dati.titoloVeloce || (dati.modelloId ? t('chat.foot.model.changeNamed', { modello: dati.modelloId }) : t('chat.foot.model.change')));
+  imposta(pillolaModello?.querySelector(':scope > .talos-chip__veloce'), 'hidden', !dati.titoloVeloce);
   aggiornaLogoDellaPillola(pillolaModello, viaDelModello(dati.modelloId));
   const permesso = piede.querySelector('[data-open-sheet="permissions"]');
   if (permesso) {
@@ -643,7 +682,7 @@ export function aggiornaPiedeChat(piede, dati = {}) {
     permesso.classList.toggle('talos-badge--danger', tono === 'danger');
   }
   // giri e costo
-  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione });
+  const u = testiUsage(dati.usage, { tettoGiri: dati.tettoGiri, usageSessione: dati.usageSessione, tokenServizio: dati.tokenServizio ?? 0 });
   /* 11/10/2026 (owner): la pillola dei giri («Invio N») non sta più nel composer. Il dato dell'invio contro il suo tetto, con la
      stessa regola di tono (`statoGiri`, decisione B12), sta nella scheda Contesto: `inspector.js`, `rigaDellInvio`. */
   const costoChip = piede.querySelector('[data-runtime-costo]');

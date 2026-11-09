@@ -278,7 +278,7 @@ test('SEZIONI-STILE-01 · Memoria — la riga ha le misure di .setting-row e le 
   await expect(page.locator('#contestoVoci .talos-contesto-voce')).toHaveCount(1);
 
   // ── il contenuto vero: una voce, il nome del prodotto, la somma dei token di schema
-  await expect(page.locator('#contestoVoci .talos-contesto-voce__k')).toHaveText('Attrezzi');
+  await expect(page.locator('#contestoVoci .talos-contesto-voce__k')).toHaveText('Strumenti');
   /*
    * ⛔ «6432», NON «6.432»: la prima stesura di questa riga pretendeva il separatore di migliaia
    * e la spec è diventata rossa — giustamente. In `it-IT` le migliaia NON si separano sui numeri
@@ -570,7 +570,7 @@ test('SEZIONI-STILE-04 · Il verso contrario — id, classi, attributi e testo i
   expect(prima.memoria.id).toEqual(expect.arrayContaining(['contestoRipartizione', 'contestoEtichetta', 'contestoVoci']));
   expect(prima.costi.id).toEqual(expect.arrayContaining(['costiRiepilogo', 'costiPerGiorno', 'costiPerModello', 'costiNota']));
   expect(prima.tools.id).toEqual(expect.arrayContaining(['setting-source-preview', 'fonte-query']));
-  expect(prima.memoria.testo).toContain('Attrezzi');
+  expect(prima.memoria.testo).toContain('Strumenti');
   expect(prima.costi.testo).toContain('8,5 k token');
   expect(prima.tools.testo).toContain('DuckDuckGo');
 

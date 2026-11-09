@@ -48,3 +48,24 @@ test('PROVA-NON-ESEGUITA-03 — la riga: pallino d\'attenzione e stato «not-run
   impostaEsitoRiga(riga, 'error');
   assert.equal(pallino.className, 'talos-dot talos-dot--danger', 'AL CONTRARIO: un errore resta rosso');
 });
+
+test('R44-RIGA — una chiamata annullata dal kernel si conta a parte: né fra i riusciti, né fra gli errori, né come «prova»', () => {
+  impostaLingua('it');
+  const r = riassuntoVoci([attrezzo('scrivi', { percorso: 'a.txt' }, 'non-eseguito'), attrezzo('leggi', { percorso: 'b.txt' })]);
+  assert.equal(r.nFalliti, 0);
+  assert.ok(r.parti.includes('1 chiamata non eseguita'), JSON.stringify(r.parti));
+  assert.ok(!r.parti.some((p) => /prova|scritt/u.test(p)), JSON.stringify(r.parti));
+  assert.equal(r.bersagli.includes('a.txt'), false, 'la chiamata annullata non ha toccato il file');
+  impostaLingua('en');
+  try {
+    assert.ok(riassuntoVoci([attrezzo('scrivi', {}, 'non-eseguito'), attrezzo('leggi', {}, 'non-eseguito')]).parti.includes('2 calls not run'));
+  } finally { impostaLingua('it'); }
+});
+
+test('REV-B17-M3 — un invio annullato non conta fra gli invii; uno troppo grande sì, come deciso', () => {
+  impostaLingua('it');
+  const annullato = attrezzo('remote_device_send_file', {}, 'non-eseguito', {});
+  annullato.annullata = true;
+  assert.ok(riassuntoVoci([annullato]).parti.includes('1 chiamata non eseguita'));
+  assert.equal(riassuntoVoci([attrezzo('remote_device_send_file', {}, 'non-eseguito')]).parti.includes('1 chiamata non eseguita'), false);
+});

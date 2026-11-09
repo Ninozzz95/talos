@@ -59,7 +59,7 @@ export function ripartizioneDellaRichiesta({ messages = [], tools = [] } = {}) {
   }
   for (const t of Array.isArray(tools) ? tools : []) {
     const nome = String(t?.function?.name ?? t?.name ?? '');
-    tot[nome.startsWith('mcp__') ? 'mcp' : 'tools'] += stima(JSON.stringify(t));
+    tot[nome.startsWith('mcp__') ? 'mcp' : 'tools'] += stimaDiUnAttrezzo(t);
   }
   return {
     categorie: CATEGORIE_RICHIESTA.filter((id) => tot[id] > 0 || SEMPRE.has(id)).map((id) => ({ id, tokens: tot[id] })),
@@ -67,6 +67,11 @@ export function ripartizioneDellaRichiesta({ messages = [], tools = [] } = {}) {
     messaggi: Array.isArray(messages) ? messages.length : 0,
     attrezzi: Array.isArray(tools) ? tools.length : 0,
   };
+}
+
+/** I token di schema di un attrezzo, come li conta la ripartizione qui sopra: la CLI la usa per gli stessi numeri del PC (01/11/2026). */
+export function stimaDiUnAttrezzo(attrezzo) {
+  return attrezzo && typeof attrezzo === 'object' ? stima(JSON.stringify(attrezzo)) : 0;
 }
 
 /** Una copia da tenere in memoria: niente immagini (un segnaposto col tipo), niente riferimenti condivisi col corpo spedito. */

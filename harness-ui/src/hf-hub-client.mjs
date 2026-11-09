@@ -2,8 +2,10 @@ const REVISION = /^[a-f0-9]{40,64}$/iu;
 const REPO = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}\/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/u;
 const OFFICIAL_HOSTS = new Set(['huggingface.co']);
 
+/* Mobile UI-139, 02/11/2026: per alcuni repository il blocco `gguf` dell'Hub descrive il proiettore, non il modello. */
+const ggufDelModello = (row) => (row.gguf?.architecture === 'clip' ? null : row.gguf);
 function parametriDichiarati(row) {
-  const total = row.gguf?.total ?? row.safetensors?.total;
+  const total = ggufDelModello(row)?.total ?? row.safetensors?.total;
   return Number.isSafeInteger(total) && total > 0 ? total : null;
 }
 function accessoHf(value) { return value === false ? false : [true, 'manual', 'auto'].includes(value) ? true : null; }
@@ -103,7 +105,8 @@ export function createHfHubClient({ fetchImpl = fetch, token, baseUrl = 'https:/
     const card = extractModelCardImages(readme, { repo, revision: revisionResolved });
     /* 27/09: l'architettura del GGUF come la dichiara l'hub (`gguf.architecture`, misurato su abenzerps/Spark-X2.5-4B-GGUF:
        «spark2_5»): serve a dire PRIMA di scaricare se il motore installato sa leggerlo (`motore-architetture.mjs`). */
-    const architettura = typeof meta.gguf?.architecture === 'string' && meta.gguf.architecture ? meta.gguf.architecture : null;
+    const architetturaDichiarata = ggufDelModello(meta)?.architecture;
+    const architettura = typeof architetturaDichiarata === 'string' && architetturaDichiarata ? architetturaDichiarata : null;
     return { repo, revision: revisionResolved, gated: accessoHf(meta.gated), license: meta.cardData?.license || meta.license || null, readme: card.readme, images: card.images, downloads: meta.downloads ?? null, likes: meta.likes ?? null, pipelineTag: meta.pipeline_tag || null, architettura };
   }
   async function listGgufFiles(repo, revision) {

@@ -128,7 +128,7 @@ test('PH-POOL-11 aggiunta e panchina conservano il lettore legacy; rimozione can
 test('PH-HTTP-POOL GET reale espone stato e modelli di riserva, mai segreti',async t=>{
   const b=banco();const k=b.store.aggiungiChiave('openai','finta-http-privata');
   b.store.mettiInPanchina('openai',k.impronta,{classe:'traffico'});
-  const server=createServer(createHttpApp({staticHandler:async()=>null,providerStore:b.store}));
+  const server=createServer(createHttpApp({ senzaGettone: 'prove', staticHandler:async()=>null,providerStore:b.store}));
   server.listen(0,'127.0.0.1');await once(server,'listening');
   t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
   assert.notEqual(server.address().port,4174);

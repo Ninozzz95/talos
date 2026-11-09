@@ -134,7 +134,7 @@ test('SESSION18-REPLAY-RACE: replay during deletion neither cancels the intent n
 
 test('SESSION18-HTTP: authenticated deletion exposes pending cleanup without paths; unauthorized requests do not delete', async t => {
   const f = await fixture(t), db = new DatabaseSync(f.databasePath);
-  const server = createServer(createHttpApp({staticHandler: () => {}, token: 'fixture18', sessionRegistry: f.registry}));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: () => {}, token: 'fixture18', sessionRegistry: f.registry}));
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const base = `http://127.0.0.1:${server.address().port}`;
   const url = `${base}/api/v1/sessions/${f.id.sessionId}/delete`;

@@ -30,7 +30,7 @@ export default defineConfig({
   reporter: [['list']],
   outputDir: join(FRONTEND, 'artifacts', 'r4-attivita-prodotto'),
   webServer: {
-    command: 'node server.mjs',
+    command: 'node server.mjs --senza-gettone=prove',
     cwd: HARNESS_UI,
     url: `http://127.0.0.1:${PORTA}/api/v1/health`,
     reuseExistingServer: false,

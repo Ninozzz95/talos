@@ -9,6 +9,12 @@ import { pipeline } from 'node:stream/promises';
 import { createWriteStream } from 'node:fs';
 import { BINARI_CASA_LINUX, preparaCasaLinux, verificaCasaLinux } from '../../src/casa-linux-binari.mjs';
 import { preparaBindingIroh } from '../../scripts/scarica-binding-iroh.mjs';
+import { MOTORE_FISSATO } from '../../src/motore-fissato.mjs';
+import { IMPRONTA_AIUTANTE_PC, percorsoAiutantePredefinito } from '../../src/computer-use/aiutante-mcp.mjs';
+
+/* il commit di cua da cui `native/aiutante-nativo/costruisci.mjs` costruisce l'aiutante (la build del 05/11 con l'impronta fissata) */
+const AIUTANTE_PIN = '0cdcec94bc9988d41087d470b32f1fad2ba28691';
+const AIUTANTE_PIN_CORTO = AIUTANTE_PIN.slice(0, 12);
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const staging = join(root, '.staging');
@@ -20,7 +26,7 @@ const cache = join(root, '.cache-r02');
  *   `nightly-tag.txt`). Gli sha256 sono quelli che GitHub dichiara per i due file (`assets[].digest`), ricontrollati sui file
  *   scaricati il 20/10/2026: cpu 19.537.886 byte, vulkan 32.182.350 byte. b10517 (20/08) era più vecchia di LFM2.5 (13/10).
  */
-export const LLAMA_VERSIONE = 'b11669';
+export const LLAMA_VERSIONE = `b${MOTORE_FISSATO.build}`; // the pin lives in `src/motore-fissato.mjs`; the two digests below change with it
 export const LLAMA = Object.freeze([
   { variante: 'cpu', versione: LLAMA_VERSIONE, nome: `llama-${LLAMA_VERSIONE}-bin-win-cpu-x64.zip`, sha256: '37b3efcf962847ca869745fd4ccf7f5e7e8dacfeff9fa3523b4ca8cdc66d632b' },
   { variante: 'vulkan', versione: LLAMA_VERSIONE, nome: `llama-${LLAMA_VERSIONE}-bin-win-vulkan-x64.zip`, sha256: '2c07574e7bde71321cb785282b20cc821e951132149eeceeea32ddebdbf0598e' },
@@ -67,6 +73,23 @@ export async function copiaHelperDegliAllegati(origine, destinazione) {
   await copyFile(join(origine, 'talos-chat-upload.exe'), join(destinazione, 'talos-chat-upload.exe'));
   await verificaImpronta(join(destinazione, 'talos-chat-upload.exe'), impronta);
   await writeFile(join(destinazione, 'talos-chat-upload.exe.sha256'), `${impronta}  talos-chat-upload.exe\n`);
+  return impronta;
+}
+
+/*
+ * L'aiutante del PC per il computer use (decisioni dell'owner 248-249, 05/11/2026): il binario potato di cua (MIT), costruito da
+ * `native/aiutante-nativo/costruisci.mjs potato`, entra in `resources/aiutante-pc/` solo se il suo sha256 è l'impronta scritta nel
+ * codice (`IMPRONTA_AIUTANTE_PC`), con la licenza di cua e gli avvisi delle crate Rust che contiene. L'exe non sta mai in git.
+ */
+export async function copiaAiutantePc({ exe, licenza, avvisi, destinazione, impronta }) {
+  if (typeof impronta !== 'string' || !/^[0-9a-f]{64}$/u.test(impronta)) throw new Error("Aiutante del PC: l'impronta fissata nel codice manca o non è uno sha256.");
+  if (!exe || !existsSync(exe)) throw new Error(`Aiutante del PC assente (${exe}): lanciare \`node native/aiutante-nativo/costruisci.mjs potato\` prima del pacchetto, o indicare TALOS_AIUTANTE_PC_SORGENTE.`);
+  await mkdir(destinazione, { recursive: true });
+  const copia = join(destinazione, 'cua-driver.exe');
+  await copyFile(exe, copia);
+  try { await verificaImpronta(copia, impronta); } catch (e) { await rm(copia, { force: true }); throw e; }
+  await copyFile(licenza, join(destinazione, 'LICENSE.md'));
+  await copyFile(avvisi, join(destinazione, 'THIRD_PARTY_NOTICES.md'));
   return impronta;
 }
 
@@ -224,12 +247,20 @@ async function copiaAlberoProduzione(sorgente, destinazione) {
   }
 }
 
-export async function copiaAssistenza({ sorgente, destinazione }) {
-  if (lstatSync(sorgente).isSymbolicLink()) throw new Error(`Radice assistenza collegata non ammessa: ${sorgente}`);
-  for (const nome of await elenco(sorgente)) {
-    await mkdir(dirname(join(destinazione, nome)), { recursive: true });
-    await copyFile(join(sorgente, nome), join(destinazione, nome));
-  }
+/*
+ * Centro assistenza (owner 01/11/2026): la guida per `talos_help` (`aiuto/index.json`, costruita dalle pagine del sito e committata con
+ * la versione) va accanto a server.mjs, dove la cerca `src/aiuto/aiuto-del-server.mjs`. Senza, o illeggibile, il pacchetto si ferma:
+ * un'app che risponde a memoria su sé stessa è il difetto che questa funzione chiude. Prende il posto di `docs/assistenza`.
+ */
+export async function copiaAiuto({ sorgente, destinazione }) {
+  const file = join(sorgente, 'index.json');
+  if (!existsSync(file) || lstatSync(sorgente).isSymbolicLink()) throw new Error(`Guida di TALOS assente o collegata: ${file}. Si costruisce con scripts/costruisci-aiuto.mjs.`);
+  let dati;
+  try { dati = JSON.parse(await readFile(file, 'utf8')); } catch { throw new Error(`Guida di TALOS illeggibile: ${file}.`); }
+  if (dati?.versione !== 1 || !Array.isArray(dati.pagine) || !dati.pagine.length) throw new Error(`Guida di TALOS vuota o di un'altra versione: ${file}.`);
+  await mkdir(destinazione, { recursive: true });
+  await copyFile(file, join(destinazione, 'index.json'));
+  return { pagine: dati.pagine.length };
 }
 
 async function esegui(comando, args, cwd, env = process.env) {
@@ -309,6 +340,7 @@ export async function preparaPacchetto() {
   await mkdir(join(backend, 'native'));
   await copiaHelperDegliAllegati(join(root, '../native'), join(backend, 'native'));
   await copyFile(join(root, '../native/GO-LICENSE.txt'), join(backend, 'native/GO-LICENSE.txt'));
+  await copyFile(join(root, '../THIRD_PARTY_NOTICES.md'), join(backend, 'THIRD_PARTY_NOTICES.md')); // 31/10/2026: i testi di Lucide e Feather viaggiano coi loro disegni
   await esegui(join(backend, 'native/talos-chat-upload.exe'), ['--version'], root);
   /*
    * Il binding iroh del controllo remoto (owner 22/10/2026, «nel repo solo l'impronta»): dalla corsa fissata in
@@ -324,7 +356,9 @@ export async function preparaPacchetto() {
   await copyFile(join(root, '../native/iroh-THIRD_PARTY_NOTICES.txt'), join(backend, 'native/iroh/THIRD_PARTY_NOTICES.txt'));
   for (const nome of ['package.json', 'package-lock.json', 'THIRD_PARTY_NOTICES.md']) await copyFile(join(root, '../..', 'context-engine', nome), join(contesto, nome));
   await copiaAlberoProduzione(join(root, '../..', 'context-engine/src'), join(contesto, 'src'));
-  await copiaAssistenza({ sorgente: join(root, '../..', 'docs/assistenza'), destinazione: join(staging, 'docs/assistenza') });
+  /* Centro assistenza (owner 01/11/2026): la guida per `talos_help`, accanto a server.mjs come la cerca `aiuto-del-server.mjs`. */
+  const guida = await copiaAiuto({ sorgente: join(root, '..', 'aiuto'), destinazione: join(backend, 'aiuto') });
+  console.log(`Guida di TALOS: ${guida.pagine} pagine.`);
   await dipendenzeProduzione(backend);
   await sfoltisciPdfjs(join(backend, 'node_modules')); // F-001: ~5 MB invece di ~72 (owner 02/10)
   await sfoltisciEld(join(backend, 'node_modules')); // M 28/10: un dizionario solo, ~1 MB invece di 8,8
@@ -358,14 +392,23 @@ export async function preparaPacchetto() {
   await preparaCasaLinux(casaLinux, { cache: join(cache, 'casa-linux') });
   const casaVerificata = await verificaCasaLinux(casaLinux, { controllaImpronte: true });
   if (!casaVerificata.pronta) throw new Error(`Binari della casa Linux non pronti: ${casaVerificata.motivo}`);
+  /* la build di sviluppo, mai il valore che il guscio installato passa al server: qui si prepara il pacchetto, non lo si esegue */
+  const exeAiutante = process.env.TALOS_AIUTANTE_PC_SORGENTE || percorsoAiutantePredefinito({ LOCALAPPDATA: process.env.LOCALAPPDATA });
+  /* in CI l'exe e gli avvisi li posa, verificati, `scripts/scarica-aiutante-pc.mjs` (strada A, owner 09/11/2026) e li dice in GITHUB_ENV */
+  const avvisiAiutante = process.env.TALOS_AIUTANTE_PC_AVVISI || join(process.env.LOCALAPPDATA ?? '', 'tb', AIUTANTE_PIN_CORTO, 'albero', 'rust', 'THIRD_PARTY_NOTICES.md');
+  const aiutantePc = await copiaAiutantePc({ exe: exeAiutante, licenza: join(root, '../../native/aiutante-nativo/LICENSE.md'), avvisi: avvisiAiutante,
+    destinazione: join(staging, 'aiutante-pc'), impronta: IMPRONTA_AIUTANTE_PC });
+  console.log(`Aiutante del PC: ${aiutantePc}.`);
   await writeFile(join(staging, 'AVVISI.txt'), [
     'TALOS Desktop — pacchetto di prova non firmato. Versione e commit nel manifesto della build.',
     'Electron 44.3.0 (MIT): LICENSE e LICENSES.chromium.html nella radice installata.',
-    `llama.cpp v0.7.0 = ${LLAMA_VERSIONE} (MIT): https://github.com/ggml-org/llama.cpp/tree/${LLAMA_VERSIONE} ; avvisi negli archivi inclusi.`,
+    `llama.cpp v${MOTORE_FISSATO.versione} = ${LLAMA_VERSIONE} (MIT): https://github.com/ggml-org/llama.cpp/tree/${LLAMA_VERSIONE} ; avvisi negli archivi inclusi.`,
+    "Lucide 1.25.0 (ISC) e Feather (MIT): le icone dell'interfaccia; testi delle licenze in harness-ui/THIRD_PARTY_NOTICES.md.",
     'Go 1.27.1 (BSD-3-Clause): il helper upload include la standard library; licenza in harness-ui/native/GO-LICENSE.txt.',
     'iroh-ffi 1.1.0 (MIT o Apache-2.0) per il controllo remoto, con le crate Rust che contiene: testi delle licenze e fonti in harness-ui/native/iroh/THIRD_PARTY_NOTICES.txt.',
     'Node.js 24.18.0 per Linux (MIT): eseguito dentro WSL per gli attrezzi dei file; licenza in casa-linux/linux-x64/LICENSE-node.txt.',
     'ripgrep 15.0.0 per Linux (MIT o Unlicense: https://github.com/BurntSushi/ripgrep), dal pacchetto @vscode/ripgrep-linux-x64 1.18.0 (MIT); licenza del pacchetto in casa-linux/linux-x64/LICENSE-rg.txt.',
+    `cua-driver di cua (MIT, Copyright (c) 2025 Cua AI, Inc.: https://github.com/trycua/cua/tree/${AIUTANTE_PIN}) per il computer use, con le crate Rust che contiene, fra cui uniffi 0.31.0 (MPL-2.0, sorgente su https://crates.io/crates/uniffi/0.31.0): licenza e avvisi in aiutante-pc/LICENSE.md e aiutante-pc/THIRD_PARTY_NOTICES.md.`,
     'Dipendenze Node: licenze originali conservate nei rispettivi node_modules.',
     'Licenza del repository: vedere LICENZA-REPOSITORY.txt. Le dipendenze mantengono le proprie licenze.',
     'Nessun modello GGUF, aggiornamento automatico o telemetria aggiunto da R-02.',

@@ -22,7 +22,7 @@ async function setup(t, { token = null, esito = { ok: true } } = {}) {
       return typeof esito === 'function' ? esito(sessionId, corpo) : esito;
     },
   };
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry, token }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry, token }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const port = server.address().port;

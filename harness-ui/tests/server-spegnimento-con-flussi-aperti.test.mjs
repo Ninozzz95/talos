@@ -54,13 +54,14 @@ async function avviaServerFiglio(t, prefisso, { cartellaCondivisa = null } = {})
   ].map((r) => JSON.stringify(r)).join('\n') + '\n');
   const origine = `http://127.0.0.1:${porta}`;
   const headers = { Cookie: `talos_token=${token}` };
-  const figlio = spawn(process.execPath, ['server.mjs'], { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
-    ...process.env, TALOS_HARNESS_UI_PORT: String(porta), TALOS_HARNESS_UI_TOKEN: token,
+  const figlio = spawn(process.execPath, ['server.mjs'], { cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: {
+    ...process.env, TALOS_HARNESS_UI_PORT: String(porta), TALOS_HARNESS_UI_SEGRETI_DA: 'stdin',
     TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: join(cartella, 'scratch'),
     TALOS_HARNESS_UI_SESSIONS_DIR: cartella, TALOS_HARNESS_UI_PROJECT_DIRS: workspace,
     TALOS_HARNESS_UI_WORKFLOW_DIR: join(cartella, 'workflows'),
     TALOS_DESKTOP_DATA_DIR: join(cartella, 'desktop'), // 01/10/2026: mai le cartelle dati di default (sono quelle del 4174 vivo: memorie, note, Forge, archivio output, modelli)
   } });
+  figlio.stdin.end(`TALOS_HARNESS_UI_TOKEN=${token}\n`); // gettone sempre (02/11/2026): solo dallo stdin
   const stato = { uscito: null, log: '' };
   const uscita = new Promise((ok) => figlio.once('exit', (code, signal) => { stato.uscito = { code, signal }; ok(stato.uscito); }));
   figlio.stdout.on('data', (d) => { stato.log += d; });

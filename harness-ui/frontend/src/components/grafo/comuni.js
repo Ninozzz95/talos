@@ -66,7 +66,7 @@ export function statoDelRun(panoramica, { tipo = 'run', revisione = null } = {})
 }
 export const TONO_RUN = { running: 'corso', created: 'corso', paused: 'attesa', needs_attention: 'errore', succeeded: 'ok', failed: 'errore', cancelled: 'neutro',
   succeeded_with_set_aside: 'ok', pausing: 'attesa', cancelling: 'neutro' };
-export const ICONA_TONO = { ok: 'i-check', corso: 'i-play', attesa: 'i-clock', avviso: 'i-user', errore: 'i-x', neutro: null };
+export const ICONA_TONO = { ok: 'i-check', corso: 'i-loader', attesa: 'i-clock', avviso: 'i-user', errore: 'i-x', neutro: null };
 
 /* D29: le famiglie dei conteggi di una fase. «Errori» sta a parte, come vuole la decisione. */
 export const FAMIGLIE = Object.freeze([
@@ -116,9 +116,9 @@ export function tonoFase(gruppo) {
 
 /* D28: icone dai ruoli del contratto; senza ruolo, dal tipo del passo; senza nessuno dei due, l'agente generico. */
 export const ICONE_RUOLO = Object.freeze({
-  coordinator: 'i-coordina', researcher: 'i-search', implementer: 'i-code', reviewer: 'i-shield', integrator: 'i-layers', tester: 'i-flask',
+  coordinator: 'i-coordina', researcher: 'i-search', implementer: 'i-code', reviewer: 'i-shield', integrator: 'i-merge', tester: 'i-test-tube',
 });
-const ICONE_TIPO = Object.freeze({ test: 'i-flask', verify: 'i-shield', judge: 'i-shield', merge: 'i-layers', reduce: 'i-layers', artifact: 'i-doc', human: 'i-user' });
+const ICONE_TIPO = Object.freeze({ test: 'i-test-tube', verify: 'i-shield', judge: 'i-shield', merge: 'i-merge', reduce: 'i-merge', artifact: 'i-doc', human: 'i-user' });
 const piuFrequente = (conti, ordine) => {
   let scelta = null, massimo = 0;
   for (const chiave of ordine) if ((conti?.[chiave] ?? 0) > massimo) { scelta = chiave; massimo = conti[chiave]; }

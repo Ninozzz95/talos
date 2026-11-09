@@ -114,7 +114,7 @@ function creaRegistro(stato) {
 }
 
 async function servi(t, registro) {
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     listaTaskDisponibili: () => [],
     elencaCartelleProgetto: () => [],

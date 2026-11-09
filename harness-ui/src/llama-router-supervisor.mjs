@@ -95,6 +95,7 @@ const IN_MOVIMENTO = new Set(['loading', 'loaded', 'sleeping']);
 export const CHIAVI_DEL_PRESET = Object.freeze(new Map([
   ['-c', 'ctx-size'],
   ['-ngl', 'n-gpu-layers'],
+  ['--load-mode', 'load-mode'],
   ['--device', 'device'],
   ['-fa', 'flash-attn'],
   ['--cache-type-k', 'cache-type-k'],
@@ -127,13 +128,16 @@ export function valoreScrivibile(valore) {
  * The section of one model, or null when it cannot be written (its path or name would be cut by the INI parser): such a model goes to
  * today's engine (decision 2).
  */
-export function sezioneDelModello({ modelId, modelPath, argomenti, dormiDopoSecondi = DORMI_DOPO_SECONDI }) {
+export function sezioneDelModello({ modelId, modelPath, argomenti, dormiDopoSecondi = DORMI_DOPO_SECONDI, proiettore = null, memoriaVistaByte = 0 }) {
   if (!nomeDiSezioneValido(modelId) || !valoreScrivibile(modelPath)) return null;
-  const chiavi = [['model', modelPath], ...chiaviDagliArgomenti(argomenti), ['props', 'true']];
+  /* 02/11/2026, form «proiettore nel conto», point 3: the projector is the same argument in the section (`mmproj`, the long option name
+     without dashes, `common/preset.cpp:249-260`); a path the INI cannot hold sends the model to today's engine, which opens it WITH vision */
+  if (proiettore !== null && !valoreScrivibile(proiettore)) return null;
+  const chiavi = [['model', modelPath], ...(proiettore ? [['mmproj', proiettore]] : []), ...chiaviDagliArgomenti(argomenti), ['props', 'true']];
   /* A2 (owner, 26/10): the model leaves the memory after 15 idle minutes. `--sleep-idle-seconds` is an ordinary server argument, so in a
      section it reaches only that model's child (`server-models.cpp:463-475` renders the section into the child's arguments). */
   if (Number.isSafeInteger(dormiDopoSecondi) && dormiDopoSecondi > 0) chiavi.push(['sleep-idle-seconds', String(dormiDopoSecondi)]);
-  return { modelId, modelPath, chiavi, testo: `[${modelId}]\n${chiavi.map(([k, v]) => `${k} = ${v}`).join('\n')}\n` };
+  return { modelId, modelPath, chiavi, ...(proiettore ? { proiettore, memoriaVistaByte } : {}), testo: `[${modelId}]\n${chiavi.map(([k, v]) => `${k} = ${v}`).join('\n')}\n` };
 }
 
 export function testoDelPreset(sezioni) {
@@ -336,6 +340,7 @@ export function createLlamaRouterSupervisor({
   healthTimeoutMs = DEFAULT_TIMEOUT_MS,
   pollIntervalMs = 100,
   attesaChiusuraMs = 5_000,
+  scheda = null, // A2-1: the same `creaMemoriaScheda` of today's engine: one card, one record
   dormiDopoSecondi = DORMI_DOPO_SECONDI,
   atteseDiRiavvioMs = ATTESE_DI_RIAVVIO_MS,
   vitaSanaMs = VITA_SANA_MS,
@@ -384,7 +389,11 @@ export function createLlamaRouterSupervisor({
   let stopPromise = null;
   let fermatoNonUscito = null;  // the model stop() unloaded and did not wait for (A-6); the next start waits (A-7)
   let caricamento = null;       // { modelId, fase, percentuale }
+  let ripiegoInCorso = null;    // the model today's engine is taking right now, after the router failed it (never one simply remembered)
   const ripieghi = new Map();   // modelId -> { motivo, codice }: decision 2, remembered for this process
+  /* CLI second read of fee4b69a5, the two S4: modelId -> why the router could not open it WITH its projector (and could without), for this
+     process like `ripieghi`: the next opening of that model goes without vision at once, with no failed load more */
+  const visteFallite = new Map();
 
   function emit(evento) {
     for (const listener of listeners) {
@@ -418,7 +427,9 @@ export function createLlamaRouterSupervisor({
       attivo: vivo && !router.muto,
       ...(vivo && router.muto ? { nonRisponde: true } : {}),
       modelliMax,
+      proprietario, // who holds the model: on today's engine a chat on another model has to wait for it, as without the router
       caricamento: caricamento ? { ...caricamento } : null,
+      ...(ripiegoInCorso ? { ripiegoInCorso } : {}), // 01/11/2026: today's engine is taking this model NOW; `ripieghi` is memory, and the first time it comes after the load
       ripieghi: [...ripieghi].map(([modelId, r]) => ({ modelId, motivo: r.motivo })),
       fermo: fermo ? { ...fermo } : null,
     };
@@ -428,13 +439,16 @@ export function createLlamaRouterSupervisor({
     if (proprietario === 'standalone') return { ...standalone.status(), router: fotoRouter() };
     const motore = standalone.status()?.motore ?? null;
     const base = { runtimeId: 'llama.cpp', ...(motore ? { motore } : {}) };
-    if (!current) return { state, ...base, observedAt: now().toISOString(), router: fotoRouter() };
+    if (!current) return { state, ...base, ...(scheda?.liberando() ? { fase: 'freeing', modelId: pendingStart?.modelId ?? null, ...(pendingStart?.startedAt ? { startedAt: pendingStart.startedAt } : {}) } : {}), observedAt: now().toISOString(), router: fotoRouter() };
     return {
       state: current.state,
       ...base,
       ...(router ? { port: router.porta, baseUrl: router.baseUrl } : {}),
       modelId: current.modelId,
+      ...(current.state === 'loading' ? { startedAt: current.startedAt } : {}),
       ...(Number.isSafeInteger(current.windowTokens) ? { windowTokens: current.windowTokens } : {}),
+      ...(current.proiettore ? { proiettore: current.proiettore } : {}), // 02/11: the same field today's engine gives
+      ...(current.vistaSenza ? { vistaSenza: current.vistaSenza } : {}),
       observedAt: now().toISOString(),
       router: fotoRouter(),
     };
@@ -533,8 +547,10 @@ export function createLlamaRouterSupervisor({
     for (const voce of Array.isArray(installati) ? installati : []) {
       if (!voce?.modelId || voce.modelId === richiesta.modelId || sezioni.has(voce.modelId) || !voce.modelPath) continue;
       try {
-        const scelte = await standalone.sceltePerIlRouter({ modelPath: voce.modelPath, ...(voce.opzioni ?? {}), signal: operation.controller.signal, check: () => checkStart(operation) });
-        const sezione = sezioneDelModello({ modelId: voce.modelId, modelPath: voce.modelPath, argomenti: scelte.argomenti, dormiDopoSecondi });
+        /* CLI review of 1fb59818f (a): every installed model with its projector, as its own start would give it, so that a model the
+           router loads by name opens with vision and decision 1 counts its projector from the first section */
+        const scelte = await standalone.sceltePerIlRouter({ modelPath: voce.modelPath, ...(voce.opzioni ?? {}), proiettore: voce.proiettore ?? null, signal: operation.controller.signal, check: () => checkStart(operation) });
+        const sezione = sezioneDelModello({ modelId: voce.modelId, modelPath: voce.modelPath, argomenti: scelte.argomenti, dormiDopoSecondi, proiettore: scelte.proiettore ?? null, memoriaVistaByte: scelte.memoriaVistaByte ?? 0 });
         if (sezione) sezioni.set(voce.modelId, sezione);
       } catch (errore) {
         checkStart(operation);
@@ -552,7 +568,8 @@ export function createLlamaRouterSupervisor({
       let kvPerToken = null;
       try { kvPerToken = Number((await leggiIntestazione(sezione.modelPath))?.kvCacheBytesPerToken); } catch { kvPerToken = null; }
       const finestra = Number(sezione.chiavi.find(([k]) => k === 'ctx-size')?.[1]);
-      const impronta = improntaDelModello({ byteFile, kvPerToken, finestra });
+      /* 02/11, form «proiettore nel conto»: a model that opens with vision holds its projector too (decision 1 counts it) */
+      const impronta = improntaDelModello({ byteFile: byteFile + (Number.isFinite(sezione.memoriaVistaByte) ? sezione.memoriaVistaByte : 0), kvPerToken, finestra });
       if (impronta !== null) impronte.push(impronta);
     }
     let utilizzabile = null;
@@ -635,7 +652,12 @@ export function createLlamaRouterSupervisor({
     if (!entry.child || typeof entry.child.once !== 'function') throw guastoDelRouter('spawn did not return a router process');
     router = entry;
     attaccaRouter(entry);
-    /* Hermes `_wait_health` (`supervisor.py:243-256`): the router's own `/health`, until it answers, exits, or the wait ends. */
+    return aspettaSalute(entry, operation, verifica);
+  }
+
+  /* Hermes `_wait_health` (`supervisor.py:243-256`): the router's own `/health`, until it answers, exits, or the wait ends.
+     Also for a router a Stop left in the middle of its first start (revisione del 01/11, M6): it is alive but nobody has seen it answer, and it has no progress stream. */
+  async function aspettaSalute(entry, operation, verifica) {
     const scadenza = Date.now() + attesaSaluteMs(0, healthTimeoutMs);
     while (Date.now() < scadenza) {
       verifica();
@@ -911,6 +933,7 @@ export function createLlamaRouterSupervisor({
 
   async function suStandalone(operation, opzioni, { motivo, codice, ricordato = false }) {
     const ripiego = { modelId: opzioni.modelId ?? null, motivo, codice };
+    scheda?.dimentica(); // today's engine reads the card by itself: the second reading must not look like memory that never came back
     if (current && proprietario === 'router') { await unlock(current); current = null; }
     /* J-R2: the router's copy leaves the memory BEFORE anything says «loading it with today's engine» */
     try {
@@ -920,6 +943,7 @@ export function createLlamaRouterSupervisor({
       throw errore;
     }
     checkStart(operation);
+    if (!ricordato) ripiegoInCorso = opzioni.modelId ?? null;
     const testo = ricordato
       ? `[talos] ${opzioni.modelId} runs on today's engine: the router could not load it earlier (${motivo})\n`
       : `[talos] the router could not load ${opzioni.modelId}: ${motivo}. Loading it with today's engine, one model at a time.\n`;
@@ -928,12 +952,15 @@ export function createLlamaRouterSupervisor({
     proprietario = 'standalone';
     try {
       const esito = await standalone.start({ modelId: opzioni.modelId, modelPath: opzioni.modelPath, port: opzioni.port, contextLength: opzioni.contextLength,
-        finestraDiRiserva: opzioni.finestraDiRiserva, signal: operation.controller.signal });
+        finestraDiRiserva: opzioni.finestraDiRiserva, signal: operation.controller.signal, proiettore: opzioni.proiettore ?? null }); // the vision travels with the fallback
       /* Only a model that DOES load standalone is remembered: if today's engine fails too, the router was not the reason (a growth
          that does not fit, a broken file) and the next load tries the router again. */
       if (opzioni.modelId && !ricordato) ripieghi.set(opzioni.modelId, { motivo, codice });
-      return { ...esito, router: fotoRouter(), ripiegoRouter: ripiego };
+      ripiegoInCorso = null;
+      /* FE-050: the line in the chat says the fallback once, when it happens: a model simply remembered has nothing to announce */
+      return { ...esito, router: fotoRouter(), ...(ricordato ? {} : { ripiegoRouter: ripiego }) };
     } catch (errore) {
+      ripiegoInCorso = null;
       if (errore && typeof errore === 'object') errore.ripiegoRouter = ripiego;
       throw errore;
     }
@@ -941,7 +968,7 @@ export function createLlamaRouterSupervisor({
 
   /* ── start / stop ─────────────────────────────────────────────────────────────────────────────────────── */
 
-  async function start({ modelId, modelPath, port, contextLength, finestraDiRiserva, signal } = {}) {
+  async function start({ modelId, modelPath, port, contextLength, finestraDiRiserva, signal, proiettore = null } = {}) {
     if (pendingStart || stopPromise) throw new LlamaServerSupervisorError('runtime is already active', 'RUNTIME_ALREADY_RUNNING');
     if (proprietario === 'standalone' && ['loading', 'ready', 'stopping'].includes(standalone.status()?.state)) {
       throw new LlamaServerSupervisorError('runtime is already active', 'RUNTIME_ALREADY_RUNNING'); // today's engine: one model at a time
@@ -954,13 +981,13 @@ export function createLlamaRouterSupervisor({
     if (typeof modelPath !== 'string' || !isAbsolute(modelPath)) throw invalid('modelPath must be absolute');
     if (signal?.aborted) throw cancelled();
     let complete;
-    const operation = { controller: new AbortController(), modelId, done: new Promise((resolve) => { complete = resolve; }) };
+    const operation = { controller: new AbortController(), modelId, startedAt: now().toISOString(), done: new Promise((resolve) => { complete = resolve; }) };
     const onAbort = () => operation.controller.abort(cancelled());
     signal?.addEventListener('abort', onAbort, { once: true });
     pendingStart = operation;
     state = 'loading';
     const verifica = () => checkStart(operation);
-    const opzioni = { modelId, modelPath, port, contextLength, finestraDiRiserva };
+    const opzioni = { modelId, modelPath, port, contextLength, finestraDiRiserva, ...(proiettore ? { proiettore } : {}) };
     let voce = null;
     try {
       await fermaRiavvio(); // the person asks for the engine now: the restart in waiting is this start
@@ -970,6 +997,12 @@ export function createLlamaRouterSupervisor({
       }
       await attendiScarico(operation);
       verifica();
+      if (scheda) {
+        /* A2-1: a change of model keeps the old one loaded (decision 1), so its memory is not coming back and nothing is waited for */
+        const esito = await scheda.primaDiAprire({ signal: operation.controller.signal, liberato: current?.state !== 'ready' });
+        if (esito && ['tornata', 'scaduta'].includes(esito.esito)) registro(`[talos] graphics card: ${esito.esito} after ${esito.ms} ms\n`);
+        verifica();
+      }
       if (!nomeDiSezioneValido(modelId)) return await suStandalone(operation, opzioni, { motivo: 'the model id cannot name a preset section', codice: 'ROUTER_SECTION_INVALID' });
       if (ripieghi.has(modelId)) return await suStandalone(operation, opzioni, { ...ripieghi.get(modelId), ricordato: true });
       /* ⭐ 27/09: the architecture check before the start, as today. Only a measured «no» sends the model to today's engine, which says
@@ -984,41 +1017,75 @@ export function createLlamaRouterSupervisor({
       }
       if (current && proprietario === 'router') { await unlock(current); current = null; } // the switch: the old model stays in the router
       proprietario = 'router';
-      voce = { modelId, modelPath, state: 'loading', windowTokens: null, locked: false, opzioni };
+      voce = { modelId, modelPath, state: 'loading', startedAt: operation.startedAt, windowTokens: null, locked: false, opzioni };
       if (modelStore && modelId) {
         await modelStore.lock(modelId);
         voce.locked = true;
       }
       current = voce;
       verifica();
-      const scelte = await standalone.sceltePerIlRouter({ modelPath, contextLength, finestraDiRiserva, signal: operation.controller.signal, check: verifica });
+      const vistaRicordata = proiettore ? visteFallite.get(modelId) ?? null : null;
+      if (vistaRicordata) {
+        voce.vistaSenza = `the image projector failed earlier in this session (${vistaRicordata}): opened without it, images are not read`;
+        emitLog('stderr', `[talos] ${voce.vistaSenza}\n`);
+      }
+      const scelte = await standalone.sceltePerIlRouter({ modelPath, contextLength, finestraDiRiserva, signal: operation.controller.signal, check: verifica, proiettore: vistaRicordata ? null : proiettore });
       verifica();
       for (const riga of scelte.righe) emitLog('stderr', riga);
-      const sezione = sezioneDelModello({ modelId, modelPath, argomenti: scelte.argomenti, dormiDopoSecondi });
+      if (scelte.proiettore) voce.proiettore = scelte.proiettore;
+      const sezione = sezioneDelModello({ modelId, modelPath, argomenti: scelte.argomenti, dormiDopoSecondi, proiettore: scelte.proiettore ?? null, memoriaVistaByte: scelte.memoriaVistaByte ?? 0 });
       if (!sezione) return await suStandalone(operation, opzioni, { motivo: 'the model path cannot be written in the preset file (it holds # or ;)', codice: 'ROUTER_SECTION_INVALID' });
-      try {
-        const cambiata = sezioni.get(modelId)?.testo !== sezione.testo;
-        sezioni.set(modelId, sezione);
+      /* one section in the router: written (with every other model the first time), read again if it changed, then loaded */
+      const caricaLaSezione = async (sez) => {
+        const cambiata = sezioni.get(modelId)?.testo !== sez.testo;
+        sezioni.set(modelId, sez);
         if (!router || router.closed) {
           await scriviTutteLeSezioni(operation, opzioni);
           verifica();
           await avviaRouter(operation, verifica);
-        } else if (cambiata) {
-          /* The window grows, or the choices changed: the section is rewritten and the router reads it again. `?reload=1` unloads only
-             the models whose section changed (`server-models.cpp:1086-1118`): the others stay where they are. */
-          scriviNelPosto(posto.preset, testoDelPreset(sezioni.values()));
-          const risposta = await chiedi('/models?reload=1', { signal: operation.controller.signal, timeoutMs: 60_000 });
-          verifica();
-          if (!risposta?.ok) throw guastoDelRouter(`the router did not read the preset again (HTTP ${risposta?.status})`);
+        } else {
+          if (router.saneAlle === null) { await aspettaSalute(router, operation, verifica); verifica(); }
+          if (cambiata) {
+            /* The window grows, or the choices changed: the section is rewritten and the router reads it again. `?reload=1` unloads only
+               the models whose section changed (`server-models.cpp:1086-1118`): the others stay where they are. */
+            scriviNelPosto(posto.preset, testoDelPreset(sezioni.values()));
+            const risposta = await chiedi('/models?reload=1', { signal: operation.controller.signal, timeoutMs: 60_000 });
+            verifica();
+            if (!risposta?.ok) throw guastoDelRouter(`the router did not read the preset again (HTTP ${risposta?.status})`);
+          }
         }
         verifica();
-        const { finestra } = await caricaNelRouter(operation, verifica, modelId, modelPath, { forza: false });
+        return (await caricaNelRouter(operation, verifica, modelId, modelPath, { forza: false })).finestra;
+      };
+      try {
+        let finestra;
+        try {
+          finestra = await caricaLaSezione(sezione);
+        } catch (conVista) {
+          verifica();
+          if (conVista?.guastoDelRouter !== true || !sezione.proiettore) throw conVista;
+          /* CLI review of 1fb59818f (b), the order of the R3 cure: first the router WITHOUT the projector, and only if that fails too
+             today's engine; the vision alone must not cost the model the router for the whole session */
+          emitLog('stderr', `[talos] the router did not open the model with the image projector (${conVista.code ?? 'error'}): trying again without it\n`);
+          try {
+            finestra = await caricaLaSezione(sezioneDelModello({ modelId, modelPath, argomenti: scelte.argomenti, dormiDopoSecondi }));
+          } catch (ancheSenza) {
+            verifica();
+            if (ancheSenza?.guastoDelRouter === true) emitLog('stderr', `[talos] it fails in the router without the image projector too (${ancheSenza.code ?? 'error'}): the failure is not from the image projector\n`);
+            throw ancheSenza;
+          }
+          delete voce.proiettore;
+          visteFallite.set(modelId, conVista.code ?? 'error'); // it opened without: the projector was the cause
+          voce.vistaSenza = `the router did not open the model with the image projector (${conVista.code ?? 'error'}): opened without it, images are not read`;
+          emitLog('stderr', `[talos] ${voce.vistaSenza}\n`);
+        }
         verifica();
         voce.windowTokens = finestra;
         if (caricamento?.modelId === modelId) caricamento = null; // ready: whatever the stream still says, the load is over
         if (Number.isSafeInteger(finestra)) standalone.ricordaFinestra?.(modelId, finestra); // T3, D3: the same file as today
         voce.state = 'ready';
         state = 'ready';
+        scheda?.aperto(); // in the background: it neither waits nor can fail this opening
         return status();
       } catch (errore) {
         verifica(); // a stop is never a reason to start today's engine (as R-03 never starts a CPU fallback after a stop)
@@ -1026,6 +1093,14 @@ export function createLlamaRouterSupervisor({
         return await suStandalone(operation, opzioni, { motivo: errore.motivo ?? errore.message, codice: errore.code });
       }
     } catch (error) {
+      /* Owner 01/11/2026: a cancelled load leaves the memory. The child keeps loading inside the router until it is told otherwise, and
+         `stop()` waits for this start, so nobody unloaded it. Like `stop()`, the next start waits for it to leave (A-7). */
+      if (voce && operation.controller.signal.aborted && router && !router.closed) {
+        try {
+          await chiedi('/models/unload', { method: 'POST', body: { model: voce.modelId }, timeoutMs: 3_000 });
+          fermatoNonUscito = voce.modelId;
+        } catch { /* the router may be gone, and then the child with it */ }
+      }
       if (voce) { await unlock(voce); if (current === voce) current = null; }
       state = operation.controller.signal.aborted ? 'unavailable' : 'failed';
       if (operation.controller.signal.aborted) throw cancelled();
@@ -1041,7 +1116,8 @@ export function createLlamaRouterSupervisor({
    * Router mode stop: the current model leaves the memory (`POST /models/unload`, as the «free the memory» button expects), the router
    * stays up. Like today (A-6) it does not wait for the child to leave: the next start does (A-7).
    */
-  function stop() {
+  /** `tutti`: «Free the memory», every model of the router. Without it only the current one: a window that grows must not cut the other model (revisione 2, D2). */
+  function stop({ tutti = false } = {}) {
     if (stopPromise) return stopPromise;
     const operation = pendingStart;
     const voce = current;
@@ -1053,13 +1129,19 @@ export function createLlamaRouterSupervisor({
         await operation.done; // the start owner releases its lock exactly once
       } else if (proprietario === 'standalone') {
         await standalone.stop();
-      } else if (voce) {
+      } else if (voce || tutti) {
+        /* after a change of model the old one stays loaded, and after a cancelled change it is the only one (revisione del 01/11, M13) */
         if (router && !router.closed) {
-          try { await chiedi('/models/unload', { method: 'POST', body: { model: voce.modelId }, timeoutMs: 3_000 }); } catch { /* the router may be gone */ }
-          fermatoNonUscito = voce.modelId;
+          const accesi = tutti ? await residentiNelRouter() : null;
+          for (const modelId of new Set([...(voce ? [voce.modelId] : []), ...(accesi ?? [])])) {
+            try { await chiedi('/models/unload', { method: 'POST', body: { model: modelId }, timeoutMs: 3_000 }); } catch { /* the router may be gone */ }
+            fermatoNonUscito = modelId;
+          }
         }
-        if (current === voce) current = null;
-        await unlock(voce);
+        if (voce) {
+          if (current === voce) current = null;
+          await unlock(voce);
+        }
       }
       state = 'unavailable';
       return status();

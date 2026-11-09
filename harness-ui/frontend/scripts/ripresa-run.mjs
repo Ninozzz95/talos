@@ -10,8 +10,12 @@ const repo = resolve(frontend, '../..');
 const preload = new URL('../tests/fixtures/ripresa-keyring-preload.mjs', import.meta.url).href;
 const json = (file, value) => writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx' });
 const git = (...args) => {
-  const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8', windowsHide: true });
-  if (result.status !== 0) throw new Error(`Git ${args[0]}: ${result.stderr}`);
+  /* 04/11/2026: con l'unione del computer use `ls-files --stage -z` ha passato 1 MiB (1.049.324 byte), il tetto di serie di spawnSync
+   * (nodejs.org/api/child_process.html, `maxBuffer`, «Default: 1024 * 1024»): il figlio veniva ucciso con stato null e stderr vuoto
+   * («Git ls-files: » e nient'altro). Tetto a 256 MiB, e l'errore del figlio detto. Hermes legge tutto (`subprocess.run` con
+   * `capture_output`, hermes_cli/update_cmd_stash.py:60-65). */
+  const result = spawnSync('git', args, { cwd: repo, encoding: 'utf8', windowsHide: true, maxBuffer: 256 * 1024 * 1024 });
+  if (result.status !== 0) throw new Error(`Git ${args[0]}: ${result.stderr || result.error?.message || `stato ${result.status}`}`);
   return result.stdout.trim();
 };
 

@@ -381,7 +381,7 @@ export function creaAzioniMessaggio({ ascolta = true } = {}, opzioni = {}) {
   };
   gruppo.append(bottone('copy', TESTI_MESSAGGIO.copiaRisposta, 'i-copy'));
   if (ascolta) {
-    const b = bottone('listen', TESTI_MESSAGGIO.ascolta, 'i-play');
+    const b = bottone('listen', TESTI_MESSAGGIO.ascolta, 'i-volume');
     b.setAttribute('aria-pressed', 'false');
     b.classList.add('assistant-listen-btn');
     gruppo.append(b);
@@ -670,7 +670,7 @@ const NOMI_LINGUAGGIO = Object.freeze({
 export function chiaveLinguaggio(dichiarato) {
   const pulito = String(dichiarato || '').trim().toLowerCase();
   if (!pulito) return '';
-  return ALIAS_LINGUAGGIO[pulito] || pulito;
+  return (Object.hasOwn(ALIAS_LINGUAGGIO, pulito) && ALIAS_LINGUAGGIO[pulito]) || pulito;
 }
 
 /** Il nome da mostrare nell'intestazione: quello dichiarato dal modello, non quello interno di Prism. */
@@ -685,8 +685,9 @@ export function etichettaLinguaggio(dichiarato) {
   /* revisione a blocco 3 (24/10/2026, S4): «python3», «c++17», «lua5.4» — l'estensione l'aveva già capita (.py, .cpp, .lua) e
      l'etichetta restava grezza; quando la lingua dichiarata non ha un nome, si usa quello della sua estensione */
   const daEstensione = estensioneDi(minuscolo);
-  return NOMI_LINGUAGGIO[minuscolo] || NOMI_LINGUAGGIO[linguaSenzaVersione(minuscolo)]
-    || (daEstensione !== minuscolo && daEstensione !== 'txt' ? NOMI_LINGUAGGIO[daEstensione] : undefined) || pulito;
+  /* D-17 (31/10/2026): la lingua la scrive il modello, e un nome di Object («constructor») pescava una funzione dalla tabella */
+  const nome = (chiave) => (Object.hasOwn(NOMI_LINGUAGGIO, chiave) ? NOMI_LINGUAGGIO[chiave] : undefined);
+  return nome(minuscolo) || nome(linguaSenzaVersione(minuscolo)) || (daEstensione !== minuscolo && daEstensione !== 'txt' ? nome(daEstensione) : undefined) || pulito;
 }
 const LINGUE_SEMPLICI = new Set(['text', 'plain', 'plaintext', 'txt']);
 
@@ -1090,12 +1091,12 @@ export function aggiornaBloccoCodice(blocco, { testo, linguaggio, chiuso } = {})
 
 /** Le icone dello sprite per ogni attrezzo del kernel (i nomi che riceve il modello NON cambiano: qui si sceglie solo il simbolo). */
 export const ICONA_ATTREZZO = Object.freeze({
-  leggi: 'i-eye', cerca: 'i-search', elenca: 'i-search', shell: 'i-terminal', prova: 'i-terminal',
+  leggi: 'i-eye', cerca: 'i-search', elenca: 'i-search', shell: 'i-terminal', prova: 'i-test-tube',
   // ⛔ BC-59 (17/09): `file_edit` scriveva sul disco e nella riga attività arrivava senza icona
   //    propria (ripiego `i-bolt`) e senza nome. Stessa icona di `scrivi`: è la stessa cosa al file.
-  scrivi: 'i-code', file_edit: 'i-code', naviga: 'i-globe', web_search: 'i-globe', delega_sottotask: 'i-user',
-  memory_write: 'i-brain', artifact_create: 'i-doc', artifact_update: 'i-doc', document_create: 'i-doc', generate_image: 'i-doc', view_image: 'i-eye',
-  time_now: 'i-clock', research_start: 'i-globe',
+  scrivi: 'i-code', file_edit: 'i-code', naviga: 'i-globe', web_search: 'i-globe', delega_sottotask: 'i-robot',
+  memory_write: 'i-book-marked', artifact_create: 'i-doc', artifact_update: 'i-doc', document_create: 'i-doc', generate_image: 'i-image', view_image: 'i-eye',
+  time_now: 'i-clock', research_start: 'i-telescope',
   remote_phones: 'i-phone', remote_phone_pair: 'i-phone', remote_phone_revoke: 'i-phone', // R5.12 (18/10/2026)
   remote_phone_folders: 'i-phone', remote_phone_folder_allow: 'i-phone', remote_phone_folder_revoke: 'i-phone', remote_phone_folder_unblock: 'i-phone', // R5.12 cartelle (23/10/2026)
   remote_device_send_file: 'i-phone', // R5.13 (24/10/2026): mandare un file a un dispositivo
@@ -1103,7 +1104,7 @@ export const ICONA_ATTREZZO = Object.freeze({
 });
 
 export function iconaAttrezzo(nome) {
-  return ICONA_ATTREZZO[nome] || 'i-bolt';
+  return Object.hasOwn(ICONA_ATTREZZO, nome) ? ICONA_ATTREZZO[nome] : 'i-wrench'; // il nome lo decide il modello o un server MCP
 }
 
 /**
@@ -1192,7 +1193,8 @@ export function impostaEsitoRiga(riga, esito) {
   const tono = esito === 'running' ? 'live' : esito === 'success' ? 'success' : esito === 'error' ? 'danger' : esito === 'interrupted' || esito === 'not-run' ? 'warning' : null;
   pallino.className = `talos-dot${tono ? ` talos-dot--${tono}` : ''}`;
   /* 27/09, decisione owner 47: `corretta` — il modello riformula una domanda respinta per la forma; pallino neutro, riga attenuata. */
-  riga.dataset.toolState = esito === 'running' ? 'running' : esito === 'error' ? 'error' : esito === 'success' ? 'complete' : esito === 'interrupted' ? 'interrupted' : esito === 'not-run' ? 'not-run' : esito === 'corretta' ? 'corrected' : esito === 'duplicate' ? 'duplicate' : ''; // 12/10/2026: copia identica saltata, pallino neutro
+  /* revisione del 03/11 pomeriggio, D1: `declined` — la persona ha detto no sulla carta («Non consentito»); pallino neutro, riga attenuata */
+  riga.dataset.toolState = esito === 'running' ? 'running' : esito === 'error' ? 'error' : esito === 'success' ? 'complete' : esito === 'interrupted' ? 'interrupted' : esito === 'not-run' ? 'not-run' : esito === 'corretta' ? 'corrected' : esito === 'duplicate' ? 'duplicate' : esito === 'declined' ? 'declined' : ''; // 12/10/2026: copia identica saltata, pallino neutro
   if (!riga.dataset.toolState) delete riga.dataset.toolState;
 }
 
@@ -1247,7 +1249,15 @@ export function creaNotaErrore({ badge = t('chat.note.errorBadge'), titolo = t('
   nota.append(el(documentObj, 'span', `talos-badge talos-badge--${tono} talos-badge--sm`, badge));
   const corpo = el(documentObj, 'div');
   if (titolo) corpo.append(el(documentObj, 'div', 'talos-system-note__title', titolo));
-  corpo.append(el(documentObj, 'p', 'assistant-copy', spiegazione?.cosa || ''));
+  /* Revisione UX della candidata, 04/11/2026, riga 39 (foto 85): dopo uno Stop la carta diceva tre volte la stessa cosa («Fermato»,
+     «TALOS · fermato», «Hai fermato il giro.»). Il titolo della famiglia «fermato» è ora la frase stessa: quando la frase ripete il titolo
+     non si scrive una seconda volta, e sotto restano cosa resta fatto e cosa fare (NN/g, «Error-message guidelines»: dire con precisione
+     cosa è successo, poi il rimedio). Un guasto vero ha un titolo generico e la frase resta. */
+  const cosa = spiegazione?.cosa || '';
+  const senzaPunto = (s) => String(s ?? '').trim().replace(/[.!…]+$/u, '');
+  // decisione 116 C (Desktop 15:07): la scheda nata dall'attrezzo non ha una frase — nessun paragrafo vuoto
+  const ripeteIlTitolo = Boolean(titolo && cosa && senzaPunto(cosa) === senzaPunto(titolo));
+  if ((cosa || spiegazione?.senzaFrase !== true) && !ripeteIlTitolo) corpo.append(el(documentObj, 'p', 'assistant-copy', cosa));
   if (spiegazione?.perche) corpo.append(el(documentObj, 'p', 'talos-system-note__perche', spiegazione.perche));
   if (Array.isArray(spiegazione?.rimedi) && spiegazione.rimedi.length) {
     const lista = el(documentObj, 'ul', 'talos-system-note__rimedi');
@@ -1264,8 +1274,9 @@ export function creaNotaErrore({ badge = t('chat.note.errorBadge'), titolo = t('
   const azioni = Array.isArray(opzioni.azioni) ? opzioni.azioni.slice(0, 2) : [];
   if (azioni.length > 0) {
     const riga = el(documentObj, 'div', 'talos-cluster talos-system-note__azioni');
-    for (const [i, [testoAzione, fai]] of azioni.entries()) {
-      const b = el(documentObj, 'button', `talos-button talos-button--${i === 0 ? 'primary' : 'secondary'} talos-button--sm`, testoAzione);
+    /* decisione owner 166: una voce può chiedere la forma secondaria anche da sola («Riprendi da dove ti eri fermato», bozzetto 43 A) */
+    for (const [i, [testoAzione, fai, forma]] of azioni.entries()) {
+      const b = el(documentObj, 'button', `talos-button talos-button--${i === 0 && forma?.secondaria !== true ? 'primary' : 'secondary'} talos-button--sm`, testoAzione);
       b.type = 'button';
       b.dataset.notaAzione = String(i);
       if (typeof fai === 'function') b.addEventListener('click', fai);
@@ -1273,7 +1284,8 @@ export function creaNotaErrore({ badge = t('chat.note.errorBadge'), titolo = t('
     }
     corpo.append(riga);
   }
-  if (spiegazione?.tecnico) {
+  /* decisione 116 C: la scheda «Accedi e riprendi» non porta il testo del server (il grezzo resta nella spiegazione, per una segnalazione) */
+  if (spiegazione?.tecnico && spiegazione.senzaTestoDelServer !== true) {
     const dettaglio = documentObj.createElement('details');
     dettaglio.className = 'talos-system-note__tecnico';
     const riassunto = documentObj.createElement('summary');
@@ -1316,7 +1328,7 @@ export function creaApprovazione({ badge = t('chat.approval.requestsToWrite'), b
   scheda.setAttribute('data-c', 'ApprovalCard');
   const testa = el(documentObj, 'div', 'talos-approval__head');
   const etichetta = el(documentObj, 'span', 'talos-badge talos-badge--accent');
-  etichetta.append(simbolo(documentObj, 'i i--sm', 'i-shield'), documentObj.createTextNode(badge));
+  etichetta.append(simbolo(documentObj, 'i i--sm', 'i-shield-question'), documentObj.createTextNode(badge));
   testa.append(etichetta, el(documentObj, 'span', 'talos-mono talos-measure talos-grow talos-truncate', bersaglio));
   if (Number.isFinite(aggiunte)) testa.append(el(documentObj, 'span', 'talos-diff-num talos-diff-num--plus', `+${aggiunte}`));
   if (Number.isFinite(rimozioni)) testa.append(el(documentObj, 'span', 'talos-diff-num talos-diff-num--minus', `−${rimozioni}`));
@@ -1345,7 +1357,8 @@ export function creaApprovazione({ badge = t('chat.approval.requestsToWrite'), b
   };
   const unaVolta = bottone('talos-button talos-button--primary talos-button--md', t('chat.approval.allowOnce'), onUnaVolta);
   const sessione = bottone('talos-button talos-button--secondary', t('chat.approval.forThisSession'), onSessione);
-  const nega = bottone('talos-button talos-button--ghost talos-button--danger', t('chat.approval.deny'), onNega);
+  /* Decisione 92 dell'owner (03/11/2026): dire di no è la scelta sicura, il rosso la faceva sembrare pericolosa — grigio */
+  const nega = bottone('talos-button talos-button--ghost', t('chat.approval.deny'), onNega);
   piede.append(unaVolta, sessione, nega, el(documentObj, 'span', 'talos-grow'), el(documentObj, 'span', 'talos-approval__foot-note', nota));
   scheda.append(piede);
   return { scheda, perche: perchéEl, codice: codiceEl, motivo: motivoEl, piede, pulsanti: { unaVolta, sessione, nega } };
@@ -1369,11 +1382,21 @@ export function segnaEsitoApprovazione(scheda, { approvato = false, altrove = fa
   /* 0.1.25 (review del bugfixer, 09/10): anche la carta dei fornitori esclusi ha «Annulla», e l'esito dice la stessa parola */
   const cartaAutomazione = Boolean(scheda.dataset?.cartaAutomazione || scheda.dataset?.cartaFornitori);
   const modificata = !approvato && motivo === 'modificata-dalla-persona';
+  /* COD-205 (Mobile 30/10/2026): la carta chiusa da uno Stop non è un «Negato» e non viene «da un'altra finestra» */
+  const fermata = !approvato && motivo === 'fermato';
   const esito = approvato
-    ? (ambito === 'cartella' ? t('chat.approval.allowedInFolder') : t('chat.common.approved'))
+    ? (ambito === 'cartella' ? t('chat.approval.allowedInFolder') : ambito === 'strumento' ? t('chat.approval.allowedForTool') : t('chat.common.approved'))
     : modificata ? t('chat.approval.editedByYou')
-      : (motivo === 'nessuna-interfaccia' ? t('chat.approval.deniedNoOneCanAnswer') : cartaAutomazione ? t('chat.approval.cancelled') : t('chat.approval.denied'));
-  const riga = el(documentObj, 'p', `talos-approval__esito talos-approval__esito--${approvato || modificata ? 'si' : 'no'}`, t('chat.approval.outcomeWithOrigin', { esito, altrove: altrove && motivo !== 'nessuna-interfaccia' ? t('chat.common.fromAnotherWindow') : '' }));
+      : fermata ? t('chat.approval.stopped')
+        : (motivo === 'nessuna-interfaccia' ? t('chat.approval.deniedNoOneCanAnswer') : cartaAutomazione ? t('chat.approval.cancelled') : t('chat.approval.youSaidNo'));
+  /* Decisione 89 dell'owner (03/11/2026): il no della persona non è un guasto — «Hai detto di no», neutro come la riga del passo
+     («non consentito»), anche da un'altra finestra; «Modificata da te» è una sua scelta, neutra anche lei (come il telefono).
+     Il no chiuso dal server e lo Stop restano col loro tono.
+     Decisione 96 (03/11/2026): anche l'«Annullata» di un'automazione o dei fornitori è un no della persona — stessa parola, grigia;
+     il rosso resta ai guasti veri (il no del server, anche su queste carte). */
+  const noDellaPersona = !approvato && !motivo;
+  const tono = approvato ? 'si' : (modificata || noDellaPersona) ? 'neutro' : 'no';
+  const riga = el(documentObj, 'p', `talos-approval__esito talos-approval__esito--${tono}`, t('chat.approval.outcomeWithOrigin', { esito, altrove: altrove && motivo !== 'nessuna-interfaccia' && !fermata ? t('chat.common.fromAnotherWindow') : '' }));
   riga.setAttribute('role', 'status');
   scheda.append(riga);
   /* C2-R7 (owner 08/10/2026 sera, «vince il "Nega"»): «Per questa sessione» davanti a un «nega» messo DOPO la nascita della carta

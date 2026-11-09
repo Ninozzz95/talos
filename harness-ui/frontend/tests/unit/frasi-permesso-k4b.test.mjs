@@ -20,9 +20,9 @@ const CASI = [
   [fraseDiPermesso('server.approval.outsideProject.unverified', { percorso: 'D:\\x\\$&.txt' }),
     'Non è stato possibile verificare dove finisce «D:\\x\\$&.txt»: potrebbe essere fuori dalla cartella della sessione. Con «Scrive nel progetto» qui serve il tuo sì.'],
   [fraseDiPermesso('server.approval.wslRoot.user', { linux: nellaDistro, utente: 'root' }),
-    `Questo comando girerebbe in ${nellaDistro} come root. Con i permessi di questa sessione i comandi partono senza chiedere, ma come root può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se confermi, per il resto di questa sessione i comandi in ${nellaDistro} potranno girare come root senza chiederlo di nuovo.`],
+    `Questo comando girerebbe in ${nellaDistro} come root. Con i permessi di questa sessione i comandi partono senza chiedere, ma come root può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Un sì vale per questa chat, a meno che tu scelga solo questa volta.`],
   [fraseDiPermesso('server.approval.wslRoot.unverifiedUser', { linux: 'Linux (WSL)' }),
-    'Questo comando girerebbe in Linux (WSL), e non è stato possibile verificare con che utente: potrebbe essere root, che può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Con i permessi di questa sessione i comandi partono senza chiedere. Se confermi, per il resto di questa sessione i comandi in Linux (WSL) potranno girare senza chiederlo di nuovo.'],
+    'Questo comando girerebbe in Linux (WSL), e non è stato possibile verificare con che utente: potrebbe essere root, che può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Con i permessi di questa sessione i comandi partono senza chiedere. Un sì vale per questa chat, a meno che tu scelga solo questa volta.'],
   [fraseDiPermesso('server.approval.network.sessionFolder', { ospite: 'nas01' }),
     'La cartella della sessione sta su un computer di rete (nas01): aprire i suoi file manda a quel computer le credenziali di Windows. Se lo consenti, vale per tutta la sessione.'],
   [fraseDiPermesso('server.approval.network.link', { ...cosa('read'), collegamento: 'C:\\dati', ospite: 'nas01' }),
@@ -59,4 +59,51 @@ test('K4B-PERMESSO-03: al contrario — a key the dictionary does not have shows
   assert.equal(testoDelCampo(ignota, 'frase'), 'It wants to do something new.');
   const vecchio = { frase: 'Questo comando gira in Linux (WSL) come root, …' };
   assert.equal(testoDelCampo(vecchio, 'frase'), 'Questo comando gira in Linux (WSL) come root, …');
+});
+
+/* Decisioni 57 e 144 (04/11/2026): la carta della ricerca coi dollari, nelle due lingue; senza prezzo la frase di prima. */
+test('K4B-PERMESSO-DOLLARI: research card with a known price, in Italian and English; without a price the sentence of before', async () => {
+  const { azioneCartaRicerca } = await import('../../../src/kernel/talosHarness.mjs');
+  const conPrezzo = azioneCartaRicerca('c', { question: 'q', depth: 'quick' }, { in: 0.4, out: 1.6 });
+  const senza = azioneCartaRicerca('c', { question: 'q', depth: 'quick' }, null);
+  try {
+    impostaLingua('it');
+    assert.match(testoDelCampo(conPrezzo, 'frase'), /^Profondità: rapida\. Costo stimato: ~\$0\.\d{2,4} al prezzo pubblicato; ricerche ~2, pagine ~10, token ~\d+k, tempo ~\d+ min\.$/u);
+    assert.match(testoDelCampo(senza, 'frase'), /^Profondità: rapida\. Costo stimato: ricerche ~2, pagine ~10, token ~\d+k, tempo ~\d+ min\.$/u);
+    for (const depth of ['deep', 'exhaustive']) {
+      const carta = azioneCartaRicerca('c', { question: 'q', depth }, { in: 1, out: 1 });
+      assert.notEqual(testoDelCampo(carta, 'frase'), carta.frase, `${depth}: the dictionary has the Italian`);
+      assert.ok(testoDelCampo(carta, 'frase').includes(carta.fraseParams.dollari), depth);
+    }
+    impostaLingua('en');
+    assert.equal(testoDelCampo(conPrezzo, 'frase'), conPrezzo.frase);
+  } finally { impostaLingua('it'); }
+});
+
+/* Prova dell'escape (Desktop 04/11/2026, dopo la prova CRC-11 del Mobile: con escapeParameter acceso «~$<0.0001» usciva «~$&lt;0.0001»
+   sul telefono). Sul PC: la frase detta nella lingua dell'interfaccia (testoDelCampo, interpola) e la carta disegnata (creaApprovazione,
+   il campo del perché) mostrano i dollari come erano; il DOM finto fa cadere ogni innerHTML. */
+test('K4B-PERMESSO-DOLLARI-ESCAPE: «~$<0.0001» and a normal amount reach the card as text, in Italian and English, for every depth', async () => {
+  const { azioneCartaRicerca } = await import('../../../src/kernel/talosHarness.mjs');
+  const { creaApprovazione } = await import('../../src/components/conversazione.js');
+  const { documento } = await import('./aiuto-dom-blocchi.mjs');
+  const SEGNI_HTML = /&(?:lt|gt|amp|quot|#\d+);/u;
+  try {
+    for (const [prezzo, minuscolo] of [[{ in: 0.000001, out: 0.000001 }, true], [{ in: 0.4, out: 1.6 }, false]]) {
+      for (const depth of ['quick', 'deep', 'exhaustive']) {
+        const carta = azioneCartaRicerca('c', { question: 'q', depth }, prezzo);
+        const dollari = carta.fraseParams.dollari;
+        if (minuscolo) assert.equal(dollari, '~$<0.0001', depth);
+        else assert.match(dollari, /^~\$\d+\.\d{2,4}$/u, depth);
+        for (const lingua of ['it', 'en']) {
+          impostaLingua(lingua);
+          const testo = testoDelCampo(carta, 'frase');
+          assert.ok(testo.includes(dollari), `${lingua} ${depth}: ${testo}`);
+          assert.doesNotMatch(testo, SEGNI_HTML, `${lingua} ${depth}`);
+          const scheda = creaApprovazione({ badge: 'b', motivo: testo, nota: 'n' }, { document: documento() });
+          assert.equal(scheda.motivo.textContent, testo, `${lingua} ${depth}: la carta disegnata`);
+        }
+      }
+    }
+  } finally { impostaLingua('it'); }
 });

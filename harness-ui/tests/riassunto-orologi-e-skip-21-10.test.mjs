@@ -58,18 +58,28 @@ async function giro(t, { riassunto, opzioni = {}, prima = null }) {
 }
 const fine = (eventi) => eventi.filter((e) => e.tipo === 'compattazione-fine').at(-1);
 
-test('ORO-01 tetto totale: un riassunto che non risponde mai si abbandona allo scadere, e il giro prosegue col riassunto senza modello', async (t) => {
+/*
+ * ⛔ 28/10/2026 — ORO-01..05 sono SUPERATE dal contratto C1, owner 27/10/2026, «Sì, mai aspettare». Provavano gli orologi del riassunto
+ *   che il giro ASPETTAVA (tetto, inattività, Skip, Stop) all'emergenza; con un modello a chiave il giro non aspetta più nessun riassunto
+ *   del modello: la richiesta parte subito col riassunto senza modello (ragione 'in-arrivo') e quello del modello si fa in sottofondo, dove
+ *   gli orologi del riassunto atteso non valgono. Gli orologi restano per il riassunto atteso dei modelli locali e del /compact a mano
+ *   (C3); l'orologio da solo lo prova ancora ORO-06. Gli ID restano, e ognuna prova ora il contratto nella sua scena di prima. Sul codice
+ *   di prima (8fde46abf) sono rosse: la ragione era «tempo» o «saltato», o il giro aspettava il riassunto del modello.
+ */
+test('ORO-01 superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): un riassunto che non risponde mai non si aspetta fino al tetto — il giro parte subito col riassunto senza modello «in-arrivo», e quello del modello è uno solo, in sottofondo', async (t) => {
+  /* 28/10/2026: prima il giro aspettava il tetto (300 ms) e la ragione era «tempo» */
   const r = await giro(t, { riassunto: (_c, segnale) => abortito(segnale), opzioni: { riassuntoTettoMs: 300 } });
   assert.equal(r.errore, null, String(r.errore?.stack ?? ''));
   const f = fine(r.eventi);
   assert.equal(f?.compattato, true, JSON.stringify(r.eventi.map((e) => [e.tipo, e.motivo, e.ragione])));
   assert.equal(f.ripiego, true);
-  assert.equal(f.ragione, 'tempo');
-  assert.equal(r.conti.riassunti, 1, 'niente secondo tentativo dopo il tetto');
+  assert.equal(f.ragione, 'in-arrivo');
+  assert.equal(r.conti.riassunti, 1, 'un riassunto del modello solo, in sottofondo: niente secondo tentativo');
   assert.ok(r.durataMs < 20_000, `durata ${r.durataMs} ms`);
 });
 
-test('ORO-02 inattività dal primo token: un riassunto che manda un pezzo e poi tace si abbandona', async (t) => {
+test('ORO-02 superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): un riassunto che manda un pezzo e poi tace non tiene fermo il giro — riassunto senza modello «in-arrivo», subito', async (t) => {
+  /* 28/10/2026: prima l'orologio d'inattività abbandonava il riassunto atteso (ragione «tempo»); ora il giro non lo aspetta */
   const riassunto = (_c, segnale) => {
     const enc = new TextEncoder(); let mandato = false;
     return new Response(new ReadableStream({
@@ -81,13 +91,17 @@ test('ORO-02 inattività dal primo token: un riassunto che manda un pezzo e poi 
   };
   const r = await giro(t, { riassunto, opzioni: { progressoCompattazione: true, riassuntoInattivitaMs: 200, riassuntoTettoMs: 30_000 } });
   assert.equal(r.errore, null, String(r.errore?.stack ?? ''));
-  assert.equal(fine(r.eventi)?.ragione, 'tempo', JSON.stringify(r.eventi.map((e) => [e.tipo, e.motivo, e.ragione])));
+  assert.equal(fine(r.eventi)?.ragione, 'in-arrivo', JSON.stringify(r.eventi.map((e) => [e.tipo, e.motivo, e.ragione])));
   assert.ok(r.durataMs < 15_000, `durata ${r.durataMs} ms`);
 });
 
-test('ORO-03 verso contrario: una lettura lenta PRIMA del primo token non è inattività; il riassunto del modello arriva e si usa', async (t) => {
-  const riassunto = async (_c, segnale) => {
+test('ORO-03 superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»), verso contrario: una lettura lenta del riassunto non ferma il giro, e il riassunto del modello ARRIVA lo stesso (in sottofondo), pronto per la richiesta dopo', async (t) => {
+  /* 28/10/2026: prima il giro aspettava la lettura lenta e usava il riassunto del modello nella stessa richiesta; ora la richiesta parte
+     col riassunto senza modello «in-arrivo», e quello del modello — lo stesso, non un ripiego — arriva dopo e sostituirà il rapido */
+  const riassunto = async (corpo, segnale) => {
     await Promise.race([new Promise((r) => { setTimeout(r, 600); }), abortito(segnale)]);
+    /* il riassunto di sottofondo non va in streaming (niente riga viva da aggiornare): risponde nella forma che ha chiesto */
+    if (corpo.stream !== true) return RIASSUNTO_BUONO();
     const enc = new TextEncoder();
     return new Response(new ReadableStream({ start(c) {
       c.enqueue(enc.encode(sse([{ choices: [{ index: 0, delta: { role: 'assistant', content: `## Riassunto\n${'Dettaglio. '.repeat(20)}` } }] }, { choices: [{ index: 0, delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 1000, completion_tokens: 100 } }]) + 'data: [DONE]\n\n'));
@@ -98,26 +112,38 @@ test('ORO-03 verso contrario: una lettura lenta PRIMA del primo token non è ina
   assert.equal(r.errore, null, String(r.errore?.stack ?? ''));
   const f = fine(r.eventi);
   assert.equal(f?.compattato, true, JSON.stringify(r.eventi.map((e) => [e.tipo, e.motivo, e.ragione])));
-  assert.notEqual(f.ripiego, true, 'il riassunto del modello, non il ripiego');
+  assert.equal(f.ragione, 'in-arrivo', 'la richiesta non ha aspettato la lettura lenta');
+  const pronta = r.esito.compattazionePronta ?? await r.esito.compattazioneInPreparazione;
+  const testo = JSON.stringify(pronta?.record?.riassunto ?? null);
+  assert.ok(testo.includes('Dettaglio.'), `il riassunto del modello arriva e si tiene per la richiesta dopo: ${testo.slice(0, 200)}`);
+  assert.equal(typeof pronta.sostituisce, 'string', 'e dice quale riassunto rapido sostituisce');
 });
 
-test('ORO-04 Skip della persona: il riassunto atteso si annulla, il giro prosegue senza modello con ragione «saltato»', async (t) => {
+test('ORO-04 superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): non c\'è più un riassunto atteso da saltare — il giro prosegue subito col riassunto senza modello, ragione «in-arrivo»', async (t) => {
+  /* 28/10/2026: prima lo Skip annullava il riassunto atteso (ragione «saltato»); lo Skip vale ancora per il /compact a mano e i locali */
   const salta = new AbortController();
   const r = await giro(t, { riassunto: (_c, segnale) => abortito(segnale), opzioni: { segnaleSaltaRiassunto: salta.signal, riassuntoTettoMs: 30_000 },
     prima: (e) => { if (e.tipo === 'compattazione-inizio') setTimeout(() => salta.abort(), 50); } });
   assert.equal(r.errore, null, String(r.errore?.stack ?? ''));
   const f = fine(r.eventi);
   assert.equal(f?.ripiego, true, JSON.stringify(r.eventi.map((e) => [e.tipo, e.motivo, e.ragione])));
-  assert.equal(f.ragione, 'saltato');
+  assert.equal(f.ragione, 'in-arrivo');
   assert.ok(r.durataMs < 15_000);
 });
 
-test('ORO-05 verso contrario: lo Stop durante il riassunto resta uno Stop (niente ripiego, niente «tempo»)', async (t) => {
+test('ORO-05 superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»), verso contrario: uno Stop in arrivo non trova nessun riassunto atteso — la riga è il riassunto senza modello «in-arrivo», mai un «tempo»', async (t) => {
+  /* 28/10/2026: prima lo Stop interrompeva il riassunto atteso e non c'era nessun ripiego; ora il ripiego «in-arrivo» parte subito,
+     prima dello Stop, e il «tempo» dell'orologio non c'è comunque */
   const stop = new AbortController();
   const r = await giro(t, { riassunto: (_c, segnale) => abortito(segnale), opzioni: { segnaleStop: stop.signal, riassuntoTettoMs: 30_000 },
     prima: (e) => { if (e.tipo === 'compattazione-inizio') setTimeout(() => stop.abort(), 50); } });
   assert.ok(r.durataMs < 15_000);
-  assert.equal(r.eventi.some((e) => e.ripiego === true), false, JSON.stringify(r.eventi.map((e) => [e.tipo, e.motivo, e.ragione])));
+  assert.equal(r.eventi.some((e) => e.ragione === 'tempo'), false, JSON.stringify(r.eventi.map((e) => [e.tipo, e.motivo, e.ragione])));
+  assert.equal(fine(r.eventi)?.ragione, 'in-arrivo', JSON.stringify(r.eventi.map((e) => [e.tipo, e.motivo, e.ragione])));
+  /* 28/10/2026 (rossa 2 volte su ~6 sotto carico, già prima delle cure C-1…C-9): lo Stop arriva 50 ms dopo l'inizio e la preparazione di
+     sottofondo può non aver ancora mandato la richiesta — allora lo Stop la ferma prima e non si paga niente, che è giusto. Il punto è
+     «mai un secondo riassunto», non «uno per forza». */
+  assert.ok(r.conti.riassunti <= 1, `al più un riassunto del modello, in sottofondo (${r.conti.riassunti})`);
 });
 
 test('ORO-06 l\'orologio: Skip già scattato vale subito; chiudi() spegne i timer; l\'inattività non parte senza vita()', async () => {
@@ -146,11 +172,15 @@ for (const [code, ragione] of [['CTX_COMPACTION_TIMEOUT', 'tempo'], ['CTX_INVALI
   });
 }
 
-test('ENG-03 verso contrario: un altro errore del motore (archivio) ripiega come prima, e la compattazione semplice chiama il modello', async (t) => {
+test('ENG-03 superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»), verso contrario: un altro errore del motore (archivio) ripiega come prima, e la compattazione semplice chiama il modello — ora in sottofondo, dopo il riassunto senza modello «in-arrivo»', async (t) => {
+  /* 28/10/2026: prima la compattazione semplice pagava il riassunto del modello DENTRO il giro e la riga non era un ripiego; col
+     contratto C1 la richiesta parte col riassunto senza modello (ragione 'in-arrivo') e quello del modello si chiede in sottofondo. Il
+     verso contrario di ENG-02 resta: qui il modello SI chiede. */
   const r = await giro(t, { riassunto: () => RIASSUNTO_BUONO(), opzioni: { contextHooks: motoreCheFallisce('CTX_HISTORY_DIVERGED') } });
   assert.equal(r.errore, null, String(r.errore?.stack ?? ''));
   assert.ok(r.conti.riassunti >= 1, 'qui il riassunto del modello si chiede');
-  assert.equal(r.eventi.some((e) => e.ripiego === true && e.compattato === true), false);
+  const f = r.eventi.filter((e) => e.tipo === 'compattazione-fine' && e.compattato === true).at(-1);
+  assert.equal(f?.ragione, 'in-arrivo', JSON.stringify(r.eventi.map((e) => [e.tipo, e.motivo, e.codice, e.ragione])));
 });
 
 test('ENG-04 Skip mentre il motore del contesto riassume: il motore riceve l\'annullo nel segnale, e il giro prosegue senza modello («saltato»), non come uno Stop', async (t) => {

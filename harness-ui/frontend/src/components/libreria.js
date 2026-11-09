@@ -52,7 +52,7 @@ import { nomeModelloUmano } from './chat-foot.js'; // BC-38: un id di modello no
 /* ⛔ Le etichette si leggono a ogni uso (getter e funzioni), non alla creazione del modulo: seguono il cambio di lingua. */
 const TIPI=new Map([['document',{get testo(){return traduci('sezioni.library.type.document');},icona:'doc'}],['image',{get testo(){return traduci('sezioni.library.type.image');},icona:'image'}]]);
 const ORIGINI=new Map([['uploaded',()=>traduci('sezioni.library.origin.uploaded')],['generated',()=>traduci('sezioni.library.origin.generated')]]);
-export function tipoVoceLibreria(tipo){return TIPI.get(tipo)||{testo:traduci('sezioni.library.type.unknown'),icona:'files'};}
+export function tipoVoceLibreria(tipo){return TIPI.get(tipo)||{testo:traduci('sezioni.library.type.unknown'),icona:'doc'};}
 export function origineVoceLibreria(origine){return (ORIGINI.get(origine)||(()=>traduci('sezioni.library.origin.unknown')))();}
 export function testiVoceLibreria(voce){
  const nome=typeof voce?.nome==='string'&&voce.nome.trim()?voce.nome:traduci('sezioni.library.unnamed');

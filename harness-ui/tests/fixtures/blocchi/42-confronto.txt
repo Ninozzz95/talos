@@ -1,0 +1,1 @@
+root = Confronto("dove", null, [{nome: "In rete", pro: ["Modelli più grandi", "Niente da installare"], contro: ["Costa a ogni richiesta"]}, {nome: "Locale", pro: ["Privato", "Gratis dopo l'acquisto"]}])

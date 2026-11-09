@@ -55,7 +55,7 @@ async function avvia(t, { cartella, voci = new Map(), lasciapassarePagine, token
       ? { ok: true, ...voci.get(voceId) }
       : { erroreAvvio: 'Questa voce della Libreria non esiste', code: 'LIBRARY_NOT_FOUND' }),
   };
-  const app = createHttpApp({ staticHandler: async () => null, sessionRegistry, listaTaskDisponibili: () => [], token,
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry, listaTaskDisponibili: () => [], token,
     ...(lasciapassarePagine ? { lasciapassarePagine } : {}) });
   const server = createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));

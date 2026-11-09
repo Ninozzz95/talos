@@ -58,7 +58,7 @@ async function server(t, store) {
     leggiSessioneContesto: (id) => (id === SESSIONE && !eliminate.includes(id) ? { sessionId: id } : null),
     elimina: async (id) => { eliminate.push(id); return { ok: true }; },
   };
-  const srv = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registry, workflowStore: store }));
+  const srv = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registry, workflowStore: store }));
   await new Promise((resolve) => srv.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => srv.close(resolve)));
   return { base: `http://127.0.0.1:${srv.address().port}`, eliminate };

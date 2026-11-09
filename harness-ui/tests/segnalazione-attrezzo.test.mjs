@@ -182,7 +182,7 @@ test('SEGN-R-02 — senza nessuno davanti la porta non si lega (nessuno vedrebbe
 
 /* ——— la rotta della diagnostica ——— */
 async function ascolta(t, opzioni) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, ...opzioni }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, ...opzioni }))
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
   t.after(() => new Promise((ok) => server.close(() => ok())))
   return `http://127.0.0.1:${server.address().port}`

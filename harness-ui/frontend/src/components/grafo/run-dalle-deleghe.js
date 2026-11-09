@@ -56,6 +56,13 @@ export function nomeDellAgente(agente, massimo = NOME_MASSIMO) {
 export const NOME_MASSIMO = 160;
 const HA_UN_SEGNO_VISIBILE = /[^\s\u200B-\u200D\u2060\uFEFF]/u;
 export const NOME_IN_UNA_FRASE = 60;
+/* Blocco 21 (01/11/2026): l'elenco porta la cartella come `{ cartellaId, nome }`, le prove di prima come stringa. Due righe della stessa cartella sono oggetti
+   diversi: si confronta questa chiave, mai la riga. Stringa vuota = cartella non nota. */
+export function chiaveCartella(cartella) {
+  if (typeof cartella === 'string') return cartella;
+  return typeof cartella?.cartellaId === 'string' ? cartella.cartellaId : '';
+}
+
 export function nomeBreve(testo, massimo = NOME_MASSIMO) {
   const intero = typeof testo === 'string' ? testo : '';
   /* si guarda solo l'inizio (una consegna da migliaia di caratteri non si ripulisce tutta per tenerne 160), ma l'inizio del TESTO:
@@ -197,9 +204,10 @@ export function runDalleDeleghe({ corrente = {}, sessioni = [], figli = [] } = {
   /* ⛔ Owner 13/10/2026 (mockup approvato) — AMBITO «cartella» (era della vista classica, `grafo-agenti.js:102`): le ALTRE
      conversazioni della stessa cartella, che non stanno nell'albero di questa, in un gruppo loro in fondo, senza frecce (non le
      ha avviate questa conversazione). Senza una cartella nota non c'è niente da aggiungere. */
-  const cartellaNota = typeof corrente.cartella === 'string' && corrente.cartella !== '';
+  const cartellaCorrente = chiaveCartella(corrente.cartella);
+  const cartellaNota = cartellaCorrente !== '';
   if (ambito === 'cartella' && cartellaNota) {
-    const altre = [...mappa.values()].filter((a) => a.cartella === corrente.cartella && !profondita.has(a.sessionId)).sort(ordine);
+    const altre = [...mappa.values()].filter((a) => chiaveCartella(a.cartella) === cartellaCorrente && !profondita.has(a.sessionId)).sort(ordine);
     if (altre.length) lotti.push({ da: null, quando: null, ultimo: null, agenti: altre, richiesta: null, cartella: true, numero: null });
   }
   /* FILTRO PER STATO e «ISOLA UN RAMO» (owner 13/10/2026: gli agenti fuori dal filtro SPARISCONO, il diagramma si ricompone).

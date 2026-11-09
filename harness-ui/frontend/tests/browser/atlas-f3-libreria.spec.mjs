@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
 import { expect, test } from '@playwright/test';
+import { statoColCookie } from './fixtures/cookie-della-corsa.mjs';
 import { rimuoviCartellaDiProva } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 
 test.use({ locale: 'it-IT' });
@@ -79,7 +80,7 @@ test.beforeAll(async ({ playwright, baseURL }) => {
     writeFileSync(join(base, 'meta.json'), JSON.stringify({ nome, mediaType, origine, creatoIl: adesso, aggiornatoIl: adesso }, null, 2));
     writeFileSync(join(base, 'contenuto'), byte);
   }
-  const api = await playwright.request.newContext({ baseURL });
+  const api = await playwright.request.newContext({ baseURL, storageState: statoColCookie(baseURL) });
   expect((await api.post('/api/v1/providers/openrouter/key', { data: { key: 'sk-f3-libreria-fixture' } })).ok()).toBe(true);
   const r = await api.post('/api/v1/sessions/custom', { data: { cartellaLibera: cartella, consegna: 'prova F3 della Libreria: non fare nulla', modello: MODELLO } });
   expect(r.ok(), `creazione della sessione: ${await r.text()}`).toBe(true);

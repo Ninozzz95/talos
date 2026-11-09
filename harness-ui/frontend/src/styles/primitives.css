@@ -50,6 +50,10 @@
 .talos-button--secondary { border-color: var(--talos-border); background: var(--talos-card-subtle); }
 .talos-button--secondary:hover:not(:disabled),
 .talos-button--ghost:hover:not(:disabled) { border-color: var(--talos-border-strong); background: var(--talos-card-hover); }
+/* Decisione 198: il ▶ senza niente da riprendere resta raggiungibile (il titolo dice quando si accende) ma è spento come un tasto
+   disabilitato, e al passaggio del puntatore non si accende: un'azione che non fa niente non si evidenzia */
+.talos-button[data-tasto-riprendi][aria-disabled="true"] { color: var(--talos-muted); cursor: not-allowed; opacity: 0.58; }
+.talos-button.talos-button--secondary[data-tasto-riprendi][aria-disabled="true"]:hover { border-color: var(--talos-border); background: var(--talos-card-subtle); }
 .talos-button--ghost { color: var(--talos-muted); }
 .talos-button--danger { border-color: var(--talos-danger); color: var(--talos-danger); }
 .talos-button--sm { min-height: var(--talos-control-height); padding-inline: var(--talos-space-control); font-size: var(--talos-font-size-xs); }

@@ -118,6 +118,21 @@ test('BC80 — si aggiorna al terzo file senza ricaricare, e sparisce quando non
   expect(vuoto.nascosto, 'e il posto non resta occupato da uno spazio vuoto').toBe(true);
 });
 
+test('BC80 — un file nuovo conta le sue righe vere: l a capo finale non è una riga, un file vuoto ne ha zero', async ({ page }) => {
+  await apriConFile(page, { larghezza: 1440, altezza: 900, tema: 'dark', quantiFile: 1 });
+  const piu = async () => Number(/\+(\d+)/u.exec((await page.evaluate(MISURA)).testo)?.[1]);
+  const base = await piu();
+  const scrivi = (percorso, testo) => page.evaluate(async ([p, t]) => { window.__bc80Scrivi(p, null, t); await new Promise((x) => requestAnimationFrame(x)); }, [percorso, testo]);
+  await scrivi('a.txt', 'uno\n');
+  expect(await piu(), 'una riga con l a capo').toBe(base + 1);
+  await scrivi('b.txt', 'uno\ndue');
+  expect(await piu(), 'due righe senza a capo').toBe(base + 3);
+  await scrivi('c.txt', '');
+  expect(await piu(), 'un file vuoto').toBe(base + 3);
+  await scrivi('d.txt', '\n');
+  expect(await piu(), 'una riga vuota è una riga').toBe(base + 4);
+});
+
 test('BC80 — con dodici linguette scorre la striscia, il riassunto resta', async ({ page }) => {
   await apriConFile(page, { larghezza: 1024, altezza: 800, tema: 'dark', quantiFile: 12 });
   const m = await page.evaluate(MISURA);

@@ -6,7 +6,7 @@ import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
 import { filoRagionamentoDiretti, livelliRagionamentoDiretti } from '../src/model-destination.mjs';
 
 async function listen(t, { catalogoModelliFn } = {}) {
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     catalogoModelliFn,
   });

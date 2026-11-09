@@ -258,8 +258,14 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
         if (urlAmmesso(indirizzo)) { a.setAttribute('href', indirizzo); a.setAttribute('target', '_blank'); a.setAttribute('rel', 'noopener noreferrer'); }
         a.textContent = senzaEscape(link);
         contenitore.appendChild(a);
-      } else if (match[GRUPPI.forte] !== undefined) contenitore.appendChild(elementoTesto(doc, 'strong', '', senzaEscape(match[GRUPPI.forte])));
-      else if (match[GRUPPI.codice] !== undefined) contenitore.appendChild(elementoTesto(doc, 'code', '', match[GRUPPI.codice]));
+      } else if (match[GRUPPI.forte] !== undefined) {
+        /* Revisione d'uso della candidata, reperto 5 (04/11/2026): `**\`node --version\`**` mostrava gli apici inversi, perché il grassetto
+           metteva il suo contenuto come testo. Il contenuto passa dalla stessa lettura in linea (CommonMark 0.31.2, es. 428 e 433: lo
+           strong contiene corsivo e link; Hermes lo fa con remark, `markdown-text.tsx:22`). Non si richiude su sé stesso: `[^*]+`. */
+        const forte = doc.createElement('strong');
+        applicaInline(forte, match[GRUPPI.forte]);
+        contenitore.appendChild(forte);
+      } else if (match[GRUPPI.codice] !== undefined) contenitore.appendChild(elementoTesto(doc, 'code', '', match[GRUPPI.codice]));
       else contenitore.appendChild(elementoTesto(doc, 'em', '', senzaEscape(match[GRUPPI.corsivoA] !== undefined ? match[GRUPPI.corsivoA] : match[GRUPPI.corsivoB])));
       ultimo = pattern.lastIndex;
     }

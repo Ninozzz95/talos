@@ -220,7 +220,8 @@ for (const tema of ['dark', 'light']) {
       /* 2. ⛔ E IL NUMERO NON MANGIA L'ETICHETTA: dentro la scheda si legge la parola E il numero. */
       // 26/09/2026 — F6-1 (decisioni dell'owner su F6): la quinta scheda «GitHub», subito dopo File. Ci stanno tutte e cinque grazie
       // al margine di 6 px delle schede (owner, stesso giorno, seconda risposta coi numeri giusti: «margine 6 px + scorrimento»).
-      expect(m.schede.map((s) => s.testo)).toEqual(['Contesto', 'File', 'Git', 'Agenti 3', 'Processi 1']);
+      // 03/11/2026 — FE-010 (la chat a lato, owner 31/10): la sesta scheda «A lato», in fondo; se non ci stanno, la fila scorre.
+      expect(m.schede.map((s) => s.testo)).toEqual(['Contesto', 'File', 'Git', 'Agenti 3', 'Processi 1', 'A lato']);
     });
   }
 }
@@ -279,17 +280,18 @@ test('BADGE-SCORRIMENTO — se le schede non ci stanno la fila scorre nella colo
  * anche le tre schede nascoste del pannello vecchio: il giro atterrava su una di quelle e nella colonna non restava nessuna
  * scheda scelta.
  */
-test('BADGE-FRECCE-GIRO — la freccia gira fra le cinque schede della colonna, nei due versi', async ({ page }) => {
+// 03/11/2026 — FE-010: l'ultima scheda della fila è «A lato» (la chat a lato), non più Processi.
+test('BADGE-FRECCE-GIRO — la freccia gira fra le sei schede della colonna, nei due versi', async ({ page }) => {
   await scena(page, { tema: 'dark', larghezza: 1440, altezza: 900 });
   const scelta = () => page.locator('#railTabs [aria-selected="true"]').getAttribute('data-rail');
   const fuocoNellaFila = () => page.evaluate(() => Boolean(document.activeElement?.closest('#railTabs')));
-  await page.locator('#railTabs [data-rail="processi"]').click();
-  await page.locator('#railTabs [data-rail="processi"]').focus();
+  await page.locator('#railTabs [data-rail="lato"]').click();
+  await page.locator('#railTabs [data-rail="lato"]').focus();
   await page.keyboard.press('ArrowRight');
   expect(await scelta(), 'dall’ultima, a destra si torna alla prima').toBe('contesto');
   expect(await fuocoNellaFila(), 'il fuoco resta nella fila').toBe(true);
   await page.keyboard.press('ArrowLeft');
-  expect(await scelta(), 'dalla prima, a sinistra si va all’ultima').toBe('processi');
+  expect(await scelta(), 'dalla prima, a sinistra si va all’ultima').toBe('lato');
   expect(await fuocoNellaFila()).toBe(true);
   await expect(page.locator('#railTabs [aria-selected="true"]'), 'una scheda sola è scelta nella colonna').toHaveCount(1);
 });

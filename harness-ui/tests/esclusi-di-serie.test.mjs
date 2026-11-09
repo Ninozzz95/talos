@@ -48,7 +48,7 @@ test('SERIE-10 — la rotta: toglie e rimette una voce di serie, solo dalla fine
   const dir = mkdtempSync(join(tmpdir(), 'talos-di-serie-http-'))
   t.after(() => rimuoviCartellaDiProva(dir))
   const providerStore = createProviderCredentialStore({ env: {}, runtimeFile: join(dir, 'providers.json') })
-  const server = createServer(createHttpApp({ staticHandler: async () => null, providerStore }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore }))
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
   t.after(() => new Promise((ok) => server.close(ok)))
   const base = `http://127.0.0.1:${server.address().port}`
@@ -82,7 +82,7 @@ test('SERIE-12 — il «Salva» unico: `/esclusi {esclusi, diSerie}` scrive list
   t.after(() => rimuoviCartellaDiProva(dir))
   const providerStore = createProviderCredentialStore({ env: {}, runtimeFile: join(dir, 'providers.json') })
   providerStore.impostaEsclusi('openrouter', ['chutes'])
-  const server = createServer(createHttpApp({ staticHandler: async () => null, providerStore }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore }))
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
   t.after(() => new Promise((ok) => server.close(ok)))
   const base = `http://127.0.0.1:${server.address().port}`

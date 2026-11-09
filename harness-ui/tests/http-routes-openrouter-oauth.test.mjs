@@ -42,7 +42,7 @@ function openRouterFinto({ ok = true, status = 200, corpo = { key: CHIAVE_FINTA 
 }
 
 async function listen(t, deps = {}) {
-  const app = createHttpApp({ staticHandler: async () => null, ...deps });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, ...deps });
   const server = createServer(app);
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise((resolve) => server.close(resolve)));

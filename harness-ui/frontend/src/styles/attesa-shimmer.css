@@ -54,6 +54,11 @@
  */
 .real-reasoning-note[data-ragionamento="vivo"] > .talos-activity__head > .tool-note-summary-text{ flex: none; }
 .talos-ragionamento__argomento{ flex: 1 1 auto; min-width: 0; font-weight: 400; }
+/* R-36 variante A (owner 30/10/2026 notte): «Sta ragionando · argomento · 12 s»; senza argomento niente punto, restano i secondi */
+/* 31/10/2026, prova dal vivo sulla 4177 (gpt-6-luna): con lo spazio DENTRO il contenuto si leggeva «·Tracing» — lo spazio di una
+   lettera a 13 px contro gli 8 px di distanza della riga a sinistra del punto. Il punto senza spazio e un margine di mezza lettera
+   a destra: lo stesso respiro ai due lati. */
+.talos-ragionamento__argomento:not(:empty)::before{ content: '·'; margin-inline-end: .5em; }
 /*
  * ⛔⛔ 13/09 notte, GIRO VERO con glm-5.3-flash (foto `04-in-coda-scuro`): con un argomento lungo i secondi
  *   andavano A CAPO — «4» sopra, «s» sotto. L'argomento cede spazio (`min-width: 0`), ma anche i secondi

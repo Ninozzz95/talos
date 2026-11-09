@@ -315,7 +315,7 @@ test('DELEGHE-PARITA-10 — tutta la scheda sceglie l’agente (il nome, la past
   await expect(nomeNelDettaglio).not.toContainText(scelta === 'a' ? 'Agente B' : 'Agente A');
 });
 
-test('DELEGHE-PARITA-11 — la scheda in cima dice SUBITO l’attrezzo che la conversazione sta usando, e quando ha finito — senza aspettare una rilettura dal server', async ({ page }) => {
+test('DELEGHE-PARITA-11 — la scheda in cima dice SUBITO lo strumento che la conversazione sta usando, e quando ha finito — senza aspettare una rilettura dal server', async ({ page }) => {
   /* era la parte «operazioni in diretta» di RIPRESA-GRAFO-MADRE della vista classica (`data-operativo` entro 1,5 s). Misurato il
      14/10/2026 sul diagramma nuovo: con la rilettura dei figli appesa la scheda restava su «Tra due operazioni» per tutto
      l'attrezzo; col server vivo arrivava al battito (fino a 5 s dopo), e un attrezzo più corto non si vedeva mai. */

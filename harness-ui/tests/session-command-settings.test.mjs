@@ -53,7 +53,7 @@ function freshProcess(b, sessionId=b.sessionId) {
   assert.equal(result.status,0,result.stderr);return JSON.parse(result.stdout.trim());
 }
 async function http(t, registry) {
-  const server=createServer(createHttpApp({sessionRegistry:registry}));
+  const server=createServer(createHttpApp({ senzaGettone: 'prove', sessionRegistry:registry}));
   await new Promise((ok,ko)=>{server.once('error',ko);server.listen(0,'127.0.0.1',ok);});
   t.after(()=>new Promise(ok=>server.close(ok)));
   const base='http://127.0.0.1:'+server.address().port;

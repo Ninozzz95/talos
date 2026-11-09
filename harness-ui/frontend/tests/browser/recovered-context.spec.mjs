@@ -11,7 +11,7 @@ for (const theme of ['dark', 'light']) test(`RETRY08-UI ${theme}: rebuilt contex
   }, theme);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.route('**/api/v1/sessions/retry08-*/events', () => {});
+  await page.route('**/api/v1/sessions/retry08-*/events*', () => {});
   const open = async id => {
     await page.waitForFunction(() => window.__talosHarnessUiRuntime);
     await page.locator('#talosAvvio').waitFor({ state: 'detached' });

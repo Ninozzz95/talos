@@ -6,6 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { verificaPermessoScrittura } from '../src/kernel/talosHarness.mjs';
+import { chiaveDelConsensoDi } from '../src/path-policy.mjs';
 
 const pieno = (azione, extra = {}) => verificaPermessoScrittura(azione, { livelloAccesso: 'accesso-pieno', ...extra });
 
@@ -35,7 +36,7 @@ test('CASA-LETTA-03 — the «for this session» yes on that path is honoured: n
   const chiedi = async (a) => { chieste.push(a); return true; };
   await pieno({ tipo: 'leggi', percorso: '~/.npmrc' }, { chiediApprovazioneFn: chiedi });
   assert.equal(chieste.length, 1, 'premessa: chiede');
-  const chiave = chieste[0].segreto.chiaveDelConsenso ?? chieste[0].segreto.percorso;
+  const chiave = chiaveDelConsensoDi(chieste[0].segreto, 'leggi'); // la stessa funzione del registro (decisione 107)
   const dopo = await pieno({ tipo: 'leggi', percorso: '~/.npmrc' }, { chiediApprovazioneFn: chiedi, consensiSessione: { segretiConsentiti: [chiave] } });
   assert.equal(dopo.consentito, true);
   assert.equal(chieste.length, 1, 'no second card');

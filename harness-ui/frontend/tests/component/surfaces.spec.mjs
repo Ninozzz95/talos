@@ -96,7 +96,7 @@ test('SUP-VIS-06 ⭐ il percorso della Topbar è troncato al centro ma leggibile
   expect(visibile.endsWith('harness-ui')).toBe(true);
 });
 
-test('SUP-VIS-07 ⛔ nessun nome tecnico di attrezzo compare come TITOLO nell\'inventario', async ({ page }) => {
+test('SUP-VIS-07 ⛔ nessun nome tecnico di strumento compare come TITOLO nell\'inventario', async ({ page }) => {
   await apriLaboratorio(page);
   const titoli = await page.locator('[data-testid="lab-capability"] .talos-list-row__title').allInnerTexts();
   expect(titoli.length).toBeGreaterThan(0);

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 
 import { ID_DESTINAZIONE_CHAT, idPerWire } from './provider-registry.mjs';
 import { FORMA_ID_MODELLO_LOCALE } from './local-model-store.mjs';
+import { MOTORE_FISSATO } from './motore-fissato.mjs';
 import { CHIAVE_COORDINAZIONE } from './coordinazione.mjs';
 
 // P-L · JSON del runtime non segreto dell'agente esterno, letto solo alla richiesta.
@@ -22,6 +23,15 @@ export const DEFAULT_HOST = '127.0.0.1';
 export const DEFAULT_PORT = 4174;
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
+
+/**
+ * S8 della revisione cloud della PR 20 (04/11/2026): l'indirizzo del server per un link. Un host IPv6 (`::1`) va fra parentesi quadre (RFC 3986 §3.2.2,
+ * «IP-literal = "[" IPv6address "]"»), come fa Hermes (`hermes_cli/web_server_chat.py:614`); `http://::1:4174` non è un indirizzo.
+ */
+export function indirizzoDelServer(host, porta) {
+  const nome = String(host);
+  return `http://${nome.includes(':') && !nome.startsWith('[') ? `[${nome}]` : nome}:${porta}`;
+}
 
 /**
  * ⛔⛔ ALLOWLIST: TALOS_HARNESS_UI_MODEL può solo SCEGLIERE fra questi, mai introdurne uno
@@ -253,7 +263,8 @@ export function modelloRichiestaValido(raw) {
  * catalogo dichiara è un cancello che litiga con i propri dati.
  */
 const EFFORT_AMMESSI = new Set(['max', 'xhigh', 'high', 'medium', 'low', 'minimal', 'none']);
-const SUMMARY_AMMESSI = new Set(['auto', 'concise', 'detailed']);
+/* `none` (owner: muto «solo -p e banco»): lo chiede chi ospita senza una persona davanti, l'interfaccia non lo manda mai. */
+const SUMMARY_AMMESSI = new Set(['auto', 'concise', 'detailed', 'none']);
 
 /** Stesso principio di modelloRichiestaValido: pura, nessun throw. */
 export function reasoningRichiestaValido(raw) {
@@ -414,7 +425,7 @@ function parseLlamaServerPath(raw, moduleUrl, sondaMotore) {
    */
   /* L2 (20/10/2026): prima la build fissata nel pacchetto (b11669 = v0.7.0), poi quella di prima, per i cloni di sviluppo che hanno
      ancora la vecchia (ognuno resta un DEFAULT: `TALOS_LLAMA_SERVER_PATH` vince sempre) */
-  for (const cartella of ['.local-runtime/b11669-vulkan/', '.local-runtime/b11669/', '.local-runtime/b10517-vulkan/', '.local-runtime/b10517/']) {
+  for (const cartella of [`.local-runtime/b${MOTORE_FISSATO.build}-vulkan/`, `.local-runtime/b${MOTORE_FISSATO.build}/`, '.local-runtime/b10517-vulkan/', '.local-runtime/b10517/']) {
     try {
       const candidate = fileURLToPath(new URL(`${cartella}llama-server.exe`, moduleUrl));
       if (!statSync(candidate).isFile()) continue;
@@ -657,9 +668,15 @@ export function loadConfig(
     llamaServerFallbackPath: typeof env.TALOS_LLAMA_SERVER_FALLBACK_PATH === 'string' && env.TALOS_LLAMA_SERVER_FALLBACK_PATH.trim()
       ? resolve(env.TALOS_LLAMA_SERVER_FALLBACK_PATH.trim())
       : (!env.TALOS_LLAMA_SERVER_PATH?.trim() ? parseLlamaServerPath(undefined, moduleUrl, () => ({ status: 1 })) : undefined),
+    /* 01/11/2026: the engine path was set by a person, not chosen by the desktop shell among the packaged engines (`versione-del-motore.mjs`). */
+    llamaServerManuale: Boolean(env.TALOS_LLAMA_SERVER_PATH?.trim()) && env.TALOS_LLAMA_SERVER_DAL_PACCHETTO !== '1',
     /* Router mode of the local engine (owner 26/10/2026 night, decision 3): behind a switch, OFF by default, until the bench promotes
        it. Only the exact value `1` turns it on; anything else (absent, `0`, `true`) leaves today's engine. `llama-router-supervisor.mjs`. */
     motoreLocaleRouter: env.TALOS_LOCAL_ROUTER === '1',
+    /* owner 01/11 and 02/11/2026: without the copy of the model in RAM, by default since the bench held (281 runs, 7 families); `auto` gives the engine's
+       default back. An engine chosen by hand gets it only if asked: an older binary refuses an unknown option and would stop opening models (CLI review). */
+    caricamentoMotore: env.TALOS_LOCAL_LOAD_MODE === 'none' || (env.TALOS_LOCAL_LOAD_MODE !== 'auto' && !(Boolean(env.TALOS_LLAMA_SERVER_PATH?.trim()) && env.TALOS_LLAMA_SERVER_DAL_PACCHETTO !== '1')) ? 'none' : null,
+    attrezziEmulati: env.TALOS_EMULATED_TOOLS === '1', // owner 01/11/2026: off until the bench promotes it, three tasks out of three on 5 families
     ownerRuntimeModule: parseOwnerRuntimeModule(env.TALOS_OWNER_RUNTIME_MODULE, moduleUrl),
     ricercaWeb: parseRicercaWeb(env),
     labs: parseLabs(env.TALOS_LABS, moduleUrl), // ⭐ 04/9, W0-04

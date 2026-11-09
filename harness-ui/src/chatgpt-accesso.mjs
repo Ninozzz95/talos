@@ -96,6 +96,9 @@ export function creaAccessoChatgpt({
   if (!custodia) throw errore('The ChatGPT sign-in needs a custody.', 'CHATGPT_CUSTODIA_ASSENTE');
   let tentativo = null; // { ascolto, scadenza, esito: Promise, dichiara: (chiusura) => void }
   let rinnovoInCorso = null;
+  /* D1 di R116 (forma §8): la ripetizione dopo un rinnovo è stata rifiutata DI NUOVO ⇒ l'account resta collegato in custodia ma l'accesso
+     non vale. Solo in memoria, mai un token; lo toglie un nuovo accesso riuscito o l'uscita. */
+  let rifiutatoDopoRinnovo = false;
   let scoperta = null;
 
   const chiedi = async (indirizzo, opzioni) => {
@@ -182,6 +185,7 @@ export function creaAccessoChatgpt({
       salva('registrazione', { clientId: letto.clientId, idDellHost: registrazione?.idDellHost, sub: chi.sub, email: chi.email });
       salva('sessione', { clientId: letto.clientId, sub: chi.sub, accessToken: t.accessToken, refreshToken: t.refreshToken, idToken: t.idToken,
         scadeAlle: t.scadeAlle, rinnovaNonPrimaDi: t.rinnovaNonPrimaDi, scopes: t.scopes });
+      rifiutatoDopoRinnovo = false; // D1 di R116: un accesso nuovo vale di nuovo
       pagina(200, { esito: 'riuscito', titolo: testi.okTitolo, frase: t.pianoAbilitato ? testi.okFrase(chi.email) : testi.okSenzaPiano, poi: testi.okPoi });
       return { ok: true, email: chi.email, pianoAbilitato: t.pianoAbilitato };
     } catch (guasto) {
@@ -193,7 +197,7 @@ export function creaAccessoChatgpt({
     }
   }
 
-  return {
+  const accesso = {
     /** Ciò che l'interfaccia può sapere. Mai un token. */
     stato() {
       const r = custodia.leggi('registrazione');
@@ -296,9 +300,32 @@ export function creaAccessoChatgpt({
       return rinnovoInCorso;
     },
 
+    /**
+     * Decisione 116 C (owner 04/11/2026), stato 2 — il servizio ha RIFIUTATO `rifiutato` (un 401 a metà giro). Se in custodia c'è già un
+     * token buono e diverso, non da rinnovare (rinnovato da un'altra richiesta o da un altro processo), si usa quello senza rete; sennò un
+     * rinnovo forzato, con lo stesso lucchetto e lo stesso «un rinnovo per volta» di `tokenDiAccesso` (più richieste rifiutate insieme ⇒
+     * un rinnovo solo). Un rinnovo che restituisce lo stesso token rifiutato non è un rinnovo: `CHATGPT_RINNOVO_FALLITO`. Gli altri guasti
+     * sono quelli di `tokenDiAccesso` (rete ⇒ la sessione resta; refresh token non più valido ⇒ `CHATGPT_ACCESSO_SCADUTO` e la sessione
+     * si toglie). Forma: Codex, rilettura e rinnovo forzato dopo un 401 (openai/codex issue 7144; developers.openai.com/codex/auth/ci-cd-auth).
+     */
+    async rinnovaDopoRifiuto(rifiutato) {
+      const s = custodia.leggi('sessione');
+      if (s?.refreshToken && s.accessToken && pianoAbilitato(s.scopes) && s.accessToken !== rifiutato
+        && clock() < quandoRinnovare({ scadeAlle: s.scadeAlle, rinnovaNonPrimaDi: s.rinnovaNonPrimaDi })) return s.accessToken;
+      const nuovo = await accesso.tokenDiAccesso({ forzaRinnovo: true });
+      if (nuovo === rifiutato) throw errore('The ChatGPT session could not be renewed.', 'CHATGPT_RINNOVO_FALLITO');
+      return nuovo;
+    },
+
     /** Esce: revoca il refresh token e toglie la sessione. `revocaConfermata` falso = tolta qui, da scollegare anche in ChatGPT. */
+    /** D1 di R116: segnato dall'adattatore quando la richiesta ripetuta dopo il rinnovo riceve un altro 401 (solo sul PC). */
+    segnaRifiutatoDopoRinnovo() { rifiutatoDopoRinnovo = true; },
+    /** Vero se l'accesso collegato è stato rifiutato dopo il rinnovo e nessun accesso nuovo è riuscito da allora. */
+    rifiutatoDopoRinnovo() { return rifiutatoDopoRinnovo; },
+
     async esci() {
       chiudiTentativo();
+      rifiutatoDopoRinnovo = false;
       const s = custodia.leggi('sessione');
       let revocaConfermata = false;
       if (s?.refreshToken && s.clientId) {
@@ -315,4 +342,5 @@ export function creaAccessoChatgpt({
       return { revocaConfermata };
     },
   };
+  return accesso;
 }

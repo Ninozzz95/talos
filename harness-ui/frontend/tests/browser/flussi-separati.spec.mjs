@@ -75,7 +75,7 @@ async function scena(page, { conFlussi, colorMode = 'dark', codice = 0, stdoutVu
    *   L'interruttore è la RIGA (`#conversation .talos-tool-row`), non un bottone dentro di lei.
    */
   const riga = page.locator('#conversation .talos-tool-row').first();
-  await expect(riga, 'la scena non si è formata: nessuna riga di attrezzo').toHaveCount(1);
+  await expect(riga, 'la scena non si è formata: nessuna riga di strumento').toHaveCount(1);
   /*
    * ⛔ APERTURA PER VIA DIRETTA, E DICHIARATA. La riga nasce dentro un contenitore chiuso e il suo
    *   interruttore non è raggiungibile da qui: `click` va in timeout (provato). Questa prova NON è

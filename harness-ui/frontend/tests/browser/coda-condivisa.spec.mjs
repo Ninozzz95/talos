@@ -28,7 +28,7 @@ for (const modo of ['dark', 'light']) {
       }, modo);
       /* VELO-SPEC-2 (08/10/2026, bugfixer): flusso APERTO E MUTO, come in scroll-p0.spec.mjs, e il confine in `apri`. Senza confine la
          chat restava sotto il velo (`#conversation.is-restoring`, `visibility:hidden`) e le foto della coda la mostravano vuota. */
-      await page.route('**/api/v1/sessions/coda-proof-*/events', () => { /* resta pending: aperto e muto */ });
+      await page.route('**/api/v1/sessions/coda-proof-*/events*', () => { /* resta pending: aperto e muto */ });
       await page.goto('/');
       await page.waitForFunction(() => window.__talosHarnessUiRuntime);
       await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
@@ -148,7 +148,7 @@ for (const modo of ['dark', 'light']) {
       expect(riprese, '⛔ il testo sta sul server: nessuna ripresa col testo copiato dalla finestra').toEqual([]);
       await expect(page.locator('#conversation')).toContainText('poi aggiorna il README coi numeri veri');
       /* ⛔ 14/09, foto 12: su una sessione aperta CONCLUSA la domanda mandata da qui usciva senza ora — un invio è diretta. */
-      await expect(page.locator('#conversation .talos-message--user').last().locator('.talos-message__meta')).toHaveText(/^\d{2}:\d{2} · Follow-up/);
+      await expect(page.locator('#conversation .talos-message--user').last().locator('.talos-message__meta')).toHaveText(/^\d{2}:\d{2} · Seguito/); // decisione owner 165
     });
 
     test(`CODA-SCHERMO-06 — il giro ripreso da «Invia ora» si può INTERROMPERE (${modo})`, async ({ page }, testInfo) => {
@@ -171,7 +171,7 @@ for (const modo of ['dark', 'light']) {
       await eventi(page, [{ type: 'RunStarted', input: { consegna: VOCE.testo, seguito: true }, contesto: { permessi: 'Full access', modello: 'z-ai/glm-5.3-flash' }, _sequenza: 3 }]);
       await expect(page.locator('.send-btn.is-stop'), 'il giro ripreso ha il suo «Interrompi»').toHaveCount(1);
       /* ⛔ 14/09, giro vero (parte 5): la domanda mandata da qui prende il permesso che il server dichiara, come nelle altre finestre. */
-      await expect(page.locator('#conversation .talos-message--user').last().locator('.talos-message__meta')).toHaveText(/^\d{2}:\d{2} · Follow-up · \S/);
+      await expect(page.locator('#conversation .talos-message--user').last().locator('.talos-message__meta')).toHaveText(/^\d{2}:\d{2} · Seguito · \S/); // decisione owner 165
       await fotografa(page, testInfo.outputPath(`6-ripreso-interrompibile-${modo}.png`));
     });
 

@@ -49,6 +49,11 @@ const HARNESS = fileURLToPath(new URL('../../../', import.meta.url));
 let banco = { base: null, token: null, figlio: null, cartella: null };
 
 test.beforeAll(async () => {
+  /* ⛔ 31/10/2026 (suite del blocco 11, sotto carico): P0-B-5 rossa per «Test timeout of 30000ms» DENTRO questa preparazione, mai su
+     un controllo. I 30 s di serie valgono per tutto il gancio, e qui c'è una build intera (oggi modulare, 252 file verificati: non
+     più gli 0,43 s del commento sotto) più l'avvio di un server. Si aspetta sempre l'evento vero (la salute a 200): cambia solo il
+     tetto della PREPARAZIONE, coerente con quello che fa. Il comportamento provato dalle prove non ha tetti nuovi. */
+  test.setTimeout(120_000);
   /* ⛔ La build PRIMA del server: senza, si servirebbe l'uscita di un build precedente e il
      cancello parlerebbe di un codice che non è quello del commit. Costa 0,43 s misurati. */
   const costruita = spawnSync(process.execPath, ['scripts/build.mjs'], { cwd: fileURLToPath(new URL('../../', import.meta.url)), encoding: 'utf8', windowsHide: true });
@@ -66,21 +71,25 @@ test.beforeAll(async () => {
   banco.token = randomBytes(24).toString('hex');
   banco.base = `http://127.0.0.1:${porta}`;
   banco.figlio = spawn(process.execPath, ['server.mjs'], {
-    cwd: HARNESS, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: HARNESS, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
     env: {
       TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: (globalThis.process?.env?.TEMP || globalThis.process?.env?.TMP || '.') + '/talos-scratch-di-prova', // 24/09/2026: mai la radice vera %LOCALAPPDATA%TALOS, // 23/09/2026: custodia delle chiavi di prova, mai quella vera di Windows
       ...process.env,
       TALOS_HARNESS_UI_PORT: String(porta),
-      TALOS_HARNESS_UI_TOKEN: banco.token,
+      TALOS_HARNESS_UI_SEGRETI_DA: 'stdin', // gettone sempre (02/11/2026): solo dallo stdin
       TALOS_HARNESS_UI_SESSIONS_DIR: banco.cartella,
+      /* ⛔ 02/11/2026 (treno, 4 rosse): senza, la copia delle preferenze della fase 8 finiva in `harness-ui/.preferenze-finestra.json`, nella cartella del repo: restava
+         da una corsa all'altra e l'inglese di una prova entrava nella prova dopo. */
+      TALOS_DESKTOP_DATA_DIR: banco.cartella,
       TALOS_HARNESS_UI_PUBLIC_DIR: resolve(HARNESS, 'frontend/dist'),
       TALOS_INTRO: '0',
     },
   });
+  banco.figlio.stdin.end(`TALOS_HARNESS_UI_TOKEN=${banco.token}\n`);
   banco.figlio.stdout.resume(); banco.figlio.stderr.resume();
   await expect.poll(async () => {
     try { return (await fetch(`${banco.base}/api/v1/health`, { headers: { Cookie: `talos_token=${banco.token}` }, signal: AbortSignal.timeout(400) })).status; } catch { return 0; }
-  }, { timeout: 30_000 }).toBe(200);
+  }, { timeout: 90_000 }).toBe(200); // l'evento vero; il tetto sta dentro quello della preparazione (120 s)
 });
 
 test.afterAll(async () => {
@@ -163,6 +172,8 @@ async function apriLaApp(page, { tema = 'dark', lingua = 'it' } = {}) {
   await page.addInitScript(([colorMode, uiLanguage]) => {
     try {
       localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode, uiLanguage } }));
+      /* come `playwright.config.mjs`, che qui non arriva (quello semina la sua origine, questo banco ha la sua porta): la copia del server è già vista, tema e lingua restano di questa prova */
+      localStorage.setItem('talos.harness.desktop.settings.copy.v1', String(Number.MAX_SAFE_INTEGER));
     } catch { /* finestra senza storage */ }
   }, [tema, lingua]);
   await page.goto(banco.base);

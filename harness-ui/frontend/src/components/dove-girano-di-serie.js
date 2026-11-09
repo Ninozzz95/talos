@@ -36,7 +36,8 @@ function creaScheda(documento) {
   scheda.setAttribute('role', 'group');
   scheda.setAttribute('aria-labelledby', 'settings-group-tools-dove-girano');
   scheda.innerHTML = '<div class="settings-group__head" data-settings-group-head>'
-    + '<h3 class="settings-group__title" id="settings-group-tools-dove-girano" data-settings-group-title="tools-dove-girano"></h3></div>'
+    + '<h3 class="settings-group__title" id="settings-group-tools-dove-girano" data-settings-group-title="tools-dove-girano"></h3>'
+    + '<span class="settings-group__count" data-settings-group-count hidden></span></div>'
     + '<p data-dove-serie-descrizione></p>'
     + '<div class="talos-choice-grid" role="radiogroup" data-dove-serie-scelte></div>'
     + '<p class="talos-setting__help" data-dove-serie-stato role="status" hidden></p>';
@@ -88,8 +89,10 @@ export function montaDoveGiranoDiSerie({ documento = globalThis.document, fetchF
       const azioni = pannello.querySelector(':scope > .talos-settings__actions');
       if (sorella) sorella.after(scheda.scheda); else if (azioni) azioni.before(scheda.scheda); else pannello.append(scheda.scheda);
     }
-    scheda.titolo.textContent = t('modello.permissions.whereCommandsRun');
-    scheda.gruppo.setAttribute('aria-label', t('modello.permissions.whereCommandsRun'));
+    /* fase 8, forma §5 (Frontend 01/11): il titolo dice il suo ambito. Chiave sua: `modello.permissions.whereCommandsRun` resta al velo
+       dei permessi della sessione («vale per questa sessione»), che non cambia */
+    scheda.titolo.textContent = t('varie.commandsDefault.title');
+    scheda.gruppo.setAttribute('aria-label', t('varie.commandsDefault.title'));
     scheda.descrizione.textContent = t('varie.commandsDefault.description');
     const casa = testiDoveGiranoIComandi(wsl);
     const disponibile = stato !== null && stato !== 'non-disponibile';

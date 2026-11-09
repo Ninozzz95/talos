@@ -226,6 +226,8 @@ async function avviaHost(argomenti) {
   const t0 = Date.now();
   while (!/GRUPPO (\d+)/u.test(fuori) && Date.now() - t0 < 10_000) await new Promise((r) => setTimeout(r, 50));
   const gruppo = Number(/GRUPPO (\d+)/u.exec(fuori)?.[1]);
+  /* il finally delle prove comincia dopo questo ritorno: un host partito senza gruppo si chiude qui */
+  if (!(gruppo > 0)) { try { process.kill(-host.pid, 'SIGKILL'); } catch { /* già uscito */ } rimuoviCartellaDiProva(cartella); }
   assert.ok(gruppo > 0, `il comando non è partito: ${fuori}`);
   return { host, gruppo, cartella, fuori: () => fuori };
 }

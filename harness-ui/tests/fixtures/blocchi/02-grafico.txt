@@ -1,0 +1,3 @@
+root = Grafico("prezzi", "Prezzo medio", "linee", "Il prezzo sale da 10 a 14 euro fra gennaio e marzo.", [
+  {nome: "Prezzo", punti: [{x: "gen", y: 10}, {x: "feb", y: 12}, {x: "mar", y: 14}]}
+], "€")

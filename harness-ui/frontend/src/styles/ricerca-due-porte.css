@@ -1,0 +1,21 @@
+/*
+ * 01/11/2026 — «Nuova ricerca» della sezione Ricerca approfondita (bozzetto approvato dall'owner il 22/10/2026, foto E, F, G). Le misure
+ * sono quelle del bozzetto (`mockup.mjs`, il CSS `mk-*`), sui pezzi veri: la modale delle sezioni (`modale-td.js`) con l'occhiello, le
+ * righe `talos-list-row`. ⛔ Owner 01/11 sera: niente pillola nel compositore — le sue regole non ci sono più.
+ */
+.talos-nuova-ricerca__domanda{min-height:132px; resize:vertical; line-height:1.5; font:inherit; padding:10px 12px}
+.talos-nuova-ricerca__conto{font-variant-numeric:tabular-nums}
+.talos-nuova-ricerca__avanzate{display:inline-flex; align-items:center; gap:6px; align-self:flex-start; padding:0; border:0; background:none; color:var(--talos-muted); font:inherit; cursor:pointer}
+.talos-nuova-ricerca__avanzate:hover{color:var(--talos-text)}
+.talos-nuova-ricerca__avanzate:focus-visible{outline:2px solid var(--talos-focus, var(--talos-accent)); outline-offset:2px; border-radius:6px}
+.talos-nuova-ricerca__freccia{transition:transform .15s}
+.talos-nuova-ricerca__avanzate[aria-expanded="true"] .talos-nuova-ricerca__freccia{transform:rotate(90deg)}
+@media (prefers-reduced-motion: reduce){.talos-nuova-ricerca__freccia{transition:none}}
+.talos-nuova-ricerca__pannello[hidden]{display:none}
+.talos-nuova-ricerca__piede{display:flex; align-items:center; gap:8px}
+/* l'occhiello sopra il titolo (foto F): `talos-eyebrow` + titolo in colonna, come la testata `talos-dialog__header` del bozzetto */
+.td-modal-head__titoli{display:flex; flex-direction:column; gap:2px; min-width:0}
+
+/* Difetto della foto E (owner 22/10): il testo d'apertura della sezione andava a capo lasciando sola l'ultima parola («from.»).
+   `text-wrap: pretty` evita le righe orfane (CSS Text 4; Chrome 117+, Electron di TALOS ok); dove manca, il testo resta com'era. */
+.td-research .td-intro p, #schermoRicerca .td-intro p{text-wrap:pretty}

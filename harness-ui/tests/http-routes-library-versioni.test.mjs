@@ -45,7 +45,7 @@ async function avvia(t) {
       return r ? { ok: true, ...r } : nessuna();
     },
   };
-  const app = createHttpApp({ staticHandler: async () => null, sessionRegistry, listaTaskDisponibili: () => [], token: GETTONE });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry, listaTaskDisponibili: () => [], token: GETTONE });
   const server = createServer(app);
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
   t.after(() => new Promise((ok) => server.close(ok)));

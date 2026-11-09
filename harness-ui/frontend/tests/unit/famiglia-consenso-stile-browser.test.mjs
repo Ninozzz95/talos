@@ -57,7 +57,7 @@ test('CONSENSO-ESITO-STILE: dentro la chat «Approvato» e «Negato» sono pillo
   const m = await page.evaluate(() => {
     const r = document.getElementById('r');
     const tinta = (v) => { const s = document.createElement('span'); s.style.color = `var(${v})`; r.append(s); const c = getComputedStyle(s).color; s.remove(); return c; };
-    const tinte = { si: tinta('--talos-success'), no: tinta('--talos-danger'), testo: tinta('--talos-assistant-text') };
+    const tinte = { si: tinta('--talos-success'), no: tinta('--talos-muted'), testo: tinta('--talos-assistant-text') };
     const esiti = [true, false].map((approvato) => {
       const { scheda: card } = window.fc.creaApprovazione({ badge: 'Chiede di eseguire', bersaglio: 'npm test', perche: 'Per provare la cura.', codice: 'npm test' });
       r.append(card);
@@ -68,10 +68,62 @@ test('CONSENSO-ESITO-STILE: dentro la chat «Approvato» e «Negato» sono pillo
     return { tinte, esiti };
   });
   assert.notEqual(m.tinte.si, m.tinte.testo, 'le tinte di prova devono essere diverse dal testo, o la prova non morde');
-  assert.deepEqual(m.esiti.map((e) => e.testo), ['Approvato', 'Negato']);
+  assert.deepEqual(m.esiti.map((e) => e.testo), ['Approvato', 'Hai detto di no']);
   assert.deepEqual(m.esiti.map((e) => e.fs), ['12px', '12px']);
-  assert.deepEqual(m.esiti.map((e) => e.colore), [m.tinte.si, m.tinte.no], 'il sì verde e il no rosso: la regola del 07/9');
+  assert.deepEqual(m.esiti.map((e) => e.colore), [m.tinte.si, m.tinte.no], 'il sì verde e il no della persona neutro (decisione 89, 03/11/2026)');
   for (const e of m.esiti) assert.ok(e.fondo >= 10, `l’esito non tocca il fondo della carta (${e.fondo}px)`);
+});
+
+/* ⛔ Decisioni 89 e 92 dell'owner (03/11/2026): il no detto dalla persona non è un guasto. Sulla carta chiusa si legge
+   «Hai detto di no», neutro come la riga del passo («non consentito»), anche quando arriva da un'altra finestra; e il pulsante
+   «Nega» è grigio, non rosso. Restano col loro tono: il no chiuso dal server («nessuno poteva rispondere»), anche sulla carta
+   di un'automazione, e lo Stop. «Modificata da te» è una scelta della persona: neutra anche lei (allineata al telefono).
+   Decisione 96 (03/11/2026): anche l'«Annullata» delle automazioni e dei fornitori, quando è la persona a dire no, è grigia;
+   la parola resta la stessa. */
+test('NO-NEUTRO-PC: il no della persona, «Modificata da te» e l’«Annullata» sono neutri; il no del server e lo Stop no', async (t) => {
+  const page = await pagina(t);
+  const m = await page.evaluate(() => {
+    const r = document.getElementById('r');
+    const tinta = (v) => { const s = document.createElement('span'); s.style.color = `var(${v})`; r.append(s); const c = getComputedStyle(s).color; s.remove(); return c; };
+    const esito = (opz, carta = '') => {
+      const { scheda } = window.fc.creaApprovazione({ badge: 'Chiede di scrivere', bersaglio: 'note/a.txt' });
+      if (carta) scheda.dataset[carta] = '1';
+      r.append(scheda);
+      const riga = window.fc.segnaEsitoApprovazione(scheda, opz);
+      return { testo: riga.textContent, colore: getComputedStyle(riga).color, classe: riga.className };
+    };
+    const { pulsanti } = window.fc.creaApprovazione({ badge: 'Chiede di scrivere', bersaglio: 'note/a.txt' });
+    r.append(pulsanti.nega.closest('article') || pulsanti.nega.parentElement);
+    return {
+      muto: tinta('--talos-muted'), rosso: tinta('--talos-danger'),
+      qui: esito({ approvato: false }),
+      altrove: esito({ approvato: false, altrove: true }),
+      modificata: esito({ approvato: false, motivo: 'modificata-dalla-persona' }),
+      server: esito({ approvato: false, motivo: 'nessuna-interfaccia' }),
+      fermata: esito({ approvato: false, motivo: 'fermato' }),
+      annullata: esito({ approvato: false }, 'cartaAutomazione'),
+      annullataAltrove: esito({ approvato: false, altrove: true }, 'cartaAutomazione'),
+      fornitori: esito({ approvato: false }, 'cartaFornitori'),
+      automazioneServer: esito({ approvato: false, motivo: 'nessuna-interfaccia' }, 'cartaAutomazione'),
+      nega: { testo: pulsanti.nega.textContent, classe: pulsanti.nega.className, colore: getComputedStyle(pulsanti.nega).color },
+    };
+  });
+  assert.notEqual(m.muto, m.rosso, 'le tinte di prova devono essere diverse, o la prova non morde');
+  assert.deepEqual([m.qui.testo, m.qui.colore], ['Hai detto di no', m.muto]);
+  assert.match(m.qui.classe, /talos-approval__esito--neutro/u);
+  assert.deepEqual([m.altrove.testo, m.altrove.colore], ['Hai detto di no da un’altra finestra', m.muto], 'neutro anche col suffisso, come il telefono');
+  assert.deepEqual([m.modificata.testo, m.modificata.colore], ['Modificata e salvata da te', m.muto]);
+  assert.deepEqual([m.server.testo, m.server.colore], ['Negato: nessuno poteva rispondere in questa sessione automatica', m.rosso], 'il no del server resta un no');
+  assert.equal(m.fermata.testo, 'Fermata prima della risposta');
+  assert.match(m.fermata.classe, /talos-approval__esito--no/u, '«Fermata» fuori da questo giro (Desktop, 03/11)');
+  assert.deepEqual([m.annullata.testo, m.annullata.colore], ['Annullata', m.muto], 'decisione 96: l’automazione ha la sua parola, in grigio');
+  assert.match(m.annullata.classe, /talos-approval__esito--neutro/u);
+  assert.deepEqual([m.annullataAltrove.testo, m.annullataAltrove.colore], ['Annullata da un’altra finestra', m.muto]);
+  assert.deepEqual([m.fornitori.testo, m.fornitori.colore], ['Annullata', m.muto], 'la carta dei fornitori dice la stessa parola, nello stesso tono');
+  assert.deepEqual([m.automazioneServer.testo, m.automazioneServer.colore], ['Negato: nessuno poteva rispondere in questa sessione automatica', m.rosso], 'il no del server resta rosso anche sulla carta di un’automazione');
+  assert.equal(m.nega.testo, 'Nega');
+  assert.doesNotMatch(m.nega.classe, /talos-button--danger/u, 'decisione 92: il «Nega» è grigio');
+  assert.notEqual(m.nega.colore, m.rosso);
 });
 
 test('CONSENSO-MOTIVO-STILE: dentro la chat il motivo del consenso è a 12,5 px e attenuato (D1), non a misura di chat', async (t) => {

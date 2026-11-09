@@ -314,7 +314,7 @@ test('⛔ nessun segnaposto del composer promette che l Invio REINDIRIZZI', () =
     .split(String.fromCharCode(13)).join(' ')
     .split(String.fromCharCode(10)).join(' ')
     .split(' ').filter(Boolean).join(' ');
-  const RAMO_ASK = "domandePendenti.size > 0 ? 'Scrivi un follow-up… Invio indirizza, Ctrl+Invio accoda'";
+  const RAMO_ASK = "domandePendenti.size > 0 ? 'Scrivi il seguito… Invio indirizza, Ctrl+Invio accoda'"; // decisione owner 165: «Seguito»
   const conRamoAsk = segnaposto.filter((r) => compatta(r).includes(RAMO_ASK));
   assert.equal(conRamoAsk.length, 1, 'il ramo Ask del segnaposto deve esistere una volta sola, condizionato alla domanda pendente');
   for (const riga of segnaposto) {

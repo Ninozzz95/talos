@@ -137,7 +137,7 @@ test('SCOLLEGATE: una superficie alimentata da SSE non è scollegata (trappola d
 test('SCOLLEGATE: le chiamate si attribuiscono anche per file, e chi non dice dove vive lo dichiara', () => {
   const chiamate = [{ metodo: 'GET', percorso: '/api/v1/tools', file: 'src/components/officina.js', riga: 12 }];
   const superfici = [
-    { id: 'officina', nome: 'Officina', promette: 'gli attrezzi', file: 'src/components/officina.js' },
+    { id: 'officina', nome: 'Officina', promette: 'gli strumenti', file: 'src/components/officina.js' },
     { id: 'board', nome: 'Board', promette: 'le carte del lavoro' },
   ];
   const reperti = superficiScollegate(superfici, chiamate, { rotte: ROTTE });
@@ -223,7 +223,7 @@ test('CHIAMATE ORFANE: un fetch verso una rotta inesistente si vede da entrambi 
 
 const SUPERFICI = [
   { id: 'note', nome: 'Note', promette: 'le note della sessione', chiamate: ['GET /api/v1/sessions/${id}/notes'] },
-  { id: 'officina', nome: 'Officina', promette: 'gli attrezzi', chiamate: ['GET /api/v1/tools'] },
+  { id: 'officina', nome: 'Officina', promette: 'gli strumenti', chiamate: ['GET /api/v1/tools'] },
 ];
 
 test('CONTATORI: «Note» col numero e senza `vaia` ⇒ il clic cade dove capita', () => {
@@ -246,7 +246,7 @@ test('CONTATORI: una destinazione che non esiste fra le superfici è grave quant
 
 test('CONTATORI: «il luogo c’è ma è vuoto» è un difetto DIVERSO, e più leggero', () => {
   const reperti = contatoriSenzaLuogo(
-    [{ vaia: 'officina', etichetta: 'Officina attrezzi' }],
+    [{ vaia: 'officina', etichetta: 'Officina strumenti' }],
     SUPERFICI,
     { scollegate: [{ superficie: 'officina' }] },
   );
@@ -278,7 +278,7 @@ test('GIRO: le tre domande insieme, e i contatori sanno quali luoghi sono vuoti'
     chiamate: [{ metodo: 'GET', percorso: '/api/v1/tools', file: 'src/components/officina.js' }],
     superfici: [
       { id: 'agenti', nome: 'Agenti', promette: 'i sotto-agenti', chiamate: [], sinonimi: ['children'] },
-      { id: 'officina', nome: 'Officina', promette: 'gli attrezzi', file: 'src/components/officina.js' },
+      { id: 'officina', nome: 'Officina', promette: 'gli strumenti', file: 'src/components/officina.js' },
     ],
     contatori: [{ conteggio: 'note', etichetta: 'Note' }, { vaia: 'agenti', etichetta: 'Agenti' }],
   });

@@ -25,7 +25,7 @@ export async function avviaForgeDiProva(){
    if(s.abilitato)await abilitaToolForgiato({cartella:cartellaForge,id:s.id,abilitato:true});
   }
   const registro=createSessionRegistry({cartellaStore,cartellaForge,guardaWorkspaceFn:()=>()=>{}}),sessioni=new Set();
-  server=createServer(createHttpApp({sessionRegistry:registro,staticHandler:(_req,res)=>{res.writeHead(404);res.end();}}));
+  server=createServer(createHttpApp({ senzaGettone: 'prove', sessionRegistry:registro,staticHandler:(_req,res)=>{res.writeHead(404);res.end();}}));
   await new Promise((r,j)=>{server.once('error',j);server.listen(4178,'127.0.0.1',r);});
   return {radice,chiudi,
    async inoltra(rotta){
@@ -33,7 +33,7 @@ export async function avviaForgeDiProva(){
     if(!sessioni.has(id)){await writeFile(join(cartellaStore,id+'.jsonl'),JSON.stringify({tipo:'intestazione',schema:SCHEMA_SESSIONE,sessionId:id,taskId:'forge-prova',cartella:radice,task:'Prova UI isolata',avviataAlle:'2026-09-05T10:00:00Z',modello:'nessun-modello',permessi:'Read only'})+'\n');const ripristino=await registro.ripristina();if(!ripristino.ripristinate)throw new Error('Sessione di prova non ripristinata');sessioni.add(id);}
     const risposta=await rotta.fetch({url:'http://127.0.0.1:4178'+url.pathname});await rotta.fulfill({response:risposta});
    },
-   async leggi(id){if(!STRUMENTI_FORGIATI.some(s=>s.id===id))throw new Error('Attrezzo fuori fixture');return JSON.parse(await readFile(join(cartellaForge,id+'.json'),'utf8'));}
+   async leggi(id){if(!STRUMENTI_FORGIATI.some(s=>s.id===id))throw new Error('Strumento fuori fixture');return JSON.parse(await readFile(join(cartellaForge,id+'.json'),'utf8'));}
   };
  }catch(e){await chiudi();throw e;}
 }

@@ -120,6 +120,9 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
       else if (frame[0] === 0) uscitaPty += frame.subarray(1).toString('utf8'); // 13/09 review: xterm con WebGL disegna su canvas, niente .xterm-rows nel DOM — si legge il flusso PTY vero
     }));
     // BOOT-03 starts on Home: reach the real conversation before its mode switch.
+    // 09/11/2026 r39b: dal 30/10 (variante D) il gruppo «Spazi di lavoro» nasce chiuso in un profilo nuovo; si apre prima del clic
+    const testata = pagina.locator('#testataGruppoLavoro').first();
+    if (await testata.getAttribute('aria-expanded') === 'false') await testata.click();
     await pagina.locator('.talos-sidebar [data-vaia="chat"]').first().click();
     await pagina.locator('[data-mode="terminal"]').first().click();
     const tastiera = pagina.locator('.xterm-helper-textarea').first();

@@ -18,7 +18,7 @@ const approval = JSON.parse(await readFile(new URL('./fixtures/workflow/records/
 
 async function startApp(t, workflowStore) {
   const registry = { leggiSessioneContesto: (id) => [rootSessionId, otherSessionId].includes(id) ? { sessionId: id } : null };
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registry, workflowStore }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registry, workflowStore }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;

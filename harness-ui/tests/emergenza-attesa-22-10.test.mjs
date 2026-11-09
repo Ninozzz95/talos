@@ -64,34 +64,49 @@ async function giroInEmergenza(t, { azione, riassuntoTettoMs }) {
 
 const conta = (eventi, tipo) => eventi.filter((e) => e.tipo === tipo).length;
 
-test('EMERG-ATTESA-01 — Stop mentre il giro aspetta il riassunto ereditato: il giro finisce, e la riga aperta si chiude (inizio = fine)', async (t) => {
-  const { esito, eventi } = await giroInEmergenza(t, { azione: 'stop' });
-  assert.notEqual(esito, 'APPESO', `lo Stop non ha effetto (eventi ${JSON.stringify(eventi.map((e) => e.tipo))})`);
-  assert.equal(conta(eventi, 'compattazione-inizio'), 1, 'la riga viva si apre PRIMA di aspettare');
+/*
+ * ⛔ 28/10/2026 — EMERG-ATTESA-01..03 sono SUPERATE dal contratto C1, owner 27/10/2026, «Sì, mai aspettare»: all'emergenza il giro non
+ *   aspetta più il riassunto ereditato in volo (prima: fino a Stop, «Salta» o `riassuntoTettoMs`). Gli ID restano, e ognuna prova ora il
+ *   contratto nella stessa scena (un riassunto ereditato che non arriva mai): la richiesta parte SUBITO col riassunto senza modello,
+ *   ragione 'in-arrivo', la riga aperta si chiude, e nessun secondo riassunto si paga mentre quello in volo è per strada. Sul codice di
+ *   prima (8fde46abf) sono rosse: il giro aspettava, e la ragione era «interrotta», «saltato» o «tempo».
+ */
+test('EMERG-ATTESA-01 — superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): con uno Stop in arrivo il giro non aspetta il riassunto ereditato — finisce da sé col riassunto senza modello «in-arrivo», e la riga aperta si chiude (inizio = fine)', async (t) => {
+  /* 28/10/2026: prima lo Stop chiudeva l'ATTESA (motivo «interrotta»); ora non c'è attesa da chiudere, e il giro è già finito quando lo
+     Stop arriverebbe (300 ms). Resta l'invariante della riga: una sola, aperta e chiusa. */
+  const { esito, eventi, conti } = await giroInEmergenza(t, { azione: 'stop' });
+  assert.notEqual(esito, 'APPESO', `il giro aspetta il riassunto in volo (eventi ${JSON.stringify(eventi.map((e) => e.tipo))})`);
+  assert.ok(esito.r, `il giro finisce bene, senza bisogno dello Stop: ${esito.e?.message ?? ''}`);
+  assert.equal(conta(eventi, 'compattazione-inizio'), 1, 'una riga sola');
   assert.equal(conta(eventi, 'compattazione-fine'), 1, 'e si chiude');
-  assert.equal(eventi.find((e) => e.tipo === 'compattazione-fine').motivo, 'interrotta');
+  const fine = eventi.find((e) => e.tipo === 'compattazione-fine');
+  assert.deepEqual([fine.compattato, fine.ripiego, fine.ragione], [true, true, 'in-arrivo'], 'il riassunto senza modello, subito: quello del modello è in arrivo');
+  assert.equal(conti.riassunti, 0, 'nessun secondo riassunto pagato mentre quello ereditato è in volo');
 });
 
-test('EMERG-ATTESA-02 — «Salta» mentre il giro aspetta: riassunto senza modello subito, ragione «saltato», nessun riassunto pagato', async (t) => {
+test('EMERG-ATTESA-02 — superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): non c\'è più un\'attesa da saltare — riassunto senza modello subito, ragione «in-arrivo», nessun riassunto pagato', async (t) => {
+  /* 28/10/2026: prima «Salta» chiudeva l'attesa con ragione «saltato»; ora il giro non aspetta e la ragione dice che quello del modello
+     arriva. Il resto della prova (una riga, compattata, senza modello, niente pagato) è quello di prima. */
   const { esito, eventi, conti } = await giroInEmergenza(t, { azione: 'salta' });
-  assert.notEqual(esito, 'APPESO', `«Salta» non ha effetto (eventi ${JSON.stringify(eventi.map((e) => e.tipo))})`);
+  assert.notEqual(esito, 'APPESO', `il giro aspetta il riassunto in volo (eventi ${JSON.stringify(eventi.map((e) => e.tipo))})`);
   assert.ok(esito.r, `il giro finisce bene: ${esito.e?.message ?? ''}`);
-  assert.equal(conta(eventi, 'compattazione-inizio'), 1, 'una riga sola: la compattazione dopo l\'attesa non ne apre un\'altra');
+  assert.equal(conta(eventi, 'compattazione-inizio'), 1, 'una riga sola');
   const fine = eventi.filter((e) => e.tipo === 'compattazione-fine');
   assert.equal(fine.length, 1);
   assert.equal(fine[0].compattato, true);
   assert.equal(fine[0].ripiego, true);
-  assert.equal(fine[0].ragione, 'saltato');
-  assert.equal(conti.riassunti, 0, 'il modello lento non si richiama');
+  assert.equal(fine[0].ragione, 'in-arrivo');
+  assert.equal(conti.riassunti, 0, 'nessun secondo riassunto pagato mentre quello ereditato è in volo');
 });
 
-test('EMERG-ATTESA-03 — tetto scaduto mentre il giro aspetta: riassunto senza modello, ragione «tempo»', async (t) => {
+test('EMERG-ATTESA-03 — superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): il tetto dell\'attesa non scade più perché non si aspetta — riassunto senza modello subito, ragione «in-arrivo»', async (t) => {
+  /* 28/10/2026: prima il giro aspettava fino al tetto (250 ms) e la ragione era «tempo»; ora parte subito e la ragione è «in-arrivo» */
   const { esito, eventi, conti } = await giroInEmergenza(t, { riassuntoTettoMs: 250 });
-  assert.notEqual(esito, 'APPESO', 'il tetto non vale per l\'attesa');
+  assert.notEqual(esito, 'APPESO', 'il giro aspetta il riassunto in volo');
   const fine = eventi.filter((e) => e.tipo === 'compattazione-fine');
   assert.equal(conta(eventi, 'compattazione-inizio'), 1);
   assert.equal(fine.length, 1);
-  assert.equal(fine[0].ragione, 'tempo');
+  assert.equal(fine[0].ragione, 'in-arrivo');
   assert.equal(conti.riassunti, 0);
 });
 

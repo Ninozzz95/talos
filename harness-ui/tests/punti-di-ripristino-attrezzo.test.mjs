@@ -73,7 +73,7 @@ test('ATT-K-03 — anteprima, carta col suo tipo, sì ⇒ esegue; no ⇒ REFUSED
   assert.match(si.esito('a'), /^Put back as they were/u)
   const no = await giro(c, [chiama('b', 'file_changes_undo', {})], { ospite: OSPITE, risposta: false })
   assert.deepEqual(no.ospite.map(([, , f]) => f), ['anteprima'])
-  assert.match(no.esito('b'), /^REFUSED\./u)
+  assert.match(no.esito('b'), /^DECLINED\. The person said no/u)
 })
 
 test('ATT-K-04 — un rifiuto dell\'anteprima arriva al modello col motivo, senza carta', async (t) => {

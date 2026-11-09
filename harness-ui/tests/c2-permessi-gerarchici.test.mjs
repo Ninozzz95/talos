@@ -250,7 +250,7 @@ test('C2-04-HTTP CARTA NEL PADRE: pending si legge per id, il padre risponde con
   const { createServer } = await import('node:http')
   const { createHttpApp } = await import('../src/http-app.mjs')
   const { registry, sessionId: padreId, figliaId, inputFiglia } = await scena(t)
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registry }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registry }))
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
   t.after(() => new Promise((ok) => server.close(() => ok())))
   const base = `http://127.0.0.1:${server.address().port}/api/v1/sessions`
@@ -307,6 +307,55 @@ test('C2-05 STOP: la domanda della figlia chiusa da uno stop ⇒ pending torna n
   assert.equal(ultimo?.value.operation?.status, 'resolved', 'l\'ultima notizia alla radice è «risolta», non «in attesa»')
   assert.equal(ultimo?.value.operation?.requestId, requestId)
   assert.equal(ultimo?.value.operation?.approvato, false, 'con l\'esito: la carta del padre si chiude dicendo il vero')
+})
+
+/*
+ * COD-205 (2)-(3) dello stress del telefono 0.1.47 (Mobile 30/10/2026): fermata la delega dalla scheda Agenti mentre aspettava un
+ * permesso, la carta diceva «Denied from another window» e il nucleo raccontava al modello «the person did not approve». Causa: lo
+ * Stop negava la domanda PRIMA dell'abort, e la corsa del nucleo (`Promise.race([domanda, gara])`, talosHarness.mjs) vedeva il «no»
+ * prima del segnale. Lo Stop deve arrivare al nucleo come Stop, e la carta deve dire «fermata».
+ */
+test('C2-05c STOP NON È UN NO: il nucleo che aspetta il permesso vede lo Stop, e la risoluzione dice «fermato»', async (t) => {
+  const { registry, sessionId: padreId, figliaId, inputFiglia } = await scena(t)
+  const visti = []
+  const dalPadre = []
+  const disiscrivi = registry.iscriviti(figliaId, (e) => visti.push(e))
+  const disiscriviPadre = registry.iscriviti(padreId, (e) => dalPadre.push(e))
+  t.after(() => { disiscrivi?.(); disiscriviPadre?.() })
+  /* la stessa corsa del nucleo (talosHarness.mjs, «FERMATO = Symbol('fermato-mentre-chiedevo')») */
+  const FERMATO = Symbol('fermato')
+  const segnale = inputFiglia.segnaleStop
+  assert.ok(segnale, 'premessa: la figlia riceve il segnale di Stop del suo giro')
+  const gara = new Promise((risolvi) => segnale.addEventListener('abort', () => risolvi(FERMATO), { once: true }))
+  const domanda = inputFiglia.chiediApprovazioneFn({ tipo: 'shell', comando: 'npm install' })
+  await new Promise((r) => setTimeout(r, 10))
+  const requestId = registry.domandaInAttesa(figliaId)?.requestId
+  assert.ok(requestId, 'premessa: la carta è aperta')
+  const corsa = Promise.race([domanda, gara]) // costruita PRIMA dello Stop, come nel nucleo: vince chi si risolve per primo
+  registry.ferma(figliaId)
+  assert.equal(await corsa, FERMATO, 'lo Stop vince sulla domanda: il nucleo prende la via «fermato su richiesta»')
+  assert.equal(await domanda, false, 'la domanda si chiude comunque (nessuna promessa sospesa)')
+  const risolta = visti.find((e) => e.type === 'ApprovalResolved' && e.requestId === requestId)
+  assert.equal(risolta?.approvato, false)
+  assert.equal(risolta?.motivo, 'fermato', 'la carta sa che è stata fermata, non negata')
+  /* il caso del telefono: la carta della figlia è disegnata nel PADRE, che la chiude dallo snapshot `talos.agenti` */
+  const ultimo = agentiPer(dalPadre, figliaId).filter((e) => e.value.operation?.kind === 'approval').at(-1)
+  assert.equal(ultimo?.value.operation?.status, 'resolved')
+  assert.equal(ultimo?.value.operation?.motivo, 'fermato', 'anche il padre sa che è stata fermata')
+})
+
+test('C2-05d AL CONTRARIO: un «no» vero della persona resta un no, senza motivo «fermato»', async (t) => {
+  const { registry, figliaId, inputFiglia } = await scena(t)
+  const visti = []
+  const disiscrivi = registry.iscriviti(figliaId, (e) => visti.push(e))
+  t.after(() => disiscrivi?.())
+  const domanda = inputFiglia.chiediApprovazioneFn({ tipo: 'shell', comando: 'npm install' })
+  await new Promise((r) => setTimeout(r, 10))
+  const requestId = registry.domandaInAttesa(figliaId)?.requestId
+  registry.rispondiApprovazione(figliaId, requestId, false)
+  assert.equal(await domanda, false)
+  const risolta = visti.find((e) => e.type === 'ApprovalResolved' && e.requestId === requestId)
+  assert.notEqual(risolta?.motivo, 'fermato')
 })
 
 test('C2-05b R5 SILENZIO: la domanda che resta senza risposta si ripresenta ANCHE alla radice', async (t) => {

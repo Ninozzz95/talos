@@ -28,8 +28,10 @@ Alternatively download `TALOS-<version>-win.zip`, extract it **completely** into
 and start `TALOS.exe`, keeping `resources` and the DLLs next to the executable. The zip uses the
 same user profile as the installer; it is not a portable mode with data next to the zip.
 
-No automatic updates and no telemetry. The network is used only when you choose a remote
-provider, search the web, or download a model.
+No telemetry. The app checks for updates in the background and installs one when you close it, or
+right away with "Restart now"; the update manifest carries our own signature, and the check can be
+turned off in Settings. Otherwise the network is used only when you choose a remote provider, search
+the web, or download a model.
 
 ### SmartScreen warning
 

@@ -27,7 +27,7 @@ for (const modo of ['dark', 'light']) {
       await page.addInitScript((colorMode) => {
         try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode, uiLanguage: 'it' } })); } catch { /* storage assente */ }
       }, modo);
-      await page.route(`**/api/v1/sessions/${PADRE}/events`, () => { /* resta pending: aperto e muto */ });
+      await page.route(`**/api/v1/sessions/${PADRE}/events*`, () => { /* resta pending: aperto e muto */ });
       await page.goto('/');
       await page.waitForFunction(() => window.__talosHarnessUiRuntime);
       await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
@@ -59,7 +59,7 @@ for (const modo of ['dark', 'light']) {
       };
     });
 
-    test(`RIGA-IN-FONDO-01 — due attrezzi aperti, due risposte dei sotto-agenti: la riga viva resta l'ultima del turno (${modo})`, async ({ page }, testInfo) => {
+    test(`RIGA-IN-FONDO-01 — due strumenti aperti, due risposte dei sotto-agenti: la riga viva resta l'ultima del turno (${modo})`, async ({ page }, testInfo) => {
       sequenza = 0;
       await eventi(page, [
         { type: 'RunStarted', input: { consegna: 'Delega a due figlie la lettura dei file e poi riassumi.' } },
@@ -80,7 +80,7 @@ for (const modo of ['dark', 'light']) {
       await page.screenshot({ path: testInfo.outputPath(`riga-viva-${modo}.png`) });
     });
 
-    test(`RIGA-IN-FONDO-02 — un attrezzo solo, senza involucro: la risposta va sopra la sua scheda (${modo})`, async ({ page }) => {
+    test(`RIGA-IN-FONDO-02 — uno strumento solo, senza involucro: la risposta va sopra la sua scheda (${modo})`, async ({ page }) => {
       sequenza = 0;
       await eventi(page, [
         { type: 'RunStarted', input: { consegna: 'Delega a una figlia la lettura del README.' } },
@@ -163,7 +163,7 @@ test('RIGA-IN-FONDO-04 — dopo una ricarica a giro aperto le risposte restano s
     const righe = [...document.querySelectorAll('#conversation [data-c="ToolRow"]')];
     return { righe: righe.length, sopra: righe.length > 0 && righe.every((r) => Boolean(nota.compareDocumentPosition(r) & Node.DOCUMENT_POSITION_FOLLOWING)) };
   });
-  expect(ordine.righe, 'premessa: le righe degli attrezzi rigiocate ci sono').toBeGreaterThan(0);
+  expect(ordine.righe, 'premessa: le righe degli strumenti rigiocate ci sono').toBeGreaterThan(0);
   expect(ordine.sopra, 'dopo la ricarica la risposta è tornata sotto il lavoro in corso').toBe(true);
   expect(nonGet).toBe(0);
 });

@@ -76,7 +76,7 @@ test('DELEGHE-PAROLE-03 — la conversazione in cima, finita: «Conclusa» (non 
   // il modello accanto allo stato «al lavoro»: era «glm-5.3-…» accanto a «In esecuzione» (SECONDA-MODELLO-03)
   const { grafo: vivo } = await apri(page, [figlia('a', 10, { taskCorto: 'Agente A' })]);
   const m = await vivo.locator('[data-sessione="a"] .gv-passo-piede .gv-passo-modello').evaluate((n) => ({ testo: n.textContent, serve: n.scrollWidth, ha: n.clientWidth }));
-  expect(m.testo).toBe('glm-5.3-flash');
+  expect(m.testo).toBe('GLM 5.3 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   expect(m.serve, JSON.stringify(m)).toBeLessThanOrEqual(m.ha);
 });
 
@@ -111,7 +111,7 @@ test('DELEGHE-PAROLE-06 — il nome corto del modello entra INTERO anche accanto
   const { grafo } = await apri(page, scena());
   for (const id of ['a', 'b', 'c', 'd']) {
     const m = await grafo.locator(`[data-sessione="${id}"] .gv-passo-piede .gv-passo-modello`).evaluate((n) => ({ testo: n.textContent, serve: n.scrollWidth, ha: n.clientWidth }));
-    expect(m.testo, id).toBe('glm-5.3-flash');
+    expect(m.testo, id).toBe('GLM 5.3 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
     expect(m.serve, `scheda «${id}»: ${JSON.stringify(m)}`).toBeLessThanOrEqual(m.ha);
   }
   // e il testo non finisce sotto l'icona del ruolo, in fondo a destra
@@ -126,6 +126,10 @@ test('DELEGHE-PAROLE-07 — vista Tempo: la barra di un agente FERMATO senza un�
   // foto del 14/10/2026: «Riscrivi le prove», fermato, con una barra grigia lunga «27 h 23 min» fino all'istante di adesso
   const { grafo } = await apri(page, scena());
   await grafo.locator('[data-vista="tempo"]').click();
+  /* Le barre nascono dai tentativi, cioè dalla storia: la si aspetta come le prove sorelle (seconda-passata-attacchi:76).
+     Misurato il 04/11/2026 a macchina carica: la storia arriva fra 2,3 e 5,3 s dopo il clic, e l'attesa di serie (5 s) la
+     mancava 2 volte su 3 («barra di chi lavora» non trovata, con «Carico la storia…» ancora a schermo). */
+  await expect(grafo.locator('.gv-rip')).toHaveAttribute('data-pronta', 'true', { timeout: 15_000 });
   await expect(grafo.locator('.gv-tempo-barra[data-stato="running"]').first()).toBeVisible();
   /* ⛔ La vista Tempo si ridisegna una volta al secondo e SOSTITUISCE le barre: cercare la barra e misurarla in due passi
      separati misurava, sotto carico, un nodo già staccato (larghezza 0 col suo titolo intero — regressione del 14/10/2026).
@@ -142,6 +146,26 @@ test('DELEGHE-PAROLE-07 — vista Tempo: la barra di un agente FERMATO senza un�
   expect(fermato.titolo).not.toContain('in corso');
   expect(fermato.larga, `la barra dell’agente fermato: ${JSON.stringify(fermato)}`).toBeLessThan(40);
   expect(fermato.testo, 'nessuna durata inventata dentro la barra').toBe('');
+});
+
+test('DELEGHE-PAROLE-07-TACCHE — vista Tempo aperta SUBITO: quando la storia allunga l’asse, la scala si riadatta e le tacche restano poche', async ({ page }) => {
+  /* Misurato il 04/11/2026: clic immediato su Tempo ⇒ la scala si adattava all'asse corto di prima della storia; la storia lo
+     allungava a ~23 giorni e la scala restava quella, con una tacca al minuto: 32.718 tacche + 32.718 righe di griglia, 65.000
+     nodi, e ogni lettura della pagina costava 7-15 s (DELEGHE-PAROLE-07 rossa 1 volta su 10). AL CONTRARIO, aspettando 3 s
+     prima del clic le tacche erano poche: il guasto era solo nell'ordine. */
+  const { grafo } = await apri(page, scena());
+  await grafo.locator('[data-vista="tempo"]').click();
+  await expect(grafo.locator('.gv-rip')).toHaveAttribute('data-pronta', 'true', { timeout: 15_000 });
+  await expect(grafo.locator('.gv-tempo-barra[data-stato="running"]').first()).toBeVisible();
+  const conta = () => grafo.evaluate((g) => ({ tacche: g.querySelectorAll('.gv-tempo-tacca').length, griglia: g.querySelectorAll('.gv-tempo-griglia').length }));
+  const subito = await conta();
+  expect(subito.tacche, JSON.stringify(subito)).toBeGreaterThan(0);
+  expect(subito.tacche, JSON.stringify(subito)).toBeLessThanOrEqual(400);
+  expect(subito.griglia, JSON.stringify(subito)).toBeLessThanOrEqual(400);
+  // e dopo qualche battito della vista (si ridisegna ogni secondo) il numero non risale
+  await page.waitForTimeout(2_500);
+  const dopo = await conta();
+  expect(dopo.tacche, JSON.stringify(dopo)).toBeLessThanOrEqual(400);
 });
 
 /* Cura T6 della terza passata, vista nella FOTO: la ricerca delle deleghe guarda tutti gli agenti, e la sua riga lo dice giusto. */

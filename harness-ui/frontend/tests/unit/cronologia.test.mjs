@@ -155,7 +155,7 @@ test('BC-08, dal DOM: due turni, due voci, ordine della conversazione e testi gi
   assert.equal(voci[1].numero, 2);
   assert.equal(voci[1].numeroUltimo, 3);
   assert.equal(voci[1].tono, 'warning');
-  assert.equal(voci[1].attrezzi, 3, 'gli attrezzi del turno sono quelli di TUTTI i suoi giri');
+  assert.equal(voci[1].attrezzi, 3, 'gli strumenti del turno sono quelli di TUTTI i suoi giri');
   assert.equal(voci[2].elemento, chat.figli[2]);
 });
 
@@ -214,13 +214,13 @@ test('TONO: di un turno vale il PEGGIORE dei suoi giri, e il nessuno resta nessu
   assert.equal(tonoPeggiore(['boh']), null, 'un tono che non esiste non diventa un tono');
 });
 
-test('FUMETTO: il capo dice chi parla, e per TALOS i giri, l’esito e gli attrezzi', () => {
+test('FUMETTO: il capo dice chi parla, e per TALOS i giri, l’esito e gli strumenti', () => {
   assert.equal(capoFumetto({ diUtente: true, numero: 1 }), 'Tu');
-  assert.equal(capoFumetto({ diUtente: false, numero: 5, numeroUltimo: 5, tono: 'danger', attrezzi: 3 }), 'TALOS · giro 5 · errore · 3 attrezzi');
-  assert.equal(capoFumetto({ diUtente: false, numero: 5, numeroUltimo: 8, attrezzi: 1 }), 'TALOS · giri 5-8', 'un attrezzo solo non merita una riga');
+  assert.equal(capoFumetto({ diUtente: false, numero: 5, numeroUltimo: 5, tono: 'danger', attrezzi: 3 }), 'TALOS · giro 5 · errore · 3 strumenti');
+  assert.equal(capoFumetto({ diUtente: false, numero: 5, numeroUltimo: 8, attrezzi: 1 }), 'TALOS · giri 5-8', 'uno strumento solo non merita una riga');
   assert.equal(capoFumetto({ diUtente: false }), 'TALOS');
   assert.equal(capoFumetto(null), '');
-  assert.equal(testoFumetto({ diUtente: false, numero: 5, tono: 'danger', numeroUltimo: 5, attrezzi: 3, testo: 'ciao' }), 'TALOS · giro 5 · errore · 3 attrezzi\nciao');
+  assert.equal(testoFumetto({ diUtente: false, numero: 5, tono: 'danger', numeroUltimo: 5, attrezzi: 3, testo: 'ciao' }), 'TALOS · giro 5 · errore · 3 strumenti\nciao');
   assert.equal(testoFumetto({ diUtente: true, testo: 'la mia' }), 'Tu\nla mia');
   assert.equal(testoFumetto(null), '');
 });

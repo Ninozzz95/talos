@@ -25,7 +25,18 @@ const fine = { type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine
 test('R04-01 — la contabilità del giro resta fuori: consumo del fornitore e uscita dei comandi', () => {
   assert.deepEqual(trascriviEventoInterno(consumo), { omesso: true });
   assert.deepEqual(trascriviEventoInterno(uscita), { omesso: true });
-  assert.deepEqual([...EVENTI_CONTABILI].sort(), ['consumo-fornitore', 'talos.process-output']);
+  /* spesa di servizio (30/10): la riga di servizio e l'attesa del motore sono contabilità e misure, la chat non le disegna */
+  assert.deepEqual([...EVENTI_CONTABILI].sort(),
+    ['consumo-di-servizio', 'consumo-fornitore', 'talos.attesa-del-motore', 'talos.chiamata-nel-testo', 'talos.continuazione', 'talos.process-output']);
+  for (const name of ['consumo-di-servizio', 'talos.attesa-del-motore']) assert.deepEqual(trascriviEventoInterno({ type: 'CUSTOM', name, value: { schema: 'x' } }), { omesso: true }, name);
+});
+
+test('R04-R34 (Desktop 30/10) — il giornale di una chiamata scritta come testo resta fuori dal Markdown, frammento compreso', () => {
+  for (const esito of ['ripresa', 'lasciata', 'interrotta']) {
+    const evento = { type: 'CUSTOM', name: 'talos.chiamata-nel-testo', value: { schema: 'talos.chiamata-nel-testo.v1', threadId: 't', runId: 'r', giro: 3, esito, nome: 'shell', forma: 'glm',
+      modello: 'z-ai/glm-5.3-flash', frammento: 'shell<arg_key>comando</arg_key><arg_value>rm -rf .</arg_value></tool_call>' } };
+    assert.deepEqual(trascriviEventoInterno(evento), { omesso: true }, esito);
+  }
 });
 
 test('R04-02 — talos.context: la misura resta fuori, la versione compattata o ripristinata ha la frase della chat', () => {
@@ -41,7 +52,7 @@ test('R04-03 — talos.compattazione: l\'inizio resta fuori, la fine e l\'annull
   assert.deepEqual(trascriviEventoInterno(fine), { testo: 'Conversation compacted · 190,123 tokens saved' });
   const fallita = trascriviEventoInterno({ type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', compattato: false, motivo: 'errore: 429 rate limited', at: 'x' } });
   assert.equal(fallita.testo, testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'errore', dettaglio: '429 rate limited' }));
-  assert.match(fallita.testo, /^Conversation not summarized · .*\(429 rate limited\)$/u);
+  assert.match(fallita.testo, /^Conversation not compacted · .*\(429 rate limited\)$/u);
   assert.deepEqual(trascriviEventoInterno({ type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'annullata', at: 'x' } }), { testo: testoRigaCompattazione({ stato: 'annullata' }) });
 });
 

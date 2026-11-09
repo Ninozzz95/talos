@@ -137,7 +137,7 @@ test('C2Q-05 HTTP: pending rende la domanda, il padre risponde con rispostoDa, u
   const { createServer } = await import('node:http')
   const { createHttpApp } = await import('../src/http-app.mjs')
   const { registry, sessionId: padreId, figliaId, inputFiglia } = await scena(t)
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registry }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registry }))
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
   /* Il server si chiude nella prova stessa, connessioni comprese. ⛔ Misurato l'08/10: con `--test-force-exit` (che il progetto
      NON usa) questo file cade all'uscita su Windows con `!(handle->flags & UV_HANDLE_CLOSING)` (libuv async.c:94), come i file
@@ -250,4 +250,22 @@ test('C2Q-10 L\'EREDITÀ RESTA: una NIPOTE nasce senza interfaccia, e dopo il ri
   assert.ok(!ripresa?.erroreAvvio && runtime2.runs[0], JSON.stringify(ripresa))
   assert.equal(runtime2.runs[0].input.figliaChiedeAllaPersona, false, 'dopo il riavvio la figlia ha perso il segno dell\'automazione')
   assert.equal((await entro(runtime2.runs[0].input.chiediDomandaFn(DOMANDE, { toolCallId: 'c3', messaggi: [] }))).r?.status, 'unanswerable')
+})
+
+/* COD-205 (Mobile 30/10/2026): fermata la delega mentre aspettava una RISPOSTA della persona, la carta nel padre diceva solo
+   «Question cancelled». Lo snapshot verso il padre porta anche il perché, e la carta dice «you stopped the turn». */
+test('C2Q-11 STOP: la domanda della figlia chiusa da uno Stop arriva al padre con motivo «fermato»', async (t) => {
+  const { registry, sessionId: padreId, figliaId, inputFiglia } = await scena(t)
+  const dalPadre = []
+  const disiscrivi = registry.iscriviti(padreId, (e) => dalPadre.push(e))
+  t.after(() => disiscrivi?.())
+  const risposta = inputFiglia.chiediDomandaFn(DOMANDE, { toolCallId: 'c1', messaggi: [] })
+  await pausa()
+  const { requestId } = registry.domandaInAttesa(figliaId)
+  registry.ferma(figliaId)
+  assert.equal((await risposta)?.status, 'cancelled', 'il nucleo legge una domanda annullata, non saltata')
+  const ultimo = agentiPer(dalPadre, figliaId).filter((e) => e.value.operation?.kind === 'question').at(-1)
+  assert.equal(ultimo?.value.operation?.status, 'resolved')
+  assert.equal(ultimo?.value.operation?.requestId, requestId)
+  assert.equal(ultimo?.value.operation?.motivo, 'fermato')
 })

@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { linkSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { motivoDaChiedere } from '../src/path-policy.mjs';
+import { chiaveDelConsensoDi, motivoDaChiedere } from '../src/path-policy.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 function scena(t) {
@@ -43,7 +43,7 @@ test('HARD-LINK-01 — a hard link to .env asks for read, write, file_edit and t
     assert.equal(r.classe, 'segreto', `${tipo} ${x}`);
     assert.match(r.percorso, /= .*\.env$/u, `${tipo} ${x}: names the secret (${r.percorso})`);
   }
-  assert.equal(chiedi('scrivi', 'appunti.md', s).chiaveDelConsenso, 'scrittura:appunti.md = ' + join(s.progetto, '.env'), 'a write keeps its own consent key');
+  assert.equal(chiaveDelConsensoDi(chiedi('scrivi', 'appunti.md', s), 'scrivi'), 'scrittura:segreto:appunti.md = ' + join(s.progetto, '.env'), 'a write keeps its own consent key (decisione 107: with the reason)');
 });
 
 test('HARD-LINK-02 — a hard link to a home credential (~/.ssh/id_ed25519) asks too', (t) => {

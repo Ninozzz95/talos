@@ -25,8 +25,9 @@ import { resolve } from 'node:path';
  *   · si toglie il blocco `@media(max-width:1250px)` → **BANDA-05 rossa a
  *     1024** in tutt'e due i temi («a 1024 la cella della politica dovrebbe
  *     essere spenta»);
- *   · si cambia `18.6` in `catalog-engine.ts:346` → **BANDA-06 rossa** (parità
- *     del numero letta dal sorgente: «non dichiara più la soglia»).
+ *   · (decisione owner 163, 04/11/2026) la banda torna alla soglia fissa del catalogo
+ *     → **BANDA-03 e BANDA-06 rosse**: la cella dice la RAM libera MISURATA, nel
+ *     formato del telefono, e la soglia «18,6» resta solo nel catalogo.
  *
  * ⛔ E UNA PRETESA È STATA RITIRATA, perché misurata FALSA. La prima stesura
  *   diceva «si toglie `min-width:0` da `.talos-lab__banda-corrente` → BANDA-05
@@ -120,6 +121,24 @@ const MOCKUP = Object.freeze({
 
 const SOGLIE = { larga: 1440, stretta: 1024 };
 
+const GIB = 1024 ** 3;
+/* decisione owner 163: la banda legge i BYTE misurati dalla card della memoria (`data-memory-libera-byte`,
+   `data-memory-totale-byte`, `data-memory-misurato-il`, scritti da `aggiornaMisuraMemoria`). Qui si scrivono a mano, e la
+   banda li deve seguire DA SOLA (l'osservatore della carta guarda quei tre attributi). `null` toglie la misura. */
+async function misura(page, misurata) {
+  await page.evaluate((m) => {
+    const memoria = document.querySelector('#modelLabCard [data-memory-meter]');
+    if (!memoria) throw new Error('manca la card della memoria dentro #modelLabCard');
+    if (!m) {
+      for (const nome of ['data-memory-libera-byte', 'data-memory-totale-byte', 'data-memory-misurato-il']) memoria.removeAttribute(nome);
+      return;
+    }
+    memoria.setAttribute('data-memory-misurato-il', m.il);
+    memoria.setAttribute('data-memory-totale-byte', String(m.totale));
+    memoria.setAttribute('data-memory-libera-byte', String(m.libera));
+  }, misurata);
+}
+
 test.describe('la banda del laboratorio', () => {
   test('BANDA-01 — le tre celle del mockup ci sono, su tutte e quattro le schede', async ({ page }) => {
     await page.setViewportSize({ width: SOGLIE.larga, height: 900 });
@@ -140,7 +159,9 @@ test.describe('la banda del laboratorio', () => {
     // Le tre etichette del mockup, parola per parola.
     const testo = await banda.innerText();
     expect(testo).toContain('Modello per le nuove chat');
-    expect(testo).toContain('Budget RAM · scenario demo');
+    // decisione owner 163: la cella di mezzo dice la RAM libera misurata, non più «Budget RAM · scenario demo»
+    expect(testo).toContain('RAM libera');
+    expect(testo).not.toContain('scenario demo');
     // ⛔ La terza NON è quella del mockup, e non è una dimenticanza: la frase
     // del mockup («Nessun passaggio automatico al cloud») in TALOS è FALSA — il
     // ripiego automatico esiste (`session-registry.mjs:3728-3742`). Qui si
@@ -236,68 +257,47 @@ test.describe('la banda del laboratorio', () => {
     expect(appSorgente).toContain('fornitoreDelModello(grezzo)');
   });
 
-  test('BANDA-03 — il budget è la soglia dichiarata sul totale VERO della macchina', async ({ page }) => {
+  test('BANDA-03 — la RAM libera MISURATA, con l ora, nel formato del telefono; la barra è la RAM in uso (decisione owner 163)', async ({ page }) => {
     await page.setViewportSize({ width: SOGLIE.larga, height: 900 });
     await apriEEmonta(page);
     const banda = page.locator('#modelLabCard [data-lab-banda]');
+    const sopra = banda.locator('[data-lab-banda-sopra-ram]');
+    const valore = banda.locator('[data-lab-banda-valore]');
+    const unita = banda.locator('[data-lab-banda-unita]');
     const frazione = banda.locator('[data-lab-banda-frazione]');
     const track = banda.locator('[data-lab-banda-track]');
-
-    // Il numeratore è la costante dichiarata del catalogo.
-    await expect(banda.locator('[data-lab-banda-valore]')).toHaveText('18,6');
-    await expect(banda.locator('.talos-lab__banda-unita')).toHaveText('GiB');
-
-    /* Il DENOMINATORE è misurato: si muove `#machineMemoryMetric`, il nodo che
-       il pannello Sistema riempie, e la banda deve seguirlo DA SOLA (la prova
-       non richiama `aggiornaBandaLaboratorio`: lo fa l'osservatore della carta). */
-    await page.evaluate(() => {
-      const nodo = document.querySelector('#machineMemoryMetric');
-      nodo.textContent = '32 GiB';
-    });
-    await expect(frazione).toHaveText('su 32 GiB');
-    await expect(track).toBeVisible();
-    // 18,6 / 32 = 58,125% — lo STESSO conto del mockup, che sta al 58,117%.
     const riempimento = banda.locator('[data-lab-banda-fill]');
+
+    await misura(page, { libera: 7.5 * GIB, totale: 31.6 * GIB, il: '2026-11-04T15:37:56.000Z' });
+    await expect(sopra).toHaveText('RAM libera · misurata alle 16:37:56');
+    await expect(valore).toHaveText('7,5');
+    await expect(unita).toHaveText('GB');
+    await expect(frazione).toHaveText('su 32 GB');
+    await expect(track).toBeVisible();
+    await expect(track).toHaveAttribute('data-livello', 'alto');
     const pct = await riempimento.evaluate(n => Number.parseFloat(n.style.width));
-    expect(pct).toBeGreaterThan(58);
-    expect(pct).toBeLessThan(58.3);
+    expect(pct).toBeGreaterThan(76.1);
+    expect(pct).toBeLessThan(76.4);
 
-    /* E il denominatore è davvero quello: cambiando la RAM totale, la barra si
-       sposta. Se la banda mostrasse ancora la RAM LIBERA questo non accadrebbe. */
-    await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '20 GiB'; });
-    await expect(frazione).toHaveText('su 20 GiB');
-    expect(await riempimento.evaluate(n => Number.parseFloat(n.style.width))).toBeGreaterThan(92);
+    /* La misura dopo: un modello chiuso libera memoria, e la banda la segue da sola. */
+    await misura(page, { libera: 20 * GIB, totale: 31.6 * GIB, il: '2026-11-04T15:38:56.000Z' });
+    await expect(valore).toHaveText('20');
+    await expect(track).toHaveAttribute('data-livello', 'normale');
+    await expect(sopra).toHaveText('RAM libera · misurata alle 16:38:56');
+    /* Sotto 1 GB, MB — come il telefono. */
+    await misura(page, { libera: 512 * 1024 ** 2, totale: 16 * GIB, il: '2026-11-04T15:39:56.000Z' });
+    await expect(valore).toHaveText('512');
+    await expect(unita).toHaveText('MB');
+    await expect(track).toHaveAttribute('data-livello', 'critico');
 
-    /* La fonte non è ancora misurata: la frazione SPARISCE e la barra pure.
-       Non si inventa uno zero, e non si mostra un rapporto senza denominatore. */
-    await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '—'; });
+    /* Senza misura la banda non inventa: niente numero, niente frazione, niente barra. */
+    await misura(page, null);
+    await expect(sopra).toHaveText('RAM libera');
+    await expect(valore).toHaveText('—');
     await expect(frazione).toHaveText('');
     await expect(track).toBeHidden();
-    // Il numeratore resta: è una soglia dichiarata, non una misura. Non
-    // dipende dalla macchina, quindi non ha motivo di sparire con lei.
-    await expect(banda.locator('[data-lab-banda-valore]')).toHaveText('18,6');
-
-    /* ⛔⛔ UNA MISURA CHE NON È NELLA NOSTRA FORMA NON SI INDOVINA — il difetto
-       latente dichiarato il 19/09 e curato qui. `gib()` toglieva i punti PRIMA di
-       convertire la virgola, quindi «31.6 GiB» diventava **316** e la barra
-       mostrava il **5,9%** — un numero sbagliato con l'aria di un numero giusto, il
-       difetto peggiore che questa banda possa fare, e **in silenzio**.
-       La fonte di oggi scrive all'italiana (`misura-memoria.js:11`,
-       `Intl.NumberFormat('it-IT')`), quindi il caso non si presenta: ma la banda
-       legge il TESTO di un'altra superficie, e un giorno quel testo può cambiare
-       formato. ⇒ Si accetta **solo** la forma italiana — virgola per i decimali,
-       punto per le migliaia — e tutto il resto è «non è una misura»: la frazione
-       sparisce, come quando la misura non c'è.
-       ⛔ Questo caso è stato scritto PRIMA della cura e visto ROSSO con la cura
-       vecchia (`gib()` leggeva 31.6 come 316 e la barra restava accesa): se qui
-       restasse verde, la cura non starebbe curando niente. */
-    await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '31.6 GiB'; });
-    await expect(frazione, 'un formato che non è il nostro non si interpreta: si rifiuta').toHaveText('');
-    await expect(track).toBeHidden();
-    // E la forma italiana con le migliaia si legge ancora: lì il punto È un separatore di migliaia.
-    await page.evaluate(() => { document.querySelector('#machineMemoryMetric').textContent = '1.024 GiB'; });
-    await expect(frazione).toHaveText('su 1.024 GiB');
-    expect(await riempimento.evaluate(n => Number.parseFloat(n.style.width))).toBeLessThan(2);
+    // AL CONTRARIO: la soglia del catalogo e l'unità «GiB» non tornano.
+    expect(await banda.innerText()).not.toMatch(/18,6|GiB|scenario demo/u);
   });
 
   test('BANDA-04 — le misure sono quelle del mockup, non «belle a vedersi»', async ({ page }) => {
@@ -373,7 +373,10 @@ test.describe('la banda del laboratorio', () => {
           nodo.dataset.modelloId = `local:${'x'.repeat(120)}`;
           nodo.dataset.modelloDestinazione = 'locale';
           nodo.textContent = `Nemotron${'X'.repeat(160)}`;
-          document.querySelector('#machineMemoryMetric').textContent = '31,6 GiB';
+          const memoria = document.querySelector('#modelLabCard [data-memory-meter]');
+          memoria?.setAttribute('data-memory-misurato-il', new Date().toISOString());
+          memoria?.setAttribute('data-memory-totale-byte', String(31.6 * 1024 ** 3));
+          memoria?.setAttribute('data-memory-libera-byte', String(7.5 * 1024 ** 3));
           window.__lab.aggiornaBandaLaboratorio(document.querySelector('#modelLabCard'));
         });
 
@@ -501,7 +504,10 @@ test.describe('la banda del laboratorio', () => {
           nodo.dataset.modelloId = 'local:Qwen3-8B-GGUF-abc-Qwen3-8B-Q4-0-gguf';
           nodo.dataset.modelloDestinazione = 'locale';
           nodo.textContent = 'Qwen3 8B · Q4_0';
-          document.querySelector('#machineMemoryMetric').textContent = '31,6 GiB';
+          const memoria = document.querySelector('#modelLabCard [data-memory-meter]');
+          memoria?.setAttribute('data-memory-misurato-il', new Date().toISOString());
+          memoria?.setAttribute('data-memory-totale-byte', String(31.6 * 1024 ** 3));
+          memoria?.setAttribute('data-memory-libera-byte', String(7.5 * 1024 ** 3));
           window.__lab.aggiornaBandaLaboratorio(document.querySelector('#modelLabCard'));
         });
         const banda = page.locator('#modelLabCard [data-lab-banda]');
@@ -513,29 +519,16 @@ test.describe('la banda del laboratorio', () => {
     }
   });
 
-  test('BANDA-06 — il numero del budget è lo STESSO del motore del catalogo, letto dal sorgente', async ({ page }) => {
+  test('BANDA-06 — la soglia del catalogo resta nel catalogo: la banda non la porta più (decisione owner 163)', async ({ page }) => {
     await page.setViewportSize({ width: SOGLIE.larga, height: 900 });
     await apriEEmonta(page);
-
-    /* ⛔ `18.6` vive in due righe di `catalog-engine.ts` (172 e 346) e non è
-       esportato: qui se ne dichiara una copia in `lab-cornice-v3.js`, e questa
-       prova è il contratto che le tiene insieme — è lo stesso patto di
-       `tests/provider-registry-parita.test.mjs` per i fornitori. Senza,
-       cambiare la soglia nel catalogo lascerebbe la banda a raccontare un
-       numero che nessuno usa più. */
+    /* Fino al 04/11 la banda dichiarava una copia di `18.6` (`BUDGET_DEMO_GIB`) e questa prova ne teneva la parità col
+       catalogo. L'owner ha scelto la RAM libera misurata: la copia è uscita, la soglia vive solo in `catalog-engine.ts`
+       e nella sua etichetta, che restano quelle di prima. */
     const sorgente = readFileSync(resolve(process.cwd(), 'src', 'domain', 'catalog-engine.ts'), 'utf8');
     const nelCatalogo = [...sorgente.matchAll(/required <= (\d+(?:\.\d+)?)/g)].map(t => Number(t[1]));
-    /* 03/10/2026, corsia S2 della lingua: l'etichetta «Entro 18,6 GiB · stima» sta nel dizionario (`modelli.catalog.fit.fits`),
-       in tutte e due le lingue: la soglia si legge da lì, e le due voci devono dire lo stesso numero. */
-    const dizionario = readFileSync(resolve(process.cwd(), 'src', 'i18n', 'testi', 'modelli.js'), 'utf8');
-    const nellaEtichetta = [...dizionario.matchAll(/"catalog\.fit\.fits": "(?:Entro|Within) (\d+[,.]\d+) GiB/g)].map(t => Number(t[1].replace(',', '.')));
-
-    expect(nelCatalogo, 'catalog-engine.ts:346 non dichiara più la soglia').toEqual([18.6]);
-    expect(nellaEtichetta, 'modelli.catalog.fit.fits (it e en) non dichiara più la soglia').toEqual([18.6, 18.6]);
-
-    const dichiarato = await page.evaluate(() => window.__lab.BUDGET_DEMO_GIB);
-    expect(dichiarato).toBe(nelCatalogo[0]);
-    // E il numero a schermo è quello, scritto all'italiana.
-    await expect(page.locator('[data-lab-banda] [data-lab-banda-valore]')).toHaveText('18,6');
+    expect(nelCatalogo, 'catalog-engine.ts:346 dichiara ancora la sua soglia').toEqual([18.6]);
+    expect(await page.evaluate(() => window.__lab.BUDGET_DEMO_GIB)).toBeUndefined();
+    await expect(page.locator('[data-lab-banda] [data-lab-banda-valore]')).not.toHaveText('18,6');
   });
 });

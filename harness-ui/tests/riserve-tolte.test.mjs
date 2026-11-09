@@ -85,7 +85,7 @@ test('RISERVE-04 HTTP: a request carrying fallbacks is never refused for them â€
     const { registro } = registroDiProva(t)
     const { sessionId } = registro.avvia('task', {})
     await new Promise((r) => setTimeout(r, 20))
-    const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }))
+    const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro }))
     await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
     t.after(() => new Promise((ok) => { server.closeAllConnections(); server.close(() => ok()) }))
     const url = `http://127.0.0.1:${server.address().port}/api/v1/sessions/${encodeURIComponent(sessionId)}/settings`

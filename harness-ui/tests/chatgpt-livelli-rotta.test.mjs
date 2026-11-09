@@ -9,7 +9,7 @@ import test from 'node:test';
 import { createHttpApp } from '../src/http-app.mjs';
 
 async function avvia(t, opzioni) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, catalogoModelliFn: async () => ({ modelli: [] }), ...opzioni }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, catalogoModelliFn: async () => ({ modelli: [] }), ...opzioni }));
   await new Promise((ok, no) => { server.once('error', no); server.listen(0, '127.0.0.1', ok); });
   t.after(() => new Promise((ok) => server.close(ok)));
   return `http://127.0.0.1:${server.address().port}`;

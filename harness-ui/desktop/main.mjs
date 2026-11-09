@@ -3,7 +3,10 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, dialog, Menu, net, powerMonitor, screen, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, Menu, net, powerMonitor, powerSaveBlocker, screen, shell, Tray } from 'electron';
+import { bollaAccesa, creaBolla } from './bolla-finestra.mjs'; // FE-066, la bolla del computer use: spenta di serie (03/11/2026)
+import { creaSegnoFinestre } from './segno-finestra.mjs'; // FE-070, il cursore di TALOS e il bordo: una finestra trasparente per schermo (05/11/2026)
+import { creaPcSveglio } from './pc-sveglio.mjs'; // il PC non dorme mentre TALOS lavora (01/11/2026, forma con l'OK del Desktop)
 import { creaAggiornatore } from './aggiornamenti.mjs';
 import { leggiFonteDiProva } from './fonte-aggiornamenti.mjs';
 import { azioneAggiornamenti, copioneStato, statoPerLaPagina } from './canale-aggiornamenti.mjs';
@@ -11,7 +14,7 @@ import { creaCicloDiVita } from './lifecycle.mjs';
 import { leggiStatoFinestra, salvaStatoFinestra } from './window-state.mjs';
 import { coloriDellaBarra, puntoDelMenu } from './barra-finestra.mjs';
 import { copioneSegnala, etichettaSegnala } from './segnalazione.mjs'; // «Segnala un problema» (owner 29/10/2026)
-import { apribileNelBrowserDelSistema, creaAvvioFiglio, navigazioneCorniceConsentita, risolviPercorsi, scegliMotoreLocale, scegliPortaPersistente, urlIngresso, validaHandshake } from './runtime.mjs';
+import { apribileNelBrowserDelSistema, consegnaSegreti, creaAvvioFiglio, rimandoConsentito, navigazioneCorniceConsentita, risolviPercorsi, scegliMotoreLocale, scegliPortaPersistente, urlIngresso, validaHandshake } from './runtime.mjs';
 import { creaRegistro } from './log.mjs';
 import { desktopProfile } from './profile.mjs';
 import { migraDatiBrowser } from './migrazione-browser.mjs';
@@ -105,6 +108,7 @@ function avviaGuscio() {
   mkdirSync(profile.scratchDir, { recursive: true });
   const cartellaHandshake = mkdtempSync(join(profile.scratchDir, 'avvio-'));
   const figli = new Set();
+  const pcSveglio = creaPcSveglio({ blocker: powerSaveBlocker, registro: riga => registro.scrivi(riga) });
   let finestra = null; let vassoio = null; let base = null;
   let staUscendo = false; let uscitaPronta = false; let dialogoAperto = false;
   let generazione = 0; let generazioneMostrata = 0;
@@ -112,6 +116,12 @@ function avviaGuscio() {
   let motoreLocalePreferito = leggiStatoFinestra(fileStato).motoreLocale;
   let cambioMotoreInCorso = false;
   const attendi = ms => new Promise(r => setTimeout(r, ms));
+  /* FE-066: la seconda finestra, accesa solo con `--talos-bolla` finché il computer use non è montato (bolla-finestra.mjs) */
+  const bolla = creaBolla({ accesa: bollaAccesa(process.argv), BrowserWindow, globalShortcut, screen, registro: riga => registro.scrivi(riga),
+    portaDavanti: () => portaDavanti(), filePosto: join(dataDir, 'bolla.json'), lingua: () => app.getLocale(), quandoPronta: () => segno.bollaPronta() });
+  /* FE-070: il segno del computer use, con lo stesso cancello della bolla; su Windows prima della 2004 niente finestre, e lo dice la bolla (segno-finestra.mjs) */
+  const segno = creaSegnoFinestre({ accesa: bollaAccesa(process.argv), BrowserWindow, screen, registro: riga => registro.scrivi(riga),
+    postaNellaBolla: messaggio => bolla.posta(messaggio) });
 
   /*
    * ⭐ 01/10/2026 — L'AGGIORNAMENTO AUTOMATICO (owner: «seamless, automatizzato e user friendly», come Codex, Hermes e Claude).
@@ -253,13 +263,18 @@ function avviaGuscio() {
       const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, scratchDir: profile.scratchDir, motoreLocale, keyringScope: profile.keyringScope, installata: app.isPackaged, versione: app.getVersion() });
       for (const avviso of avvio.avvisi) registro.scrivi(avviso); // L3-8: una variabile del kernel ereditata e ignorata si dice
       const proc = spawn(avvio.command, avvio.args, avvio.options);
+      consegnaSegreti(proc, avvio);
       const handle = { proc, port, reportFile, generazione, terminato: false, get exitCode() { return proc.exitCode; } };
       figli.add(handle);
+      /* il server dice { tipo: 'sveglio', acceso } quando i giri al lavoro passano da 0 a 1 e da 1 a 0; vale solo questo figlio */
+      pcSveglio.nuovoFiglio(proc);
+      proc.on('message', messaggio => { pcSveglio.messaggio(proc, messaggio); });
       const uscita = registro.canale(); const errori = registro.canale();
       proc.stdout.on('data', chunk => uscita.scrivi(chunk)); proc.stderr.on('data', chunk => errori.scrivi(chunk));
       proc.once('close', () => { uscita.fine(); errori.fine(); });
       const terminato = codice => {
         handle.terminato = true; figli.delete(handle);
+        pcSveglio.figlioUscito(proc); // un server caduto col blocco preso non può più dire «spento»
         registro.scrivi('Servizio locale terminato (' + (codice ?? 'errore') + '), generazione ' + handle.generazione + '.');
         if (ciclo.handle() === handle) ciclo.figlioUscito(codice);
       };
@@ -317,6 +332,7 @@ function avviaGuscio() {
       enabled: !cambioMotoreInCorso && !['avvio', 'in-chiusura'].includes(ciclo.stato()), click: () => { void cambiaMotoreLocale(valore); } })) });
     const azioni = () => [
       { id: 'apri-talos', label: 'Apri TALOS', click: portaDavanti },
+      ...[bolla.voceDelMenu()].filter(Boolean), // la porta del mouse: c'è anche quando la scorciatoia è occupata
       { id: 'apri-browser', label: 'Apri nel browser', click: apriBrowser },
       motore(),
       { type: 'separator' },
@@ -325,7 +341,7 @@ function avviaGuscio() {
     vassoio.setContextMenu(Menu.buildFromTemplate(azioni()));
     Menu.setApplicationMenu(Menu.buildFromTemplate([
       { label: 'TALOS', submenu: [
-        ...azioni().slice(0, 3), { type: 'separator' },
+        ...azioni().slice(0, -2), { type: 'separator' },
         { id: 'resta-vassoio', label: 'Resta nel vassoio alla chiusura', type: 'checkbox', checked: restaNelVassoio,
           click: voce => { restaNelVassoio = voce.checked; salva(); } },
         { label: 'Apri il registro', click: apriRegistro },
@@ -393,7 +409,7 @@ function avviaGuscio() {
       /* Ogni caricamento (anche un «Ricarica») ritrova lo stato degli aggiornamenti. */
       questa.webContents.on('did-finish-load', () => inviaStatoAggiornamenti());
       questa.webContents.on('will-navigate', controllaNavigazione);
-      questa.webContents.on('will-redirect', controllaNavigazione);
+      questa.webContents.on('will-redirect', (evento) => { if (!rimandoConsentito(base, evento.url, evento.isMainFrame !== false)) evento.preventDefault(); });
       // F5: una cornice di pagina HTML resa nel lettore non naviga fuori dal suo lasciapassare (runtime.mjs)
       questa.webContents.on('will-frame-navigate', (evento) => {
         if (!evento.isMainFrame && !navigazioneCorniceConsentita(base, evento.frame?.url ?? '', evento.url)) evento.preventDefault();
@@ -405,13 +421,17 @@ function avviaGuscio() {
         clearTimeout(timer); salva();
         if (!staUscendo && restaNelVassoio) { evento.preventDefault(); questa.hide(); }
       });
-      questa.on('closed', () => { clearTimeout(timer); finestra = null; });
+      /* con la bolla aperta `window-all-closed` non arriverebbe: senza vassoio la principale chiusa chiude anche lei, e l'app esce come prima */
+      questa.on('closed', () => { clearTimeout(timer); finestra = null; if (!staUscendo && !restaNelVassoio) bolla.chiudi(); if (!staUscendo && !restaNelVassoio) segno.chiudi(); });
     }
     if (generazioneMostrata !== generazione) {
       await finestra.loadURL(urlIngresso(base, token));
       generazioneMostrata = generazione;
       registro.scrivi('Finestra pronta, credenziale nel cookie.');
     }
+    /* la bolla DOPO, ora che c'è il cookie; non ferma la principale */
+    bolla.aggiorna(base, generazione).catch(() => { registro.scrivi('Bolla non caricata.'); });
+    segno.aggiorna(base, generazione).catch(() => { registro.scrivi('Segno del computer use non caricato.'); });
   }
 
   app.on('second-instance', () => { registro.scrivi('Seconda istanza: riporto TALOS davanti.'); portaDavanti(); });
@@ -421,7 +441,7 @@ function avviaGuscio() {
     if (uscitaPronta) return;
     evento.preventDefault();
     if (staUscendo) return;
-    staUscendo = true; salva(); ciclo.chiudi(); aggiornatore?.ferma();
+    staUscendo = true; salva(); ciclo.chiudi(); aggiornatore?.ferma(); pcSveglio.chiudi(); bolla.chiudi(); segno.chiudi();
     void (async () => {
       await Promise.all([...figli].map(fermaFiglio));
       if (vassoio && !vassoio.isDestroyed()) vassoio.destroy();
@@ -432,6 +452,7 @@ function avviaGuscio() {
   });
   app.whenReady().then(async () => {
     vassoio = new Tray(join(app.getAppPath(), 'assets', 'talos-tray.png'));
+    bolla.registraScorciatoia(); // prima del menu: se è occupata la voce lo dice
     vassoio.setToolTip(profile.name); vassoio.on('double-click', portaDavanti); creaMenu();
     powerMonitor.on('suspend', () => ciclo.sospendi());
     powerMonitor.on('resume', () => { void ciclo.riprendi(); });

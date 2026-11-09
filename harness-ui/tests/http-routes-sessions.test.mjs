@@ -99,7 +99,7 @@ test('CTX-HEADER-HTTP-INTEGRATED — create reale fallisce prima del modello e r
 });
 
 test('CTX-DELETE-ERROR-HTTP-CODE — fallimento storage conserva il codice tipizzato nella route delete', async () => {
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: () => {},
     sessionRegistry: { elimina: async () => { throw Object.assign(new Error('unlink EACCES'), { code: 'SESSION_STORE_DELETE_FAILED' }); } },
   });
@@ -175,7 +175,7 @@ test('CTX-DELETE-HTTP-INTEGRATED — errore, elenco/export, retry e restart usan
 
 test('NATIVE-CATALOG-HTTP il selettore riceve cataloghi nativi senza credenziali', async () => {
   const calls = [];
-  const app = createHttpApp({ staticHandler: () => {}, providerProbe: { elencaModelli: async provider => {
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: () => {}, providerProbe: { elencaModelli: async provider => {
     calls.push(provider);
     return {provider, modelli:[{id:provider+':modello',nome:'Modello reale'}]};
   } } });
@@ -203,7 +203,7 @@ test('IMAGE-04 — upload e tutti gli ingressi trasmettono i riferimenti verific
     accodaMessaggio: (...value) => { calls.push(value); return { ok: true, posizione: 1 }; },
     reindirizza: (...value) => { calls.push(value); return { ok: true, redirectId: 'r' }; },
   };
-  const app = createHttpApp({ staticHandler: () => {}, sessionRegistry: registry, chatImageStore: store });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: () => {}, sessionRegistry: registry, chatImageStore: store });
   const server = createServer(app);
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -598,7 +598,7 @@ function registroFinto() {
 }
 
 async function listen(t, { sessionRegistry = registroFinto(), listaTaskDisponibili, impostaIntervalloFn, cancellaIntervalloFn, riconosciLinguaScritta } = {}) {
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     ...(riconosciLinguaScritta !== undefined ? { riconosciLinguaScritta } : {}), // M 28/10 notte
     sessionRegistry,
@@ -718,7 +718,7 @@ test('POST /api/v1/sessions con client:\'mobile\' passa {mobile:true} a sessionR
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'mobile' }),
   });
   assert.equal(risposta.status, 200);
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: true, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, fasciaVeloceScelta: false, mobile: true, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null });
 });
 
 test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono entrambi {mobile:false} — nessuna differenza di comportamento', async (t) => {
@@ -728,13 +728,13 @@ test('⛔ AL CONTRARIO: client:\'desktop\' ESPLICITO e client ASSENTE producono 
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni', client: 'desktop' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, fasciaVeloceScelta: false, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null });
 
   await fetch(`${base}/api/v1/sessions`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ taskId: 'sconto-a-scaglioni' }),
   });
-  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null });
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvio, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, fasciaVeloceScelta: false, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null });
 });
 
 /*
@@ -1149,6 +1149,25 @@ test('F4-03 HTTP-FUORI-01: POST .../approve con ambito «cartella» arriva al re
     assert.equal(risposta.status, 400, JSON.stringify(corpo));
     assert.equal((await risposta.json()).error.code, 'QUERY_INVALID', JSON.stringify(corpo));
     assert.equal(sessionRegistry.ultimaRispostaApprovazione, null, `non arriva al registro: ${JSON.stringify(corpo)}`);
+  }
+});
+
+/* E1, decision 121: «yes for this tool in this conversation» = `ambito: 'strumento'`, only with a yes; the client cannot name the tool. */
+test('E1 HTTP-STRUMENTO-01: POST .../approve with scope «strumento» reaches the registry; with a no or with a name it is 400', async (t) => {
+  const { base, sessionRegistry } = await listen(t);
+  const { sessionId } = sessionRegistry.avvia('sconto-a-scaglioni');
+  const invia = (corpo) => fetch(`${base}/api/v1/sessions/${sessionId}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
+  const ok = await invia({ requestId: 'richiesta-vera', approvato: true, ambito: 'strumento' });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaRispostaApprovazione, { sessionId, requestId: 'richiesta-vera', approvato: true, ambito: 'strumento' });
+  sessionRegistry.ultimaRispostaApprovazione = null;
+  for (const corpo of [
+    { requestId: 'richiesta-vera', approvato: false, ambito: 'strumento' },
+    { requestId: 'richiesta-vera', approvato: true, ambito: 'strumento', nome: 'shell' },
+  ]) {
+    const risposta = await invia(corpo);
+    assert.equal(risposta.status, 400, JSON.stringify(corpo));
+    assert.equal(sessionRegistry.ultimaRispostaApprovazione, null, `it does not reach the registry: ${JSON.stringify(corpo)}`);
   }
 });
 
@@ -3522,4 +3541,51 @@ test('ALLEGA-HTTP-01 — «Invia come allegato» arriva al registro da avvio lib
   for (const cattivo of [{ allegaSeTroppoGrande: true }, { messaggio: 'x', allegaSeTroppoGrande: 'si' }, { messaggio: 'x', altro: 1 }]) {
     assert.equal((await posta(`/api/v1/sessions/${vivaId}/queue`, cattivo)).status, 400, JSON.stringify(cattivo));
   }
+});
+
+test('BP-HTTP-01 — decisione 201: `paginaBrowser` (dove si trova la pagina, mai il suo testo) passa da avvio libero, ripresa e coda; storta ⇒ 400; dal telefono si ignora', async (t) => {
+  const { ORIGINE_REMOTA } = await import('../src/origine-remota.mjs');
+  const sessionRegistry = registroFinto();
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry, listaTaskDisponibili: () => [{ id: 'sconto-a-scaglioni', progetto: 'listino', difficolta: 1, consegnaCorta: 'x' }] });
+  const server = createServer((req, res) => { if (req.headers['x-prova-dal-dispositivo']) req[ORIGINE_REMOTA] = { dispositivoId: 'pad' }; return app(req, res); });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  t.after(() => new Promise((resolve) => server.close(() => resolve())));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const posta = (percorso, corpo, remoto = false) => fetch(`${base}${percorso}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(remoto ? { 'x-prova-dal-dispositivo': '1' } : {}) }, body: JSON.stringify(corpo) });
+  const PAGINA = { url: 'https://example.org/a', titolo: 'Esempio', via: 'cornice' };
+  /* avvio libero */
+  assert.equal((await posta('/api/v1/sessions/custom', { cartellaLibera: 'C:/workspace', consegna: 'prova', permessi: 'Full access', paginaBrowser: PAGINA })).status, 200);
+  assert.deepEqual(sessionRegistry.ultimeOpzioniAvvioLibero.paginaBrowser, PAGINA);
+  assert.equal((await posta('/api/v1/sessions/custom', { cartellaLibera: 'C:/workspace', consegna: 'prova', permessi: 'Full access', paginaBrowser: null })).status, 200);
+  assert.equal(sessionRegistry.ultimeOpzioniAvvioLibero.paginaBrowser, null, '«nessuna pagina» è un valore, non un\'assenza');
+  assert.equal((await posta('/api/v1/sessions/custom', { cartellaLibera: 'C:/workspace', consegna: 'prova', permessi: 'Full access' })).status, 200);
+  assert.equal(Object.hasOwn(sessionRegistry.ultimeOpzioniAvvioLibero, 'paginaBrowser'), false, 'senza campo: assente');
+  /* ripresa */
+  const sessionId = (await (await posta('/api/v1/sessions', { taskId: 'sconto-a-scaglioni' })).json()).data.sessionId;
+  const concludi = () => sessionRegistry._emetti(sessionId, { type: 'RunFinished' });
+  concludi();
+  assert.notEqual((await posta(`/api/v1/sessions/${sessionId}/resume`, { messaggio: 'e questa?', paginaBrowser: PAGINA })).status, 400);
+  assert.deepEqual(sessionRegistry.ultimeOpzioniGiro?.paginaBrowser, PAGINA);
+  concludi();
+  await posta(`/api/v1/sessions/${sessionId}/resume`, { messaggio: 'dal telefono', paginaBrowser: PAGINA }, true);
+  assert.equal(sessionRegistry.ultimoResume?.nuovoMessaggioUtente, 'dal telefono');
+  assert.equal(sessionRegistry.ultimeOpzioniGiro?.paginaBrowser, undefined, 'da un dispositivo il campo non vale: la pagina la dice solo la finestra del PC');
+  concludi();
+  await posta(`/api/v1/sessions/${sessionId}/resume`, { messaggio: 'senza' });
+  assert.equal(sessionRegistry.ultimeOpzioniGiro?.paginaBrowser, undefined);
+  concludi();
+  const STORTE = [{ url: 'ftp://e.com', via: 'vivo' }, { url: 'https://e.com', via: 'vivo', testo: 'il testo NON si manda' }, 'https://e.com', { url: 'https://e.com', via: 'x' }];
+  for (const storta of STORTE) {
+    sessionRegistry.ultimoResume = null;
+    assert.equal((await posta(`/api/v1/sessions/${sessionId}/resume`, { messaggio: 'x', paginaBrowser: storta })).status, 400, JSON.stringify(storta));
+    assert.equal(sessionRegistry.ultimoResume, null, 'registro mai raggiunto');
+    assert.equal((await posta('/api/v1/sessions/custom', { cartellaLibera: 'C:/workspace', consegna: 'prova', permessi: 'Full access', paginaBrowser: storta })).status, 400);
+  }
+  /* coda */
+  const viva = sessionRegistry.avvia('sconto-a-scaglioni').sessionId;
+  assert.equal((await posta(`/api/v1/sessions/${viva}/queue`, { messaggio: 'poi questa', paginaBrowser: PAGINA })).status, 200);
+  assert.deepEqual(sessionRegistry.ultimoAccodaMessaggio.opzioni.paginaBrowser, PAGINA);
+  assert.equal((await posta(`/api/v1/sessions/${viva}/queue`, { messaggio: 'dal pad', paginaBrowser: PAGINA }, true)).status, 200);
+  assert.equal(Object.hasOwn(sessionRegistry.ultimoAccodaMessaggio.opzioni, 'paginaBrowser'), false, 'dal dispositivo: ignorata');
+  for (const storta of STORTE) assert.equal((await posta(`/api/v1/sessions/${viva}/queue`, { messaggio: 'x', paginaBrowser: storta })).status, 400, JSON.stringify(storta));
 });

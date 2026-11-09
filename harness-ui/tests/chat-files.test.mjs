@@ -9,6 +9,7 @@ import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
+import { creaArchivioAllegati } from '../src/allegati-dati.mjs';
 import { saveChatFile, MAX_CHAT_FILE_BYTES } from '../src/chat-file-upload.mjs';
 import { createHttpApp } from '../src/http-app.mjs';
 import { createSessionRegistry } from '../src/session-registry.mjs';
@@ -72,6 +73,14 @@ test('CHAT-FILES-LIMIT: count bytes while streaming and remove incomplete file',
   assert.deepEqual(readdirSync(join(rootDir, 'allegati')).filter((name) => name.endsWith('.part')), []);
 }));
 
+/* Decision 298 (owner 06/11): a chat attachment may be up to 100 MiB, so a 60 MiB file goes through the real helper whole. */
+test('CHAT-FILES-100MIB: a 60 MiB attachment is saved whole by the real helper', async () => withWorkspace(async (rootDir) => {
+  const bytes = Buffer.alloc(60 * 1024 * 1024, 7);
+  const result = await saveChatFile({ rootDir, name: 'video.mp4', source: Readable.from([bytes]) });
+  assert.equal(result.percorso, 'allegati/video.mp4');
+  assert.equal(readFileSync(join(rootDir, result.percorso)).length, bytes.length);
+}));
+
 test('CHAT-FILES-NAME: paths, device names and invalid Windows names are refused', async () => withWorkspace(async (rootDir) => {
   for (const name of ['../outside', 'a/b', 'a\\b', 'CON.txt', 'tail.', 'bad:name', '']) {
     await assert.rejects(upload(rootDir, name, Buffer.from('x')), (error) => error.code === 'QUERY_INVALID', name);
@@ -122,69 +131,48 @@ test('CHAT-FILES-HELPER-MISSING: no path-based fallback is used', async () => wi
   assert.equal(existsSync(join(rootDir, 'allegati')), false);
 }));
 
-test('CHAT-FILES-HTTP: authenticated same-origin request copies bytes to the selected session only', async () => withWorkspace(async (rootDir) => {
-  const app = createHttpApp({ staticHandler: () => {}, token: 'test-chat-file-token',
-    sessionRegistry: { cartellaPerChatFile: (id) => id === 's1'
-      ? { ok: true, cartella: rootDir } : { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' } } });
-  const server = createServer(app);
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const bytes = Buffer.from([0, 255, 80, 75, 0]);
-  const request = (id, headers = {}) => fetch(`${base}/api/v1/sessions/${id}/chat-files`, {
-    method: 'POST', body: bytes, headers: { 'Content-Type': 'application/octet-stream',
-      'X-Talos-File-Name': encodeURIComponent('dati € .zip'), Origin: base,
-      'Sec-Fetch-Site': 'same-origin', Cookie: 'talos_token=test-chat-file-token', ...headers },
-  });
-  try {
-    assert.equal((await request('s1', { Cookie: '' })).status, 401);
-    assert.equal((await request('s1', { Origin: 'https://other.example' })).status, 403);
-    assert.equal((await request('missing')).status, 404);
-    const response = await request('s1');
-    assert.equal(response.status, 201);
-    const { data } = await response.json();
-    assert.deepEqual(data, { tipo: 'file', nome: 'dati € .zip', percorso: 'allegati/dati € .zip', bytes: bytes.length,
-      assoluto: join(rootDir, 'allegati', 'dati € .zip') });
-    assert.deepEqual(readFileSync(join(rootDir, data.percorso)), bytes);
-  } finally { await new Promise((resolve) => server.close(resolve)); }
-}));
-
-test('CHAT-FILES-REAL-SESSION: HTTP receipt resolves to bytes in the actual registry workspace', async () => withWorkspace(async (rootDir) => {
+/*
+ * Tester 02/11/2026, poi decisioni 43 e 47: il primo messaggio di una chat nuova non ha ancora una sessione. Il file va nei dati di TALOS,
+ * senza cartella né sessione, e la cartella del progetto non si tocca. Senza i dati nessuna scrittura, mai un ripiego nel progetto.
+ */
+test('CHAT-FILES-NEW-CHAT: the file goes to the TALOS data, with no folder and no session, and the project stays untouched', async () => withWorkspace(async (rootDir) => {
   const workspace = join(rootDir, 'progetto');
-  const cartellaStore = join(rootDir, 'sessioni');
   mkdirSync(workspace);
-  mkdirSync(cartellaStore);
-  const registry = createSessionRegistry({ cartellaStore, modello: 'test/model', chiave: 'test',
-    guardaWorkspaceFn: () => () => {},
-    preparaEsecuzioneFn: () => ({ cartella: workspace, comandoProva: 'node --test', task: { id: 'test', consegna: 'prova' } }),
-    avviaSessioneFn: async (input) => {
-      input.onEvento({ type: 'RunStarted', threadId: 't', runId: 'r' });
-      input.onEvento({ type: 'RunFinished', threadId: 't', runId: 'r' });
-      return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } };
-    },
-  });
-  const { sessionId } = registry.avvia('test');
-  assert.ok(sessionId);
-  const server = createServer(createHttpApp({ staticHandler: () => {}, sessionRegistry: registry }));
+  const registry = createSessionRegistry({ cartellaStore: join(rootDir, 'sessioni'), modello: 'test/model', chiave: 'test',
+    cartelleProgetto: [{ id: 'p1', nome: 'progetto', percorso: workspace }] });
+  const archivioAllegati = creaArchivioAllegati({ cartella: join(rootDir, 'dati', 'allegati') });
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: () => {}, token: 'test-chat-file-token', sessionRegistry: registry, archivioAllegati }));
+  const senzaDati = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: () => {}, token: 'test-chat-file-token', sessionRegistry: registry }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve) => senzaDati.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const post = (name, body) => fetch(`${base}/api/v1/sessions/${sessionId}/chat-files`, {
-    method: 'POST', body, signal: AbortSignal.timeout(15000), headers: { Origin: base, 'Sec-Fetch-Site': 'same-origin',
-      'Content-Type': 'application/octet-stream', 'X-Talos-File-Name': encodeURIComponent(name) },
-  });
+  const baseSenza = `http://127.0.0.1:${senzaDati.address().port}`;
+  const bytes = Buffer.from([1, 2, 3]);
+  const post = (headers = {}, dove = base) => fetch(`${dove}/api/v1/chat-files`, { method: 'POST', body: bytes, headers: {
+    'Content-Type': 'application/octet-stream', 'X-Talos-File-Name': 'prima.bin', Origin: dove, 'Sec-Fetch-Site': 'same-origin',
+    Cookie: 'talos_token=test-chat-file-token', ...headers } });
   try {
-    const bytes = Buffer.from([0, 255, 80, 75]);
-    const response = await post('allegato.zip', bytes);
-    assert.equal(response.status, 201);
-    const receipt = (await response.json()).data;
-    const recovered = await registry.scaricaFile(sessionId, receipt.percorso);
-    assert.equal(recovered.ok, true);
-    assert.deepEqual(recovered.bytes, bytes);
-    const tooLarge = await post('too-large.bin', Buffer.alloc(MAX_CHAT_FILE_BYTES + 1, 1));
-    assert.equal(tooLarge.status, 413);
-    assert.equal(existsSync(join(workspace, 'allegati', 'too-large.bin')), false);
+    assert.equal((await post({ Cookie: '' })).status, 401);
+    assert.equal((await post({ Origin: 'https://other.example' })).status, 403);
+    assert.equal((await fetch(`${base}/api/v1/chat-files`, { headers: { Cookie: 'talos_token=test-chat-file-token' } })).status, 405, 'the route is in the inventory');
+    assert.equal((await post({ 'X-Talos-File-Name': 'a/b.bin' })).status, 400, 'a name that is a path');
+    const risposta = await post();
+    assert.equal(risposta.status, 201);
+    const { data } = await risposta.json();
+    assert.equal(data.percorso, `attachments/${data.allegatoId}/prima.bin`);
+    assert.equal(data.assoluto, undefined);
+    assert.deepEqual(readFileSync(archivioAllegati.percorsoDi(data.allegatoId)), bytes);
+    assert.deepEqual(readdirSync(workspace), [], 'the project is not touched');
+    const altro = await (await post({ 'X-Talos-Chat-Folder': encodeURIComponent(JSON.stringify({ cartellaId: 'p1' })) })).json();
+    assert.notEqual(altro.data.allegatoId, data.allegatoId, 'an old window that still says the folder gets the same treatment');
+    assert.deepEqual(readdirSync(workspace), []);
+    const rifiuto = await post({}, baseSenza);
+    assert.equal(rifiuto.status, 503);
+    assert.equal((await rifiuto.json()).error.code, 'ATTACHMENTS_UNAVAILABLE');
+    assert.deepEqual(readdirSync(workspace), [], 'never a fallback into the project');
   } finally {
     await new Promise((resolve) => server.close(resolve));
-    await registry.chiudi();
+    await new Promise((resolve) => senzaDati.close(resolve));
   }
 }));
 

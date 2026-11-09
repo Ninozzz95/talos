@@ -90,7 +90,7 @@ async function doctorDalVivo(t, sorgenteDelKernel) {
     TALOS_DESKTOP_DATA_DIR: join(radice, 'desktop'), TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_HARNESS_UI_KEYRING_SCOPE: '', TALOS_SCRATCH_DIR: join(radice, 'scratch'),
     TEMP: temp, TMP: temp, TMPDIR: temp, TALOS_OWNER_RUNTIME_MODULE: kernel,
   };
-  const figlio = spawn(process.execPath, ['server.mjs'], { cwd: RADICE, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env });
+  const figlio = spawn(process.execPath, ['server.mjs', '--senza-gettone=prove'], { cwd: RADICE, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env });
   t.after(() => { figlio.kill(); });
   let scritto = '';
   figlio.stdout.on('data', (c) => { scritto += c; });

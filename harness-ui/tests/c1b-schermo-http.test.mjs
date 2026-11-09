@@ -13,7 +13,7 @@ import { createHttpApp } from '../src/http-app.mjs';
  * Il gestore del browser è finto: qui si prova la rotta, non Chromium.
  */
 async function banco(t, browserVivo) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, browserVivo }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, browserVivo }));
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
   t.after(() => new Promise((ok) => { server.closeAllConnections?.(); server.close(ok); }));
   return `http://127.0.0.1:${server.address().port}/api/v1/browser/vivo/schermo?sessione=s1`;

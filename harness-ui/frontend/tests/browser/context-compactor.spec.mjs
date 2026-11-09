@@ -13,6 +13,12 @@ import { rimuoviCartellaDiProvaAttesa } from '../../../tests/aiuto/rimuovi-carte
 const harness = fileURLToPath(new URL('../../../', import.meta.url));
 const sessionId = 'context-desktop-proof';
 const model = 'fixture/no-inference';
+/* 89c13b4d9 (revisione d'uso O4, 04/11): sotto 760 px di barra «Context Manager» sta nel menu «Altre azioni»
+   (`#altreAzioniChat` apre `#azioniRaccolteChat`); la finestra di serie 1280 dà 664 px. Si apre il menu solo se il tasto non si vede. */
+async function premiContextManager(page) {
+  if (!(await page.locator('#compactSessionBtn').isVisible())) await page.locator('#altreAzioniChat').click();
+  await page.locator('#compactSessionBtn').click();
+}
 let directory, child, base, token;
 
 /*
@@ -48,13 +54,15 @@ test.beforeAll(async () => {
     { type: 'RunFinished', _sequenza: 5 },
   ].map(JSON.stringify).join('\n') + '\n');
   await writeFile(join(directory, 'context-disabled-proof.jsonl'), (await readFile(join(directory, `${sessionId}.jsonl`), 'utf8')).replaceAll(sessionId, 'context-disabled-proof'));
-  child = spawn(process.execPath, ['server.mjs'], { cwd: harness, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: {
+  child = spawn(process.execPath, ['server.mjs'], { cwd: harness, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: {
       TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: (globalThis.process?.env?.TEMP || globalThis.process?.env?.TMP || '.') + '/talos-scratch-di-prova', // 24/09/2026: mai la radice vera %LOCALAPPDATA%TALOS, // 23/09/2026: custodia delle chiavi di prova, mai quella vera di Windows
-    ...process.env, TALOS_HARNESS_UI_PORT: String(port), TALOS_HARNESS_UI_TOKEN: token,
+    ...process.env, TALOS_HARNESS_UI_PORT: String(port), TALOS_HARNESS_UI_SEGRETI_DA: 'stdin',
     TALOS_HARNESS_UI_SESSIONS_DIR: directory, TALOS_HARNESS_UI_PROJECT_DIRS: workspace,
+    TALOS_DESKTOP_DATA_DIR: directory, // 02/11/2026: senza, la copia delle preferenze (fase 8) arrivava da `harness-ui/.preferenze-finestra.json`, e con lei l'inglese di un'altra prova
     TALOS_HARNESS_UI_PUBLIC_DIR: resolve(harness, 'frontend/dist'),
     TALOS_CONTEXT_TRIAL: JSON.stringify({ sessionIds: [sessionId], models: [{ provider: 'openrouter', model, windowTokens: 16384, responseReserve: 2048 }] }),
   } });
+  child.stdin.end(`TALOS_HARNESS_UI_TOKEN=${token}\n`); // gettone sempre (02/11/2026): solo dallo stdin
   child.stdout.resume(); child.stderr.resume();
   await expect.poll(async () => { try { return (await fetch(`${base}/api/v1/health`, { headers: { Cookie: `talos_token=${token}` }, signal: AbortSignal.timeout(300) })).status; } catch { return 0; } }, { timeout: 20000 }).toBe(200);
 });
@@ -72,7 +80,7 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
   await page.goto(base);
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.evaluate(({ sessionId, model }) => window.__talosHarnessUiRuntime.passaASessione(sessionId, 'fixture', 'Decisione sul database', model, { conclusa: true, modello: model }), { sessionId, model });
-  await page.locator('#compactSessionBtn').click();
+  await premiContextManager(page);
   await expect(page.locator('#veloContesto')).toBeVisible();
   await expect(page.locator('#compactSessionBtn')).toHaveAccessibleName('Context Manager');
   await expect(page.locator('[data-context-title]')).toHaveText('Context Manager');
@@ -188,7 +196,7 @@ test('CTX-UI-DESKTOP-ROUNDTRIP pulsante, SQLite e replay della chat vera', async
   await page.evaluate(({ sessionId, model }) => window.__talosHarnessUiRuntime.passaASessione(sessionId, 'fixture', 'Decisione sul database', model, { conclusa: true, modello: model }), { sessionId, model });
   await expect(page.locator('#conversation [data-context-separator]')).toHaveCount(1);
   await verificaConsumoNelContesto();
-  await page.locator('#compactSessionBtn').click();
+  await premiContextManager(page);
   await page.getByText('Da non dimenticare', { exact: true }).click();
   await expect(page.locator('[data-context-facts]')).toContainText('Il database deve restare locale.');
   expect(inference).toEqual([`${base}/api/v1/sessions/${sessionId}/context/jobs`]);

@@ -97,7 +97,7 @@ const INVENTARIO = [
   {
     superficie: 'collasso della barra (le colonne della shell)',
     mockup: '[{gridTemplateColumns:start},{gridTemplateColumns:end}]',
-    nostra: '[{ gridTemplateColumns: valore }, { gridTemplateColumns: dopo }]',
+    nostra: '[{ gridTemplateColumns: colonnePrima }, { gridTemplateColumns: dopo }]',
     dove: 'regia', bundle: 'js', durata: 'disclosure ×1,2 = 216 ms',
   },
   {

@@ -1,6 +1,6 @@
 import './src/difesa-ricerca-programmi.mjs'; // ⛔ PER PRIMO: su Windows un `git.exe` dentro il workspace non deve battere il git vero (misura e fonti nel file)
 import { KERNEL_DI_SERIE_DESKTOP } from './src/kernel-di-serie-desktop.avvio.mjs'; // ⛔ PER SECONDO (L3-9): senza la variabile del kernel vale l'adattatore desktop, e va deciso PRIMA che config e runtime la leggano
-import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, statfsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto'; // F3 (24/09): il gettone dello spegnimento gentile
 import { createServer } from 'node:http';
 import { createLocalResumeDiagnostics } from './src/local-resume-diagnostics.mjs';
@@ -9,10 +9,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAutomationScheduler } from './src/automation-scheduler.mjs';
 import { creaOspiteAutomazioni } from './src/automation-per-il-modello.mjs'; // automazioni a due porte (08/10/2026)
 import { createAutomationStore } from './src/automation-store.mjs';
-import { loadConfig, trovaPortaLibera } from './src/config.mjs';
+import { indirizzoDelServer, loadConfig, trovaPortaLibera } from './src/config.mjs';
 import { leggiSegretiDaStdin } from './src/segreti-da-stdin.mjs'; // owner 14/10 (via mobile): i segreti dallo stdin
+import { CAMPO_BIGLIETTO, chiaveDeiBiglietti, creaBiglietto, DURATA_BIGLIETTO_MS, scegliGettone } from './src/gettone.mjs'; // owner 02/11: il gettone c'è sempre
+import { chiudiCollegamentiDelPiano, collegamentiDelProcesso } from './src/chatgpt-collegamento.mjs';
 import { createHttpApp } from './src/http-app.mjs';
 import { createSessionRegistry } from './src/session-registry.mjs';
+import { blocchiViviAllaNascita, catalogoBlocchiDaAmbiente } from './src/blocchi/prompt-del-catalogo.mjs';
+import { listaPassiDelServer, passiSenzaPersonaPerProva } from './src/passi-del-server.mjs';
 import { createProcessOutputStore } from './src/process-output-store.mjs';
 import { impostaPoliticaScritturaSync, modalitaPubblicazioneIntestazione } from './src/session-store.mjs'; // F3 (24/09): il writer sincrono rispetta la coda; 24/09: la modalità dell'intestazione per il Doctor
 import { apriArchivioInSolaLettura, createWorkflowStore } from './src/workflow/store.mjs';
@@ -28,10 +32,18 @@ import { listaTaskDisponibili } from './src/task-catalog.mjs';
 import { elencaCartelleProgetto, validaCartellaLibera } from './src/custom-task.mjs';
 import { diagnosi, statoDelServizioAgente } from './src/doctor.mjs';
 import { avviaPuliziaScratch, statoScratch } from './src/scratch.mjs';
+import { creaAvvisoSveglio } from './src/pc-sveglio.mjs';
+import { createImpostazioniPcSveglio } from './src/impostazioni-pc-sveglio.mjs';
+import { createImpostazioniMemoriaConversazioni } from './src/impostazioni-memoria-conversazioni.mjs';
+import { creaFotoConversazioni } from './src/foto-conversazioni.mjs'; // 01/11/2026, «Memoria delle conversazioni»
+import { identitaFoto } from './src/archivio-foto.mjs';
+import { capacitaDelLocaleAperto, proiettoreDelManifesto, vedeDaRuntimeCompatibile } from './src/proiettore-visione.mjs';
+import { creaSorveglianteScheda } from './src/scheda-lenta.mjs';
 import { statoPrimoAvvio } from './src/setup-stato.mjs';
 import { createSearchSourceStore } from './src/search-source-store.mjs';
+import { cartellaDegliAllegati, creaArchivioAllegati } from './src/allegati-dati.mjs'; // decisioni 43 e 47: gli allegati nei dati di TALOS
 import { createPreferenzeWslStore } from './src/preferenze-wsl-store.mjs'; // F009 (owner 01/10/2026): l'utente di WSL
-import { statoWsl } from './src/kernel/talosHarness.mjs';
+import { statoWsl, statoCancelloWorker } from './src/kernel/talosHarness.mjs';
 import { verificaCasaLinux } from './src/casa-linux-binari.mjs'; // Fase B (owner 01/10/2026): i binari per Linux del pacchetto
 import { ENDPOINT_SENTINELLA_DUCKDUCKGO, creaTrasportoSenzaChiave } from './src/duckduckgo-search.mjs';
 import { createModelCatalog } from './src/model-catalog.mjs';
@@ -51,6 +63,11 @@ import { createHfDirectTransfer } from './src/hf-direct-transfer.mjs';
 import { fetchAllowedHfImage } from './src/hf-image-proxy.mjs';
 import { createLlamaServerSupervisor, finestraDelMotoreLocale } from './src/llama-server-supervisor.mjs';
 import { createLlamaRouterSupervisor } from './src/llama-router-supervisor.mjs';
+import { createLlamaBinaryProbe } from './src/llama-binary-probe.mjs';
+import { createVersioneDelMotore, rigaDelRegistro } from './src/versione-del-motore.mjs';
+import { creaAperturaCondivisa, fotoDelCaricamento, nomeDaMostrare } from './src/apertura-condivisa.mjs';
+import { creaLettoreScheda, creaMemoriaScheda } from './src/attesa-scheda.mjs';
+import { creaCambioDiModello } from './src/attesa-turno.mjs';
 import { motoreConosceArchitettura } from './src/motore-architetture.mjs';
 import { createLlamaServerRuntime } from './src/local-runtime-llama-server.mjs';
 import { createProviderProbe, CATALOGHI_DIRETTI } from './src/provider-probe.mjs';
@@ -67,14 +84,17 @@ import { spawn as spawnServerLocali } from 'node:child_process';
 import { creaProntoFn } from './src/sessione-pronta.mjs';
 import { createDesktopContextRuntime, resolveDesktopContextProfile, resolveDesktopDefaultProfile } from './src/context-runtime.mjs';
 import { createImpostazioniContesto, giroUsaIlMotore } from './src/impostazioni-contesto.mjs';
+import { creaFiduciaCartelle, opzioniFiduciaPerIlRegistro } from './src/fiducia-cartelle.mjs';
 import { createImpostazioniComandi } from './src/impostazioni-comandi.mjs'; // owner 27/10/2026: dove girano i comandi, di serie
+import { createImpostazioniChat } from './src/impostazioni-chat.mjs'; // decisione 140 (04/11/2026): «Blocchi vivi nelle risposte»
 import { createPreferenzeModelli } from './src/preferenze-modelli.mjs'; // owner 29/10/2026: preferiti e recenti dei modelli
 import { createContextTokenCounter, buildPreparedDesktopContextRequest, credenzialeDelContatore } from './src/context-token-counters.mjs';
 import { createChatImageStore } from './src/chat-image-attachments.mjs';
 import { creaGuardaImmagine, ridimensionatoreDisponibile } from './src/guarda-immagine-ospite.mjs';
 import { apriPaginaLocaleSeCeIlBrowser } from './src/pagina-locale-ospite.mjs'; // owner 27/10/2026, local_page
 import { baseImmaginiOpenRouter } from './src/image-generator.mjs'; // L-1 del kit: le immagini all'indirizzo di OpenRouter scelto
-import { avviaSessione } from './src/agent-service.mjs';
+import { avviaSessione, leggiPaginaPerLaVista } from './src/agent-service.mjs';
+import { leggiPaginaBrowserSeCeIlBrowser } from './src/pagina-browser-ospite.mjs'; // decisione 201, browser_page
 import { RUNTIME_BOOTSTRAP_SCHEMA, RUNTIME_RESOURCE_SCHEMA } from './src/runtime-contract.mjs';
 import { applicaTempiDelServer, closeRuntimeResources } from './src/http-lifecycle.mjs';
 import { leggiInattivitaGenerazioneMs } from './src/generation-idle.mjs';
@@ -91,14 +111,25 @@ import { CARTELLA_PROGETTI, creaCartellaDatiProgetto } from './src/cartella-dati
 import { creaPuntiDiRipristino } from './src/punti-di-ripristino.mjs'; // R5.11: «Annulla le modifiche ai file» // PO-26 (24/09): Libreria e Ricerca fuori dal progetto
 import { creaInstradamentoDiSerie } from './src/esclusi-di-serie.mjs'; // 0.1.25: i fornitori a valle esclusi di serie, per modello
 import { creaOspiteFornitori } from './src/fornitori-per-il-modello.mjs'; // 0.1.25: la seconda porta dei fornitori esclusi
+import { creaServizioImpostazioni } from './src/impostazioni/servizio-impostazioni.mjs'; // Fase 8 (01/11/2026): impostazioni dalla chat
+import { creaCopiaFinestra } from './src/impostazioni/copia-finestra.mjs';
+import { creaFontiDelServer } from './src/impostazioni/fonti-impostazioni.mjs';
+import { prezzoPerMilione } from './src/impostazioni/prezzo-del-modello.mjs';
 import { slugDelFornitore } from './src/openrouter-fornitori.mjs';
 import { creaCustodiaChatgpt } from './src/chatgpt-custodia.mjs'; // 11/10/2026: «Continue with ChatGPT»
 import { creaAccessoChatgpt } from './src/chatgpt-accesso.mjs';
 import { creaAccessoChatgptOspite } from './src/chatgpt-accesso-ospite.mjs'; // 18/10/2026: il custode del piano è l'app che ospita r4
 import { creaLucchettoRinnovoChatgpt, fileLucchettoRinnovoChatgpt } from './src/chatgpt-lucchetto-rinnovo.mjs'; // L3-1
 import { accessoConUso, creaRegistroUsoChatgpt } from './src/chatgpt-uso.mjs';
-import { creaCatalogoChatgpt, creaRotteChatgpt } from './src/chatgpt-rotte.mjs';
+import { creaRegistroNotifiche } from './src/notifiche-registro.mjs';
+import { porteDelComputerUse } from './src/computer-use/interruttore.mjs';
+import { creaImpostazioneComputerUse } from './src/computer-use/impostazione.mjs'; // decisione 310 (06/11): «Anteprima», spento di serie, acceso solo a mano
+import { chiudiTuttiGliAiutanti } from './src/computer-use/aiutante-mcp.mjs'; // 04/11/2026: l'aiutante nativo si spegne con l'app
+import { creaScrittoriNotifiche } from './src/notifiche-scrittori.mjs';
+import { creaPulitoreMarkdown } from './src/notifiche-testo.mjs'; // markdown-it si importa alla prima voce con segni, mai qui
+import { creaCatalogoChatgpt, creaFasciaVeloceDelModello, creaRotteChatgpt } from './src/chatgpt-rotte.mjs';
 import { creaAccessoLocaleOspite, finestraDelModelloOspite } from './src/accesso-locale-ospite.mjs';
+import { creaPresenzaDaApp } from './src/presenza-da-app.mjs'; // R-34 parte 2: la presenza dal telefono
 import { homedir, hostname } from 'node:os';
 import { creaRemoto } from './src/remoto/index.mjs'; // 18/10/2026: il controllo remoto, lato PC
 import { caricaBindingIroh } from './src/remoto/binding.mjs';
@@ -106,6 +137,8 @@ import { creaChiamataInterna } from './src/remoto/chiamata-interna.mjs';
 import { creaLettoreBloccate } from './src/remoto/lettore-bloccate.mjs'; // owner 27/10/2026: le cartelle bloccate per un dispositivo, dal file
 import { iscriviConRigiocata } from './src/iscrizione-sessione.mjs';
 import { segnalazioneAccesaDallAmbiente } from './src/segnalazione-problema.mjs'; // «Segnala un problema»: l'interruttore positivo (revisione D, F4)
+import { allegatiDellOspite } from './src/allegati-dell-ospite.mjs'; // COD-248: ogni ospite salva a modo suo
+import { aiutoDelServer } from './src/aiuto/aiuto-del-server.mjs'; // Centro assistenza (owner 01/11/2026): la guida di TALOS per `talos_help`
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
 const ALIAS_LOOPBACK = ['127.0.0.1', '::1', 'localhost'];
@@ -118,12 +151,26 @@ function percorsoDatiDesktop(relativo) {
   return join(cartella, relativo);
 }
 
+/**
+ * Il proiettore scaricato col modello, nella forma che vuole il motore (`{ path, bytes? }`), o null. S9 della revisione cloud della PR 20 (04/11/2026): la stessa
+ * espressione stava due volte, per la sezione del router e per `load`; ora è una, e le due non possono divergere.
+ */
+function proiettoreDelModello(manifest, radiceModelli) {
+  const voce = proiettoreDelManifesto(manifest);
+  return voce ? { path: join(radiceModelli, manifest.path, voce.path), ...(Number.isSafeInteger(voce.bytes) ? { bytes: voce.bytes } : {}) } : null;
+}
+
 async function startServer() {
   /* ⭐ 14/10/2026 — `TALOS_HARNESS_UI_SEGRETI_DA=stdin`: i segreti arrivano dallo stdin, PRIMA del config. Il token va al config in
      una COPIA dell'ambiente e mai in `process.env` (lo erediterebbero i processi figli, e su Android si legge in
      /proc/<pid>/environ); il resto va al portachiavi a modulo. Vedi `src/segreti-da-stdin.mjs`. */
   const segreti = await leggiSegretiDaStdin({ env: process.env });
   const config = loadConfig({ ...process.env, ...segreti.perR4 }, import.meta.url);
+  /* ⛔⛔ «Gettone sempre» (owner 02/11/2026, `src/gettone.mjs`): da qui in poi si usa SOLO `gettoneDelServer`, mai `config.token`. Sta in memoria:
+     mai in `process.env` (lo erediterebbero i figli), mai su disco, mai nei log. */
+  const { gettone: gettoneDelServer, origine: origineDelGettone } = scegliGettone({ argv: process.argv.slice(2), env: process.env,
+    daStdin: segreti.perR4.TALOS_HARNESS_UI_TOKEN ?? null, cartelle: [config.cartellaStore, process.env.TALOS_DESKTOP_DATA_DIR] });
+  if (origineDelGettone === 'prove') console.warn('[gettone] test mode: this server runs with no token, on a test folder only / modo prove: questo server gira senza gettone, solo su una cartella di prova');
   /*
    * ⭐ F3, onda 2 di F2 (24/09/2026) — IL WRITER SINCRONO NON SCAVALCA PIÙ LA CODA (J3, rapporto F2 §2.2). Con
    *   `'busy'` un sync che trova una scrittura in volo lancia `SESSION_STORE_BUSY` prima di toccare il disco, e il
@@ -198,6 +245,16 @@ async function startServer() {
   /* Il conteggio NOSTRO di ciò che TALOS manda col piano (decisione owner 11/10: «Link + conteggio nostro»): soli numeri, nella
      cartella dei dati. Scollegare lo azzera, da tutte e due le porte (`accessoConUso`). */
   const usoChatgpt = creaRegistroUsoChatgpt({ file: percorsoDatiDesktop('.chatgpt-uso.json') });
+  /* Notifiche del PC (contratto «notifiche», 31/10/2026): un registro solo nella cartella dei dati, letto alla prima richiesta
+     (mai all'avvio), servito dalle rotte /api/v1/notifications e dal ponte dei dispositivi. */
+  /* 03/11/2026: i luoghi di «Consenti sempre», nella cartella dei dati; il ciclo del computer use li riceverà da qui (attrezzo, fase 7c).
+     Decisioni 79-80: il computer use è SPENTO in questa release (`COMPUTER_USE_ACCESO` in `computer-use/interruttore.mjs`): niente
+     registro, niente rotte, niente operazioni dal dispositivo. Decisione 310 (06/11/2026): la costante è accesa (la funzione è nella
+     versione, come «Anteprima»), la scelta della persona è SPENTA di serie e si accende solo a mano, dalle Impostazioni → Strumenti o da
+     `app_settings` (`tools.computerUse`) dietro la carta; porte, rotte, ponte e giri la rileggono dal vivo, senza riavviare. */
+  const impostazioneComputerUse = creaImpostazioneComputerUse({ file: percorsoDatiDesktop('.computer-use-impostazione.json') });
+  const computerUse = porteDelComputerUse({ fileLuoghi: percorsoDatiDesktop('.computer-use-luoghi.json'), acceso: impostazioneComputerUse.acceso });
+  const registroNotifiche = creaRegistroNotifiche({ file: percorsoDatiDesktop('.notifiche.jsonl'), pulisciTesto: creaPulitoreMarkdown() });
   /* L3-1 (13/10/2026): il portachiavi di sistema è di TUTTI i processi TALOS desktop dell'utente (l'app e un server a mano):
      un rinnovo alla volta fra loro, o il secondo butta la sessione che il primo ha appena salvato. La custodia di prova
      (`memoria`) è di questo processo solo: lì nessun lucchetto. */
@@ -216,6 +273,10 @@ async function startServer() {
      l'app che ospita r4 spinge il suo motore locale (socket privato + chiave per avvio) e i modelli `locale-ospite:<nome>` gli
      parlano. Senza la variabile la fonte non esiste e le sue rotte rispondono 404. */
   const accessoLocaleOspite = creaAccessoLocaleOspite({ cartella: process.env.TALOS_LOCALE_OSPITE_DIR || null });
+  /* R-34 parte 2 (forma del Mobile, OK di CLI e Performance, 30/10/2026): con `TALOS_PRESENZA_DA_APP=1` l'app che ospita r4 dice se la
+     persona è davanti (`POST /api/v1/presence`); parte ASSENTE e un «presente» scade dopo 60 s senza rinnovo. Senza la variabile non
+     esiste: la rotta risponde 404 e il registro decide solo dai client capaci, come sul desktop. */
+  const presenzaDaApp = process.env.TALOS_PRESENZA_DA_APP === '1' ? creaPresenzaDaApp() : null;
 
   /*
    * ⭐⭐⭐ 04/9 — R-03, la fonte della ricerca web dalle Impostazioni (parità
@@ -243,6 +304,9 @@ async function startServer() {
     file: percorsoDatiDesktop('.preferenze-wsl.json'),
     statoFn: async (preferenze) => ({ ...(await statoWsl(preferenze)), casaLinux: casaLinux.pronta ? { pronta: true } : { pronta: false, motivo: casaLinux.motivo } }),
   });
+  /* Decisioni 43 e 47: i file allegati, nei dati di TALOS, accanto alle sessioni (BD2). Ciò che non è mai stato legato si pulisce all'avvio e a ogni caricamento. */
+  const archivioAllegati = creaArchivioAllegati({ cartella: cartellaDegliAllegati(config.cartellaStore), ...allegatiDellOspite(process.env) });
+  void archivioAllegati.pulisci().catch((errore) => { console.warn(`[allegati] pulizia non riuscita: ${errore?.message ?? errore}`); });
   const trasportoSenzaChiave = creaTrasportoSenzaChiave();
   const ricercaWebFn = () => searchSourceStore.perKernel({ trasportoSenzaChiave, sentinellaDuckDuckGo: ENDPOINT_SENTINELLA_DUCKDUCKGO });
   const provaRicercaWebFn = async (query) => {
@@ -323,14 +387,58 @@ async function startServer() {
   }
 
   let supervisoreLocale = null;
+  let schedaLenta = null; // `src/scheda-lenta.mjs`, created with today's engine
   /* Router mode (27/10/2026): the router and its children go down with the server (null with the switch OFF: nothing changes) */
   let chiudiRouterLocale = null;
   /* L1 1.3 (26/10/2026): la finestra che cresce — nasce col supervisore, più sotto (`src/finestra-che-cresce.mjs`) */
   let finestraCheCresce = null;
+  const proiettoriPerPercorso = new Map(); // 02/11/2026: percorso del modello → il suo proiettore (o null), dall'ultima apertura
+
+  /* modelId → { nome, motivo }: by model, because a refused request also passes here and must not rename the opening in course (revisione del 01/11, M1) */
+  const datiDelleAperture = new Map();
+  const datiApertura = (modelId, dati) => { datiDelleAperture.set(modelId, { ...datiDelleAperture.get(modelId), ...dati }); };
+  const aperturaCondivisa = creaAperturaCondivisa({ apri: (modelId, opzioni) => localRuntimes['llama.cpp'].load(modelId, opzioni) });
+  const nomeDelModello = async (modelId) => {
+    const manifesto = await localModelStore.inspect(modelId).catch(() => null);
+    /* prima di ogni attesa: un modello che non c'è non deve costare quello aperto (revisione 2, M1) */
+    if (!manifesto || manifesto.state !== 'ready') { const errore = new Error('Modello locale non pronto'); errore.code = 'MODEL_NOT_FOUND'; throw errore; }
+    datiApertura(modelId, { nome: nomeDaMostrare(manifesto.name) ?? nomeDaMostrare(manifesto.repo) });
+  };
+  let emulatoreLocale = null;
+  const localiInsieme = () => {
+    const router = supervisoreLocale?.status?.()?.router;
+    return config.motoreLocaleRouter === true && router?.proprietario !== 'standalone' && router?.modelliMax !== 1;
+  };
+  /* owner 01/11/2026, «Aspetta l'altra» (`attesa-turno.mjs`). Letto dallo stato vero a ogni richiesta: `config` dice se c'è il router */
+  const cambioDiModello = creaCambioDiModello({
+    stato: () => supervisoreLocale?.status?.() ?? null,
+    scarica: () => localRuntimes['llama.cpp'].unload(),
+    giriInCorso: (modelId) => sessionRegistry.giriSulModelloLocale(modelId),
+    giroDi: (sessione) => sessionRegistry.giroDellaSessione(sessione),
+    /* col modello sul motore di oggi il router rifiuta: si aspetta come senza router (revisione 2, M2) */
+    /* e se la memoria regge un modello solo il router scaricherebbe chi scrive: «Aspetta l'altra» vale anche lì (revisione 2, M5) */
+    conRouter: () => localiInsieme(),
+    /* Desktop: rotta spenta o processo uscito, si va avanti; un timeout a processo vivo non vuol dire fermo: un motore sotto carico risponde male */
+    motoreOccupato: async ({ signal } = {}) => {
+      const stato = supervisoreLocale?.status?.()?.state;
+      if (stato === 'loading' || stato === 'stopping') return true; // reopening: a window that grows is not a still engine (revisione 2, D3)
+      if (stato !== 'ready') return false;
+      try {
+        const risposta = await supervisoreLocale.request('/slots', { method: 'GET', signal: AbortSignal.any([signal, AbortSignal.timeout(3_000)]) });
+        if (risposta.status === 404 || risposta.status === 501) return false;
+        if (!risposta.ok) return true;
+        const posti = await risposta.json();
+        return !Array.isArray(posti) || posti.some((posto) => posto?.is_processing === true);
+      } catch { return true; }
+    },
+  });
   let contextRuntime = null;
 
   const chatImageStore = createChatImageStore({ rootDir: percorsoDatiDesktop('.chat-images/') });
   const readModelCapabilities = async modelId => {
+    /* 01/11/2026, vista locale: per il modello locale APERTO decide quello che il motore ha detto all'avvio (`/props`), prima del catalogo */
+    const delMotore = capacitaDelLocaleAperto(modelId, supervisoreLocale?.status?.());
+    if (delMotore) return delMotore;
     try {
       const { modelli } = await modelCatalog.ottieni();
       return modelli.find(modello => modello.id === modelId) ?? null;
@@ -344,11 +452,25 @@ async function startServer() {
   const guardaImmagineFn = creaGuardaImmagine({ chatImageStore, ridimensionaFn: await ridimensionatoreDisponibile() });
   const vedeImmaginiFn = async (modelId) => {
     const id = String(modelId ?? '');
+    /* 01/11/2026, vista locale (forma, punto 3): Ollama e LM Studio dicono già se un modello vede (`capabilities.vision` osservata,
+       la stessa che la scheda dei fornitori mostra, `http-app.mjs`); prima qui valeva sempre null. Non osservata = null, mai false. */
+    if (/^(ollama|lmstudio):/u.test(id)) return vedeDaRuntimeCompatibile(id, localRuntimes);
     const modalita = id.startsWith('chatgpt:')
       ? (catalogoChatgpt ? (await catalogoChatgpt.elenca().catch(() => null))?.find?.(m => m.id === id)?.inputModalities : null)
       : (await readModelCapabilities(id))?.inputModalities;
     return Array.isArray(modalita) && modalita.length ? modalita.includes('image') : null;
   };
+  /* 01/11/2026 (contratto di Desktop, Frontend e Mobile): allo Stop, il motore locale di QUESTO modello si stava ancora aprendo? La carta dice
+     allora «while the model was still loading». Solo un `local:` col supervisore in apertura su quel modello; tutto il resto false. */
+  const motoreInCaricamentoFn = (modello) => {
+    const id = typeof modello === 'string' && modello.startsWith('local:') ? modello.slice('local:'.length) : null;
+    if (!id) return false;
+    const s = supervisoreLocale?.status?.();
+    return s?.state === 'loading' && s.modelId === id;
+  };
+  /* Il prezzo pubblicato di un modello, dollari per milione `{ in, out }`, dal catalogo (`prezzo-del-modello.mjs`); ignoto ⇒ null. Una sola funzione
+     per la carta di `app_settings` (D4) e, decisioni 57 e 144 (04/11/2026), per i dollari sulla carta della ricerca e nella chat a lato. */
+  const prezzoDelModelloFn = async (id) => prezzoPerMilione(await readModelCapabilities(id));
   /*
    * ⭐⭐⭐ 03/9 — da qui passano i modelli che NON sono di OpenRouter.
    * La chiave viene dal portachiavi del computer e non tocca mai il
@@ -362,9 +484,12 @@ async function startServer() {
    *   giudice. Una copia per cliente sarebbe due instradamenti che divergono.
    */
   const destinazioneModelloDeps = {
+    /* Il collegamento aperto lo accende chi ospita. Dentro la strada la `fetch` è sempre avvolta dalla resilienza: un confronto con `globalThis.fetch` non lo accendeva mai (dal vivo, 31/10/2026). */
+    collegamentiDelPiano: collegamentiDelProcesso(),
     leggiChiave: (fonte) => { try { return providerStore.getKey(fonte); } catch { return null; } },
     leggiRuntime: (fonte) => { try { return providerStore.getRuntime(fonte); } catch { return {}; } },
-    localePronto: () => supervisoreLocale?.status?.()?.state === 'ready',
+    /* 01/11/2026: pronto per QUEL modello: con un altro aperto rispondeva lui in silenzio, e la ricevuta scriveva il nome chiesto. A porta chiusa non è pronto per nessuno. */
+    localePronto: (modello, { sessione } = {}) => { const stato = supervisoreLocale?.status?.(); return !cambioDiModello.portaChiusa() && !cambioDiModello.staDietro(sessione) && stato?.state === 'ready' && (modello === undefined || stato.modelId === modello); },
     // 18/10/2026: il motore dell'app che ospita r4 — pronto se ha aperto QUEL modello; spedisce l'accesso, che ha socket e chiave
     ospitePronto: (modello) => accessoLocaleOspite.pronto(modello),
     chiamaLocaleOspite: (percorso, opzioni) => accessoLocaleOspite.chiama(percorso, opzioni),
@@ -378,14 +503,29 @@ async function startServer() {
       return accessoChatgpt.tokenDiAccesso();
     },
     registraUsoDelPiano: (voce) => usoChatgpt.registra(voce),
+    registraLimitiDelPiano: (voce) => usoChatgpt.registraLimiti(voce),
     /* 18/10/2026: col custode nell'app un 401 del piano = token da rinnovare nell'app; r4 lo dimentica e lo dice (runtime-owner-adapter) */
     ...(custodeChatgptApp ? { suTokenDelPianoRifiutato: () => { accessoChatgpt.dimentica(); return Object.assign(new Error('The ChatGPT access token must be renewed by the app.'), { code: 'CHATGPT_TOKEN_DA_RINNOVARE', transitorio: false, fornitore: 'chatgpt' }); } } : {}),
+    /* Decisione 116 C (owner 04/11/2026): un 401 a metà giro si rinnova SUBITO e la stessa richiesta riparte, una volta (runtime-owner-adapter).
+       Sul PC rinnova la custodia nostra (rinnovo forzato); sul telefono r4 chiede il token all'app con la riga viva e lo aspetta ≤10 s. Se il
+       rinnovo non arriva, il gancio di sopra resta la strada di sempre. */
+    ...(accessoChatgpt ? (custodeChatgptApp
+      ? { rinnovaTokenDelPiano: ({ rifiutato, signal }) => accessoChatgpt.attendiTokenNuovo({ rifiutato, entroMs: 10_000, signal }), rinnovoDelPianoDallApp: true }
+      : { rinnovaTokenDelPiano: ({ rifiutato }) => accessoChatgpt.rinnovaDopoRifiuto(rifiutato),
+        segnaAccessoRifiutato: () => accessoChatgpt.segnaRifiutatoDopoRinnovo() }) : {}), // D1 di R116: rifiutato anche dopo il rinnovo
     /*
      * ⛔ Si passa il PONTE, non la chiave: `request()` del supervisore
      * aggiunge da sé l'`--api-key` generata all'avvio, che non deve essere
      * copiata da nessuna parte — men che meno in una risposta HTTP.
      */
     chiamaLocale: (percorso, opzioni) => resumeDiagnostics.withRoute('owner-transport', () => supervisoreLocale.request(percorso, opzioni)),
+    /* il modulo si legge solo con l'interruttore acceso (Desktop, condizione 5) */
+    ...(config.attrezziEmulati ? { attrezziEmulati: async (corpo, opzioni) => {
+      /* la promessa, non il risultato: due prime richieste insieme dividono lo stesso emulatore e la sua memoria (quinta revisione, R-06) */
+      emulatoreLocale ??= import('./src/attrezzi-emulati.mjs').then((m) => m.creaEmulatore({ identitaDelMotore: () => supervisoreLocale?.status?.()?.port ?? null, // ogni avvio ha la sua porta
+        chiama: (percorso, o) => resumeDiagnostics.withRoute('owner-transport', () => supervisoreLocale.request(percorso, o)) }));
+      return (await emulatoreLocale).genera(corpo, opzioni);
+    } } : {}),
     /*
      * ⭐⭐⭐ 3/9 — owner, dal vivo: "non è così che si deve fare... deve
      * partire tutto in automatico". LM Studio/Ollama caricano il modello
@@ -403,15 +543,17 @@ async function startServer() {
     /* L1 1.3 (26/10/2026): la finestra di un modello locale di questo PC si allarga da sola quando la conversazione non ci sta più
        (se il massimo addestrato e la memoria lo reggono). Solo il supervisore di questo PC: il motore dell'app e Ollama/LM Studio no. */
     allargaFinestraLocale: (richiesta) => (finestraCheCresce ? finestraCheCresce.allarga(richiesta) : Promise.resolve({ ok: false, motivo: 'motore-non-configurato' })),
-    avviaLocale: async (modelId) => {
+    avviaLocale: async (modelId, { signal, sessione = null } = {}) => {
       /* Durante un allargamento il motore è giù per pochi secondi: chi arriva aspetta che torni, invece di chiedere un secondo avvio
          (RUNTIME_ALREADY_RUNNING) */
-      await finestraCheCresce?.attendi();
+      await finestraCheCresce?.attendi({ signal });
       const ora = supervisoreLocale?.status?.();
-      if (ora?.state === 'ready' && ora.modelId === modelId) return ora;
+      if (ora?.state === 'ready' && ora.modelId === modelId && !cambioDiModello.portaChiusa() && !cambioDiModello.staDietro(sessione)) return ora;
       const runtime = localRuntimes['llama.cpp'];
       if (!runtime) { const errore = new Error('Il motore locale non è configurato su questo server.'); errore.code = 'LOCAL_RUNTIME_NOT_CONFIGURED'; throw errore; }
-      return runtime.load(modelId);
+      /* 01/11/2026 (`apertura-condivisa.mjs`): lo Stop annulla un primo caricamento o un cambio di modello; chi aspetta la stessa apertura la divide */
+      datiApertura(modelId, { motivo: ora?.modelId && ora.modelId !== modelId ? 'cambio' : 'apertura' });
+      return aperturaCondivisa.apri(modelId, { signal, coda: true, prima: (segnale) => cambioDiModello.prepara(modelId, segnale, { sessione, alVia: () => nomeDelModello(modelId) }) });
     },
   };
 
@@ -496,14 +638,36 @@ async function startServer() {
      * scheda manca o si perde durante il caricamento, il modello riparte sul processore
      * una volta sola e lo stato dichiara (`motore.ripiego`).
      */
+    /* A2-1: only a graphics engine has a card to wait for; the same record goes to both supervisors */
+    const scheda = gpuLayers > 0 ? creaMemoriaScheda({ leggi: creaLettoreScheda({ binaryPath: config.llamaServerPath }) }) : null;
+    /* 01/11/2026, la scheda che rallenta da sola (#26663, forma con gli OK delle sessioni): la storia sta accanto ai modelli, mai nel nucleo */
+    const fileSchedaLenta = percorsoDatiDesktop('.local-models/velocita-viste.json');
+    schedaLenta = creaSorveglianteScheda({
+      leggi: () => { try { return JSON.parse(readFileSync(fileSchedaLenta, 'utf8')); } catch { return null; } },
+      scrivi: (dati) => { try { writeFileSync(`${fileSchedaLenta}.tmp`, JSON.stringify(dati)); renameSync(`${fileSchedaLenta}.tmp`, fileSchedaLenta); } catch { /* a help, never a stop */ } },
+    });
     const motoreDiOggi = createLlamaServerSupervisor(resumeDiagnostics.supervisorOptions({
       binaryPath: config.llamaServerPath,
+      scheda,
+      onTempiRisposta: ({ generati, tokenPerSecondo, modelId, finestra, scheda: nomeScheda }) => {
+        const versione = (() => { try { return versioneDelMotore.versione(config.llamaServerPath)?.build ?? null; } catch { return null; } })(); // runs after start: the const exists by then
+        const sullaScheda = nomeScheda ?? (gpuLayers > 0 ? 'vulkan' : 'cpu');
+        const esito = schedaLenta?.registra({ modello: modelId, scheda: sullaScheda, versione, tokenPerSecondo, generati, finestra });
+        if (esito?.evento !== 'lenta' || !esito.schedaLenta) return;
+        /* the row goes under the answer that made it fire: the conversations working on this model now (once in each start) */
+        for (const sessionId of sessionRegistry.giriSulModelloLocale?.(modelId) ?? []) {
+          void sessionRegistry.rigaSchedaLenta?.(sessionId, { ...esito.schedaLenta, modello: datiDelleAperture.get(modelId)?.nome ?? modelId, scheda: sullaScheda, versione: versione == null ? null : `b${versione}` }).catch(() => {});
+        }
+      },
       fallbackBinaryPath: config.llamaServerFallbackPath && config.llamaServerFallbackPath !== config.llamaServerPath ? config.llamaServerFallbackPath : null,
       motore: { variante: gpuLayers > 0 ? 'vulkan' : 'cpu', dispositivi },
       modelStore: localModelStore,
       gpuLayers,
+      caricamento: config.caricamentoMotore,
       // L1 (20/10/2026): le finestre vere dei modelli già accesi, fra un avvio dell'app e l'altro (accanto ai modelli, file piccolo)
       finestreFile: percorsoDatiDesktop('.local-models/finestre-viste.json'),
+      // 01/11/2026, «Memoria delle conversazioni» (forma FOTO-E-RIORDINO, punto 1): dove llama-server scrive le foto della scheda
+      cartellaFoto: percorsoDatiDesktop('.local-models/foto/'),
     }));
     /*
      * Router mode of the local engine (owner 26/10/2026 night; `src/llama-router-supervisor.mjs`). Behind `TALOS_LOCAL_ROUTER=1`, OFF by
@@ -512,6 +676,7 @@ async function startServer() {
      */
     const supervisor = resumeDiagnostics.wrapSupervisor(config.motoreLocaleRouter ? createLlamaRouterSupervisor(resumeDiagnostics.supervisorOptions({
       binaryPath: config.llamaServerPath,
+      scheda,
       standalone: motoreDiOggi,
       modelStore: localModelStore,
       /* one file per server process: the installed app and the 4174 can share the data folder, never this file */
@@ -523,7 +688,9 @@ async function startServer() {
           const file = manifest?.state === 'ready' ? manifest.files?.[0] : null;
           if (!file) continue;
           const modelPath = join(percorsoDatiDesktop('.local-models/'), manifest.path, file.path);
-          voci.push({ modelId: manifest.id, modelPath, opzioni: await opzioniDiAvvio(manifest.id, modelPath) });
+          /* 02/11, CLI review of the router vision (a): the projector of the manifest, the same one `load` gives the model */
+          const proiettore = proiettoreDelModello(manifest, percorsoDatiDesktop('.local-models/'));
+          voci.push({ modelId: manifest.id, modelPath, opzioni: await opzioniDiAvvio(manifest.id, modelPath), ...(proiettore ? { proiettore } : {}) });
         }
         return voci;
       },
@@ -551,7 +718,8 @@ async function startServer() {
       supervisor,
       /* `riapri`: l'avvio di sempre (`localRuntimes['llama.cpp'].load`, qui sotto) — il ritorno a com'era quando la finestra nuova non
          entra (revisione blocco 4, A-2); si legge alla chiamata, quando `localRuntimes` è già pieno */
-      motore: { load: (opzioni) => llama.load(opzioni), unload: () => llama.unload(), riapri: (modelId) => localRuntimes['llama.cpp'].load(modelId) },
+      motore: { load: (opzioni) => llama.load({ ...opzioni, proiettore: proiettoriPerPercorso.get(opzioni?.modelPath) ?? null }), unload: () => llama.unload(), riapri: (modelId) => localRuntimes['llama.cpp'].load(modelId) },
+      cambioInAttesa: () => cambioDiModello.inAttesa() !== null,
       modello: async (modelId) => {
         const manifest = await localModelStore.inspect(modelId);
         const file = manifest?.state === 'ready' ? manifest.files?.[0] : null;
@@ -562,11 +730,31 @@ async function startServer() {
       gpuLayers,
       cartella: percorsoDatiDesktop('.local-models/'),
     });
+    /* 01/11/2026 (`versione-del-motore.mjs`): the read starts now, in the background, so the first `GET /api/v1/runtime` after a restart already knows */
+    const versioneDelMotore = createVersioneDelMotore({ sonda: createLlamaBinaryProbe(), manuale: config.llamaServerManuale,
+      onLetta: (letta) => { const riga = rigaDelRegistro(letta); if (riga) process.stderr.write(riga); } });
+    versioneDelMotore.versione(config.llamaServerPath);
+    const caricamentoAdesso = (s) => {
+      const coda = aperturaCondivisa.inCoda();
+      const inFila = coda.length ? { inCoda: coda } : {}; // who waits behind the opening on the screen: their row says it, with this same sentence
+      const inAttesa = cambioDiModello.inAttesa();
+      if (inAttesa) {
+        const { modelId, iniziatoIl } = inAttesa;
+        return { modelId, nome: datiDelleAperture.get(modelId)?.nome ?? null, fase: 'waiting', percentuale: null, iniziatoIl, motivo: 'cambio', altroMotore: false, ...inFila };
+      }
+      const dati = datiDelleAperture.get(s.modelId);
+      const foto = fotoDelCaricamento(s, { motivo: finestraCheCresce?.inCorso() ? 'allargamento' : dati?.motivo ?? 'apertura', nome: dati?.nome ?? null });
+      return foto ? { ...foto, ...inFila } : foto;
+    };
     localRuntimes['llama.cpp'] = {
       detect: async () => {
         const s = supervisor.status();
-        return { state: 'observed', runtimeId: 'llama.cpp', runtimeState: s.state, modelId: s.modelId ?? null, motore: s.motore, observedAt: s.observedAt };
+        const percorsoInUso = s.motore?.ripiego ? config.llamaServerFallbackPath : config.llamaServerPath;
+        return { state: 'observed', runtimeId: 'llama.cpp', runtimeState: s.state, modelId: s.modelId ?? null, motore: { ...s.motore, versione: versioneDelMotore.versione(percorsoInUso) },
+          caricamento: caricamentoAdesso(s), schedaLenta: s.modelId ? schedaLenta?.corrente(s.modelId) ?? null : null, observedAt: s.observedAt };
       },
+      /* 01/11/2026: la rotta leggera della riga viva, solo stato in memoria (`GET /api/v1/runtime` sonda anche Ollama e LM Studio) */
+      caricamento: () => { const s = supervisor.status(); return { caricamento: caricamentoAdesso(s), observedAt: s.observedAt }; },
       listModels: async () => (await localModelStore.list()).filter((model) => model.state === 'ready').map((model) => ({ id: model.id, name: model.repo, source: 'llama.cpp', context: { state: 'unknown' } })),
       inspect: (modelId) => localModelStore.inspect(modelId),
       /*
@@ -592,15 +780,20 @@ async function startServer() {
         const manifest = await localModelStore.inspect(modelId);
         if (!manifest || manifest.state !== 'ready') { const error = new Error('Modello locale non pronto'); error.code = 'MODEL_NOT_FOUND'; throw error; }
         const file = manifest.files[0];
+        datiApertura(modelId, { nome: nomeDaMostrare(manifest.name) ?? nomeDaMostrare(manifest.repo) }); // the name the person gave it comes first
         const radiceModelli = percorsoDatiDesktop('.local-models/');
         const modelPath = join(radiceModelli, manifest.path, file.path);
+        /* 02/11/2026, forma «proiettore nel conto»: il proiettore scaricato col modello apre la vista (owner 01/11 «Sempre col modello»);
+           ricordato per percorso così anche la finestra che cresce riapre con la vista */
+        const proiettore = proiettoreDelModello(manifest, radiceModelli);
+        proiettoriPerPercorso.set(modelPath, proiettore);
         let contextLength = Number.isInteger(opzioni.contextLength) && opzioni.contextLength > 0 ? opzioni.contextLength : null;
         /* L1 1.3: la finestra allargata l'ultima volta si riprende al prossimo avvio. Se oggi non entra più (altri programmi hanno preso
            la memoria), si dimentica e si torna alla scelta di sempre, qui sotto. */
         if (contextLength === null && finestraCheCresce) {
           /* revisione blocco 4 (A-5): una finestra ricordata che non parte più si dimentica per QUALUNQUE guasto, non solo la memoria
              della scheda (`conLaPreferita`, provato in finestra-che-cresce.test.mjs) */
-          const conRicordata = await finestraCheCresce.conLaPreferita(modelId, (preferita) => llama.load({ modelId, modelPath, contextLength: preferita }));
+          const conRicordata = await finestraCheCresce.conLaPreferita(modelId, (preferita) => llama.load({ modelId, modelPath, contextLength: preferita, signal: opzioni.signal, proiettore }));
           if (conRicordata.avviato) return conRicordata.esito;
           if (conRicordata.dimenticata) { try { await llama.unload(); } catch { /* già spento */ } }
         }
@@ -609,11 +802,13 @@ async function startServer() {
           /* L1-d, revisione del 20/10 (T1): con la scheda la finestra la decide il SUPERVISORE (pavimento di 64K se ci sta, vedi
              `finestraDiSerie`): questa banda gli arriva come RISERVA, per i modelli densi che non ci stanno e per un fitter muto —
              cioè resta esattamente quello che succedeva prima. Senza scheda si decide qui, come sempre. */
-          if (gpuLayers > 0) return llama.load({ modelId, modelPath, finestraDiRiserva: contextLength ?? 8_192 });
+          if (gpuLayers > 0) return llama.load({ modelId, modelPath, finestraDiRiserva: contextLength ?? 8_192, signal: opzioni.signal, proiettore });
         }
-        return llama.load({ modelId, modelPath, contextLength: contextLength ?? 8_192 });
+        return llama.load({ modelId, modelPath, contextLength: contextLength ?? 8_192, signal: opzioni.signal, proiettore });
       },
-      unload: () => llama.unload(),
+      /* the Model Lab's load (`POST /api/v1/runtime/load`) enters the same opening: a chat that arrives meanwhile waits instead of being refused (revisione del 01/11, M3; condition of Performance) */
+      apri: (modelId, { contextLength } = {}) => aperturaCondivisa.apri(modelId, Number.isInteger(contextLength) && contextLength > 0 ? { opzioni: { contextLength } } : {}),
+      unload: () => llama.unload({ tutti: true }), // «Free the memory»: every model of the router (`POST /api/v1/runtime/unload`)
       generateStream: (options) => llama.generateStream(options),
       cancel: (requestId) => llama.cancel(requestId),
       health: () => llama.health(),
@@ -781,13 +976,96 @@ async function startServer() {
      sta sul server accanto al database del contesto, si legge alla NASCITA di ogni conversazione e si timbra su di lei. Senza
      cartella delle sessioni non c'è archivio del contesto: il motore resta spento (la prova `TALOS_CONTEXT_TRIAL` resta com'era). */
   const impostazioniContesto = config.cartellaStore
-    ? createImpostazioniContesto({ file: join(config.cartellaStore, 'context', 'impostazioni-contesto.json') })
+    ? createImpostazioniContesto({ file: join(config.cartellaStore, 'context', 'impostazioni-contesto.json'), fonteOspite: accessoLocaleOspite.attivo })
     : null;
   const motoreContestoAttivo = Boolean(config.contextTrial || impostazioniContesto);
+  /* Decisioni 173, 189 e 196 (owner 04/11/2026): la fiducia delle cartelle, accanto alle sessioni. Mai sul telefono (contratto del 29/10,
+     «CLI e telefono non cambiano»): lì il registro non riceve le due funzioni e la rotta risponde FOLDER_TRUST_UNAVAILABLE. */
+  const fiduciaCartelle = config.cartellaStore && !accessoLocaleOspite.attivo
+    ? creaFiduciaCartelle({ file: join(config.cartellaStore, 'fiducia', 'fiducia-cartelle.json') })
+    : null;
   /* Owner 27/10/2026 («Di serie nelle Impostazioni + per conversazione»): dove girano i comandi delle conversazioni NUOVE, accanto
      alla preferenza di WSL. Si legge alla nascita e si timbra sulla conversazione, come il motore del contesto. */
   const impostazioniComandi = createImpostazioniComandi({ file: percorsoDatiDesktop('.impostazioni-comandi.json') });
+  /* decisione 140: «Blocchi vivi nelle risposte», per le conversazioni nuove; accesa di serie */
+  const impostazioniChat = createImpostazioniChat({ file: percorsoDatiDesktop('.impostazioni-chat.json') });
+  const impostazioniPcSveglio = createImpostazioniPcSveglio({ file: percorsoDatiDesktop('.impostazioni-pc-sveglio.json') }); // 01/11/2026
+  /* 01/11/2026, «Memoria delle conversazioni»: il massimo dal disco libero dove stanno i modelli (soglia di 20 GB di Performance) */
+  const impostazioniMemoriaConversazioni = createImpostazioniMemoriaConversazioni({ file: percorsoDatiDesktop('.impostazioni-memoria-conversazioni.json'),
+    discoLibero: () => { const s = statfsSync(percorsoDatiDesktop('.')); return Number(s.bavail) * Number(s.bsize); } });
+  /* 01/11/2026, «Memoria delle conversazioni»: a fine giro la scheda di un modello `local:` va su disco e torna quando la persona riprende
+     quella conversazione (`foto-conversazioni.mjs`). Identità = modello + impronta del GGUF + impronta di come il processo tiene la scheda
+     (binario, finestra, tipo di cache, livelli, speculativa: `firmaScheda` del supervisore) + finestra vera + motore. */
+  const fotoConversazioni = await creaFotoConversazioni({
+    cartella: percorsoDatiDesktop('.local-models/foto/'),
+    motore: {
+      stato: () => supervisoreLocale?.status?.() ?? null,
+      async slot(azione, filename) {
+        const r = await supervisoreLocale.request(`/slots/0?action=${azione}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename }) });
+        const j = await r.json().catch(() => null);
+        if (!r.ok) throw Object.assign(new Error(j?.error?.message ?? `HTTP ${r.status}`), { code: `HTTP_${r.status}` });
+        return j;
+      },
+    },
+    identita: async (modelId) => {
+      const s = supervisoreLocale?.status?.();
+      if (!s?.firmaScheda || s.modelId !== modelId) return null;
+      const manifesto = (await localModelStore.list().catch(() => [])).find((m) => m?.id === modelId) ?? null;
+      return identitaFoto({ modello: modelId, ggufSha256: manifesto?.sha256 ?? null, ggufBytes: manifesto?.bytes ?? null, build: s.firmaScheda,
+        finestra: s.windowTokens ?? null, motore: s.motore?.variante ?? null });
+    },
+    tettoConversazioni: () => impostazioniMemoriaConversazioni.tettoAdesso(),
+    discoLibero: () => { const s = statfsSync(percorsoDatiDesktop('.')); return Number(s.bavail) * Number(s.bsize); },
+  });
+  /* una riga nel registro del server per ciò che tocca il disco o la scheda (mai il contenuto, mai un percorso di file della persona) */
+  const rigaFoto = (fase, sessione, e) => {
+    if (!['rimessa', 'salvata', 'non-riuscita', 'identita-diversa', 'disco-pieno', 'non-entra'].includes(e?.esito)) return;
+    console.log(`[snapshots] ${fase} ${e.esito}${e.ms != null ? ` in ${Math.round(e.ms)} ms` : ''}${e.bytes ? `, ${(e.bytes / 1e6).toFixed(1)} MB` : ''}${e.attesaMs ? `, waited ${e.attesaMs} ms` : ''} (${String(sessione).slice(0, 8)})`);
+  };
+  destinazioneModelloDeps.primaDellaRichiestaLocale = async (sessione, { modello } = {}) => {
+    const e = await fotoConversazioni.primaDelGiro(sessione, { modello });
+    rigaFoto('restore', sessione, e);
+    return e;
+  };
+  const fotoConversazioniDelRegistro = {
+    dopoIlGiro: async (sessione, o) => { const e = await fotoConversazioni.dopoIlGiro(sessione, o); rigaFoto('save', sessione, e); return e; },
+    dimentica: (sessione) => fotoConversazioni.dimentica(sessione), // revisione 1/11, nota 3: una conversazione cancellata porta via la sua foto
+  };
+  /* dentro l'app installata il guscio ci ha dato il canale IPC: è lì, e solo lì, che il PC può essere tenuto sveglio */
+  const nellAppInstallata = () => typeof process.send === 'function' && process.connected === true;
   const preferenzeModelli = createPreferenzeModelli({ file: percorsoDatiDesktop('.preferenze-modelli.json') });
+  /* L1 1.3: la scelta per la finestra piena senza motore (nessun binario) — una sola, usata dalle Impostazioni e dalle impostazioni dalla chat */
+  const sceltaFinestraPienaSenzaMotore = creaSceltaFinestraPiena({ cartella: percorsoDatiDesktop('.local-models/') });
+  /*
+   * ⭐ Fase 8 «Impostazioni dalla chat» (owner 01/11/2026, D1-D8): il catalogo unico e `app_settings`. Le fonti sono gli STESSI magazzini
+   *   delle rotte delle Impostazioni (stesse convalide, stesse code); la copia delle preferenze della finestra sta nella cartella dei dati
+   *   (§3.5, strada A), con le ricevute dell'Annulla. Il registro e la finestra che cresce nascono dopo: si leggono pigri.
+   * ⛔ Mai col server dell'app del telefono (`accessoLocaleOspite.attivo`): il telefono vuole lo stesso attrezzo col SUO catalogo, al via
+   *   dell'owner (Mobile, 01/11) — finché non c'è, lì l'attrezzo non esiste.
+   */
+  const impostazioniApp = accessoLocaleOspite.attivo ? null : creaServizioImpostazioni({
+    fonti: creaFontiDelServer({
+      impostazioniContesto, impostazioniComandi, preferenzeWslStore, searchSourceStore, impostazioniChat, fiduciaCartelle,
+      impostazioneComputerUse, // decisione 310: `tools.computerUse`, gruppo sicurezza ⇒ la carta c'è sempre
+      finestraPienaFn: () => finestraCheCresce ?? sceltaFinestraPienaSenzaMotore,
+      registroFn: () => sessionRegistry,
+    }),
+    copiaFinestra: creaCopiaFinestra({ file: percorsoDatiDesktop('.preferenze-finestra.json') }),
+    fileRicevute: percorsoDatiDesktop('.impostazioni-ricevute.json'),
+    /* D4: il prezzo prima → dopo sulla carta, dal catalogo dei modelli (dollari per token → per milione); sconosciuto ⇒ «price unknown» */
+    /* REV8-06: anche un prezzo d'uscita assente o negativo ⇒ sconosciuto, mai «$0.00» (`prezzo-del-modello.mjs`, con le sue prove) */
+    prezzoDelModelloFn,
+    /* Fase 8, cura 3 (D6): un cambio del modello diventa la voce `impostazioni` del registro delle notifiche del PC. Il servizio la chiama
+       dopo l'esito, al giro dopo del ciclo; scrittori e registro nascono più sotto, quindi si leggono qui solo al momento della chiamata. */
+    osservaCambioFn: (ricevuta) => {
+      let nome = '';
+      try { nome = sessionRegistry.impostazioniCorrenti(ricevuta?.sessionId)?.nome ?? ''; } catch { nome = ''; }
+      scrittoriNotifiche.impostazioni(ricevuta, { nome });
+    },
+    /* Giro 2 delle cure, voce 1 (02/11/2026): il modello viene informato di un cambio della persona, col suo prossimo messaggio. Il registro
+       nasce più sotto: si legge al momento della chiamata, come qui sopra. */
+    annotaPerIlModelloFn: (sessionId, testo) => sessionRegistry.annotaCambioDellaPersona(sessionId, testo),
+  });
   /* 18/10/2026 — il controllo remoto nasce DOPO il gestore HTTP (chiama le stesse rotte in processo) e dopo il legame alla porta:
      il gestore e il registro (R5.12, gli attrezzi dei telefoni) lo raggiungono attraverso una funzione, e fino ad allora le sue
      rotte rispondono «non disponibile». Dichiarato QUI, prima del registro, perché la sua funzione non cada nella zona morta. */
@@ -799,27 +1077,61 @@ async function startServer() {
     avvisa: (x) => console.warn(`[punti-di-ripristino] ${x.tipo}: ${x.motivo ?? ''}${x.dettaglio ? ` — ${x.dettaglio}` : ''}`),
   });
   void puntiDiRipristino.misuraGit(process.cwd()).catch(() => {});
+  const scrittoriNotifiche = creaScrittoriNotifiche({ registro: registroNotifiche,
+    segnala: (e) => { console.error(`[notifiche] write failed: ${e instanceof Error ? e.message : e}`); } });
   const sessionRegistry = resumeDiagnostics.wrapRegistry(createSessionRegistry(resumeDiagnostics.registryOptions({
     processOutputStoreFn,
+    /* 189: le due insieme (la fiducia e le istruzioni del progetto), solo sul PC; null = mai chiesta, vale fidata (R2-F2) */
+    ...opzioniFiduciaPerIlRegistro(fiduciaCartelle, { telefono: accessoLocaleOspite.attivo }),
+    /* contratto «notifiche» (31/10/2026): permessi, domande e fine dei giri diventano voci del registro, dagli eventi della sessione */
+    osservatoreNotifiche: scrittoriNotifiche,
+    ...(presenzaDaApp ? { personaPresenteFn: () => presenzaDaApp.presente() } : {}), // R-34 parte 2: la presenza dal telefono
+    /* Decisione 44 (03/11), condizione del Mobile: sul telefono (l'app che ospita r4 spinge la presenza) la promozione del testo resta accesa finché
+       il Codice locale non è provato sul Pad con Spark e Gemma; poi si toglie questa riga. Sul PC è spenta di serie. */
+    ...(presenzaDaApp ? { promuoviDalTesto: true } : {}),
     guardaImmagineFn, vedeImmaginiFn, // owner 27/10/2026, view_image
+    motoreInCaricamentoFn, // 01/11/2026: la carta dell'arresto durante un'apertura
+    prezzoDelModelloFn, // decisioni 57 e 144: dollari sulla carta della ricerca e nella chat a lato
+    fotoConversazioni: fotoConversazioniDelRegistro, // 01/11/2026: «Memoria delle conversazioni», la scheda su disco a fine giro
+    /* 04/11/2026 (decisione 129, passo 5): i due ospiti del computer use, decisi SOLO dall'interruttore (spento: nessuno); il registro li
+       lega alla conversazione principale con qualcuno davanti */
+    ...computerUse.perNucleo,
     /* owner 27/10/2026, local_page: registro e browser vivo nascono più sotto, per questo passano come funzioni */
     /* Mobile 29/10/2026: solo dove c'è un Chromium da pilotare (sul telefono no, e l'attrezzo non si offre) */
     apriPaginaLocaleFn: apriPaginaLocaleSeCeIlBrowser({ registroFn: () => sessionRegistry, browserVivoFn: () => browserVivo, chatImageStore }),
+    /* Decisione 201 (04/11/2026): dove c'è il Browser (il PC: Edge c'è di serie), deciso all'avvio del server e mai dopo — la riga del
+       catalogo nasce con la conversazione e non entra né esce col pannello (condizione 1 di Performance). Sul telefono no (forma, §6). */
+    leggiPaginaBrowserFn: leggiPaginaBrowserSeCeIlBrowser({ browserVivoFn: () => browserVivo, leggiPaginaFn: leggiPaginaPerLaVista }),
     remotoFn: () => remoto, // R5.12 (owner 18/10/2026): elenca, apre il QR, revoca — dalla chat
     /* «Segnala un problema» (owner 29/10/2026, due porte): la bozza dalla chat (`report_problem`). Solo dove chi ospita il server lo
        ACCENDE (`TALOS_SEGNALAZIONE_PROBLEMA=on`: il guscio desktop e lo script del 4174; revisione D, F4) e mai col server dell'app del
        telefono (`TALOS_LOCALE_OSPITE_DIR`) — contratto del 29/10, «CLI e telefono non cambiano». */
     segnalazione: segnalazioneAccesaDallAmbiente(process.env),
+    /* Centro assistenza (owner 01/11/2026): la copia della guida accanto al server (`aiuto/index.json`, la mette la release); senza,
+       `talos_help` non si offre. La versione come per «Segnala un problema»: dal guscio, o da `desktop/package.json` da sorgente. */
+    aiutoTalos: aiutoDelServer(process.env, {
+      cartellaPredefinita: fileURLToPath(new URL('./aiuto/', import.meta.url)),
+      versioneDesktopFn: () => {
+        if (process.env.TALOS_DESKTOP_VERSION?.trim()) return process.env.TALOS_DESKTOP_VERSION.trim();
+        try { return JSON.parse(readFileSync(new URL('./desktop/package.json', import.meta.url), 'utf8')).version ?? null; }
+        catch { return null; }
+      },
+    }),
+    impostazioniApp, // Fase 8 (01/11/2026): `app_settings`, solo alla conversazione principale con qualcuno davanti
     repositoryFn: () => servizioGit, // C-3 (owner 21/10/2026): lo stato del repository per il confutatore del /goal
     cartellaDatiProgettoFn: cartellaDatiProgetto,
     /* R5.11 (owner 18/10/2026, «Come Hermes, PC e telefono»): «Annulla le modifiche ai file». L'archivio git ombra di ogni progetto
        sta nella sua cartella dati (PO-26), mai nel progetto; un guasto non ferma mai un giro (`src/punti-di-ripristino.mjs`). */
     puntiDiRipristino,
     finestraTokenFn: finestraDallaRoute,
+    catalogoBlocchi: catalogoBlocchiDaAmbiente(process.env, { telefono: accessoLocaleOspite.attivo }), // FE-003, decisione 139; mai sul telefono (Z-3.1)
+    listaPassi: listaPassiDelServer(process.env, { telefono: accessoLocaleOspite.attivo }), // FE-008, decisione 143
+    passiSenzaPersona: passiSenzaPersonaPerProva(process.env), // SOLO per le prove
     // owner 27/10/2026: i server locali di npm run dev nella scheda Browser — le porte in ascolto dei comandi della conversazione
     lettorePorteServerLocali: creaLettorePorte({ spawnFn: spawnServerLocali }),
     // owner 27/10/2026: il ragionamento al cambio di modello, «Codex, ma mai più caro», col catalogo vero
     reasoningAlCambioDiModelloFn: async (reasoning, modello) => reasoningAlCambioDiModello(reasoning, await readModelCapabilities(modello)),
+    fasciaVeloceDelModelloFn: creaFasciaVeloceDelModello({ catalogo: catalogoChatgpt }),
     /* L1 1.3, revisione blocco 4 (A-3, A-4; owner A1-1 26/10/2026): alla soglia del riassunto la finestra del modello locale di questo PC
        si allarga invece di riassumere. Solo `local:` del supervisore (`finestraCheCresce` esiste solo col motore configurato: sul
        telefono, dove `local:` è il motore dell'app, non c'è); si legge alla chiamata, quando il supervisore è già nato. */
@@ -845,8 +1157,17 @@ async function startServer() {
        serie — prima chiamata −50% sul codice (56/60 = 56/60) e −49% sulle sezioni (27/30 = 27/30), circa due giri in più sulle
        sezioni. Il registro resta spento di serie per chi lo importa (la CLI decide da sé). `TALOS_ATTREZZI_DIFFERITI=0` lo spegne. */
     attrezziDifferiti: process.env.TALOS_ATTREZZI_DIFFERITI !== '0',
+    /* Ricerca a due porte (owner 21-22/10/2026: «research_start di nuovo davanti»; forma del 01/11 con l'OK di Mobile, CLI e Performance):
+       sul PC `research_start` resta davanti anche col ponte acceso, +267 token a richiesta misurati col contatore del ponte. Solo qui:
+       il registro la tiene spenta per chi lo importa (la CLI decide con l'owner). */
+    ricercaDavanti: true,
     ...(impostazioniContesto ? { motoreContestoPerNuoveFn: () => impostazioniContesto.motorePerUnaConversazioneNuova() } : {}),
+    /* C6 (28/10/2026): il modello dei riassunti scelto dalla persona in Impostazioni → Memoria e contesto (salvato da ef7a6903f) arriva
+       al registro (compattazione semplice, fine giro e dentro il giro); la strada del motore lo riceve da `modelloDelRiassuntoFn` più sotto */
+    ...(impostazioniContesto ? { sceltaDelRiassuntoFn: () => impostazioniContesto.riassuntoPerUnGiro() } : {}),
     doveComandiPerNuoveFn: () => impostazioniComandi.dovePerUnaConversazioneNuova(), // owner 27/10: Impostazioni → Strumenti
+    /* decisione 140: letta UNA volta alla nascita (Performance); una conversazione nata dal telefono resta senza fino a UI-137 (Mobile) */
+    blocchiViviPerNuoveFn: blocchiViviAllaNascita(() => impostazioniChat.blocchiViviPerUnaConversazioneNuova()),
     contextHooksFn: motoreContestoAttivo ? input => contextRuntime?.service.createKernelHooks(input) : undefined,
     // C1 review Y1: lo stesso criterio di `politicaAbilitazione`/`enabledSessionIds` qui sotto, ma sincrono, PRIMA dei ganci
     giroUsaIlMotoreFn: giroUsaIlMotore({ trialSessionIds: config.contextTrial?.sessionIds ?? null }),
@@ -928,11 +1249,14 @@ async function startServer() {
     /* revisione blocco 6 (A-R5): riassunti, /compact e giudice sono chiamate di servizio — sul rifiuto del motore locale non lo riaprono e
        non chiedono una carta che nessuno vede (la crescita la decide il giro, nel registro e nel kernel) */
     fetchModelloFn: () => creaFetchMultiProvider(fetch, { dipendenze: destinazioneModelloDeps, senzaPersona: true }),
+    /* spesa di servizio (owner 30/10/2026): i riassunti di fine giro e del /compact entrano nel giornale come `consumo-di-servizio` */
+    consumoDiServizioDurevole: true,
     cartelleProgetto: config.cartelleProgetto,
     taskCatalogProvider,
     ricercaWeb: config.ricercaWeb, // seme dell'ambiente: resta per compatibilità, ma è ricercaWebFn a valere a ogni giro
     ricercaWebFn,
     preferenzeWslFn: () => preferenzeWslStore.leggi(), // F009: letta a ogni comando, come ricercaWebFn
+    archivioAllegati, // decisioni 43 e 47
     /* owner 27/10/2026: le cartelle bloccate per un dispositivo, lette dallo STESSO file che scrive il coordinatore del remoto
        (`cartelle-dispositivi.mjs`: accanto a `consensi.json`) — contratto CONTRATTO-CARTELLE-BLOCCATE-2026-10-27, giro 2 */
     bloccateDelDispositivoFn: creaLettoreBloccate({ fileBloccate: percorsoDatiDesktop('remoto/cartelle-bloccate.json') }),
@@ -968,6 +1292,7 @@ async function startServer() {
      * ricerca sui tre concorrenti che fanno la stessa cosa.
      */
     cartellaStore: config.cartellaStore,
+    localiInsiemeFn: localiInsieme,
     /*
      * ⭐ 10/10/2026 — l'affitto fra processi sull'archivio (owner 09/10: «Affitto come Hermes»): il 4174 e l'app installata usano lo
      *   stesso `%APPDATA%\TALOS\sessions`. L'etichetta è ciò che l'ALTRO processo dirà alla persona («aperta in …»).
@@ -998,7 +1323,17 @@ async function startServer() {
    * silenzioso — l'owner che guarda il terminale vede quante sessioni
    * sono tornate.
    */
+  /* contratto «notifiche»: l'avviso anche sul flusso della conversazione a cui la voce porta (effimero, per il telefono iscritto lì) */
+  registroNotifiche.ascolta((avviso) => {
+    const porta = avviso?.voce?.porta;
+    if (porta?.tipo === 'sessione' && typeof porta.id === 'string') sessionRegistry.avvisaNotifica(porta.id, avviso);
+  });
   const { ripristinate, totali } = await sessionRegistry.ripristina();
+  /* BD6: i legami verso chat sparite non tengono lo spazio per sempre; in sottofondo, l'avvio non aspetta */
+  sessionRegistry.riconciliaAllegati().catch((e) => { console.warn(`[allegati] riconciliazione non riuscita: ${e instanceof Error ? e.message : e}`); });
+  /* contratto «notifiche»: una carta sparita col riavvio non resta «da fare» per sempre (in sottofondo: l'avvio non aspetta il registro) */
+  scrittoriNotifiche.riconcilia({ attesaDi: (id) => sessionRegistry.domandaInAttesa(id, { capacita: ['chiamata-dal-testo'] }) })
+    .catch((e) => { console.error(`[notifiche] reconciliation failed: ${e instanceof Error ? e.message : e}`); });
   if (totali > 0) console.log(`[session-store] ${ripristinate}/${totali} sessioni ripristinate da .sessions-store/`);
   /*
    * ⭐ F3-41b (25/09/2026) — IL RUNTIME DEI WORKFLOW, composto qui come chiedeva l'audit (`WFS` punto 1: il server componeva
@@ -1077,6 +1412,15 @@ async function startServer() {
       callModel: request => ownerRuntime.callContextModel(request),
       onEvent: input => sessionRegistry.pubblicaEventoContesto(input),
       onPrepared: input => sessionRegistry.annotaPreparazioneContesto(input), // C1 (10/10): i conteggi del livello 1 per la scheda Contesto
+      // C6 (28/10/2026): la scelta globale della persona per i riassunti del motore (precedenza in `modelloDelRiassuntoScelto`)
+      ...(impostazioniContesto ? { modelloDelRiassuntoFn: () => impostazioniContesto.riassuntoPerUnGiro().modelloDelRiassunto } : {}),
+      // C6-bis (owner 28/10/2026): la riserva, la memoria della conversazione (la stessa della strada legacy) e l'avviso durevole
+      ...(impostazioniContesto ? { riservaDelRiassuntoFn: () => impostazioniContesto.riassuntoPerUnGiro().riservaDelRiassunto } : {}),
+      memoriaRiassuntoFn: sessionId => sessionRegistry.memoriaRiassuntoDi(sessionId),
+      localiInsiemeFn: localiInsieme,
+      onModelloInutilizzabile: valore => { sessionRegistry.pubblicaModelloRiassuntoInutilizzabile(valore).catch((errore) => console.error('[context] summary-model warning not saved:', errore?.message ?? errore)); },
+      // spesa di servizio, parte 2 B (30/10/2026): ogni chiamata pagata del motore, nella sua conversazione
+      onConsumoDiServizio: input => sessionRegistry.pubblicaSpesaDelMotore(input),
     });
     if (config.contextTrial) contextRuntime = await creaRuntimeContesto();
     else {
@@ -1104,6 +1448,7 @@ async function startServer() {
    */
   const automationStore = createAutomationStore({
     cartella: percorsoDatiDesktop('.automations/'),
+    osservaGiro: (giro) => scrittoriNotifiche.giro(giro), // contratto «notifiche»: i giri da guardare diventano voci
   });
   const automationScheduler = createAutomationScheduler({
     store: automationStore,
@@ -1119,7 +1464,28 @@ async function startServer() {
   }));
   /* ⭐ 0.1.25 (owner 09/10/2026) — la seconda porta dei fornitori esclusi: elencare libero, escludere e riammettere con la carta.
      Come le automazioni, il registro offre gli attrezzi `provider_*` solo da qui in poi; la CLI non lo chiama. */
-  sessionRegistry.collegaFornitori(creaOspiteFornitori({ providerStore, slugDelFornitoreFn: (q) => slugDelFornitore(q), accessoChatgpt, finestraLocale: finestraCheCresce })); // L1 1.3: local_model_window
+  /* 01/11/2026, `local_model` (forma `FORMA-MODELLI-DALLA-CHAT`): l'ospite del PC. Solo modelli già scaricati e pronti; il nome è quello
+     del manifesto come la riga viva; «entra» è il verdetto del PC (`estimateFit`): stretto conta come «entra», bloccato no, ignoto null. */
+  const modelliLocali = {
+    elenca: async () => {
+      const pronti = (await localModelStore.list()).filter((m) => m?.state === 'ready');
+      return Promise.all(pronti.map(async (m) => {
+        let entra = null;
+        try { const v = await localRuntimeProbe?.estimateFit?.({ bytes: m.bytes }); entra = v?.state === 'compatible' || v?.state === 'tight' ? true : v?.state === 'blocked' && v?.reason === 'memory' ? false : null; } catch { entra = null; }
+        return { id: m.id, nome: nomeDaMostrare(m.name) ?? nomeDaMostrare(m.repo) ?? m.id, bytes: m.bytes ?? null, entra };
+      }));
+    },
+    aperto: () => {
+      const s = supervisoreLocale?.status?.();
+      if (!(s?.state === 'ready' || s?.state === 'loading') || !s.modelId) return null;
+      return { id: s.modelId, nome: datiDelleAperture?.get?.(s.modelId)?.nome ?? s.modelId };
+    },
+    inUso: (id) => sessionRegistry.giriSulModelloLocale?.(id) ?? [],
+    apri: async (id) => { try { await localRuntimes['llama.cpp'].load(id, {}); return { ok: true }; } catch (e) { return { ok: false, motivo: e?.message ?? 'error' }; } },
+    chiudi: async () => { try { await localRuntimes['llama.cpp'].unload?.(); return { ok: true }; } catch (e) { return { ok: false, motivo: e?.message ?? 'error' }; } },
+    memoriaAperta: () => { const s = supervisoreLocale?.status?.(); return Number.isSafeInteger(s?.memoriaBytes) ? { bytes: s.memoriaBytes, stima: false } : null; },
+  };
+  sessionRegistry.collegaFornitori(creaOspiteFornitori({ providerStore, slugDelFornitoreFn: (q) => slugDelFornitore(q), accessoChatgpt, finestraLocale: finestraCheCresce, modelliLocali })); // L1 1.3: local_model_window · 01/11: local_model
   /*
    * ⭐⭐⭐ 27/8 — owner: "un picker per il modello, dropdown stilizzato
    * (l'abbiamo già fatto nel mobile)". Il catalogo VERO di OpenRouter
@@ -1158,6 +1524,8 @@ async function startServer() {
       negozioSessioni: config.cartellaStore
         ? { modalitaIntestazione: modalitaPubblicazioneIntestazione(config.cartellaStore), cartella: config.cartellaStore }
         : undefined,
+      /* R-39 (30/10/2026): il worker del cancello delle scritture — vivo, giudizi, cadute, spento e perché */
+      cancelloScritture: statoCancelloWorker(),
     });
   };
   /*
@@ -1223,7 +1591,11 @@ async function startServer() {
   };
 
   const app = createHttpApp({
+    cartellaEsportazioni: config.cartellaStore ? join(config.cartellaStore, 'remoto', 'esportazioni') : null,
     remotoFn: () => remoto,
+    ...computerUse.perHttp, // 03/11/2026: i luoghi di «Consenti sempre»; spento ⇒ niente `luoghiFn`
+    notificheFn: () => registroNotifiche, // contratto «notifiche» 31/10/2026: GET col cursore, seen, seen-all con confine
+    impostazioniApp, // Fase 8 (01/11/2026): /api/v1/app-settings/* e l'evento delle preferenze della finestra sul flusso del PC
     versioneDesktopFn, // «Segnala un problema» (owner 29/10/2026): la versione dell'app nella diagnostica
     riconosciLinguaScritta: config.riconosciLinguaScritta !== false, // M 28/10/2026 notte: spento nel profilo del dispositivo
     // /goal G2c (14/10/2026): la proposta dei criteri adatta il ragionamento al catalogo del modello, come i giri
@@ -1249,15 +1621,21 @@ async function startServer() {
     custodisciChiaveOpenRouter: async (chiave) => { providerStore.setKey('openrouter', chiave); },
     rotteChatgpt, catalogoChatgpt,
     accessoLocaleOspite, // 18/10/2026: il motore locale dell'app che ospita r4
+    presenzaDaApp, // R-34 parte 2 (30/10/2026): la presenza spinta dall'app che ospita r4
     leggiTokenDelPianoFn: accessoChatgpt ? () => accessoChatgpt.tokenDiAccesso() : null,
     registraUsoDelPianoFn: (voce) => usoChatgpt.registra(voce),
     registraLimitiDelPianoFn: (voce) => usoChatgpt.registraLimiti(voce),
     contextService: contextRuntime?.service,
     impostazioniContesto, // C1: «Motore del contesto» in Impostazioni → Contesto
+    fiduciaCartelle, // decisioni 173/189/196: GET e POST /api/v1/folder-trust (assente sul telefono)
     /* L1 1.3: la scelta «quando la finestra di un modello locale si riempie». Senza motore (nessun binario) resta la sola scelta: si legge
        e si salva lo stesso, e «Allarga» risponde LOCAL_RUNTIME_NOT_CONFIGURED (27/10, prima era un 500 a ogni apertura delle Impostazioni) */
-    finestraPiena: finestraCheCresce ?? creaSceltaFinestraPiena({ cartella: percorsoDatiDesktop('.local-models/') }),
+    finestraPiena: finestraCheCresce ?? sceltaFinestraPienaSenzaMotore,
     impostazioniComandi, // owner 27/10: GET/POST /api/v1/command-settings
+    impostazioniChat, // decisione 140: GET/POST /api/v1/chat-settings
+    impostazioneComputerUse, // decisione 310 (06/11): GET/POST /api/v1/computer-use/settings
+    impostazioniPcSveglio, nellAppInstallata, // 01/11/2026: GET/POST /api/v1/keep-awake-settings
+    impostazioniMemoriaConversazioni, // 01/11/2026: GET/POST /api/v1/conversation-memory-settings
     preferenzeModelli, // owner 29/10/2026: GET/POST /api/v1/model-preferences
     // ⭐ 10/09: le favicon delle fonti, prese dal server una volta sola e tenute qui accanto alle sessioni.
     cartellaFavicon: percorsoDatiDesktop('.favicon-cache/'),
@@ -1309,7 +1687,10 @@ async function startServer() {
     searchSourceStore,
     provaRicercaWebFn,
     preferenzeWslStore, // F009: GET/POST /api/v1/wsl
-    token: config.token, // ⭐ 04/9, W1-10 — cancello a token per la shell Electron
+    archivioAllegati, // decisioni 43 e 47: POST /api/v1/chat-files
+    token: gettoneDelServer, // ⭐ 04/9, W1-10 — il cancello; dal 02/11/2026 c'è sempre (`src/gettone.mjs`)
+    senzaGettone: origineDelGettone === 'prove' ? 'prove' : null,
+    origineStrettaSenzaGettone: origineDelGettone === 'prove', // difesa in profondità del modo prove: un programma senza intestazioni non arriva alle azioni della persona
     spegnimento: spegnimentoPerLaApp, // F3 (24/09): la rotta di spegnimento gentile; gettone e funzione arrivano dopo l'ascolto (oggetto condiviso)
     catalogoModelliFn: (opts) => modelCatalog.ottieni(opts),
     // P-K (12/09) — i cataloghi cloud dipendono dal collegamento dell'owner: Bedrock si legge dalla sonda, Azure/Vertex dichiarano che serve una configurazione.
@@ -1439,10 +1820,14 @@ async function startServer() {
            una volta; il nome è quello che il PC mostra sulla carta del consenso (inglese prima) */
         cartellaChat: percorsoDatiDesktop('remoto/Chats from devices'),
         chatImageStore, // D-5 (25/10/2026): le immagini dal dispositivo vanno al modello come quelle della finestra
+        archivioAllegati, // decisione 47: il telefono nuovo manda i file nei dati di TALOS
+        capacita: archivioAllegati.disponibile ? ['allegati-nei-dati'] : [], // BD9: il telefono nuovo lo sa senza provare, e con un PC vecchio resta alla strada di prima
+        ...computerUse.perRemoto, // 03/11/2026: computer-use.places.* dal dispositivo; spento ⇒ niente `luoghi`
+        notifiche: registroNotifiche, // contratto «notifiche» 31/10/2026: notifications.list/seen/seen-all dal dispositivo
         cartelleAmmesse: (config.cartelleProgetto ?? []).filter((c) => c?.id !== 'default').map((c) => c.percorso),
         cartelleEscluse: [fileURLToPath(new URL('./', import.meta.url)), parse(process.execPath).dir,
           ...(process.env.TALOS_DESKTOP_DATA_DIR ? [process.env.TALOS_DESKTOP_DATA_DIR] : [])],
-        chiama: creaChiamataInterna({ httpApp: app, porta: portaAscolto, gettone: config.token ?? null }),
+        chiama: creaChiamataInterna({ httpApp: app, porta: portaAscolto, gettone: gettoneDelServer }),
         sessionRegistry, iscriviConRigiocata,
         caricaIroh: caricaBindingIroh,
         /* 21/10/2026 (ripresa M09 del video): il nome che il telefono mostra per questo PC si può scegliere (`TALOS_REMOTE_PC_NAME`,
@@ -1462,12 +1847,13 @@ async function startServer() {
     }
   }
 
-  const originiTerminaleConsentite = new Set(ALIAS_LOOPBACK.map((host) => `http://${host}:${portaAscolto}`));
+  /* S8 della revisione cloud della PR 20: la pagina aperta su [::1] manda l'origine con le parentesi quadre */
+  const originiTerminaleConsentite = new Set(ALIAS_LOOPBACK.map((host) => indirizzoDelServer(host, portaAscolto)));
   const terminaleWs = creaGestoreTerminaleWs({
     registro: registroTerminali,
     originiConsentite: originiTerminaleConsentite,
     risolviScheda: (terminalId) => registroSchedeTerminale.risolviPerConnessione(terminalId),
-    token: config.token, // ⭐ 04/9, W1-10
+    token: gettoneDelServer, // ⭐ 04/9, W1-10
   });
   server.on('upgrade', (req, socket, head) => terminaleWs.gestisciUpgrade(req, socket, head));
   /*
@@ -1518,6 +1904,7 @@ async function startServer() {
       ],
       logger: console,
     });
+    try { // revisione O, nota 6 (04/11/2026): gli aiutanti del computer use si spengono anche se qui sotto qualcosa lancia (`finally`)
     await resumeDiagnostics.flush();
     /*
      * ⭐ F3, onda 2 di F2 (24/09/2026), decisione 8 — il registro si chiude PRIMA di `server.close`: fence sulle operazioni
@@ -1530,10 +1917,20 @@ async function startServer() {
     } catch (errore) {
       console.error('[session-store] chiusura del registro fallita:', errore instanceof Error ? errore.message : errore);
     }
+    } finally {
+    /*
+     * Computer use (04/11/2026, revisione del passo 5, difetto 7): gli aiutanti nativi si spengono DOPO il registro. Prima, un compito
+     *   ancora in volo durante `sessionRegistry.chiudi` riapriva l'aiutante appena spento (`apri` lo riavviava) e il processo restava
+     *   orfano; ora l'aiutante spento rifiuta ogni `apri` (`chiuso`). Come Hermes, che spegne il computer use all'uscita
+     *   (`tools/computer_use/tool.py:263-295`, atexit), e come la specifica MCP: chiusura su stdio = ingresso chiuso, attesa, poi la forza.
+     */
+    await closeRuntimeResources('shutdown', { resources: [{ close: () => chiudiTuttiGliAiutanti() }], logger: console });
+    }
     if (processOutputStorePromise) {
       try {await (await processOutputStorePromise).close();}
       catch {console.error('[process-output] archivio non chiuso regolarmente; le catture incomplete restano incomplete.');}
     }
+    chiudiCollegamentiDelPiano();
     server.close(() => process.exit(0));
     /*
      * ⛔⛔ 24/09/2026 — `close()` DA SOLO NON CHIUDE I FLUSSI APERTI. Segnalato dalla lane mobile (stesso difetto curato sul
@@ -1595,7 +1992,24 @@ async function startServer() {
   spegnimentoPerLaApp.spegniFn = shutdown;
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
-  console.log(`Harness UI disponibile su http://${config.host}:${portaAscolto}`);
+  /* 01/11/2026, il PC che non dorme mentre TALOS lavora (forma con l'OK del Desktop): solo sotto il guscio, che ci ha dato il canale IPC.
+     Il modo è quello delle Impostazioni («Tieni sveglio il PC», `impostazioni-pc-sveglio.mjs`), di serie «mentre lavora». Se il server
+     cade, il guscio rilascia il blocco da solo all'uscita del figlio. */
+  creaAvvisoSveglio({
+    giriAlLavoro: () => sessionRegistry.giriAlLavoro?.() ?? 0,
+    motoreInApertura: () => supervisoreLocale?.status?.()?.state === 'loading',
+    modo: () => impostazioniPcSveglio.modoAdesso(),
+    manda: nellAppInstallata() ? (m) => { if (process.connected) process.send(m); } : null,
+  }).avvia();
+  /* Avvio a mano (README, un terminale): il gettone l'ha fatto il server e nessuno lo conosce. Si stampa un BIGLIETTO, mai il gettone: monouso e da
+     60 secondi, in un log non vale niente dopo l'uso (come Hermes, `mint_printed_launch_ticket`, `hermes_cli/web_routers/webapp.py:86-89`). */
+  if (origineDelGettone === 'generato') {
+    const link = `${indirizzoDelServer(config.host, portaAscolto)}/?${CAMPO_BIGLIETTO}=${creaBiglietto(chiaveDeiBiglietti(gettoneDelServer))}`;
+    const secondi = DURATA_BIGLIETTO_MS / 1000;
+    console.log(`Open this link within ${secondi} seconds, it works once: ${link}`);
+    console.log(`Apri questo link entro ${secondi} secondi, vale una volta sola: ${link}`);
+  }
+  console.log(`Harness UI disponibile su ${indirizzoDelServer(config.host, portaAscolto)}`);
   /*
    * 13/10/2026 (bugfixer, C1) — QUALE KERNEL: una riga, e un avviso quando non è l'adattatore desktop (`src/kernel-caricato.mjs`).
    * Tre volte un server di prova è rimasto per giorni sul kernel di base senza dirlo. Si guarda il modulo CARICATO (lo stesso

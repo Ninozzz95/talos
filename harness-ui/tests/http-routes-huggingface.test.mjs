@@ -5,7 +5,7 @@ import { createHttpApp } from '../src/http-app.mjs';
 import { createHfHubClient } from '../src/hf-hub-client.mjs';
 
 async function listen(t, extra) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, ...extra }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, ...extra }));
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;

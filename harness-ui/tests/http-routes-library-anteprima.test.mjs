@@ -40,7 +40,7 @@ function registroFinto() {
 }
 
 async function listen(t) {
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     listaTaskDisponibili: () => [],
     elencaCartelleProgetto: () => [],

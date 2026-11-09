@@ -22,6 +22,9 @@ const FINESTRA = 8_192;
    marcatore, i conti cambiavano senza che il nucleo facesse niente di diverso. Il sistema dello scenario si accorcia di quanto pesa la nota. */
 const corpoOnesto = (corpoJson) => { const c = JSON.parse(corpoJson); return { ...c, messages: c.messages.map((m) => (Array.isArray(m.content) && m.content.every((p) => p?.type === 'text') ? { ...m, content: m.content.map((p) => p.text).join('') } : m)) }; };
 const NOTA_NON_CONTATA = 620;
+/* PERF R-33 (30/10/2026): `cerca.oppure` ha aggiunto 260 caratteri (~65 token) agli schemi del kernel, che la finta conta; il sistema
+   dello scenario si accorcia di altrettanto, così la matematica della finestra resta quella del caso (stessa regola della nota qui sopra). */
+const SCHEMI_CERCA_OPPURE = 260;
 const rifiuto = (message) => new Response(JSON.stringify({ error: { message } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
 function fornitoreOnesto({ conNumeri = true, scala = 1 } = {}) {
   const conti = { richieste: 0, rifiutate: 0, riassunti: 0 };
@@ -48,9 +51,9 @@ const sistema = (caratteri) => ({ role: 'system', content: `You are a coding age
 const coppie = (n, l = 1_500) => Array.from({ length: n }, (_, i) => [{ role: 'user', content: `Domanda ${i}: ${'parola '.repeat(Math.round(l / 7))}` },
   { role: 'assistant', content: `Risposta ${i}: ${'parola '.repeat(Math.round(l / 7))}` }]).flat();
 /* il caso della CLI: sistema e attrezzi riempiono quasi la finestra, e la storia vecchia da riassumere è poca */
-const conStoria = (n) => [sistema(18_000 - NOTA_NON_CONTATA), ...coppie(n), { role: 'user', content: 'Continua.' }];
+const conStoria = (n) => [sistema(18_000 - NOTA_NON_CONTATA - SCHEMI_CERCA_OPPURE), ...coppie(n), { role: 'user', content: 'Continua.' }];
 /* la strada della sola coda: niente da riassumere, un esito d'attrezzo che si accorcia e una risposta lunga che resta */
-const conCoda = (lungaCaratteri) => [sistema(12_000 - NOTA_NON_CONTATA), { role: 'user', content: 'Leggi il file grande.' },
+const conCoda = (lungaCaratteri) => [sistema(12_000 - NOTA_NON_CONTATA - SCHEMI_CERCA_OPPURE), { role: 'user', content: 'Leggi il file grande.' },
   { role: 'assistant', content: null, tool_calls: [{ id: 'g1', type: 'function', function: { name: 'read_file', arguments: '{"path":"grande.txt"}' } }] },
   { role: 'tool', tool_call_id: 'g1', content: 'contenuto del file grande, riga dopo riga. '.repeat(465) },
   { role: 'assistant', content: `Ecco il log: ${'x'.repeat(lungaCaratteri)}` }, { role: 'user', content: 'Ora rispondi OK.' }];

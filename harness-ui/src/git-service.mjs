@@ -138,7 +138,9 @@
  * con lo stesso identico test del modulo di W1-13, così la Review non
  * presenta come «file da aggiungere» il contenuto di un altro repository.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { execFile } from 'node:child_process';
+import { ARGOMENTI_DIFF_SICURI, argomentiGitSicuri } from './kernel/git-sicuro.mjs';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { rm, stat, writeFile } from 'node:fs/promises';
@@ -146,6 +148,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 
 import { isPathInside } from './path-policy.mjs';
+import { indirizziPerIlDispositivo } from './remoto/indirizzo-git.mjs';
 import { createProcessPolicy } from './process-policy.mjs';
 import { cartellaScratchAttesa } from './scratch.mjs';
 
@@ -168,6 +171,55 @@ const AMBIENTE_GIT = Object.freeze([
  * toglie ai percorsi del client ogni potere di pathspec (ricerca 5).
  */
 const FLAG_SEMPRE = Object.freeze(['--no-optional-locks', '--literal-pathspecs']);
+/*
+ * ⛔ 31/10/2026 (PROPOSTA-GIT-SICURO, rev. 3, OK di CLI e Mobile): ciò che la scheda Git fa da sola gira con le chiavi eseguibili della
+ *   cartella spente (fsmonitor, filtri, textconv, ganci, firme, sottomoduli: misurato che `status` le esegue). Le AZIONI della persona
+ *   (aggiungi, salva, cambia ramo, invia, annulla…) restano come in ogni IDE: i suoi filtri (LFS) e i suoi ganci girano.
+ * ⛔ Blocco 9 (31/10, Mobile; OK di CLI e Performance): la lista è delle AZIONI, non delle letture. Prima si elencavano le letture e
+ *   `stash` non c'era: `git stash list`, che la scheda lancia da sola, faceva partire il `gpg.program` di una cartella copiata (misurato).
+ *   Ora la cura è DI SERIE e resta fuori solo ciò che sta qui: un sottocomando nuovo o dimenticato è protetto.
+ * ⛔ Questa lista regge finché questi sottocomandi partono SOLO da un gesto della persona (Mobile): un `fetch` o un `pull` automatico
+ *   (un timer, un aggiornamento della scheda) NON va aggiunto qui sotto un nome d'azione — una lettura automatica riceve la cura.
+ */
+/* una parola per sottocomando, in una stringa sola: la guardia del remoto (git-service.test, «PIN — il remoto») conta i comandi `push`
+   scritti come argomento di git, e questa è una lista di nomi, non un comando.
+   ⛔ D-14 (31/10): solo ciò che il servizio lancia davvero. Un nome tenuto «per sicurezza» è un sottocomando che esce dalla cura il giorno che
+   qualcuno lo lancia: `worktree list`, `tag --list`, `submodule status` erano azioni. Chi ne aggiunge uno lo aggiunge qui, sapendo cosa fa. */
+const AZIONI_DELLA_PERSONA = new Set('add apply checkout clean commit fetch init pull push reset switch update-ref'.split(' '));
+const STASH_CHE_LEGGONO = new Set(['list', 'show']);
+const RAMO_CHE_SCRIVE = /^(-[mMdDcC]|--(move|delete|copy|force|unset-upstream|set-upstream-to(=.*)?))$/u;
+/* le opzioni con cui Git elenca invece di creare (builtin/branch.c): con queste il nome che segue è un filtro, non un ramo nuovo */
+const RAMO_CHE_ELENCA = /^(-l|--list|--(no-)?contains(=.*)?|--(no-)?merged(=.*)?|--points-at(=.*)?)$/u;
+
+/** Il sottocomando di una riga di Git (dopo le opzioni globali come `-c chiave=valore`) e ciò che lo segue. */
+function sottocomandoDi(argomenti) {
+  const a = Array.isArray(argomenti) ? argomenti : [];
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] === '-c' || a[i] === '-C') { i += 1; continue; }
+    if (typeof a[i] === 'string' && !a[i].startsWith('-')) return { sotto: a[i], resto: a.slice(i + 1) };
+  }
+  return { sotto: '', resto: [] };
+}
+
+/** Vero solo per un'azione della persona (fuori dalla cura); tutto il resto, anche ciò che nessuno ha elencato, riceve la cura. */
+export function eAzioneDellaPersona(argomenti) {
+  const { sotto, resto } = sottocomandoDi(argomenti);
+  if (sotto === 'stash') return !STASH_CHE_LEGGONO.has(resto[0]);
+  if (sotto === 'branch') {
+    if (resto.some((x) => RAMO_CHE_SCRIVE.test(x))) return true;
+    return !resto.some((x) => RAMO_CHE_ELENCA.test(x)) && resto.some((x) => !x.startsWith('-'));
+  }
+  return AZIONI_DELLA_PERSONA.has(sotto);
+}
+
+/* Performance (blocco 9): le chiavi della cartella si leggono UNA volta per chiamata del servizio e valgono per tutti i suoi comandi
+   (uno «stato» ne lancia cinque o sei: ~13 ms invece di ~65). Finita la chiamata la lettura si butta: nessuna cache fra due aperture. */
+const curaDellaChiamata = new AsyncLocalStorage();
+/** I metodi del servizio, ognuno dentro la sua lettura delle chiavi (vuota all'inizio di ogni chiamata). */
+function conUnaCuraPerChiamata(metodi) {
+  return Object.freeze(Object.fromEntries(Object.entries(metodi).map(([nome, fn]) => [nome,
+    typeof fn === 'function' ? (...argomenti) => curaDellaChiamata.run(new Map(), () => fn(...argomenti)) : fn])));
+}
 
 const TIMEOUT_LETTURA_MS = 15_000;
 const TIMEOUT_SCRITTURA_MS = 60_000;
@@ -382,6 +434,21 @@ export function creaServizioGit({
   /** F6-2 — il recupero in corso per cartella (uno alla volta), con il suo «Ferma». */
   const recuperiInCorso = new Map();
 
+  /** La cura della cartella per questa chiamata del servizio: letta la prima volta, poi la stessa promessa per i comandi che seguono.
+      Le chiavi si leggono con lo STESSO esecutore del servizio (politica dei processi, e il finto delle prove). */
+  function curaPer(cartella, conSottomoduli) {
+    const lette = curaDellaChiamata.getStore();
+    const leggiDavvero = async (args, cwd) => { const r = await eseguiGit(cwd, [...FLAG_SEMPRE, ...args], timeoutLetturaMs); return r.codice === 0 || r.codice === 1 ? String(r.stdout ?? '') : null; };
+    /* ogni lettura (le chiavi della cartella, l'indice, quelle dei sottomoduli) una volta sola per chiamata: lo «stato» con i sottomoduli
+       e le altre letture senza condividono la stessa `git config` della cartella */
+    const leggi = lette ? (args, cwd) => {
+      const chiave = `${cwd}\0${args.join('\0')}`;
+      if (!lette.has(chiave)) lette.set(chiave, leggiDavvero(args, cwd));
+      return lette.get(chiave);
+    } : leggiDavvero;
+    return argomentiGitSicuri(cartella, { conSottomoduli, eseguiGit: leggi });
+  }
+
   /** Lancia con i flag obbligatori davanti, e traduce ogni fallimento in un codice NOMINATO. */
   async function git(cartella, argomenti, { timeoutMs = timeoutLetturaMs, tollera = false, percorsiCostanti = false, rete = false, segnale = null } = {}) {
     /* ⛔ `percorsiCostanti` è l'UNICA eccezione a FLAG_SEMPRE, e vale solo per `stash` con il pathspec COSTANTE `.` (nessun percorso
@@ -389,8 +456,23 @@ export function creaServizioGit({
        da parte TUTTO il repository, e `-- m` non trova il file — il flag arriva ai figli di stash come `GIT_LITERAL_PATHSPECS=1` e il
        prefisso `:(prefix:N)` che stash aggiunge smette di essere magia (org2AI/ORG2 PR #1737, letto il 26/09/2026). */
     const flag = percorsiCostanti ? FLAG_SEMPRE.filter((f) => f !== '--literal-pathspecs') : FLAG_SEMPRE;
+    let sicuri = [];
+    const azione = eAzioneDellaPersona(argomenti);
+    if (!azione) {
+      /* lo stato della scheda Git guarda dentro i sottomoduli come prima: ne spegne le chiavi invece di non guardarli */
+      const conSottomoduli = argomenti[0] === 'status';
+      sicuri = await curaPer(cartella, conSottomoduli);
+      /* Git non sa dire quali comandi porta la cartella (configurazione rotta): la lettura non parte senza cura */
+      if (!sicuri) throw new GitServiceError('git could not read this folder configuration', 'GIT_COMMAND_FAILED');
+      const { sotto } = sottocomandoDi(argomenti);
+      if ((sotto === 'diff' || sotto === 'show' || sotto === 'log') && argomenti[0] === sotto) argomenti = [sotto, ...ARGOMENTI_DIFF_SICURI, ...argomenti.slice(1)];
+      if (sotto === 'stash' && argomenti[0] === 'stash' && argomenti[1] === 'show') argomenti = ['stash', 'show', ...ARGOMENTI_DIFF_SICURI, ...argomenti.slice(2)];
+    }
     /* F6-2: un comando di rete non chiede MAI nel terminale, ha il suo tempo massimo, e può portare il segnale di «Ferma» */
-    const esito = await eseguiGit(cartella, [...flag, ...argomenti], rete && timeoutMs === timeoutLetturaMs ? TIMEOUT_RETE_MS : timeoutMs, rete ? { ambiente: { GIT_TERMINAL_PROMPT: '0' }, segnale } : {});
+    const esito = await eseguiGit(cartella, [...flag, ...sicuri, ...argomenti], rete && timeoutMs === timeoutLetturaMs ? TIMEOUT_RETE_MS : timeoutMs, rete ? { ambiente: { GIT_TERMINAL_PROMPT: '0' }, segnale } : {});
+    /* Revisione dei blocchi 10-12, D-1: un'azione può cambiare ciò che si legge (`includeIf "onbranch:"`, i sottomoduli del ramo nuovo):
+       ciò che segue nella stessa chiamata rilegge, anche se l'azione è fallita a metà */
+    if (azione) curaDellaChiamata.getStore()?.clear();
     if (esito.codice === 0) return esito;
     if (esito.annullato) throw new GitServiceError('Fermato', 'GIT_ABORTED');
     if (tollera) return esito;
@@ -425,9 +507,10 @@ export function creaServizioGit({
   async function collocazione(cartella) {
     const esito = await git(cartella, ['rev-parse', '--show-toplevel', '--show-prefix']);
     const righe = esito.stdout.split('\n');
-    const radiceRepo = (righe[0] ?? '').trim();
+    /* N3 del Mobile: solo la fine riga. `.trim()` toglieva dal nome vero anche NBSP e U+3000, e la lettura ripartiva da un'altra cartella */
+    const radiceRepo = (righe[0] ?? '').replace(/\r$/u, '');
     if (radiceRepo === '') throw new GitServiceError('This folder is not a git repository', 'GIT_NOT_A_REPOSITORY');
-    const prefisso = (righe[1] ?? '').trim();
+    const prefisso = (righe[1] ?? '').replace(/\r$/u, '');
     return {
       radiceRepo,
       prefisso,
@@ -679,7 +762,7 @@ export function creaServizioGit({
     };
   }
 
-  return Object.freeze({
+  return conUnaCuraPerChiamata({
     /** Lo stato «Non committato» della Review: una voce per file, nel vocabolario della sessione. */
     async stato({ sessionId } = {}) {
       try {
@@ -1060,6 +1143,31 @@ export function creaServizioGit({
     },
 
     /**
+     * ⛔ SOLO PER IL CANCELLO DEL PONTE (`remoto/operazioni.mjs`, revisione delle cure 4 del Mobile, D2 e D4): nessuna rotta la espone e non esce mai verso il dispositivo. Dice quali nomi sono
+     *   legati da una rinomina, perché un blocco valga per tutti e due. Senza confronto: ciò che è preparato e ciò che è nel lavoro (una voce «da aggiungere» fa vedere una rinomina anche lì, come
+     *   `git status`). Con `confronto`: fra i due estremi, gli stessi di `modificheFra`.
+     * ⛔ Non è la lettura della scheda, che tiene il suo `-- .`, `--relative` e il tetto di 500: da una sottocartella quelle tolgono proprio il nome che esce dal blocco. Qui niente pathspec,
+     *   `--no-relative` (scavalca `diff.relative`) e percorsi della RADICE. Come VS Code (`extensions/git/src/git.ts:1865`, `diff --name-status -z`, con `--find-renames`).
+     * ⛔ N1 del Mobile: una rinomina «mezza preparata» (`mv` normale, poi `git add` del solo nome nuovo) non sta né in HEAD↔indice né in indice↔lavoro, ma sta in HEAD↔lavoro: terza lettura, e in un
+     *   repository senza commit HEAD non c'è e non è un guasto (`baseInterna`). `riguarda`: chi chiede dice quali radici gli interessano, e per le altre si risparmiano le letture.
+     * ⛔ Il riconoscimento si forza: `--find-renames` vince su `status.renames` e `diff.renames` spenti («Turn on rename detection», git-diff(1)), `-l0` su `diff.renameLimit` e
+     *   `status.renameLimit` («a value of 0 is treated as unlimited»; letti il 31/10/2026). `status` non ha `-l`: per questo `diff`, che porta anche solo le righe R e tiene lontano il tetto d'uscita.
+     */
+    async rinomineDelRepository({ sessionId, confronto = null, riguarda = null } = {}) {
+      try {
+        const cartella = cartellaDi(sessionId);
+        const estremi = confronto ? await estremiDelConfronto(cartella, confronto.da, confronto.a) : null;
+        const { radiceRepo } = await collocazione(cartella);
+        const comune = ['diff', '--no-color', '--name-status', '-z', '--find-renames', '-l0', '--diff-filter=R', '--no-relative'];
+        if (riguarda && !riguarda(radiceRepo)) return { radiceRepo, coppie: [] };
+        const conTesta = !estremi && (await git(cartella, ['rev-parse', '--verify', '-q', 'HEAD'], { tollera: true })).codice === 0;
+        const letture = await Promise.all((estremi ? [[...comune, estremi.base, estremi.punta]] : [[...comune, '--cached'], comune, ...(conTesta ? [[...comune, 'HEAD']] : [])]).map((argomenti) => git(cartella, argomenti)));
+        const uniche = new Map(letture.flatMap((esito) => vociNameStatus(esito.stdout)).map(({ prima, percorso }) => [`${prima}\0${percorso}`, { prima, percorso }]));
+        return { radiceRepo, coppie: [...uniche.values()] };
+      } catch (errore) { return rifiuto(errore); }
+    },
+
+    /**
      * ⭐ F6-2 passo 4 — IL DIFF DI UN FILE fra due commit, in sola lettura (niente pezzi da preparare: la storia non si prepara).
      *   Stessi divieti di ogni diff qui (niente textconv né diff esterno) e stesso tetto. Un rinominato porta anche il nome di
      *   PRIMA (`prima`): col solo nome nuovo nel pathspec git lo mostrerebbe come un file aggiunto.
@@ -1086,13 +1194,16 @@ export function creaServizioGit({
      * ⛔ Guardie per nome: HEAD non è più quello che la scheda ha visto (`GIT_HEAD_CHANGED`), il commit è già in un ramo remoto
      *   (`GIT_COMMIT_PUSHED`, decisione dell'owner: solo se non ancora inviato), l'area preparata è cambiata o ha file fuori dalla
      *   sessione (le stesse del commit), conflitti aperti.
+     * ⛔ D8 (contratto del ponte, revisione 4): senza il campo `messaggio` il commit tiene il suo, com'è (`--no-edit --cleanup=verbatim`). Serve al dispositivo quando il messaggio supera il tetto e
+     *   non lo può rimandare. La scheda del PC manda sempre una stringa e mai vuota (`scheda-github.js`, `committa`), quindi niente cambia per lei: una stringa vuota o un altro tipo restano 422.
      */
     async modificaUltimoCommit({ sessionId, messaggio, impronta, commit } = {}) {
       let cartellaMessaggio = null;
       try {
         const cartella = cartellaDi(sessionId);
-        if (typeof messaggio !== 'string' || messaggio.trim() === '') throw new GitServiceError('The commit needs a message', 'GIT_MESSAGE_REQUIRED');
-        if (Buffer.byteLength(messaggio, 'utf8') > TETTO_MESSAGGIO_BYTE) throw new GitServiceError('Commit message too long', 'GIT_MESSAGE_REQUIRED');
+        const tieneIlSuo = messaggio === undefined;
+        if (!tieneIlSuo && (typeof messaggio !== 'string' || messaggio.trim() === '')) throw new GitServiceError('The commit needs a message', 'GIT_MESSAGE_REQUIRED');
+        if (!tieneIlSuo && Buffer.byteLength(messaggio, 'utf8') > TETTO_MESSAGGIO_BYTE) throw new GitServiceError('Commit message too long', 'GIT_MESSAGE_REQUIRED');
         const prima = await statoInterno(cartella);
         await ultimoCommitRiscrivibile(cartella, prima.base, commit);
         if (typeof impronta !== 'string' || impronta !== prima.impronta) {
@@ -1104,10 +1215,13 @@ export function creaServizioGit({
           throw new GitServiceError(`There are ${area.fuori.length} staged files outside the session folder: the commit would take them without you having seen them`, 'GIT_STAGED_OUTSIDE');
         }
         if (prima.riepilogo.conflitti > 0) throw new GitServiceError('Conflicts must be resolved first', 'GIT_CONFLICTS');
-        cartellaMessaggio = await cartellaScratchAttesa('talos-git-msg-');
-        const fileMessaggio = join(cartellaMessaggio, 'messaggio.txt');
-        await writeFile(fileMessaggio, messaggio, 'utf8');
-        await git(cartella, ['commit', '--amend', '--cleanup=whitespace', '-F', fileMessaggio], { timeoutMs: timeoutScritturaMs });
+        if (tieneIlSuo) await git(cartella, ['commit', '--amend', '--no-edit', '--cleanup=verbatim'], { timeoutMs: timeoutScritturaMs });
+        else {
+          cartellaMessaggio = await cartellaScratchAttesa('talos-git-msg-');
+          const fileMessaggio = join(cartellaMessaggio, 'messaggio.txt');
+          await writeFile(fileMessaggio, messaggio, 'utf8');
+          await git(cartella, ['commit', '--amend', '--cleanup=whitespace', '-F', fileMessaggio], { timeoutMs: timeoutScritturaMs });
+        }
         const testa = await git(cartella, ['rev-parse', 'HEAD']);
         return { ok: true, commit: testa.stdout.trim(), stato: await statoInterno(cartella) };
       } catch (errore) {
@@ -1149,7 +1263,7 @@ export function creaServizioGit({
     async rami({ sessionId } = {}) {
       try {
         const cartella = cartellaDi(sessionId);
-        return { rami: await ramiInterni(cartella) };
+        return { rami: await ramiConPrincipale(cartella) };
       } catch (errore) { return rifiuto(errore); }
     },
 
@@ -1233,7 +1347,7 @@ export function creaServizioGit({
         if (!esistenti.some((r) => r.nome === vecchio)) throw new GitServiceError(`The branch “${vecchio}” does not exist`, 'GIT_BRANCH_NOT_FOUND');
         if (esistenti.some((r) => r.nome === nuovo)) throw new GitServiceError(`The branch “${nuovo}” already exists`, 'GIT_BRANCH_EXISTS');
         await git(cartella, ['branch', '-m', vecchio, nuovo], { timeoutMs: timeoutScritturaMs });
-        return { ok: true, rami: await ramiInterni(cartella) };
+        return { ok: true, rami: await ramiConPrincipale(cartella) };
       } catch (errore) { return rifiuto(errore); }
     },
 
@@ -1265,7 +1379,7 @@ export function creaServizioGit({
           if (/not fully merged/iu.test(esito.stderr)) throw new GitServiceError(`The branch “${nome}” has commits that are in no other branch`, 'GIT_BRANCH_NOT_MERGED');
           throw new GitServiceError(String(esito.stderr || '').trim() || 'git did not delete the branch', 'GIT_COMMAND_FAILED');
         }
-        return { ok: true, rami: await ramiInterni(cartella) };
+        return { ok: true, rami: await ramiConPrincipale(cartella) };
       } catch (errore) { return rifiuto(errore); }
     },
 
@@ -1317,8 +1431,9 @@ export function creaServizioGit({
         const cartella = cartellaDi(sessionId);
         const rif = await voceAccantonata(cartella, indice, commit);
         const dove = await collocazione(cartella);
-        const nomi = await git(cartella, ['stash', 'show', '--name-only', '--include-untracked', '--no-color', rif]);
-        const fuori = dove.prefisso === '' ? [] : nomi.stdout.split('\n').map((s) => s.trim()).filter((p) => p && !p.startsWith(dove.prefisso));
+        /* D3 del Mobile: senza `-z` git mette fra virgolette un nome accentato, e da `città` nessun file stava più «dentro» */
+        const nomi = await git(cartella, ['stash', 'show', '--name-only', '-z', '--include-untracked', '--no-color', rif]);
+        const fuori = dove.prefisso === '' ? [] : nomi.stdout.split('\0').filter((p) => p && !p.startsWith(dove.prefisso));
         if (fuori.length > 0) throw new GitServiceError(`This entry touches ${fuori.length} files outside the session folder`, 'GIT_STASH_OUTSIDE');
         const esito = await git(cartella, ['stash', 'pop', rif], { timeoutMs: timeoutScritturaMs, tollera: true });
         if (esito.codice !== 0) {
@@ -1452,7 +1567,7 @@ export function creaServizioGit({
      * (punto 22), che deve essere uno dei remoti del repository. L'esito lo dicono i flag di `--porcelain`, non l'inglese.
      * ⛔ Il remoto che arriva dalla scheda deve coincidere con quello che si userà: la conferma ha detto un nome, e si va lì.
      */
-    async invia({ sessionId, remoto = null } = {}) {
+    async invia({ sessionId, remoto = null, visto = null } = {}) {
       const inizio = Date.now();
       try {
         const cartella = cartellaDi(sessionId);
@@ -1460,18 +1575,32 @@ export function creaServizioGit({
         if (!sinc.ramo) throw new GitServiceError('No branch: HEAD is detached', 'GIT_DETACHED');
         if (!(await baseInterna(cartella))) throw new GitServiceError('There is no commit yet', 'GIT_NOTHING_TO_COMMIT');
         if (sinc.remoti.length === 0) throw new GitServiceError('This repository has no remote', 'GIT_NO_REMOTE');
+        const tracciato = sinc.riferimento && !sinc.riferimentoSparito;
         let nome; let refspec; let pubblica = false;
-        if (sinc.riferimento && !sinc.riferimentoSparito) {
+        if (tracciato) {
           nome = sinc.riferimento.remoto;
           refspec = `${sinc.ramo}:${sinc.riferimento.ramo}`;
           if (remoto != null && remoto !== nome) throw new GitServiceError(`The branch “${sinc.ramo}” tracks “${sinc.riferimento.corto}”: push to “${nome}”`, 'GIT_REMOTE_MISMATCH');
-          if (sinc.indietro > 0) throw new GitServiceError(`The remote branch has ${sinc.indietro} commits that are not here: pull first`, 'GIT_BEHIND');
-          if (sinc.avanti === 0) return { ok: true, nienteDaInviare: true, remoto: nome, ramo: sinc.ramo, sincronizzazione: sinc };
         } else {
           pubblica = true;
           nome = remoto == null ? sinc.remotoPerInvio : remotoConosciuto(remoto, sinc.remoti);
           if (!nome) throw new GitServiceError('Choose the remote to publish the branch to', 'GIT_REMOTE_REQUIRED');
           refspec = sinc.ramo;
+        }
+        /*
+         * Punto 4 del Mobile: la carta del dispositivo ha mostrato ramo, remoto, indirizzo, destinazione e commit. Si confrontano QUI, nell'operazione che invia: letti dal ponte
+         *   restava la finestra, e con `remote set-url --push` o un altro tracciamento il commit andava dove nessuno aveva visto. Non è un errore del servizio: il ponte lo dice al dispositivo.
+         * ⛔ E parte il commit mostrato, per hash: un commit nato dopo il confronto non parte.
+         */
+        if (visto) {
+          const destinazione = tracciato ? sinc.riferimento.ramo : sinc.ramo;
+          const adesso = { ramo: sinc.ramo, remoto: nome, urlInvio: indirizziPerIlDispositivo(sinc.remoti.find((r) => r.nome === nome)?.urlsInvio), destinazione, commit: (await baseInterna(cartella))?.commit ?? null };
+          if (Object.keys(adesso).some((k) => adesso[k] !== visto[k])) return { ok: false, cambiato: adesso };
+          refspec = `${adesso.commit}:refs/heads/${destinazione}`;
+        }
+        if (tracciato) {
+          if (sinc.indietro > 0) throw new GitServiceError(`The remote branch has ${sinc.indietro} commits that are not here: pull first`, 'GIT_BEHIND');
+          if (sinc.avanti === 0) return { ok: true, nienteDaInviare: true, remoto: nome, ramo: sinc.ramo, sincronizzazione: sinc };
         }
         const argomenti = ['push', '--porcelain', ...(pubblica ? ['--set-upstream'] : []), '--', nome, refspec];
         let esito;
@@ -1487,6 +1616,8 @@ export function creaServizioGit({
           const perche = rifiutata ? rifiutata.riepilogo : String(esito.stderr || '').trim();
           throw new GitServiceError(perche ? `The remote did not accept the push: ${perche}` : 'git push failed', 'GIT_PUSH_REJECTED');
         }
+        /* un hash come sorgente non imposta il tracciamento: lo si imposta qui, come avrebbe fatto `--set-upstream` col nome del ramo */
+        if (pubblica && visto) await git(cartella, ['branch', `--set-upstream-to=${nome}/${sinc.ramo}`, sinc.ramo], { tollera: true });
         return { ok: true, remoto: nome, ramo: sinc.ramo, pubblicato: pubblica, esiti: righe, sincronizzazione: await sincronizzazioneInterna(cartella) };
       } catch (errore) { return rifiuto(errore); }
     },
@@ -1548,11 +1679,12 @@ export function creaServizioGit({
     for (const riga of esito.stdout.split('\n')) {
       const m = /^(\S+)\t(.*?) \((fetch|push)\)$/u.exec(riga.trim());
       if (!m || m[1].startsWith('-')) continue;
-      const voce = remoti.get(m[1]) ?? { nome: m[1], url: null, urlInvio: null };
-      if (m[3] === 'fetch') voce.url = m[2]; else voce.urlInvio = m[2];
+      const voce = remoti.get(m[1]) ?? { nome: m[1], url: null, urlInvio: null, urlsInvio: [] };
+      if (m[3] === 'fetch') voce.url = m[2]; else { voce.urlInvio = m[2]; voce.urlsInvio.push(m[2]); }
       remoti.set(m[1], voce);
     }
-    return [...remoti.values()].map((r) => ({ nome: r.nome, url: r.url ?? r.urlInvio, urlInvio: r.urlInvio && r.urlInvio !== r.url ? r.urlInvio : null }));
+    /* `urlsInvio`: un remoto può avere più indirizzi d'invio e `git push` va a tutti; `urlInvio` ne tiene uno, e il ponte deve confrontarli tutti (misurato il 31/10/2026) */
+    return [...remoti.values()].map((r) => ({ nome: r.nome, url: r.url ?? r.urlInvio, urlInvio: r.urlInvio && r.urlInvio !== r.url ? r.urlInvio : null, urlsInvio: r.urlsInvio }));
   }
 
   /** Una chiave di configurazione, o `null` se non è impostata (uscita 1, che qui non è un errore). */
@@ -1586,6 +1718,32 @@ export function creaServizioGit({
   }
 
   /** Lo stato di sincronizzazione del ramo corrente. `avanti`/`indietro` sono `null` senza un riferimento. */
+  /* FE-046 (31/10/2026): la carta dell'invio è più forte sul ramo principale (t3code `GitConfirmSheet.tsx:160`). Lo dice `refs/remotes/<remoto>/HEAD`, scritto da `clone`;
+     se git non lo sa è `null`, e la carta resta quella normale: dal nome non si indovina. */
+  async function ramoPrincipaleDi(cartella, remoto) {
+    if (!remoto) return null;
+    const prefisso = `refs/remotes/${remoto}/`;
+    const esito = await git(cartella, ['symbolic-ref', '--quiet', `${prefisso}HEAD`], { tollera: true });
+    const riferimento = esito.stdout.trim();
+    return esito.codice === 0 && riferimento.startsWith(prefisso) ? riferimento.slice(prefisso.length) : null;
+  }
+
+  /* D-31 (revisione del blocco 14; Mobile: il telefono non confronta nomi): il principale di OGNI remoto, solo quelli che git sa. Un ramo può seguire `fork` mentre si elimina il `main` di `origin` */
+  async function principaliDi(cartella, remoti) {
+    const trovati = await Promise.all(remoti.map(async ({ nome }) => ({ remoto: nome, ramo: await ramoPrincipaleDi(cartella, nome) })));
+    return trovati.filter((p) => p.ramo !== null);
+  }
+  /* il nome locale può essere un altro: `lavoro-mio` che segue `origin/main` è il ramo principale per ciò che si perde */
+  function ePrincipale(principali, nome, seguito) {
+    return principali.some((p) => p.ramo === nome || seguito === `${p.remoto}/${p.ramo}`);
+  }
+
+  async function ramiConPrincipale(cartella) {
+    const [rami, remoti] = await Promise.all([ramiInterni(cartella), remotiInterni(cartella)]);
+    const principali = await principaliDi(cartella, remoti);
+    return rami.map((r) => (ePrincipale(principali, r.nome, r.riferimento) ? { ...r, principale: true } : r));
+  }
+
   async function sincronizzazioneInterna(cartella) {
     const testa = await ramoInterno(cartella);
     const remoti = await remotiInterni(cartella);
@@ -1605,6 +1763,12 @@ export function creaServizioGit({
         }
       }
     }
+    const remotoPerInvio = await remotoPredefinito(cartella, testa.ramo, remoti);
+    const principali = await principaliDi(cartella, remoti);
+    const remotoDelRamo = riferimento?.remoto ?? remotoPerInvio;
+    /* Dove andrebbe l'invio adesso: le stesse scelte di `invia`. La carta del dispositivo li mostra e li rimanda nel `visto` */
+    const tracciato = riferimento && !riferimentoSparito ? riferimento : null;
+    const remotoInvio = tracciato?.remoto ?? remotoPerInvio;
     return {
       ramo: testa.ramo,
       staccata: testa.staccata,
@@ -1613,7 +1777,12 @@ export function creaServizioGit({
       avanti,
       indietro,
       riferimentoSparito,
-      remotoPerInvio: await remotoPredefinito(cartella, testa.ramo, remoti),
+      remotoPerInvio,
+      urlsInvio: remoti.find((r) => r.nome === remotoInvio)?.urlsInvio ?? [],
+      destinazione: testa.ramo ? (tracciato?.ramo ?? testa.ramo) : null,
+      ramoPrincipale: principali.find((p) => p.remoto === remotoDelRamo)?.ramo ?? null,
+      /* se git non sa nessun principale il campo non c'è, e la carta resta quella normale */
+      ...(principali.length ? { suPrincipale: ePrincipale(principali, testa.ramo, riferimento?.corto) } : {}),
       ultimoRecupero: await ultimoRecuperoInterno(cartella),
       recuperoInCorso: recuperiInCorso.has(cartella),
     };

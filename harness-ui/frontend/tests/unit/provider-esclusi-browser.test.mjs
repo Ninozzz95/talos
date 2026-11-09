@@ -287,7 +287,7 @@ test('ESC-SERIE-01: la voce di serie si vede col suo modello e il perché; la ×
   const { page, modale, inviati } = await pagina(t, { row: DI_SERIE });
   const voce = modale.locator('[data-escluso-di-serie="z-ai/glm-5.3-flash#open-inference"]');
   await voce.waitFor();
-  assert.match(await voce.innerText(), /open-inference[\s\S]*per glm-5\.3-flash: non chiama gli attrezzi/u);
+  assert.match(await voce.innerText(), /open-inference[\s\S]*per glm-5\.3-flash: non chiama gli strumenti/u);
   assert.doesNotMatch(await voce.innerText(), /z-ai\//u, 'il modello col nome umano, mai l id');
   assert.equal(await modale.getByText('Esclusi di serie', { exact: true }).isVisible(), true, 'un titoletto suo, staccato dalla lista della persona');
   assert.match(await page.locator('#card').innerText(), /Fornitori esclusi\s*2 fornitori/u, 'il riepilogo conta anche il di-serie attivo (chutes + open-inference)');

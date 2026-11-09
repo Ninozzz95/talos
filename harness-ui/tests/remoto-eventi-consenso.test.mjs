@@ -48,7 +48,7 @@ function banco({ programma = undefined, clock = undefined } = {}) {
   };
   const cartelle = creaCartelleDeiDispositivi({ fileConsensi: join(dati, 'remoto', 'consensi.json'), fileSegreto: join(dati, 'remoto', 'segreto-cartelle'),
     sessionRegistry, cartelleAmmesse: [], cartelleEscluse: [dati], ...(programma ? { programma } : {}), ...(clock ? { clock } : {}) });
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry, remotoFn: () => ({ cartelle }) });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry, remotoFn: () => ({ cartelle }) });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   const operazioni = creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, cartelle });
   const contesto = (id = DISP_A, nome = 'OnePlus Pad 3') => ({ dispositivo: { id, nome }, iscrizioni: new Map(), iscrivi: () => async () => {} });
@@ -233,7 +233,7 @@ test('EV-06 lo stream è solo della finestra: un\'origine estranea, un programma
 });
 
 test('EV-07 senza le cartelle dei dispositivi lo stream risponde 503: la finestra resta sul controllo a tempo', async (t) => {
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry: { elenca: () => [], esiste: () => false }, remotoFn: () => null });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: { elenca: () => [], esiste: () => false }, remotoFn: () => null });
   const porta = await apri(t, httpApp);
   const f = await flusso(porta);
   const corpo = await f.corpo();

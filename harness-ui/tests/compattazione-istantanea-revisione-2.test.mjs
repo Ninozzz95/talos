@@ -64,17 +64,27 @@ test('IST2-REV-01 — (owner 21/10/2026, «sta maledetta compattazione») un ria
   assert.ok(r0.conti.riassunti >= 2, 'il primo troncato e il ritentativo');
 });
 
-test('IST2-REV-01c — [VERDE, da sapere] TUTTI E DUE i tentativi di sottofondo troncati: l’istantanea si spegne per il resto del giro e all’emergenza si aspetta in primo piano — la politica di prima, ora dopo il ritentativo', async (t) => {
+/* ⛔ 28/10/2026 — IST2-REV-01c è SUPERATA dal contratto C1, owner 27/10/2026, «Sì, mai aspettare»: dopo i due tentativi di sottofondo
+   troncati, all'emergenza il giro NON aspetta più in primo piano il terzo riassunto. La richiesta parte col riassunto senza modello
+   (ragione 'in-arrivo'), il terzo riassunto del modello si fa in sottofondo e, arrivato, sostituisce quello rapido alla richiesta dopo
+   («miglioramento»). I riassunti pagati restano tre, come prima. Sul codice di prima (8fde46abf) è rossa: si aspettava in primo piano. */
+test('IST2-REV-01c — superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): TUTTI E DUE i tentativi di sottofondo troncati — all’emergenza il giro non aspetta in primo piano: riassunto senza modello subito, il terzo in sottofondo, e quello rapido migliorato alla richiesta dopo', async (t) => {
   const cartella = mkdtempSync(join(tmpdir(), 'istantanea-rev2c-'));
   t.after(() => rimuoviCartellaDiProva(cartella));
   for (let i = 1; i <= 12; i += 1) writeFileSync(join(cartella, `f${i}.txt`), `${'riga del file '.repeat(60)}\n`);
   const r0 = rete({ letture: 12, riassunto: (n) => (n <= 2 ? RIASSUNTO_TRONCATO() : RIASSUNTO_BUONO()) });
   const eventi = [];
+  const ragioni = [];
   await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Leggi.' }, messaggiIniziali: [...storia(coppiePer(3250)), { role: 'user', content: 'Leggi i file.' }],
     compattazioneIstantanea: true, contestoDelProgetto: 'Project files:\n', fetchDiRete: r0.fn, permessi: 'Full access',
-    onGiro: (e) => { if (/^compattazione-(inizio|fine|preparata)$/u.test(e?.tipo ?? '')) eventi.push(`${e.tipo}${e.fase ? `/${e.fase}` : ''}${e.istantanea ? '/istantanea' : ''}${e.motivo ? `/${e.motivo}` : ''}`); } });
-  assert.deepEqual(eventi, ['compattazione-preparata/inizio/precalcolo', 'compattazione-preparata/troncato', 'compattazione-inizio/emergenza', 'compattazione-fine'], JSON.stringify(eventi));
-  assert.equal(r0.conti.riassunti, 3, 'due di sottofondo (troncati) e quello della emergenza');
+    onGiro: (e) => {
+      if (/^compattazione-(inizio|fine|preparata)$/u.test(e?.tipo ?? '')) eventi.push(`${e.tipo}${e.fase ? `/${e.fase}` : ''}${e.istantanea ? '/istantanea' : ''}${e.motivo ? `/${e.motivo}` : ''}`);
+      if (e?.tipo === 'compattazione-fine' && e.compattato === true) ragioni.push(e.ragione ?? (e.migliora ? 'migliora' : null));
+    } });
+  assert.deepEqual(eventi, ['compattazione-preparata/inizio/precalcolo', 'compattazione-preparata/troncato', 'compattazione-inizio/emergenza', 'compattazione-fine',
+    'compattazione-preparata/inizio/precalcolo', 'compattazione-preparata/pronta', 'compattazione-fine/istantanea/miglioramento'], JSON.stringify(eventi));
+  assert.deepEqual(ragioni, ['in-arrivo', 'migliora'], 'all\'emergenza il riassunto senza modello, poi quello del modello lo migliora');
+  assert.equal(r0.conti.riassunti, 3, 'due di sottofondo (troncati) e il terzo, ora anche lui in sottofondo');
 });
 
 test('IST2-REV-01b — [VERDE] AL CONTRARIO, lo stesso giro con un riassunto buono: scambio istantaneo, nessuna attesa in primo piano', async (t) => {

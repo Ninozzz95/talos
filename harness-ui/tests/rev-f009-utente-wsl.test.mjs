@@ -147,7 +147,7 @@ test('F009-07: WSL come root senza nessuno interpellato («Scrive nel progetto»
     assert.equal(domanda.comando, 'echo uno')
     assert.equal(domanda.wslRoot.utente, 'root')
     // K4b (11/10/2026): inglese + chiave + valori; l'italiano lo dice l'interfaccia (frasi-permesso-k4b.test.mjs)
-    assert.equal(domanda.wslRoot.frase, "This command would run in Linux (WSL, Ubuntu) as root. With this session's permissions commands run without asking, but as root it can change the whole Linux system and write to the Windows disks. If you confirm, commands in Linux (WSL, Ubuntu) can run as root for the rest of this session without asking again.")
+    assert.equal(domanda.wslRoot.frase, "This command would run in Linux (WSL, Ubuntu) as root. With this session's permissions commands run without asking, but as root it can change the whole Linux system and write to the Windows disks. A yes applies to this chat, unless you choose only this time.")
     assert.deepEqual([domanda.wslRoot.fraseChiave, domanda.wslRoot.fraseParams], ['server.approval.wslRoot.user', { linux: 'Linux (WSL, Ubuntu)', utente: 'root' }])
     assert.deepEqual(primo.eseguiti.map((e) => e.comando), ['echo uno', 'echo due'])
     assert.equal(consensiSessione.rootWsl, true)
@@ -322,7 +322,7 @@ test('F009-20: GET e POST /api/v1/wsl — stato coi fatti, corpo con il solo cam
     const { createHttpApp } = await import('../src/http-app.mjs')
     const http = await import('node:http')
     const store = createPreferenzeWslStore({ statoFn: async (p) => ({ disponibile: true, distro: 'Ubuntu', utenteUsato: 'root', root: true, usa: p.usaUtenteNormale }) })
-    const app = createHttpApp({ preferenzeWslStore: store })
+    const app = createHttpApp({ senzaGettone: 'prove', preferenzeWslStore: store })
     const server = http.createServer(app)
     await new Promise((r) => server.listen(0, '127.0.0.1', r))
     t.after(() => new Promise((r) => server.close(r)))
@@ -358,4 +358,45 @@ test('F009-21 (WSL vero): il comando gira con l utente che la sonda dice, e l es
     const stato = await statoWsl({ usaUtenteNormale: true })
     assert.equal(stato.disponibile, true)
     assert.equal(stato.utenteUsato, atteso)
+})
+
+/*
+ * Decisione 41 dell'owner (02/11/2026): la carta di root ha due sì. «Solo questa volta» non si ricorda, «Per questa chat» sì. La forma è
+ *   quella di Hermes (`tools/approval.py:411`, `_persist_choice`, scrive solo «session» e «always»: «once» non lascia traccia).
+ */
+test('D41-01: «solo questa volta» esegue il comando e non si ricorda: il comando dopo chiede di nuovo', async (t) => {
+    const consensiSessione = {}
+    const { chieste, eseguiti } = await giro(t, { consensiSessione, livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot, risposta: { approvato: true, soloQuestaVolta: true },
+        chiamate: [['shell', { comando: 'echo uno' }], ['shell', { comando: 'echo due' }]] })
+    assert.equal(chieste.length, 2, 'due comandi, due domande')
+    assert.deepEqual(eseguiti.map((e) => e.comando), ['echo uno', 'echo due'])
+    assert.equal(consensiSessione.rootWsl, undefined, 'niente si ricorda')
+})
+
+test('D41-02: al contrario, una risposta che non è un sì vero resta un no: nessun comando, niente si ricorda', async (t) => {
+    for (const risposta of [{ approvato: true }, { approvato: false, soloQuestaVolta: true }, { soloQuestaVolta: true }, { approvato: 'true', soloQuestaVolta: true }]) {
+        const consensiSessione = {}
+        const { chieste, eseguiti } = await giro(t, { consensiSessione, livelloAccesso: 'nessuno', rootWslDelComandoFn: comeRoot, risposta })
+        assert.equal(chieste.length, 1, JSON.stringify(risposta))
+        assert.equal(eseguiti.length, 0, JSON.stringify(risposta))
+        assert.equal(consensiSessione.rootWsl, undefined, JSON.stringify(risposta))
+    }
+})
+
+test('D41-03: senza un utente normale nella distro la carta dice il perché, e il sì senza ambito resta il sì per la chat', async (t) => {
+    const consensiSessione = {}
+    const { chieste } = await giro(t, { consensiSessione, livelloAccesso: 'nessuno', rootWslDelComandoFn: async () => ({ distro: 'Ubuntu', utente: 'root', nessunUtenteNormale: true }) })
+    const [domanda] = chieste
+    assert.equal(domanda.wslRoot.fraseChiave, 'server.approval.wslRoot.noNormalUser')
+    assert.deepEqual(domanda.wslRoot.fraseParams, { linux: 'Linux (WSL, Ubuntu)', utente: 'root' })
+    assert.equal(domanda.wslRoot.frase, 'This command would run in Linux (WSL, Ubuntu) as root, because this Linux has no normal user, and TALOS does not create one by itself. As root it can change the whole Linux system and write to the Windows disks. A yes applies to this chat, unless you choose only this time. To stop this question, create a normal user: the Linux user section of the session permissions shows how.')
+    assert.equal(domanda.wslRoot.nessunUtenteNormale, true)
+    assert.equal(consensiSessione.rootWsl, true)
+})
+
+test('D41-04 (BD3): se root lo chiede il comando, la carta lo dice con la sua frase', async (t) => {
+    const { chieste, eseguiti } = await giro(t, { consensiSessione: {}, livelloAccesso: 'nessuno', rootWslDelComandoFn: async () => ({ distro: 'Ubuntu', utente: 'root', sceltoDalComando: true }), risposta: false })
+    assert.equal(chieste[0].wslRoot.fraseChiave, 'server.approval.wslRoot.commandChoosesRoot')
+    assert.equal(chieste[0].wslRoot.frase, 'This command asks to run in Linux (WSL, Ubuntu) as root, by its own choice. As root it can change the whole Linux system and write to the Windows disks. A yes applies to this chat, unless you choose only this time.')
+    assert.equal(eseguiti.length, 0)
 })

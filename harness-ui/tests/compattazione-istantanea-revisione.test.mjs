@@ -71,7 +71,11 @@ test('IST-REV-01 — il riassunto preparato che arriva DOPO la fine del giro si 
   assert.deepEqual(depositati, [{ secondaria: true, prompt: 1000 }], 'arrivato dopo il giro, è passato dall\'involucro: il suo costo (1.000 token d\'ingresso) entra nel conto della sessione');
 });
 
-test('IST-REV-02 — [VERDE] un giro che si ferma mentre aspetta all\'emergenza il riassunto in volo esce subito: lo Stop interrompe anche il riassunto', async (t) => {
+/* ⛔ 28/10/2026 — IST-REV-02 è SUPERATA dal contratto C1, owner 27/10/2026, «Sì, mai aspettare»: all'emergenza il giro non aspetta più
+   il riassunto in volo, quindi non c'è un'attesa che lo Stop debba chiudere — il giro finisce da sé, prima dello Stop (1 s), col solo
+   riassunto in volo (nessun secondo pagato). Resta la metà che la prova difendeva: lo Stop che arriva dopo interrompe anche il riassunto
+   in sottofondo. Sul codice di prima (8fde46abf) è rossa: il giro aspettava e finiva «fermato». */
+test('IST-REV-02 — superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): all\'emergenza il giro non aspetta il riassunto in volo e finisce da sé; lo Stop che arriva dopo interrompe anche il riassunto', async (t) => {
   const cartella = cartellaConFile(t, 4, 200);
   const controller = new AbortController();
   let abortiti = 0;
@@ -80,9 +84,11 @@ test('IST-REV-02 — [VERDE] un giro che si ferma mentre aspetta all\'emergenza 
   const inizio = Date.now();
   const r = await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'Leggi.' }, messaggiIniziali: [...storia(coppiePer(3250)), { role: 'user', content: 'Leggi i file.' }],
     compattazioneIstantanea: true, contestoDelProgetto: 'Project files:\n', fetchDiRete: r0.fn, segnaleStop: controller.signal, permessi: 'Full access' });
-  assert.equal(r.comeFinita, 'fermato');
-  assert.ok(Date.now() - inizio < 3_000, `${Date.now() - inizio} ms`);
-  assert.equal(abortiti, 1);
+  assert.equal(r.comeFinita, 'concluso', 'il giro non aspetta: finisce da sé, prima dello Stop');
+  assert.ok(Date.now() - inizio < 1_000, `${Date.now() - inizio} ms`);
+  assert.equal(r0.conti.riassunti, 1, 'un riassunto solo, quello in volo: nessun secondo pagato');
+  await attesa(1_500);
+  assert.equal(abortiti, 1, 'lo Stop interrompe anche il riassunto in sottofondo');
 });
 
 test('IST-REV-03 — [ROSSO, S5] dopo lo Stop all\'emergenza l\'adapter apre lo stesso una compattazione nuova: un «compattazione-inizio» che nessun «fine» chiude', async (t) => {
@@ -301,12 +307,16 @@ async function giroAllEmergenza(t, { inArrivo: crea, coda }) {
 }
 const conFirma = (promessa, firma) => Object.assign(promessa, { firma });
 
-test('IST-REV-05c — all\'emergenza, un riassunto in volo che VALE (firma giusta) si aspetta e si usa: nessun secondo riassunto pagato', async (t) => {
+/* ⛔ 28/10/2026 — IST-REV-05c è SUPERATA dal contratto C1, owner 27/10/2026, «Sì, mai aspettare»: il riassunto in volo che vale non si
+   aspetta più (arriva dopo 300 ms). La richiesta parte subito col riassunto senza modello, ragione 'in-arrivo'; quello in volo resta il
+   solo riassunto del modello (nessun secondo pagato) e sostituirà il rapido alla prima richiesta dopo il suo arrivo
+   (MAI-ASPETTARE-LEG-06). Sul codice di prima (8fde46abf) è rossa: si aspettava e la riga era lo scambio dell'ereditato. */
+test('IST-REV-05c — superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): all\'emergenza un riassunto in volo che VALE (firma giusta) non si aspetta — riassunto senza modello subito, «in-arrivo», e nessun secondo riassunto pagato', async (t) => {
   const esito = await giroAllEmergenza(t, { coda: 'altro testo '.repeat(700), inArrivo: (pronta, storiaUno) => conFirma(
     new Promise((ok) => { setTimeout(() => ok(pronta), 300).unref(); }),
     { coveredThrough: pronta.record.coveredThrough, impronta: pronta.impronta, base: pronta.base }) });
   assert.equal(esito.riassunti, 0, JSON.stringify(esito.eventi));
-  assert.deepEqual(esito.eventi, ['ereditato']);
+  assert.deepEqual(esito.eventi, ['in-arrivo'], 'la riga è il riassunto senza modello: quello in volo non si è aspettato');
 });
 
 test('IST-REV-05d — all\'emergenza, un riassunto in volo che NON vale più (la storia è cambiata: firma diversa) NON si aspetta: il giro compatta subito (prima: 1.220 ms in serie)', async (t) => {

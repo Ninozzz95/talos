@@ -1,0 +1,1 @@
+{"stato":"completo","blocco":{"tipo":"diagramma","id":"ciclo","titolo":"Ciclo","nodi":[{"id":"a","testo":"Scrivi"},{"id":"b","testo":"Prova"},{"id":"c","testo":"Correggi"}],"frecce":[{"da":"a","a":"b"},{"da":"b","a":"c"},{"da":"c","a":"a","testo":"di nuovo"}]}}

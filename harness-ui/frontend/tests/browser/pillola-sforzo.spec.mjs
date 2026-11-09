@@ -41,7 +41,7 @@ async function apri(page, { modello, effort = null, lingua = 'it', modo = 'light
     return rotta.abort();
   });
   await page.route('**/api/v1/sessions', (route) => route.fulfill({ json: { ok: true, data: { items: [sessione] } } }));
-  await page.route(`**/api/v1/sessions/${SID}/events`, (route) => route.fulfill({ contentType: 'text/event-stream',
+  await page.route(`**/api/v1/sessions/${SID}/events*`, (route) => route.fulfill({ contentType: 'text/event-stream',
     body: `retry: 3600000\ndata: ${JSON.stringify({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null })}\n\n` }));
   /* A9: con `diretti` la risposta porta anche i livelli e il FILO delle sessioni dirette, calcolati dal server vero (gli stessi
      moduli che `http-app.mjs` serve), non scritti a mano. */

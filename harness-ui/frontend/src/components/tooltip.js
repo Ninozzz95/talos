@@ -101,6 +101,7 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
 
   let bersaglio = null;
   let timer = null;
+  let inProgramma = null; // (6) l'elemento la cui bolla aspetta il ritardo
   let dentroLaBolla = false;
   /*
    * ⛔⛔ 26/09/2026, difetti (6) e (7) delle foto di Ask e del Piano: dopo lo Stop «Interrompi adesso» restava sul bottone
@@ -125,6 +126,7 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
 
   const chiudi = () => {
     if (timer) { clearTimeout(timer); timer = null; }
+    inProgramma = null; // (6)
     /* ⛔ 22/10/2026 (streaming fluido): chiudere una bolla GIÀ chiusa non è gratis. Questo ascolta OGNI scorrimento della pagina,
        e mentre il modello scrive la chat scorre a ogni fotogramma: riscrivere `hidden` con lo stesso valore genera comunque una
        mutazione (DOM, «set an attribute value»), e `hidden` è fra i tratti di un `:has()` sull'intera chat (`index.css`,
@@ -180,7 +182,8 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
     const frase = migraTitle(elemento);
     if (!frase) return;
     chiudi();
-    timer = setTimeout(() => apri(elemento, frase), ritardo);
+    inProgramma = elemento;
+    timer = setTimeout(() => { timer = null; inProgramma = null; apri(elemento, frase); }, ritardo);
   };
   const suEntrata = (evento) => {
     const alFuoco = evento.type === 'focusin';
@@ -203,10 +206,24 @@ export function collegaTooltip(documentObj = globalThis.document, { ritardo = RI
   };
 
   const suUscita = (evento) => {
-    if (!bersaglio) return;
+    const verso = evento.relatedTarget;
+    /*
+     * ⛔ (6) 04/11/2026, revisione UX della candidata, riga 34 (variante di (4)): «Trascina o usa le frecce…» restava oltre 15 s sopra il
+     *   selettore col puntatore già altrove. Il puntatore lasciava il bersaglio PRIMA dei 350 ms: qui si usciva subito perché la bolla non
+     *   era ancora aperta (`bersaglio` vuoto), il timer restava armato e la bolla si apriva su un elemento già lasciato, dove nessun
+     *   `pointerout` l'avrebbe più chiusa. ⇒ uscire dal bersaglio annulla anche l'apertura in attesa e l'attesa del movimento. Hermes fa
+     *   così (`apps/desktop/src/components/ui/tooltip.tsx:327-351`, clone 2026-11-01: `onPointerLeave={close}`, e `close` cancella il timer).
+     */
+    if (!bersaglio) {
+      const atteso = inProgramma ?? inAttesaDiMovimento;
+      if (atteso && atteso.contains?.(evento.target) && !(verso && atteso.contains(verso))) {
+        if (timer) { clearTimeout(timer); timer = null; }
+        inProgramma = null; inAttesaDiMovimento = null;
+      }
+      return;
+    }
     // WCAG 1.4.13, «hoverable»: passare col mouse SOPRA il suggerimento non lo fa sparire —
     // serve a chi ingrandisce lo schermo e deve inseguire il testo per leggerlo tutto.
-    const verso = evento.relatedTarget;
     if (verso && (bolla.contains(verso) || bersaglio.contains(verso))) return;
     if (dentroLaBolla) return;
     chiudi();

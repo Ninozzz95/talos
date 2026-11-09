@@ -122,7 +122,7 @@ export function creaRigaInstallata(dati, { selezionato = false, seleziona, docum
   const b = el(documentObj, 'button', 'talos-list-row');
   b.type = 'button'; b.dataset.c = 'ListRow'; b.dataset.model = dati.id; b.dataset.match = dati.match; b.dataset.installedState = dati.stato;
   b.setAttribute('aria-pressed', String(Boolean(selezionato)));
-  const ic = el(documentObj, 'span', 'talos-list-row__icon'); ic.appendChild(icona(documentObj, 'i-bolt'));
+  const ic = el(documentObj, 'span', 'talos-list-row__icon'); ic.appendChild(icona(documentObj, 'i-cpu'));
   const testo = el(documentObj, 'span', 'talos-list-row__text');
   const sub = el(documentObj, 'span', 'talos-list-row__sub', dati.sotto);
   if (dati.sottoDue) { sub.appendChild(documentObj.createElement('br')); sub.appendChild(documentObj.createTextNode(dati.sottoDue)); }

@@ -65,7 +65,7 @@ test('BUG23-02 — dal vivo: i pezzi di ToolCallOutput si accumulano (solo la co
   assert.equal(scheda.stato, 'terminato');
 });
 
-test('BUG23-03 — solo i comandi: gli altri attrezzi non fanno comandi nella scheda, e un giro senza comandi non ha scheda', () => {
+test('BUG23-03 — solo i comandi: gli altri strumenti non fanno comandi nella scheda, e un giro senza comandi non ha scheda', () => {
   const schede = schedeAgenteDagliEventi([
     avvio('x', 1, 'leggi'), { type: 'ToolCallArgs', toolCallId: 'x', delta: '{"percorso":"a.txt"}' }, esito('x', 'contenuto'),
     avvio('y', 2, 'prova'), esito('y', 'ok'),

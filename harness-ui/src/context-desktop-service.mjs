@@ -7,6 +7,8 @@ import { classificaErroreFornitore } from './kernel/compattazione-desktop.mjs';
 const fail = (code, message) => { throw new ContextEngineError(message, code); };
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const terminal = new Set(['committed', 'failed', 'cancelled']);
+/** D9 (04/11/2026): da quanto il motore locale può restare «non pronto» prima che la chat torni a dirlo (condizione di Performance). */
+export const NON_PRONTO_OLTRE_MS = 60_000;
 const validId = value => typeof value === 'string' && value.length > 0 && value.length <= 256 && !value.includes('\0');
 
 /** Desktop ownership and transport adaptation; archive paths and model credentials
@@ -25,15 +27,26 @@ export function budgetDellaMisura(snapshot, profilo = null) {
   if (!misura) return null;
   const altroModello = profilo && Number.isSafeInteger(profilo.windowTokens) && Number.isSafeInteger(profilo.responseReserve)
     && (profilo.model !== misura.model || profilo.provider !== misura.provider);
-  const tokens = altroModello ? { ...misura, provider: profilo.provider, model: profilo.model, windowTokens: profilo.windowTokens, responseReserve: profilo.responseReserve } : misura;
+  /* 174 (04/11/2026, condizione della CLI): il margine salvato con la misura vale per la SUA finestra; con un altro modello si ricalcola */
+  const { marginTokens: margineSalvato, ...senzaMargine } = misura;
+  const tokens = altroModello ? { ...senzaMargine, provider: profilo.provider, model: profilo.model, windowTokens: profilo.windowTokens, responseReserve: profilo.responseReserve } : misura;
   try {
     const b = computeContextBudget({ ...tokens, settings: snapshot.settings ?? {} });
-    return { windowTokens: b.windowTokens, inputLimit: b.inputLimit, triggerTokens: b.triggerTokens, inputTokens: b.inputTokens, method: b.method };
+    const ancora = Number.isSafeInteger(b.anchorTokens) && Number.isSafeInteger(b.estimatedDeltaTokens) ? { anchorTokens: b.anchorTokens, estimatedDeltaTokens: b.estimatedDeltaTokens } : {};
+    return { windowTokens: b.windowTokens, inputLimit: b.inputLimit, triggerTokens: b.triggerTokens, inputTokens: b.inputTokens, method: b.method, marginTokens: b.safetyMarginTokens, ...ancora };
   } catch { return null; }
 }
 
 /** Ogni quanto il /compact a mano sul motore dice a che punto è (Mobile 22/10: senza, ~18 minuti di riga ferma). */
 export const AVANZAMENTO_DEL_COMPACT_MS = 2_000;
+/*
+ * R2 (revisione del Blocco 21, 01/11/2026): l'evento che dice «l'archivio è andato da parte». `setAsideSession` porta via lavori e versioni, quindi la scheda Contesto
+ *   riparte da 0, mentre l'elenco delle sessioni conta `context.version.committed` dal giornale (`compattazioniInVigore`, `session-registry.mjs`): senza questa riga i due
+ *   numeri si contraddicevano anche dopo un riavvio. Niente `versionId`: la chat non ci disegna un separatore (`identity`, `context-separator.js`).
+ */
+export const ARCHIVIO_MESSO_DA_PARTE = 'context.archive.set-aside';
+/* gli stati di `activeStates` del motore: un lavoro in uno di questi ha il suo processo dietro (`recoverInterrupted` toglie gli orfani) */
+const LAVORI_ATTIVI = new Set(['queued', 'preparing', 'summarizing', 'validating', 'ready']);
 
 export function createDesktopContextService({ engine, store, loadLegacy, selectLegacyCheckpoint = null, resolveSessionModel, isSessionEnabled, readSession, onEvent, onPrepared, runInference, registraAncora, clock = () => new Date().toISOString() }) {
   if (!engine || !store || typeof readSession !== 'function' || typeof resolveSessionModel !== 'function' || typeof isSessionEnabled !== 'function') fail('CTX_PORT_MISSING', 'Incomplete desktop context services.');
@@ -88,6 +101,46 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
     }
     return snapshot;
   }
+  /*
+   * Owner 27/10/2026 notte («Si annulla, come Codex»): i lavori di compattazione ancora ATTIVI di una conversazione, annullati prima di
+   *   riparare l'archivio (vedi `prepare`). Annullare un lavoro già concluso non fa niente. Si aspetta al più `ATTESA_ANNULLAMENTO_MS` che
+   *   l'esecutore interrotto si fermi davvero: senza, potrebbe scrivere lo stato finale sotto la conversazione DOPO lo spostamento. Un
+   *   errore qui non ferma niente: se un lavoro resta attivo, l'archivio rifiuta di mettere da parte e la richiesta ricade come prima.
+   */
+  const ATTESA_ANNULLAMENTO_MS = 2_000;
+  /** Un lavoro annullato si aspetta al più `ATTESA_ANNULLAMENTO_MS`: l'esecutore che non si ferma subito non trattiene chi annulla. */
+  async function aspettaAnnullato(options) {
+    if (typeof engine.waitForCompaction !== 'function') return;
+    let timer = null;
+    const tetto = new Promise((risolvi) => { timer = setTimeout(risolvi, ATTESA_ANNULLAMENTO_MS); });
+    try { await Promise.race([engine.waitForCompaction(options).catch(() => {}), tetto]); }
+    finally { clearTimeout(timer); }
+  }
+  /*
+   * P4 (owner 28/10/2026, «Rapido subito, il modello dopo»; contratto con la CLI): il riassunto di fine giro di un posto unico si annulla
+   *   quando un giro prende il motore (P3). L'annullo è asincrono: la preparazione di una richiesta li ASPETTA (al più
+   *   `ATTESA_ANNULLAMENTO_MS` ciascuno), altrimenti il motore vedrebbe il lavoro ancora in volo, lo aspetterebbe dentro il giro, lo troverebbe
+   *   annullato e la chat direbbe un guasto che non c'è. Sono di tutto il servizio, non di una conversazione: il posto è del MOTORE.
+   */
+  const annullamentiInCorso = new Set();
+  function annullaPerUnGiro(sessionId, jobId) {
+    if (typeof engine.cancelCompaction !== 'function') return;
+    const fatto = (async () => {
+      try { await engine.cancelCompaction({ sessionId, jobId }); } catch { /* già concluso o sparito */ }
+      await aspettaAnnullato({ sessionId, jobId });
+    })();
+    annullamentiInCorso.add(fatto);
+    void fatto.finally(() => annullamentiInCorso.delete(fatto));
+  }
+  async function annullaLavoriVecchi(sessionId) {
+    if (typeof engine.cancelCompaction !== 'function') return;
+    const snapshot = await store.readContextSnapshot({ sessionId });
+    const attivi = (Array.isArray(snapshot?.jobs) ? snapshot.jobs : []).filter((job) => job && !['committed', 'failed', 'cancelled', 'paused'].includes(job.state));
+    for (const job of attivi) {
+      try { await engine.cancelCompaction({ sessionId, jobId: job.id }); } catch { /* già concluso o sparito */ }
+      await aspettaAnnullato({ sessionId, jobId: job.id });
+    }
+  }
   async function allRecords(sessionId) {
     const records = []; let afterSequence = 0;
     for (;;) {
@@ -114,7 +167,36 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
     pending.finally(() => { if (deliveries.get(sessionId) === pending) deliveries.delete(sessionId); }).catch(() => {});
     return pending;
   }
-  async function modelFor(sessionId) { return resolveSessionModel({ sessionId, session: await readSession(sessionId) }); }
+  /*
+   * R2 e RIP-3 (ripassata del Blocco 21, 01/11/2026): l'annuncio entra nella coda degli eventi DENTRO la transazione di `setAsideSession`, in fondo a ciò che aspettava già:
+   *   una versione consegnata dopo tornerebbe a contare. Prima andava sul giornale da qui, con un tentativo solo, e se il giornale non scriveva o il processo moriva fra le due
+   *   scritture l'elenco teneva il numero vecchio per sempre: una riparazione dopo non arriva, a archivio riparato. Ora la coda lo riprova a ogni richiesta e a ogni apertura
+   *   della scheda, anche dopo un riavvio, finché il giornale non lo prende. Fino ad allora l'elenco è indietro; una consegna ripetuta non conta due volte
+   *   (`pubblicaEventoContesto` guarda l'id). Non ferma mai la richiesta: la riga `archivio-riallineato` del guscio esce solo se `prepare` riesce.
+   */
+  const annuncioArchivioDaParte = (sessionId, asideId) => ({ schema: 'talos.context.event.v1', id: `archive-set-aside-${randomUUID()}`, sessionId, kind: ARCHIVIO_MESSO_DA_PARTE, createdAt: clock(), payload: { asideId } });
+  /*
+   * D9, condizione di Performance (04/11/2026): «se il motore resta non pronto oltre l'apertura attesa (es. 2 giri o 60 s), la riga torna».
+   *   Il guscio vive un giro solo; questo servizio vive quanto il server, quindi qui si ricorda da quando la conversazione trova il motore
+   *   locale non pronto. Oltre `NON_PRONTO_OLTRE_MS` il segno si toglie e il guasto torna quello di sempre (stesso codice): un'apertura
+   *   incastrata non diventa muta. Un profilo riuscito azzera il conto.
+   */
+  const nonProntoDal = new Map();
+  async function modelFor(sessionId) {
+    try {
+      const profilo = await resolveSessionModel({ sessionId, session: await readSession(sessionId) });
+      nonProntoDal.delete(sessionId);
+      return profilo;
+    } catch (errore) {
+      if (errore?.details?.nonPronto !== true) throw errore;
+      const adesso = Date.now();
+      if (!nonProntoDal.has(sessionId)) nonProntoDal.set(sessionId, adesso);
+      if (adesso - nonProntoDal.get(sessionId) <= NON_PRONTO_OLTRE_MS) throw errore;
+      const { nonPronto: _tolto, ...altri } = errore.details;
+      errore.details = Object.keys(altri).length ? altri : undefined;
+      throw errore;
+    }
+  }
   /*
    * Revisione blocco 7, A-R7 (27/10/2026): subito dopo una crescita riuscita il motore può risultare per un attimo «in partenza» (un'altra
    * conversazione ha appena chiesto di riaprirlo) e il profilo non si rilegge: l'errore usciva da `prepareForRequest` e la chat scriveva la
@@ -193,6 +275,10 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
         },
         captureProviderResponse: async ({ response, giro, usage }) => {
           if (!response || typeof response !== 'object' || !Number.isSafeInteger(giro) || giro < 0) fail('CTX_INVALID_INPUT', 'The model response cannot be archived.');
+          /* D9, revisione R1 (04/11/2026): una risposta arrivata vuol dire che il modello era pronto ⇒ il conto dei 60 s si chiude qui,
+             o un'apertura NUOVA minuti dopo erediterebbe quello vecchio. Come Hermes `agent/chat_completion_helpers.py:2687-2689`
+             («Success clears the cross-turn breaker»). */
+          nonProntoDal.delete(sessionId);
           const bytes = Buffer.from(JSON.stringify({ schema: 'talos.context.provider-response.v1', runId, giro, response }), 'utf8');
           return serial(sessionId, async () => {
             await ensure(sessionId);
@@ -213,12 +299,45 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
         },
       });
     },
-    async compact({ sessionId, messages, onProgresso = null, intervalloAvanzamentoMs = AVANZAMENTO_DEL_COMPACT_MS }) {
+    /* `attesaDellaPersona` (spesa di servizio, parte 2 B): chi chiama aspetta davanti allo schermo (il /compact); il riassunto di fine giro
+       no. Le chiamate pagate di questo lavoro risultano allora «in primo piano». */
+    async compact({ sessionId, messages, onProgresso = null, intervalloAvanzamentoMs = AVANZAMENTO_DEL_COMPACT_MS, onLavoro = null, segnale = null, attesaDellaPersona = false }) {
       if (!await isSessionEnabled(sessionId)) return undefined;
       const session = await readSession(sessionId);
       if (Array.isArray(messages) && session?.conclusa !== false) await api.syncOriginals({ sessionId, messages });
       const snapshot = await serial(sessionId, () => ensure(sessionId));
-      const { job } = await api.request({ sessionId, method: 'POST', path: '/jobs', body: { kind: 'compact', expectedRevision: snapshot.revision, idempotencyKey: randomUUID() } });
+      /* Chiusura della compattazione (31/10/2026, dal vivo: 500 in 6 corse su 6): subito dopo un giro lavora ancora il riassunto di fine giro, e il worker rifiuta un lavoro
+         nuovo (`CTX_JOB_ACTIVE`). Si aspetta quello: la persona ha chiesto un riassunto, e uno è già in corso. */
+      const inCorso = snapshot.jobs.find((lavoro) => LAVORI_ATTIVI.has(lavoro.state));
+      /* banco del 31/10/2026 sera: se non c'è davvero niente da compattare lo si dice, e la rotta non risponde 500. Il tentativo dentro il giro sta in `/jobs` */
+      const avvia = (revision) => api.request({ sessionId, method: 'POST', path: '/jobs', body: { kind: 'compact', expectedRevision: revision, idempotencyKey: randomUUID() } })
+        .catch((errore) => { if (errore?.code === 'CTX_NOTHING_TO_COMPACT') return null; throw errore; });
+      const avviato = inCorso ? { job: inCorso } : await avvia(snapshot.revision);
+      if (!avviato) return { ok: true, compattato: false, motivo: 'niente-da-compattare' };
+      const esito = await seguiCompattazione({ sessionId, job: avviato.job, onProgresso, intervalloAvanzamentoMs, onLavoro, segnale, attesaDellaPersona });
+      /*
+       * B3 (05/11/2026, cura per Luna 6; forma §3, OK di CLI, Performance e Mobile §8). Al banco del 04/11 il /compact si agganciava al
+       *   lavoro automatico, quello falliva dopo 2 secondi e la persona leggeva «non riuscita» senza che il SUO riassunto fosse partito.
+       *   Se il lavoro agganciato non finisce `committed` (e nessuno ha annullato questo /compact), parte UNA volta il lavoro della
+       *   persona, con la sua chiave, e si risponde col SUO esito, nella stessa forma: il telefono apre la riga viva prima della POST e la
+       *   chiude alla risposta (condizione del Mobile), la CLI ci costruisce il testo (condizione 2 della CLI). Passa la stessa verifica
+       *   del 30% dei lavori chiesti: niente da guadagnare ⇒ «niente-da-compattare», come sempre.
+       */
+      if (!inCorso || esito.compattato || esito.annullato || segnale?.aborted) return esito;
+      const ora = await serial(sessionId, () => ensure(sessionId));
+      const ancoraUno = ora.jobs.find((lavoro) => LAVORI_ATTIVI.has(lavoro.state));
+      const ripartito = ancoraUno ? { job: ancoraUno } : await avvia(ora.revision);
+      if (!ripartito) return { ok: true, compattato: false, motivo: 'niente-da-compattare' };
+      return seguiCompattazione({ sessionId, job: ripartito.job, onProgresso, intervalloAvanzamentoMs, onLavoro, segnale, attesaDellaPersona });
+      /* Il seguito di un lavoro del /compact: l'id a chi ascolta, i passi della riga viva, l'attesa, la consegna e l'esito (B3: si usa per il
+       lavoro agganciato e, se quello non riesce, per quello ripartito). */
+      async function seguiCompattazione({ sessionId, job, onProgresso, intervalloAvanzamentoMs, onLavoro, segnale, attesaDellaPersona }) {
+      /* P4: l'id SUBITO, prima di aspettare — chi avvia il riassunto di fine giro lega a lui la riga del rapido, nel giornale prima del commit */
+      if (typeof onLavoro === 'function') { try { onLavoro(job.id); } catch { /* chi ascolta non ferma il lavoro */ } }
+      /* P3/P4: un giro che prende il posto unico annulla questo lavoro (il segnale di chi l'ha avviato) */
+      let annullato = false;
+      const annulla = () => { if (annullato) return; annullato = true; annullaPerUnGiro(sessionId, job.id); };
+      if (segnale?.aborted) annulla(); else segnale?.addEventListener?.('abort', annulla, { once: true });
       /*
        * 22/10/2026 (Mobile, dal vivo): il lavoro del motore durava ~18 minuti (un modello locale che legge 24.331 token a 55,7 t/s, due
        *   tentativi) e la riga non riceveva NIENTE dopo la lettura: sembrava ferma. Il motore salva lo stato del lavoro a ogni passo
@@ -254,10 +373,12 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
       const orologio = typeof onProgresso === 'function' ? setInterval(() => { void leggiPasso(); }, intervalloAvanzamentoMs) : null;
       orologio?.unref?.();
       let finished;
-      try { finished = await engine.waitForCompaction({ sessionId, jobId: job.id }); }
-      finally { finito = true; if (orologio) clearInterval(orologio); }
+      try { finished = await engine.waitForCompaction({ sessionId, jobId: job.id, contaComeAttesa: attesaDellaPersona === true }); }
+      finally { finito = true; if (orologio) clearInterval(orologio); segnale?.removeEventListener?.('abort', annulla); }
       await deliver(sessionId);
-      return { ok: true, compattato: finished.state === 'committed', jobId: job.id, ...(finished.error ? { error: finished.error } : {}) };
+      return { ok: true, compattato: finished.state === 'committed', jobId: job.id, ...(annullato || finished.state === 'cancelled' ? { annullato: true } : {}),
+        ...(finished.error ? { error: finished.error } : {}) };
+      }
     },
     async request({ sessionId, method, path = '/', body, signal }) {
       signal?.throwIfAborted();
@@ -304,7 +425,9 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
         const existing = snapshot.jobs.find(job => job.idempotencyKey === body.idempotencyKey);
         if (existing) return { job: await engine.startCompaction({ sessionId, idempotencyKey: body.idempotencyKey, kind: body.kind ?? 'compact', sessionModel: await modelFor(sessionId) }) };
       }
-      if (snapshot.revision !== body.expectedRevision) fail('CTX_STALE_REVISION', 'The conversation has changed. Refresh the panel before changing the context.');
+      /* Context Manager dal dispositivo (contratto, regola 2): fermare un lavoro non cambia il contesto, e con un riassunto in corso la revisione corre: non dipende da lei */
+      const fermaUnLavoro = method === 'DELETE' && /^\/jobs\/[^/]+$/u.test(path);
+      if (!fermaUnLavoro && snapshot.revision !== body.expectedRevision) fail('CTX_STALE_REVISION', 'The conversation has changed. Refresh the panel before changing the context.');
       signal?.throwIfAborted();
       if (method === 'PATCH' && path === '/settings') {
         const settings = parseContextSettings({ ...snapshot.settings, ...body.patch });
@@ -312,7 +435,10 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
       }
       if (method === 'POST' && path === '/jobs') {
         if (!['compact', 'regenerate'].includes(body.kind ?? 'compact')) fail('CTX_INVALID_INPUT', 'Invalid compaction type.');
-        const job = await engine.startCompaction({ sessionId, idempotencyKey: body.idempotencyKey, kind: body.kind ?? 'compact', sessionModel: await modelFor(sessionId) });
+        /* Banco del 31/10/2026 sera: dopo un solo giro, anche enorme, il motore tiene intero l'ultimo scambio. Chi preme «Compatta», dal /compact o dalla finestra, vuole lo spazio:
+           si compatta dentro il giro, come fa il motore da solo quando il contesto non basta. «Rigenera» riscrive ciò che c'è e non cambia strada. */
+        const avvia = async (withinTurn) => engine.startCompaction({ sessionId, idempotencyKey: body.idempotencyKey, kind: body.kind ?? 'compact', sessionModel: await modelFor(sessionId), ...(withinTurn ? { withinTurn } : {}) });
+        const job = await avvia(false).catch((errore) => { if (errore?.code !== 'CTX_NOTHING_TO_COMPACT' || (body.kind ?? 'compact') !== 'compact') throw errore; return avvia(true); });
         ownedJobs.set(`${sessionId}:${job.id}`, { sessionId, jobId: job.id });
         return { job };
       }
@@ -369,6 +495,7 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
             forma: messages.length < salvate.length && primoDiverso >= messages.length ? 'piu-corta' : 'riscritta',
             ruolo: typeof messages[primoDiverso]?.role === 'string' ? messages[primoDiverso].role : null,
           });
+          errore.sessionId = sessionId; // COD-220 (Mobile 30/10): il registro del processo deve dire DI CHI è la divergenza
           throw errore;
         }
         const records = messages.slice(salvate.length).map((message, offset) => ({ id: `message-${salvate.length + offset + 1}`, message, createdAt: clock(), origin: 'desktop-kernel' }));
@@ -408,10 +535,22 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
       try { await api.syncOriginals({ sessionId, messages: daArchiviare }); }
       catch (errore) {
         if (errore?.code !== 'CTX_HISTORY_DIVERGED' || typeof store.setAsideSession !== 'function') throw errore;
+        /*
+         * ⛔ Owner 27/10/2026 notte, «Si annulla, come Codex» — dal file dell'owner (sessione 9eea8edf, richieste 12 e 13): dopo uno
+         *   Stop la storia non combaciava e la riparazione qui sotto era VIETATA, perché un riassunto in sottofondo era fermo da 30
+         *   minuti sul limite del piano e l'archivio non mette da parte con un lavoro attivo (`setAsideSession` ⇒ CTX_JOB_ACTIVE).
+         *   Le richieste morivano con CTX_HISTORY_DIVERGED (riprodotto: senza il lavoro attivo si ripara). Quel riassunto era su una
+         *   storia ormai vecchia: si annulla, si aspetta al più `ATTESA_ANNULLAMENTO_MS` che il suo esecutore si fermi (riceve il segnale,
+         *   `engine.mjs` summarize), poi si ripara. Come Codex: il tentativo in sottofondo è legato alla versione della storia e uno
+         *   vecchio si scarta senza mai fermare la richiesta (`core/src/session/async_compaction.rs:24-30`, `:134`); i token già
+         *   consumati restano pagati («Discarded requests still charge completed usage», `:2`).
+         */
+        await annullaLavoriVecchi(sessionId);
         const asideId = `${sessionId}.aside-${Date.parse(clock()) || 0}-${randomUUID().slice(0, 8)}`;
-        try { await serial(sessionId, () => store.setAsideSession({ sessionId, asideId })); }
+        try { await serial(sessionId, () => store.setAsideSession({ sessionId, asideId, event: annuncioArchivioDaParte(sessionId, asideId) })); }
         catch { throw errore; }
         impronteVerificate.delete(sessionId); ultimeProiezioni.delete(sessionId);
+        await deliver(sessionId).catch(() => {}); // prima di tutto ciò che può ancora fallire: l'archivio a questo punto è già stato spostato
         await api.syncOriginals({ sessionId, messages: daArchiviare });
         /*
          * L3-3 (owner 13/10/2026, D1: «solo l'ULTIMA per conversazione»): ora che la copia nuova è scritta E l'archivio vivo è
@@ -426,8 +565,11 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
         riallineato = Object.freeze({ asideId, ...(errore.dettaglio && typeof errore.dettaglio === 'object' ? errore.dettaglio : {}) });
       }
       let result;
+      /* P4: un riassunto di fine giro appena annullato per far posto a un giro si chiude prima che il motore prepari (vedi `annullaPerUnGiro`) */
+      if (annullamentiInCorso.size) await Promise.allSettled([...annullamentiInCorso]);
       try { result = await engine.prepareForRequest({ sessionId, projection, tools, sessionModel: await modelFor(sessionId), signal, waitForInFlight: waitForInFlight === true,
-        ...(Number.isSafeInteger(summaryCeilingMs) && summaryCeilingMs > 0 ? { summaryCeilingMs } : {}),
+        /* owner 27/10 notte, «mai aspettare» (C4): anche lo 0, che per il motore vuol dire «non aspettare il riassunto» */
+        ...(Number.isSafeInteger(summaryCeilingMs) && summaryCeilingMs >= 0 ? { summaryCeilingMs } : {}),
         ...(typeof onInTurnWait === 'function' ? { onInTurnWait } : {}),
         /* cresciuta la finestra, il profilo si rilegge (`modelFor` ⇒ la finestra viva del motore): il motore rimisura su quella */
         ...(typeof growWindow === 'function' ? { growWindow: async (info) => {
@@ -439,13 +581,18 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
            riassunto rifiutato mentre si aspettava): senza questa consegna restava nella coda fino alla richiesta dopo. Una
            consegna fallita non copre l'errore vero della richiesta. */
         await deliver(sessionId).catch(() => {});
+        /* Blocco 21 (reperto del Motore locale, 01/11/2026): qui gli originali sono GIÀ nell'archivio, e il guscio deve saperlo anche se la
+           richiesta è morta dopo (profilo del modello che fallisce): altrimenti la toglie dalla cattura e la storia risulta più corta. */
+        if (error && typeof error === 'object') error.originaliArchiviati = true;
         throw error;
       }
       if (Array.isArray(result?.messages)) ultimeProiezioni.set(sessionId, result.messages);
       /* C1 (owner 10/10/2026, «Sì, come campi»): quante uscite le regole hanno tolto o accorciato in QUESTA richiesta, e su quale
          versione, per la scheda Contesto. Facoltativo; un suo errore non tocca mai la richiesta. */
       if (typeof onPrepared === 'function') { try { onPrepared({ sessionId, level1: result?.level1 ?? null, versionId: result?.versionId ?? null }); } catch { /* solo per guardare */ } }
-      await deliver(sessionId);
+      /* D10 (revisione di fine fase, 01/11/2026): come nel ramo d'errore qui sopra. Una consegna fallita non butta una richiesta già preparata: l'evento non
+         confermato resta in coda e parte alla consegna dopo. */
+      await deliver(sessionId).catch(() => {});
       return riallineato && result && typeof result === 'object' ? { ...result, riallineato } : result;
     },
     async append({ sessionId, record }) { await serial(sessionId, () => ensure(sessionId)); return engine.appendOriginal({ sessionId, record }); },
@@ -456,8 +603,14 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
       await Promise.allSettled([...deliveries.values()]);
       for (const options of ownedJobs.values()) {
         const job = await store.readContextJob(options);
-        if (job && !terminal.has(job.state)) await engine.cancelCompaction(options);
-        await engine.waitForCompaction(options);
+        /* 27/10/2026 (prova ARCHIVIO-LAVORO-ATTIVO-01): un lavoro che non sta più sotto la conversazione è stato spostato con la copia
+           messa da parte dalla riparazione dell'archivio (`setAsideSession` sposta TUTTI i lavori, anche quelli conclusi) — non c'è
+           niente da fermare né da aspettare qui, e cercarlo faceva fallire la chiusura con «Compattazione non trovata». */
+        if (!job) continue;
+        if (!terminal.has(job.state)) await engine.cancelCompaction(options);
+        /* C8 (contratto «mai aspettare», misura della CLI 28/10): annullato, si aspetta al più `ATTESA_ANNULLAMENTO_MS` — un esecutore che
+           non si ferma subito (un fornitore appeso) teneva ferma la chiusura, e con lei il RunFinished di `talos -p` */
+        await aspettaAnnullato(options);
       }
       ownedJobs.clear();
       /*
@@ -472,7 +625,7 @@ export function createDesktopContextService({ engine, store, loadLegacy, selectL
         try { snapshot = await store.readContextSnapshot({ sessionId }); } catch { continue; }
         for (const job of snapshot?.jobs ?? []) {
           if (terminal.has(job.state)) continue;
-          try { await engine.cancelCompaction({ sessionId, jobId: job.id }); await engine.waitForCompaction({ sessionId, jobId: job.id }); }
+          try { await engine.cancelCompaction({ sessionId, jobId: job.id }); await aspettaAnnullato({ sessionId, jobId: job.id }); } // C8: col tetto
           catch { /* un lavoro che non si lascia fermare non trattiene la chiusura */ }
         }
       }

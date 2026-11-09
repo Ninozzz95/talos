@@ -85,7 +85,7 @@ export async function avviaBanco() {
   const statico = createStaticHandler(temporanea);
   // Catalogo dichiaratamente vuoto nel banco; nessuna rete o inferenza esterna.
   const catalogo = createModelCatalog({ fetchFn: async () => new Response(JSON.stringify({ data: [] }), { status: 200 }) });
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     ...cartelle, sessionRegistry: registro,
     catalogoModelliFn: catalogo.ottieni,
     staticHandler: pathname => pathname === '/bc43-componenti.js'

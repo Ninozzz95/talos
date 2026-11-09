@@ -160,7 +160,7 @@ test('FAV-07 — le rotte: elenco intero e «dalla risposta»; solo dalla finest
   const dir = mkdtempSync(join(tmpdir(), 'talos-esclusi-http-'));
   t.after(() => rimuoviCartellaDiProva(dir));
   const providerStore = createProviderCredentialStore({ env: {}, runtimeFile: join(dir, 'providers.json') });
-  const server = createServer(createHttpApp({ staticHandler: async () => null, providerStore,
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore,
     fetchOpenRouterFn: ENDPOINT([{ provider_name: 'DeepInfra', tag: 'deepinfra' }]) }));
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok); });
   t.after(() => new Promise((ok) => server.close(ok)));
@@ -202,7 +202,7 @@ test('FAV-07b — elenco endpoint di OpenRouter giù (500 o rete): la rotta risp
     const dir = mkdtempSync(join(tmpdir(), 'talos-esclusi-502-'));
     t.after(() => rimuoviCartellaDiProva(dir));
     const providerStore = createProviderCredentialStore({ env: {}, runtimeFile: join(dir, 'providers.json') });
-    const server = createServer(createHttpApp({ staticHandler: async () => null, providerStore, fetchOpenRouterFn }));
+    const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore, fetchOpenRouterFn }));
     await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok); });
     t.after(() => new Promise((ok) => server.close(ok)));
     const base = `http://127.0.0.1:${server.address().port}`;
@@ -263,6 +263,23 @@ test('FAV-08 — tutti i fornitori esclusi: un codice suo, non transitorio, una 
   assert.equal(errore?.code, 'OPENROUTER_ALL_PROVIDERS_EXCLUDED');
   assert.equal(errore.transitorio, false);
   assert.match(errore.message, /excluded list/u);
+  assert.equal(richieste.length, 1, 'nessun ritento');
+  assert.deepEqual(cambi, [], 'nessun fornitore di riserva');
+  assert.ok(store.elencaPool('openrouter').every((k) => k.stato === 'disponibile'), 'la chiave non va in panchina');
+});
+
+/* Corpo copiato dalla risposta vera del 01/11/2026 (banco di chiusura: 4 modelli su 8 senza una sola richiesta partita): la restrizione è del
+   conto, non dell'elenco della persona in TALOS, e «The provider did not accept the request.» non diceva dove si cambia. */
+const RESTRIZIONE_DEL_CONTO = { error: { message: '0 endpoints out of 2 requested are available matching your guardrail restrictions and data policy.', code: 404,
+  metadata: { input_endpoint_count: 2, ineligibility_reasons: [{ reason: 'provider-not-allowed-by-guardrail', endpoint_count: 2, configure_url: 'https://openrouter.ai/workspaces/default/guardrails' }],
+    routing_funnel: [{ step: 'Initial Endpoints', endpoint_count: 2 }], failed_routing_step: 'Filter by Guardrails' } } };
+
+test('FAV-08c — la restrizione del conto OpenRouter: un codice suo, non transitorio, una richiesta sola, niente riserva, la chiave resta disponibile', async (t) => {
+  const { errore, richieste, cambi, store } = await bancoRifiuto(t, 404, RESTRIZIONE_DEL_CONTO);
+  assert.equal(errore?.code, 'OPENROUTER_GUARDRAIL_BLOCKED');
+  assert.equal(errore.transitorio, false);
+  assert.match(errore.message, /guardrail/iu);
+  assert.doesNotMatch(errore.message, /excluded list/u, 'non è l’elenco degli esclusi della persona');
   assert.equal(richieste.length, 1, 'nessun ritento');
   assert.deepEqual(cambi, [], 'nessun fornitore di riserva');
   assert.ok(store.elencaPool('openrouter').every((k) => k.stato === 'disponibile'), 'la chiave non va in panchina');

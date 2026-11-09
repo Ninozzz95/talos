@@ -46,7 +46,7 @@ test('R4-AUTO-MODEL-FORM: il modulo dice con quale modello girerà l’automazio
   const { creazioni, scritture } = await apri(page, { modello: 'z-ai/glm-5.3-flash' });
   await page.locator('[data-automation-action="new"]').first().evaluate((el) => el.click());
   const foglio = page.locator('#sheetBody');
-  await expect(foglio).toContainText('Userà glm-5.3-flash, il modello scelto nella chat.');
+  await expect(foglio).toContainText('Userà GLM 5.3 Flash, il modello scelto nella chat.'); // 68ebab480 (revisione d'uso 04/11, reperto 11): il nome del catalogo
   await compila(foglio);
   await foglio.getByRole('button', { name: 'Crea automazione' }).click();
   await expect.poll(() => creazioni.length).toBe(1);

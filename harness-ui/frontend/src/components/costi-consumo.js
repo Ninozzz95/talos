@@ -50,8 +50,10 @@ const NUM = { format: (n) => new Intl.NumberFormat(localeUI()).format(n) };
 export function compatto(n) {
   const v = Number(n);
   if (!Number.isFinite(v) || v < 0) return '—';
-  if (v >= 1_000_000) return `${new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1 }).format(v / 1_000_000)} M`;
-  if (v >= 1_000) return `${new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1 }).format(v / 1_000)} k`;
+  /* 04/11/2026 (revisione UX, riga 24: ora lo usa anche la Bacheca): le soglie stanno appena sotto il salto d'unità, come Hermes
+     (`apps/shared/src/format.ts:7-26`, `compactNumber`: 999_950 → M, 999.5 → k), così l'arrotondamento a una cifra non scrive mai «1.000 k». */
+  if (v >= 999_950) return `${new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1 }).format(v / 1_000_000)} M`;
+  if (v >= 999.95) return `${new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1 }).format(v / 1_000)} k`;
   return NUM.format(v);
 }
 

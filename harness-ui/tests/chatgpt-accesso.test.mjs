@@ -317,3 +317,92 @@ test('ACCESSO-12 — cancelling while the code is being exchanged stores nothing
   assert.equal(ascolto.risposte.some((x) => x.stato === 200), false, 'never the «connected» page');
   assert.ok(r.chiamate.some((c) => c.indirizzo === REVOCA && new URLSearchParams(c.corpo).get('token') === 'REFRESH-1'), 'the token just issued is revoked');
 });
+
+/*
+ * Decisione 116 C (owner 04/11/2026), stato 2 sul PC — `rinnovaDopoRifiuto`: il servizio ha rifiutato un token a metà giro. Un token
+ * buono e diverso già in custodia si usa senza rete; sennò un rinnovo forzato, uno solo per chi arriva insieme; i guasti sono quelli di
+ * sempre (la rete lascia la sessione, un refresh token finito la toglie). Forma: Codex, rinnovo forzato dopo un 401 (openai/codex 7144).
+ */
+const rinnoviDi = (r) => r.chiamate.filter((c) => c.indirizzo === TOKEN && new URLSearchParams(c.corpo).get('grant_type') === 'refresh_token');
+
+test('ACCESSO-116-01 — refused token, another good one already in custody: used with no network', async () => {
+  const ora = () => 1_800_000_000_000;
+  const { accesso, r } = await accedi({ ora });
+  assert.equal(await accesso.rinnovaDopoRifiuto('UN-ALTRO-RIFIUTATO'), 'ACCESSO-1');
+  assert.equal(rinnoviDi(r).length, 0, 'no renewal: the token in custody is not the refused one and is still good');
+});
+
+test('ACCESSO-116-02 — the refused token is the one in custody: one forced renewal, even if it would still be valid', async () => {
+  const ora = () => 1_800_000_000_000;
+  const { accesso, custodia, r } = await accedi({ ora });
+  assert.equal(await accesso.rinnovaDopoRifiuto('ACCESSO-1'), 'ACCESSO-2');
+  assert.equal(rinnoviDi(r).length, 1);
+  assert.equal(custodia.leggi('sessione').refreshToken, 'REFRESH-2');
+  assert.equal(await accesso.tokenDiAccesso(), 'ACCESSO-2', 'the next request uses the new token');
+});
+
+test('ACCESSO-116-03 — several requests refused together: one renewal for all of them', async () => {
+  const ora = () => 1_800_000_000_000;
+  const piano = {};
+  const r = rete({ ora, piano });
+  const { accesso } = await accedi({ ora, r });
+  let sblocca; piano.lento = new Promise((x) => { sblocca = x; });
+  const insieme = [accesso.rinnovaDopoRifiuto('ACCESSO-1'), accesso.rinnovaDopoRifiuto('ACCESSO-1'), accesso.rinnovaDopoRifiuto('ACCESSO-1')];
+  sblocca();
+  assert.deepEqual(await Promise.all(insieme), ['ACCESSO-2', 'ACCESSO-2', 'ACCESSO-2']);
+  assert.equal(rinnoviDi(r).length, 1);
+  piano.lento = null;
+  assert.equal(await accesso.rinnovaDopoRifiuto('ACCESSO-1'), 'ACCESSO-2', 'a late one finds the new token in custody');
+  assert.equal(rinnoviDi(r).length, 1);
+});
+
+test('ACCESSO-116-04 — the renewal cannot reach the service: CHATGPT_RETE and the session is kept; a refresh token that is over removes it', async () => {
+  const ora = () => 1_800_000_000_000;
+  const piano = {};
+  const r = rete({ ora, piano });
+  const { accesso, custodia } = await accedi({ ora, r });
+  piano.token = 'rete';
+  await assert.rejects(accesso.rinnovaDopoRifiuto('ACCESSO-1'), (e) => e.code === 'CHATGPT_RETE');
+  assert.equal(custodia.leggi('sessione').refreshToken, 'REFRESH-1', 'a network failure never signs the person out');
+  piano.token = { stato: 400, errore: 'invalid_grant' };
+  await assert.rejects(accesso.rinnovaDopoRifiuto('ACCESSO-1'), (e) => e.code === 'CHATGPT_ACCESSO_SCADUTO' && !/REFRESH|ACCESSO-\d/u.test(e.message));
+  assert.equal(custodia.leggi('sessione'), null);
+});
+
+test('ACCESSO-116-05 AL CONTRARIO — a renewal that gives back the refused token is not a renewal', async () => {
+  const ora = () => 1_800_000_000_000;
+  const { accesso, custodia } = await accedi({ ora });
+  // another process already "renewed" to a token that the service refused, and it is due: the forced renewal brings ACCESSO-2,
+  // but if the service hands back the same one it is a failure, never a loop
+  const s = custodia.leggi('sessione');
+  custodia.scrivi('sessione', { ...s, accessToken: 'ACCESSO-2' });
+  await assert.rejects(accesso.rinnovaDopoRifiuto('ACCESSO-2'), (e) => e.code === 'CHATGPT_RINNOVO_FALLITO');
+});
+
+test('ACCESSO-116-06 (D1 di R116) — «refused after the renewal» is a mark in memory: set by the adapter, cleared by a new sign-in and by signing out; never in stato()', async () => {
+  const ora = () => 1_800_000_000_000;
+  const custodia = custodiaInMemoria();
+  const r = rete({ ora });
+  const ascolti = [];
+  const accesso = creaAccessoChatgpt({ custodia, fetchDiRete: r.fetchDiRete, clock: ora, creaAscoltatore: async () => { const a = ascoltoFinto(); ascolti.push(a); return a; }, pianifica: () => 0, annulla: () => {} });
+  const entra = async () => {
+    const avviato = await accesso.inizia();
+    const p = new URL(avviato.indirizzo).searchParams;
+    r.usaNonce(p.get('nonce'));
+    const q = new URLSearchParams({ state: p.get('state'), code: 'CODICE', scope: SCOPE_RICHIESTI.join(' '), ...(p.get('client_id') === 'dynamic_agent_client' ? { client_id: CLIENT } : {}) });
+    ascolti.at(-1).arriva(`/auth/callback?${q}`, 'en');
+    return avviato.esito;
+  };
+  assert.equal((await entra()).ok, true);
+  assert.equal(accesso.rifiutatoDopoRinnovo(), false);
+  const chiavi = Object.keys(accesso.stato()).sort();
+  accesso.segnaRifiutatoDopoRinnovo();
+  assert.equal(accesso.rifiutatoDopoRinnovo(), true);
+  assert.equal(accesso.stato().collegato, true, 'the custody keeps the account: only the mark says it is not valid');
+  assert.deepEqual(Object.keys(accesso.stato()).sort(), chiavi, 'stato() keeps its shape');
+  assert.equal((await entra()).ok, true);
+  assert.equal(accesso.rifiutatoDopoRinnovo(), false, 'a new sign-in clears it');
+  accesso.segnaRifiutatoDopoRinnovo();
+  await accesso.esci();
+  assert.equal(accesso.rifiutatoDopoRinnovo(), false, 'signing out clears it');
+});

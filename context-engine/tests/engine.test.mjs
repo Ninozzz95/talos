@@ -4,15 +4,16 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { createContextEngine } from '../src/engine.mjs';
+import { createContextEngine, GUADAGNO_MINIMO_CHIESTO } from '../src/engine.mjs';
 import { createSqliteContextStore } from '../src/node/sqlite-store.mjs';
 import { parseContextSettings } from '../src/contracts.mjs';
+import { computeContextBudget } from '../src/compaction-planner.mjs';
 
 const modelProfile = { provider: 'local', model: 'controlled-fixture', windowTokens: 16384, responseReserve: 2048, local: true };
 const now = '2026-09-09T00:00:00.000Z';
 const sha = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const summary = { schema: 'talos.context.summary.v1', text: 'Database SQLite, scelta confermata.', goal: 'Continuare il progetto', decisions: ['Database SQLite'], constraints: [], completed: [], pending: [], resources: [], sources: [{ recordId: 'u0', quote: 'Database SQLite' }] };
-async function fixture(t, { summarize, settings, faultPoint, decorateStore } = {}) {
+async function fixture(t, { summarize, settings, faultPoint, decorateStore, guadagnoMinimoChiesto = 0 } = {}) { // 31/10: il controllo «niente da compattare» spento di serie qui (conversazioni minuscole); CTX-SMALL lo accende
   const directory = await mkdtemp(join(tmpdir(), 'tcec-engine-'));
   const databasePath = join(directory, 'context.sqlite');
   const store = createSqliteContextStore({ databasePath, faultPoint });
@@ -31,7 +32,7 @@ async function fixture(t, { summarize, settings, faultPoint, decorateStore } = {
     return predefinito(request);
   } };
   const tokenCounter = { async countPreparedContext({ messages, tools, model }) { return { schema: 'talos.context.tokens.v1', inputTokens: Math.ceil(JSON.stringify({ messages, tools }).length / 4), windowTokens: model.windowTokens, responseReserve: model.responseReserve, method: 'heuristic', exact: false, requestHash: sha({ messages, tools }), provider: model.provider, model: model.model }; } };
-  const engine = createContextEngine({ store: decorateStore ? decorateStore(store) : store, model, tokenCounter, clock: () => now });
+  const engine = createContextEngine({ store: decorateStore ? decorateStore(store) : store, model, tokenCounter, clock: () => now, guadagnoMinimoChiesto });
   for (let i = 0; i < 5; i++) {
     await engine.appendOriginal({ sessionId: 'chat', record: { id: `u${i}`, message: { role: 'user', content: i ? `richiesta ${i} ` + 'dati '.repeat(500) : 'Database SQLite ' + 'contesto '.repeat(500) }, createdAt: now } });
     await engine.appendOriginal({ sessionId: 'chat', record: { id: `a${i}`, message: { role: 'assistant', content: 'risposta '.repeat(500) }, createdAt: now } });
@@ -89,18 +90,18 @@ test('CTX-SMALL-AUTO-NOOP: a still-fitting request proceeds when only its instru
   assert.equal(calls.length, 0);
 });
 
-test('CTX-SMALL-NO-REDUCTION: expanding a short exchange leaves originals intact without a retry loop', async t => {
-  const { engine, store, calls } = await fixture(t);
+/* 31/10/2026, contratto «niente da compattare» (OK di Performance, Mobile e CLI): prima questa prova PAGAVA il riassunto e finiva
+   CTX_NO_REDUCTION. Ora un riassunto CHIESTO su uno scambio corto risponde prima, senza modello: è il reperto dal vivo della 4177. */
+test('CTX-SMALL-NO-REDUCTION: a requested compaction of a short exchange answers «nothing to compact» before paying, originals intact, no loop', async t => {
+  const { engine, store, calls } = await fixture(t, { guadagnoMinimoChiesto: GUADAGNO_MINIMO_CHIESTO });
   const sessionId = 'brief';
   await store.initSession({ sessionId, settings: parseContextSettings({}) });
   for (const [id, role, content] of [['u0', 'user', 'Database SQLite'], ['a0', 'assistant', 'va bene'], ['u1', 'user', 'confermi?'], ['a1', 'assistant', 'sì']]) await engine.appendOriginal({ sessionId, record: { id, message: { role, content }, createdAt: now } });
   const before = await store.readOriginals({ sessionId });
   const request = { sessionId, sessionModel: modelProfile, idempotencyKey: 'short' };
-  const started = await engine.startCompaction(request);
-  const job = await engine.waitForCompaction({ sessionId, jobId: started.id });
-  assert.equal(job.state, 'failed'); assert.equal(job.error.code, 'CTX_NO_REDUCTION');
-  await engine.startCompaction(request);
-  assert.equal(calls.length, 1);
+  await assert.rejects(engine.startCompaction(request), { code: 'CTX_NOTHING_TO_COMPACT' });
+  await assert.rejects(engine.startCompaction(request), { code: 'CTX_NOTHING_TO_COMPACT' });
+  assert.equal(calls.length, 0, 'no summary is paid for');
   assert.equal((await engine.getContextState({ sessionId })).activeVersion, null);
   assert.deepEqual(await store.readOriginals({ sessionId }), before);
 });
@@ -255,7 +256,8 @@ test('CTX-MEASURE-PERSISTED: the last prepared measurement is stored with its re
   assert.equal((await engine.getContextState({ sessionId: 'chat' })).measurement ?? null, null, 'prima di una richiesta non esiste nessuna misura: non si inventa');
   const prepared = await engine.prepareForRequest({ sessionId: 'chat', sessionModel: modelProfile, tools: [{ name: 'shell' }] });
   const state = await engine.getContextState({ sessionId: 'chat' });
-  assert.deepEqual(state.measurement.tokens, prepared.measurement, 'la misura nello stato è ESATTAMENTE quella della richiesta preparata, strumenti compresi');
+  /* 174 (04/11/2026, condizione della CLI): più il margine con cui il motore ha deciso, lo stesso di `computeContextBudget` */
+  assert.deepEqual(state.measurement.tokens, { ...prepared.measurement, marginTokens: computeContextBudget(prepared.measurement).safetyMarginTokens }, 'la misura nello stato è ESATTAMENTE quella della richiesta preparata, strumenti compresi');
   assert.equal(state.measurement.revision, state.revision);
   assert.equal(state.measurement.measuredAt, now);
   await engine.appendOriginal({ sessionId: 'chat', record: { id: 'm1', message: { role: 'assistant', content: 'ciao!' }, createdAt: now } });
@@ -337,7 +339,7 @@ test('CTX-RESTART-ACTIVE-JOB-RECOVERY: a job left running by a dead process is m
   for (let giro = 0; giro < 100 && (await store.readContextJob({ sessionId: 'chat', jobId: started.id })).state !== 'summarizing'; giro++) await new Promise(resolve => setTimeout(resolve, 10));
   assert.equal((await store.readContextJob({ sessionId: 'chat', jobId: started.id })).state, 'summarizing', 'il processo muore qui');
   const calls = [];
-  const vivo = createContextEngine({ store, tokenCounter, clock: () => now, model: { resolveModel: async ({ sessionModel }) => sessionModel, summarize: async request => {
+  const vivo = createContextEngine({ store, tokenCounter, clock: () => now, guadagnoMinimoChiesto: 0, model: { resolveModel: async ({ sessionModel }) => sessionModel, summarize: async request => {
     calls.push(request);
     const sourceId = JSON.parse(request.messages.at(-1).content).sourceIds?.[0] ?? 'u0';
     const quote = sourceId === 'u0' ? 'Database SQLite' : sourceId.startsWith('a') ? 'risposta' : `richiesta ${sourceId.slice(1)}`;
@@ -360,6 +362,59 @@ test('CTX-RESTART-ACTIVE-JOB-RECOVERY: a job left running by a dead process is m
   const finito = await vivo.waitForCompaction({ sessionId: 'chat', jobId: manuale.id });
   assert.ok(['committed', 'failed'].includes(finito.state));
   assert.notEqual(finito.error?.code, 'CTX_JOB_ACTIVE');
+});
+
+/* D4 (revisione di fine fase, 01/11/2026): riavvio a metà riassunto, poi una versione pubblicata a mano. Il lavoro in pausa ha una base stantia: riprenderlo dava
+   CTX_STALE_REVISION a ogni richiesta, per sempre. */
+async function lavoroStantioDopoIlRiavvio(t) {
+  const { engine: morto, store, tokenCounter } = await fixture(t, { summarize: () => new Promise(() => {}) });
+  const profile = { ...modelProfile, windowTokens: 8192 };
+  const started = await morto.startCompaction({ sessionId: 'chat', idempotencyKey: 'prima-del-crash', sessionModel: profile });
+  for (let giro = 0; giro < 100 && (await store.readContextJob({ sessionId: 'chat', jobId: started.id })).state !== 'summarizing'; giro++) await new Promise(resolve => setTimeout(resolve, 10));
+  const guasto = { jobId: null }; // l'archivio è congelato: il guasto sta in una copia data al solo motore vivo
+  const storeVivo = { ...store, readContextJob: async domanda => { if (domanda.jobId === guasto.jobId) throw Object.assign(new Error('gone'), { code: 'CTX_STORE_BUSY' }); return store.readContextJob(domanda); } };
+  const vivo = createContextEngine({ store: storeVivo, tokenCounter, clock: () => now, guadagnoMinimoChiesto: 0, model: { resolveModel: async ({ sessionModel }) => sessionModel, summarize: async request => {
+    const sourceId = JSON.parse(request.messages.at(-1).content).sourceIds?.[0] ?? 'u0';
+    const quote = sourceId === 'u0' ? 'Database SQLite' : sourceId.startsWith('a') ? 'risposta' : `richiesta ${sourceId.slice(1)}`;
+    return { text: JSON.stringify({ ...summary, sources: [{ recordId: sourceId, quote }] }), finishReason: 'stop' };
+  } } });
+  await vivo.recoverInterruptedJobs({ sessionId: 'chat' });
+  const manuale = await vivo.startCompaction({ sessionId: 'chat', idempotencyKey: 'a-mano', sessionModel: profile });
+  assert.equal((await vivo.waitForCompaction({ sessionId: 'chat', jobId: manuale.id })).state, 'committed');
+  const lavoro = async () => (await vivo.getContextState({ sessionId: 'chat' })).jobs.find(job => job.id === started.id);
+  assert.equal((await lavoro()).state, 'paused', 'premessa: il lavoro interrotto è ancora lì');
+  for (let i = 10; i < 18; i++) {
+    await vivo.appendOriginal({ sessionId: 'chat', record: { id: `u${i}`, message: { role: 'user', content: `richiesta ${i} ` + 'dati '.repeat(500) }, createdAt: now } });
+    await vivo.appendOriginal({ sessionId: 'chat', record: { id: `a${i}`, message: { role: 'assistant', content: 'risposta '.repeat(500) }, createdAt: now } });
+  }
+  return { vivo, profile, lavoro, guasto, stantio: started.id };
+}
+
+test('CTX-RESTART-STALE-PAUSED-JOB: a paused job with a stale base is cancelled and a new summary runs: the request that does not fit gets its context', async t => {
+  const { vivo, profile, lavoro } = await lavoroStantioDopoIlRiavvio(t);
+  const prima = (await vivo.getContextState({ sessionId: 'chat' })).activeVersion.id;
+  const preparata = await vivo.prepareForRequest({ sessionId: 'chat', sessionModel: profile });
+  assert.equal((await lavoro()).state, 'cancelled');
+  assert.ok(preparata.versionId && preparata.versionId !== prima, 'a new version was published');
+});
+
+test('CTX-RESTART-STALE-PAUSED-JOB-SOFT: over the soft threshold the stale job no longer keeps the background summary from starting', async t => {
+  const { vivo, lavoro } = await lavoroStantioDopoIlRiavvio(t);
+  const largo = { ...modelProfile, windowTokens: 20_000 };
+  const preparata = await vivo.prepareForRequest({ sessionId: 'chat', sessionModel: largo });
+  assert.ok(preparata.measurement.inputTokens > 0);
+  assert.equal((await lavoro()).state, 'cancelled');
+  assert.ok(preparata.job, `a background summary started (${preparata.measurement.inputTokens} tokens)`);
+  await vivo.waitForCompaction({ sessionId: 'chat', jobId: preparata.job.id });
+});
+
+test('CTX-RESTART-STALE-PAUSED-JOB-CANCEL-FAILS: a cancel that fails does not bring the request down, and the stale job is not resumed', async t => {
+  const { vivo, profile, lavoro, guasto, stantio } = await lavoroStantioDopoIlRiavvio(t);
+  guasto.jobId = stantio;
+  const prima = (await vivo.getContextState({ sessionId: 'chat' })).activeVersion.id;
+  const preparata = await vivo.prepareForRequest({ sessionId: 'chat', sessionModel: profile });
+  assert.equal((await lavoro()).state, 'paused', 'the cancel really failed');
+  assert.ok(preparata.versionId && preparata.versionId !== prima, 'a new version was published anyway');
 });
 
 test('CTX-RESTART-NO-ORPHAN-IN-PROCESS: a job running in THIS process is never mistaken for an orphan', async t => {
@@ -398,8 +453,10 @@ test('CTX-PROJECTION-OVERLAY: the request and the summarizer see the projection,
   assert.ok(version.summary.sources.every(source => originali.some(message => String(message.content).includes(source.quote))), 'le citazioni della versione vivono negli originali');
 });
 
+// 05/11/2026 (B1): la fusione ora porta gli id delle fonti verificate; la si riconosce dai dati, non da `sourceIds` vuoto. Con B2 la
+// fusione si ritenta una volta e cita ancora testo proiettato: il lavoro resta rifiutato.
 test('CTX-PROJECTION-QUOTE-NOT-IN-ARCHIVE: a summary that cites only projected text cannot publish a version with unverifiable sources', async t => {
-  const { engine, store } = await fixture(t, { summarize: (request, predefinito) => JSON.parse(request.messages.at(-1).content).sourceIds?.length ? predefinito() : { text: JSON.stringify({ ...summary, sources: [{ recordId: 'u1', quote: 'richiesta 1 CORRETTA' }] }), finishReason: 'stop' } });
+  const { engine, store } = await fixture(t, { summarize: (request, predefinito) => !String(JSON.parse(request.messages.at(-1).content).untrustedSource).startsWith('{"verifiedSegments"') ? predefinito() : { text: JSON.stringify({ ...summary, sources: [{ recordId: 'u1', quote: 'richiesta 1 CORRETTA' }] }), finishReason: 'stop' } });
   const originali = (await store.readOriginals({ sessionId: 'chat' })).map(record => record.message);
   const projection = originali.map((message, index) => index === 2 ? { ...message, content: 'richiesta 1 CORRETTA ' + 'dati '.repeat(500) } : message);
   const small = { ...modelProfile, windowTokens: 8192 };

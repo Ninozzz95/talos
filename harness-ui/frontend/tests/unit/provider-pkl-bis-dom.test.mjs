@@ -31,7 +31,7 @@ for (const [nome, width, height] of [['desktop-1080p', 1920, 1080], ['desktop', 
   const cwd = mkdtempSync(join(tmpdir(), 'talos-pklbis-dom-')), runtimeFile = join(cwd, 'preferenze.json'), diario = join(cwd, 'diario.jsonl');
   let store = createProviderCredentialStore({ env: {}, runtimeFile });
   const probe = createProviderProbe({ env: {}, leggiRuntime: id => store.getRuntime(id), leggiChiave: id => store.getKey(id), fetchImpl: () => assert.fail('Cloud vietato') });
-  let app = createHttpApp({ staticHandler: async () => null, providerStore: store, providerProbe: probe });
+  let app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore: store, providerProbe: probe });
   const server = createServer((req, res) => {
     if (req.url === '/') { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end(html); return; }
     if (req.url.startsWith('/frontend/')) {
@@ -86,7 +86,7 @@ for (const [nome, width, height] of [['desktop-1080p', 1920, 1080], ['desktop', 
   assert.equal(richiesteRuntime.length, 2);
   assert.deepEqual(Object.keys(richiesteRuntime[1]), ['agente']);
   store = createProviderCredentialStore({ env: {}, runtimeFile });
-  app = createHttpApp({ staticHandler: async () => null, providerStore: store, providerProbe: probe });
+  app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore: store, providerProbe: probe });
   await page.reload(); await page.waitForFunction(() => window.pronto);
   assert.equal(await card('azure').getByLabel('Modelli configurati (uno per riga)').inputValue(), 'lavoro\nsecondo');
   assert.equal(await card('esterno').getByLabel('Comando', { exact: true }).inputValue(), process.execPath);

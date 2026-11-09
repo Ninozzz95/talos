@@ -265,3 +265,168 @@ test('CEDE-07 conversazione locale, riassunto su un fornitore a chiave: nessuna 
   assert.equal(locale.riassuntore.chiamate[0].segnaleStop.aborted, true);
   for (const giro of locale.g.tutti.slice(1)) giro.concludi([{ role: 'system', content: 's' }, { role: 'user', content: 'u' }, { role: 'assistant', content: 'ok' }]);
 });
+
+/*
+ * Owner 28/10/2026, «Rapido subito, il modello dopo» (contratto P2/P3/C8 con la CLI, `CONTRATTO-POSTO-UNICO-RAPIDO-POI-MODELLO-2026-10-28.md`):
+ * sul posto unico all'emergenza il giro parte col rapido (`aFineGiro`), e il riassunto del modello lo scrive il FINE GIRO, a motore
+ * libero, sulla storia da cui il rapido era nato (il record di PRIMA più i grezzi) — e lo sostituisce nella stessa riga (`migliora`).
+ * Cede a ogni giro sullo stesso motore (CEDE-03); un tentativo in più; la riga smette di promettere quando non arriverà più niente.
+ */
+const AT_RAPIDO = '2026-10-28T12:00:00.000Z';
+function rapidoSu(storia, { aFineGiro = true, copre = storia.length } = {}) {
+  const riassunto = [...storia.slice(0, 2), { role: 'user', content: `${MARCATORE_RIASSUNTO}\nRiassunto rapido senza il modello.` }, ...(copre === storia.length ? [storia.at(-1)] : [])];
+  const record = creaRecord({ coveredThrough: copre, riassunto, tokenPrima: 5_000, tokenDopo: 300, misura: 'stima', at: AT_RAPIDO, modello: LOCALE, coperti: storia });
+  return aFineGiro ? { ...record, aFineGiro: true } : record;
+}
+const eventiDi = (cartellaStore, sessionId, nome) => righeDelJournal(cartellaStore, sessionId).filter((e) => e?.type === 'CUSTOM' && e.name === nome).map((e) => e.value);
+const nonArriva = (cartellaStore, sessionId) => eventiDi(cartellaStore, sessionId, 'talos.compattazione-preparata').filter((v) => v.fase === 'non-arriva');
+const chiudiGiro = (giro) => giro.concludi([...giro.input.messaggiIniziali, { role: 'assistant', content: 'ok' }]);
+
+for (const modello of [LOCALE, OSPITE]) {
+  test(`PU-FINE-01 ${modello.split(':')[0]}: a fine giro il riassunto del modello parte dalla storia di PRIMA del rapido e lo sostituisce nella stessa riga (migliora)`, async (t) => {
+    const { registro, riassuntore, g, avvia, cartellaStore } = ambiente(t);
+    const sessionId = avvia(modello);
+    const storia = storiaGrande();
+    g.tutti[0].concludi(storia, { recordDiCompattazione: [rapidoSu(storia)] });
+    await attendi(() => riassuntore.chiamate.length === 1, 'il riassunto di fine giro per il rapido non è partito');
+    assert.ok(JSON.stringify(riassuntore.chiamate[0].messaggi).includes('file2.txt'), 'riassume la storia vera, non il testo del rapido');
+    riassuntore.rilasciaTutti();
+    await attendi(() => { const r = registro.statoCompattazione(sessionId)?.record; return Boolean(r && r.at !== AT_RAPIDO); }, 'il riassunto del modello non ha preso il posto del rapido');
+    await attendiScritture({ cartellaStore, sessionId });
+    const migliorata = eventiDi(cartellaStore, sessionId, 'talos.compattazione').find((v) => v.fase === 'fine' && v.compattato === true && v.motivo === 'background');
+    assert.deepEqual(migliorata?.migliora, { at: AT_RAPIDO }, 'la riga del rapido diventa «migliorato dal modello»');
+    assert.equal(nonArriva(cartellaStore, sessionId).length, 0);
+  });
+}
+
+test('PU-FINE-02 cede a un giro nuovo e riprova UNA volta al fine giro dopo; ceduto di nuovo, la riga smette di promettere («fermata»)', async (t) => {
+  const { registro, riassuntore, g, avvia, cartellaStore } = ambiente(t);
+  const sessionId = avvia(LOCALE);
+  const storia = storiaGrande();
+  g.tutti[0].concludi(storia, { recordDiCompattazione: [rapidoSu(storia)] });
+  await attendi(() => riassuntore.chiamate.length === 1, 'primo tentativo');
+  registro.resume(sessionId, 'scrivo subito');
+  await attendi(() => registro.statoCompattazione(sessionId)?.inCorso === false, 'il primo tentativo non ha ceduto');
+  await attendiScritture({ cartellaStore, sessionId });
+  assert.equal(nonArriva(cartellaStore, sessionId).length, 0, 'c\'è ancora un tentativo: la riga non smette di promettere');
+  chiudiGiro(g.tutti[1]);
+  await attendi(() => riassuntore.chiamate.length === 2, 'il secondo tentativo al fine giro dopo');
+  registro.resume(sessionId, 'scrivo di nuovo');
+  await attendi(() => registro.statoCompattazione(sessionId)?.inCorso === false, 'il secondo tentativo non ha ceduto');
+  await attendiScritture({ cartellaStore, sessionId });
+  assert.deepEqual(nonArriva(cartellaStore, sessionId), [{ fase: 'non-arriva', perIlRapido: { at: AT_RAPIDO }, motivo: 'fermata' }]);
+  chiudiGiro(g.tutti[2]);
+  await attendiScritture({ cartellaStore, sessionId });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(riassuntore.chiamate.length, 2, 'niente terzo tentativo');
+});
+
+test('PU-FINE-03 la storia cambia mentre il riassunto si scrive (la persona annulla il rapido): non si applica, la riga dice «non-vale-piu»', async (t) => {
+  const { registro, riassuntore, g, avvia, cartellaStore } = ambiente(t);
+  const sessionId = avvia(LOCALE);
+  const storia = storiaGrande();
+  g.tutti[0].concludi(storia, { recordDiCompattazione: [rapidoSu(storia)] });
+  await attendi(() => riassuntore.chiamate.length === 1, 'il riassunto non è partito');
+  assert.equal((await registro.annullaCompattazione(sessionId, AT_RAPIDO)).ok, true);
+  riassuntore.rilasciaTutti();
+  await attendi(() => registro.statoCompattazione(sessionId)?.inCorso === false, 'il riassunto non si è chiuso');
+  await attendiScritture({ cartellaStore, sessionId });
+  assert.equal(registro.statoCompattazione(sessionId).record, null, 'il riassunto su una storia che non c\'è più non si applica');
+  assert.deepEqual(nonArriva(cartellaStore, sessionId), [{ fase: 'non-arriva', perIlRapido: { at: AT_RAPIDO }, motivo: 'non-vale-piu' }]);
+});
+
+test('PU-FINE-04 C8: alla chiusura il riassunto in corso si ferma, la riga smette di promettere («fermata», scritto prima dello spegnimento), e nessuna richiesta dopo', async (t) => {
+  const { registro, riassuntore, g, avvia, cartellaStore } = ambiente(t);
+  const sessionId = avvia(LOCALE);
+  const storia = storiaGrande();
+  g.tutti[0].concludi(storia, { recordDiCompattazione: [rapidoSu(storia)] });
+  await attendi(() => riassuntore.chiamate.length === 1, 'il riassunto non è partito');
+  await registro.chiudi();
+  assert.equal(riassuntore.chiamate[0].segnaleStop.aborted, true);
+  assert.deepEqual(nonArriva(cartellaStore, sessionId), [{ fase: 'non-arriva', perIlRapido: { at: AT_RAPIDO }, motivo: 'fermata' }]);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(riassuntore.chiamate.length, 1, 'nessuna richiesta dopo la chiusura');
+});
+
+test('PU-FINE-05 (verso contrario) — un rapido SENZA `aFineGiro` sul motore locale: il fine giro non riassume dalla storia di prima (com\'era)', async (t) => {
+  const { riassuntore, g, avvia, cartellaStore } = ambiente(t);
+  const sessionId = avvia(LOCALE);
+  const storia = storiaGrande();
+  g.tutti[0].concludi(storia, { recordDiCompattazione: [rapidoSu(storia, { aFineGiro: false })] });
+  await attendiScritture({ cartellaStore, sessionId });
+  await new Promise((r) => setTimeout(r, 80));
+  assert.equal(riassuntore.chiamate.length, 0);
+  assert.equal(nonArriva(cartellaStore, sessionId).length, 0);
+});
+
+/* Con il rapido che copre TUTTO il /compact risponde «al-minimo» (misurato il 28/10): la storia non cambia, e il rapido continua giustamente
+   ad aspettare. Qui il rapido copre solo l'inizio e dopo c'è una coda grande: il /compact scrive davvero un record nuovo. */
+test('PU-FINE-06 il /compact della persona scrive un record nuovo mentre il rapido aspetta (il fine giro non è potuto partire: il motore era occupato): la riga dice subito «non-vale-piu»', async (t) => {
+  const { registro, riassuntore, g, avvia, cartellaStore } = ambiente(t);
+  const a = avvia(LOCALE);
+  avvia(LOCALE); // B occupa il motore del PC: il fine giro di A non parte, il rapido aspetta
+  const storia = storiaGrande();
+  g.tutti[0].concludi(storia, { recordDiCompattazione: [rapidoSu(storia, { copre: 6 })] });
+  await attendiScritture({ cartellaStore, sessionId: a });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(riassuntore.chiamate.length, 0, 'premessa: il fine giro non è partito');
+  assert.equal(nonArriva(cartellaStore, a).length, 0, 'premessa: il rapido aspetta ancora');
+  const compatto = registro.compatta(a);
+  await attendi(() => riassuntore.chiamate.length === 1, 'il /compact non ha chiesto il riassunto');
+  riassuntore.rilasciaTutti();
+  const esito = await compatto;
+  assert.equal(esito?.ok, true, JSON.stringify(esito));
+  await attendiScritture({ cartellaStore, sessionId: a });
+  assert.deepEqual(nonArriva(cartellaStore, a), [{ fase: 'non-arriva', perIlRapido: { at: AT_RAPIDO }, motivo: 'non-vale-piu' }]);
+  g.tutti[1].concludi([{ role: 'system', content: 's' }, { role: 'user', content: 'u' }, { role: 'assistant', content: 'ok' }]);
+});
+
+test('PU-FINE-07 il giro dopo scrive un record suo (il rapido non è più il record vivo): la riga dice «non-vale-piu», una volta', async (t) => {
+  const { registro, riassuntore, g, avvia, cartellaStore } = ambiente(t);
+  const sessionId = avvia(LOCALE);
+  const storia = storiaGrande();
+  g.tutti[0].concludi(storia, { recordDiCompattazione: [rapidoSu(storia)] });
+  await attendi(() => riassuntore.chiamate.length === 1, 'primo tentativo');
+  registro.resume(sessionId, 'scrivo subito');
+  await attendi(() => registro.statoCompattazione(sessionId)?.inCorso === false, 'non ha ceduto');
+  const storia2 = [...g.tutti[1].input.messaggiIniziali, { role: 'assistant', content: 'ok' }];
+  const suo = creaRecord({ coveredThrough: storia2.length, riassunto: [...storia2.slice(0, 2), { role: 'user', content: `${MARCATORE_RIASSUNTO}\nRiassunto del giro.` }, storia2.at(-1)],
+    tokenPrima: 5_000, tokenDopo: 400, misura: 'stima', at: '2026-10-28T12:05:00.000Z', modello: LOCALE, coperti: storia2 });
+  g.tutti[1].concludi(storia2, { recordDiCompattazione: [suo] });
+  await attendi(() => registro.statoCompattazione(sessionId)?.record?.at === suo.at, 'il record del giro non è diventato vivo');
+  await attendiScritture({ cartellaStore, sessionId });
+  assert.deepEqual(nonArriva(cartellaStore, sessionId), [{ fase: 'non-arriva', perIlRapido: { at: AT_RAPIDO }, motivo: 'non-vale-piu' }]);
+});
+
+test('PU-FINE-08 col rapido che aspetta il fine giro RIASSUME anche se la finestra del modello locale potrebbe crescere (crescere non riporta la storia che il rapido ha già sostituito); AL CONTRARIO, senza rapido cresce come dal 26/10', async (t) => {
+  const crescite = [];
+  const finestraLocaleFn = (perRete) => (String(perRete).startsWith('local:') ? { puoCrescere: async () => true, cresci: async (r) => { crescite.push(r); return { ok: true }; } } : null);
+  const { riassuntore, g, avvia, cartellaStore } = ambiente(t, { finestraLocaleFn });
+  const conRapido = avvia(LOCALE);
+  const storia = storiaGrande();
+  g.tutti[0].concludi(storia, { recordDiCompattazione: [rapidoSu(storia)] });
+  await attendi(() => riassuntore.chiamate.length === 1, 'col rapido il fine giro doveva riassumere');
+  assert.equal(crescite.length, 0, 'col rapido la finestra non si allarga al posto del riassunto');
+  riassuntore.rilasciaTutti();
+  await attendiScritture({ cartellaStore, sessionId: conRapido });
+  const senza = avvia(LOCALE);
+  g.tutti[1].concludi(storiaGrande());
+  await attendi(() => crescite.length === 1, 'senza rapido la finestra doveva allargarsi');
+  assert.equal(riassuntore.chiamate.length, 1, 'senza rapido nessun riassunto in più');
+  await attendiScritture({ cartellaStore, sessionId: senza });
+});
+
+test('PU-FINE-09 la persona annulla il rapido mentre aspetta (nessun riassunto in corso: il motore era occupato): la riga dice subito «non-vale-piu», e il fine giro dopo non riassume per lui', async (t) => {
+  const { registro, riassuntore, g, avvia, cartellaStore } = ambiente(t);
+  const a = avvia(LOCALE);
+  avvia(LOCALE); // B occupa il motore del PC: il fine giro di A non parte
+  const storia = storiaGrande();
+  g.tutti[0].concludi(storia, { recordDiCompattazione: [rapidoSu(storia)] });
+  await attendiScritture({ cartellaStore, sessionId: a });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(riassuntore.chiamate.length, 0, 'premessa: niente in corso');
+  assert.equal((await registro.annullaCompattazione(a, AT_RAPIDO)).ok, true);
+  await attendiScritture({ cartellaStore, sessionId: a });
+  assert.deepEqual(nonArriva(cartellaStore, a), [{ fase: 'non-arriva', perIlRapido: { at: AT_RAPIDO }, motivo: 'non-vale-piu' }]);
+  g.tutti[1].concludi([{ role: 'system', content: 's' }, { role: 'user', content: 'u' }, { role: 'assistant', content: 'ok' }]);
+});

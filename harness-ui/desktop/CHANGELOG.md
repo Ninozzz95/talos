@@ -4,7 +4,7 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
-## Unreleased
+## desktop-v0.2.0 — 2026-11-09
 
 ### Added
 
@@ -12,6 +12,180 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   top while you scroll through the code, and leaves with the block. «⋯», or a right-click on the bar, downloads the code as a
   file of its language, as Markdown or as plain text, named after the file the model wrote in the block (otherwise
   `talos-<language>-<date>`), and collapses a block longer than 40 lines. Copy and «⋯» wait until the block has fully arrived.
+- **Live blocks in replies.** The model can answer with interactive blocks (choices, tables, charts, comparisons, sliders,
+  metrics, diagrams) that you use in the chat, open on the side or full screen, save to the Library with versions, and export
+  as CSV, image or text from their «⋯» menu or a right-click. On by default; «Live blocks in replies» in Settings turns them off.
+- **Computer use (Preview).** When you turn it on, the model can see and use apps and the browser on this PC: a TALOS cursor
+  shows where it clicks, the window it watches gets a border, and a small bubble says what it is doing. It asks before steps
+  that change things, watches more closely on sensitive sites and apps, and remembers the places you allow. See Known limits.
+- **A side chat.** Ask a question about the conversation while TALOS works: it reads the chat, writes nothing to it, does not
+  interrupt the turn and is not saved. It shows the estimated cost in dollars when the model's price is known.
+- **Change TALOS settings from the chat.** Ask the model, or type `/settings`: every change shows a card with what changes and
+  why, a line with Undo, a mark in Settings and a notification. The model hears about the changes you make yourself, and a
+  change pushed by a suspicious reason is shown in a danger box.
+- **A notification centre on the PC.** «To do» and «All» list cards waiting for you, finished chats, automations and changes,
+  shared with your paired devices: what you mark as seen on one is seen everywhere.
+- **Deep research from the composer.** Start it from the «+» menu, `/research` or the Research section, choose how deep it
+  goes; when the model proposes one, you get a card where you can edit the question and see the depth and estimated cost.
+- **A list of steps above the live row.** The model can keep a short plan of the turn; the chat shows the current step with its
+  seconds, and a revised plan replaces the old one, which folds into a row.
+- **Allow all.** With two or more requests waiting, a bar above the composer lists them all in full and allows them in one press.
+- **Trust this folder?** TALOS asks once when you open a new folder. After a No the conversation works as Asks first and the
+  folder's instructions, hooks and connected tools stay off; you can trust it later from the permissions menu.
+- **Stop the chat and its agents together.** With sub-agents at work, Stop asks whether to stop everything or only the chat;
+  stopping one agent from the Agents tab stops everything it started.
+- **A Resume button** lights up when a turn stopped, failed or was interrupted, and picks up where it left off. After a Stop
+  your next message is a new request, and the stop note offers «Pick up where you left off».
+- **Fast mode on the ChatGPT plan.** A switch in the reasoning menu asks for faster answers on the models that offer it, one
+  conversation at a time, off by default.
+- **«Continue now with…» on the ChatGPT plan limit card**, to go on with another model at once.
+- **A Board kanban.** The Board switches between Table and Kanban: running, waiting for you, to resume, done.
+- **A sky view for New session (Beta).** In Settings → Chat, «How New session opens» can show your projects, sessions, agents
+  and automations as a sky; the window stays the default.
+- **The model can look at images and open your local dev servers.** It views an image file in the project (shown as a
+  thumbnail in its row) and opens a dev server of the conversation in the Browser tab you see; a «Server ready» row and a
+  «Local servers» strip tell you when one starts.
+- **Local models from the chat.** The model can open, switch and free local models; TALOS shows the measured speed of a model
+  on this PC, says when the graphics card is still busy or a model is still loading, and Stop cancels a first load.
+- **Images on local models that can see**, with a clear message when the model in use cannot.
+- **Conversation memory for local models.** A local conversation picks up where it was without reading everything again; set
+  its disk space in Settings → Models (8 GB by default, 0 turns it off).
+- **Keep the PC awake.** The PC does not go to sleep while TALOS works (Settings → Tools and permissions: never, while working,
+  always).
+- **Report a problem…** in the window menu: a window to describe it, with the app version and diagnostics, that warns you when
+  your text looks like a key or a folder path.
+- **Reply and dictation language.** TALOS replies in the language you write or speak in; a setting (Automatic by default)
+  fixes one, and dictation follows it.
+- **The model answers questions about TALOS from the guide** shipped with this version.
+- **Pinned chats** are kept on the PC and seen from every device; starred and recent models in the model picker too (F toggles
+  the star).
+- **A side-by-side preview** for question options that carry one.
+- **The default for where commands run**, for new conversations, in Settings → Tools.
+- **Updates** is a settings section of its own in the installed app.
+- **Paired devices can do more with this PC:** the Git tab, research, the Library, the conversation goal and the context
+  engine settings work from a device, which can also see and mark the PC notifications.
+
+### Changed
+
+- **The chat never waits for a summary.** Compaction writes a quick summary at once and improves it with the model at the end
+  of the turn; the line says who wrote it and why. You can choose the model that writes summaries and the one that stands in
+  when it fails, and each summary's cost shows in the Context tab and in the session's spend.
+- **A calm Context panel.** While automatic compaction is on, the panel and the chat no longer warn about the threshold: one
+  line says the conversation compacts by itself. When an automatic summary fails, it says what to do. «Compact now» never opens
+  the Context Manager window, and `/compact` typed in the composer compacts at once.
+- **The model no longer stops «because the context is full»**, since TALOS compacts by itself.
+- **The model finishes the job more often.** A turn that ends on a failing test or command is reopened once; an answer cut by
+  the output limit is retried with a changed request; a tool call lost in a dropped stream or in blank space is sent again.
+- **A tool call written as text** by a model is no longer run on its own: it never ends the turn, and on local models it runs
+  only with your yes, from a card.
+- **Full access no longer shows cards for control files, `.git`, project secrets or network paths.** Deleting the whole project
+  or a folder above it still asks in every mode, and in Full access deleting a top-level folder such as `C:\Users` asks too.
+- **The Browser page is no longer sent with every message.** The model reads the open page when it needs it, so each message
+  costs up to about 5,000 tokens less.
+- **The ChatGPT plan is faster to start each step** (an open connection sends only what is new), retries a stream that drops,
+  and renews the sign-in in the middle of a turn, with «Sign in and resume» when that is not enough.
+- **The prompt cache is used more**, and the Context tab says when the provider's cache started over, and why.
+- **Local models load without a second copy in RAM** by default, and a local model's window grows by itself before TALOS
+  summarises.
+- **A redesigned right panel, Context Manager and New session window.** Tabs for Agents, Processes, Files, Git and Context with
+  counts; the Context Manager has an index on the left; New session has one field to search folders by name or paste a path.
+- **Attachments up to 100 MB.** Files attached to a chat are kept in TALOS's data, not in the project or git; the picker takes
+  many files at once and says how many stayed out; an unsent draft and its attachments survive a reload.
+- **A cleaner look.** One header and search row for every section, a tidier sidebar with pop-up menus when closed, an icon for
+  every meaning, a lighter animated background (on by default), live rows that count seconds, the person's question pinned at
+  the top while its answer is read, and «Thinking · topic · 12 s» while the model reasons.
+- **A No on a card reads «You said no»**, in grey, and the model takes it as your choice, not as a failure to retry.
+- **The folder chooser reaches every disk**, and the installed app starts with no project instead of its own folder.
+- **English state labels say «In progress»**, and the remaining server messages speak the interface language.
+
+### Fixed
+
+- **Switching chats never waits for a long history**; the Context tab says it is reading, with seconds.
+- **Reloading reopens the right chat**, with its draft, photo and attachments.
+- **A new chat is named after what you wrote**, or after the image when you sent only an image.
+- **A refused model answer gets its own card** with one way forward, survives a reload and keeps its images; an old photo no
+  longer breaks a chat on a model without vision.
+- **«Send as attachment» keeps your text** when the send fails, and is offered only for your own message.
+- **The Files tab no longer flickers** when files change on disk, and numbers in file names sort naturally.
+- **The Processes tab no longer shows a client's port as a listening server on Windows**, and always shows a real one.
+- **Notifications:** one «Finished» per chat, a deleted conversation opens nothing, and a burst of notices redraws once.
+- **«N files edited» counts files, not calls**, and a new file counts its real lines.
+- **A server that cannot start says why** instead of staying silent, and a child process that cannot start no longer takes it
+  down.
+- **Stop always ends as stopped**, never as an internal error, also during a delegation that waits for a permission.
+- **Undo never reverts a file someone else changed during the turn**, and the turn snapshot no longer slows the start of a turn.
+- **Model names and labels**: a local model keeps the name from its catalogue (dots included), the chip shows the catalogue name,
+  and the model picker opens on the model in use.
+- **Report PDFs no longer produce blank pages.**
+- **Editing a file whose only difference is Windows line endings works**, and the file keeps its own line endings.
+- **The computer use settings card** keeps its place, with the Preview badge by its title, and a delegation card shows the
+  model's short name whole next to «Failed».
+- **No network** is said in plain words in the model picker and status bar, which recover by themselves; a window that lost
+  access says so at once, with the way back in.
+- **A model that thinks and then stops without answering is asked to continue from its reasoning** before TALOS retries or
+  reports an empty answer.
+- **A context window that fills up during a reply is recognised** also when OpenRouter reports it inside the stream, and a
+  continuation that no longer fits is sent again once without the carried-over reasoning instead of failing.
+- **The phone's file list shows only files that were really written**, so a failed edit is no longer listed.
+- **Your messages keep their line breaks.** A message written on several lines showed as one line in your bubble.
+- **The message box hint belongs to the open conversation.** After you switched conversations, the box could show the
+  suggestion left by the conversation you came from.
+
+### Security
+
+- **Every TALOS server needs its token.** The window enters with a one-time ticket, so a program on the PC without TALOS's
+  ticket cannot answer a card, raise permissions or run a command through TALOS.
+- **A local page shown in TALOS runs apart from TALOS**, cannot open windows or frame other local servers.
+- **Git reads are safer:** automatic reads no longer run commands set in a copied folder's configuration, and the Git key
+  lookup no longer sees the whole server environment.
+- **Secrets stay hidden** in more forms: prefixed key names, Z.AI keys, whole PEM blocks, passwords and tokens in addresses,
+  and secret parameters of a page the model reads.
+- **The sign-in command and key folders ask** in every shell spelling, and a blocked folder holds in every form of its path.
+- **Files outside the chat folder** open, download or go to a device only when that chat wrote them.
+- **The OpenRouter key goes only to the address you chose.**
+- **A folder blocked for a paired device stays closed** to its files, goal and delegations; unblocking it always asks.
+- **TALOS control files are guarded under every spelling of their path (write tools).** Outside Full access, writing the
+  agent rules, hooks or settings files through another form of the path shows the control file card, and creating a
+  document or exporting from the library no longer writes them.
+- **Control files and secrets follow the permission level you set now**, also when you lower it during a turn; outside Full
+  access, a library export no longer writes credential files.
+
+### Known limits
+
+- **Computer use is a Preview, and it is off by default.** You turn it on yourself in Settings → Agent tools and
+  permissions («Computer use», marked Preview). This version does not have the Esc key brake yet, nor the protection of
+  password fields: to stop it, use the Stop button.
+- **In Full access the model can change the computer use settings without a card.** This is a choice, as in Claude Code
+  and Codex: in Full access TALOS writes files and runs commands without asking you anything.
+- **Outside Full access, a command can change the computer use settings without TALOS noticing.** A shell command that
+  names these settings gets no card of its own: in Asks first every command already asks you, but in Writes to the
+  project, the default, a command can reach them without asking, for example when it doesn't spell their full path.
+  TALOS does not check these settings around a command and does not tell you when one changes them. A changed list of
+  always-allowed places counts at once; a change that turns computer use on counts the next time TALOS starts.
+- **If a model writes a tool call as plain text instead of making a real call, TALOS never runs it.** Sometimes TALOS
+  asks the model to retry on its own; in some shapes (several calls in a row, or an example in a code block before the
+  real call) the call stays on screen as text, and you need to ask the model to try again.
+- **Right after TALOS starts, a branch can open without the earlier conversation.** A branch made with Retry or Edit and
+  resend can open before the conversation list has loaded; it then shows only its own messages, without the earlier
+  conversation.
+- **In a narrow window, Open on the side opens the right panel over the chat.** After Close the panel stays open; close
+  it by hand.
+- **If another device stops and deletes a chat while this computer is offline, the chat stays on screen as if it
+  were still working once the network is back.** The bar switches between "Connected again" and "Connection lost"
+  and does not stop by itself. This was already in v0.1.38; it will be fixed after the release.
+- **An option in an interactive block is written by the model.** If it contains a command, such as /settings, clicking
+  it does not run it: it is sent as a message. The model can still answer by proposing that change, for example a card
+  from Asks first to Full access. Nothing changes until you press Apply; Not now leaves everything as it is.
+- **A branch made with Retry or Edit and resend can show the earlier conversation again each time you send a message
+  in it.** The saved conversation is correct: the duplicates are only on screen. This was already in v0.1.38; it will
+  be fixed after the release.
+- **With LM Studio models, TALOS does not yet know how much text the model can hold.** With a small-window model it
+  does not warn you first or summarize the conversation in time: the model refuses the request or cuts it short. This
+  was already in v0.1.38; it will be fixed after the release.
+- After "Retry" in a branch, the model picker can show the earlier model while replies come from the current one;
+  picking that model again does not switch to it.
+- **Interactive blocks in an older TALOS.** If a chat answered with this version is opened in an older TALOS, an
+  interactive block can show as unanswered there, and clicking it sends a second answer.
 
 ## desktop-v0.1.38 — 2026-10-25
 

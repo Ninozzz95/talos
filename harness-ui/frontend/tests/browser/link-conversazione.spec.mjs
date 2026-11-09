@@ -84,7 +84,7 @@ test('RIGHE-SEZIONI — le letture nuove si leggono a giro concluso, senza punti
 
 /* Difetto 1 del 27/09 (owner, stessa notte: «1, 2 e 5 ora»): un attrezzo SENZA frase sua (qui `memory_delete`, com'era stato
  * visto) cadeva nel ripiego «nome umano…» e restava coi puntini a giro concluso. Nessuna riga conclusa finisce con «…». */
-test('RIGHE-CONCLUSE — un attrezzo senza frase sua, a giro concluso, non ha i puntini', async ({ page }) => {
+test('RIGHE-CONCLUSE — uno strumento senza frase sua, a giro concluso, non ha i puntini', async ({ page }) => {
   const { scritture } = await apri(page, 'conv-righe-concluse', [ALTRA]);
   await evento(page, { type: 'ToolCallStart', toolCallId: 'd1', toolCallName: 'memory_delete', _sequenza: 10 });
   await evento(page, { type: 'ToolCallArgs', toolCallId: 'd1', delta: JSON.stringify({ id: 'm1' }), _sequenza: 11 });
@@ -98,7 +98,7 @@ test('RIGHE-CONCLUSE — un attrezzo senza frase sua, a giro concluso, non ha i 
 /* ⛔ TACCUINO (09/10/2026, bugfixer): i nomi umani degli attrezzi sono minuscoli apposta (entrano a metà frase), e il ripiego li
  * metteva così com'erano nel TITOLO della riga: in chat «risposta a un sotto-agente», nell'Indice «3 · Risposta a un sotto-agente»
  * (misurato sulla 4176). Le due forme del ripiego: la riga in corso e quella conclusa. */
-test('RIGHE-MAIUSCOLA — il titolo della riga di un attrezzo senza frase sua comincia con la maiuscola, in corso e concluso', async ({ page }) => {
+test('RIGHE-MAIUSCOLA — il titolo della riga di uno strumento senza frase sua comincia con la maiuscola, in corso e concluso', async ({ page }) => {
   const { scritture } = await apri(page, 'conv-righe-maiuscola', [ALTRA]);
   await evento(page, { type: 'ToolCallStart', toolCallId: 'm1', toolCallName: 'memory_delete', _sequenza: 10 });
   await evento(page, { type: 'ToolCallArgs', toolCallId: 'm1', delta: JSON.stringify({ id: 'm1' }), _sequenza: 11 });

@@ -41,17 +41,17 @@ import {
 
 /* stato del diagramma (`statoDelPasso`) → parola delle DELEGHE (owner 14/10), tono, icona (`ICONA_TONO`, grafo/comuni.js:69) */
 const STATI = Object.freeze({
-  running: { chiave: 'agenti.agent.statusRunning', tono: 'corso', icona: 'i-play', gruppo: 'lavoro' },
+  running: { chiave: 'agenti.agent.statusRunning', tono: 'corso', icona: 'i-loader', gruppo: 'lavoro' },
   pending: { chiave: 'agenti.stepState.waiting', tono: 'neutro', icona: 'i-clock', gruppo: 'lavoro' },
   paused: { chiave: 'agenti.agent.statusPaused', tono: 'neutro', icona: 'i-pausa', gruppo: 'lavoro' },
   waiting_human: { chiave: 'agenti.stepState.waitingForYou', tono: 'avviso', icona: 'i-user', gruppo: 'attenzione' },
   failed: { chiave: 'agenti.agent.statusFailed', tono: 'errore', icona: 'i-x', gruppo: 'attenzione' },
   uncertain: { chiave: 'agenti.stepState.toVerify', tono: 'errore', icona: 'i-alert', gruppo: 'attenzione' },
-  succeeded: { chiave: 'agenti.agent.statusDone', tono: 'ok', icona: 'i-check', gruppo: 'fine' },
-  cancelled: { chiave: 'agenti.agent.statusStopped', tono: 'neutro', icona: 'i-stop', gruppo: 'fine' },
+  succeeded: { chiave: 'agenti.agent.statusDone', tono: 'ok', icona: 'i-circle-check', gruppo: 'fine' },
+  cancelled: { chiave: 'agenti.agent.statusStopped', tono: 'neutro', icona: 'i-quadrato', gruppo: 'fine' },
   /* niente perso (scheda di oggi, `statoDelega` inspector.js:1847): senza `conclusa` vera o falsa lo stato NON si sa, e si dice —
      dati incompleti non diventano un agente «in corso» (RIPRESA-AGENTI-STATO-IGNOTO) */
-  unknown: { chiave: 'agenti.delegations.statusUnavailable', tono: 'neutro', icona: 'i-ignoto', gruppo: 'fine' },
+  unknown: { chiave: 'agenti.delegations.statusUnavailable', tono: 'neutro', icona: 'i-question', gruppo: 'fine' },
 });
 const PERMESSI = Object.freeze({ 'read-only': 'agenti.agent.permissionReadOnly', 'workspace-write': 'agenti.agent.permissionWritesToProject' });
 /* i filtri di oggi (`agenteNelFiltro`, inspector.js:1851): «Errori» comprende anche «Da verificare» */
@@ -241,7 +241,7 @@ function costruisci(d, ui, dati, azioni) {
     menu: [
       azioni.apriDiagramma ? { chiave: 'diagramma', etichetta: t('pannello.agenti.apriDiagrammaDeleghe'), icona: 'i-coordina', aziona: () => azioni.apriDiagramma(null) } : null,
       m.passate.length ? { chiave: 'passate', etichetta: ui.piegheAperte.has('passate-tutte') ? t('pannello.agenti.chiudiPassate') : t('pannello.agenti.apriPassate'), icona: 'i-history', aziona: () => { const k = 'passate-tutte'; if (ui.piegheAperte.has(k)) { ui.piegheAperte.delete(k); for (const p of m.passate) ui.piegheAperte.delete(`richiesta-${p.richiesta.id}`); } else { ui.piegheAperte.add(k); for (const p of m.passate) ui.piegheAperte.add(`richiesta-${p.richiesta.id}`); } ui.ridisegna(); } } : null,
-      azioni.ricarica ? { chiave: 'ricarica', etichetta: t('pannello.comune.aggiorna'), icona: 'i-history', separaPrima: true, aziona: () => azioni.ricarica() } : null,
+      azioni.ricarica ? { chiave: 'ricarica', etichetta: t('pannello.comune.aggiorna'), icona: 'i-refresh', separaPrima: true, aziona: () => azioni.ricarica() } : null,
     ].filter(Boolean),
   });
 

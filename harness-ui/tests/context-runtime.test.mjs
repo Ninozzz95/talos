@@ -194,3 +194,19 @@ test('CTX-RUNTIME-SINGLE-SLOT the default profile marks the two single-slot engi
     assert.deepEqual([...new Set(visti)], [singleSlot ? true : undefined], `singleSlot=${singleSlot}`);
   }
 });
+
+/* C6 (28/10/2026): la scelta globale della persona per i riassunti arriva al motore del contesto desktop; senza, il modello della conversazione */
+test('CTX-RUNTIME-SUMMARY-MODEL-C6 — il riassunto del motore lo scrive il modello scelto dalla persona (un id del selettore), e senza scelta quello della conversazione', async t => {
+  const storia = Array.from({ length: 6 }, (_, i) => [{ role: 'user', content: `richiesta ${i} ` + 'dati '.repeat(300) }, { role: 'assistant', content: `risposta ${i} ` + 'testo '.repeat(300) }]).flat();
+  for (const [scelta, atteso] of [['openrouter:z-ai/glm-5.3-air', { provider: 'openrouter', model: 'z-ai/glm-5.3-air' }], [null, { provider: 'local', model: 'fixture' }]]) {
+    const chiamati = [];
+    const { open } = await fixture(t, {
+      resolveModelProfile: async (selected) => ({ ...selected, windowTokens: 16384, responseReserve: 2048 }),
+      callModel: async (request) => { chiamati.push({ provider: request.provider, model: request.model }); return { text: 'non un riassunto', finishReason: 'stop', usage: { inputTokens: 5, outputTokens: 2 } }; },
+    });
+    const runtime = await open({ modelloDelRiassuntoFn: () => scelta });
+    await runtime.service.compact({ sessionId: 'chat', messages: storia }).catch(() => null);
+    assert.ok(chiamati.length >= 1, `il motore ha chiesto un riassunto (${String(scelta)})`);
+    assert.deepEqual(chiamati[0], atteso, String(scelta));
+  }
+});

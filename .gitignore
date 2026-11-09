@@ -37,5 +37,7 @@ harness-ui/.provider-runtime.json
 harness-ui/.provider-runtime.json.tmp
 harness-ui/.search-source.json
 harness-ui/.search-source.json.tmp-*
+harness-ui/.notifiche.jsonl
+harness-ui/.notifiche.jsonl.*.tmp
 harness-ui/public.prima-del-cutover-*/
 harness-ui/public.nuovo-*/

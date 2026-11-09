@@ -29,10 +29,10 @@ test('CACHE-RICOMINCIATA-02 — la storia che CRESCE e le note in coda alla rich
   assert.equal(motivoDellaCacheRicominciata(prima, dopo), null);
 });
 
-test('CACHE-RICOMINCIATA-03 — stessa impronta e il fornitore rilegge 0 dopo averne riletti: «pausa» oltre la durata del marcatore, «sconosciuto» prima', () => {
+test('CACHE-RICOMINCIATA-03 — stessa impronta e il fornitore rilegge 0 dopo averne riletti: «pausa» oltre la durata del marcatore, «persa-dal-fornitore» prima (decisione 183)', () => {
   const prima = conCache(imp(), { tokenDaCache: 9_000, at: 0, durataMs: 300_000 });
   assert.equal(motivoDellaCacheRicominciata(prima, imp(), { tokenDaCache: 0, ora: 301_000 }), 'pausa');
-  assert.equal(motivoDellaCacheRicominciata(prima, imp(), { tokenDaCache: 0, ora: 60_000 }), 'sconosciuto');
+  assert.equal(motivoDellaCacheRicominciata(prima, imp(), { tokenDaCache: 0, ora: 60_000 }), 'persa-dal-fornitore');
   assert.equal(motivoDellaCacheRicominciata(prima, imp(), { tokenDaCache: 8_000, ora: 60_000 }), null, 'riletti: niente da dire');
   assert.equal(motivoDellaCacheRicominciata(conCache(imp()), imp(), { tokenDaCache: 0, ora: 60_000 }), null, 'un fornitore che non ha mai riletto niente non «ricomincia»');
 });
@@ -69,7 +69,7 @@ test('CACHE-RICOMINCIATA-04 — dal giro vero: niente evento quando la storia cr
   assert.match(secondo.eventi[0]?.at ?? '', /^\d{4}-\d\d-\d\dT/u);
 });
 
-test('CACHE-RICOMINCIATA-05 — dal giro vero: la cache riletta e poi persa nello stesso giro, senza cambi, si dice «sconosciuto»', async (t) => {
+test('CACHE-RICOMINCIATA-05 — dal giro vero: la cache riletta e poi persa nello stesso giro, senza cambi, la ha persa il fornitore (decisione 183)', async (t) => {
   const r = await giro(t, { fetchDiRete: fornitore([3_000, 0]) });
-  assert.deepEqual(r.eventi.map((e) => e.motivo), ['sconosciuto']);
+  assert.deepEqual(r.eventi.map((e) => e.motivo), ['persa-dal-fornitore']);
 });

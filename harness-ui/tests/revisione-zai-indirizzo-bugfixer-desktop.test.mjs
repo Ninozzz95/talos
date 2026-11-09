@@ -45,8 +45,11 @@ test('REV-ZAI-00 premessa: il desktop cabla il contatore del motore del contesto
   // il kernel chiama `contextHooks.prepare` (che misura col contatore) PRIMA di `invoke` (dove la destinazione rifiuta)
   const kernel = readFileSync(new URL('../src/kernel/talosHarness.mjs', import.meta.url), 'utf8');
   const prepara = kernel.indexOf('await contextHooks.prepare({ messages: messaggiDelGiro');
-  const invoca = kernel.indexOf('const invoke = (signal = segnaleStop) => chiamaIlModelloConRitenta(');
-  assert.ok(prepara > 0 && invoca > prepara, 'prepare comes before the model call');
+  /* b5445f55f (decisione 193, 04/11/2026): la chiamata al modello sta in `invocaCon`, e `invoke` la avvolge per riprovare UNA volta
+     senza i fornitori evitati dopo un 404. Il punto resta lo stesso: la misura del contesto viene prima di ogni chiamata. */
+  const invoca = kernel.indexOf('const invocaCon = (signal, fornitoriDaEvitare) => chiamaIlModelloConRitenta(');
+  const invoke = kernel.indexOf('const invoke = async (signal = segnaleStop) => {');
+  assert.ok(prepara > 0 && invoca > prepara && invoke > invoca, 'prepare comes before the model call');
 });
 
 test('REV-ZAI-01 (S2) — senza indirizzo scelto il CONTATORE DEI TOKEN manda la chiave Z.AI all’indirizzo a consumo, prima che la destinazione rifiuti', async () => {

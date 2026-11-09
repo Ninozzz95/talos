@@ -14,8 +14,13 @@
  *     perché il riassunto in testa non è un giro;
  *   - quella a PROIEZIONE (motore del contesto) conserva la storia grezza e la copre con un riassunto fino a `coveredThrough`:
  *     un taglio dentro la parte coperta è `FORK_POINT_COMPACTED` (contratto della CLI); dopo, il fork porta anche il riassunto.
+ * ⛔ Le note del kernel (`eNotaDiTalos`: la spinta «non fermarti per il contesto», `[TALOS]…`, la spinta dopo la risposta
+ *   vuota) sono `user` nella storia ma NON aprono un giro: non si contano (R1 della revisione di 245, 05/11/2026). Come Hermes,
+ *   `agent/context_compressor.py:491` «synthetic continuation rows ... never mark a turn boundary». Una persona che scrive
+ *   `[TALOS]` in testa al suo messaggio sfasa il conto: la conferma del testo allora non torna e il taglio si rifiuta.
  * Puro: nessun disco, nessuna rete.
  */
+import { eNotaDiTalos } from './kernel/compattazione-desktop.mjs';
 
 const testoDi = (contenuto) => {
   if (typeof contenuto === 'string') return contenuto;
@@ -55,7 +60,7 @@ export function taglioPrimaDelGiro({ eventi, messaggi, runId, recordCompattazion
   if (iManuale > iGiro) return no('FORK_POINT_COMPACTED', 'compattazione-manuale');
   const giriContati = lista.map((e, i) => ({ e, i })).filter(({ e, i }) => e?.type === 'RunStarted' && i > iManuale);
   const k = giriContati.findIndex(({ i }) => i === iGiro);
-  const utenti = messaggi.map((m, i) => ({ m, i })).filter(({ m }) => m?.role === 'user');
+  const utenti = messaggi.map((m, i) => ({ m, i })).filter(({ m }) => m?.role === 'user' && !eNotaDiTalos(m));
   /* Senza compattazione manuale si conta dall'inizio, come l'eliminazione; dopo una manuale si conta dalla FINE: in testa c'è
      il riassunto, che non è il messaggio di nessun giro. */
   const posizione = iManuale < 0 ? k : utenti.length - (giriContati.length - k);

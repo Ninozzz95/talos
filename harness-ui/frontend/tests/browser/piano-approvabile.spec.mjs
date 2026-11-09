@@ -138,7 +138,7 @@ test('R4-PLAN-REPLAY-AND-CLOSED: in rigiocata la ricevuta è una sola; un piano 
   expect(bodies).toEqual([]);
 });
 
-test('R4-PLAN-NO-FINAL-TEXT-PLAN: col piano presentato dall’attrezzo, il testo finale del giro non diventa un secondo piano', async ({ page }) => {
+test('R4-PLAN-NO-FINAL-TEXT-PLAN: col piano presentato dall’strumento, il testo finale del giro non diventa un secondo piano', async ({ page }) => {
   const sid = 'piano-niente-doppio';
   await apri(page, sid);
   await evento(page, avvio(sid));

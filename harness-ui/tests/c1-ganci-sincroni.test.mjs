@@ -82,6 +82,70 @@ test('C1-GANCI-05: a predicate that throws means legacy (synchronous), never the
   concludi();
 });
 
+/* Revisione di fine fase della compattazione (01/11/2026, D2): `contextHooksFn` che lancia (archivio che non si apre) fermava il giro prima del kernel. */
+function ganciRotti(comportamento) {
+  const avvii = [];
+  const registro = createSessionRegistry({
+    avviaSessioneFn: async (input) => { avvii.push(input); input.onEvento({ type: 'RunStarted', threadId: 't', runId: 'r' }); input.onEvento({ type: 'RunFinished' }); return { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'r' }] } }; },
+    preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', motoreContestoPerNuoveFn: () => 'engine', giroUsaIlMotoreFn: giroUsaIlMotore({}),
+    contextHooksFn: comportamento,
+  });
+  return { registro, avvii };
+}
+const passa = (ms = 20) => new Promise((r) => setTimeout(r, ms));
+const righeDelRipiego = (eventi) => eventi.filter((e) => e.type === 'CUSTOM' && e.name === 'talos.compattazione' && e.value?.motivo === 'ripiego');
+const archivioRotto = (code) => Object.assign(new Error('The context archive is not available.'), { code });
+
+test('C1-GANCI-07: hooks that throw do not stop the turn: the kernel starts without them, and the fallback line says so once, inside the turn', async () => {
+  const stato = { rotto: true };
+  const { registro, avvii } = ganciRotti(async () => { if (stato.rotto) throw archivioRotto('CTX_LEGACY_CORRUPT'); return undefined; });
+  const { sessionId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  await passa();
+  assert.equal(avvii.length, 1, 'the kernel started');
+  assert.equal(Object.hasOwn(avvii[0], 'contextHooks'), false, 'without the hooks: the simple compaction');
+  const prima = righeDelRipiego(ricevuti);
+  assert.equal(prima.length, 1);
+  assert.deepEqual({ fase: prima[0].value.fase, compattato: prima[0].value.compattato, ragione: prima[0].value.ragione, codice: prima[0].value.codice }, { fase: 'fine', compattato: false, ragione: 'rifiutato', codice: 'CTX_LEGACY_CORRUPT' });
+  /* revisione del blocco 25, R3: chi SA che il motore non è partito lo dice in un campo suo; la riga si decide su quello, mai su `giro === 0` */
+  assert.equal(prima[0].value.motoreNonPartito, true);
+  assert.ok(ricevuti.indexOf(prima[0]) > ricevuti.findIndex((e) => e.type === 'RunStarted'), 'the line belongs to the turn it talks about');
+  /* lo stesso guasto non si ripete; guariti i ganci, un guasto dopo si dice di nuovo */
+  registro.resume(sessionId, 'ancora'); await passa();
+  assert.equal(righeDelRipiego(ricevuti).length, 1, 'same failure, same line');
+  stato.rotto = false;
+  registro.resume(sessionId, 'ancora'); await passa();
+  stato.rotto = true;
+  registro.resume(sessionId, 'ancora'); await passa();
+  assert.equal(avvii.length, 4);
+  assert.equal(righeDelRipiego(ricevuti).length, 2, 'healed, then broken again: said again');
+});
+
+test('C1-GANCI-08: a different failure has its own line; an error with no code is still a line', async () => {
+  const errori = [archivioRotto('CTX_LEGACY_CORRUPT'), archivioRotto('CTX_STORE_CLOSED'), new Error('senza codice')];
+  const { registro } = ganciRotti(async () => { throw errori.shift(); });
+  const { sessionId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  await passa();
+  registro.resume(sessionId, 'ancora'); await passa();
+  registro.resume(sessionId, 'ancora'); await passa();
+  assert.deepEqual(righeDelRipiego(ricevuti).map((e) => e.value.codice), ['CTX_LEGACY_CORRUPT', 'CTX_STORE_CLOSED', 'unknown']);
+});
+
+test('C1-GANCI-09: AL CONTRARIO: Stop while the hooks fail stays a Stop: no turn without the engine, no fallback line', async () => {
+  let ferma = null;
+  const { registro, avvii } = ganciRotti(async () => { ferma(); throw archivioRotto('CTX_LEGACY_CORRUPT'); });
+  const { sessionId } = registro.avvia('task-vero');
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  ferma = () => registro.ferma(sessionId);
+  await passa();
+  assert.equal(avvii.length, 0, 'the kernel does not start after a Stop');
+  assert.equal(righeDelRipiego(ricevuti).length, 0);
+});
+
 test('C1-GANCI-06: giroUsaIlMotore is the same rule as the runtime: stamp by default, list in the trial', () => {
   const diSerie = giroUsaIlMotore();
   assert.equal(diSerie('a', { motoreContesto: 'engine' }), true);

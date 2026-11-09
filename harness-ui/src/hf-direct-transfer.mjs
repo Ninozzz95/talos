@@ -3,6 +3,7 @@ import { createWriteStream } from 'node:fs';
 import { once } from 'node:events';
 import { mkdir, stat, rm } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
+import { eProiettore } from './proiettore-visione.mjs';
 
 const HOST_OK = (host) => host === 'huggingface.co' || host.endsWith('.huggingface.co') || host.endsWith('.hf.co');
 
@@ -102,6 +103,8 @@ export function createHfDirectTransfer({ rootDir, modelStore, hubClient, fetchIm
   function validateImportMetadata(value) {
     if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.id !== 'string' || !LOCAL_ID.test(value.id)) fail('local model id is invalid', 'LOCAL_IMPORT_INVALID');
     if (typeof value.filename !== 'string' || value.filename.trim() === '' || value.filename.length > 240 || basename(value.filename) !== value.filename || value.filename.includes('\\') || value.filename.includes('/') || !/\.gguf$/iu.test(value.filename)) fail('local model filename is invalid', 'LOCAL_IMPORT_INVALID');
+    /* 01/11/2026, condition of the Mobile on local vision: a projector is never a model (on the phone it got chosen alone, first in the list) */
+    if (eProiettore(value.filename)) fail('this file is the image part of a model (mmproj), not a model', 'LOCAL_IMPORT_INVALID');
     if (value.expectedBytes !== undefined && (!Number.isSafeInteger(value.expectedBytes) || value.expectedBytes <= 0)) fail('local model size is invalid', 'LOCAL_IMPORT_INVALID');
     if (value.expectedBytes !== undefined && value.expectedBytes > maxImportBytes) fail('local model is too large', 'LOCAL_IMPORT_TOO_LARGE');
     if (value.name !== undefined && (typeof value.name !== 'string' || !LOCAL_NAME.test(value.name.trim()))) fail('local model name is invalid', 'LOCAL_IMPORT_INVALID');

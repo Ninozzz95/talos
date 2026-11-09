@@ -85,7 +85,7 @@ async function banco(t) {
    *   il modello usa dai suoi attrezzi — e NON rifà la sua proiezione: quella la guarda la prova
    *   «PROIEZIONE» qui sotto, sul sorgente, dove è scritta una volta sola.
    */
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     listaTaskDisponibili: () => [],
     elencaCartelleProgetto: () => [],

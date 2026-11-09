@@ -2,6 +2,7 @@ import { mkdtempSync, readdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { expect, test } from '@playwright/test';
+import { statoColCookie } from './fixtures/cookie-della-corsa.mjs';
 import { rimuoviCartellaDiProva } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 import { aggiungiVersione, elencaVersioni, salvaVoce } from '../../../src/library-store.mjs';
 import { CARTELLA_PROGETTI, nomeCartellaProgetto, percorsoCanonico } from '../../../src/cartella-dati-progetto.mjs';
@@ -47,7 +48,7 @@ let voce = null;
 test.beforeAll(async ({ playwright, baseURL }) => {
   test.setTimeout(120_000);
   cartella = traccia(mkdtempSync(join(rootWorkspace, 'artefatti-versioni-')));
-  const api = await playwright.request.newContext({ baseURL });
+  const api = await playwright.request.newContext({ baseURL, storageState: statoColCookie(baseURL) });
   expect((await api.post('/api/v1/providers/openrouter/key', { data: { key: 'sk-artefatti-fixture' } })).ok()).toBe(true);
   const r = await api.post('/api/v1/sessions/custom', { data: { cartellaLibera: cartella, consegna: 'artefatti: non fare nulla', modello: MODELLO } });
   expect(r.ok()).toBe(true);

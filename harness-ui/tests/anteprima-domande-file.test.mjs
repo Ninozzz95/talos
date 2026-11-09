@@ -54,7 +54,7 @@ test('ANTEPRIMA-FILE-01 — un file indicato dal modello: il documento sì, `.en
 
 test('ANTEPRIMA-FILE-02 — la rotta: `origine=modello` passa la regola, un altro valore è una richiesta sbagliata, il PDF uguale', async (t) => {
   const { registry, sessionId } = await conProgetto(t);
-  const server = createServer(createHttpApp({ staticHandler: () => {}, sessionRegistry: registry }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: () => {}, sessionRegistry: registry }));
   await new Promise((fatto) => server.listen(0, '127.0.0.1', fatto));
   t.after(() => new Promise((fatto) => server.close(fatto)));
   const base = `http://127.0.0.1:${server.address().port}/api/v1/sessions/${sessionId}`;

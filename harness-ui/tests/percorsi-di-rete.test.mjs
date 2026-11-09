@@ -112,10 +112,10 @@ test('RETE-02: un prefisso NT si rifiuta in leggi, scrivi e file_edit, senza nes
   }
 });
 
-test('RETE-03: una condivisione di rete CHIEDE prima di essere toccata — anche con «Accesso pieno» e con «sempre»; senza un sì niente parte', { skip: process.platform !== 'win32' && 'solo Windows' }, async (t) => {
+test('RETE-03: una condivisione di rete CHIEDE prima di essere toccata — in «Su richiesta» e con «sempre» (in Accesso pieno no, 157); senza un sì niente parte', { skip: process.platform !== 'win32' && 'solo Windows' }, async (t) => {
   const c = cartella(t);
   const rete = unc('nessuno.invalid', 'condivisa', 'a.txt');
-  for (const extra of [{ livelloAccesso: 'accesso-pieno' }, { livelloAccesso: 'scrittura-progetto', permessiPerAttrezzo: { scrivi: 'sempre', leggi: 'sempre', file_edit: 'sempre' } }]) {
+  for (const extra of [{ livelloAccesso: 'su-richiesta' }, { livelloAccesso: 'scrittura-progetto', permessiPerAttrezzo: { scrivi: 'sempre', leggi: 'sempre', file_edit: 'sempre' } }]) {
     const { esito, domande } = await giro(c, [
       chiama('l', 'leggi', { percorso: rete }),
       chiama('s', 'scrivi', { percorso: rete, contenuto: 'x' }),
@@ -131,7 +131,7 @@ test('RETE-03: una condivisione di rete CHIEDE prima di essere toccata — anche
     }
     for (const id of ['l', 's', 'e']) assert.match(esito(id), /^REFUSED\./, id);
   }
-  const senza = await giro(c, [chiama('l', 'leggi', { percorso: rete })], { chiediApprovazioneFn: undefined, livelloAccesso: 'accesso-pieno' });
+  const senza = await giro(c, [chiama('l', 'leggi', { percorso: rete })], { chiediApprovazioneFn: undefined, livelloAccesso: 'scrittura-progetto' });
   assert.match(senza.esito('l'), /^REFUSED\..*network share.*no one to confirm/s, 'senza nessuno a cui chiedere: rifiuto, mai un contatto');
 });
 
@@ -142,7 +142,7 @@ test('RETE-05: senza un sì nessuna funzione del file system riceve il percorso 
   const ospite = 'nessuno-rete05.invalid';
   const rete = unc(ospite, 'condivisa', 'a.txt');
   toccati.length = 0;
-  for (const extra of [{ livelloAccesso: 'accesso-pieno' }, { livelloAccesso: 'scrittura-progetto', permessiPerAttrezzo: { scrivi: 'sempre', leggi: 'sempre', file_edit: 'sempre' } }]) {
+  for (const extra of [{ livelloAccesso: 'su-richiesta' }, { livelloAccesso: 'scrittura-progetto', permessiPerAttrezzo: { scrivi: 'sempre', leggi: 'sempre', file_edit: 'sempre' } }]) {
     // due `leggi` in testa: è il prefisso di sole letture che parte in anticipo (`MAX_LETTURE_INSIEME`, P18)
     const { domande } = await giro(c, [
       chiama('l', 'leggi', { percorso: rete }),
@@ -154,8 +154,33 @@ test('RETE-05: senza un sì nessuna funzione del file system riceve il percorso 
   }
   assert.deepEqual(toccati, [], 'nessun contatto col computer di rete senza il sì');
   // AL CONTRARIO: con il sì il kernel tocca il percorso, e la spia lo vede (se non lo vedesse, il verde sopra non direbbe niente).
-  await giro(c, [chiama('l', 'leggi', { percorso: rete })], { livelloAccesso: 'accesso-pieno', chiediApprovazioneFn: async () => true });
+  await giro(c, [chiama('l', 'leggi', { percorso: rete })], { livelloAccesso: 'scrittura-progetto', chiediApprovazioneFn: async () => true });
   assert.ok(toccati.length > 0, 'con il sì la lettura passa dal file system spiato');
+});
+
+/*
+ * ⛔ Decisione 157 dell'owner (04/11/2026, 16:54): in Accesso pieno, come Claude Code, i percorsi di rete passano senza carta. Supera
+ *   la carta dei percorsi di rete (owner 02/10) solo lì; nelle altre modalità RETE-03…10 restano come sono. Il prefisso NT si rifiuta
+ *   ancora a ogni livello (RETE-02): non è un computer di rete ma un nome del sistema.
+ */
+test('RETE-157: in Accesso pieno una condivisione di rete passa senza carta e senza rifiuto — leggi, scrivi, elenca, anche senza nessuno davanti', { skip: process.platform !== 'win32' && 'solo Windows' }, async (t) => {
+  const c = cartella(t);
+  const rete = unc('nessuno-rete157.invalid', 'condivisa', 'a.txt');
+  for (const extra of [{}, { chiediApprovazioneFn: undefined }]) { // la persona davanti dice no a ogni carta; poi nessuno davanti
+    toccati.length = 0;
+    const { esito, domande } = await giro(c, [
+      chiama('l', 'leggi', { percorso: rete }),
+      chiama('s', 'scrivi', { percorso: rete, contenuto: 'x' }),
+      chiama('el', 'elenca', { percorso: unc('nessuno-rete157.invalid', 'condivisa') }),
+    ], { livelloAccesso: 'accesso-pieno', ...extra });
+    assert.equal(domande.length, 0, 'nessuna carta');
+    for (const id of ['l', 's', 'el']) assert.doesNotMatch(esito(id), /network share|network computer|no one to confirm/u, `${id}: nessun rifiuto di rete`);
+    assert.ok(toccati.length > 0, 'il kernel arriva al file system (la spia blocca il contatto vero)');
+  }
+  /* AL CONTRARIO: il prefisso NT resta un rifiuto anche qui */
+  const nt = `${B}${B}?${B}UNC${B}nessuno-rete157.invalid${B}s`;
+  const { esito } = await giro(c, [chiama('n', 'elenca', { percorso: nt })], { livelloAccesso: 'accesso-pieno' });
+  assert.match(esito('n'), /^REFUSED\..*NT\/device namespace prefix/su);
 });
 
 test('RETE-04: AL CONTRARIO — i percorsi della casa Linux (\\\\wsl.localhost) e quelli locali non chiedono niente in più', async (t) => {
@@ -174,7 +199,7 @@ test('RETE-06: elenca — un prefisso NT si rifiuta, una condivisione chiede pri
     chiama('n', 'elenca', { percorso: nt }),
     chiama('r', 'elenca', { percorso: rete }),
     chiama('r2', 'elenca', { percorso: unc('nessuno-rete06.invalid', 'altra') }),
-  ], { livelloAccesso: 'accesso-pieno' });
+  ], { livelloAccesso: 'scrittura-progetto' }); // 157: in Accesso pieno la rete non chiede (la prova 157 qui sotto)
   assert.match(esito('n'), /^REFUSED\..*NT\/device namespace prefix/s);
   assert.deepEqual(domande.map((d) => d.tipo), ['elenca', 'elenca']);
   assert.match(domande[0].percorsoDiRete.frase, /files of a folder on a network computer \(nessuno-rete06\.invalid\)/);
@@ -237,7 +262,7 @@ test('RETE-09: con la cartella della sessione su una condivisione si chiede UNA 
   const { esito, domande } = await giro(NAS, [
     chiama('l', 'leggi', { percorso: 'a.txt' }), chiama('e', 'elenca', { percorso: '' }),
     chiama('c', 'cerca', { testo: 'x' }), chiama('s', 'scrivi', { percorso: 'b.txt', contenuto: 'x' }),
-  ], { livelloAccesso: 'accesso-pieno', consensiSessione: {} });
+  ], { livelloAccesso: 'scrittura-progetto', consensiSessione: {} }); // 157: in Accesso pieno la rete non chiede
   assert.deepEqual(domande.map((d) => [d.tipo, d.percorsoDiRete?.via, d.percorsoDiRete?.ambito]),
     [['leggi', 'cartella', 'sessione'], ['elenca', 'cartella', 'sessione'], ['cerca', 'cartella', 'sessione'], ['scrivi', 'cartella', 'sessione']]);
   assert.match(domande[0].percorsoDiRete.frase, /session folder is on a network computer \(nessuno-rete09\.invalid\).*whole session/s);
@@ -247,8 +272,8 @@ test('RETE-09: con la cartella della sessione su una condivisione si chiede UNA 
   const consensi = {};
   const domandeSi = [];
   const siSempre = async (a) => { domandeSi.push(a); return true; };
-  await giro(NAS, [chiama('l', 'leggi', { percorso: 'a.txt' }), chiama('l2', 'leggi', { percorso: 'b.txt' })], { livelloAccesso: 'accesso-pieno', consensiSessione: consensi, chiediApprovazioneFn: siSempre });
-  await giro(NAS, [chiama('e', 'elenca', { percorso: '' })], { livelloAccesso: 'accesso-pieno', consensiSessione: consensi, chiediApprovazioneFn: siSempre });
+  await giro(NAS, [chiama('l', 'leggi', { percorso: 'a.txt' }), chiama('l2', 'leggi', { percorso: 'b.txt' })], { livelloAccesso: 'scrittura-progetto', consensiSessione: consensi, chiediApprovazioneFn: siSempre });
+  await giro(NAS, [chiama('e', 'elenca', { percorso: '' })], { livelloAccesso: 'scrittura-progetto', consensiSessione: consensi, chiediApprovazioneFn: siSempre });
   assert.equal(domandeSi.length, 1, 'una domanda sola per tutta la sessione');
   assert.equal(consensi.reteCartella, true);
 });
@@ -264,7 +289,7 @@ test('RETE-10: un collegamento locale verso una condivisione chiede PRIMA di ess
     chiama('s', 'scrivi', { percorso: 'rete10-link/c.txt', contenuto: 'x' }),
     chiama('e', 'file_edit', { percorso: 'rete10-link/d.txt', old_string: 'a', new_string: 'b' }),
     chiama('el', 'elenca', { percorso: 'rete10-link' }), chiama('ce', 'cerca', { testo: 'x', dentro: 'rete10-link' }),
-  ], { livelloAccesso: 'accesso-pieno' });
+  ], { livelloAccesso: 'scrittura-progetto' }); // 157: in Accesso pieno la rete non chiede
   assert.deepEqual(domande.map((d) => [d.tipo, d.percorsoDiRete?.via]),
     [['leggi', 'collegamento'], ['leggi', 'collegamento'], ['scrivi', 'collegamento'], ['file_edit', 'collegamento'], ['elenca', 'collegamento'], ['cerca', 'collegamento']]);
   assert.match(domande[0].percorsoDiRete.frase, /read a file through a link .*rete10-link.* network computer \(nessuno-rete10\.invalid\)/s);

@@ -44,7 +44,7 @@ test('WF-RUN-CANCEL-CONSEQUENCES: the confirmation says what happens, from the r
 
 test('WF-RUN-RETRY-RAISE: the raise is said in the words of the card limits, only what goes up (decision 23)', () => {
   assert.deepEqual(righeAumento({ promptTokens: 12_000, completionTokens: 0, wallMs: 80 * 60_000, agentSeconds: 99, toolCalls: 30, modelRequests: 40, knownCostUsd: 0.5 }), [
-    ['Tempo massimo', '+ 1 h 20 min'], ['Richieste al modello', '+ 40'], ['Token letti', '+ 12.000'], ['Attrezzi usati', '+ 30'], ['Costo', '+ 0.50 $'],
+    ['Tempo massimo', '+ 1 h 20 min'], ['Richieste al modello', '+ 40'], ['Token letti', '+ 12.000'], ['Strumenti usati', '+ 30'], ['Costo', '+ 0.50 $'],
   ]);
   assert.deepEqual(righeAumento({ promptTokens: 0, knownCostUsd: 0 }), [], 'zero raise, nothing listed');
   assert.deepEqual(righeAumento(null), []);

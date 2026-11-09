@@ -40,7 +40,7 @@ for (const tema of ['dark', 'light']) {
   test(`DOVE-SERIE-UI-01 (${tema}): the card shows the three choices of the permissions sheet, Automatic by default, and a click saves the choice`, async ({ page }) => {
     const { fermate, scritte, carta, scelta } = await apri(page, { tema });
     await expect(carta).toBeVisible();
-    await expect(carta.locator('h3')).toHaveText('Dove girano i comandi');
+    await expect(carta.locator('h3')).toHaveText('Dove girano i comandi · conversazioni nuove'); // fase 8, forma §5 (Frontend 01/11)
     await expect(carta.locator('[role="radio"]')).toHaveCount(3);
     expect(await carta.evaluate((c) => c.previousElementSibling?.dataset.settingsCard), 'right after the session policy').toBe('tools-policy');
     expect(await page.evaluate(() => document.querySelector('#setting-panel-tools').lastElementChild.classList.contains('talos-settings__actions')), 'the actions row stays last').toBe(true);
@@ -74,7 +74,7 @@ test('DOVE-SERIE-UI-02: a save that fails leaves the old choice and says so', as
 
 test('DOVE-SERIE-UI-03: without the setting on the server the choices are disabled and the card says why; English first', async ({ page }) => {
   const { carta, scelta } = await apri(page, { get: 503, lingua: 'en' });
-  await expect(carta.locator('h3')).toHaveText('Where commands run');
+  await expect(carta.locator('h3')).toHaveText('Where commands run · new conversations'); // fase 8, forma §5
   for (const v of ['', 'wsl2', 'windows']) await expect(scelta(v)).toBeDisabled();
   await expect(carta.locator('[data-dove-serie-stato]')).toHaveText('This setting is not available in this instance.');
 });

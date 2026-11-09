@@ -62,3 +62,13 @@ test('ALL-APRI-06 maiuscole indifferenti SOLO su Windows: su una radice Linux co
   assert.equal(relativoNellaRadice('/home/nino/progetto/a.txt', '/home/nino/progetto'), 'a.txt');
   assert.equal(relativoNellaRadice('C:/Users/Nino/a.txt', 'c:/users/nino'), 'a.txt');
 });
+
+/* Decisioni 43 e 47: un allegato nei dati di TALOS non sta nella cartella: il chip lo apre per riferimento, e il nome corto non si mostra */
+test('ALLEGATI-DATI-CHIP: con il riferimento il chip porta l id, niente percorso da aprire, e il nome vero', () => {
+  const id = 'a'.repeat(24);
+  const chip = chipAllegato({ tipo: 'file', nome: 'nota lunga.txt', percorso: `attachments/${id}/nota lunga.txt`, allegatoId: id }, '', { radice: 'C:/progetti/AVM' });
+  assert.equal(chip.allegatoId, id);
+  assert.equal(chip.apribile, '');
+  assert.equal(chip.titolo, 'nota lunga.txt');
+  assert.equal(chipAllegato({ tipo: 'file', percorso: 'allegati/a.csv' }, '', { radice: 'C:/progetti/AVM' }).allegatoId, undefined);
+});

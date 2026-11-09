@@ -22,7 +22,7 @@ function banco(t, modo = 'normale') {
 }
 const sonda = (store, extra = {}) => createProviderProbe({ leggiChiave: store.getKey, leggiRuntime: store.getRuntime, env: {}, fetchImpl: () => assert.fail('Rete vietata'), ...extra });
 async function ascolta(t, store, extra = {}) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, providerStore: store, providerProbe: sonda(store), ...extra }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore: store, providerProbe: sonda(store), ...extra }));
   await new Promise((r, j) => { server.once('error', j); server.listen(0, '127.0.0.1', r); });
   assert.notEqual(server.address().port, 4174);
   t.after(() => new Promise(r => { server.close(r); server.closeAllConnections(); }));

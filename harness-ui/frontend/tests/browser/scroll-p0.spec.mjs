@@ -61,7 +61,7 @@ test.beforeEach(async ({ page }) => {
   /* VELO-SPEC (08/10/2026, bugfixer): flusso APERTO E MUTO (handler che non risolve), come in chat-attesa-fondo.spec.mjs. Con un
      corpo vuoto il flusso si chiudeva e il browser lo riapriva, e ogni `onopen` rimette la chat «nella storia» (app.js, `source.onopen`):
      dopo il confine mandato dalla prova, una riapertura la rivelava di nuovo. */
-  await page.route('**/api/v1/sessions/scroll-p0-*/events', () => { /* resta pending: aperto e muto */ });
+  await page.route('**/api/v1/sessions/scroll-p0-*/events*', () => { /* resta pending: aperto e muto */ });
   /* ⛔ Solo lo STUB: nessun giro vero parte da qui, e il server di prova non ha queste sessioni. */
   await page.route('**/api/v1/sessions/scroll-p0-*/resume', (route) => route.fulfill({
     status: 200, contentType: 'application/json',
@@ -152,7 +152,7 @@ test('SCROLL-P0-01 — 240 delta con la persona a metà: la vista non si muove d
   expect(sonda.max, `la vista si è spostata di ${sonda.max}px durante lo streaming (ultime letture: ${sonda.letture})`).toBe(0);
 });
 
-test('SCROLL-P0-02 — nemmeno le carte del modello la spostano (attesa, attrezzo, attività, artefatto, permesso)', async ({ page }) => {
+test('SCROLL-P0-02 — nemmeno le carte del modello la spostano (attesa, strumento, attività, artefatto, permesso)', async ({ page }) => {
   await apri(page, 'carte');
   await riempi(page);
   const { base } = await vaiAMetaEOsserva(page);

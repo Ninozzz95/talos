@@ -163,7 +163,7 @@ test('PORTA-KERNEL-02 — goal_create passa dalla carta: approvata ⇒ esegue; r
     assert.equal(azioni[0].tipo, 'goal_create');
     assert.equal(azioni[0].obiettivo.testo, 'make the tests pass', `${nome}: la carta porta l'obiettivo`);
     if (approva) { assert.deepEqual(fasi, ['anteprima', 'esegui']); assert.equal(esito('g'), 'Goal set.'); }
-    else { assert.deepEqual(fasi, ['anteprima']); assert.match(esito('g'), /^REFUSED\./u); }
+    else { assert.deepEqual(fasi, ['anteprima']); assert.match(esito('g'), /^DECLINED\. The person said no/u); }
   }
 });
 
@@ -180,10 +180,13 @@ test('PORTA-REG-01 — sul registro: il giro della persona crea l\'obiettivo; un
   const fatto = await input.onObiettivoFn('goal_create', { objective: 'make the tests pass' }, { fase: 'esegui' });
   assert.equal(fatto.ok, true, JSON.stringify(fatto));
   assert.equal(b.registro.statoObiettivo(sessionId).obiettivo.testo, 'make the tests pass');
-  b.giri.at(-1).concludi([{ role: 'user', content: 'c' }, { role: 'assistant', content: 'ok' }]);
+  /* decisione 198 (owner 04/11, 82db48a2f): dopo un giro FINITO la ripresa senza messaggio nuovo è rifiutata (`nothing-to-resume`);
+     qui la persona ferma il suo giro (Stop), e il ▶ lo fa ripartire senza testo */
+  b.giri.at(-1).fallisci('fermato', [{ role: 'user', content: 'c' }, { role: 'assistant', content: 'ok' }]);
   await passo(); await passo();
   /* un giro che riparte senza un messaggio nuovo della persona: la porta c'è, ma mettere in pausa no */
-  b.registro.resume(sessionId, null, []);
+  const senzaTesto = b.registro.resume(sessionId, null, []);
+  assert.ok(!senzaTesto?.erroreAvvio, `premessa: la ripresa senza messaggio nuovo parte (${JSON.stringify(senzaTesto)?.slice(0, 160)})`);
   await passo();
   const ripresa = b.giri.at(-1).input;
   assert.notEqual(ripresa, input, 'premessa: è un giro nuovo');

@@ -24,8 +24,8 @@ const SEZIONI = [
   ['Laboratorio modelli', 'models'],
   // ⛔ 23/09/2026, decisione owner: «Provider e accessi» tolta del tutto — nell'app le sezioni sono nove.
   ['Costi e consumo', 'costi'],
-  ['File e workspace', 'workspace'],
-  ['Account, Doctor e backup', 'account'],
+  ['File e spazio di lavoro', 'workspace'],
+  ['Diagnosi e configurazione', 'account'],
 ];
 
 test('IMP-MOCKUP — tre ingressi disponibili nel mockup canonico, sette dichiarati fuori lotto', async ({ page }, info) => {

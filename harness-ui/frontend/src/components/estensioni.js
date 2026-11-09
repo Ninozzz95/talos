@@ -38,7 +38,7 @@ export function datiEstensione(tipo,v){
 export function filtraEstensioni(tipo,voci,query=''){const q=String(query).trim().toLocaleLowerCase('it');return voci.filter(v=>!q||JSON.stringify(datiEstensione(tipo,v)).toLocaleLowerCase('it').includes(q));}
 export function creaExtensionRow(tipo,v,{document:doc=globalThis.document,selezionata=false,onSeleziona}={}){
  const d=datiEstensione(tipo,v),r=el(doc,'button','talos-list-row');r.type='button';r.dataset.extId=d.id;r.setAttribute('role','option');r.setAttribute('aria-selected',String(selezionata));r.tabIndex=selezionata?0:-1;
- const i=el(doc,'span','talos-list-row__icon'),svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),u=doc.createElementNS('http://www.w3.org/2000/svg','use');svg.setAttribute('class','i');svg.setAttribute('aria-hidden','true');u.setAttribute('href',tipo==='mcp'?'#i-globe':'#i-bolt');svg.append(u);i.append(svg);
+ const i=el(doc,'span','talos-list-row__icon'),svg=doc.createElementNS('http://www.w3.org/2000/svg','svg'),u=doc.createElementNS('http://www.w3.org/2000/svg','use');svg.setAttribute('class','i');svg.setAttribute('aria-hidden','true');u.setAttribute('href',tipo==='mcp'?'#i-globe':'#i-blocks');svg.append(u);i.append(svg);
  const testo=el(doc,'span','talos-list-row__text');testo.append(el(doc,'span','talos-list-row__title',d.titolo),el(doc,'span','talos-list-row__sub',d.descrizione));
  const a=el(doc,'span','talos-list-row__aside');a.append(el(doc,'span','talos-badge'+(d.fidabile||d.attenzione?' talos-badge--warning':''),d.stato));r.append(i,testo,a);r.addEventListener('click',()=>onSeleziona?.(d.id));return r;
 }

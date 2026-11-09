@@ -1,0 +1,1 @@
+root = Tabella("prezzi-web", "Prezzi letti dalla pagina", [{id: "p", titolo: "Prodotto", tipo: "testo"}, {id: "e", titolo: "Prezzo", tipo: "soldi"}], [["Pane", 2.5]], null, true, {tipo: "pagina", nome: "esempio.it", quando: "2026-11-02"})

@@ -3,7 +3,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ripartizioneDellaRichiesta, copiaDellaRichiesta, MARCATORE_ISTRUZIONI, MARCATORE_MEMORIA } from '../src/richiesta-del-giro.mjs';
+import { ripartizioneDellaRichiesta, copiaDellaRichiesta, stimaDiUnAttrezzo, MARCATORE_ISTRUZIONI, MARCATORE_MEMORIA } from '../src/richiesta-del-giro.mjs';
 
 const perId = (r) => Object.fromEntries(r.categorie.map((c) => [c.id, c.tokens]));
 const lungo = (parola, n) => `${parola} `.repeat(n);
@@ -53,4 +53,15 @@ test('C1-RICH-04: the copy kept in memory drops images (type kept), and shares n
   copia.tools[0].function.name = 'cambiato';
   assert.equal(corpo.tools[0].function.name, 'leggi', 'a deep copy');
   assert.equal(copia.model, 'm');
+});
+
+test('C1-RICH-STIMA: stimaDiUnAttrezzo gives the same number as the breakdown, UTF-8 bytes / 3.5 rounded up, and 0 for nothing', () => {
+  const a = { type: 'function', function: { name: 'leggi', description: 'Legge un file – con un trattino lungo', parameters: { type: 'object' } } };
+  const b = { name: 'mcp__srv__x', description: 'y'.repeat(100) };
+  assert.equal(stimaDiUnAttrezzo(a), Math.ceil(Buffer.byteLength(JSON.stringify(a), 'utf8') / 3.5));
+  const r = perId(ripartizioneDellaRichiesta({ messages: [], tools: [a, b] }));
+  assert.equal(r.tools, stimaDiUnAttrezzo(a));
+  assert.equal(r.mcp, stimaDiUnAttrezzo(b));
+  assert.equal(stimaDiUnAttrezzo(null), 0);
+  assert.equal(stimaDiUnAttrezzo('x'), 0);
 });

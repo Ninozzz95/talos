@@ -60,7 +60,7 @@ test('SKIP-01 dal registro: prima del riassunto atteso non arma niente; durante 
 
 test('SKIP-02 la rotta: POST con gettone, 200 {saltato}, GET 405, sessione ignota 404, query 400', async (t) => {
   const chiamate = [];
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null, token: 'token-di-prova',
     sessionRegistry: { saltaRiassunto: (id) => { chiamate.push(id); return id === 's1' ? { saltato: true } : { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' }; } },
   });

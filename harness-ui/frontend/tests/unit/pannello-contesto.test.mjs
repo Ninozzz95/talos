@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { impostaLingua } from '../../src/components/lingua.js';
-import { modelloContesto, contoContesto } from '../../src/components/pannello/contesto.js';
+import { modelloContesto, contoContesto, cacheRipartita } from '../../src/components/pannello/contesto.js';
 import { creaStato } from '../fixtures/pannello-dati.mjs';
 
 const S = creaStato(Date.parse('2026-10-29T15:00:00Z'));
@@ -49,4 +49,39 @@ test('PANNELLO-CONTESTO-RIASSUNTO — «col modello» solo quando lo si sa: vero
   assert.equal(modelloContesto({ storiaContesto: storia(false) }).riassunti[0].conModello, false);
   assert.equal(modelloContesto({ storiaContesto: storia(undefined) }).riassunti[0].conModello, null, 'senza il dato non si dice «col modello»');
   assert.equal(modelloContesto({ storiaContesto: storia(null) }).riassunti[0].liberati, 120_000);
+});
+
+test('PANNELLO-CONTESTO-CACHE — la cache ripartita da capo (owner 28/10, punto 2): motivo, ora e token; mai un motivo inventato', () => {
+  const c = cacheRipartita({ motivo: 'modello', at: '2026-10-30T10:00:00.000Z', tokenDaRileggere: 45_000 });
+  assert.deepEqual(c, { chiave: 'pannello.contesto.cacheMotivoModello', at: Date.parse('2026-10-30T10:00:00.000Z'), token: 45_000 });
+  for (const [motivo, chiave] of [['attrezzi', 'Attrezzi'], ['attrezzi-caricati', 'AttrezziCaricati'], ['sistema', 'Sistema'], ['compattazione', 'Compattazione'], ['pausa', 'Pausa'], ['sconosciuto', 'Sconosciuto'], ['fornitore', 'Fornitore'], ['persa-dal-fornitore', 'PersaDalFornitore']]) {
+    assert.equal(cacheRipartita({ motivo }).chiave, `pannello.contesto.cacheMotivo${chiave}`, motivo);
+  }
+  assert.equal(cacheRipartita({ motivo: 'domani-uno-nuovo' }).chiave, 'pannello.contesto.cacheMotivoAltro', 'un motivo che non conosce non diventa «il fornitore non ha detto perché»');
+  assert.equal(cacheRipartita({ motivo: 'toString' }).chiave, 'pannello.contesto.cacheMotivoAltro', 'solo le chiavi proprie della tabella');
+  const senza = cacheRipartita({ motivo: 'pausa', at: 'non è una data', tokenDaRileggere: 0 });
+  assert.equal(senza.at, null, 'un\'ora illeggibile non si inventa');
+  assert.equal(senza.token, null, 'zero token non si dice');
+  for (const vuoto of [null, undefined, {}, { motivo: '' }, { motivo: 3 }, 'modello']) assert.equal(cacheRipartita(vuoto), null);
+  assert.equal(modelloContesto({}).cache, null, 'senza evento nessuna riga');
+  assert.equal(modelloContesto({ cacheRicominciata: { motivo: 'sistema' } }).cache.chiave, 'pannello.contesto.cacheMotivoSistema');
+});
+
+test('PANNELLO-CONTESTO-EVITATI — decisione 193: «Evitato in questa sessione» solo per chi è stato escluso; un 404 di OpenRouter lo toglie', async () => {
+  const { fornitoriEvitatiDopo } = await import('../../src/components/pannello/contesto.js');
+  const M = 'deepseek/deepseek-v4.1-flash-1017';
+  let elenco = fornitoriEvitatiDopo(undefined, { escluso: true, fornitore: 'Particle AI', modello: M, volte: 2 });
+  assert.deepEqual(elenco, [{ fornitore: 'Particle AI', modello: M }]);
+  assert.equal(fornitoriEvitatiDopo(elenco, { escluso: true, fornitore: 'Particle AI', modello: M }), elenco, 'niente doppioni');
+  assert.equal(fornitoriEvitatiDopo(elenco, { escluso: false, motivo: 'unico-fornitore', fornitore: 'Wafer', modello: M }), elenco, 'non escluso: nessuna riga');
+  for (const strano of [null, 'x', { escluso: true }, { escluso: true, fornitore: '' }, { escluso: 'true', fornitore: 'Wafer' }]) assert.equal(fornitoriEvitatiDopo(elenco, strano), elenco);
+  elenco = fornitoriEvitatiDopo(elenco, { escluso: true, fornitore: 'Novita', modello: 'z-ai/glm-5.3-flash' });
+  assert.deepEqual(fornitoriEvitatiDopo(elenco, { escluso: false, motivo: 'nessun-fornitore-rimasto', modello: M }), [{ fornitore: 'Novita', modello: 'z-ai/glm-5.3-flash' }], 'il 404 toglie solo quelli del suo modello');
+  assert.deepEqual(modelloContesto({ fornitoriEvitati: elenco }).evitati, ['Particle AI', 'Novita']);
+  assert.deepEqual(modelloContesto({}).evitati, [], 'senza evento nessuna riga');
+  impostaLingua('en');
+  const { t } = await import('../../src/components/lingua.js');
+  assert.equal(t('pannello.contesto.cacheFornitoreEvitato', { nome: 'Particle AI' }), 'Avoided for this session: Particle AI (it lost the cache twice)');
+  impostaLingua('it');
+  assert.equal(t('pannello.contesto.cacheFornitoreEvitato', { nome: 'Particle AI' }), 'Evitato in questa sessione: Particle AI (ha perso la cache due volte)');
 });

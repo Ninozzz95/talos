@@ -114,7 +114,9 @@ test('CACHE-03 AL CONTRARIO — due conversazioni con un primo messaggio diverso
   assert.notEqual(await chiaveDelPiano(due.a), await chiaveDelPiano(uno.a), 'two different conversations share the plan cache key');
 });
 
-test('CACHE-04 CONTROLLO — su Anthropic nativo resta com\'era: tutti i messaggi di sistema in `system`, nessuno fra i messaggi (Anthropic non li accetta separati)', async () => {
+/* Decisione 194 (owner 04/11/2026): prima qui si fissava «l'aggiornamento resta in `system`», cioè IN TESTA, e una nota nuova cambiava la testa.
+   Ora l'aggiornamento è testo della persona al suo posto, in un blocco `<talos-note>`; la testa resta quella; nessun `system` fra i messaggi. */
+test('CACHE-04 CONTROLLO — su Anthropic nativo nessun `system` fra i messaggi; l\'aggiornamento non entra in `system` (decisione 194): è una nota in coda alla domanda dopo', async () => {
   let corpo = null;
   const model = 'claude-opus-5-5';
   await nativeProviderResponse({
@@ -122,6 +124,9 @@ test('CACHE-04 CONTROLLO — su Anthropic nativo resta com\'era: tutti i messagg
     body: { messages: [{ role: 'system', content: 'Base.' }, { role: 'user', content: 'Ciao.' }, { role: 'assistant', content: 'Ciao!' }, { role: 'system', content: 'Project context update: x' }, { role: 'user', content: 'E poi?' }] },
     fetchFn: async (_url, init) => { corpo = corpoSenzaMarcatori(init.body); return new Response(JSON.stringify({ id: 'msg', type: 'message', role: 'assistant', model, content: [{ type: 'text', text: 'ok' }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 5, output_tokens: 2 } }), { headers: { 'content-type': 'application/json' } }); },
   });
-  assert.match(JSON.stringify(corpo.system), /Project context update/u, 'the update is still in `system` on Anthropic');
+  assert.doesNotMatch(JSON.stringify(corpo.system), /Project context update/u, 'the update stays out of the head `system` (decision 194)');
   assert.ok(corpo.messages.every((m) => m.role !== 'system'), 'no system message among the Anthropic messages');
+  const ultimo = JSON.stringify(corpo.messages.at(-1));
+  assert.ok(ultimo.indexOf('E poi?') >= 0 && ultimo.indexOf('E poi?') < ultimo.indexOf('<talos-note>\\nProject context update: x\\n</talos-note>'),
+    'the update is a note at the tail of the next question');
 });

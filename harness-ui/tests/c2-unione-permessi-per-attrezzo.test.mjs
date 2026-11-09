@@ -138,7 +138,7 @@ test('UNIONE-06 HTTP: la rotta accetta l\'unione e rifiuta le forme storte con 4
      lo status da solo non dice chi ha rifiutato. Si contano le chiamate che arrivano al registro (mutante N7, 08/10). */
   const arrivateAlRegistro = []
   const registroSpiato = { ...registry, aggiornaImpostazioni: (...argomenti) => { arrivateAlRegistro.push(argomenti[1]); return registry.aggiornaImpostazioni(...argomenti) } }
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registroSpiato }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registroSpiato }))
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
   t.after(() => new Promise((ok) => { server.closeAllConnections(); server.close(() => ok()) }))
   const url = `http://127.0.0.1:${server.address().port}/api/v1/sessions/${encodeURIComponent(figliaId)}/settings`

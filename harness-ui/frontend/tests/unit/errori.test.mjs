@@ -89,7 +89,7 @@ test('RIFIUTI: un REFUSED del kernel si legge in italiano, e il testo originale 
   assert.match(spiegaRifiutoAttrezzo('REFUSED. cartella is required and must be a non-empty absolute path.').detto, /Manca la cartella/);
   assert.match(spiegaRifiutoAttrezzo('REFUSED. cartella must be a string (an absolute path)').detto, /non era scritto come testo/);
   // un rifiuto che non conosciamo si dichiara tale, senza inventare un motivo
-  assert.equal(spiegaRifiutoAttrezzo('REFUSED. qualcosa di nuovo').detto, 'L’attrezzo ha rifiutato la richiesta.');
+  assert.equal(spiegaRifiutoAttrezzo('REFUSED. qualcosa di nuovo').detto, 'Lo strumento ha rifiutato la richiesta.');
   // AL CONTRARIO: un esito normale NON è un rifiuto, e non si tocca
   assert.equal(spiegaRifiutoAttrezzo('ok: 3 file letti').rifiutato, false);
   assert.equal(spiegaRifiutoAttrezzo('').rifiutato, false);
@@ -225,7 +225,7 @@ test('VESTIZIONE: la carta del contesto si distingue a colpo d’occhio da quell
   const guasto = vestizioneErrore(spiegaErrore('fetch failed', 'internal-error'));
   assert.deepEqual(guasto, { badge: 'Errore', titolo: 'TALOS · errore', tono: 'danger' });
   const fermato = vestizioneErrore(spiegaErrore('This operation was aborted', 'internal-error'));
-  assert.deepEqual(fermato, { badge: 'Fermato', titolo: 'TALOS · fermato', tono: 'accent' });
+  assert.deepEqual(fermato, { badge: 'Fermato', titolo: 'Hai fermato il giro', tono: 'accent' }); // decisione 191
   // AL CONTRARIO: senza spiegazione si torna alla forma dell'errore, mai a una carta muta
   assert.deepEqual(vestizioneErrore(null), { badge: 'Errore', titolo: 'TALOS · errore', tono: 'danger' });
 });
@@ -529,7 +529,7 @@ test('ERRORI-FORNITORE-ITALIANO, al contrario: una frase qualunque resta sconosc
  * 3.8). La frase la scrive `erroreRispostaVuota` (talosHarness.mjs); il rimedio «in più parti» solo col motivo noto.
  */
 test('ERRORI-VUOTA-DOPO-TENTATIVI: codice e frase del kernel, col motivo del fornitore e i rimedi veri', () => {
-  const s = spiegaErrore('Il modello ha risposto senza testo né attrezzi (4 volte di fila; motivo del fornitore: MALFORMED_FUNCTION_CALL).', 'PROVIDER_EMPTY_RESPONSE');
+  const s = spiegaErrore('Il modello ha risposto senza testo né strumenti (4 volte di fila; motivo del fornitore: MALFORMED_FUNCTION_CALL).', 'PROVIDER_EMPTY_RESPONSE');
   assert.equal(s.id, 'risposta-vuota-dopo-tentativi');
   assert.match(s.perche, /«MALFORMED_FUNCTION_CALL»/u);
   assert.match(s.perche, /file intero/u);
@@ -539,7 +539,7 @@ test('ERRORI-VUOTA-DOPO-TENTATIVI: codice e frase del kernel, col motivo del for
 });
 
 test('ERRORI-VUOTA-DOPO-TENTATIVI, al contrario: senza motivo non si inventa la causa, e la carta dei locali resta la sua', () => {
-  const s = spiegaErrore('Il modello ha risposto senza testo né attrezzi (una volta).', 'PROVIDER_EMPTY_RESPONSE');
+  const s = spiegaErrore('Il modello ha risposto senza testo né strumenti (una volta).', 'PROVIDER_EMPTY_RESPONSE');
   assert.equal(s.id, 'risposta-vuota-dopo-tentativi');
   assert.match(s.perche, /non ha detto il motivo/u);
   assert.equal(s.rimedi.some((r) => /in più parti/u.test(r)), false);

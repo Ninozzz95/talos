@@ -87,7 +87,8 @@ test('SCHEDE-01: nel velo Permessi i titoli di ogni riga partono dalla stessa al
   }
   const badgePermessi = await page.evaluate(() => [...document.querySelectorAll('#veloPermessi [data-permission-choice] .talos-badge')]
     .map((b) => Math.round(b.getBoundingClientRect().width) < Math.round(b.closest('.talos-choice').getBoundingClientRect().width) / 2));
-  expect(badgePermessi.length).toBe(4);
+  // 07/11/2026 (curatore, rossa del treno M): 9d2a482c4 (decisione 162, 04/11) — quattro pillole di rischio più «Consigliato», pillola a parte su «Scrive nel progetto»
+  expect(badgePermessi.length).toBe(5);
   expect(badgePermessi.every(Boolean), 'i badge di rischio non si allargano alla scheda').toBe(true);
   expect(fermate).toEqual([]);
 });

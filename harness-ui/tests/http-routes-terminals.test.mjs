@@ -19,7 +19,7 @@ async function listen(t, { token = null, senzaRegistro = false, cartellaStandalo
     statoPtyFn: () => null,
     cartellaStandalone,
   });
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     sessionRegistry: { cartellaDi: (id) => SESSIONI[id] ?? null },
     terminalRegistry,

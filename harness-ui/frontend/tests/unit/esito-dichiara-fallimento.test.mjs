@@ -37,14 +37,14 @@ const RIUSCITI = [
   ['notes_create', 'notes_create failed to be slow, all good'],
 ];
 
-test('ESITO-FAIL-01 — un esito «<attrezzo> failed…» è un fallimento (chat e figlia, stessa risposta)', () => {
+test('ESITO-FAIL-01 — un esito «<strumento> failed…» è un fallimento (chat e figlia, stessa risposta)', () => {
   for (const [nome, testo] of FALLITI) {
     assert.equal(esitoDichiaraFallimento(nome, testo), true, `${nome}: «${testo.slice(0, 60)}»`);
     assert.equal(esitoDaContenuto(nome, testo), 'error', `figlia, ${nome}: «${testo.slice(0, 60)}»`);
   }
 });
 
-test('ESITO-FAIL-02 — AL CONTRARIO: una ricevuta, un file che nomina un altro attrezzo, un «failed» senza contratto restano riusciti', () => {
+test('ESITO-FAIL-02 — AL CONTRARIO: una ricevuta, un file che nomina un altro strumento, un «failed» senza contratto restano riusciti', () => {
   for (const [nome, testo] of RIUSCITI) {
     assert.equal(esitoDichiaraFallimento(nome, testo), false, `${nome}: «${testo.slice(0, 60)}»`);
     assert.equal(esitoDaContenuto(nome, testo), 'success', `figlia, ${nome}: «${testo.slice(0, 60)}»`);

@@ -15,7 +15,7 @@ export default defineConfig({
   outputDir: join(output, 'test-results'),
   reporter: [['list'], ['json', { outputFile: join(output, 'playwright.json') }], ['./scripts/ripresa-reporter.mjs', { output }]],
   webServer: {
-    command: 'node server.mjs', cwd: fileURLToPath(new URL('..', import.meta.url)),
+    command: 'node server.mjs --senza-gettone=prove', cwd: fileURLToPath(new URL('..', import.meta.url)),
     url: `${baseURL}api/v1/health`, reuseExistingServer: false, timeout: 60_000,
     stdout: 'pipe', stderr: 'pipe',
     env: { ...process.env, TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: join(process.env.TALOS_RIPRESA_OUTPUT || tmpdir(), 'talos-scratch-di-prova') }, // 24/09/2026: custodia di prova e radice dei temporanei di prova, mai quelle vere

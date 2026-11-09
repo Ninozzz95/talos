@@ -184,12 +184,14 @@ export async function contestoDelProgetto({
   cartella, creaFiltro, permesso = null, modello = null, piattaforma = null,
   tettoIstruzioni = TETTO_BYTE_PREDEFINITO, tettoTokenMappa = TETTO_TOKEN_MAPPA_PREDEFINITO,
   statoVolatile = true,
+  /* Forma B del blocco CLI (02/11/2026): una cartella di cui la persona non si fida non scrive nel prompt. Spenta di serie. */
+  senzaIstruzioni = false,
   contatore, finestra, deps = {},
 } = {}) {
   if (typeof cartella !== 'string' || cartella.trim() === '') return null;
   const adesso = deps.adesso ?? (() => Date.now());
   const ora = adesso();
-  const chiave = chiaveDi(cartella, permesso, modello);
+  const chiave = chiaveDi(cartella, permesso, modello) + (senzaIstruzioni === true ? '|senza-istruzioni' : '');
 
   const voce = cache.get(chiave);
   if (voce && ora - voce.quando < VALIDITA_MS) {
@@ -202,18 +204,18 @@ export async function contestoDelProgetto({
     /* Scaduta per età: si serve quella di prima SUBITO e si rinnova dopo (vedi la nota in testa).
        `stantio` lo dice a chi legge il registro; il testo è byte-identico al precedente. */
     if (!voce.rinnovo) {
-      voce.rinnovo = costruisciPreambolo({ cartella, creaFiltro, permesso, modello, piattaforma, tettoIstruzioni, tettoTokenMappa, statoVolatile, contatore, finestra, deps, chiave, rinnovo: true })
+      voce.rinnovo = costruisciPreambolo({ cartella, creaFiltro, permesso, modello, piattaforma, tettoIstruzioni, tettoTokenMappa, statoVolatile, senzaIstruzioni, contatore, finestra, deps, chiave, rinnovo: true })
         .catch(() => null)
         .finally(() => { const attuale = cache.get(chiave); if (attuale) attuale.rinnovo = null; });
     }
     return { ...voce.esito, riusato: true, stantio: true };
   }
 
-  return costruisciPreambolo({ cartella, creaFiltro, permesso, modello, piattaforma, tettoIstruzioni, tettoTokenMappa, statoVolatile, contatore, finestra, deps, chiave });
+  return costruisciPreambolo({ cartella, creaFiltro, permesso, modello, piattaforma, tettoIstruzioni, tettoTokenMappa, statoVolatile, senzaIstruzioni, contatore, finestra, deps, chiave });
 }
 
 /** La costruzione vera, separata dalla lettura della cache perché il rinnovo in sottofondo la chiama da solo. */
-async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, piattaforma, tettoIstruzioni, tettoTokenMappa, statoVolatile, contatore, finestra, deps, chiave, rinnovo = false }) {
+async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, piattaforma, tettoIstruzioni, tettoTokenMappa, statoVolatile, senzaIstruzioni, contatore, finestra, deps, chiave, rinnovo = false }) {
   const adesso = deps.adesso ?? (() => Date.now());
   const ora = adesso();
   const filtro = await filtroGitignore(creaFiltro, cartella);
@@ -230,7 +232,7 @@ async function costruisciPreambolo({ cartella, creaFiltro, permesso, modello, pi
   const confineScheda = confineStabile('scheda');
   const [mappa, istruzioni, scheda, nomeProgetto] = await Promise.all([
     costruisciMappaCartelle({ radice: cartella, filtro, fs: deps.fs }).catch(() => null),
-    istruzioniDiProgetto({ cartella, tetto: tettoIstruzioni, fs: deps.fs }),
+    senzaIstruzioni === true ? null : istruzioniDiProgetto({ cartella, tetto: tettoIstruzioni, fs: deps.fs }),
     schedaDiLavoro({ cartella, permesso, modello, piattaforma, statoVolatile, fs: deps.fs, eseguiGit: deps.eseguiGit,
       confine: (righe) => { const r = confineScheda(righe); sospettiScheda = r.sospetti; return r.testo; } }).catch(() => null),
     trovaRadiceProgetto(cartella, { fs: deps.fs }).catch(() => null),

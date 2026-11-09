@@ -201,8 +201,12 @@ test('C-UNO-PER-GIRO-01 — due rifiuti nel giro, ognuno con un riassunto possib
     chiamateTool: 4,
     /* 28/10/2026 (note di sistema in mezzo, contratto con la CLI): il secondo scalino tiene le note del nucleo (confine dei dati e regola
        della lingua, ~200 token). Prima cadevano nel tratto tagliato e quella richiesta partiva SENZA la regola sui dati esterni: la
-       finestra al 75% contava su quel taglio. All'80% il secondo scalino ci sta con le note, e la prova misura ancora la stessa cosa. */
-    rifiuta: (n, corpo) => (n === 1 || n === 4 ? rifiutoConNumeri(corpo, Math.floor(stima(corpo.messages) * (n === 4 ? 0.8 : 0.75))) : null),
+       finestra al 75% contava su quel taglio. All'80% il secondo scalino ci sta con le note, e la prova misura ancora la stessa cosa.
+       05/11/2026 (cura per Luna 6, M1 e M2): ogni lettura accorciata porta la riga dell'avviso (~85 token) e la richiesta la nota in coda
+       (~80), che la linea certa ora conta. Su una finestra di ~1.800 token sono ~250 token: quando il riassunto pagato arriva prima della
+       chiamata 4, il pavimento senza riassunto è ~1.990 e all'80% (1.816) «non entra» (3 giri su 5). Al 90% il secondo scalino ci sta
+       in tutti e due i rami, e la prova misura ancora la stessa cosa. */
+    rifiuta: (n, corpo) => (n === 1 || n === 4 ? rifiutoConNumeri(corpo, Math.floor(stima(corpo.messages) * (n === 4 ? 0.9 : 0.75))) : null),
   });
   const cartella = cartellaDiProva('talos-c-uno-');
   t.after(() => rimuoviCartellaDiProva(cartella));
@@ -309,7 +313,9 @@ test('C-UNO-PER-GIRO-02 — al secondo rifiuto un riassunto sarebbe alla portata
   const fini = [];
   const esito = await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: messaggi,
     contestoDelProgetto: 'Project files:\n', fetchDiRete: rete.fetchDiRete, permessi: 'Full access',
-    onGiro: (e) => { if (e?.tipo === 'compattazione-fine' && e.compattato) fini.push({ ripiego: e.ripiego === true, ragione: e.ragione ?? null }); } });
+    /* 28/10/2026 (C-3, contratto C1/C5): la riga che porta `migliora` è la STESSA riga del rapido aggiornata dal riassunto pagato
+       arrivato in sottofondo, non una compattazione nuova (non si conta nemmeno in `compactions`): qui si contano le compattazioni */
+    onGiro: (e) => { if (e?.tipo === 'compattazione-fine' && e.compattato && !e.migliora) fini.push({ ripiego: e.ripiego === true, ragione: e.ragione ?? null }); } });
   assert.ok(esito, 'il giro finisce');
   assert.equal(fini.length, 2, `premessa: due compattazioni (${JSON.stringify(fini)})`);
   assert.equal(rete.conti.riassunti, 1, `UN riassunto pagato nel giro (${rete.conti.riassunti})`);
@@ -325,9 +331,12 @@ test('C-TETTO-01 — quattro rifiuti nello stesso giro: tre ritentativi, al quar
   const { join } = await import('node:path');
   writeFileSync(join(cartella, 'grande.txt'), 'una riga del file grande. '.repeat(300));
   const rifiutate = new Set([1, 4, 7, 10]);
+  /* 05/11/2026 (cura per Luna 6, M1 e M2): all'80% il ritentativo del secondo rifiuto, con la riga dell'avviso sulle letture accorciate e
+     la nota in coda che la linea certa ora conta, passava la linea (prima partiva SOPRA il massimo detto dal fornitore, e il fornitore
+     finto lo lasciava passare). Al 90% i tre ritentativi ci stanno, e la prova misura ancora il tetto dei ritentativi. */
   const rete = fornitore({
     chiamateTool: 20,
-    rifiuta: (n, corpo) => (rifiutate.has(n) ? rifiutoConNumeri(corpo, Math.max(1_024, Math.floor(stima(corpo.messages) * 0.8))) : null),
+    rifiuta: (n, corpo) => (rifiutate.has(n) ? rifiutoConNumeri(corpo, Math.max(1_024, Math.floor(stima(corpo.messages) * 0.9))) : null),
   });
   let errore = null;
   try {
@@ -349,15 +358,26 @@ test('C-REGOLA-N-02b — AL CONTRARIO anche con la finestra dichiarata: senza nu
   assert.notEqual(errore?.code, CODICE_RICHIESTA_TROPPO_GRANDE, `${errore?.code}: ${errore?.message}`);
 });
 
+/* ⛔ 28/10/2026 (C-3, contratto C1 «mai aspettare»): trasformata. Dopo il rifiuto il ritentativo parte SUBITO col riassunto senza modello
+   (ragione 'in-arrivo') e il riassunto PAGATO si prepara in sottofondo, giudicato sul bersaglio del rifiuto: arriva come riassunto pronto
+   e sostituisce il rapido alla richiesta dopo. Le stesse due proprietà si provano ora sul record pagato (quello che la richiesta dopo
+   porterà), non sul ritentativo: (1) il pagato resta, non lascia il posto a quello senza modello; (2) il blocco dei fatti che lo
+   porterebbe oltre il bersaglio si toglie. La taratura del bersaglio parte dal peso del record pagato, non del ritentativo (che oggi
+   porta il rapido, più leggero). Il peso «da richiesta» del record = la sua proiezione più gli effimeri in coda (il `system` finale). */
 test('C-BLOCCO-01 — il blocco dei fatti che porterebbe il ritentativo oltre il bersaglio si toglie; il riassunto pagato resta', async (t) => {
   const messaggi = [...storia(40), { role: 'user', content: 'Continua.' }];
   /* un riassunto riconoscibile e più grande di quello atteso: la decisione di pagare resta lontana dal bordo */
   const testoRiassunto = `## Riassunto\n${'SINTESI-PAGATA '.repeat(450)}`;
-  // 1. senza fatti dichiarati: quanto pesa il ritentativo col riassunto pagato
+  const effimeriDi = (corpo) => { const m = corpo.messages; let i = m.length; while (i > 0 && m[i - 1].role === 'system') i -= 1; return m.slice(i); };
+  const pagatoDi = async (esito) => (esito?.compattazionePronta ?? await esito?.compattazioneInPreparazione) ?? null;
+  // 1. senza fatti dichiarati: quanto pesa, come richiesta, il record col riassunto pagato
   const prova = fornitore({ riassunto: testoRiassunto, rifiuta: (n, corpo) => (n === 1 ? rifiutoConNumeri(corpo, Math.floor(stima(corpo.messages) * 0.8)) : null) });
-  await giro(t, { messaggiIniziali: messaggi, rete: prova });
+  const primo = await giro(t, { messaggiIniziali: messaggi, rete: prova });
+  const pagatoUno = await pagatoDi(primo.esito);
   assert.equal(prova.conti.riassunti, 1, 'premessa: il riassunto si paga');
-  const conRiassunto = stima(prova.conti.corpi[1].messages);
+  assert.ok(pagatoUno && JSON.stringify(pagatoUno.record.riassunto).includes('SINTESI-PAGATA'), 'premessa: arriva il record pagato');
+  const effimeri = effimeriDi(prova.conti.corpi[1]);
+  const conRiassunto = stima([...pagatoUno.record.riassunto, ...effimeri]);
   // 2. coi fatti al loro tetto (~1.000 token) e un bersaglio sopra il riassunto ma sotto riassunto + fatti
   const bersaglio = conRiassunto + 600;
   const rete = fornitore({ riassunto: testoRiassunto, rifiuta: (n, corpo) => (n === 1 ? rifiuto(`prompt is too long: ${stima(corpo.messages)} tokens > ${Math.ceil(bersaglio / 0.9)} maximum`) : null) });
@@ -365,11 +385,26 @@ test('C-BLOCCO-01 — il blocco dei fatti che porterebbe il ritentativo oltre il
   const { esito, errore } = await giro(t, { messaggiIniziali: messaggi, rete, fontiRicarica: { fatti } });
   assert.equal(errore, null, errore?.message);
   assert.ok(esito);
+  const pagato = await pagatoDi(esito);
   assert.equal(rete.conti.riassunti, 1, 'il riassunto si paga anche qui');
-  const ritentata = JSON.stringify(rete.conti.corpi[1].messages);
-  assert.ok(ritentata.includes('SINTESI-PAGATA'), 'il riassunto pagato resta (non lascia il posto a quello senza modello)');
-  assert.ok(!ritentata.includes('FATTO-DELLA-PROVA-'), 'il blocco dei fatti è stato tolto');
-  assert.ok(stima(rete.conti.corpi[1].messages) <= bersaglio + 1, `e il ritentativo sta nel bersaglio (${stima(rete.conti.corpi[1].messages)} contro ${bersaglio})`);
+  assert.ok(pagato, 'e arriva come riassunto pronto');
+  const record = JSON.stringify(pagato.record.riassunto);
+  assert.ok(record.includes('SINTESI-PAGATA'), 'il riassunto pagato resta (non lascia il posto a quello senza modello)');
+  assert.ok(!record.includes('FATTO-DELLA-PROVA-'), 'il blocco dei fatti è stato tolto');
+  const peso = stima([...pagato.record.riassunto, ...effimeriDi(rete.conti.corpi[1])]);
+  assert.ok(peso <= bersaglio + 1, `e la richiesta col record pagato sta nel bersaglio (${peso} contro ${bersaglio})`);
+});
+
+test('PASSI-15b — dentro il giro le voci aperte dei Passi tornano nel blocco dei fatti del riassunto', async (t) => {
+  const messaggi = [...storia(40), { role: 'user', content: 'Continua.' }];
+  const passiIniziali = { revisione: 1, voci: [{ testo: 'VOCE-APERTA-DELLA-PROVA', stato: 'in_progress', iniziatoAl: 1 }, { testo: 'VOCE-FINITA-DELLA-PROVA', stato: 'completed', iniziatoAl: 1, finitoAl: 2 }] };
+  const rete = fornitore({ riassunto: `## Riassunto\n${'SINTESI-PAGATA '.repeat(450)}`, rifiuta: (n, corpo) => (n === 1 ? rifiutoConNumeri(corpo, Math.floor(stima(corpo.messages) * 0.8)) : null) });
+  const { esito, errore } = await giro(t, { messaggiIniziali: messaggi, rete, passiIniziali });
+  assert.equal(errore, null, errore?.message);
+  const pagato = esito?.compattazionePronta ?? await esito?.compattazioneInPreparazione;
+  const record = JSON.stringify(pagato?.record?.riassunto ?? null);
+  assert.ok(record.includes('VOCE-APERTA-DELLA-PROVA'), 'la voce aperta torna');
+  assert.ok(!record.includes('VOCE-FINITA-DELLA-PROVA'), 'quella finita no');
 });
 
 test('C-K-01 — sul rifiuto anche le richieste vecchie si accorciano sul bersaglio (non solo sul tetto di 20.000): bastano, e niente si paga', async (t) => {

@@ -38,7 +38,7 @@ async function listen(t, { sessioni = [SESSIONE] } = {}) {
       return { ok: true, eliminata: { id } };
     },
   };
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     listaTaskDisponibili: () => [],
     elencaCartelleProgetto: () => [],

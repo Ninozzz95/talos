@@ -40,8 +40,8 @@ const CASI = [
   ['zai:glm-5.3-flash', 'glm-5.3-flash', 'zai', 'diretto, nome con un punto'],
   ['anthropic:claude-sonnet-5', 'claude-sonnet-5', 'anthropic', 'diretto (monogramma: nessun marchio verificabile)'],
   ['openai:gpt-5.5-mini', 'gpt-5.5-mini', 'openai', 'diretto (monogramma)'],
-  ['google/gemini-3.8-flash', 'gemini-3.8-flash', 'openrouter', 'OpenRouter, la strada di serie'],
-  ['z-ai/glm-5.3-flash', 'glm-5.3-flash', 'openrouter', 'OpenRouter con la grafia di un diretto'],
+  ['google/gemini-3.8-flash', 'Gemini 3.8 Flash', 'openrouter', 'OpenRouter, la strada di serie'], // 68ebab480 (revisione d'uso 04/11, reperto 11): un id del catalogo prende il suo nome
+  ['z-ai/glm-5.3-flash', 'GLM 5.3 Flash', 'openrouter', 'OpenRouter con la grafia di un diretto'], // 68ebab480 (revisione d'uso 04/11, reperto 11)
   ['meta-llama/llama-4:free', 'llama-4:free', 'openrouter', 'OpenRouter coi due punti DOPO la barra: non è un prefisso'],
   ['openrouter:z-ai/glm-5.3-flash', 'glm-5.3-flash', 'openrouter', 'OpenRouter col suo prefisso esplicito (config.mjs:189)'],
   ['chatgpt:gpt-5.5', 'gpt-5.5', 'chatgpt', 'piano ChatGPT: la sua pastiglia resta accanto'],

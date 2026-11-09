@@ -17,7 +17,53 @@ import { ESCLUSI_DI_SERIE, modelloBase, vociDiSerie } from './esclusi-di-serie.m
 import { ESCLUSI_MASSIMI } from './provider-credential-store.mjs';
 import { finestraDaAprire } from './finestra-che-cresce.mjs';
 
-export const ATTREZZI_FORNITORI_OSPITE = Object.freeze(['provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', 'local_model_window']);
+export const ATTREZZI_FORNITORI_OSPITE = Object.freeze(['provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', 'local_model_window', 'local_model']);
+
+/*
+ * 01/11/2026 — `local_model` (owner: «Modelli dalla chat: Sì, con la carta di conferma»; forma `FORMA-MODELLI-DALLA-CHAT-2026-11-01.md`
+ * con le condizioni di Desktop, Mobile, CLI e Frontend). `modelliLocali` è dell'ospite del PC:
+ *   { elenca(): Promise<[{ id, nome, bytes, entra: true|false|null }]>, aperto(): { id, nome } | null, inUso(id): string[] (le
+ *     conversazioni che lo stanno usando adesso), apri(id): Promise<{ ok, motivo? }>, chiudi(): Promise<{ ok, motivo? }>,
+ *     memoriaAperta(): { bytes, stima } | null }
+ * Niente «switch»: il modello della conversazione si cambia solo con `app_settings` (Desktop e Mobile, fase 8, una via sola).
+ * Senza (la CLI, il telefono finché non ha il suo) l'attrezzo dice che non c'è. `model` è SOLO un id di `status` (Mobile, 1).
+ */
+export function creaLocalModel(modelliLocali) {
+  const nonCe = 'local models are not available on this computer.';
+  return async function localModel(argomenti, fase, { perchéNo = null } = {}) {
+    if (!modelliLocali) return rifiuto(nonCe);
+    const azione = typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : '';
+    if (!['status', 'open', 'free'].includes(azione)) return rifiuto('local_model needs action "status", "open" or "free". To change the model of this conversation use app_settings.');
+    const elenco = await modelliLocali.elenca();
+    const aperto = modelliLocali.aperto();
+    if (azione === 'status') {
+      if (fase === 'anteprima') return { ok: true, carta: false };
+      if (!elenco.length) return { ok: true, testo: 'No local model is downloaded on this computer. The person downloads them from the Model Lab.' };
+      const entra = (e) => (e === true ? 'fits in memory' : e === false ? 'does not fit in memory' : 'fit unknown');
+      const righe = elenco.map((m) => `- id "${m.id}": ${m.nome}, ${(Number(m.bytes) / 1e9).toFixed(1)} GB, ${entra(m.entra)}${aperto?.id === m.id ? ', OPEN now' : ''}`);
+      return { ok: true, testo: `${aperto ? `Open now: ${aperto.nome}.` : 'No local model is open now.'}\n${righe.join('\n')}` };
+    }
+    if (perchéNo) return rifiuto(`${perchéNo} cannot ${azione} a local model: nobody could approve it.`);
+    if (azione === 'free') {
+      if (!aperto) return fase === 'anteprima' ? { ok: true, carta: false } : { ok: true, testo: 'Nothing to close: no local model is open.' };
+      const inUso = modelliLocali.inUso(aperto.id);
+      if (inUso.length) return { ok: false, messaggio: `${aperto.nome} is still answering in another conversation, so it is not closed.`, codice: 'LOCAL_MODEL_IN_USE', modello: aperto.nome };
+      const memoria = modelliLocali.memoriaAperta();
+      if (fase === 'anteprima') return { ok: true, carta: true, azione: { azione: 'free', modello: aperto.nome, memoria: memoria?.bytes ?? null, stima: memoria?.stima === true, dove: 'pc' } };
+      const esito = await modelliLocali.chiudi();
+      return esito?.ok ? { ok: true, testo: `Done. ${aperto.nome} was closed and its memory freed.` } : rifiuto(`${aperto.nome} was not closed: ${esito?.motivo ?? 'the engine did not answer'}.`);
+    }
+    const id = typeof argomenti?.model === 'string' ? argomenti.model : '';
+    const scelto = elenco.find((m) => m.id === id);
+    if (!scelto) return rifiuto(`"${id}" is not an id returned by local_model status: call status and pass one of its ids.`);
+    /* open: apre il modello, non cambia il modello della conversazione (quello è di `app_settings`, una via sola: Desktop e Mobile, fase 8) */
+    if (aperto?.id === scelto.id) return fase === 'anteprima' ? { ok: true, carta: false } : { ok: true, testo: `Nothing to do: ${scelto.nome} is already open.` };
+    if (scelto.entra === false) return rifiuto(`${scelto.nome} does not fit in the memory of this computer, so it is not opened.`);
+    if (fase === 'anteprima') return { ok: true, carta: true, azione: { azione: 'open', modello: scelto.nome, peso: scelto.bytes ?? null, aperto: aperto?.nome ?? null, dove: 'pc' } };
+    const esito = await modelliLocali.apri(scelto.id);
+    return esito?.ok ? { ok: true, testo: `Done. ${scelto.nome} is open.` } : rifiuto(`${scelto.nome} was not opened: ${esito?.motivo ?? 'the engine did not answer'}.`);
+  };
+}
 const FORMA_SLUG = /^[a-z0-9][a-z0-9._-]{0,47}(?:\/[a-z0-9][a-z0-9._-]{0,47})?$/u;
 const rifiuto = (messaggio) => ({ ok: false, messaggio });
 
@@ -25,7 +71,8 @@ const rifiuto = (messaggio) => ({ ok: false, messaggio });
  * @param {{ providerStore, slugDelFornitoreFn?: ({fornitore, modello}) => Promise<string> }} servizi
  * @returns la fabbrica di `onFornitoriFn` per una sessione: `({ automazioneDelGiro })`.
  */
-export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, accessoChatgpt = null, finestraLocale = null }) {
+export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, accessoChatgpt = null, finestraLocale = null, modelliLocali = null }) {
+  const localModel = creaLocalModel(modelliLocali);
   /*
    * L1 1.3 (owner 26/10/2026) — `local_model_window`: la seconda porta della finestra che cresce. «status» libero; «enlarge» con la
    *   carta (prima → dopo, memoria): la stessa misura di `finestra-che-cresce.mjs` (`finestraDaAprire`), quindi la carta dice la
@@ -160,6 +207,7 @@ export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, 
     return async function onFornitoriFn(nome, argomenti = {}, { fase = 'esegui' } = {}) {
       try {
         if (nome === 'provider_exclusions_list') return fase === 'anteprima' ? { ok: true, carta: false } : lista();
+        if (nome === 'local_model') return await localModel(argomenti ?? {}, fase, { perchéNo }); // 01/11/2026
         if (nome === 'local_model_window') {
           if (perchéNo && String(argomenti?.action ?? '').trim().toLowerCase() === 'enlarge') return rifiuto(`${perchéNo} cannot enlarge the local model window: nobody could approve it.`);
           return finestra(argomenti ?? {}, fase);
@@ -167,7 +215,25 @@ export function creaOspiteFornitori({ providerStore, slugDelFornitoreFn = null, 
         if (nome === 'chatgpt_account') {
           const azione = typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : '';
           if (azione === 'status') return fase === 'anteprima' ? { ok: true, carta: false } : statoChatgpt();
-          if (azione !== 'disconnect') return rifiuto('chatgpt_account needs action "status" or "disconnect".');
+          /* Decisione 116 C, §8 (owner 04/11/2026): `sign_in` mette nella conversazione la scheda «Accedi e riprendi», dietro la carta. Il modello
+             non apre mai il browser: il clic è della persona, sulla scheda.
+             D1 di R116 (forma §8): collegato, piano abilitato e non rifiutato dopo il rinnovo ⇒ niente carta e «Nothing to do» (l'anteprima
+             che è già l'esito, `{ ok, carta:false, testo }`). Un secondo 401 dopo il rinnovo non toglie la custodia: la custodia lo SEGNA
+             (`rifiutatoDopoRinnovo`), e allora la carta torna. Un ospite senza quel segno (il telefono, che dimentica il token rifiutato)
+             vale come «mai rifiutato».
+             Segnale ai clienti (Desktop 15:31, OK di Mobile, CLI e Performance): la risposta «esegui» porta `schedaChatgpt: true` — la
+             scheda l'ha messa QUESTO ospite; il nucleo lo passa sul ToolCallResult. Mai nell'anteprima, mai con «Nothing to do». */
+          if (azione === 'sign_in') {
+            if (perchéNo) return rifiuto(`${perchéNo} cannot sign in to ChatGPT: nobody could sign in.`);
+            if (!accessoChatgpt) return rifiuto('a ChatGPT account cannot be connected on this computer: the system keyring is not available.');
+            const s = accessoChatgpt.stato();
+            if (s.collegato && s.pianoAbilitato && accessoChatgpt.rifiutatoDopoRinnovo?.() !== true) {
+              return { ok: true, carta: false, testo: 'Nothing to do: the ChatGPT sign-in is valid and plan use is enabled. No card was put in the conversation.' };
+            }
+            if (fase === 'anteprima') return { ok: true, carta: true, azione: { fornitore: 'chatgpt', azione: 'sign_in', email: s.email ?? null } };
+            return { ok: true, testo: 'The ChatGPT sign-in card is now in the conversation. The person signs in from it with "Sign in and resume", and the turn picks up after the sign-in. Do not ask again.', schedaChatgpt: true };
+          }
+          if (azione !== 'disconnect') return rifiuto('chatgpt_account needs action "status", "disconnect" or "sign_in".');
           if (perchéNo) return rifiuto(`${perchéNo} cannot disconnect ChatGPT: nobody could approve it.`);
           if (!accessoChatgpt || !accessoChatgpt.stato().collegato) return fase === 'anteprima' ? { ok: true, carta: false } : { ok: true, testo: 'Nothing to do: no ChatGPT account is connected.' };
           if (fase === 'anteprima') return { ok: true, carta: true, azione: { fornitore: 'chatgpt', email: accessoChatgpt.stato().email ?? null } };

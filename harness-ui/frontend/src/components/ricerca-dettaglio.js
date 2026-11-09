@@ -1553,13 +1553,13 @@ export function vociMenuRicerca(voce, ctx = {}) {
    */
   const scrivibili = [];
   if (typeof ctx.onPausa === 'function' && puoMettereInPausa(voce)) {
-    scrivibili.push({ chiave: 'pausa', etichetta: traduci('sezioni.research.menu.pause'), icona: 'i-stop', aziona: () => ctx.onPausa(voce) });
+    scrivibili.push({ chiave: 'pausa', etichetta: traduci('sezioni.research.menu.pause'), icona: 'i-pausa', aziona: () => ctx.onPausa(voce) });
   }
   if (typeof ctx.onRiprendi === 'function' && puoRiprendere(voce)) {
     scrivibili.push({ chiave: 'ripresa', etichetta: traduci('sezioni.research.menu.resume'), icona: 'i-play', aziona: () => ctx.onRiprendi(voce) });
   }
   if (typeof ctx.onRiverifica === 'function' && puoRicontrollareLeFonti(voce)) {
-    scrivibili.push({ chiave: 'riverifica', etichetta: traduci('sezioni.research.menu.recheck'), icona: 'i-history', aziona: () => ctx.onRiverifica(voce) });
+    scrivibili.push({ chiave: 'riverifica', etichetta: traduci('sezioni.research.menu.recheck'), icona: 'i-refresh', aziona: () => ctx.onRiverifica(voce) });
   }
   if (scrivibili.length) {
     scrivibili[0].separaPrima = true;

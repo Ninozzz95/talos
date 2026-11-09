@@ -58,3 +58,36 @@ test('BOLLA-FE-05 the queue banner shows the person\'s sentence, never the files
   const senza = descriviCoda({ voci: [{ id: 'b', testo: 'solo testo', immagini: 0 }] });
   assert.match(senza.testo, /solo testo/u);
 });
+
+/*
+ * FE-065 (owner 02/11/2026, «refactor bolla allegati e immagini»): con un solo FILE e nessun testo la bolla restava, vuota
+ *   (una striscia color sabbia sul 4174, chat ciao-3): si nascondeva solo per le immagini. Regola unica per tutti gli allegati.
+ */
+test('FE-065: solo allegati, nessuna bolla; la frase «descrivi l’immagine» vale solo con un’immagine', async () => {
+  const { bollaSoloAllegati } = await import('../../src/components/bolla-della-persona.js');
+  const frasi = new Set([TESTI.it['app.attachments.promptDescribeImage'], TESTI.en['app.attachments.promptDescribeImage']]);
+  const file = { tipo: 'file', nome: 'nota-di-prova.txt' };
+  const immagine = { tipo: 'immagine', nome: 'punto.png', url: '/x.png' };
+  assert.equal(bollaSoloAllegati('', [file], frasi), true, 'un solo file: niente bolla vuota');
+  assert.equal(bollaSoloAllegati('   ', [file, file], frasi), true);
+  assert.equal(bollaSoloAllegati('', [immagine], frasi), true);
+  assert.equal(bollaSoloAllegati(TESTI.it['app.attachments.promptDescribeImage'], [immagine], frasi), true);
+  assert.equal(bollaSoloAllegati(TESTI.it['app.attachments.promptDescribeImage'], [file], frasi), false, 'senza immagine la frase è testo vero');
+  assert.equal(bollaSoloAllegati('Riassumi questa nota', [file], frasi), false);
+  assert.equal(bollaSoloAllegati('', [], frasi), false, 'senza allegati la bolla resta quella di sempre');
+  assert.equal(bollaSoloAllegati('', null), false);
+});
+
+test('FE-065: la bolla porta il peso misurato del file, per la riga «tipo · peso · token» della scheda', () => {
+  const [uno] = allegatiPerBolla([{ tipo: 'file', nome: 'relazione.pdf', byte: 1_258_291 }]);
+  assert.equal(uno.byte, 1_258_291);
+  const [senza] = allegatiPerBolla([{ tipo: 'file', nome: 'a.txt', byte: -3 }, { tipo: 'file', nome: 'b.txt', byte: 1.5 }, { tipo: 'file', nome: 'c.txt', byte: '9' }].slice(0, 1));
+  assert.equal('byte' in senza, false, 'un peso non valido non viaggia');
+  assert.equal('byte' in allegatiPerBolla([{ tipo: 'file', nome: 'c.txt', byte: '9' }])[0], false, 'nemmeno come testo');
+});
+
+test('BOLLA-ALLEGATO-ID (decisioni 43 e 47): il riferimento opaco viaggia nella bolla: da lì nasce il legame con la chat', () => {
+  const id = 'a'.repeat(24);
+  assert.deepEqual(allegatiPerBolla([{ tipo: 'file', nome: 'x', percorso: `attachments/${id}/x`, allegatoId: id }])[0].allegatoId, id);
+  assert.equal(allegatiPerBolla([{ tipo: 'file', nome: 'x', percorso: 'allegati/x' }])[0].allegatoId, undefined);
+});

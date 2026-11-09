@@ -1,0 +1,1 @@
+root = Diagramma("d", null, [{id: "a", testo: "A"}], [{da: "a", a: "b"}])

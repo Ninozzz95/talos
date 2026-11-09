@@ -1,6 +1,7 @@
 import { ContextEngineError, ContextEventV1, ContextJobV1, ContextVersionV1, TokenMeasurementV1, parseContextRecord, parseContextSettings } from './contracts.mjs';
 import { computeContextBudget, planCompaction, selectClosedPrefix } from './compaction-planner.mjs';
-import { clearOldToolOutputs, shortenRecentLargeOutputs, DEFAULT_CLEARED_POINTER } from './tool-output-clearing.mjs';
+import { validateContextProfile } from './profiles.mjs';
+import { clearOldToolOutputs, clearTailThrough, shortenRecentLargeOutputs, tailClearingBoundary, DEFAULT_CLEARED_POINTER } from './tool-output-clearing.mjs';
 /** Review Y2 (10/10): la quota dura del giro in sospeso, come Hermes `TAIL_MAX_CONTEXT_FRACTION = 0.20` (`context_compressor.py:949`). */
 const PENDING_ROUND_WINDOW_SHARE = 0.20;
 import { buildSummaryRequest, validateSummary, composeActiveContext, personRequestBudget, personRequestsKept } from './summary.mjs';
@@ -39,15 +40,31 @@ const piuRecente = (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt) |
  * pieno — 2-4 volte su 6 (`r5a-coord-ce-compaction`). Una corsa interna del motore (revisione o modello cambiati a metà, un
  * annullamento, niente da compattare) non costa un riassunto sbagliato, e ritentare subito è ciò che deve succedere.
  * `CTX_COMPACTION_FAILED` è l'errore NON del motore (rete, 5xx, tempo scaduto del fornitore): conta, come in Hermes.
+ * D5 (revisione di fine fase, 01/11/2026): contano anche i tre codici di una risposta ARRIVATA e inservibile (illeggibile, con attrezzi, rifiutata dal modello):
+ * è pagata, e prima se ne pagava una a ogni passo del giro (6 su 6 passi misurati), lo stesso ticket del 25/09 sulla porta vera. `CTX_SUMMARY_HTTP` resta fuori
+ * (Performance, 01/11): un 4xx o 5xx non è una risposta pagata, e la catena del riassunto ricorda già il blocco.
  */
+/* Contratto «niente da compattare» (31/10/2026): il guadagno minimo di un riassunto CHIESTO (regola owner 02/10, «Almeno il 30%»).
+   `createContextEngine({ guadagnoMinimoChiesto })` lo cambia SOLO per le prove che usano conversazioni minuscole per provare altro:
+   il desktop e la CLI non lo passano, quindi la regola resta una sola. */
+export const GUADAGNO_MINIMO_CHIESTO = 0.30;
+/* Un byte del blocco firmato, in byte di testo: 3,5 byte di testo a token contro 12 del cifrato, misurato sul piano il 31/10/2026 (`strumenti/misura-peso-cifrato.mjs`). */
+export const PESO_DEL_BLOCCO_FIRMATO = 3.5 / 12;
 const FALLIMENTI_DEL_RIASSUNTO = new Set(['CTX_INVALID_SUMMARY', 'CTX_EMPTY_SUMMARY', 'CTX_TRUNCATED_SUMMARY', 'CTX_INVALID_SOURCE',
-  'CTX_NO_REDUCTION', 'CTX_SEGMENT_TOO_LARGE', 'CTX_CONTEXT_TOO_SMALL', 'CTX_COMPACTION_FAILED']);
+  'CTX_NO_REDUCTION', 'CTX_SEGMENT_TOO_LARGE', 'CTX_CONTEXT_TOO_SMALL', 'CTX_COMPACTION_FAILED',
+  'CTX_SUMMARY_RESPONSE_INVALID', 'CTX_SUMMARY_TOOLS', 'CTX_SUMMARY_REFUSED']);
 export function raffreddamentoCompattazione(jobs, adesso) {
   let ultimo = null; let tentativi = 0;
   for (const job of [...jobs].sort(piuRecente)) {
     if (job.state === 'committed') break;
     // annullati, in pausa e le corse interne del motore non pagano un rifiuto: non aprono e non chiudono la pausa
     if (job.state !== 'failed' || !FALLIMENTI_DEL_RIASSUNTO.has(job.error?.code)) continue;
+    /* Contratto «niente da compattare» (31/10/2026, OK di Performance, Mobile e CLI): una compattazione CHIESTA dalla persona (/compact,
+       «Compatta ora», «Rigenera»: chiave scelta da chi chiama — le chiavi `auto-` sono riservate al motore) che ha passato il controllo
+       prima di pagare ma non ha liberato spazio non è un motivo per ritentare da sola: niente pausa e niente nuovo tentativo, la persona
+       decide. I lavori automatici restano come prima. (Hermes tratta il «niente da comprimere» come esito, non come fallimento:
+       `agent/conversation_compression_manual.py:107-109`, clone 22/10.) */
+    if (job.error?.code === 'CTX_NO_REDUCTION' && typeof job.idempotencyKey === 'string' && !job.idempotencyKey.startsWith('auto-')) continue;
     ultimo ??= job;
     if (job.error?.code === ultimo.error?.code) tentativi++;
   }
@@ -111,10 +128,25 @@ function ricitaSugliOriginali(summary, records) {
  */
 export const IN_TURN_SUMMARY_CEILING_MS = 600_000;
 
-export function createContextEngine({ store, model, tokenCounter, retrieval, embedding, toolCatalog, assets, usagePolicy, recoveryHint = null, anchorIndex = null, isPersonRequest = null, clearedToolPointer = DEFAULT_CLEARED_POINTER, clock = () => new Date().toISOString(), idFactory = () => crypto.randomUUID(), inTurnSummaryCeilingMs = IN_TURN_SUMMARY_CEILING_MS }) {
+export function createContextEngine({ store, model, tokenCounter, retrieval, embedding, toolCatalog, assets, usagePolicy, recoveryHint = null, anchorIndex = null, isPersonRequest = null, pesoDelBloccoFirmato = PESO_DEL_BLOCCO_FIRMATO, clearedToolPointer = DEFAULT_CLEARED_POINTER, clock = () => new Date().toISOString(), idFactory = () => crypto.randomUUID(), inTurnSummaryCeilingMs = IN_TURN_SUMMARY_CEILING_MS, guadagnoMinimoChiesto = GUADAGNO_MINIMO_CHIESTO }) {
   if (!store || !model?.resolveModel || !model?.summarize || !tokenCounter?.countPreparedContext) fail('CTX_PORT_MISSING', 'Archivio, modello e contatore sono necessari.');
   const running = new Map();
   const key = (sessionId, jobId) => JSON.stringify([sessionId, jobId]);
+  /* Spesa di servizio, parte 2 B (30/10/2026; CLI, Mobile, Performance): chi ASPETTA un lavoro, per lavoro — attese in corso e attese
+     totali. Una chiamata del riassunto è «in primo piano» se qualcuno lo aspettava quando è partita, se un'attesa è cominciata mentre
+     andava, o se ce n'è una alla fine (CLI: col solo contatore il /compact, che aspetta fin dall'inizio, risulterebbe in sottofondo).
+     Solo in memoria: è un'etichetta della riga di spesa, non uno stato del lavoro. */
+  const attese = new Map();
+  const iniziaAttesa = (sessionId, jobId) => {
+    const k = key(sessionId, jobId);
+    const a = attese.get(k) ?? { inCorso: 0, totale: 0 };
+    a.inCorso += 1; a.totale += 1; attese.set(k, a);
+    let chiusa = false;
+    /* la voce si toglie solo a lavoro FINITO (nessuna chiamata può più guardarla): toglierla prima perderebbe un'attesa cominciata e
+       finita tutta dentro una chiamata. E la mappa non cresce coi lavori finiti, che `running` invece tiene. */
+    return () => { if (chiusa) return; chiusa = true; a.inCorso -= 1; if (a.inCorso === 0 && running.get(k)?.finito === true && attese.get(k) === a) attese.delete(k); };
+  };
+  const letturaAttese = (sessionId, jobId) => () => { const a = attese.get(key(sessionId, jobId)); return { inCorso: a?.inCorso ?? 0, totale: a?.totale ?? 0 }; };
   const state = async sessionId => {
     const snapshot = await store.readContextSnapshot({ sessionId });
     if (!snapshot) fail('CTX_SESSION_NOT_FOUND', 'Conversazione non presente nell’archivio del contesto.');
@@ -137,6 +169,51 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
     return measurement;
   };
   const budgetFor = (measurement, settings) => computeContextBudget({ ...measurement, settings });
+  /*
+   * Contratto «niente da compattare» (31/10/2026, OK di Performance, Mobile e CLI; reperto dal vivo: un /compact su ~16,6k token
+   *   ha pagato 11.514 + 1.167 token per finire CTX_NO_REDUCTION). Prima di pagare un riassunto CHIESTO, si misura la richiesta
+   *   con un riassunto VUOTO al posto della parte da compattare: è il massimo che un riassunto può liberare. Se nemmeno così si
+   *   guadagna almeno il 30%, non c'è niente da compattare e il modello non si chiama.
+   * ⛔ Metodo e soglia sono quelli della Chat del telefono, che sono già una regola dell'owner per lo stesso gesto (02/10, «Almeno
+   *   il 30%», `chatCompattazione.ts:103-106`, `GUADAGNO_MINIMO`): una regola sola per «/compact» e «Compatta ora».
+   * ⛔ Performance: la misura è LOCALE (la stessa stima a byte che `prepareForRequest` usa già, byte / 3,5), una sola al clic, nessuna richiesta prima
+   *   dell'esito — il contatore del modello locale interroga llama.cpp, e qui non serve un numero esatto: si confrontano due conteggi
+   *   fatti nello stesso modo. Hermes controlla solo che un pezzo di mezzo esista (`context_compressor.py:5104-5108`); qui si
+   *   guarda anche quanto renderebbe. Codex chiama sempre il modello (`compact.rs:264`).
+   */
+  const RIASSUNTO_VUOTO = Object.freeze({ schema: 'talos.context.summary.v1', text: '.', goal: '.', decisions: [], constraints: [], completed: [], pending: [], resources: [], sources: [] });
+  function guadagnaAbbastanza(snapshot, records, coveredThrough, sessionModel, tools) {
+    const peso = valore => new TextEncoder().encode(JSON.stringify(valore)).length;
+    const attrezzi = peso(tools ?? []);
+    const intera = peso(compiled(snapshot, records, { targetModel: sessionModel })) + attrezzi;
+    const conVuoto = peso(compiled(snapshot, records, { summary: RIASSUNTO_VUOTO, coveredThrough, tailClearedThrough: 0, targetModel: sessionModel })) + attrezzi;
+    return intera > 0 && (intera - conVuoto) / intera >= guadagnoMinimoChiesto;
+  }
+  /*
+   * B4 (cura della compattazione per Luna 6, 05/11/2026; OK di CLI, Performance e Mobile, `FORMA-CURA-COMPATTAZIONE-LUNA-2026-11-05.md` §8):
+   *   un lavoro AUTOMATICO parte solo se il guadagno stimato, tolto il costo minimo di un riassunto, è > 0. Reperto del banco del 04/11:
+   *   in cinque sessioni un lavoro a metà del primo giro copriva solo i messaggi di sistema, la richiesta e l'elenco dei file
+   *   (`covered=6`), pagava una chiamata, finiva CTX_NO_REDUCTION e apriva 60 secondi di pausa. Stessa misura LOCALE di
+   *   `guadagnaAbbastanza` (byte, nessuna chiamata, prima di pagare: condizione del Mobile), con un riassunto MINIMO al posto di quello
+   *   vuoto. Il minimo è MISURATO: sui 117 riassunti veri del banco del 04/11 (Luna 6 e gli altri) il testo più corto è di 178 caratteri
+   *   e le fonti chieste sono almeno 2; le citazioni sono di almeno 20 caratteri (la richiesta, `summary.mjs`). Qui: testo di 150,
+   *   2 fonti da 20 — sotto ogni riassunto visto, quindi la stima sbaglia verso «parte». Sul lavoro A9 (`covered=6`) il riassunto
+   *   vuoto avrebbe liberato 147 byte su 31.469, meno di qualsiasi riassunto vero (il suo, scritto e scartato, pesava 1.170 byte).
+   *   Soglia «> 0» e non il 30% dei lavori chiesti: un riassunto utile in sottofondo non si toglie (Performance, CLI e Mobile, 05/11).
+   *   Hermes salta prima del modello un passo «strutturalmente vuoto» senza contarlo come guasto (`agent/context_compressor.py:5192-5197`,
+   *   clone 01/11, `_structural_no_op_result`); il pacchetto `hermes-jev-compact` (PyPI, 2026) ripiega se il risultato non scende del 25%.
+   */
+  const TESTO_MINIMO = 'x'.repeat(150);
+  const FONTE_MINIMA = 'x'.repeat(20);
+  function guadagnaQualcosa(snapshot, records, coveredThrough, sessionModel) {
+    const peso = valore => new TextEncoder().encode(JSON.stringify(valore)).length;
+    const fonte = records.find(r => r.sequence <= coveredThrough && !['system', 'developer'].includes(r.message.role))?.id ?? 'record';
+    const citazione = { recordId: fonte, quote: FONTE_MINIMA, start: 0, end: FONTE_MINIMA.length };
+    const minimo = { ...RIASSUNTO_VUOTO, text: TESTO_MINIMO, sources: [citazione, citazione] };
+    const intera = peso(compiled(snapshot, records, { targetModel: sessionModel }));
+    const conMinimo = peso(compiled(snapshot, records, { summary: minimo, coveredThrough, targetModel: sessionModel }));
+    return intera - conMinimo > 0;
+  }
   /* C1 (09/10/2026, banco A/B + Hermes «anchor index»): l'indice meccanico della parte riassunta — percorsi, impronte, errori —
      calcolato dalla funzione di chi crea il motore sui messaggi COPERTI; il prefisso coperto è immutabile, quindi si ricorda per
      (sessione, punto coperto, numero dei messaggi). Un errore dell'indice non ferma mai la richiesta: niente indice. */
@@ -145,6 +222,12 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
      sono (il desktop esclude le buste dei sotto-agenti, dei Workflow e del dialogo fra agenti). Un predicato che lancia vale
      «non della persona»: nel registro entra solo ciò che è certamente suo. */
   const personRequest = message => { if (typeof isPersonRequest !== 'function') return true; try { return isPersonRequest(message) === true; } catch { return false; } };
+  /* Dove comincia la richiesta in corso (revisione del blocco 14, 31/10/2026): un messaggio della persona dopo un turno chiuso. Una nota del kernel non lo è, e nemmeno un messaggio
+     in coda arrivato fra un attrezzo e l'altro: le uscite prima di lui servono ancora. Senza nessuno, dopo un riassunto dentro il giro, la richiesta è tutta la coda. */
+  const inizioDellaRichiesta = coda => {
+    for (let i = coda.length - 1; i > 0; i--) if (coda[i].role === 'user' && personRequest(coda[i]) && coda[i - 1].role !== 'tool') return i;
+    return 0;
+  };
   const anchorsFor = (snapshot, records, coveredThrough) => {
     if (typeof anchorIndex !== 'function' || !coveredThrough) return null;
     const covered = records.filter(r => r.sequence <= coveredThrough && !['system', 'developer'].includes(r.message.role)).map(r => r.message);
@@ -157,7 +240,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
     }
     return anchorsMemo.get(key);
   };
-  function compiled(snapshot, records, { summary = snapshot.activeVersion?.summary, coveredThrough = snapshot.activeVersion?.coveredThrough ?? 0, evidence = [], targetModel, clear = null, retained = null } = {}) {
+  function compiled(snapshot, records, { summary = snapshot.activeVersion?.summary, coveredThrough = snapshot.activeVersion?.coveredThrough ?? 0, tailClearedThrough = snapshot.activeVersion?.tailClearedThrough ?? 0, evidence = [], targetModel, clear = null, conta = null, retained = null } = {}) {
     /* ⛔ Cache del piano (CLI + desktop, 15/10/2026): in testa va solo il blocco di sistema INIZIALE (quelli prima del primo messaggio
        non di sistema) e i system già coperti dal riassunto, che il riassunto riscrive comunque. Un system arrivato DOPO — il «Project
        context update» dell'agent-service, la frase F-027 del kernel — resta al suo posto nella coda: prima risaliva in testa, prima
@@ -168,14 +251,35 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
     const primoNonDiSistema = records.find(r => !diSistema(r))?.sequence ?? Infinity;
     const inTesta = r => diSistema(r) && (r.sequence < primoNonDiSistema || r.sequence <= coveredThrough);
     const systemMessages = records.filter(inTesta).map(r => r.message);
-    const verbatimTail = records.filter(r => r.sequence > coveredThrough && !inTesta(r)).map(r => r.message);
+    const codaRegistro = records.filter(r => r.sequence > coveredThrough && !inTesta(r));
+    const verbatimTail = codaRegistro.map(r => r.message);
+    /* La coda dopo il riassunto (owner 05/11/2026, registro 224): le uscite vecchie fino al punto salvato nella versione si mostrano col
+       segnaposto (`tool-output-clearing.mjs`, `tailClearingBoundary`). Il punto è fermo per tutta la vita della versione: stesso prefisso,
+       cache intera. Le regole sotto lavorano sulla coda così; il conto delle uscite accorciate si fa sempre sulla coda intera. */
+    const codaVista = tailClearedThrough > coveredThrough ? clearTailThrough(codaRegistro, tailClearedThrough, { pointer: clearedToolPointer }) : verbatimTail;
     // C1 level 1: `clear` = a `{ cleared }` box; the old tool outputs of the verbatim part are cleared BEFORE the provider shapes it
-    const lighter = clear ? clearOldToolOutputs(verbatimTail, { pointer: clearedToolPointer }) : null;
+    /* Chiusura della compattazione (31/10/2026, dal vivo: 2 dati su 6 in 5 corse su 6, e il giro «riuscito»): le uscite della richiesta in corso accorciate senza un riassunto
+       sono dati che il modello non vede più, e non li rilegge. Hermes dopo la potatura riassume sempre (`context_compressor.py:5487`); noi non aspettiamo il riassunto, quindi
+       finché la richiesta entra quelle uscite restano intere, e nel frattempo il riassunto in sottofondo lavora. `proteggiRichiesta` lo decide chi conosce la misura. */
+    const inizioRichiesta = clear?.proteggiRichiesta ? inizioDellaRichiesta(verbatimTail) : -1;
+    const accorciabili = inizioRichiesta >= 0 ? codaVista.slice(0, inizioRichiesta) : codaVista;
+    const richiestaInCorso = inizioRichiesta >= 0 ? codaVista.slice(inizioRichiesta) : [];
+    /* D3 (revisione di fine fase, 01/11/2026): se il ragionamento vecchio si toglie o si accorcia lo dice la porta del modello, che conosce il fornitore */
+    const lighter = clear ? clearOldToolOutputs(accorciabili, { pointer: clearedToolPointer, accorciaRagionamento: model.accorciaIlRagionamento?.(targetModel) === true }) : null;
     if (clear) clear.cleared = lighter.cleared;
     // C1 (09/10, «Tutti e due»): `clear.pressure` = anche le uscite grandi recenti, inizio e fine più un rimando (l'ultima intera)
     const pressed = clear?.pressure ? shortenRecentLargeOutputs(lighter.messages, { pointer: clearedToolPointer, removeChars: clear.removeChars, spareLimitChars: clear.spareLimitChars }) : null;
     if (pressed) clear.shortened = pressed.shortened;
-    const tailMessages = pressed ? pressed.messages : lighter ? lighter.messages : verbatimTail;
+    const tailMessages = pressed ? [...pressed.messages, ...richiestaInCorso] : lighter ? [...lighter.messages, ...richiestaInCorso] : codaVista;
+    /* Riga dei risultati accorciati (owner 01/11/2026, FE-049; Performance): quante uscite DELLA RICHIESTA IN CORSO il modello non vede intere, contando gli oggetti cambiati e non
+       i caratteri, comprese quelle finite in un riassunto. Le uscite delle richieste vecchie non contano: la risposta di adesso non poggia su di loro. */
+    if (clear || conta) {
+      const inizioInCoda = inizioDellaRichiesta(verbatimTail);
+      const cambiate = verbatimTail.slice(inizioInCoda).filter((m, i) => m.role === 'tool' && tailMessages[inizioInCoda + i] !== m).length;
+      const inizioNelRegistro = inizioDellaRichiesta(records.map(r => r.message));
+      /* Blocco 20, revisione (R4): `conta` è la strada piena, dove nessuna regola accorcia ma le uscite della richiesta finite in un riassunto restano fuori */
+      (clear ?? conta).accorciateRichiesta = cambiate + records.slice(inizioNelRegistro).filter(r => r.sequence <= coveredThrough && r.message.role === 'tool').length;
+    }
     /* G02 (01/10): a summary that ends INSIDE a turn (compaction-planner.mjs, a long first turn) covers that turn's person's
        message too; it is shown verbatim before the summary, like Hermes protect_first_n, so the task is never paraphrased. */
     const pinnedMessages = summary && tailMessages.length && tailMessages[0].role !== 'user'
@@ -226,9 +330,17 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
   }
   async function execute(initial, { sessionModel, tools = [], signal, projection }) {
     let job = initial;
+    /* FE-053: chi ha scritto il riassunto quando non è lo scelto. Si pubblica col salvataggio. RIP-4 (ripassata del Blocco 21, 01/11/2026): la firma è dell'autore del testo
+       salvato, cioè dell'ultimo pezzo valido, e `null` se è lo scelto: da due pezzi in su l'ultima chiamata è la fusione finale, e i pezzi prima li riassume lei. Come Hermes,
+       che tiene il modello della chiamata più recente (`_last_aux_resolved_model`, `agent/context_compressor.py:3837`, clone del 22/10). Un lavoro ripreso a un pezzo solo non
+       chiama nessuno: quel pezzo viene da `completedSegments`, che non porta la firma. */
+    let provenienza = null;
     try {
       const snapshot = await assertCurrent(job, signal);
-      const profile = await model.resolveModel({ sessionModel, settings: snapshot.settings });
+      /* C6 (28/10/2026; trovato dalla CLI): un lavoro finisce col modello con cui è PARTITO (`pinned`). Prima si rileggeva la scelta di
+         adesso, e se la persona l'aveva cambiata dalle Impostazioni il lavoro moriva «Il modello di sintesi è cambiato» — un fallimento per
+         un cambio voluto. La scelta nuova vale dal lavoro dopo. Il controllo resta: chi risolve non può sostituire il modello del lavoro. */
+      const profile = await model.resolveModel({ sessionModel, settings: snapshot.settings, pinned: job.model });
       if (!sameModel(profile, job.model)) fail('CTX_MODEL_MISMATCH', 'Il modello di sintesi è cambiato.');
       // 24/09 — il riassuntore legge la proiezione (testo corretto), quando la richiesta ne ha portata una.
       const records = overlay(await originals(job.sessionId, job.coveredThrough), projection);
@@ -252,17 +364,24 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
           const operationId = `${job.id}:${idFactory()}`;
           if (usagePolicy?.authorize && await usagePolicy.authorize({ sessionId: job.sessionId, model: profile, operationId, maxOutputTokens: profile.responseReserve, signal }) !== true) fail('CTX_USAGE_DENIED', 'Il servizio della sessione non autorizza questa sintesi.');
           let response;
-          try { response = await model.summarize({ model: profile, messages: request.messages, maxOutputTokens: profile.responseReserve, signal, operationId }); }
+          /* C6-bis (OK di CLI e Mobile 30/10/2026): la conversazione, SOLO per instradare la memoria dei modelli dei riassunti e l'avviso
+             alla chat giusta — mai nel testo per il modello né in una riga per la persona */
+          try { response = await model.summarize({ model: profile, messages: request.messages, maxOutputTokens: profile.responseReserve, signal, operationId, sessionId: job.sessionId, jobId: job.id, attese: letturaAttese(job.sessionId, job.id) }); }
           catch (error) { await account(job, operationId, error.usage); throw error; }
           await account(job, operationId, response.usage);
           signal?.throwIfAborted();
-          return validateSummary(response, { records: sourceRecords });
+          const valido = validateSummary(response, { records: sourceRecords });
+          provenienza = response?.provenienza ?? null; // solo un pezzo valido firma: un salvataggio passa sempre da un'ultima chiamata valida, e un tentativo scartato non la cambia
+          return valido;
         };
         try { return await once(false); }
         catch (error) {
           if (error?.code === 'CTX_TRUNCATED_SUMMARY') return once(true);
           // C1 (09/10/2026): il formato sbagliato si riprova UNA volta, con l'istruzione sul formato (mai la stessa richiesta)
           if (error?.code === 'CTX_INVALID_SUMMARY') return once('format');
+          /* B2 (05/11/2026, OK di CLI, Performance e Mobile; B2-bis no): solo nella FUSIONE, una citazione che non sta negli originali si
+             riprova UNA volta, con la frase che dice cosa era sbagliato. Un segmento vede gli originali: lì non si ritenta. */
+          if (error?.code === 'CTX_INVALID_SOURCE' && label.startsWith('merge-')) return once('sources');
           throw error;
         }
       };
@@ -294,7 +413,7 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         for (let index = 0; index < level.length; index += 2) {
           if (index + 1 === level.length) { next.push(level[index]); continue; }
           const pair = level.slice(index, index + 2);
-          const merged = await invoke(mode => buildSummaryRequest({ summaries: pair, focus: snapshot.settings.focus, maxOutputTokens: profile.responseReserve, compact: mode === true, formatRetry: mode === 'format' }), records, `merge-${depth}-${index}`);
+          const merged = await invoke(mode => buildSummaryRequest({ summaries: pair, focus: snapshot.settings.focus, maxOutputTokens: profile.responseReserve, compact: mode === true, formatRetry: mode === 'format', sourcesRetry: mode === 'sources' }), records, `merge-${depth}-${index}`);
           if (JSON.stringify(merged).length >= JSON.stringify(pair).length) fail('CTX_NO_REDUCTION', 'La fusione non libera spazio.');
           next.push(merged);
         }
@@ -308,9 +427,30 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       // 24/09 — la versione è un fatto d'ARCHIVIO: prefisso, `sourceHash` e citazioni sugli originali grezzi.
       const prefix = grezzi.filter(record => record.sequence <= job.coveredThrough);
       const summary = projection === undefined ? level[0] : ricitaSugliOriginali(level[0], prefix);
-      const active = compiled(latest, all, { summary, coveredThrough: job.coveredThrough, targetModel: sessionModel });
+      let tailClearedThrough = 0;
+      let active = compiled(latest, all, { summary, coveredThrough: job.coveredThrough, tailClearedThrough, targetModel: sessionModel });
       const before = await measure(compiled(latest, all, { targetModel: sessionModel }), tools, sessionModel, signal);
-      const measurement = await measure(active, tools, sessionModel, signal);
+      let measurement = await measure(active, tools, sessionModel, signal);
+      /* La coda dopo il riassunto (owner 05/11/2026, registro 224; fonti in `tool-output-clearing.mjs`, `tailClearingBoundary`): se riassunto
+         più coda supera l'obiettivo, le uscite vecchie della coda diventano segnaposto, dalla più vecchia, finché ci sta. Quanto togliere si
+         stima coi caratteri per token di questa misura; si rimisura, al più tre volte. Il punto si salva nella versione (`tailClearedThrough`).
+         Ogni giro parte da quanto il confine ha GIÀ tolto davvero (le uscite si tolgono intere, quindi spesso più della stima) e aggiunge
+         la stima nuova: sommando solo le stime, la seconda restava sotto il già tolto e il confine non si muoveva (mutanti 05/11, CODA-06). */
+      const coda = all.filter(record => record.sequence > job.coveredThrough);
+      /* ⛔ Forma della CLI (05/11/2026): mai dentro la richiesta in corso (senza un messaggio della persona nella coda, è tutta la coda) */
+      const inizioRichiesta = inizioDellaRichiesta(coda.map(record => record.message));
+      let giaTolti = 0;
+      for (let giro = 0; giro < 3; giro++) {
+        const soglie = budgetFor(measurement, latest.settings);
+        if (measurement.inputTokens <= soglie.targetTokens) break;
+        const stima = Math.ceil((measurement.inputTokens - soglie.targetTokens) * JSON.stringify(active).length / measurement.inputTokens);
+        const confine = tailClearingBoundary(coda, { removeChars: giaTolti + stima, pointer: clearedToolPointer, protectFrom: inizioRichiesta });
+        if (confine.through <= tailClearedThrough) break;
+        giaTolti = confine.removedChars;
+        tailClearedThrough = confine.through;
+        active = compiled(latest, all, { summary, coveredThrough: job.coveredThrough, tailClearedThrough, targetModel: sessionModel });
+        measurement = await measure(active, tools, sessionModel, signal);
+      }
       /* C1 (owner 09/10/2026 sera, «Tutti e due»): un riassunto che RIDUCE si pubblica sempre, anche se non basta per un contesto
          cresciuto mentre lavorava (dal vivo: partito al giro 3 per il giro 1, buttato al giro 4) — chi chiede ne fa partire un
          secondo fino ad adesso (`prepareForRequest`). Si rifiuta solo un riassunto che non riduce niente. */
@@ -319,9 +459,9 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       await assertCurrent(job, signal);
       const retained = {};
       const activeMessages = compiled(latest, prefix, { summary, coveredThrough: job.coveredThrough, targetModel: sessionModel, retained });
-      const version = ContextVersionV1.parse({ schema: 'talos.context.version.v1', id: idFactory(), sessionId: job.sessionId, coveredThrough: job.coveredThrough, sourceIds: prefix.map(r => r.id), sourceHash: await hash(prefix.map(({ id, sha256 }) => ({ id, sha256 }))), summary, activeMessages, model: job.model, measurement, createdAt: clock(), ...(retained.personRequests ? { retained: { personRequests: retained.personRequests, anchorIndex: retained.anchorIndex ?? null } } : {}) });
+      const version = ContextVersionV1.parse({ schema: 'talos.context.version.v1', id: idFactory(), sessionId: job.sessionId, coveredThrough: job.coveredThrough, sourceIds: prefix.map(r => r.id), sourceHash: await hash(prefix.map(({ id, sha256 }) => ({ id, sha256 }))), summary, activeMessages, model: job.model, measurement, createdAt: clock(), ...(retained.personRequests ? { retained: { personRequests: retained.personRequests, anchorIndex: retained.anchorIndex ?? null } } : {}), ...(tailClearedThrough ? { tailClearedThrough } : {}) });
       signal?.throwIfAborted();
-      await store.commitContextVersion({ sessionId: job.sessionId, expectedRevision: latest.revision, expectedStateRevision: latest.stateRevision, jobId: job.id, version });
+      await store.commitContextVersion({ sessionId: job.sessionId, expectedRevision: latest.revision, expectedStateRevision: latest.stateRevision, jobId: job.id, version, ...(provenienza ? { provenienza } : {}) });
       return store.readContextJob({ sessionId: job.sessionId, jobId: job.id });
     } catch (error) {
       const current = await store.readContextJob({ sessionId: job.sessionId, jobId: job.id });
@@ -344,7 +484,11 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
     if (options.signal?.aborted) abort();
     const entry = { controller, promise: null, error: null };
     // Keep a handled result even when the persistence worker dies during failure reporting.
-    entry.promise = Promise.resolve().then(() => execute(job, { ...options, signal: controller.signal })).catch(error => { entry.error = error; return null; }).finally(() => options.signal?.removeEventListener('abort', abort));
+    entry.promise = Promise.resolve().then(() => execute(job, { ...options, signal: controller.signal })).catch(error => { entry.error = error; return null; }).finally(() => {
+      options.signal?.removeEventListener('abort', abort);
+      entry.finito = true; // spesa di servizio, parte 2 B: nessuna chiamata guarda più le attese di questo lavoro
+      if ((attese.get(jobKey)?.inCorso ?? 0) === 0) attese.delete(jobKey);
+    });
     running.set(jobKey, entry);
   }
   /*
@@ -380,9 +524,27 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
     async startCompaction({ sessionId, idempotencyKey, sessionModel, kind = 'compact', tools = [], signal, projection, withinTurn = false, retainRecentTurns }) {
       signal?.throwIfAborted();
       const snapshot = await recoverInterrupted(sessionId, await state(sessionId));
-      const existing = snapshot.jobs.find(job => job.idempotencyKey === idempotencyKey);
+      /* C6 (28/10/2026; trovato dalla CLI): una chiave AUTOMATICA porta anche il modello del riassunto. Dopo un riassunto fallito con A, la
+         persona sceglie B proprio per quello: la stessa versione della storia deve poter ripartire con B, non ritrovare il lavoro di A
+         (CTX_IDEMPOTENCY_CONFLICT). Una chiave scelta da chi chiama (/compact) resta com'è, e severa come prima. */
+      /* Il modello si risolve SOLO se un lavoro di questa richiesta c'è già: senza, prima si guarda se c'è qualcosa da compattare
+         (CTX-SMALL-AUTO-NOOP: una richiesta che entra non interroga chi risolve). Un lavoro ATTIVO con una chiave di prima di oggi non passa
+         di qui: `prepareForRequest` lo ritrova dallo stato prima di chiederne uno nuovo. */
+      const automatica = idempotencyKey.startsWith('auto-');
+      const resto = idempotencyKey.slice('auto-'.length);
+      const chiaveCol = async (profilo) => `auto-m${(await hash(identity(profilo))).slice(0, 16)}-${resto}`;
+      const stessaRichiesta = (job) => job.idempotencyKey.length === 23 + resto.length
+        && /^auto-m[0-9a-f]{16}-$/u.test(job.idempotencyKey.slice(0, 23)) && job.idempotencyKey.slice(23) === resto;
+      let profiloAuto = null;
+      let existing;
+      if (!automatica) existing = snapshot.jobs.find(job => job.idempotencyKey === idempotencyKey);
+      else if (snapshot.jobs.some(stessaRichiesta)) {
+        profiloAuto = await model.resolveModel({ sessionModel, settings: snapshot.settings });
+        const chiave = await chiaveCol(profiloAuto);
+        existing = snapshot.jobs.find(job => job.idempotencyKey === chiave);
+      }
       if (existing) {
-        const profile = await model.resolveModel({ sessionModel, settings: snapshot.settings });
+        const profile = profiloAuto ?? await model.resolveModel({ sessionModel, settings: snapshot.settings });
         if (!sameModel(existing.model, profile) || existing.kind !== kind) fail('CTX_IDEMPOTENCY_CONFLICT', 'Questa chiave identifica una richiesta diversa.');
         return existing;
       }
@@ -391,16 +553,44 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       const selection = selectClosedPrefix(records, { retainRecentTurns: Number.isSafeInteger(retainRecentTurns) ? Math.min(retainRecentTurns, snapshot.settings.retainRecentTurns) : snapshot.settings.retainRecentTurns, force: true, withinTurn });
       if (selection.pendingCalls.length) fail('CTX_PENDING_TOOLS', 'Attendere i risultati degli strumenti.');
       if (!selection.prefix.length) fail('CTX_NOTHING_TO_COMPACT', 'Non ci sono scambi precedenti da compattare mantenendo intero l’ultimo scambio. Nessun messaggio è stato modificato.');
-      const profile = await model.resolveModel({ sessionModel, settings: snapshot.settings });
+      /* solo «Compatta» (Mobile, revisione del diff 31/10): «Rigenera» riscrive una conversazione GIÀ compattata, che per definizione non
+         guadagna il 30% — fermarla qui le toglierebbe il testo nuovo che la persona ha chiesto */
+      if (!automatica && kind === 'compact' && guadagnoMinimoChiesto > 0 && !guadagnaAbbastanza(snapshot, overlay(records, projection), selection.coveredThrough, sessionModel, tools)) {
+        fail('CTX_NOTHING_TO_COMPACT', 'Niente da compattare: la conversazione è già corta. Nessun messaggio è stato modificato.');
+      }
+      /* B4: prima di pagare, un lavoro automatico che non può liberare niente non nasce — nessuna chiamata, nessun lavoro fallito, nessuna
+         pausa. Il codice è quello che chi chiama già ingoia (`prepareForRequest`, `giroInSottofondo`): nessuna riga nuova per la CLI. */
+      if (automatica && !guadagnaQualcosa(snapshot, overlay(records, projection), selection.coveredThrough, sessionModel)) {
+        fail('CTX_NOTHING_TO_COMPACT', 'Niente da compattare: un riassunto di questa parte non libererebbe spazio. Nessun messaggio è stato modificato.');
+      }
+      const profile = profiloAuto ?? await model.resolveModel({ sessionModel, settings: snapshot.settings });
+      if (automatica) idempotencyKey = await chiaveCol(profile);
       const fingerprint = await hash({ sessionId, revision: snapshot.revision, settings: snapshot.settings, profile, kind, tools });
       const job = ContextJobV1.parse({ schema: 'talos.context.job.v1', id: idFactory(), sessionId, idempotencyKey, requestFingerprint: fingerprint, kind, state: 'queued', baseRevision: snapshot.revision, baseStateRevision: snapshot.stateRevision, coveredThrough: selection.coveredThrough, model: identity(profile), createdAt: clock(), updatedAt: clock(), completedSegments: [], progress: { completed: 0, total: 0, phase: 'queued' } });
       const claimed = await store.claimContextJob({ sessionId, job });
       launch(claimed, { sessionModel, tools, signal, projection });
       return claimed;
     },
-    async waitForCompaction({ sessionId, jobId }) {
+    /* `contaComeAttesa`: chi aspetta è la persona (il /compact; la CLI anche all'uscita, `talos-composition.ts:491`). Di serie no: lo
+       spegnimento del server desktop non ha nessuno davanti. */
+    /* `signal` (Performance, revisione del pezzo B, 30/10): chi aspetta può SMETTERE di aspettare (lo Skip, lo Stop) senza annullare il
+       lavoro — un lavoro nato in sottofondo da una richiesta di prima non è suo da annullare. Senza, l'attesa restava aperta fino alla fine
+       del lavoro: le sue chiamate risultavano «in primo piano» con nessuno davanti, e l'ora di fine dell'attesa era quella del lavoro. */
+    async waitForCompaction({ sessionId, jobId, contaComeAttesa = false, signal = null }) {
       const entry = running.get(key(sessionId, jobId));
-      if (entry) { await entry.promise; if (entry.error) throw entry.error; }
+      signal?.throwIfAborted?.();
+      const fine = contaComeAttesa === true && entry ? iniziaAttesa(sessionId, jobId) : null;
+      let smetti = null;
+      try {
+        if (entry) {
+          /* Performance (30/10, misurato): se il lavoro è DELLA richiesta, lo stesso segnale lo sta annullando (il suo ascoltatore è
+             registrato al lancio, prima di questo) ⇒ niente rifiuto: si aspetta che si chiuda, esito «cancelled» e la strada di prima.
+             Si smette di aspettare solo un lavoro che NON è della richiesta (nato in sottofondo prima) ⇒ «abandoned». */
+          const lascia = signal ? new Promise((_, no) => { smetti = () => { if (entry.controller.signal.aborted) return; no(signal.reason ?? new ContextEngineError('Attesa interrotta.', 'CTX_WAIT_ABORTED')); }; signal.addEventListener('abort', smetti, { once: true }); }) : null;
+          await (lascia ? Promise.race([entry.promise, lascia]) : entry.promise);
+          if (entry.error) throw entry.error;
+        }
+      } finally { if (smetti) signal.removeEventListener('abort', smetti); fine?.(); }
       const job = await store.readContextJob({ sessionId, jobId });
       if (!job) fail('CTX_JOB_NOT_FOUND', 'Compattazione non trovata.');
       return job;
@@ -431,6 +621,17 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
     async prepareForRequest({ sessionId, messages, projection, tools = [], sessionModel, signal, waitForInFlight = false, summaryCeilingMs, onInTurnWait, growWindow }) {
       /* A1: il riassunto atteso nel giro gara col suo tetto; allo scadere si annulla e il giro riceve CTX_COMPACTION_TIMEOUT */
       const tettoNelGiro = Number.isSafeInteger(summaryCeilingMs) && summaryCeilingMs > 0 ? summaryCeilingMs : inTurnSummaryCeilingMs;
+      /*
+       * C4 del contratto «la chat non aspetta mai il riassunto» (owner 27/10/2026 notte, «Sì, mai aspettare»; con la CLI:
+       * `CONTRATTO-RIASSUNTO-MAI-ASPETTARE-2026-10-27.md`). `summaryCeilingMs: 0` = non aspettare: quando la richiesta non entra e il
+       * riassunto non è pronto il motore risponde subito `CTX_SUMMARY_NOT_READY` (chi lo ospita manda la richiesta con un riassunto
+       * senza modello) e NON annulla il lavoro: finisce in sottofondo e la richiesta dopo lo usa. Nel file dell'owner il giro aspettava
+       * un riassunto fermo 30 minuti sul limite del piano.
+       * ⛔ Il motore a posto unico non aspetta e non lascia un lavoro in volo: il lavoro occuperebbe il motore mentre la richiesta del giro
+       *   è in volo (409 LOCAL_ENGINE_BUSY, misurato sul Pad il 21/10). Owner 28/10/2026, «Rapido subito, il modello dopo»: lì il «non
+       *   pronto» non avvia nessun lavoro (`aFineGiro`, più sotto) e il riassunto lo avvia chi ospita a giro finito.
+       */
+      const nonAspettare = summaryCeilingMs === 0 && sessionModel?.singleSlot !== true;
       /* B1 (21/10/2026, revisione del Mobile): chi ospita il motore sa QUANDO il giro aspetta un riassunto — `waiting` all'inizio
          dell'attesa, `done` alla fine comunque sia andata (pubblicato, fallito, scaduto, annullato). Senza, la riga viva con «Skip»
          non compariva mai sulla strada del motore, che per le conversazioni nuove è quella di serie. Un ascoltatore che lancia non
@@ -439,11 +640,14 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
       const attendiNelGiro = async (jobId) => {
         segnalaAttesa({ state: 'waiting', jobId, ceilingMs: tettoNelGiro });
         let esitoAttesa = 'failed';
+        /* Skip o Stop della richiesta: il giro smette di aspettare (il lavoro va avanti per conto suo) ⇒ «abandoned» */
         try {
           let scaduto = false; let timer = null;
           const scadenza = new Promise((risolvi) => { timer = setTimeout(() => { scaduto = true; risolvi(null); }, tettoNelGiro); });
           try {
-            const esito = await Promise.race([api.waitForCompaction({ sessionId, jobId }), scadenza]);
+            let esito;
+            try { esito = await Promise.race([api.waitForCompaction({ sessionId, jobId, contaComeAttesa: true, signal }), scadenza]); }
+            catch (errore) { if (signal?.aborted) esitoAttesa = 'abandoned'; throw errore; }
             if (!scaduto) { esitoAttesa = typeof esito?.state === 'string' ? esito.state : 'failed'; return esito; }
           } finally { clearTimeout(timer); }
           esitoAttesa = 'timeout';
@@ -465,7 +669,13 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
          senza limite, e un suo errore faceva cadere una richiesta che leggera entrava. Quindi: una stima locale decide se
          serve alleggerire (byte/3,5, la stessa euristica del contatore, col margine largo dell'euristica); sopra la soglia la
          piena si STIMA dalla misura leggera più i byte tolti, mai si conta; sotto, si misura la piena come sempre. */
-      const bytes = messages => new TextEncoder().encode(JSON.stringify(messages)).length;
+      /* Performance, 31/10/2026 (forma coi tre, `PROPOSTA-STIMA-SENZA-CIFRATO`): il blocco firmato del fornitore è ragionamento cifrato più il doppione di testo e chiamate, e non si
+         toglie mai. Contato come testo la stima cresceva da sola: su Luna la pulitura scattava a 60 mila token veri su 272 mila. Si conta al suo peso misurato. */
+      const bytes = messages => {
+        let firmati = 0;
+        const chiari = messages.map(({ talos_provider_state: blocco, ...resto }) => { if (blocco) firmati += JSON.stringify(blocco).length; return resto; });
+        return new TextEncoder().encode(JSON.stringify(chiari)).length + Math.ceil(firmati * pesoDelBloccoFirmato);
+      };
       /*
        * ⛔ Owner 16/10/2026 sera («In sottofondo, con una guardia»), misurato dal vivo prima (tetto 60.000, glm-5.3-flash): in un
        *   giro lungo — un messaggio della persona e molti attrezzi — alla soglia morbida il riassunto in sottofondo trovava «niente di
@@ -491,36 +701,51 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
            soglia e obiettivo vicini lo scarto dal segnaposto faceva ripartire un riassunto a ogni passo (11 in 11). Isteresi misurata:
            il segnaposto è lungo almeno quanto l'ULTIMO riassunto vero di questa sessione — dopo uno più lungo del previsto la stima
            si corregge da sola, e al più se ne spreca uno. */
-        const ultimo = stato.activeVersion?.summary ? bytes(stato.activeVersion.summary) : 0;
+        const ultimo = stato.activeVersion?.summary ? new TextEncoder().encode(JSON.stringify(stato.activeVersion.summary)).length : 0;
         const segnaposto = 'x'.repeat(Math.max(Math.ceil((sessionModel.responseReserve / 2) * 3.5), ultimo));
-        const composizione = compiled(stato, overlay(tutti, projection), { summary: segnaposto, coveredThrough: scelta.coveredThrough, targetModel: sessionModel });
+        const composizione = compiled(stato, overlay(tutti, projection), { summary: segnaposto, coveredThrough: scelta.coveredThrough, tailClearedThrough: 0, targetModel: sessionModel });
         const fuoriDaiMessaggi = Math.max(0, misura.inputTokens - Math.ceil(bytes(misurati) / 3.5));
         const dopo = fuoriDaiMessaggi + Math.ceil(bytes(composizione) / 3.5);
         if (dopo >= soglie.targetTokens) return undefined;
         try { return await api.startCompaction({ sessionId, idempotencyKey: `auto-${stato.revision}-${await hash(identity(sessionModel))}-turn-bg`, sessionModel, tools, signal, projection, withinTurn: true }); }
         catch (error) { if (error.code === 'CTX_NOTHING_TO_COMPACT' || error.code === 'CTX_PENDING_TOOLS') return undefined; throw error; }
       };
-      const project = async (current, list) => {
-        const full = compiled(current, list, { targetModel: sessionModel });
-        const measureFull = async () => ({ prepared: full, measurement: await measure(full, tools, sessionModel, signal), cleared: 0 });
+      let protetta = false;
+      const proietta = async (current, list, { proteggi = true } = {}) => {
+        protetta = false;
+        const contaPiena = {};
+        const full = compiled(current, list, { targetModel: sessionModel, conta: contaPiena });
+        const measureFull = async () => ({ prepared: full, measurement: await measure(full, tools, sessionModel, signal), cleared: 0, ...(contaPiena.accorciateRichiesta > 0 ? { level1: { cleared: 0, shortened: 0, accorciateRichiesta: contaPiena.accorciateRichiesta } } : {}) });
         if (!current.settings.auto) return measureFull();
         const fullBytes = bytes(full); // una volta sola: su una storia da decine di MB pesa (nota del bugfixer, 09/10)
-        const quick = budgetFor({ windowTokens: sessionModel.windowTokens, responseReserve: sessionModel.responseReserve, method: 'heuristic', inputTokens: Math.ceil(fullBytes / 3.5) }, current.settings);
+        /* 174 (04/11/2026, forma C, OK di Performance, CLI e Mobile): se il contatore ha un'àncora del fornitore che combacia con la
+           richiesta piena, la stima rapida è l'àncora più la sola parte stimata, e il margine si misura su quella (`profiles.mjs`). Prima la
+           stima tutta locale al 15% della finestra puliva le uscite a 145.999 mentre la misura del fornitore diceva 165.999, e la pulitura
+           rompeva l'àncora: il tetto saltava. Senza àncora (o senza la porta: la CLI) come prima. Nessun conteggio in più. */
+        let ancorata = null;
+        try { ancorata = typeof tokenCounter.anchoredEstimate === 'function' ? tokenCounter.anchoredEstimate({ messages: full, tools, model: sessionModel }) : null; } catch { ancorata = null; }
+        const stimaRapida = { windowTokens: sessionModel.windowTokens, responseReserve: sessionModel.responseReserve, method: 'heuristic', inputTokens: Math.ceil(fullBytes / 3.5),
+          ...(ancorata && Number.isSafeInteger(ancorata.inputTokens) ? { inputTokens: ancorata.inputTokens, anchorTokens: ancorata.anchorTokens, estimatedDeltaTokens: ancorata.estimatedDeltaTokens } : {}) };
+        const quick = budgetFor(stimaRapida, current.settings);
         if (!quick.shouldPrepare) return measureFull();
-        const box = { cleared: 0 };
+        /* sul posto unico il riassunto in sottofondo non parte finché la richiesta entra (qui sotto, 21/10): si resta come prima, finché non è misurato (Mobile, 31/10) */
+        /* si decide sul conto vero, non sulla stima (banco del 31/10 sera: la stima, più pessimista, spegneva la protezione a richiesta che entrava): se poi non entra, `project` riproietta senza */
+        const proteggiRichiesta = proteggi && sessionModel?.singleSlot !== true;
+        protetta = proteggiRichiesta;
+        const box = { cleared: 0, proteggiRichiesta };
         const light = compiled(current, list, { targetModel: sessionModel, clear: box });
-        let lighter = box.cleared ? { prepared: light, measurement: await measure(light, tools, sessionModel, signal), cleared: box.cleared, level1: { cleared: box.cleared, shortened: 0 } } : null;
+        let lighter = box.cleared ? { prepared: light, measurement: await measure(light, tools, sessionModel, signal), cleared: box.cleared, level1: { cleared: box.cleared, shortened: 0, accorciateRichiesta: box.accorciateRichiesta } } : null;
         /* C1 (owner 09/10/2026 sera, «Tutti e due»): se le regole non bastano (o non toccano niente), SOTTO PRESSIONE si accorciano
            anche le uscite grandi della parte recente — inizio e fine più un rimando, l'ultima intera — prima del riassunto. */
         if (!lighter || budgetFor(lighter.measurement, current.settings).shouldPrepare) {
           /* Review Y2 (10/10): quanto togliere per tornare sotto la soglia (dalla misura leggera, o dalla stima della piena) e la
              quota dura del giro in sospeso, il 20% della finestra come Hermes — tutto in caratteri, con l'euristica byte/3,5. */
-          const sopra = budgetFor(lighter ? lighter.measurement : { windowTokens: sessionModel.windowTokens, responseReserve: sessionModel.responseReserve, method: 'heuristic', inputTokens: Math.ceil(fullBytes / 3.5) }, current.settings);
-          const pressure = { cleared: 0, shortened: 0, pressure: true, removeChars: Math.max(0, Math.ceil((sopra.inputTokens - sopra.triggerTokens + 1) * 3.5)), spareLimitChars: Math.floor(sessionModel.windowTokens * PENDING_ROUND_WINDOW_SHARE * 3.5) };
+          const sopra = budgetFor(lighter ? lighter.measurement : stimaRapida, current.settings);
+          const pressure = { cleared: 0, shortened: 0, pressure: true, proteggiRichiesta, removeChars: Math.ceil((sopra.inputTokens - sopra.triggerTokens + 1) * 3.5), spareLimitChars: Math.floor(sessionModel.windowTokens * PENDING_ROUND_WINDOW_SHARE * 3.5) };
           const pressed = compiled(current, list, { targetModel: sessionModel, clear: pressure });
           if (pressure.cleared + pressure.shortened > 0) {
             const pressedMeasurement = await measure(pressed, tools, sessionModel, signal);
-            if (!lighter || pressedMeasurement.inputTokens < lighter.measurement.inputTokens) lighter = { prepared: pressed, measurement: pressedMeasurement, cleared: pressure.cleared + pressure.shortened, level1: { cleared: pressure.cleared, shortened: pressure.shortened } };
+            if (!lighter || pressedMeasurement.inputTokens < lighter.measurement.inputTokens) lighter = { prepared: pressed, measurement: pressedMeasurement, cleared: pressure.cleared + pressure.shortened, level1: { cleared: pressure.cleared, shortened: pressure.shortened, accorciateRichiesta: pressure.accorciateRichiesta } };
           }
         }
         if (!lighter) return measureFull();
@@ -533,13 +758,23 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
           return budgetFor(exact.measurement, current.settings).shouldPrepare ? lighter : exact;
         } catch (error) { if (signal?.aborted) throw error; return lighter; }
       };
+      /* la protezione si prova sempre: se il conto vero dice che così non entra, si proietta senza. Costa un conteggio in più, solo in quel caso */
+      const project = async (current, list) => {
+        const scelta = await proietta(current, list);
+        if (!protetta || budgetFor(scelta.measurement, current.settings).fits) return scelta;
+        const senza = await proietta(current, list, { proteggi: false });
+        return senza.measurement.inputTokens < scelta.measurement.inputTokens ? senza : scelta;
+      };
       let { prepared, measurement, cleared: firstCleared, level1: firstLevel1 } = await project(snapshot, overlay(records, projection));
       toolOutputsCleared = firstCleared;
       level1 = firstLevel1 ?? null;
       /* 09/09 — si salva SUBITO, prima di qualunque automazione: se la compattazione automatica fallisce
          (CTX_NO_REDUCTION su un solo messaggio enorme, per esempio) la misura che ha fatto scattare tutto
          è comunque un fatto vero, ed è quello che la modale deve poter mostrare. */
-      const record = m => store.recordMeasurement({ sessionId, revision: snapshot.revision, measuredAt: clock(), measurement: m });
+      /* 174 (CLI, 04/11/2026): la misura salvata porta il margine con cui il motore decide, così `snapshot.measurement.tokens.marginTokens`
+         è lo stesso numero (la CLI lo prende da qui invece di ricalcolarlo). Un profilo che non si valida: la misura com'è, come prima. */
+      const conMargine = m => { try { return { ...m, marginTokens: validateContextProfile(m).safetyMarginTokens }; } catch { return m; } };
+      const record = m => store.recordMeasurement({ sessionId, revision: snapshot.revision, measuredAt: clock(), measurement: conMargine(m) });
       await record(measurement);
       let budget = budgetFor(measurement, snapshot.settings);
       /*
@@ -575,7 +810,11 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
          ha una richiesta in volo (dal vivo sul Pad: 409 LOCAL_ENGINE_BUSY e giro in errore). Lì si compatta solo quando la richiesta non
          entra più, dentro il giro e aspettando (`withinTurn`), mai in parallelo. */
       if (snapshot.settings.auto && budget.shouldPrepare && !(sessionModel?.singleSlot === true && budget.fits)) {
-        job = snapshot.jobs.find(entry => !terminal.has(entry.state));
+        /* D4 (revisione di fine fase, 01/11/2026): un lavoro in pausa (un riavvio a metà riassunto) la cui base è stantia non può più pubblicare: riprenderlo dava
+           `CTX_STALE_REVISION` a ogni richiesta e restava in pausa per sempre, e il motore non compattava più quella conversazione. Si annulla e ne parte uno nuovo. */
+        const stantii = new Set(snapshot.jobs.filter(entry => entry.state === 'paused' && entry.baseStateRevision !== snapshot.stateRevision).map(entry => entry.id));
+        for (const jobId of stantii) { try { await api.cancelCompaction({ sessionId, jobId }); } catch { /* già concluso o sparito: non si riprende, e la richiesta non cade per questo */ } }
+        job = snapshot.jobs.find(entry => !terminal.has(entry.state) && !stantii.has(entry.id));
         const inVoloPrima = Boolean(job);
         // 25/09 — in pausa dopo un rifiuto: niente lavoro nuovo (l'avviso si riscrive con lo stesso id: copre i lavori
         // falliti prima di questa versione)
@@ -583,6 +822,12 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         if (!job && !compactionCooling) {
           /* G02: inside the current turn only when the context does not fit (compaction-planner.mjs `withinTurn`) */
           const withinTurn = !budget.fits;
+          /* Owner 28/10/2026, «Rapido subito, il modello dopo» (contratto P4 con la CLI): col «non aspettare» anche il posto unico risponde
+             SUBITO «non pronto» — ma SENZA avviare un lavoro, che occuperebbe l'unico posto mentre la richiesta del giro (col riassunto
+             rapido) è in volo. Il riassunto lo avvia chi ospita a giro finito (`aFineGiro`), e il jobId lo conosce lui. */
+          if (withinTurn && summaryCeilingMs === 0 && sessionModel?.singleSlot === true) {
+            throw new ContextEngineError('The summary is written after this turn: this request goes with a quick summary.', 'CTX_SUMMARY_NOT_READY', { jobId: null, aFineGiro: true });
+          }
           try { job = await api.startCompaction({ sessionId, idempotencyKey: `auto-${snapshot.revision}-${await hash(identity(sessionModel))}${withinTurn ? '-turn' : ''}`, sessionModel, tools, signal, projection, withinTurn }); }
           catch (error) {
             if (error.code !== 'CTX_NOTHING_TO_COMPACT') throw error;
@@ -602,6 +847,11 @@ export function createContextEngine({ store, model, tokenCounter, retrieval, emb
         senzaAttesa = !waitForInFlight && !budget.fits && inVoloPrima && job?.state !== 'paused' && measurement.inputTokens <= budget.windowTokens - budget.responseReserve;
         if (!budget.fits && job && !senzaAttesa) {
           if (job.state === 'paused') job = await api.resumeCompaction({ sessionId, jobId: job.id, sessionModel, tools, signal, projection });
+          /* C4: il lavoro (appena partito, ripreso o già in volo) va avanti da solo; questa richiesta non lo aspetta */
+          /* contratto con la CLI (28/10/2026): il «non pronto» dice QUALE lavoro scrive il riassunto (`details.jobId`): chi ospita lega a lui
+             la riga del rapido, e solo la versione pubblicata da QUEL lavoro la migliora (un /compact della persona, o un lavoro dopo uno
+             fallito, no) */
+          if (nonAspettare) throw new ContextEngineError('The summary is still being written: this request goes with a quick summary, and the next one uses it.', 'CTX_SUMMARY_NOT_READY', { jobId: job.id });
           const result = await attendiNelGiro(job.id);
           if (result.state !== 'committed') fail(result.error?.code ?? 'CTX_COMPACTION_REQUIRED', result.error?.message ?? 'Il contesto richiede una compattazione completata.');
           snapshot = await state(sessionId);

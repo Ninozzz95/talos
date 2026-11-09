@@ -237,6 +237,9 @@ export const REGISTRO_FORNITORI = congela({
      *   record non scioglie quel dubbio, lo lascia dov'era e lo dichiara.
      */
     baseUrl: 'https://api.deepseek.com',
+    /* Decisione 330 (giro 3, punto 6c): l'assistant in coda DeepSeek lo prosegue solo con `prefix: true` sull'indirizzo /beta («Chat Prefix
+       Completion (Beta)»), che qui non si usa: niente continuazione sul ragionamento, l'assistant in coda si toglie (`preparaRichiestaCompatibile`). */
+    prefillInCoda: congela({ prosegue: false, fonte: 'https://api-docs.deepseek.com/guides/chat_prefix_completion', data: '2026-11-07' }),
     indirizzoModificabile: true,
     envIndirizzo: congela([]),
     auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['DEEPSEEK_API_KEY']) }),
@@ -319,6 +322,8 @@ export const REGISTRO_FORNITORI = congela({
     ]),
     modelloAusiliario: 'kimi-k2.6', modelsDevId: 'moonshotai',
     wire: 'openai-chat', baseUrl: 'https://api.moonshot.ai/v1',
+    // giro 4 della 324: la continuazione documentata vuole `partial: true`, che TALOS non manda ⇒ l'assistant in coda si toglie, la scala di oggi
+    prefillInCoda: congela({ prosegue: false, fonte: 'https://platform.kimi.ai/docs/api/partial.md', data: '2026-11-07' }),
     // Cina: https://api.moonshot.cn/v1; nessun secondo record o cambio implicito di regione.
     indirizzoModificabile: true, envIndirizzo: congela(['MOONSHOT_BASE_URL']),
     auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['MOONSHOT_API_KEY', 'KIMI_API_KEY']) }),
@@ -414,6 +419,8 @@ export const REGISTRO_FORNITORI = congela({
     // Turbo escluso: discordanza sul supporto agli strumenti tra scheda ufficiale e catalogo.
     modelloAusiliario: 'qwen-flash', modelsDevId: 'alibaba',
     wire: 'openai-chat', baseUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+    // giro 4 della 324: la continuazione vuole `partial: true` (che TALOS non manda) e non regge il modo «thinking» ⇒ si toglie
+    prefillInCoda: congela({ prosegue: false, fonte: 'https://www.alibabacloud.com/help/en/model-studio/partial-mode', data: '2026-11-07' }),
     // Cina: https://dashscope.aliyuncs.com/compatible-mode/v1; anche i domini workspace sono modificabili.
     indirizzoModificabile: true, envIndirizzo: congela(['DASHSCOPE_BASE_URL']),
     auth: congela({ tipo: 'bearer', header: 'Authorization', nomeVariabile: congela(['DASHSCOPE_API_KEY']) }),
@@ -719,6 +726,18 @@ export const REGISTRO_FORNITORI = congela({
     endpoint: congela({ chat: '/v1/chat/completions', modelli: '/api/tags' }),
     streaming: 'osservato',
     toolCalling: 'ignoto',     // ⛔ dipende dal modello caricato, non dal motore
+    /* giro 6 della 324 (MEDIO del revisore 2): il messaggio OpenAI di Ollama ha solo `reasoning` («Reasoning string `json:"reasoning,omitempty"`»,
+       openai/openai.go:32-39 del clone ollama-2026-10-21) e lo passa al modello come pensiero (`Thinking: msg.Reasoning`, :636);
+       `reasoning_content` lo butta. Il ragionamento rimandato, e il prefill della continuazione, vanno nel suo campo. */
+    campiRifiutati: congela({ campi: congela(['reasoning_content']), fonte: 'https://github.com/ollama/ollama/blob/main/openai/openai.go', data: '2026-11-07' }),
+    ragionamentoNeiMessaggi: congela({ campo: 'reasoning', fonte: 'https://github.com/ollama/ollama/blob/main/openai/openai.go', data: '2026-11-07' }),
+    /* giro 7 della 324 (MEDIO del revisore 1): l'assistant in coda col solo pensiero NON lo prosegue. I renderer di Ollama chiudono il
+       pensiero rimandato prima di generare (qwen3.5: «<think>» + Thinking + «</think>», model/renderers/qwen35.go:299-310; glm-4.7:
+       «<think>» + Thinking + «</think>», renderers/glm47.go:79-80; deepseek3: renderers/deepseek3.go:115-140) e il parser ricomincia a pensare
+       daccapo (parsers/qwen35.go:74-77, :245-253; parsers/glm47.go:12-20), clone ollama-2026-10-21. Solo harmony (gpt-oss) lo tiene
+       (harmony/harmonyparser.go:79-90), ma il suo modello di prompt viaggia col modello e non è nel clone: niente lista per famiglia,
+       `null` per tutto il fornitore (`prefillInCodaArriva`), la scala di oggi. Il ragionamento nella storia resta in `reasoning`. */
+    prefillInCoda: congela({ prosegue: false, fonte: 'https://github.com/ollama/ollama/blob/main/model/renderers/qwen35.go', data: '2026-11-07' }),
     cache: congela({ marcatore: null, letturaUsage: congela([]), scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null }),
     catalogo: congela({ fonte: 'runtime-locale', forma: 'ollama-tags', percorso: '/api/tags', inUI: false }),
     prezzi: congela({ fonte: 'nessuna' }),
@@ -1287,6 +1306,16 @@ export const REGISTRO_FORNITORI = congela({
     endpoint: congela({ chat: '/chat/completions', modelli: '/models' }),
     streaming: 'dichiarato',
     toolCalling: 'dichiarato',
+    /* giro 6 della 324: lo stesso server di Ollama (openai/openai.go:32-39 e :636 del clone ollama-2026-10-21): solo `reasoning` */
+    campiRifiutati: congela({ campi: congela(['reasoning_content']), fonte: 'https://github.com/ollama/ollama/blob/main/openai/openai.go', data: '2026-11-07' }),
+    ragionamentoNeiMessaggi: congela({ campo: 'reasoning', fonte: 'https://github.com/ollama/ollama/blob/main/openai/openai.go', data: '2026-11-07' }),
+    /* giro 7 della 324 (MEDIO del revisore 1): l'assistant in coda col solo pensiero NON lo prosegue. I renderer di Ollama chiudono il
+       pensiero rimandato prima di generare (qwen3.5: «<think>» + Thinking + «</think>», model/renderers/qwen35.go:299-310; glm-4.7:
+       «<think>» + Thinking + «</think>», renderers/glm47.go:79-80; deepseek3: renderers/deepseek3.go:115-140) e il parser ricomincia a pensare
+       daccapo (parsers/qwen35.go:74-77, :245-253; parsers/glm47.go:12-20), clone ollama-2026-10-21. Solo harmony (gpt-oss) lo tiene
+       (harmony/harmonyparser.go:79-90), ma il suo modello di prompt viaggia col modello e non è nel clone: niente lista per famiglia,
+       `null` per tutto il fornitore (`prefillInCodaArriva`), la scala di oggi. Il ragionamento nella storia resta in `reasoning`. */
+    prefillInCoda: congela({ prosegue: false, fonte: 'https://github.com/ollama/ollama/blob/main/model/renderers/qwen35.go', data: '2026-11-07' }),
     cache: congela({
       marcatore: null, letturaUsage: congela([]),
       scritturaUsage: congela([]), inclusiNelTotale: true, scontoDichiarato: null,
@@ -1812,6 +1841,12 @@ export function verificaRegistro(registro = REGISTRO_FORNITORI) {
         throw new ProviderRegistryError(`${dove}: rejected fields must be known fields with a dated source`);
       }
     }
+    if (record.prefillInCoda !== undefined) { // decisione 330: chi non prosegue l'assistant in coda lo dichiara con la fonte
+      const { prosegue, fonte, data } = record.prefillInCoda ?? {};
+      if (prosegue !== false || !fonteHttpsVera(fonte) || !giornoDelCalendario(data)) {
+        throw new ProviderRegistryError(`${dove}: a trailing assistant declaration must say it is not continued, with a dated source`);
+      }
+    }
     const ignoti = record.ragionamento?.modelliIgnoti;
     if (ignoti !== undefined && (!Array.isArray(ignoti?.livelli) || ignoti.livelli.some(l => !record.ragionamento.livelli?.includes(l)) || !Array.isArray(ignoti.thinking) || ignoti.thinking.some(t => !['enabled', 'disabled'].includes(t)))) {
       throw new ProviderRegistryError(`${dove}: invalid reasoning options for unknown models`);
@@ -1917,3 +1952,19 @@ export const ID_NATIVI_SDK = Object.freeze([
  *   Erano due letterali `['ollama','lmstudio']` in attesa di divergere.
  */
 export const ID_MOTORI_LOCALI_OPENAI = idFornitori((r) => r.catalogo?.fonte === 'runtime-locale' && r.wire === 'openai-chat');
+
+/* giro 5 della 324 (L1 dei revisori 1 e 3): una fonte è un indirizzo https con un dominio vero, una data è un giorno del calendario.
+   Niente controllo «non nel futuro»: un orologio sbagliato dell'utente non deve impedire al registro di caricarsi. */
+function fonteHttpsVera(fonte) {
+  if (typeof fonte !== 'string' || /\s/u.test(fonte)) return false;
+  try {
+    const u = new URL(fonte);
+    /* giro 6 (BASSO del revisore 3): ogni etichetta del dominio c'è ('https://.example', 'https://example.', 'https://x..example' no) */
+    return u.protocol === 'https:' && u.hostname.includes('.') && u.hostname.split('.').every(Boolean);
+  } catch { return false; }
+}
+function giornoDelCalendario(data) {
+  if (typeof data !== 'string' || !/^\d{4}-\d{2}-\d{2}$/u.test(data)) return false;
+  const giorno = new Date(`${data}T00:00:00Z`);
+  return !Number.isNaN(giorno.getTime()) && giorno.toISOString().slice(0, 10) === data;
+}

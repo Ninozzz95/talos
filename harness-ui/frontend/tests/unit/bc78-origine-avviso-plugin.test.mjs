@@ -19,10 +19,10 @@ import { origineAvvisoPlugin } from '../../src/components/nomi-attrezzi.js';
  */
 
 test('BC78-4: `tool:` e `hook:` diventano parole, e il nome si legge', () => {
-  assert.equal(origineAvvisoPlugin('tool:check_notes'), 'attrezzo check notes');
+  assert.equal(origineAvvisoPlugin('tool:check_notes'), 'strumento check notes');
   assert.equal(origineAvvisoPlugin('hook:pre-commit'), 'gancio pre commit');
   /* Un attrezzo che un nome nostro ce l'ha lo usa: la mappa condivisa viene prima del ripiego. */
-  assert.equal(origineAvvisoPlugin('tool:web_search'), `attrezzo ${origineAvvisoPlugin('tool:web_search').replace('attrezzo ', '')}`);
+  assert.equal(origineAvvisoPlugin('tool:web_search'), `strumento ${origineAvvisoPlugin('tool:web_search').replace('strumento ', '')}`);
   assert.ok(!origineAvvisoPlugin('tool:web_search').includes('_'), 'nessun trattino basso a schermo');
 });
 

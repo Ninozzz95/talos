@@ -52,7 +52,7 @@ const servizioSano = () => ({
 });
 
 async function conServer(t, opzioni) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, ...opzioni }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, ...opzioni }));
   await new Promise((risolvi, rifiuta) => { server.once('error', rifiuta); server.listen(0, '127.0.0.1', risolvi); });
   t.after(() => new Promise((risolvi) => server.close(risolvi)));
   return `http://127.0.0.1:${server.address().port}`;
@@ -162,7 +162,7 @@ test('BC-07/2 — due 503 diversi non sono la stessa cosa: «non attivo qui» co
  * ⛔ Fino al 16/09 c'era UN'esclusione, motivata da una misura: `PAYLOAD_LIMIT` non era raggiungibile
  *   perché `leggiCorpoJson` faceva `req.destroy()` oltre i 4096 byte e con un socket grezzo tornavano
  *   ZERO byte. ✅ Dal 16/09 quel ramo risponde (413, drenando) e il tetto è iniettabile
- *   (`createHttpApp({ limiteCorpoByte })`): la copia si prova con una richiesta VERA come tutte le
+ *   (`createHttpApp({ senzaGettone: 'prove', limiteCorpoByte })`): la copia si prova con una richiesta VERA come tutte le
  *   altre, e la mappa delle esclusioni resta vuota — se un giorno torna a riempirsi, deve dire perché.
  */
 const NON_RAGGIUNGIBILI_DALL_ESTERNO = new Map([]);

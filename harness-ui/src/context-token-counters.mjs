@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
+import { PESO_DEL_BLOCCO_FIRMATO } from '../../context-engine/src/engine.mjs';
 import { buildPreparedProviderRequest } from './context-provider-adapter.mjs';
-import { adattaRichiestaConDescrizioneComando, normalizzaReasoningPerModello } from './runtime-owner-adapter.mjs';
+import { adattaRichiestaConDescrizioneComando, normalizzaReasoningPerModello, ragionamentoPerSintesiOpenRouter } from './runtime-owner-adapter.mjs';
 import { ID_NATIVI_SDK, REGISTRO_FORNITORI } from './provider-registry.mjs';
 import { imageMessageContent } from './chat-image-attachments.mjs';
 import { conImmaginiDegliAttrezzi, senzaCampoImmagini } from './kernel/immagine-da-guardare.mjs';
@@ -40,7 +41,8 @@ export async function buildPreparedDesktopContextRequest({ messages, tools = [],
        vero D1, senza questo campo glm-5.3-flash si mangiava il budget nel pensiero). Il corpo contato deve
        portare lo stesso campo del corpo inviato, o la misura non è quella della richiesta. */
     const capability = await Promise.resolve(readModelCapabilities?.(model.model)).catch(() => null);
-    requestOptions.reasoning = normalizzaReasoningPerModello({ effort: 'low' }, capability);
+    /* 04/11: la stessa scelta di chi invia (`ragionamentoPerSintesiOpenRouter`: `none` dove si spegne, anche dopo un 400) */
+    requestOptions.reasoning = ragionamentoPerSintesiOpenRouter(capability, model.model);
   } else if (!chat) {
     Object.assign(requestOptions, opzioniRagionamentoPerSintesi(model.provider));
   }
@@ -93,9 +95,24 @@ export function opzioniRagionamentoPerSintesi(provider) {
 export function conAncoraDelFornitore(counter) {
   if (typeof counter?.countPreparedContext !== 'function') fail('CTX_TOKEN_PORT_INVALID', 'A counter to wrap is required.');
   const impronta = message => createHash('sha256').update(JSON.stringify(message)).digest('hex');
-  const stima = messages => Math.ceil(Buffer.byteLength(JSON.stringify(messages), 'utf8') / 3.5) + messages.length * 4; // la stessa euristica del contatore
+  const stima = messages => Math.ceil(Buffer.byteLength(JSON.stringify(messages.map(({ talos_provider_state, ...resto }) => resto)), 'utf8') / 3.5) + messages.length * 4; // la stessa euristica del contatore
   const ancore = new Map();
   const chiave = (provider, model) => `${provider}\n${model}`;
+  /* 174 (04/11/2026, OK di Performance, CLI e Mobile): la misura ancorata dice la parte esatta (`anchorTokens`: prompt_tokens, più
+     completion_tokens quando coprono la risposta ancorata) e la parte stimata (`estimatedDeltaTokens`); il margine del motore si
+     misura sulla seconda (`profiles.mjs`). `null` quando l'àncora manca o non combacia. Nessuna chiamata al contatore. */
+  const ancorata = ({ messages, model } = {}) => {
+    const ancora = model && typeof model.provider === 'string' && typeof model.model === 'string' ? ancore.get(chiave(model.provider, model.model)) : undefined;
+    const valida = ancora && Array.isArray(messages) && messages.length >= ancora.impronte.length && Number.isSafeInteger(model.windowTokens) && model.windowTokens > 0 && Number.isSafeInteger(model.responseReserve) && model.responseReserve >= 0 && model.responseReserve < model.windowTokens && ancora.impronte.every((hash, index) => hash === impronta(messages[index]));
+    if (!valida) return null;
+    let delta = messages.slice(ancora.impronte.length);
+    let anchorTokens = ancora.promptTokens;
+    let estimatedDeltaTokens = 0;
+    if (delta[0]?.role === 'assistant') { if (ancora.completionTokens) anchorTokens += ancora.completionTokens; else estimatedDeltaTokens += stima([delta[0]]); delta = delta.slice(1); }
+    const aggiunti = delta.length ? stima(delta) : 0;
+    estimatedDeltaTokens += aggiunti;
+    return { inputTokens: anchorTokens + estimatedDeltaTokens, anchorTokens, estimatedDeltaTokens, aggiunti };
+  };
   return Object.freeze({
     registraAncora({ provider, model, messages, usage }) {
       const prompt = Number(usage?.prompt_tokens ?? usage?.input_tokens);
@@ -104,19 +121,18 @@ export function conAncoraDelFornitore(counter) {
       ancore.set(chiave(provider, model), { impronte: messages.map(impronta), promptTokens: prompt, completionTokens: Number.isSafeInteger(completion) && completion > 0 ? completion : 0 });
       return true;
     },
+    anchoredEstimate(request) {
+      const stimata = ancorata(request);
+      return stimata && { inputTokens: stimata.inputTokens, anchorTokens: stimata.anchorTokens, estimatedDeltaTokens: stimata.estimatedDeltaTokens };
+    },
     async countPreparedContext(request) {
       const { messages, tools = [], model, signal } = request ?? {};
-      const ancora = model && typeof model.provider === 'string' && typeof model.model === 'string' ? ancore.get(chiave(model.provider, model.model)) : undefined;
-      const valida = ancora && Array.isArray(messages) && messages.length >= ancora.impronte.length && Number.isSafeInteger(model.windowTokens) && model.windowTokens > 0 && Number.isSafeInteger(model.responseReserve) && model.responseReserve >= 0 && model.responseReserve < model.windowTokens && ancora.impronte.every((hash, index) => hash === impronta(messages[index]));
-      if (!valida) return counter.countPreparedContext(request);
+      const stimata = ancorata(request);
+      if (!stimata) return counter.countPreparedContext(request);
       signal?.throwIfAborted();
-      let delta = messages.slice(ancora.impronte.length);
-      let inputTokens = ancora.promptTokens;
-      if (delta[0]?.role === 'assistant') { inputTokens += ancora.completionTokens || stima([delta[0]]); delta = delta.slice(1); }
-      const aggiunti = delta.length ? stima(delta) : 0;
-      inputTokens += aggiunti;
+      const { inputTokens, anchorTokens, estimatedDeltaTokens, aggiunti } = stimata;
       const requestHash = createHash('sha256').update(JSON.stringify({ provider: model.provider, model: model.model, messages, tools })).digest('hex');
-      return { schema: 'talos.context.tokens.v1', inputTokens, windowTokens: model.windowTokens, responseReserve: model.responseReserve, method: 'provider', exact: false, requestHash, provider: model.provider, model: model.model, estimatedMarginTokens: Math.max(64, Math.ceil(aggiunti * 0.15)) };
+      return { schema: 'talos.context.tokens.v1', inputTokens, windowTokens: model.windowTokens, responseReserve: model.responseReserve, method: 'provider', exact: false, requestHash, provider: model.provider, model: model.model, estimatedMarginTokens: Math.max(64, Math.ceil(aggiunti * 0.15)), anchorTokens, estimatedDeltaTokens };
     },
   });
 }
@@ -184,7 +200,11 @@ export function createContextTokenCounter({ fetchFn, resolveProfile, hashFn = te
          *   JSON di strumenti). Resta una stima, e resta dichiarata tale — chi ha un conteggio del
          *   fornitore lo usa.
          */
-        const inputTokens = Math.ceil(Buffer.byteLength(JSON.stringify(body), 'utf8') / 3.5) + messages.length * 4;
+        /* Performance, 31/10/2026: sul filo Responses il ragionamento cifrato si rimanda intero e il servizio lo conta 12 byte a token (`PESO_DEL_BLOCCO_FIRMATO`, motore del contesto).
+           Sul Codice col piano del telefono, a collegamento spento, resta come prima: ogni passo rimanda tutto su HTTP, e la soglia più alta non è misurata lì (Mobile, 31/10). */
+        const cifrati = process.env.TALOS_PIANO_SENZA_COLLEGAMENTO === '1' || !Array.isArray(body.input) ? 0
+          : body.input.reduce((somma, voce) => somma + (voce?.type === 'reasoning' && typeof voce.encrypted_content === 'string' ? Buffer.byteLength(voce.encrypted_content, 'utf8') : 0), 0);
+        const inputTokens = Math.ceil((Buffer.byteLength(JSON.stringify(body), 'utf8') - cifrati * (1 - PESO_DEL_BLOCCO_FIRMATO)) / 3.5) + messages.length * 4;
         return { ...base, inputTokens, method: 'heuristic', exact: false, estimatedMarginTokens: Math.max(256, Math.ceil(inputTokens * 0.15)) };
       };
       /*

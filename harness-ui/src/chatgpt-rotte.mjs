@@ -44,11 +44,28 @@ function errore(messaggio, code, extra = {}) {
 
 const stato3 = (valore) => (valore === true ? 'osservato-si' : valore === false ? 'osservato-no' : 'ignoto');
 
+/* Modalità veloce (owner 31/10/2026, `PROPOSTA-MODALITA-VELOCE`): la fascia la dichiara il catalogo del servizio per ogni modello, mai un elenco scritto a mano. */
+function fasciaVeloceDi(m) {
+  const fascia = Array.isArray(m.service_tiers) ? m.service_tiers.find((voce) => typeof voce?.id === 'string' && voce.id !== '' && voce.id !== 'default') : null;
+  return fascia ? { id: fascia.id, descrizione: typeof fascia.description === 'string' ? fascia.description : null } : null;
+}
+
+/** La fascia veloce di un modello, o `null` se non ce l'ha. I modelli del piano stanno nel loro catalogo, non in quello di OpenRouter. Se il catalogo non risponde lancia: un guasto non dice niente sul modello. */
+export function creaFasciaVeloceDelModello({ catalogo = null } = {}) {
+  return async (modello) => {
+    const id = String(modello ?? '');
+    if (!id.startsWith('chatgpt:') || !catalogo) return null;
+    const modelli = await catalogo.elenca();
+    return modelli?.find?.((m) => m.id === id)?.fasciaVeloce ?? null;
+  };
+}
+
 /** Un modello dell'elenco di OpenAI nella forma che il selettore di TALOS conosce. L'id porta il prefisso del fornitore. */
 export function modelloDelPiano(m) {
   const livelli = Array.isArray(m.supported_reasoning_levels) ? m.supported_reasoning_levels.map((l) => (typeof l === 'string' ? l : l?.effort)).filter((l) => typeof l === 'string') : null;
   const modalita = Array.isArray(m.input_modalities) ? m.input_modalities.filter((x) => typeof x === 'string') : null;
   const contesto = Number.isFinite(m.context_window) ? m.context_window : Number.isFinite(m.max_context_window) ? m.max_context_window : null;
+  const fasciaVeloce = fasciaVeloceDi(m);
   return {
     id: `chatgpt:${m.slug}`, nome: typeof m.display_name === 'string' && m.display_name.trim() ? m.display_name : m.slug, provider: 'chatgpt',
     descrizione: typeof m.description === 'string' ? m.description : null,
@@ -56,6 +73,7 @@ export function modelloDelPiano(m) {
     capacita: { visione: modalita ? stato3(modalita.includes('image')) : 'ignoto', toolUse: 'ignoto', reasoning: livelli ? stato3(livelli.length > 0) : 'ignoto' },
     ...(modalita ? { inputModalities: modalita } : {}),
     ...(livelli?.length ? { livelliRagionamento: livelli, livelloRagionamentoPredefinito: typeof m.default_reasoning_level === 'string' ? m.default_reasoning_level : null } : {}),
+    ...(fasciaVeloce ? { fasciaVeloce } : {}),
   };
 }
 

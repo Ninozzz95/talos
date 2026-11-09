@@ -13,9 +13,9 @@
 
 import { creaReplayCoalescente } from './sse-replay-coalescente.mjs';
 
-export function iscriviConRigiocata({ sessionRegistry, sessionId, daSequenza = 0, manda }) {
+export function iscriviConRigiocata({ sessionRegistry, sessionId, daSequenza = 0, manda, capacita = null }) {
   const replay = creaReplayCoalescente((evento) => { manda(evento); });
-  const disiscrivi = sessionRegistry.iscriviti(sessionId, replay.ascoltatore, daSequenza);
+  const disiscrivi = sessionRegistry.iscriviti(sessionId, replay.ascoltatore, daSequenza, { capacita }); // R-34 parte 2: le capacità del client
   replay.fineReplay();
   manda({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null });
   if (typeof sessionRegistry.statoCoda === 'function') {

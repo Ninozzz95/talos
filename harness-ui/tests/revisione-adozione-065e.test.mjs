@@ -29,14 +29,20 @@ test('ADOZIONE-REV-04 (S3) — a fork of the whole conversation restarts the mod
   const runs = [];
   const avviaSessioneFn = (input) => new Promise((resolve) => {
     const n = runs.length;
+    const storia = () => [
+      { role: 'user', content: 'ciao' },
+      { role: 'assistant', content: 'delego' },
+      { role: 'user', content: RISULTATO_FIGLIA }, // voce di coda a giro in corso: nessun talosOrigin (talosHarness.mjs:11836)
+      { role: 'assistant', content: 'ok' },
+    ];
     runs.push({ input, fine: () => {
       input.onEvento({ type: 'RunFinished', threadId: `t${n}`, runId: `r${n}` });
-      resolve({ ok: true, esito: { detto: 'ok', comeFinita: 'concluso', messaggiFinali: [
-        { role: 'user', content: 'ciao' },
-        { role: 'assistant', content: 'delego' },
-        { role: 'user', content: RISULTATO_FIGLIA }, // voce di coda a giro in corso: nessun talosOrigin (talosHarness.mjs:11836)
-        { role: 'assistant', content: 'ok' },
-      ] } });
+      resolve({ ok: true, esito: { detto: 'ok', comeFinita: 'concluso', messaggiFinali: storia() } });
+    },
+    /* decisione 198 (owner 04/11): un giro fermato dalla persona, dopo il quale la ripresa SENZA messaggio nuovo (il ▶) parte */
+    ferma: () => {
+      input.onEvento({ type: 'RunError', threadId: `t${n}`, runId: `r${n}`, code: 'fermato', message: 'stopped' });
+      resolve({ ok: false, esito: { detto: 'stopped', comeFinita: 'fermato', messaggiFinali: storia() }, erroreInterno: 'fermato', codiceErrore: 'fermato' });
     } });
     input.onEvento({ type: 'RunStarted', threadId: `t${n}`, runId: `r${n}` });
   });
@@ -46,11 +52,14 @@ test('ADOZIONE-REV-04 (S3) — a fork of the whole conversation restarts the mod
     preparaEsecuzioneFn: () => ({ cartella: '/tmp/x', comandoProva: 'npm test', task: { id: 'task', consegna: 'ciao' } }),
     modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   const { sessionId } = registry.avvia('task', { permessiScelto: 'Workspace write', modalitaOperativaScelta: 'normale' });
-  runs.at(-1).fine();
+  /* decisione 198 (owner 04/11, 82db48a2f): dopo un giro FINITO la ripresa senza messaggio nuovo è rifiutata (`nothing-to-resume`);
+     il controllo riprende dopo uno Stop, l'unico modo (con errore e interruzione) in cui oggi riparte un giro senza testo */
+  runs.at(-1).ferma();
   await new Promise((r) => setTimeout(r, 30));
   /* controllo: la ripresa senza messaggio nuovo è spenta dalla cura */
   const prima = runs.length;
-  assert.ok(!registry.resume(sessionId, null, [])?.erroreAvvio, 'premessa: la ripresa parte');
+  const ripresa = registry.resume(sessionId, null, []);
+  assert.ok(!ripresa?.erroreAvvio, `premessa: la ripresa parte (${JSON.stringify(ripresa)?.slice(0, 160)})`);
   assert.equal(runs.length, prima + 1, 'premessa: la ripresa è un giro');
   assert.equal(runs.at(-1).input.fileAdottatiDallaPersona, false, 'controllo: ripresa senza messaggio nuovo, spento');
   runs.at(-1).fine();

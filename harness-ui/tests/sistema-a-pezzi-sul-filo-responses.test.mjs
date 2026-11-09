@@ -75,14 +75,13 @@ for (const provider of ['anthropic', 'zai-anthropic', 'minimax-anthropic']) {
     const corpo = await corpoAnthropic(provider);
     const sistema = Array.isArray(corpo.system) ? corpo.system : [{ type: 'text', text: corpo.system }];
     assert.ok(sistema.every((b) => typeof b.text === 'string'), `a system block of ${provider} carries a non-string text: ${JSON.stringify(sistema.map((b) => typeof b.text))}`);
-    const blocco = sistema.find((b) => b.text.startsWith('Project context update'));
-    assert.ok(blocco, 'the update is not in the system blocks');
-    /* owner 21/10/2026 sera, «come Hermes» (revisione M1): il marcatore solo a chi lo DICHIARA nel registro. Z.AI sulla porta Anthropic
-       non lo dichiara e la sua documentazione non lo nomina (letta il 21/10): il testo resta stringa, il marcatore non parte. */
-    if (fornitore(provider).cache?.marcatore === 'cache_control') {
-      assert.deepEqual(blocco.cache_control, { type: 'ephemeral', ttl: '1h' }, 'the cache marker did not reach the update\'s system block');
-      assert.equal(sistema.filter((b) => b.cache_control).length, 1, 'only the block the kernel marked carries the marker');
-    } else {
+    /* Decisione 194 (owner 04/11/2026): l'aggiornamento in coda non entra più nel campo di sistema in testa (lo cambiava a ogni nota): è un
+       blocco `<talos-note>` di testo della persona, dopo l'ultima domanda. Prima qui si chiedeva il marcatore sul suo blocco di sistema. */
+    assert.ok(!sistema.some((b) => b.text.includes('Project context update')), 'the update stays out of the system blocks');
+    const testi = corpo.messages.filter((m) => m.role === 'user').flatMap((m) => (Array.isArray(m.content) ? m.content : [{ text: m.content }])).map((p) => p?.text ?? '');
+    assert.equal(testi.filter((t) => t.startsWith(`<talos-note>\n${AGGIORNAMENTO}`)).length, 1, 'the update arrives once, as a note');
+    /* owner 21/10/2026 sera, «come Hermes» (revisione M1): il marcatore solo a chi lo DICHIARA nel registro (Z.AI sulla porta Anthropic no). */
+    if (fornitore(provider).cache?.marcatore !== 'cache_control') {
       assert.equal(sistema.filter((b) => b.cache_control).length, 0, `${provider} does not declare the marker: none is sent`);
     }
   });
@@ -95,7 +94,10 @@ test('SAS-04 — Gemini: le istruzioni di sistema sono testo, mai un array dentr
   const parti = corpo.systemInstruction?.parts ?? [];
   assert.ok(parti.length > 0, 'premessa: Gemini riceve le istruzioni di sistema');
   assert.ok(parti.every((p) => typeof p.text === 'string'), 'a Gemini system part carries a non-string text');
-  assert.ok(parti.some((p) => p.text.startsWith('Project context update')), 'the update is not among the Gemini system parts');
+  /* decisione 194: l'aggiornamento è una nota della persona in coda, non una parte delle istruzioni di sistema */
+  assert.ok(!parti.some((p) => p.text.includes('Project context update')), 'the update stays out of the Gemini system parts');
+  const testi = corpo.contents.filter((c) => c.role === 'user').flatMap((c) => c.parts.map((p) => p.text ?? ''));
+  assert.equal(testi.filter((t) => t.includes(`<talos-note>\n${AGGIORNAMENTO}`)).length, 1);
 });
 
 test('SAS-05 AL CONTRARIO — un pezzo che non è testo in un sistema si ferma, non si scarta in silenzio', () => {

@@ -23,6 +23,7 @@ export const CODICI = Object.freeze([
   /* R5.13 (24/10/2026, contratto Parte 2, P2.5 e «Revision 1»): lo scambio di file. `FILE_NOT_ALLOWED` è RISERVATO e non usato finché
      il PC non blocca nessun tipo. Uno scostamento sbagliato di `file.upload.chunk` è `BAD_MESSAGE` col motivo `offset-mismatch` e
      `params.ricevuti` (stato 409, come tus 1.0): nessun codice in più oltre a quelli concordati. */
+  'PIECE_CHANGED', 'EXPORT_TOO_LARGE',
   'FILE_TOO_LARGE', 'TRANSFER_UNKNOWN', 'TRANSFER_EXPIRED', 'CHECKSUM_MISMATCH', 'FILE_GONE', 'FILE_NOT_ALLOWED',
 ]);
 

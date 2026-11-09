@@ -38,7 +38,7 @@ async function request(app,url,{method='GET',body,headers={}}={}){
  res.end=b=>{res.body=Buffer.from(b??'');finish();};
  app(req,res);await ended;return res;
 }
-function appFor(cartella){return createHttpApp({staticHandler:async()=>null,token:'artifact30-test-only',sessionRegistry:{
+function appFor(cartella){return createHttpApp({ senzaGettone: 'prove', staticHandler:async()=>null,token:'artifact30-test-only',sessionRegistry:{
  scaricaVoceLibreria:async(sessionId,id)=>{
   if(sessionId!=='session30')return{erroreAvvio:'Sessione non trovata',code:'NOT_FOUND'};
   const value=await leggiBytesVoce({cartella,id});return value?{ok:true,...value}:{erroreAvvio:'Questa voce non esiste',code:'LIBRARY_NOT_FOUND'};

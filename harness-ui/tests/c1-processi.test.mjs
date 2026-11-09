@@ -93,7 +93,7 @@ async function banco(t, { campionatore = null } = {}) {
         avviaSessioneFn(input) { return new Promise((resolve) => { runs.push({ input, resolve }); input.onEvento({ type: 'RunStarted' }) }) },
     })
     const registro = nuovoRegistro()
-    const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro, campionatoreRisorse: campionatore }))
+    const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro, campionatoreRisorse: campionatore }))
     await new Promise((r) => server.listen(0, '127.0.0.1', r))
     t.after(async () => {
         await new Promise((r) => server.close(r))

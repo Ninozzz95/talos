@@ -67,3 +67,34 @@ export async function slugDelFornitore({ fornitore, modello, fetchFn = globalThi
   }
   return [...slug][0];
 }
+
+/**
+ * Decisione 193 (owner 04/11/2026): i fornitori del modello, come `{ nome, slug }` con lo slug di BASE, senza doppioni (un fornitore con
+ * due varianti, `particle-ai/fp8` e `particle-ai/bf16`, è uno). Serve al nucleo per sapere, prima di evitare un fornitore che perde la
+ * cache, se ne resta almeno un altro. Stessa fonte e stessi controlli di `slugDelFornitore`; qui una risposta che non si legge è un
+ * errore col codice OPENROUTER_ENDPOINTS_UNAVAILABLE, e chi chiama non evita nessuno.
+ * @param {{modello:string, fetchFn?:typeof fetch, chiave?:string|null, signal?:AbortSignal}} richiesta
+ * @returns {Promise<Array<{nome:string, slug:string}>>}
+ */
+export async function fornitoriDelModello({ modello, fetchFn = globalThis.fetch, chiave = null, signal = null } = {}) {
+  const percorso = percorsoDelModello(modello);
+  if (!percorso) throw new FornitoreNonTrovatoError('The model id is not an OpenRouter model id', 'QUERY_INVALID');
+  let corpo;
+  try {
+    const risposta = await fetchFn(`${BASE}/${percorso}/endpoints`, {
+      headers: { Accept: 'application/json', ...(chiave ? { Authorization: `Bearer ${chiave}` } : {}) },
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(ATTESA_MASSIMA_MS)]) : AbortSignal.timeout(ATTESA_MASSIMA_MS),
+    });
+    if (!risposta?.ok) throw new Error('not ok');
+    corpo = await risposta.json();
+  } catch {
+    throw new FornitoreNonTrovatoError('OpenRouter did not answer with the providers of this model', 'OPENROUTER_ENDPOINTS_UNAVAILABLE');
+  }
+  const visti = new Map();
+  for (const e of endpointDi(corpo)) {
+    if (typeof e?.tag !== 'string' || typeof e?.provider_name !== 'string') continue;
+    const slug = normale(e.tag).split('/')[0];
+    if (/^[a-z0-9][a-z0-9._-]{0,47}$/u.test(slug) && !visti.has(slug)) visti.set(slug, e.provider_name.trim());
+  }
+  return [...visti].map(([slug, nome]) => ({ nome, slug }));
+}

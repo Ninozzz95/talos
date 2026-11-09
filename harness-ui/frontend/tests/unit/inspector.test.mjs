@@ -6,8 +6,8 @@ import { INSPECTOR } from '../../lab/fixtures/inspector.js';
 // 06/09 B2 — la colonna dei dettagli dice il vero: dati del monolite, «—» dove mancano.
 
 test('INSP-AMBIENTE: quattro righe, e «—» quando il dato non c\'è', () => {
-  assert.deepEqual(righeAmbiente(INSPECTOR.contesto), [['Ramo', 'lane/harness-desktop'], ['Worktree', 'AVM-harness-desktop'], ['Non salvate', '2 file'], ['Repo annidati', '1 · fiducia separata']]);
-  assert.deepEqual(righeAmbiente({ branch: null, repoAnnidati: [] }), [['Ramo', '—'], ['Worktree', '—'], ['Non salvate', '—'], ['Repo annidati', 'nessuno']]);
+  assert.deepEqual(righeAmbiente(INSPECTOR.contesto), [['Ramo', 'lane/harness-desktop'], ['Albero di lavoro', 'AVM-harness-desktop'], ['Non salvate', '2 file'], ['Repo annidati', '1 · fiducia separata']]);
+  assert.deepEqual(righeAmbiente({ branch: null, repoAnnidati: [] }), [['Ramo', '—'], ['Albero di lavoro', '—'], ['Non salvate', '—'], ['Repo annidati', 'nessuno']]);
   assert.deepEqual(righeAmbiente(null)[3], ['Repo annidati', '—']);
 });
 
@@ -15,7 +15,7 @@ test('INSP-FINESTRA: le parole del mockup dai token; senza finestra niente perce
   const f = righeFinestra(INSPECTOR.usage, INSPECTOR.finestra, INSPECTOR.ripartizione);
   assert.equal(f.titoloDestra, '200k');
   // le cifre del mockup: parti troncate al decimo, «Libera» = finestra meno tutto, percentuale che chiude a 100
-  assert.deepEqual(f.righe.map((r) => r.slice(0, 2)), [['Attrezzi', '7,5k · 3,7%'], ['Istruzioni', '4,1k · 2,0%'], ['Memoria', '1,8k · 0,9%'], ['Conversazione', '41,2k · 20,6%'], ['Libera', '145,4k · 72,8%'], ['Riusato dalla cache', 'non misurato']]);
+  assert.deepEqual(f.righe.map((r) => r.slice(0, 2)), [['Strumenti', '7,5k · 3,7%'], ['Istruzioni', '4,1k · 2,0%'], ['Memoria', '1,8k · 0,9%'], ['Conversazione', '41,2k · 20,6%'], ['Libera', '145,4k · 72,8%'], ['Riusato dalla cache', 'non misurato']]);
   const senza = righeFinestra({ prompt_tokens: 1000, completion_tokens: 200 }, null, null);
   assert.equal(senza.titoloDestra, 'finestra non dichiarata');
   assert.deepEqual(senza.righe.map((r) => r.slice(0, 2)), [['Conversazione', '1,2k'], ['Libera', '—'], ['Riusato dalla cache', 'non misurato']]);
@@ -28,7 +28,7 @@ test('INSP-GIRI e FILE', () => {
   const g = righeGiri(INSPECTOR.giri);
   assert.deepEqual(g[0].slice(0, 2), ['1 · La richiesta', '0,4k']);
   assert.deepEqual(g[4], ['7 · Suite completa', 'in corso', 'accent']);
-  assert.deepEqual(righeGiri([{ numero: 2, titolo: 'Lettura', attrezzi: 3 }])[0].slice(0, 2), ['2 · Lettura', '3 attrezzi']);
+  assert.deepEqual(righeGiri([{ numero: 2, titolo: 'Lettura', attrezzi: 3 }])[0].slice(0, 2), ['2 · Lettura', '3 strumenti']);
   assert.deepEqual(righeFile(INSPECTOR.file), [['src/session-registry.mjs', '+18 −2'], ['tests/session-registry.test.mjs', '+64'], ['src/http-app.mjs', '+30']]);
 });
 
@@ -46,13 +46,13 @@ test('D-10A: il messaggio della persona ha la sua riga, e tiene il numero che la
     { numero: 4, titolo: 'ok adesso aprilo nel', tu: true },
   ]);
   assert.deepEqual(righe.map((r) => r[0]), ['1 · Fai la suite completa', '2 · Lettura', '3 · Fatto.', '4 · ok adesso aprilo nel']);
-  assert.deepEqual(righe.map((r) => r[1]), ['tuo messaggio', '3 attrezzi', '0 attrezzi', 'tuo messaggio']);
+  assert.deepEqual(righe.map((r) => r[1]), ['tuo messaggio', '3 strumenti', '0 strumenti', 'tuo messaggio']);
   /* ⛔ La successione non ha piu' buchi: e' esattamente questo che il difetto rompeva. */
   assert.deepEqual(righe.map((r) => Number(r[0].split(' · ')[0])), [1, 2, 3, 4]);
 });
 
 test("D-10A, AL CONTRARIO: senza `tu` niente cambia, e un messaggio senza testo non resta senza nome", () => {
-  assert.deepEqual(righeGiri([{ numero: 2, titolo: 'Lettura', attrezzi: 3 }])[0], ['2 · Lettura', '3 attrezzi', '']);
+  assert.deepEqual(righeGiri([{ numero: 2, titolo: 'Lettura', attrezzi: 3 }])[0], ['2 · Lettura', '3 strumenti', '']);
   assert.deepEqual(righeGiri([{ numero: 5, attrezzi: 1, inCorso: true }])[0], ['5 · Giro', 'in corso', 'accent']);
   assert.deepEqual(righeGiri([{ numero: 4, tu: true }])[0], ['4 · Messaggio', 'tuo messaggio', '']);
   /* ⛔ Un messaggio della persona non e' un giro: non prende mai «in corso» ne' l'accento. */
@@ -67,7 +67,7 @@ test("D-10A: il titolo di una riga «tu» sono le prime parole della bolla, e se
   assert.equal(titoloMessaggioUtente({ querySelector: () => ({ textContent: '   ' }) }), '');
 });
 
-test('INSP-PROCESSI: dagli eventi degli attrezzi al comando con durata e uscita; il comando viene dagli argomenti JSON', () => {
+test('INSP-PROCESSI: dagli eventi degli strumenti al comando con durata e uscita; il comando viene dagli argomenti JSON', () => {
   const eventi = [
     { type: 'ToolCallStart', toolCallId: 'a', toolCallName: 'shell', ricevutoA: 1000, giro: 5 },
     { type: 'ToolCallArgs', toolCallId: 'a', delta: '{"command":"npm run ' },

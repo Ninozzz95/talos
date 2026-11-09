@@ -55,6 +55,14 @@ export function hostAmmesso(host) {
   return NOMI_LOOPBACK.has(nomeDaHost(host));
 }
 
+/**
+ * L'altro nome di loopback dello stesso server: `127.0.0.1:P` ⇄ `localhost:P`. Per il browser sono due SITI: un cookie `SameSite=Strict` di uno non segue l'altro, e
+ * nemmeno arriva per host. Serve a `/api/v1/browser/proxy` (revisione R1).
+ */
+export function aliasDiLoopback(host) {
+  return `${nomeDaHost(host) === 'localhost' ? '127.0.0.1' : 'localhost'}:${portaDaHost(host)}`;
+}
+
 /** Vero per le origini di loopback: http/https su localhost, 127.0.0.1, [::1], con o senza porta. */
 export function origineLoopback(origine) {
   return typeof origine === 'string' && ORIGINE_LOOPBACK.test(origine);
@@ -69,7 +77,7 @@ function portaDiOrigine(origine) {
   const url = new URL(origine);
   return url.port || (url.protocol === 'https:' ? '443' : '80');
 }
-function portaDaHost(host) {
+export function portaDaHost(host) {
   const valore = String(host).trim();
   const dopo = valore.startsWith('[') ? valore.slice(valore.indexOf(']') + 1) : valore;
   const i = dopo.lastIndexOf(':');

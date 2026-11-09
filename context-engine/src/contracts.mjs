@@ -20,7 +20,9 @@ const message = z.object({ role: z.enum(['system', 'developer', 'user', 'assista
 export const ContextRecordV1 = z.strictObject({ schema: z.literal('talos.context.record.v1').optional(), id, sessionId: id.optional(), sequence: revision.optional(), message, createdAt: date, origin: z.string().optional(), assetRefs: z.array(id).default([]), sha256: z.string().regex(/^[a-f0-9]{64}$/u).optional() });
 export const ContextSettingsV1 = z.strictObject({
   auto: z.boolean().default(true),
-  model: z.discriminatedUnion('mode', [z.strictObject({ mode: z.literal('follow-session') }), z.strictObject({ mode: z.literal('explicit'), provider: id, model: id })]).default({ mode: 'follow-session' }),
+  /* C6 (28/10/2026, concordato con la CLI): `origine` dice CHI ha scelto il modello del riassunto per questa conversazione — la persona o
+     l'ospite (la CLI ci scrive il suo modello leggero). Facoltativa: senza, vale «ospite», come le impostazioni scritte prima di oggi. */
+  model: z.discriminatedUnion('mode', [z.strictObject({ mode: z.literal('follow-session') }), z.strictObject({ mode: z.literal('explicit'), provider: id, model: id, origine: z.enum(['persona', 'ospite']).optional() })]).default({ mode: 'follow-session' }),
   triggerRatio: z.number().gt(0).lt(1).default(0.75), targetRatio: z.number().gt(0).lt(1).default(0.55),
   retainRecentTurns: z.number().int().min(0).max(100).default(2), focus: z.string().max(8000).default(''),
   nativeMode: z.enum(['off', 'qualified']).default('off'), semanticSearch: z.boolean().default(true),
@@ -33,13 +35,19 @@ export const ContextSummaryV1 = z.strictObject({ schema: z.literal('talos.contex
 export const TokenMeasurementV1 = z.strictObject({ schema: z.literal('talos.context.tokens.v1'), inputTokens: revision, windowTokens: z.number().int().positive(), responseReserve: revision, method: z.enum(['runtime', 'provider', 'heuristic']), exact: z.boolean(), requestHash: z.string(), provider: id, model: id, estimatedMarginTokens: revision.optional(),
   /* 16/10/2026 (S2, CLI): la stima di RIPIEGO del contatore dice da quale guasto nasce (`context-token-counters.mjs`, `stimaDopoUnGuasto`).
      Senza questo campo lo `strictObject` la rifiutava e il giro falliva: il contrario della cura. Solo un codice del contatore. */
-  fallback: z.string().regex(/^CTX_TOKEN_[A-Z_]+$/u).optional() })
+  fallback: z.string().regex(/^CTX_TOKEN_[A-Z_]+$/u).optional(),
+  /* 174 (04/11/2026, OK di Performance, CLI e Mobile): la parte esatta dal fornitore, la parte stimata dopo di lei e il margine con cui
+     il motore ha deciso (`profiles.mjs`). Assenti nelle misure già salvate e in quelle tutte stimate. */
+  anchorTokens: revision.optional(), estimatedDeltaTokens: revision.optional(), marginTokens: revision.optional() })
   .refine(value => value.method !== 'heuristic' || !value.exact, 'La stima euristica non è esatta')
   .refine(value => value.fallback === undefined || value.method === 'heuristic', 'Un ripiego del contatore è sempre una stima');
 export const ContextVersionV1 = z.strictObject({ schema: z.literal('talos.context.version.v1'), id, sessionId: id, coveredThrough: revision, sourceIds: z.array(id), sourceHash: z.string().regex(/^[a-f0-9]{64}$/u), summary: ContextSummaryV1, activeMessages: z.array(message), model, measurement: TokenMeasurementV1, createdAt: date, restoredFrom: id.optional(),
   /* C1 (owner 10/10/2026): ciò che il riassunto ha TENUTO, come dati — le richieste della persona nel registro (numero e testo) e
      l'indice meccanico. Facoltativo: una versione di prima non lo ha, e la scheda lo dice. */
-  retained: z.strictObject({ personRequests: z.strictObject({ total: revision, kept: z.array(z.strictObject({ n: z.number().int().positive(), text: z.string() })) }), anchorIndex: z.string().nullable() }).optional() });
+  retained: z.strictObject({ personRequests: z.strictObject({ total: revision, kept: z.array(z.strictObject({ n: z.number().int().positive(), text: z.string() })) }), anchorIndex: z.string().nullable() }).optional(),
+  /* La coda dopo il riassunto (owner 05/11/2026, registro 224): fin dove le uscite vecchie della coda si mostrano col segnaposto
+     (`tool-output-clearing.mjs`, `tailClearingBoundary`). Facoltativo: una versione di prima non lo ha, e la coda resta intera. */
+  tailClearedThrough: revision.optional() });
 export const ContextJobV1 = z.strictObject({ schema: z.literal('talos.context.job.v1'), id, sessionId: id, idempotencyKey: id, requestFingerprint: z.string(), kind: z.enum(['compact', 'regenerate', 'restore']), state: z.enum(['queued', 'preparing', 'summarizing', 'validating', 'ready', 'committed', 'paused', 'cancelled', 'failed']), baseRevision: revision, baseStateRevision: revision, coveredThrough: revision, model, createdAt: date, updatedAt: date, completedSegments: z.array(z.json()), progress: z.strictObject({ completed: revision, total: revision, phase: z.string() }), error: z.strictObject({ code: id, message: z.string() }).optional(), versionId: id.optional() });
 export const ContextEventV1 = z.strictObject({ schema: z.literal('talos.context.event.v1'), id, sessionId: id, jobId: id.optional(), versionId: id.optional(), kind: id, state: z.string().optional(), createdAt: date, payload: z.json() });
 /** 09/09 — l'ultima misura preparata per la richiesta, con la revisione a cui apparteneva: la UI la mostra come «misurata alle …», e dice se il contesto è cambiato dopo. */

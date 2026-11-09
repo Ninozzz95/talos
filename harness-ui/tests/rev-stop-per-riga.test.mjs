@@ -125,7 +125,7 @@ test('STOP-04 (registro + HTTP veri): 200 su un comando in corso, 409 su uno fin
     assert.equal(typeof runs[0].input.registraComandoFermabile, 'function', 'il registro passa la registrazione al giro')
     let fermato = 0
     const sgancia = runs[0].input.registraComandoFermabile({ toolCallId: 'c7', ferma: () => { fermato += 1 } })
-    const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }))
+    const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro }))
     await new Promise((r) => server.listen(0, '127.0.0.1', r))
     t.after(() => new Promise((r) => server.close(r)))
     const base = `http://127.0.0.1:${server.address().port}/api/v1/sessions`
@@ -302,7 +302,7 @@ test('SFONDO-02 (registro + HTTP veri): POST /processes/:id/sfondo — 200 su un
     const { sessionId } = registro.avvia('task')
     let sfondato = 0
     const sgancia = runs[0].input.registraComandoFermabile({ toolCallId: 'c7', ferma: () => {}, sfonda: () => { sfondato += 1 } })
-    const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }))
+    const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro }))
     await new Promise((r) => server.listen(0, '127.0.0.1', r))
     t.after(() => new Promise((r) => server.close(r)))
     const base = `http://127.0.0.1:${server.address().port}/api/v1/sessions`

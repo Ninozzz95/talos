@@ -36,7 +36,7 @@ async function listen(t, { sessioni = [SESSIONE] } = {}) {
     cartellaMemoria: join(radice, 'memoria'),
   };
   const vive = new Set(sessioni);
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     listaTaskDisponibili: () => [],
     elencaCartelleProgetto: () => [],

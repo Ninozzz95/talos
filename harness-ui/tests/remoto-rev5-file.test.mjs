@@ -75,7 +75,7 @@ test('REV5-F5 file riscritto con la STESSA dimensione e lo STESSO mtime (un disc
   utimesSync(p, fisso, fisso);
   const st0 = statSync(p);
   b.eventi.push({ type: 'RunStarted' }, { type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'scrivi' },
-    { type: 'ToolCallArgs', toolCallId: 'c1', delta: JSON.stringify({ percorso: 'y.txt' }) }, { type: 'ToolCallResult', toolCallId: 'c1' });
+    { type: 'ToolCallArgs', toolCallId: 'c1', delta: JSON.stringify({ percorso: 'y.txt' }) }, { type: 'StateDelta', delta: [{ op: 'add', path: '/file/' + 'y.txt', value: 'x' }] }, { type: 'ToolCallResult', toolCallId: 'c1' });
   const [riga] = (await b.file.elenco({ dispositivoId: 'dA', sessionId: 's1' })).items;
   const primo = await b.file.leggi({ dispositivoId: 'dA', sessionId: 's1', fileId: riga.fileId, versione: riga.versione, da: 0, quanti: 5 });
   writeFileSync(p, 'BBBBBBBBBB'); // stesso inode, stessa dimensione
@@ -91,7 +91,7 @@ test('REV5-M09b file accorciato dopo l\'elenco: FILE_GONE', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'talos-rev5-m09b-')); t.after(() => rimuoviCartellaDiProva(dir));
   const progetto = join(dir, 'p'); mkdirSync(progetto);
   const reg = { esiste: () => true, cartellaPerChatFile: async () => ({ cartella: realpathSync(progetto) }) };
-  const eventi = [{ type: 'RunStarted' }, { type: 'ToolCallStart', toolCallId: 'c', toolCallName: 'scrivi' }, { type: 'ToolCallArgs', toolCallId: 'c', delta: '{"percorso":"z.txt"}' }, { type: 'ToolCallResult', toolCallId: 'c' }];
+  const eventi = [{ type: 'RunStarted' }, { type: 'ToolCallStart', toolCallId: 'c', toolCallName: 'scrivi' }, { type: 'ToolCallArgs', toolCallId: 'c', delta: '{"percorso":"z.txt"}' }, { type: 'StateDelta', delta: [{ op: 'add', path: '/file/' + 'z.txt', value: 'x' }] }, { type: 'ToolCallResult', toolCallId: 'c' }];
   writeFileSync(join(progetto, 'z.txt'), 'x'.repeat(2000));
   const f = creaFileDeiDispositivi({ cartella: join(dir, 'dati'), sessionRegistry: reg, eventiDellaSessione: () => eventi });
   const [r] = (await f.elenco({ dispositivoId: 'd', sessionId: 's' })).items;

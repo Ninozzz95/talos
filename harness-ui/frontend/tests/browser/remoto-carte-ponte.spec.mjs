@@ -11,7 +11,7 @@ async function prepara(page, modo = 'dark') {
   await page.route('**/api/v1/**', (route) => { const r = route.request(); if (r.method() !== 'GET') { fermate.nonGet.push(`${r.method()} ${new URL(r.url()).pathname}`); return route.abort(); } return route.continue(); });
   const banco = { conAttesa: false, acceso: true, sceltaFatta: true, relay: { modo: 'n0' } };
   await page.addInitScript((colorMode) => { try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode } })); } catch { /* */ } }, modo);
-  await page.route('**/api/v1/sessions/ponte-*/events', () => { /* aperto e muto */ });
+  await page.route('**/api/v1/sessions/ponte-*/events*', () => { /* aperto e muto */ });
   await page.route(/\/api\/v1\/remote(\/.*)?$/u, async (route) => {
     const req = route.request(); const url = new URL(req.url());
     if (req.method() !== 'GET') chiamate.push(`${req.method()} ${url.pathname} ${req.postData() ?? ''}`.trim());

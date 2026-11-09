@@ -16,7 +16,7 @@ function rispostaModello(contenuto) {
 }
 
 async function listen(t, opzioni) {
-  const app = createHttpApp({ staticHandler: async () => null, ...opzioni });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, ...opzioni });
   const server = createServer(app);
   await new Promise((risolvi, rifiuta) => {
     server.once('error', rifiuta);

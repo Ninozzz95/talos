@@ -499,7 +499,14 @@ test('MONTAGGIO-04 — la memoria coi DATI VERI del server (capacity) e i fornit
     const risposta = await api('/api/v1/model-lab/capacity');
     const dati = risposta.corpo?.data ?? risposta.corpo;
     const valido = esito(() => { normalizzaCapacita(dati); return true; });
-    const gib = (n) => new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(n / 1024 ** 3) + ' GiB';
+    // decisione owner 163: il formato del telefono (`talosFormatBytes`), lo stesso che il componente esporta
+    const gib = (n) => {
+      if (n < 1024) return `${Math.max(0, Math.round(n))} B`;
+      const unita = ['KB', 'MB', 'GB', 'TB']; let v = n / 1024; let u = 0;
+      while (v >= 1024 && u < unita.length - 1) { v /= 1024; u += 1; }
+      const arrotondato = v < 10 ? Math.round(v * 10) / 10 : Math.round(v);
+      return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1, useGrouping: false }).format(arrotondato)} ${unita[u]}`;
+    };
     // montaggio nella direzione B1 (la schermata) e poi aggiornamento coi dati veri
     const b = svuota();
     const dest = clona('#panel-runtime'); const sorg = clona('#modelLabOverviewPanel');

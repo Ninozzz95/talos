@@ -39,6 +39,11 @@ function filaDiScelte(documento, { nome, voci, attuale, scegli }) {
   return fila;
 }
 
+/** Decisione owner 164: «Link dalla chat» è la prima carta di Sicurezza e privacy. Già in cima ⇒ nessuna mossa (l'osservatore non gira a vuoto). */
+export function inCimaAlPannello(pannello, scheda) {
+  if (pannello.firstElementChild !== scheda) pannello.insertBefore(scheda, pannello.firstElementChild);
+}
+
 export function montaSitiFidati({ documento = globalThis.document, fidati = sitiFidatiDellApp(), destinazioni = destinazioneDeiLinkDellApp() } = {}) {
   if (!documento) return null;
   let scheda = null;
@@ -53,22 +58,20 @@ export function montaSitiFidati({ documento = globalThis.document, fidati = siti
       scheda.dataset.settingsCard = 'privacy-link';
       scheda.setAttribute('role', 'group');
       scheda.setAttribute('aria-labelledby', 'settings-group-privacy-link');
-      /* 13/10/2026 (bugfixer, FORME-03 rossa): la carta nasce PRIMA della banda delle azioni del pannello. Appesa in fondo finiva
-         sotto «Esporta / Importa / Ripristina», e la banda non era più l'ultima cosa del pannello (il contratto delle forme:
-         le azioni stanno in UNA banda in fondo). */
-      pannello.insertBefore(scheda, pannello.querySelector(':scope > .talos-settings__actions'));
+      /* 13/10/2026 (bugfixer, FORME-03 rossa): appesa in fondo la carta finiva sotto «Esporta / Importa / Ripristina», e la banda
+         non era più l'ultima cosa del pannello (il contratto delle forme: le azioni stanno in UNA banda in fondo).
+         Decisione owner 164 (04/11/2026, bozzetto 14 B): la carta sta in CIMA, non più subito davanti alla banda — lì separava la
+         banda dalle due carte di cui fa le azioni («Dati locali del browser», «Trasferisci le preferenze»). */
+      inCimaAlPannello(pannello, scheda);
     }
-    /* …e ci RESTA: la banda può nascere (o essere rimessa in fondo) dopo la carta — la vista delle Impostazioni si monta per conto
-       suo, e in una corsa su quattro la carta finiva di nuovo sotto. Ogni volta che i figli del pannello cambiano, se la carta sta
-       dopo la banda torna davanti. Un osservatore per pannello; spostare la carta lo riattiva una volta, e lì non c'è più niente da fare. */
-    const davantiAllaBanda = () => {
-      const banda = pannello.querySelector(':scope > .talos-settings__actions');
-      if (banda && scheda?.isConnected && (banda.compareDocumentPosition(scheda) & 4)) pannello.insertBefore(scheda, banda); // 4 = la carta SEGUE la banda
-    };
-    davantiAllaBanda();
+    /* …e ci RESTA: la vista delle Impostazioni si monta per conto suo, e in una corsa su quattro la carta finiva altrove. Ogni volta
+       che i figli del pannello cambiano, se la carta non è la prima torna su. Un osservatore per pannello; spostare la carta lo
+       riattiva una volta, e lì non c'è più niente da fare. */
+    const inCima = () => { if (scheda?.isConnected) inCimaAlPannello(pannello, scheda); };
+    inCima();
     if (!osservati.has(pannello) && typeof documento.defaultView?.MutationObserver === 'function') {
       osservati.add(pannello);
-      new documento.defaultView.MutationObserver(davantiAllaBanda).observe(pannello, { childList: true });
+      new documento.defaultView.MutationObserver(inCima).observe(pannello, { childList: true });
     }
     /* il fuoco non si perde ridisegnando: si ritrova la stessa scelta per riga e valore */
     const aFuoco = documento.activeElement instanceof documento.defaultView.Element ? documento.activeElement.closest('[data-link-dove]') : null;

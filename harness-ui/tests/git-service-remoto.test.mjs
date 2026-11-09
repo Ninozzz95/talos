@@ -40,7 +40,8 @@ function mondo(t, { primoCommit = true } = {}) {
 
 test('F6-2 — remoti e sincronizzazione: il riferimento, avanti/indietro coi numeri, l ultimo recupero, il remoto per l invio', async (t) => {
   const { A, B, servizio, commitIn } = mondo(t);
-  assert.deepEqual(await servizio.remoti({ sessionId: 'sA' }), { remoti: [{ nome: 'origin', url: (await servizio.remoti({ sessionId: 'sA' })).remoti[0].url, urlInvio: null }] });
+  const remotiVisti = await servizio.remoti({ sessionId: 'sA' });
+  assert.deepEqual(remotiVisti, { remoti: [{ nome: 'origin', url: remotiVisti.remoti[0].url, urlInvio: null, urlsInvio: [remotiVisti.remoti[0].url] }] });
   let s = await servizio.sincronizzazione({ sessionId: 'sA' });
   assert.equal(s.ramo, 'main');
   assert.deepEqual(s.riferimento, { corto: 'origin/main', remoto: 'origin', ramo: 'main' });
@@ -66,6 +67,15 @@ test('F6-2 — remoti e sincronizzazione: il riferimento, avanti/indietro coi nu
   A.g('switch', '-q', '--detach');
   s = await servizio.sincronizzazione({ sessionId: 'sA' });
   assert.deepEqual([s.ramo, s.staccata, s.riferimento], [null, true, null]);
+});
+
+test('FE-046 — il ramo principale lo dice git, se lo sa: chi ha clonato sì, una cartella senza riferimento del remoto no, e nessuno lo indovina dal nome', async (t) => {
+  const { A, B, servizio } = mondo(t);
+  assert.equal((await servizio.sincronizzazione({ sessionId: 'sB' })).ramoPrincipale, 'main', 'B ha clonato un remoto con main');
+  B.g('remote', 'set-head', 'origin', '--delete');
+  assert.equal((await servizio.sincronizzazione({ sessionId: 'sB' })).ramoPrincipale, null, 'il nome «main» da solo non basta');
+  A.g('remote', 'remove', 'origin');
+  assert.equal((await servizio.sincronizzazione({ sessionId: 'sA' })).ramoPrincipale, null, 'senza remoti non c\'è');
 });
 
 test('F6-2 — il remoto per l invio segue l ordine di git: pushRemote, pushDefault, il remoto del ramo, origin, l unico; con due e niente config è NULL', async (t) => {

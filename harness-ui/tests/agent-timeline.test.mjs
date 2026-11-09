@@ -118,7 +118,7 @@ test('RIPRESA-REPLAY-DISCO: errore persistente dichiarato senza fermare la chat'
 
 test('RIPRESA-REPLAY-HTTP: endpoint reale, paginazione e validazione', async t => {
   const {registro:r}=banco(t); const {sessionId}=r.avvia('task');
-  const server=createServer(createHttpApp({staticHandler:async()=>null,sessionRegistry:r}));
+  const server=createServer(createHttpApp({ senzaGettone: 'prove', staticHandler:async()=>null,sessionRegistry:r}));
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   t.after(()=>new Promise(resolve=>server.close(resolve)));
   const base=`http://127.0.0.1:${server.address().port}/api/v1/sessions/${sessionId}/agent-timeline`;

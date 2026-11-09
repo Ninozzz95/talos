@@ -95,7 +95,7 @@ test.beforeEach(async ({ page }) => {
       } catch { /* un browser senza LoAF non fa fallire la prova: il campo resta vuoto e si dichiara */ }
     }
   });
-  await page.route('**/api/v1/sessions/chat-lunga-*/events', () => { /* VELO-SPEC (08/10/2026): aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia */ });
+  await page.route('**/api/v1/sessions/chat-lunga-*/events*', () => { /* VELO-SPEC (08/10/2026): aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia */ });
   await page.goto('/');
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
@@ -271,7 +271,7 @@ test('MISURA-P0-C — apertura di una cronologia lunga e ragionamento collassato
     quando: new Date().toISOString(),
     etichetta: ETICHETTA,
     scenario: {
-        cronologia: '60 turni · 60 ragionamenti da ~20.000 caratteri · 60 righe attrezzo · 60 blocchi di codice',
+        cronologia: '60 turni · 60 ragionamenti da ~20.000 caratteri · 60 righe strumento · 60 blocchi di codice',
       vivo: '240 delta di ragionamento a scheda CHIUSA',
       scala: '240 delta contro 480 delta, due schede distinte: dice se il costo è lineare o quadratico',
       apertura: 'un clic (dentro la pagina) sulla testa di un ragionamento da ~480 righe',
@@ -327,6 +327,11 @@ test('CHAT-LUNGA-P0-02 — aprire un ragionamento da ~41.000 caratteri non produ
    *   stesso giorno, il fotogramma peggiore al commit base è stato 245 e 196 ms: la DIREZIONE
    *   coincide (sopra il tetto prima della cura, sotto dopo), la CIFRA no — e una cifra scritta
    *   senza dire dov'è stata presa si legge come una costante del prodotto.
+   * ⛔ 31/10/2026 (R-40, Performance) — I 118 MS OGGI QUI NON SI RIPRODUCONO: stessa scena, PC dell'owner, Chromium della suite, con
+   *   `RAGIONAMENTO_PEZZO_CARATTERI` portato a 400.000 (montaggio tutto in un pezzo): 3 corse su 3 senza fotogrammi oltre 50 ms; col
+   *   montaggio a pezzi, 12 fotogrammi nessuno oltre 25 ms. Una macchina e una taglia sola: il montaggio a pezzi RESTA, ma questa prova
+   *   oggi non dimostra che serva. Che la prova veda ancora un fotogramma lungo lo dice uno scatto da 120 ms messo a mano in ogni pezzo:
+   *   3 corse rosse su 3 (`strumenti/prova-r40-cancello.mjs`).
    * ⇒ Per questo il cancello asserisce una SOGLIA (50 ms, la stessa della specifica
    *   `long-animation-frame`) e mai un valore atteso: i numeri restano qui solo come traccia di
    *   come la taglia è stata scelta, ognuno con la sua macchina e la sua data accanto.
@@ -360,6 +365,7 @@ test('CHAT-LUNGA-P0-02 — aprire un ragionamento da ~41.000 caratteri non produ
     window.__p0cLoaf.voci = [];
     await new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
     window.__p0cLoaf.voci = [];
+    prima.clicAlle = performance.now();
     nota.querySelector(':scope > .talos-activity__head').click();
     for (let i = 0; i < 600; i += 1) {
       if (window.__p0cMontato(corpo)) break;
@@ -380,7 +386,15 @@ test('CHAT-LUNGA-P0-02 — aprire un ragionamento da ~41.000 caratteri non produ
    *   una lista vuota vuol dire «nessun fotogramma lungo», non «non ho guardato».
    */
   await page.waitForTimeout(600);
-  const lunghi = await page.evaluate(() => window.__p0cLoaf.voci.map((v) => Math.round(v.durata)));
+  /*
+   * ⛔ R-40 (Performance, 31/10/2026; rossa a intermittenza, 4/6 sul Desktop a CPU libera): `long-animation-frame` consegna le voci
+   *   IN RITARDO, quindi azzerare il deposito prima del clic non bastava: arrivava dopo l'azzeramento il fotogramma del DISEGNO dei 480
+   *   delta della fixture. Misurato con la controprova (stessa scena, con e senza clic, 6 corse): 83-95 ms, 130-147 ms PRIMA del clic,
+   *   nessuno script dentro, 64-74 ms di disegno, e c'era anche SENZA clic. Si contano solo i fotogrammi FINITI dopo il clic.
+   *   ⛔ «Finiti», non «cominciati»: il fotogramma del clic comincia PRIMA del clic (il task che lo lancia ne fa parte), e col filtro
+   *   sull'inizio la prova diventava cieca proprio sul fotogramma che deve guardare (controllo positivo rimasto verde, 31/10).
+   */
+  const lunghi = await page.evaluate((da) => window.__p0cLoaf.voci.filter((v) => v.inizio + v.durata >= da).map((v) => Math.round(v.durata)), alClic.clicAlle);
   const peggiore = Math.max(0, ...lunghi);
   console.log(`[CHAT-LUNGA-P0-02] fotogrammi oltre 50 ms: ${lunghi.join(', ') || 'nessuno'} · montaggio atteso per ${alClic.fotogrammiAttesi} fotogrammi · al clic il corpo aveva ${alClic.elementi} elementi e il testo grezzo ${alClic.testoGiàDentro ? 'già dentro' : 'assente'}`);
   expect(peggiore, `il fotogramma peggiore dell'apertura è stato di ${peggiore} ms (al clic il corpo aveva ${alClic.elementi} elementi e il testo grezzo ${alClic.testoGiàDentro ? 'già dentro' : 'assente'})`).toBeLessThanOrEqual(50);

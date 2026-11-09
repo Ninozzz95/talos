@@ -39,6 +39,8 @@
 
 /** ⛔ Le variabili che esistono solo perché TALOS le ha messe. Elenco CHIUSO, deciso dall'owner. */
 export const VARIABILI_SOLO_DEL_SERVER = Object.freeze([
+  /* 01/11/2026: il marchio «viene dal pacchetto» vale per il server che il guscio avvia: un server lanciato a mano dal Terminale di TALOS col suo binario non deve ereditarlo */
+  'TALOS_LLAMA_SERVER_DAL_PACCHETTO',
   // Il token di loopback: chi ce l'ha parla con la nostra API con l'autorità dell'interfaccia.
   'TALOS_HARNESS_UI_TOKEN',
   /*
@@ -83,6 +85,8 @@ export const VARIABILI_SOLO_DEL_SERVER = Object.freeze([
    */
   'TALOS_HARNESS_UI_KEYRING_SCOPE',
   'TALOS_HARNESS_UI_DEFAULT_PROJECT',
+  /* «Gettone sempre» (02/11/2026): dice al SUO server di leggere il gettone dallo stdin. Ereditato, un TALOS lanciato da un comando resterebbe ad aspettare uno stdin che non arriva. */
+  'TALOS_HARNESS_UI_SEGRETI_DA',
 ]);
 
 /*
@@ -115,6 +119,10 @@ export const VARIABILI_DEL_SERVER_DICHIARATE_INNOCUE = Object.freeze([
      (`desktop/runtime.mjs`, `src/casa-linux-binari.mjs`): un percorso dentro l'installazione come quelli del motore locale,
      non una credenziale. Un TALOS lanciato dal terminale che la erediti troverebbe gli stessi binari, verificati. */
   'TALOS_CASA_LINUX',
+  /* 05/11/2026, decisioni dell'owner 248-249 — il percorso dell'aiutante del PC per il computer use dentro l'installazione
+     (`desktop/runtime.mjs`, `src/computer-use/aiutante-mcp.mjs`): non una credenziale. Chi lo eredita trova lo stesso binario, e
+     l'aiutante parte solo se il suo sha256 combacia con l'impronta scritta nel codice. */
+  'TALOS_AIUTANTE_PC',
   /*
    * ⛔⛔⛔ B-1 del terzo giro (17/09/2026) — DUE CREDENZIALI CHE RESTANO, DECISE PER NOME.
    *

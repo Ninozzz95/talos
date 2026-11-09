@@ -45,12 +45,12 @@
  *   dodici ore, ed è il segno che una frase «non può esistere» va datata, mai lasciata sospesa.
  *   **Progetti** resta di sola lettura: per quello le rotte non ci sono davvero.
  */
-import { t as traduci, tn, linguaCorrenteDiT } from './lingua.js';
+import { t as traduci, tn, linguaCorrenteDiT, EVENTO_LINGUA } from './lingua.js';
 /* Date e numeri nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
 const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 import { titoloNota, quandoNota, sommarioNote } from './note.js';
 import { genereMemoria, testiMemoria } from './memoria.js';
-import { statoAttivita, prioritaAttivita, testiAttivita, riepilogoAttivita } from './attivita.js';
+import { statoAttivita, prioritaAttivita, testiAttivita } from './attivita.js';
 import { provenienzaVoceLibreria, tipoVoceLibreria, origineVoceLibreria, testiVoceLibreria, azioniLibreria, indirizzoFileLibreria, creaLibraryRow } from './libreria.js';
 import { nomeLeggibileSessione } from './session-item.js'; // BC-38: il nome umano di una sessione è scritto una volta sola
 import { magazzinoFileLibreria, montaAnteprimaFile, lettoreFileLibreria } from './libreria-anteprima.js';
@@ -639,9 +639,19 @@ function scrittura(schermo, { schema, lista, opzioni, ridisegna }) {
            dal giro corrente del magazzino (`m.giro`, scritto a ogni `scrittura`), non dalla chiusura
            di questo giro, che dopo un ricarico porta l'array del suo tempo e svuota la lista. */
         b.addEventListener('click', () => m.giro.apriModulo('crea'));
+        /* riga 21 (04/11/2026): il bottone nasce una volta e il ramo «già fatto» qui sopra non passa dalla riga che riscrive la parola;
+           cambiata la lingua stando sulla pagina, si ridice da solo (un ascolto per bottone). Misurato nel browser: restava «Nuova nota». */
+        const bottone = b;
+        doc.documentElement?.addEventListener?.(EVENTO_LINGUA, () => {
+          const s = bottone.querySelector(':scope > span');
+          if (s && s.textContent !== schema.titoloNuova) s.textContent = schema.titoloNuova;
+        });
         ospite.append(b);
       }
       b.disabled = Boolean(m.modulo);
+      /* Revisione UX del 04/11/2026, riga 21: il bottone nasce una volta; la sua parola si riscrive a ogni giro (cambio di lingua) */
+      const parola = b.querySelector(':scope > span');
+      if (parola && parola.textContent !== schema.titoloNuova) parola.textContent = schema.titoloNuova;
       if (nellaTesta) collocaNuova(b);
       return b;
     },
@@ -686,7 +696,7 @@ export function montaNote(schermo, note, opzioni = {}) {
   return montaScrivibile(schermo, scrivi, {
     chiave: 'note',
     nome: traduci('sezioni.notes.name'),
-    icona: 'doc',
+    icona: 'sticky-note',
     famiglia: 'td-note',
     sostantivo: 'nota',
     nuovaNellaTesta: true, // ATLAS F2: «Nuova nota» nella testata della pagina (vedi `montaPulsanteNuova`)
@@ -703,7 +713,8 @@ export function montaNote(schermo, note, opzioni = {}) {
     titoloDi: (n) => (n?.__bozza ? SCHEMI.note.titoloNuova : titoloNota(n)),
     quandoDi: (n) => n?.aggiornataAlle ?? n?.quando ?? n?.creataAlle ?? n?.createdAt ?? null,
     cercaIn: (n) => `${n?.titolo ?? ''} ${n?.contenuto ?? ''}`,
-    sommarioBarra: (_n, { errore, caricamento }) => (errore ? traduci('sezioni.notes.unavailable') : caricamento ? traduci('sezioni.notes.loading') : sommarioNote(lista.length)),
+    /* Revisione UX del 04/11/2026, riga 23: il conteggio sta UNA volta, sotto il titolo (`sommarioStato`); la testa dice solo ciò che succede */
+    sommarioBarra: (_n, { errore, caricamento }) => (errore ? traduci('sezioni.notes.unavailable') : caricamento ? traduci('sezioni.notes.loading') : ''),
     /* ⛔ I due sommari contano l'elenco VERO: la bozza è un modulo aperto, non una nota. */
     sommarioStato: (visibili) => (visibili === lista.length ? sommarioNote(lista.length) : traduci('sezioni.notes.filteredOfTotal', { shown: sommarioNote(visibili), total: sommarioNote(lista.length) })),
     scheda: (n, { doc, icona: ic }) => ({
@@ -781,7 +792,7 @@ export function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
   return montaScrivibile(schermo, scrivi, {
     chiave: 'memoria',
     nome: traduci('sezioni.memory.name'),
-    icona: 'brain',
+    icona: 'book-marked',
     famiglia: 'td-memory',
     sostantivo: 'ricordo',
     nuovaNellaTesta: true, // owner 29/10/2026 («A · come Note»): «Nuovo ricordo» a destra del titolo, come «Nuova nota»
@@ -796,7 +807,8 @@ export function aggiornaPaginaMemoria(schermo, memorie, opzioni = {}) {
     titoloDi: (m) => (m?.__bozza ? SCHEMI.memory.titoloNuova : testiMemoria(m).titolo),
     quandoDi: (m) => m?.aggiornataAlle ?? null,
     cercaIn: (m) => `${testiMemoria(m).titolo} ${testiMemoria(m).contenuto} ${genereMemoria(m?.genere).testo}`,
-    sommarioBarra: (_n, { errore, caricamento }) => (errore ? traduci('sezioni.memory.unavailable') : caricamento ? traduci('sezioni.memory.loading') : traduci('sezioni.memory.globalCount', { count: contaRicordi(lista.length) })),
+    /* Revisione UX del 04/11/2026, riga 23: il conteggio sta UNA volta, sotto il titolo (`sommarioStato`); la testa dice solo ciò che succede */
+    sommarioBarra: (_n, { errore, caricamento }) => (errore ? traduci('sezioni.memory.unavailable') : caricamento ? traduci('sezioni.memory.loading') : ''),
     sommarioStato: (visibili) => (visibili === lista.length ? contaRicordi(lista.length) : traduci('sezioni.common.shownOfTotal', { shown: visibili, total: contaRicordi(lista.length) })),
     scheda: (m, { doc, icona: ic, etichetta }) => {
       const g = genereMemoria(m?.genere);
@@ -852,7 +864,7 @@ export function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
   return montaScrivibile(schermo, scrivi, {
     chiave: 'attivita',
     nome: traduci('sezioni.tasks.name'),
-    icona: 'check-sq',
+    icona: 'list-todo',
     famiglia: 'td-task',
     sostantivo: 'attività',
     nuovaNellaTesta: true, // owner 29/10/2026 («A · come Note»): «Nuova attività» a destra del titolo, come «Nuova nota»
@@ -872,7 +884,8 @@ export function aggiornaPaginaAttivita(schermo, attivita, opzioni = {}) {
     titoloDi: (a) => (a?.__bozza ? SCHEMI.tasks.titoloNuova : testiAttivita(a).titolo),
     quandoDi: (a) => a?.aggiornataAlle ?? null,
     cercaIn: (a) => `${testiAttivita(a).titolo} ${testiAttivita(a).descrizione} ${statoAttivita(a?.stato).testo}`,
-    sommarioBarra: (_n, { errore, caricamento }) => (errore ? traduci('sezioni.tasks.unavailable') : caricamento ? traduci('sezioni.tasks.loading') : riepilogoAttivita(lista)),
+    /* Revisione UX del 04/11/2026, riga 23: il conteggio sta UNA volta, sotto il titolo (`sommarioStato`); la testa dice solo ciò che succede */
+    sommarioBarra: (_n, { errore, caricamento }) => (errore ? traduci('sezioni.tasks.unavailable') : caricamento ? traduci('sezioni.tasks.loading') : ''),
     sommarioStato: (visibili) => (visibili === lista.length ? contaAttivita(lista.length) : traduci('sezioni.common.shownOfTotal', { shown: visibili, total: contaAttivita(lista.length) })),
     scheda: (a, { doc, icona: ic, etichetta }) => {
       const s = statoAttivita(a?.stato);
@@ -1178,12 +1191,12 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
   return montaSezione(schermo, {
     chiave: 'libreria',
     nome: traduci('sezioni.library.name'),
-    icona: 'files',
+    icona: 'library',
     famiglia: 'td-document',
     sostantivo: 'file',
     contaVoci: contaFile,
     voci: Array.isArray(voci) ? voci : [],
-    stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
+    stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento), avviso: opzioni.avviso || null }, // riga 22: «apri una sessione» è un avviso, non un errore
     caricando: traduci('sezioni.library.loading'),
     /* Revisione Codex 27/09, rilievo 9: un file cambiato FUORI da TALOS (Mostra nella cartella) non cambia la sua data nella
        Libreria, quindi la sua anteprima in memoria resterebbe quella vecchia. «Aggiorna» è il gesto di chi vuole la verità:
@@ -1231,7 +1244,7 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       menu.type = 'button';
       menu.setAttribute('aria-label', traduci("sezioni.common.actionsFor", { name: testiVoceLibreria(v).nome }));
       menu.setAttribute('aria-haspopup', 'menu');
-      menu.append(iconaSprite(doc, 'i-lib-more-vertical'));
+      menu.append(iconaSprite(doc, 'i-more'));
       menu.addEventListener('click', (e) => { e.stopPropagation(); apriMenuDellaVoce(v, { ancoraEl: menu }); });
       /* La spunta del cerchio di selezione (lucide `Check`, come il mobile) è un elemento vero, non un disegno del CSS:
          la colora il testo-sull'accento del tema, e compare solo sulla card scelta. `display: contents` sul contenitore:
@@ -1239,7 +1252,7 @@ export function aggiornaPaginaLibreria(schermo, voci, opzioni = {}) {
       const adorni = nodo(doc, 'span', 'td-lib-adorni');
       const spunta = nodo(doc, 'span', 'td-lib-spunta');
       spunta.setAttribute('aria-hidden', 'true');
-      spunta.append(iconaSprite(doc, 'i-lib-check'));
+      spunta.append(iconaSprite(doc, 'i-check'));
       adorni.append(spunta, ...(typeof opzioni.onMenu === 'function' ? [menu] : []));
       return {
         dati: { forma: 'mobile' },
@@ -1751,15 +1764,20 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
   const visibili = montaSezione(schermo, {
     chiave: 'ricerca',
     nome: traduci('sezioni.research.name'),
-    icona: 'globe',
+    icona: 'telescope',
     famiglia: 'td-research',
+    /* 01/11/2026 — ricerca a due porte (bozzetto approvato il 22/10, foto E): «Nuova ricerca», la porta della sezione. Il bozzetto la
+       metteva nella barra in alto; la decisione dell'owner del 29/10 sulle testate («A · come Note»: «Nuova…» a destra del titolo,
+       ovunque) la mette in testa, lo stesso pulsante di «Nuova nota». La modale e l'invio li fa la app (`apriNuovaRicercaDallaSezione`). */
+    azioneTesta: typeof opzioni.onNuovaRicerca === 'function'
+      ? { etichetta: traduci('chat.research.modal.title'), icona: 'globe', esegui: opzioni.onNuovaRicerca, spento: Boolean(opzioni.nuovaRicercaSpenta) } : null,
     /* ⛔ La parola è UNA: la barra in alto dice «5 ricerche elencate» (`riepilogoRicerche`), quindi
        la riga di stato non può dire «5 rapporti». Il rapporto è ciò che una ricerca PRODUCE. */
     sostantivo: 'ricerca',
     pluraleEsplicito: 'ricerche',
     contaVoci: contaRicerche,
     voci: elenco,
-    stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
+    stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento), avviso: opzioni.avviso || null }, // riga 22
     caricando: traduci('sezioni.research.loading'),
     onAggiorna: opzioni.onAggiorna,
     eliminaInBlocco: servizio?.eliminaInBlocco,
@@ -1804,7 +1822,7 @@ export function aggiornaPaginaRicerca(schermo, ricerche, opzioni = {}) {
         ? frasiBilancio(bilancioDaRecord(lettura.record))
         : f.spiegazione;
       return {
-        alto: [icona('globe'), etichetta(f.parola, f.tono)],
+        alto: [icona('telescope'), etichetta(f.parola, f.tono)],
         corpo: [
           nodo(doc, 'p', 'td-excerpt', riga),
           /* 24/09/2026, decisione owner («Barra + fase e conteggi»): una ricerca in corso dice a che punto è, nella scheda
@@ -1893,6 +1911,10 @@ export function montaProgetti(schermo, progetti, opzioni = {}) {
     stato: { errore: opzioni.errore || null, caricamento: Boolean(opzioni.caricamento) },
     caricando: traduci('sezioni.projects.loading'),
     onAggiorna: opzioni.onAggiorna,
+    /* owner 29/10/2026 (bozzetto delle testate) + revisione della Frontend 30/10: «Apri un progetto» a destra del titolo, la stessa
+       azione e le stesse parole della Home (`home.openAProject`, icona `folder-open`, `workspace-chrome.ts:105`) */
+    azioneTesta: typeof opzioni.onApriProgetto === 'function'
+      ? { etichetta: traduci('home.openAProject'), icona: 'folder-open', esegui: opzioni.onApriProgetto } : null,
     filtri: [{ id: 'tutti', etichetta: traduci('sezioni.common.filterAllM') }],
     idDi: (p) => p?.id,
     titoloDi: (p) => p?.nome ?? '',
