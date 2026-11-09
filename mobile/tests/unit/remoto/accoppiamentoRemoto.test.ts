@@ -84,7 +84,10 @@ describe("l'accoppiamento dal telefono", () => {
         for (const code of ['PAIR_REJECTED', 'PAIR_EXPIRED', 'PAIR_TOKEN_INVALID', 'PAIR_LOCKED']) {
             const f = pluginFinto()
             const giro = avviaAccoppiamento(f.plugin, QR, { nome: 'Pad', ora })
-            await attesa(); await attesa()
+            /* 09/11/2026 (0.2.0, gates della #92: «Test timed out in 5000ms», 1 su 10888): prima due giri fissi. L'ascolto dei messaggi
+               si aggancia dopo il calcolo asincrono del codice (accoppiamentoRemoto.ts:104), quindi a volte l'errore arrivava a nessuno
+               e la prova aspettava fino al tetto. Ora si aspetta il pair.hello, come ACC-01/02/04: dopo il saluto l'ascolto c'è. */
+            await salutato(f.inviati)
             f.arriva({ v: 1, t: 'error', code })
             await expect(giro.esito, code).rejects.toMatchObject({ code })
             expect(f.plugin.concludiAccoppiamento).not.toHaveBeenCalled()

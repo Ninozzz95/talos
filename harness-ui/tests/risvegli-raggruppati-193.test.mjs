@@ -19,13 +19,24 @@ import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 function runtimeControllabile() {
   const runs = [];
+  const inAttesa = [];
   return {
     runs,
+    /* 09/11/2026 (0.2.0): si aspetta l'evento «giro partito», non un tempo fisso; il tetto serve solo a non restare appesi. */
+    attendiGiro(index, tettoMs = 1_500) {
+      if (runs.length > index) return Promise.resolve(true);
+      return new Promise((risolvi) => {
+        const voce = { index, risolvi };
+        voce.timer = setTimeout(() => { inAttesa.splice(inAttesa.indexOf(voce), 1); risolvi(false); }, tettoMs);
+        inAttesa.push(voce);
+      });
+    },
     avviaSessioneFn(input) {
       let resolve;
       const promise = new Promise((r) => { resolve = r; });
       const index = runs.length;
       runs.push({ input, resolve, partitoAlle: Date.now() });
+      for (const voce of [...inAttesa]) if (runs.length > voce.index) { clearTimeout(voce.timer); inAttesa.splice(inAttesa.indexOf(voce), 1); voce.risolvi(true); }
       input.onEvento({ type: 'RunStarted', threadId: `t${index}`, runId: `r${index}` });
       return promise;
     },
@@ -135,9 +146,12 @@ test('RISVEGLIO-193-05 — un\'uscita già in coda non tiene vivo nessuno: se il
   const { sessionId, finisce } = await sessioneConSfondi(registry, runtime, ['call_a']);
   const prima = Date.now();
   finisce('call_a', { sgancia: false }); // il processo è uscito, la mappa dei vivi non l'ha ancora tolto
-  await pausa(120);
-  assert.equal(runtime.runs.length, 2, 'svegliata');
-  assert.ok(runtime.runs[1].partitoAlle - prima < 100, `partita dopo ${runtime.runs[1].partitoAlle - prima} ms: un comando già uscito non conta fra i vivi`);
+  /* 09/11/2026 (0.2.0, gates della #92): prima `pausa(120)` e tetto 100 ms; sul runner la partenza è arrivata a 101 ms ed è caduta.
+     Ora si aspetta l'evento e il tetto è 200 ms: il risveglio giusto è a 25 ms (sul runner lento fino a ~101 ms misurati), mentre il
+     guasto che la prova cerca (l'uscita già in coda contata fra i vivi) arma la quiete di 250 ms: oltre 200, quindi la prova resta rossa. */
+  assert.equal(await runtime.attendiGiro(1), true, 'svegliata');
+  assert.equal(runtime.runs.length, 2, 'un solo risveglio');
+  assert.ok(runtime.runs[1].partitoAlle - prima < 200, `partita dopo ${runtime.runs[1].partitoAlle - prima} ms: un comando già uscito non conta fra i vivi`);
   runtime.fine(1);
   await registry.attendiAssestamento(sessionId);
   await registry.chiudi?.();

@@ -10123,17 +10123,31 @@ test('REV-SESSION-READY-20 — il risultato nella finestra segue lo storico nuov
 });
 
 
-test('REV-SESSION-READY-21 — la scrittura tardiva di un risultato di figlia che fallisce NON chiude il giro dopo', async () => {
+test('REV-SESSION-READY-21 — la scrittura tardiva di un risultato di figlia che fallisce NON chiude il giro dopo', async (t) => {
   const STORIA = new Set(['messaggi-delta', 'checkpoint', 'messaggi-finali']);
   const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-v4-versione-'));
   const rifiuti = [];
+  const inScrittura = [];
   let occupato = false;
   const finta = sessioniControllabili();
+  /* 09/11/2026 (0.2.0, giudice v1254): niente più giri fissi. Prima `for 3 unGiro` e via: su un runner lento passavano più dei 25 ms
+     del risveglio da figlia (`session-registry.mjs:4745`), il padre ripartiva da solo e `resume` alla riga sotto veniva rifiutato
+     (riprodotto in copia con 60 ms al posto dei 3 giri: stesso `undefined !== id`). Ora il risveglio aspetta l'orologio finto, e si
+     aspetta la condizione vera (la scrittura in volo) e l'assestamento delle scritture rifiutate. */
+  const finché = async (condizione, cosa) => {
+    for (let i = 0; i < 1_000 && !condizione(); i += 1) await unGiro();
+    assert.ok(condizione(), cosa);
+  };
   try {
     const registro = createSessionRegistry({
       cartellaStore,
       registraRigaSyncFn: (argomenti) => { if (occupato && STORIA.has(argomenti.record?.tipo)) throw Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' }); return registraRigaSync(argomenti); },
-      registraRigaFn: (argomenti) => (occupato && STORIA.has(argomenti.record?.tipo) ? new Promise((_, rifiuta) => { rifiuti.push(rifiuta); }) : registraRiga(argomenti)),
+      registraRigaFn: (argomenti) => {
+        if (!(occupato && STORIA.has(argomenti.record?.tipo))) return registraRiga(argomenti);
+        const promessa = new Promise((_, rifiuta) => { rifiuti.push(rifiuta); });
+        inScrittura.push(promessa);
+        return promessa;
+      },
       avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
     });
     const { sessionId: parentId } = registro.avvia('task-vero');
@@ -10142,15 +10156,17 @@ test('REV-SESSION-READY-21 — la scrittura tardiva di un risultato di figlia ch
     await registro.attendiAssestamento(parentId);
     /* padre concluso e assestato: il risultato della figlia si integra FUORI da un giro, con la scrittura in coda */
     occupato = true;
+    t.mock.timers.enable({ apis: ['setTimeout'] }); // il risveglio da figlia non parte da solo mentre la prova sta in mezzo
     finta.concludi(1, { type: 'RunFinished', runId: 'r2' }, { ok: true, esito: { detto: 'Modulo scritto.', comeFinita: 'concluso', messaggiFinali: [] } });
-    for (let i = 0; i < 3; i += 1) await unGiro();
-    assert.ok(rifiuti.length > 0, 'la storia col risultato è in scrittura');
+    await finché(() => rifiuti.length > 0, 'la storia col risultato è in scrittura');
     occupato = false;
     /* intanto parte un giro nuovo del padre; poi la vecchia scrittura fallisce */
     assert.equal(registro.resume(parentId, 'domanda 2').sessionId, parentId);
+    t.mock.timers.reset();
     const finali = [];
     registro.iscriviti(parentId, (e) => { if (e.type === 'RunError' || e.type === 'RunFinished') finali.push(e); }, registro.esporta(parentId).eventi.at(-1)?._sequenza ?? 0);
     for (const rifiuta of rifiuti) rifiuta(new Error('disco pieno'));
+    await Promise.allSettled(inScrittura); // le scritture rifiutate sono assestate; poi i loro gestori
     for (let i = 0; i < 3; i += 1) await unGiro();
     assert.deepEqual(finali, [], 'nessun RunError sul giro nuovo per una scrittura del giro di prima');
     assertRifiuto(registro.resume(parentId, 'nel mezzo'), 'SESSION_NOT_READY', 'running-wait-resume'); // il giro nuovo è ancora in corso
