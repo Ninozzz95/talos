@@ -1,0 +1,8 @@
+/* FE-011: la barra delle approvazioni, grammatica di `.talos-queue`. La lista scorre da sé: il dato resta intero e va a capo, mai tagliato coi puntini, e il compositore non sale oltre il tetto */
+.talos-approvazioni[hidden]{display:none}
+.talos-approvazioni{margin-bottom:8px}
+.talos-approvazioni .talos-queue{margin-bottom:0}
+.talos-approvazioni__lista{display:grid;gap:4px;max-height:30vh;margin:4px 0 0;padding:6px 14px;overflow:auto;list-style:none;border:1px solid var(--talos-border);border-radius:11px}
+.talos-approvazioni__lista li{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px;min-width:0;font-size:12.5px}
+.talos-approvazioni__chi{flex:none;color:var(--talos-muted)}
+.talos-approvazioni__lista code{flex:1 1 200px;min-width:0;overflow-wrap:anywhere;white-space:pre-wrap;font-family:var(--talos-font-mono)}

@@ -413,9 +413,9 @@ const LABORATORI = {
   },
   NotificationPanel() {
     const pannello = document.querySelector('#pannelloNotifiche');
-    const { righe } = aggiornaPannelloNotifiche(pannello, NOTIFICHE, { ora: ORA_NOTIFICA });
+    const { righe } = aggiornaPannelloNotifiche(pannello, NOTIFICHE, { adesso: new Date('2026-10-31T18:00:00.000Z') });
     // il mockup scrive il PERCHÉ («Vuole scrivere fuori dalla cartella») al posto dell'etichetta generica
-    righe[0].querySelector('.talos-list-row__sub').textContent = `${ETICHETTA_MOCKUP} · ${ORA_NOTIFICA()}`;
+    righe[0].nodo.querySelector('.talos-list-row__sub').textContent = `${ETICHETTA_MOCKUP} · ${ORA_NOTIFICA()}`; // { nodo, voce }, 31/10
     pannello.hidden = false;
   },
   Inspector() {

@@ -69,10 +69,23 @@
   margin: 24px 0 6px;
 }
 
+/* Tester 04/11 20:23, S4: l'unità ereditava la spaziatura stretta del numero (-.06em) e si stringeva accanto alle unità delle righe
+   sotto (oggi «GB», formato del telefono, decisione 163). Come la sorella della banda (`banda-laboratorio.css`,
+   `.talos-lab__banda-unita`): spaziatura normale. */
 #modelLabOverviewPanel .system-value small {
   font-family: var(--talos-font-ui);
   font-size: 1rem;
+  letter-spacing: 0;
   color: var(--talos-muted);
+}
+
+/* decisione owner 163 (bozzetto variante-13-budget-ram A, `.mem-grande em`): la parola «liberi» accanto al numero grande,
+   nel colore del testo e non attenuata, perché dice CHE COSA è il numero */
+#modelLabOverviewPanel .system-value small.system-value__parola {
+  margin-left: 6px;
+  font-size: .875rem;
+  color: var(--talos-text);
+  letter-spacing: 0;
 }
 
 /* ⛔ La barra è un `<progress>` VERO: la si veste, non la si sostituisce — e

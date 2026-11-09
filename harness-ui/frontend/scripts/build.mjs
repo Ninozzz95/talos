@@ -160,7 +160,8 @@ async function costruisciIn(output, { entryPoint, htmlTemplate, mode }) {
        ospite: docx-preview, SheetJS e pptx-viewer-core pesano megabyte che ogni avvio dovrebbe altrimenti analizzare (senza
        `splitting` esbuild mette gli `import()` dinamici DENTRO il bundle). Le serve `static-files.mjs`, il manifesto le
        elenca da solo. */
-    entryPoints: { app: entryPoint, styles: 'src/styles/main.css', avvio: 'src/avvio.js' },
+    /* FE-066: la bolla del computer use è una pagina sua, nella seconda finestra del guscio; il tema e i token li prende da `avvio.js` e `styles.css`. FE-070: il segno (cursore, anello, bordo) è un'altra pagina, una finestra per schermo, con colori fissi del bozzetto */
+    entryPoints: { app: entryPoint, styles: 'src/styles/main.css', avvio: 'src/avvio.js', bolla: 'src/bolla.js', 'bolla-stile': 'src/styles/bolla.css', segno: 'src/segno.js', 'segno-stile': 'src/styles/segno.css' },
     outdir: output,
     entryNames: '[name]',
     assetNames: 'assets/[name]-[hash]',
@@ -198,6 +199,8 @@ async function costruisciIn(output, { entryPoint, htmlTemplate, mode }) {
     format: 'iife',
   });
   await writeFile(path.join(output, 'index.html'), await readFile(path.join(FRONTEND_ROOT, htmlTemplate), 'utf8'), 'utf8');
+  await writeFile(path.join(output, 'bolla.html'), await readFile(path.join(FRONTEND_ROOT, 'bolla.template.html'), 'utf8'), 'utf8');
+  await writeFile(path.join(output, 'segno.html'), await readFile(path.join(FRONTEND_ROOT, 'segno.template.html'), 'utf8'), 'utf8'); // FE-070: il segno del computer use, una finestra per schermo
   await copyVendoredAssets({ frontendRoot: FRONTEND_ROOT, outputDir: output });
   return writeBuildManifest(output, result.metafile, mode);
 }

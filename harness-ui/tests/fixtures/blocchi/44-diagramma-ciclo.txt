@@ -1,0 +1,1 @@
+root = Diagramma("ciclo", "Ciclo", [{id: "a", testo: "Scrivi"}, {id: "b", testo: "Prova"}, {id: "c", testo: "Correggi"}], [{da: "a", a: "b"}, {da: "b", a: "c"}, {da: "c", a: "a", testo: "di nuovo"}])

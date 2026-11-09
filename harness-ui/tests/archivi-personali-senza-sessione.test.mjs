@@ -23,7 +23,7 @@ async function server(t) {
   const radice = cartellaDiProva('talos-me-'); // la toglie l'aiutante a fine prova (classe dichiarata, BC09)
   const cartelle = { cartellaNote: join(radice, 'note'), cartellaAttivita: join(radice, 'attivita'), cartellaMemoria: join(radice, 'memoria') };
   const registro = createSessionRegistry({ modello: 'm', chiave: 'k', ...cartelle });
-  const app = createHttpApp({ staticHandler: async () => null, listaTaskDisponibili: () => [], elencaCartelleProgetto: () => [], sessionRegistry: registro, ...cartelle });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, listaTaskDisponibili: () => [], elencaCartelleProgetto: () => [], sessionRegistry: registro, ...cartelle });
   const s = createServer(app);
   await new Promise((r) => s.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => s.close(r)));

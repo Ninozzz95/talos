@@ -114,3 +114,12 @@ test('REV4-R4-UI gli allegati non immagine di un messaggio: si staccano dal test
   assert.equal(rami4.pezziDegliAllegati('riassumi\n\nAttached files:\n- a.txt (p)\nTESTO ESTRANEO', 'riassumi', lingue), null);
   assert.equal(rami4.pezziDegliAllegati('altro\n\nAttached files:\n- a.txt (p)', 'riassumi', lingue), null, 'la frase della bolla deve aprire il testo per il modello');
 });
+
+/* Revisione del blocco dati, BD7: «Modifica e rimanda» legge dal testo, dove l'id sta dentro il nome corto: senza, il chip puntava a un file del progetto */
+test('BD7: un allegato nei dati tiene il suo riferimento; un file del progetto no', () => {
+  const id = 'a'.repeat(24);
+  const lingue = { intestazioni: ['Attached files:'], prefissiFile: ['File: '] };
+  const consegna = `riassumi\n\nAttached files:\n- File: attachments/${id}/nota.pdf\n- File: docs/a.md\n- nota.txt (attachments/${id}/nota.txt)`;
+  const { file } = rami4.pezziDegliAllegati(consegna, 'riassumi', lingue);
+  assert.deepEqual(file.map((f) => f.allegatoId), [id, undefined, id]);
+});

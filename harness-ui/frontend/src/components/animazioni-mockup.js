@@ -72,7 +72,7 @@ export function montaAnimazioniMockup(doc = globalThis.document) {
     if (!b) return;
     const shell = doc.querySelector('.talos-shell');
     if (!shell) return;
-    try { grigliaPrima = { shell, valore: (doc.defaultView || globalThis).getComputedStyle(shell).gridTemplateColumns }; }
+    try { grigliaPrima = { shell, colonnePrima: (doc.defaultView || globalThis).getComputedStyle(shell).gridTemplateColumns }; }
     catch { grigliaPrima = null; }
   };
 
@@ -94,13 +94,13 @@ export function montaAnimazioniMockup(doc = globalThis.document) {
     /* ── 2. IL COLLASSO DELLA BARRA ─────────────────────────────────────────────────────
      * Mockup: `motion(shell,[{gridTemplateColumns:start},{gridTemplateColumns:end}],'disclosure',1.2)`. */
     if (grigliaPrima && b?.closest?.('[data-azione="barra"]')) {
-      const { shell, valore } = grigliaPrima;
+      const { shell, colonnePrima } = grigliaPrima;
       grigliaPrima = null;
       const anima = () => {
         let dopo = '';
         try { dopo = (doc.defaultView || globalThis).getComputedStyle(shell).gridTemplateColumns; } catch { return; }
-        if (!dopo || dopo === valore) return; // niente è cambiato: niente da raccontare
-        motion(shell, [{ gridTemplateColumns: valore }, { gridTemplateColumns: dopo }], {
+        if (!dopo || dopo === colonnePrima) return; // niente è cambiato: niente da raccontare
+        motion(shell, [{ gridTemplateColumns: colonnePrima }, { gridTemplateColumns: dopo }], {
           token: 'disclosure', fattore: 1.2, leva: NAV, document: doc,
         });
       };

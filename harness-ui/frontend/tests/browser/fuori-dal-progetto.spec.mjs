@@ -70,7 +70,7 @@ test('FUORI-UI-01: la carta dice dove vuole scrivere, e «Consenti in questa car
   await scheda.getByRole('button', { name: 'Consenti in questa cartella per la sessione' }).click();
   await expect.poll(() => risposte.length).toBe(1);
   expect(risposte[0]).toEqual({ requestId: 'fuori-app-1', approvato: true, ambito: 'cartella' });
-  expect(fermate, 'nessun permesso per attrezzo scritto: il consenso vive nella sessione, non in «scrivi: sempre»').toEqual([]);
+  expect(fermate, 'nessun permesso per strumento scritto: il consenso vive nella sessione, non in «scrivi: sempre»').toEqual([]);
   await page.evaluate(() => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.handleRealEvent({ type: 'ApprovalResolved', requestId: 'fuori-app-1', approvato: true, ambito: 'cartella', _sequenza: 3 }, runtime.realSessionState.generation);

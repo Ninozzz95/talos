@@ -22,7 +22,7 @@ async function fixture(t,{cap=300000,footer=false,failAfterFirst=false}={}){
   await store.finish({...id,sequence,termination:'exited',exitCode:0,
     ...(footer?{metadata:{schema:'talos.process-output-metadata.v1',controlFooter:{type:'cwd-marker-v1',stream:'stdout',marker,prefixBytes:1}}}:{})});
   const requests=[];
-  const app=createHttpApp({staticHandler:()=>{},token:'fixture21',sessionRegistry:{leggiOutputProcesso:async(sessionId,args,options)=>{
+  const app=createHttpApp({ senzaGettone: 'prove', staticHandler:()=>{},token:'fixture21',sessionRegistry:{leggiOutputProcesso:async(sessionId,args,options)=>{
     requests.push({sessionId,...args});
     if(failAfterFirst&&args.offset>0)throw Object.assign(Error('private/profile/path'),{code:'OUTPUT_INTEGRITY_FAILED'});
     return readProcessOutputPage(store,{...args,sessionId},options);

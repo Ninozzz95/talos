@@ -34,3 +34,16 @@ test('DOMANDA-03 la fascia: bolla corta intera, bolla lunga tagliata dopo la qua
   assert.equal(lunga.corpo, Math.ceil(12 + 1 + 4 * 27.2), 'si ferma subito dopo la quarta riga');
   assert.equal(lunga.vista, 44 + lunga.corpo + 8);
 });
+
+/*
+ * FE-065 (owner 02/11/2026, versione B): le schede e le miniature stanno SOPRA la bolla. Ferma in cima, la domanda sale di quanto
+ *   sono alti testata e allegati, che escono dall'alto come in Hermes (lì scorrono via sotto: `user-message.tsx:478-483`); resta la bolla.
+ */
+test('FE-065 la domanda con gli allegati sopra sale fino alla bolla, con 6 px di respiro', async () => {
+  const { saltoAllegatiSopra } = await import('../../src/components/domanda-appiccicata.js');
+  assert.equal(saltoAllegatiSopra({ altoTurno: 100, altoCorpo: 250 }), 144, 'testata e allegati alti 150: sale di 144');
+  assert.equal(saltoAllegatiSopra({ altoTurno: 100, altoCorpo: 250.6 }), 144, 'mai oltre la bolla: si arrotonda per difetto');
+  assert.equal(saltoAllegatiSopra({ altoTurno: 100, altoCorpo: 103 }), 0, 'mai un salto negativo');
+  assert.equal(saltoAllegatiSopra({ altoTurno: Number.NaN, altoCorpo: 250 }), 0, 'una misura rotta non sposta niente');
+  assert.equal(saltoAllegatiSopra({ altoTurno: 0, altoCorpo: Number.POSITIVE_INFINITY }), 0, 'nemmeno una infinita');
+});

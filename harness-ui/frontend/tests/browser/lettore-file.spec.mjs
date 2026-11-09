@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
 import { expect, test } from '@playwright/test';
+import { statoColCookie } from './fixtures/cookie-della-corsa.mjs';
 import { rimuoviCartellaDiProva } from '../../../tests/aiuto/rimuovi-cartella-di-prova.mjs';
 
 import { immaginiDalBrowser, scriviFileDelLettore } from './fixtures/lettore-file.mjs';
@@ -57,7 +58,7 @@ test.beforeAll(async ({ browser, playwright, baseURL }) => {
   await pagina.close();
   const cartella = traccia(mkdtempSync(join(rootWorkspace, 'f5-lettore-')));
   const { voci } = await scriviFileDelLettore(cartella, { immagini });
-  const api = await playwright.request.newContext({ baseURL });
+  const api = await playwright.request.newContext({ baseURL, storageState: statoColCookie(baseURL) });
   const chiave = await api.post('/api/v1/providers/openrouter/key', { data: { key: 'sk-f5-lettore-fixture' } });
   expect(chiave.ok(), 'chiave finta del banco').toBe(true);
   const r = await api.post('/api/v1/sessions/custom', { data: { cartellaLibera: cartella, consegna: 'prova F5 del lettore: non fare nulla', modello: MODELLO } });

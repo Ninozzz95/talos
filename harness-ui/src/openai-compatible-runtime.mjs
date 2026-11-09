@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { ID_MOTORI_LOCALI_OPENAI, REGISTRO_FORNITORI } from './provider-registry.mjs';
+import { ID_DESTINAZIONE_CHAT, ID_MOTORI_LOCALI_OPENAI, REGISTRO_FORNITORI } from './provider-registry.mjs';
 import { createStreamPartitioner } from './stream-partition.mjs';
 
 /*
@@ -150,9 +150,55 @@ function togliCampiRifiutati(record, esito) {
   return { ...esito, corpo };
 }
 
+/*
+ * Decisione 330 (giro 3 della cura 324, punto 6a del giudice): che cosa di un assistant IN CODA (il prefill della continuazione di una
+ * risposta di solo ragionamento) arriva davvero al fornitore di `modello`. `null` se non arriva niente: i fili nativi e ACP lo tolgono
+ * (Hermes toglie dalla copia per la rete ogni assistant di solo ragionamento, `agent/turn_request_assembly.py:178-187`, `run_agent.py:1122-1156`)
+ * e chi dichiara di non proseguirlo (`prefillInCoda.prosegue: false`) lo perde in `preparaRichiestaCompatibile`. `testo`: il
+ * `reasoning_content` parte (o va nel campo proprio del fornitore, `ragionamentoNeiMessaggi`); Groq e Mistral lo rifiutano, e un
+ * assistant vuoto non è una continuazione. La fonte si legge come `separaFonteModello` (`model-destination.mjs`): senza fonte nota, OpenRouter.
+ */
+export function prefillInCodaArriva(modello) {
+  const taglio = typeof modello === 'string' ? modello.indexOf(':') : -1;
+  const fonte = taglio > 0 && ID_DESTINAZIONE_CHAT.includes(modello.slice(0, taglio)) ? modello.slice(0, taglio) : 'openrouter';
+  const record = REGISTRO_FORNITORI[fonte];
+  if (!record || (record.wire !== 'openai-chat' && record.wire !== 'locale') || record.prefillInCoda?.prosegue === false) return null;
+  return { testo: !record.campiRifiutati?.campi?.includes('reasoning_content') || Boolean(record.ragionamentoNeiMessaggi?.campo) };
+}
+
+/*
+ * Decisione 330 (giro 3, punti 6b e 6c del giudice): un assistant IN CODA senza attrezzi e senza testo che, dopo `togliCampiRifiutati`,
+ * non porta più ragionamento (Groq, Mistral: `reasoning_content` tolto, nessun campo proprio) è un assistant vuoto in coda: non una
+ * continuazione, e per Mistral un 400 («Expected last role User or Tool»). Si toglie, come Hermes toglie dalla copia per la rete gli
+ * assistant di solo ragionamento (`agent/turn_request_assembly.py:178-187`; con gli attrezzi restano, `run_agent.py:1122-1135`).
+ * Lo stesso per chi dichiara di non proseguire l'assistant in coda (`prefillInCoda.prosegue: false` nel registro, con la fonte): DeepSeek
+ * diretto lo prosegue solo con `prefix: true` sull'indirizzo /beta, che qui non si usa. Il kernel non lo manda già più a nessuno di
+ * questi (`prefillInCodaArriva`): questa è la rete per ogni altro chiamante del filo.
+ */
+const haTestoVero = (content) => (typeof content === 'string' ? content.trim() !== ''
+  : Array.isArray(content) && content.some((p) => p && typeof p === 'object' && (p.type !== 'text' || (typeof p.text === 'string' && p.text.trim() !== ''))));
+const haRagionamento = (m) => (typeof m.reasoning_content === 'string' && m.reasoning_content.trim() !== '')
+  || (typeof m.reasoning === 'string' && m.reasoning.trim() !== '') || (Array.isArray(m.reasoning_details) && m.reasoning_details.length > 0);
+/* Giro 8 della 324 (BASSO del revisore dei fornitori): i `reasoning_details` li legge solo OpenRouter. Un prefill costruito per lui può
+   arrivare a un altro fornitore dentro la stessa chiamata (il cambio dopo un 429): lì l'assistant in coda parte senza, e coi soli dettagli
+   non porta ragionamento e si toglie. Come Hermes, che sceglie i campi per il fornitore che riceve: nessuno per Mistral, Groq e Cerebras
+   (`agent/message_sanitization.py:645-647`, `:670-671`), tutti e tre solo per i fili alla OpenRouter (`:674-676`). */
+function senzaAssistantMutoInCoda(record, esito, provider) {
+  const messaggi = esito?.corpo?.messages;
+  let ultimo = Array.isArray(messaggi) ? messaggi.at(-1) : null;
+  if (!record || ultimo?.role !== 'assistant' || ultimo.tool_calls?.length > 0 || haTestoVero(ultimo.content)) return esito;
+  if (provider !== 'openrouter' && Object.hasOwn(ultimo, 'reasoning_details')) {
+    const { reasoning_details: _soloOpenRouter, ...senzaDettagli } = ultimo;
+    ultimo = senzaDettagli;
+    esito = { ...esito, corpo: { ...esito.corpo, messages: [...messaggi.slice(0, -1), ultimo] } };
+  }
+  if (haRagionamento(ultimo) && record.prefillInCoda?.prosegue !== false) return esito;
+  return { ...esito, corpo: { ...esito.corpo, messages: messaggi.slice(0, -1) } };
+}
+
 export function preparaRichiestaCompatibile(provider, corpo) {
   const record = REGISTRO_FORNITORI[provider];
-  return conAttrezziCoerenti(conTettoDiUscita(record, conChiaveDellaCache(record, conIdChiamateDelFornitore(record, togliCampiRifiutati(record, preparaRichiestaPerFornitore(provider, corpo))))));
+  return conAttrezziCoerenti(conTettoDiUscita(record, conChiaveDellaCache(record, conIdChiamateDelFornitore(record, senzaAssistantMutoInCoda(record, togliCampiRifiutati(record, preparaRichiestaPerFornitore(provider, corpo)), provider)))));
 }
 
 /* P2 della ricognizione (revisione dei rigidi, 21/10/2026): il riassunto parte con `tools: []` e `tool_choice: 'auto'`

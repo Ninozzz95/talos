@@ -35,7 +35,7 @@ const frasiComponenti = [
   ...Object.values(TESTI_PR), // F6-3, 27/09
 ];
 
-test('I18N-COPERTURA: ogni frase di Impostazioni, attrezzi e componenti ha l’inglese', () => {
+test('I18N-COPERTURA: ogni frase di Impostazioni, strumenti e componenti ha l’inglese', () => {
   assert.deepEqual(traduzioniMancanti('en', frasiImpostazioni), [], 'impostazioni');
   assert.deepEqual(traduzioniMancanti('en', frasiAttrezzi), [], 'attrezzi');
   assert.deepEqual(traduzioniMancanti('en', frasiComponenti), [], 'componenti');

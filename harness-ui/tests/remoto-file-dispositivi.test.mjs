@@ -6,7 +6,7 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
-import { MAX_CHAT_FILE_BYTES } from '../src/chat-file-upload.mjs';
+import { MAX_DEVICE_FILE_BYTES } from '../src/chat-file-upload.mjs';
 import { CODICI, codifica, creaLettore } from '../src/remoto/filo.mjs';
 import { PEZZO_MASSIMO, VITA_TRASFERIMENTO_MS, creaFileDeiDispositivi, tipoDaiByte } from '../src/remoto/file-dispositivi.mjs';
 import { creaOperazioni } from '../src/remoto/operazioni.mjs';
@@ -126,7 +126,7 @@ test('FD-03 un pezzo ripetuto è idempotente; FD-04 un `da` sbagliato si rifiuta
 
 test('FD-05 oltre il tetto: dichiarato troppo grande, e dichiarato piccolo che mente', async (t) => {
   const b = banco(t);
-  await assert.rejects(b.file.inizia({ dispositivoId: 'dA', sessionId: 's1', nome: 'g.bin', dimensione: MAX_CHAT_FILE_BYTES + 1, sha256: 'a'.repeat(64) }), rifiutaCon('FILE_TOO_LARGE'));
+  await assert.rejects(b.file.inizia({ dispositivoId: 'dA', sessionId: 's1', nome: 'g.bin', dimensione: MAX_DEVICE_FILE_BYTES + 1, sha256: 'a'.repeat(64) }), rifiutaCon('FILE_TOO_LARGE'));
   const { trasferimentoId } = await b.file.inizia({ dispositivoId: 'dA', sessionId: 's1', nome: 'm.bin', dimensione: 10, sha256: 'a'.repeat(64) });
   await assert.rejects(b.file.pezzo({ dispositivoId: 'dA', trasferimentoId, da: 0, dati: b64u(Buffer.alloc(20)) }), rifiutaCon('FILE_TOO_LARGE'));
   /* il trasferimento che ha mentito non resta aperto, e il suo parziale non resta sul disco */
@@ -287,9 +287,12 @@ test('FD-18 file.list: allegati delle bolle solo dentro allegati/, file del mode
     { type: 'RunStarted' },
     { type: 'ToolCallStart', toolCallId: 't1', toolCallName: 'scrivi' },
     { type: 'ToolCallArgs', toolCallId: 't1', delta: JSON.stringify({ percorso: 'scritto.md' }) },
+    // round 3 (decision 215): a write counts only with the kernel's StateDelta, sent after the real write (agui-events eventoPerScrittura)
+    { type: 'StateDelta', delta: [{ op: 'add', path: '/file/' + 'scritto.md', value: 'x' }] },
     { type: 'ToolCallResult', toolCallId: 't1' },
     { type: 'ToolCallStart', toolCallId: 't2', toolCallName: 'file_edit' },
     { type: 'ToolCallArgs', toolCallId: 't2', delta: JSON.stringify({ path: join(b.dir, 'segreto.txt') }) },
+    { type: 'StateDelta', delta: [{ op: 'add', path: '/file/' + join(b.dir, 'segreto.txt'), value: 'x' }] },
     { type: 'ToolCallResult', toolCallId: 't2' },
     { type: 'ToolCallStart', toolCallId: 't3', toolCallName: 'scrivi' },
     { type: 'ToolCallArgs', toolCallId: 't3', delta: JSON.stringify({ percorso: 'fallito.md' }) },
@@ -400,7 +403,7 @@ test('FD-17 quattro pezzi in volo in una sola scrittura: quattro risposte, in or
 
 test('FD-20 misura: 25 MiB caricati in locale, tempo e memoria del processo', { skip: senzaHelper }, async (t) => {
   const b = banco(t);
-  const contenuto = Buffer.alloc(MAX_CHAT_FILE_BYTES);
+  const contenuto = Buffer.alloc(MAX_DEVICE_FILE_BYTES);
   for (let i = 0; i < contenuto.length; i += 4096) contenuto[i] = i % 251;
   const prima = process.memoryUsage();
   let piccoRss = prima.rss;

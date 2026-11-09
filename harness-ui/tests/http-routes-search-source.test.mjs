@@ -10,7 +10,7 @@ function keyringFinto() {
   return { get: (s, a) => m.get(`${s}/${a}`) ?? null, set: (s, a, v) => m.set(`${s}/${a}`, v), remove: (s, a) => m.delete(`${s}/${a}`) };
 }
 async function listen(t, deps) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, ...deps }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, ...deps }));
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;

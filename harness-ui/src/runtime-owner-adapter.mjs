@@ -10,7 +10,7 @@
  */
 import { senzaCampoImmagini } from './kernel/immagine-da-guardare.mjs';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { statSync } from 'node:fs';
 import { createParser } from 'eventsource-parser';
@@ -21,7 +21,7 @@ import { risolviDestinazioneModello, separaFonteModello, FONTI_MODELLO, validaFa
 import { REGISTRO_FORNITORI, ID_MOTORI_LOCALI_OPENAI, idPerWire } from './provider-registry.mjs';
 import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
 import { creaRilevatoreZai } from './zai-indirizzo.mjs';
-import { leggiAttesaRichiestaDalFornitore, leggiAttesaResetDalCorpo, erroreEsitoProviderIncerto, consumoPubblico, marcaRifiutoProvider } from './provider-retry.mjs';
+import { leggiAttesaRichiestaDalFornitore, leggiAttesaResetDalCorpo, erroreEsitoProviderIncerto, codiceDiRichiestaNonPartita, consumoPubblico, marcaRifiutoProvider } from './provider-retry.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
 import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
 import { ATTESA_LIMITE_DEL_PIANO_MASSIMA_MS, attesaDelLimiteDelPiano, conPrimoPezzo, creaFetchDelPiano, erroreDelPiano } from './chatgpt-richiesta.mjs';
@@ -40,7 +40,10 @@ import { PREFISSO_SINTESI_RECINTATA, costruisciBloccoFatti } from './kernel/rica
 import { classificaErroreFornitore, numeriDelContestoPieno } from './kernel/compattazione-desktop.mjs';
 import { rifiutoDelMotoreOspite } from './accesso-locale-ospite.mjs'; // 18/10/2026: il motore dell'app occupato o chiuso, detto per nome
 import { conUtentiUniti } from './kernel/utenti-uniti.mjs'; // riga del bugfixer 10/10: due `user` di fila, solo verso un motore locale
-import { eRifiutoDelTemplate, piegaMessaggiDiSistema, sondaFormaDeiSistemi } from './kernel/sistema-piegato.mjs'; // L1 1.1, 26/10
+import { eRifiutoDelTemplate, piegaMessaggiDiSistema, sondaFormaDeiSistemi, piegaNoteInCoda } from './kernel/sistema-piegato.mjs'; // L1 1.1, 26/10; decisione 166 (R2) e 194
+import { notaDegliAccorciatiComeUtente } from './kernel/avviso-accorciato.mjs'; // REV-M2-PIEGA (05/11): dove non si piega, la nota M2 resta la `user` di prima
+import { valoreConsumoDiServizio } from './kernel/consumo-di-servizio.mjs'; // spesa di servizio, parte 2 A (owner 30/10)
+import { immaginiPerUnModelloSenzaVista } from './immagini-senza-vista.mjs'; // Desktop 01/11: una foto vecchia non uccide più la chat
 // P0 · punto 7 (16/09): il failsafe di inattività e il dispatcher stanno in una porta sola.
 import {
   SilenzioDelFornitoreError,
@@ -140,6 +143,12 @@ function rispostaRitentabile(status) {
  *   chiuso per il registro delle sessioni. Un motore locale aggiunto domani entra qui da solo.
  */
 export const FONTI_DI_MOTORE_LOCALE = Object.freeze(new Set([...idPerWire('locale'), ...ID_MOTORI_LOCALI_OPENAI]));
+/** REV-M2-PIEGA (05/11/2026): il corpo con la nota M2 nella forma `user` <talos-note> di prima; LO STESSO corpo se non c'è. */
+const conNotaDegliAccorciatiDiPrima = (corpo) => {
+  if (!Array.isArray(corpo?.messages)) return corpo;
+  const messaggi = notaDegliAccorciatiComeUtente(corpo.messages);
+  return messaggi === corpo.messages ? corpo : { ...corpo, messages: messaggi };
+};
 
 /**
  * L'unica frase che chi legge vedrà: dice che cosa cambia per LEI, non che cosa è successo al
@@ -157,7 +166,7 @@ export function avvisoFinestraAllargata({ dopo }) {
  * The same notice shape as the others (`testo` + key + params); the reason itself goes to the log (`llama-router-supervisor.mjs`).
  */
 export function avvisoRipiegoRouter({ modelId }) {
-  return { testo: `The router could not load ${modelId}: it runs on the standard local engine, one model at a time.`, testoChiave: 'server.runtime.notice.routerFallback', testoParams: { model: modelId } };
+  return { testo: 'Opened with the other engine', testoChiave: 'server.runtime.notice.routerFallback', testoParams: { model: modelId } };
 }
 /**
  * L1 1.3 — «Chiedimi» (Impostazioni → Modelli): la finestra si potrebbe allargare, ma la persona ha scelto di decidere ogni volta.
@@ -230,6 +239,34 @@ class MotoreLocaleRifiutaError extends Error {
     // Diagnostica interna: non entra nella serializzazione pubblica dell'errore.
     Object.defineProperty(this, 'tentativi', { value: Object.freeze(tentativi.map(t => Object.freeze({ ...t }))) });
   }
+}
+
+/*
+ * 01/11/2026, vista locale (misura 1, `MISURE-VISTA-LOCALE-2026-11-01.md`): un'immagine a un modello aperto SENZA la sua parte per le
+ *   immagini (mmproj) e llama-server (b11960) risponde **500** `{"error":{"code":500,"message":"image input is not supported - hint: if
+ *   this is unexpected, you may need to provide the mmproj","type":"server_error"}}`. Un 500 sembra un guasto del motore, il ripiego lo
+ *   tratterebbe da transitorio e la persona leggerebbe un errore interno. ⇒ Diventa un 400 col suo codice e una frase che dice cosa
+ *   succede (Desktop, 01/11). ⛔ Qui NON c'è un campo strutturato (`type` è il generico `server_error`): si riconosce dalla frase del
+ *   motore, unica eccezione alla regola di BC-79.2, e solo sul motore di questo PC.
+ */
+const FRASE_IMMAGINE_SENZA_PROIETTORE = /image input is not supported/iu;
+export class ModelloLocaleNonVedeError extends Error {
+  constructor(dettaglio) {
+    super('This local model cannot see images: it was opened without the part that reads them. Send the message without the image, or use a model that sees images.');
+    this.name = 'ModelloLocaleNonVedeError';
+    this.code = 'LOCAL_MODEL_NO_VISION';
+    this.stato = 400;
+    this.transitorio = false;
+    this.dettaglio = dettaglio;
+  }
+}
+/** The refusal of a local engine for an image it cannot read (500 or 400 with that sentence); null for anything else. */
+export function motoreLocaleNonVede(stato, dettaglio) {
+  if (stato !== 500 && stato !== 400) return null;
+  let corpo = null;
+  try { corpo = JSON.parse(dettaglio); } catch { return null; }
+  const messaggio = corpo?.error?.message;
+  return typeof messaggio === 'string' && FRASE_IMMAGINE_SENZA_PROIETTORE.test(messaggio) ? new ModelloLocaleNonVedeError(dettaglio) : null;
 }
 
 /*
@@ -615,6 +652,22 @@ export function normalizzaReasoningPerModello(reasoning, capability) {
   return result;
 }
 
+/*
+ * Banco di Performance sulla candidata (04/11/2026, OK di CLI, Mobile e Performance): con `low` deepseek-v4.1-flash-1017 ragionava
+ *   1.231-2.000 token su `max_tokens: 2000` e 4 sintesi su 4 morivano troncate. Il catalogo lo dichiara spegnibile (`mandatory:
+ *   false`, `supported_efforts` con `none`); OpenRouter, «Reasoning tokens» (letta il 04/11): `effort: "none"` «Disables reasoning
+ *   entirely», mai a un modello `mandatory`. Hermes spegne il pensiero nella sua corsia veloce dei riassunti
+ *   (`agent/auxiliary_client.py:6215-6228`, clone 2026-11-01). ⇒ La SINTESI chiede `none` solo lì; ogni altro modello riceve byte
+ *   per byte quello di prima (`low` col clamp). Un 400 su `none` (Performance) mette il modello in `SINTESI_SENZA_NONE`: il
+ *   ritentativo e ogni conteggio dopo usano `low`. Una funzione sola: la usano chi invia (`callContextModel`) e chi conta.
+ */
+export const SINTESI_SENZA_NONE = new Set();
+export function ragionamentoPerSintesiOpenRouter(capability, model) {
+  const regole = capabilityReasoning(capability);
+  const spegnibile = regole && regole.mandatory !== true && Array.isArray(regole.supportedEfforts) && regole.supportedEfforts.includes('none');
+  return spegnibile && !SINTESI_SENZA_NONE.has(model) ? { effort: 'none' } : normalizzaReasoningPerModello({ effort: 'low' }, capability);
+}
+
 /**
  * ⛔ A9, seguito OpenRouter (09/10/2026) — la mappa A9 (`filoRagionamentoDiretti`) copre solo le sessioni dirette, e l'owner
  * usa `z-ai/glm-5.3-flash` via OpenRouter: lì la pillola mostrava «Spento» e «Molto alto» mentre sul filo partivano «low» e
@@ -817,9 +870,18 @@ export function unisciInstradamento(provider, instradamento) {
   if (!instradamento || typeof instradamento !== 'object' || Array.isArray(instradamento) || !Object.keys(instradamento).length) return provider;
   const base = provider && typeof provider === 'object' && !Array.isArray(provider) ? provider : {};
   const unito = { ...base, ...instradamento };
+  /* Decisione 193 (condizione della CLI, 04/11/2026): l'`ignore` che porta il corpo è quello automatico del nucleo (fornitori che hanno perso
+     la cache due volte). Un fornitore che la persona ha messo nel suo `order` o `only` per questo modello non si esclude in automatico: la
+     sua scelta vince. Si confronta lo slug di BASE (la parte prima di «/»): `order: ['deepinfra']` protegge anche `deepinfra/fp8`, e al contrario. */
+  const baseDi = (s) => s.split('/')[0].trim().toLowerCase();
+  const scelti = new Set([...(Array.isArray(instradamento.order) ? instradamento.order : []), ...(Array.isArray(instradamento.only) ? instradamento.only : [])]
+    .filter((s) => typeof s === 'string' && s).map(baseDi));
+  const gia = (Array.isArray(base.ignore) ? base.ignore.filter((s) => typeof s === 'string') : []).filter((s) => !scelti.has(baseDi(s)));
   if (Array.isArray(instradamento.ignore)) {
-    const gia = Array.isArray(base.ignore) ? base.ignore.filter((s) => typeof s === 'string') : [];
     unito.ignore = [...new Set([...gia, ...instradamento.ignore.filter((s) => typeof s === 'string' && s)])];
+  } else if (Array.isArray(base.ignore)) {
+    if (gia.length) unito.ignore = gia;
+    else delete unito.ignore;
   }
   return unito;
 }
@@ -892,6 +954,7 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
     } catch (error) {
       if (userSignal?.aborted) throw userSignal.reason ?? error;
       if (error?.esitoIncerto) throw error;
+      if (error?.richiestaNonPartita === true) throw error; // 04/11: mai partita, non un 502 inventato da ritentare dieci volte
       if (error instanceof SilenzioDelFornitoreError) throw error;
       if (error instanceof OpenRouterIdleTimeoutError) return rispostaErrore(408, { message: 'OpenRouter stayed idle past the configured limit.' });
       return rispostaErrore(502, { message: error instanceof Error ? error.message : String(error) });
@@ -952,7 +1015,7 @@ export function creaFetchOpenRouterResiliente(fetchDiRete = fetch, {
  *   (P0-D-20: stessi byte, stesso stato, stessi header). ⇒ Le prove della cache iniettano il
  *   guardiano identità e misurano il loro contratto; il guardiano vero si prova da solo (P0-D-15/16).
  */
-function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null, instradaOpenRouter = false, inattivitaGenerazioneMs = null, sorvegliaCorpo = sorvegliaCorpoDiGenerazione, chiaveDiSessione = null,
+function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null, instradaOpenRouter = false, inattivitaGenerazioneMs = null, sorvegliaCorpo = sorvegliaCorpoDiGenerazione, chiaveDiSessione = null, sessioneDelGiro = null, fasciaDiServizioFn = null,
   /*
    * BC-79.2 — la memoria del giro di sessione, CONDIVISA e non di questa chiusura: sulla strada del
    * multi-provider `creaFetchInstradata` viene ricostruita a OGNI richiesta (`invia`), quindi una
@@ -964,9 +1027,17 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
      Di serie quella del processo, come la memoria del motore: un modello si sonda una volta sola finché il server vive. */
   formeDeiSistemi = FORME_DEI_SISTEMI,
   /* L1 1.3, revisione blocco 5 (A-4): giro senza la persona davanti ⇒ sul rifiuto del motore locale si riassume, mai si riapre. */
-  senzaPersona = false } = {}) {
+  senzaPersona = false,
+  /* Decisione 116 C (owner 04/11/2026): chi chiama sa con QUALE token del piano è partita questa richiesta (il rinnovo dopo un rifiuto dice
+     quale token è stato rifiutato, e la riga «rinnovato» nasce quando cambia fra due richieste dello stesso giro). Mai scritto altrove. */
+  tokenUsato = null } = {}) {
+  /* ⛔ FETCH-MULTIPROVIDER-01: senza dipendenze si ridà la fetch STESSA, come sempre (nessuna installazione esistente cambia). Il segno
+     della spesa di servizio passa allora intatto: la fetch di Node e `new Request` scartano le chiavi che non conoscono, quindi non arriva
+     al fornitore; e senza dipendenze non c'è nemmeno una riga di spesa da spostare. */
   if (!dipendenze) return fetchDiRete;
-  return async function fetchMultiProvider(url, opzioni = {}) {
+  return async function fetchMultiProvider(url, opzioniInArrivo = {}) {
+    // spesa di servizio, parte 2 A: il segno non va mai in rete (CLI). ⛔ `let`: più sotto il corpo si riscrive (`opzioni = {...}`)
+    let opzioni = toltoIlSegnoDiServizio(opzioniInArrivo);
     let corpo = null;
     try {
       corpo = typeof opzioni.body === 'string' ? JSON.parse(opzioni.body) : null;
@@ -1001,21 +1072,30 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
      * l'avvio, l'errore vero (disco pieno, GGUF corrotto…) deve arrivare
      * all'utente, non un secondo giro silenzioso all'infinito.
      */
+    /* owner 01/11/2026, «Fila vera» (`attesa-turno.mjs`): il motore locale deve sapere di chi è la richiesta. Chi non guarda il secondo argomento non cambia. */
+    const dipendenzeDelGiro = sessioneDelGiro && typeof dipendenze?.localePronto === 'function'
+      ? { ...dipendenze, localePronto: (modello) => dipendenze.localePronto(modello, { sessione: sessioneDelGiro }) } : dipendenze;
     let destinazione;
     try {
-      destinazione = risolvi(corpo.model, dipendenze);
+      destinazione = risolvi(corpo.model, dipendenzeDelGiro);
     } catch (erroreRisoluzione) {
       /* 18/10/2026: un modello del motore dell'APP (`ospite`) non si accende da qui — vive nel telefono, e il llama-server del PC
          coprirebbe il motivo vero con «non configurato» */
       if (erroreRisoluzione?.code !== 'LOCAL_RUNTIME_NOT_READY' || erroreRisoluzione?.ospite === true || typeof dipendenze.avviaLocale !== 'function') throw erroreRisoluzione;
       const { modelloRemoto } = separaFonteModello(corpo.model);
-      const avviato = await dipendenze.avviaLocale(modelloRemoto); // ⛔ se l'avvio stesso fallisce, il SUO errore (non quello generico non acceso) arriva a chi ha chiamato
+      const avviato = await dipendenze.avviaLocale(modelloRemoto, { signal: opzioni?.signal, sessione: sessioneDelGiro }); // 01/11/2026: lo Stop del giro annulla l'apertura · ⛔ se l'avvio stesso fallisce, il SUO errore (non quello generico non acceso) arriva a chi ha chiamato
       /* Router mode (27/10/2026, decision 2): the line in the chat when today's engine took a model the router could not load. Today's
          supervisor never says `ripiegoRouter`: with the switch OFF nothing is said. */
       if (avviato?.ripiegoRouter?.modelId && typeof onAvviso === 'function') {
-        try { await onAvviso(avvisoRipiegoRouter(avviato.ripiegoRouter)); } catch { /* the line is news: it never stops the answer */ }
+        try { await onAvviso(avvisoRipiegoRouter(avviato.ripiegoRouter), { riga: 'ripiego-locale', dati: { modello: avviato.ripiegoRouter.modelId } }); } catch { /* the line is news: it never stops the answer */ }
       }
-      destinazione = risolvi(corpo.model, dipendenze); // dopo un avvio riuscito questo non deve più lanciare: se lancia ancora, è un errore vero da mostrare, non da inghiottire
+      destinazione = risolvi(corpo.model, dipendenzeDelGiro); // dopo un avvio riuscito questo non deve più lanciare: se lancia ancora, è un errore vero da mostrare, non da inghiottire
+    }
+    /* 01/11/2026, «Memoria delle conversazioni»: prima di una richiesta al motore di questo PC, la scheda della conversazione torna dal disco
+       se un'altra l'aveva presa (`foto-conversazioni.mjs`); una richiesta senza conversazione la segna occupata. Mai un errore per il giro. */
+    if (destinazione?.locale === true && !destinazione.ospite && typeof dipendenze.primaDellaRichiestaLocale === 'function') {
+      try { await dipendenze.primaDellaRichiestaLocale(sessioneDelGiro ?? null, { modello: destinazione.modelloRemoto ?? null, signal: opzioni?.signal }); }
+      catch { /* una foto che non torna vuol dire solo rileggere la conversazione */ }
     }
     /*
      * ⛔⛔⛔ P0 · punto 7 (16/09/2026) — IL FAILSAFE, IN UN PUNTO SOLO PER TUTTI I FORNITORI.
@@ -1047,8 +1127,16 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       corpo = { ...corpo, messages: corpo.messages.map(({ talos_recovery, ...message }) => message) };
       opzioni = { ...opzioni, body: JSON.stringify(corpo) };
     }
+    /* Decisione 193: `provider` (gli evitati del nucleo, `provider.ignore`) è un campo di OpenRouter. Il nucleo lo mette solo per un modello di
+       OpenRouter, ma una riserva su un altro fornitore (`eseguiConFallback`) rifà la stessa chiamata con un altro modello: lì non parte mai. */
+    if (destinazione.fonte !== 'openrouter' && Object.hasOwn(corpo, 'provider')) {
+      const { provider: _soloOpenRouter, ...senza } = corpo;
+      corpo = senza;
+      opzioni = { ...opzioni, body: JSON.stringify(corpo) };
+    }
     // P-L · il corpo del kernel incontra ACP solo qui; stop e chiusura seguono la risposta.
-    if (destinazione.esterno) return rispostaAgenteAcp({ runtime: destinazione.runtime, body: corpo, signal: opzioni.signal, onAvviso });
+    /* REV-M2-PIEGA (05/11/2026): l'agente esterno riceve la storia come testo e non piega: la nota M2 gli arriva nella forma di prima. */
+    if (destinazione.esterno) return rispostaAgenteAcp({ runtime: destinazione.runtime, body: conNotaDegliAccorciatiDiPrima(corpo), signal: opzioni.signal, onAvviso });
     // P-L · fine instradamento agente esterno.
     if (destinazione.native) {
       /* 11/10/2026, «Continue with ChatGPT» — il token del piano si prende ADESSO (si rinnova da solo se sta per scadere) e la
@@ -1059,7 +1147,8 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       if (destinazione.tokenDelPiano) {
         if (typeof dipendenze?.leggiTokenDelPiano !== 'function') throw Object.assign(new Error('No ChatGPT account is connected.'), { code: 'CHATGPT_NON_COLLEGATO' });
         apiKeyNativa = await dipendenze.leggiTokenDelPiano(destinazione.fonte);
-        fetchNativa = creaFetchDelPiano(fetchDiRete, { onRisposta: (intestazioni, stato) => {
+        if (typeof tokenUsato === 'function') await tokenUsato(apiKeyNativa);
+        fetchNativa = creaFetchDelPiano(fetchDiRete, { fasciaDiServizioFn, collegamenti: opzioni.talosSenzaCollegamento === true ? null : dipendenze?.collegamentiDelPiano ?? null, onRisposta: (intestazioni, stato) => {
           if (typeof dipendenze?.registraLimitiDelPiano !== 'function') return;
           dipendenze.registraLimitiDelPiano({ limiti: leggiLimitiDelPiano(intestazioni), nomi: nomiVisti(intestazioni), stato });
         } });
@@ -1069,6 +1158,20 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
     if (corpo.messages?.some(m => m.talos_provider_state)) {
       corpo = { ...corpo, messages: stripNativeMetadata(corpo.messages) };
       opzioni = { ...opzioni, body: JSON.stringify(corpo) };
+    }
+    /* Decisione 166, seconda forma (revisione del blocco UI R2; Performance 04/11 sera: «OpenRouter piegato SUBITO»): verso OpenRouter e ogni
+       compatibile in cloud la nota dello Stop parte come testo `user` al suo posto. Cosa farebbe il router di un `system` sparso verso Claude o
+       Gemini non è misurato; un `user` al suo posto non sposta mai la testa, qualunque cosa faccia. I motori di questo PC e del telefono
+       restano com'erano (template severo: piega di `piegaMessaggiDiSistema`, più sotto; gli altri reggono il system al suo posto). */
+    if (Array.isArray(corpo.messages) && !FONTI_DI_MOTORE_LOCALE.has(destinazione.fonte) && destinazione.locale !== true && destinazione.ospite !== true) {
+      /* Decisione 194: OGNI nota dopo la testa, non più solo quella dello Stop. Il template di DeepSeek V4 raccoglie tutti i system in testa
+         (`llama.cpp-2026-11-01/models/templates/deepseek-ai-DeepSeek-V4.jinja:22-48`): una nota sparsa cambiava la testa al fornitore a valle. */
+      const piegati = piegaNoteInCoda(corpo.messages);
+      if (piegati !== corpo.messages) { corpo = { ...corpo, messages: piegati }; opzioni = { ...opzioni, body: JSON.stringify(corpo) }; }
+    } else if (!FONTI_DI_MOTORE_LOCALE.has(destinazione.fonte)) {
+      /* REV-M2-PIEGA (05/11/2026): un locale o un ospite fuori dall'elenco dei motori non passa da nessuna piega: la nota M2 resta quella di prima. */
+      const diPrima = conNotaDegliAccorciatiDiPrima(corpo);
+      if (diPrima !== corpo) { corpo = diPrima; opzioni = { ...opzioni, body: JSON.stringify(corpo) }; }
     }
     if (destinazione.fonte === 'openrouter' && !instradaOpenRouter) return fetchDiRete(url, opzioni);
     if (destinazione.fonte === 'openai' && corpo.reasoning) {
@@ -1167,7 +1270,10 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
         formaDeiSistemi = await aspettaOFerma(sonda, opzioni.signal);
       }
     }
-    const conLaFormaGiusta = (messaggi, forma) => conUtentiUniti(forma === 'piegata' ? piegaMessaggiDiSistema(messaggi) : messaggi);
+    /* REV-M2-PIEGA (revisione avversaria del 05/11/2026): la nota M2 nasce `system`. Il template severo la piega col segno intatto (era
+       `‹talos-note>`, come una nota contraffatta); per tutti gli altri torna la `user` <talos-note> di prima, stessi byte. La rete reattiva
+       più sotto ripiega da `messaggiPrimaDellaPiega`, cioè dalla nota `system`: anche lì il segno resta. */
+    const conLaFormaGiusta = (messaggi, forma) => conUtentiUniti(forma === 'piegata' ? piegaMessaggiDiSistema(messaggi) : notaDegliAccorciatiComeUtente(messaggi));
     const messaggiPrimaDellaPiega = Array.isArray(adattata.corpo?.messages) ? adattata.corpo.messages : null;
     if (motoreLocale && messaggiPrimaDellaPiega) adattata.corpo = { ...adattata.corpo, messages: conLaFormaGiusta(messaggiPrimaDellaPiega, formaDeiSistemi) };
     const portavaAttrezzi = Array.isArray(adattata.corpo?.tools) && adattata.corpo.tools.length > 0;
@@ -1305,12 +1411,33 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
       return fetchMultiProvider(url, opzioni);
     };
 
+    /*
+     * Owner 26/10 e 01/11/2026, attrezzi per i modelli che non li hanno (`attrezzi-emulati.mjs`, spento di serie). Solo il motore di questo PC: quello dell'app non ha
+     * `/completion` (Mobile, 01/11). Questo file non legge il modulo: la dipendenza esiste solo se `server.mjs` la dà. Risponde null per tutto ciò che non è suo, e si va
+     * come oggi. Lo Stop e il tetto del giro sono il segnale della richiesta; `sorveglia` è lo stesso guardiano del silenzio.
+     */
+    if (destinazione.locale === true && !destinazione.ospite && portavaAttrezzi && !giaSenzaAttrezzi && typeof dipendenze.attrezziEmulati === 'function') {
+      const emulata = await dipendenze.attrezziEmulati(adattata.corpo, { signal: opzioni?.signal, ...conDispatcher });
+      if (emulata) return sorveglia(emulata);
+    }
+    /* 01/11/2026: un'immagine che il modello locale non può leggere sale col suo codice (`ModelloLocaleNonVedeError`); il resto torna intatto */
+    const seNonVede = async (risposta) => {
+      /* Suite del treno 02/11 (PIEGA-19): qui si leggevano 2.000 byte e si restituivano quelli, così un 500 del motore che non c'entra con le immagini
+         (fuori memoria, per esempio) arrivava tagliato a chi lo legge. Si legge intero una volta sola; si decide sui primi 2.000. */
+      const { testo: dettaglioImmagine } = await leggiCorpoDErrore(risposta);
+      const nonVede = motoreLocaleNonVede(risposta.status, dettaglioImmagine.slice(0, 2_000));
+      if (nonVede) throw nonVede;
+      return new Response(dettaglioImmagine, { status: risposta.status, statusText: risposta.statusText, headers: risposta.headers });
+    };
     if (motoreLocale && portavaAttrezzi && !giaSenzaAttrezzi) {
       const prima = await spedisciPiegandoSeServe(corpoRiscritto);
+      if (prima.status === 500) return seNonVede(prima);
       if (prima.status !== 400) return prima;
       /* Il grezzo si legge ORA: dopo la riprova questa risposta non serve più, e il suo corpo
          resterebbe aperto. Serve solo come dettaglio dell'errore, mai a schermo. */
       const dettaglio = await leggiDettaglioRifiuto(prima);
+      const nonVedeConAttrezzi = motoreLocaleNonVede(prima.status, dettaglio);
+      if (nonVedeConAttrezzi) throw nonVedeConAttrezzi; // un 400 per l'immagine non è un rifiuto degli attrezzi
       // 25/09 sera: il contesto pieno non è un rifiuto degli attrezzi — nessuna riprova senza (vedi `ContestoLocalePienoError`)
       const pieno = contestoLocalePieno(dettaglio);
       if (pieno) {
@@ -1339,8 +1466,11 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
     const risposta = await spedisciPiegandoSeServe(corpoRiscritto);
     /* 25/09 sera: anche senza attrezzi nel corpo (o già tolti) il contesto pieno del motore locale sale col suo codice, invece
        di arrivare al kernel come un 400 qualunque che il ripiego classificherebbe «richiesta non valida». */
+    if (motoreLocale && risposta.status === 500) return seNonVede(risposta);
     if (!motoreLocale || risposta.status !== 400) return risposta;
     const dettaglio = await leggiDettaglioRifiuto(risposta);
+    const nonVede = motoreLocaleNonVede(risposta.status, dettaglio);
+    if (nonVede) throw nonVede;
     const pieno = contestoLocalePieno(dettaglio);
     if (pieno) {
       const rimandata = await allargaERimanda(pieno);
@@ -1352,6 +1482,13 @@ function creaFetchInstradata(fetchDiRete = fetch, { risolvi = risolviDestinazion
 }
 
 // P-K — errori upstream non attendibili: il testo non deve attraversare il confine pubblico.
+/* Spesa di servizio (parte 2 A; CLI 30/10): `talosServizio` è un dato NOSTRO — non arriva mai al fornitore né ai registri di rete. */
+function toltoIlSegnoDiServizio(opzioni) {
+  if (!opzioni || typeof opzioni !== 'object' || !('talosServizio' in opzioni)) return opzioni;
+  const { talosServizio: _segno, ...perLaRete } = opzioni;
+  return perLaRete;
+}
+
 /** CONTRATTO-R30-R31 (Performance, 30/10/2026): il max_tokens inviato in QUESTA chiamata, additivo nel conto dei consumi. */
 function tettoInviatoNelConsumo(contesto) {
   return Number.isSafeInteger(contesto?.maxTokensInviato) ? { maxTokensInviato: contesto.maxTokensInviato } : {};
@@ -1441,7 +1578,11 @@ function classificaTuttiEsclusiOpenRouter(testo) {
   if (Buffer.byteLength(testo, 'utf8') >= 16_384) return null;
   let corpo;
   try { corpo = JSON.parse(testo); } catch { return null; }
-  return corpo?.error?.metadata?.failed_routing_step === 'Filter by Ignored Providers'
+  /* 01/11/2026, banco di chiusura: la stessa forma quando il limite è una restrizione del CONTO OpenRouter, non l'elenco della persona in TALOS.
+     Stessa classe (niente ritenti, niente panchina, niente riserva), codice e frase suoi: si cambia in un altro posto. */
+  const passo = corpo?.error?.metadata?.failed_routing_step;
+  if (passo === 'Filter by Guardrails') return { code: 'OPENROUTER_GUARDRAIL_BLOCKED', classe: 'tutti-esclusi', transitorio: false };
+  return passo === 'Filter by Ignored Providers'
     ? { code: 'OPENROUTER_ALL_PROVIDERS_EXCLUDED', classe: 'tutti-esclusi', transitorio: false }
     : null;
 }
@@ -1464,7 +1605,9 @@ function classificaTuttiEsclusiOpenRouter(testo) {
 function classificaRifiutoNoto(testo, stato) {
   if (typeof testo !== 'string' || Buffer.byteLength(testo, 'utf8') >= 16_384) return null;
   if (stato === 429 && /RESOURCE_EXHAUSTED|"retryDelay"|PerMinute|\bretry\s+in\s+\d/iu.test(testo)) return { classe: 'traffico', transitorio: true };
-  if ((stato === 404 || stato === 400) && /no longer available|model_not_found|is not found for API version|the model `[^`]*` does not exist|\bno such model\b|\bunknown model\b/iu.test(testo)) {
+  /* «is not a valid model ID»: il 400 di OpenRouter per un modello che non esiste (sonda sul servizio vero, 01/11/2026). Con «ID» scritto: senza,
+     un parametro rifiutato («… is not a valid model parameter») fermava il modello per 15 minuti e diceva di sceglierne un altro (D9, revisione di fine fase). */
+  if ((stato === 404 || stato === 400) && /no longer available|model_not_found|is not found for API version|the model `[^`]*` does not exist|\bno such model\b|\bunknown model\b|\bis not a valid model id\b/iu.test(testo)) {
     return { code: 'PROVIDER_MODEL_UNAVAILABLE', classe: 'modello-non-disponibile', transitorio: false };
   }
   return null;
@@ -1507,7 +1650,9 @@ function erroreFornitorePubblico(classificazione, stato = null, numeri = null) {
     // la classe è quella che la tabella BC-44 (`classificaErroreDiCorsa`) dava già al contesto pieno, ma senza una frase sua
     contesto: `The request is larger than the model context window${frasePienoConNumeri(numeri)}`,
   };
-  const e = new Error(messaggi[classificazione.classe] ?? 'The provider did not accept the request.');
+  const e = new Error(classificazione.code === 'OPENROUTER_GUARDRAIL_BLOCKED' ? 'A guardrail on your OpenRouter account blocks every provider of this model.'
+    : classificazione.richiestaNonPartita === true ? 'The provider could not be reached.' // la frase di `inviaCloudProtetta`, già tradotta (`errori.kernel.fornitoreIrraggiungibile`)
+    : messaggi[classificazione.classe] ?? 'The provider did not accept the request.');
   return Object.assign(e, { code: 'PROVIDER_REQUEST_ERROR', stato, ...classificazione, limitatoDalFornitore: classificazione.classe === 'traffico' });
 }
 
@@ -1580,7 +1725,8 @@ function classificaGuasto(error, stato = null) {
    *   salvato undici»: è esattamente l'inganno in cui questa corsia è caduta al primo giro.
    */
   if (CLASSI_PER_CODICE_DI_TRASPORTO.has(codice)) return { classe: CLASSI_PER_CODICE_DI_TRASPORTO.get(codice), transitorio: true, causaDiTrasporto: codice };
-  const messaggio = `${codice} ${error?.name ?? ''} ${error?.message ?? ''} ${error?.cause?.message ?? ''} ${stato ? `HTTP ${stato}` : ''}`;
+  /* `data.type` è il tipo che il fornitore dichiara nell'evento (`billing_error`): lo stato di un errore del flusso lo deduce l'SDK, e dice 400 anche sul credito finito */
+  const messaggio = `${codice} ${error?.name ?? ''} ${error?.message ?? ''} ${error?.cause?.message ?? ''} ${typeof error?.data?.type === 'string' ? error.data.type : ''} ${stato ? `HTTP ${stato}` : ''}`;
   const esito = classificaErroreDiCorsa({ codice, messaggio });
   if (esito.classe !== 'ignoto' || !(stato >= 500 && stato <= 599)) return esito;
   return classificaErroreDiCorsa({ messaggio: 'upstream error' });
@@ -1596,10 +1742,45 @@ export function chiedeRagionamentoSpento(corpo) {
  * eseguiConFallback avvolge UNA chiamata del kernel, mai il ciclo degli attrezzi.
  * I callback del cambio e del consumo devono essere durabili prima della nuova chiamata.
  */
+/* L'SDK avvolge in `AI_APICallError` un flusso che cade mentre legge i primi eventi: la caduta sta nella sua causa. */
+function flussoDelPianoCaduto(errore) {
+  for (let voce = errore, passi = 0; voce && passi < 4; voce = voce.cause, passi += 1) if (voce.code === 'PROVIDER_STREAM_INCOMPLETE') return true;
+  return false;
+}
+
+/*
+ * Il servizio ha DETTO errore dentro il flusso, e dice che riprovare non serve: è un esito noto, non una caduta, e non si ripete. L'SDK (`ai`,
+ * `normalizeStreamProviderError`) consegna ogni errore del flusso come `AI_StreamProviderError`. Un sovraccarico porta `isRetryable: true` e si ritenta.
+ */
+export function erroreDichiaratoNelFlusso(errore) {
+  return errore?.name === 'AI_StreamProviderError' && errore.isRetryable === false;
+}
+
+/* Decisione 116 C: le frasi delle righe (inglese; lo schermo le dice nella sua lingua dall'esito, queste restano per chi non conosce
+   l'evento), il tetto dei rinnovi dopo un rifiuto per giro, e l'attesa del rinnovo che «Ferma» interrompe subito. */
+const FRASE_RINNOVO_IN_CORSO = 'Renewing your ChatGPT sign-in';
+const FRASE_ACCESSO_RINNOVATO = 'ChatGPT sign-in renewed, continuing';
+const FRASE_ACCESSO_RIPRESO = 'The ChatGPT sign-in had expired: renewed, picking up from here';
+export const RINNOVI_DOPO_RIFIUTO_PER_GIRO = 3;
+function conSegnaleDiStop(promessa, signal) {
+  if (!signal) return promessa;
+  if (signal.aborted) return Promise.reject(signal.reason instanceof Error && signal.reason.name === 'AbortError' ? signal.reason : new DOMException('The request was stopped.', 'AbortError'));
+  return new Promise((risolvi, rifiuta) => {
+    const alStop = () => rifiuta(signal.reason instanceof Error && signal.reason.name === 'AbortError' ? signal.reason : new DOMException('The request was stopped.', 'AbortError'));
+    signal.addEventListener('abort', alStop, { once: true });
+    promessa.then((v) => { signal.removeEventListener('abort', alStop); risolvi(v); }, (e) => { signal.removeEventListener('abort', alStop); rifiuta(e); });
+  });
+}
+
 export function creaFetchMultiProvider(fetchDiRete = fetch, {
   risolvi = risolviDestinazioneModello, dipendenze = null, onAvviso = null,
   providerStore = null, fallbackProviders = [], onCambioFornitore = null, onConsumoFornitore = null,
+  /* Spesa di servizio (owner 30/10/2026, parte 2 A): la porta per le chiamate col segno `talosServizio` (il riassunto nel giro). Senza la
+     porta quelle chiamate restano `consumo-fornitore` come oggi (compatibilità: lo scopre la prova di ogni ospite, condizione del Mobile). */
+  onConsumoDiServizio = null,
   modelloSessione = null,
+  /* Modalità veloce (owner 31/10/2026): la fascia della conversazione, letta a ogni richiesta. Le chiamate di servizio non la prendono: restano al consumo normale. */
+  fasciaDiServizioFn = null,
   /* 14/10/2026 (owner): la chiave Z.AI solo all'indirizzo scelto (`zai-indirizzo.mjs`, `soloIndirizzo`). Di serie come prima. */
   zaiSoloIndirizzo = false,
   /* P0 · punto 7 (16/09): iniettabile perché una prova non deve aspettare mezz'ora per provarla. */
@@ -1608,6 +1789,8 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
   sorvegliaCorpo = sorvegliaCorpoDiGenerazione,
   /* Revisione O1 (21/10/2026): la chiave d'instradamento della sessione (vedi `creaFetchInstradata`), già ridotta a impronta. */
   chiaveDiSessione = null,
+  /* owner 01/11/2026: l'id della sessione, solo per il motore locale di questo processo: non esce mai verso un fornitore */
+  sessioneDelGiro = null,
   /* L1 1.3, revisione blocco 5 (A-4; owner 26/10 notte): un giro senza la persona davanti (automazione, passo di Workflow, sotto-agente).
      Sul rifiuto del motore locale NON si riapre e NON si chiede: si riassume come prima. Chi cresce senza la persona è il registro, alla
      soglia, e solo se nessun'altra conversazione usa il motore. */
@@ -1623,7 +1806,16 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
    *   perché l'adattatore non riceve nessun handle di sessione. È il confine di questa riga.
    */
   const memoriaAttrezzi = { rifiutati: false };
-  if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi, senzaPersona });
+  /*
+   * ⭐ Decisione 116, variante C (owner 04/11/2026; forma `FORMA-116-RINNOVO-C-2026-11-04.md`) — il rinnovo dell'accesso col piano ChatGPT
+   *   a metà giro, con la sua memoria PER GIRO (come quella degli attrezzi): quanti rinnovi dopo un rifiuto (tetto 3), se la riga quieta
+   *   è già stata detta, l'ultimo token visto, l'impronta dell'ultimo token rifiutato (calcolata una volta per token: Performance).
+   *   Fonti: OpenAI, «Codex CI/CD auth» (developers.openai.com/codex/auth/ci-cd-auth, letta il 04/11/2026: su un 401 Codex rinnova e
+   *   ripete una volta); spacedriveapp/spacebot PR 254 (rinnovo forzato su 401/403 e UNA ripetizione, poi errore di riaccesso);
+   *   openai/codex issue 7144 (rilettura con rinnovo forzato, un tentativo). Nessun token, stato o codice nelle righe.
+   */
+  const rinnovoDelGiro = { rinnovi: 0, ripreso: false, rinnovato: false, ultimoToken: null, impronta: null };
+  if (!providerStore && !catena.length) return creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, sessioneDelGiro, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi, senzaPersona, fasciaDiServizioFn });
   if (!dipendenze || (catena.length && (!providerStore || typeof onCambioFornitore !== 'function' || typeof onConsumoFornitore !== 'function'))) {
     throw new OwnerRuntimeUnavailableError('To continue with another provider, access, chat notices and usage recording are needed.', 'PROVIDER_FALLBACK_NOT_CONNECTED');
   }
@@ -1632,7 +1824,65 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
   const rilevatoreZai = typeof providerStore?.indirizzoRilevato === 'function'
     ? creaRilevatoreZai({ providerStore, fetchFn: fetchDiRete, onAvviso, soloIndirizzo: zaiSoloIndirizzo === true }) : null;
 
-  async function invia(url, opzioni = {}, contesto = {}) {
+  /* Spesa di servizio (parte 2 A): una sola strada per la riga di spesa. Col segno del kernel e la porta nuova ⇒ `consumo-di-servizio`
+     (stesso costruttore della parte 1); altrimenti `consumo-fornitore`, come sempre. Mai tutte e due: SPOSTATA, mai doppia (Performance). */
+  async function deposita(contesto, valore) {
+    const servizio = contesto?.servizio;
+    if (servizio && typeof onConsumoDiServizio === 'function') {
+      /* Mobile (30/10): un guasto della riga di servizio non fa mai fallire una chiamata che il fornitore ha già servito e pagato.
+         Due guasti diversi (CLI, 30/10):
+         - il COSTRUTTORE lancia (uno scopo o un esito che non conosce) ⇒ nessuna riga è nata: la spesa si conta come richiesta;
+         - la PORTA lancia ⇒ non si sa se la riga è già scritta (un lettore a valle può lanciare DOPO il broadcast): si scrive nel log e
+           basta — un ripiego qui contarebbe lo stesso uso due volte, una per nome, e la seconda finirebbe nell'«ultima richiesta». */
+      let riga = null;
+      try {
+        riga = valoreConsumoDiServizio({ scopo: servizio.scopo, inPrimoPiano: servizio.inPrimoPiano === true,
+          fonte: valore.provider, modelloRemoto: valore.model, usage: valore.usage, costoDichiarato: valore.costoDichiarato ?? undefined,
+          esito: valore.esito, maxTokensInviato: valore.maxTokensInviato,
+          ...(Number.isSafeInteger(servizio.richiestaDelGiro) && servizio.richiestaDelGiro >= 0 ? { richiestaDelGiro: servizio.richiestaDelGiro } : {}),
+          ...(typeof servizio.idRiassunto === 'string' ? { idRiassunto: servizio.idRiassunto } : {}), // spesa dei riassunti (30/10 sera)
+          ...(Number.isFinite(contesto.inizioTentativo) ? { durataMs: Date.now() - contesto.inizioTentativo } : {}) });
+      } catch (errore) {
+        console.warn('[talos] riga di spesa di servizio non costruita, contata come richiesta:', errore?.message ?? errore);
+      }
+      if (riga) {
+        try { await onConsumoDiServizio(riga); }
+        catch (errore) { console.warn('[talos] porta della spesa di servizio in errore (la riga può essere già scritta):', errore?.message ?? errore); }
+        return;
+      }
+    }
+    if (typeof onConsumoFornitore === 'function') await onConsumoFornitore(valore);
+  }
+
+  /* Decisione 116 C: una riga è una notizia, mai la causa di un guasto della richiesta (come la finestra locale) */
+  async function rigaDelRinnovo(frase, opzioni) {
+    if (typeof onAvviso !== 'function') return;
+    try { await onAvviso(frase, opzioni); } catch { /* la riga è una notizia: non ferma la richiesta */ }
+  }
+  function improntaDelToken(token) {
+    if (rinnovoDelGiro.impronta?.token !== token) rinnovoDelGiro.impronta = { token, valore: createHash('sha256').update(token).digest('hex').slice(0, 16) };
+    return rinnovoDelGiro.impronta.valore;
+  }
+  /* Stato 1: il token cambia fra due richieste dello stesso giro senza un rifiuto (rinnovato in anticipo dalla custodia, o spinto
+     dall'app) ⇒ una riga quieta per giro; dopo un «ripreso» nessuna. La ripetizione dopo un rifiuto cambia token per costruzione: non conta. */
+  async function notaTokenDelGiro(token, contesto) {
+    const prima = rinnovoDelGiro.ultimoToken;
+    rinnovoDelGiro.ultimoToken = token;
+    if (contesto?.rinnovatoDopoRifiuto || prima === null || prima === token || rinnovoDelGiro.rinnovato || rinnovoDelGiro.ripreso) return;
+    rinnovoDelGiro.rinnovato = true;
+    await rigaDelRinnovo(FRASE_ACCESSO_RINNOVATO, { riga: 'accesso-chatgpt', dati: { esito: 'rinnovato', allInvio: false } });
+  }
+
+  async function invia(url, opzioniInArrivo = {}, contesto = {}) {
+    /* Spesa di servizio (parte 2 A; CLI e Performance): il segno del kernel passa nel CONTESTO della chiamata e si toglie dalle opzioni,
+       così non arriva mai al fornitore né ai registri di rete; e il tentativo si cronometra da qui (la durata di QUESTO tentativo). */
+    let opzioni = opzioniInArrivo;
+    if (opzioni && typeof opzioni === 'object' && 'talosServizio' in opzioni) {
+      const { talosServizio, ...perLaRete } = opzioni;
+      if (contesto && typeof contesto === 'object' && talosServizio && typeof talosServizio === 'object') contesto.servizio = talosServizio;
+      opzioni = perLaRete;
+    }
+    if (contesto && typeof contesto === 'object') contesto.inizioTentativo = Date.now();
     let corpo;
     try { corpo = typeof opzioni.body === 'string' ? JSON.parse(opzioni.body) : null; } catch { /* altre fetch intatte */ }
     if (!corpo || typeof corpo.model !== 'string' || !String(url).includes('/chat/completions')) return fetchDiRete(url, opzioni);
@@ -1645,9 +1895,61 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
        panchine, rotazione, ripieghi): non ha chiavi, e la sua strada di pagamento non si cambia mai da soli. Va diritto
        all'instradamento, e i suoi guasti tornano col codice del piano (`erroreDelPiano`) invece che riclassificati. */
     if (record?.auth?.tipo === 'oauth-pkce') {
-      try { return await conPrimoPezzo(await creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi, senzaPersona })(url, opzioni)); }
+      const tokenUsato = async (token) => {
+        if (typeof token !== 'string' || !token) return;
+        if (contesto && typeof contesto === 'object') contesto.tokenUsato = token;
+        await notaTokenDelGiro(token, contesto);
+      };
+      try { return await conPrimoPezzo(await creaFetchInstradata(fetchDiRete, { risolvi, dipendenze, sessioneDelGiro, onAvviso, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi, senzaPersona, fasciaDiServizioFn: contesto?.servizio ? null : fasciaDiServizioFn, tokenUsato })(url, opzioni)); }
       catch (guasto) {
+        /* Il collegamento è caduto prima che arrivasse un solo pezzo: al giro non è stato consegnato niente, si rifà la stessa richiesta, una volta, con l'input intero. */
+        if (flussoDelPianoCaduto(guasto)) {
+          if (!contesto || contesto.ripetutaDopoCaduta) throw guasto;
+          contesto.ripetutaDopoCaduta = true;
+          return invia(url, opzioni, contesto);
+        }
         const errore = erroreDelPiano(guasto);
+        /*
+         * ⭐ Decisione 116 C, stato 2 — un 401 del piano: si rinnova SUBITO (sul PC la custodia nostra col rinnovo forzato, sul telefono
+         *   r4 chiede il token all'app e lo aspetta ≤10 s) e si rifà la STESSA richiesta, una volta, con lo stesso corpo. Una sola volta
+         *   per richiesta, al massimo tre per giro. La riga viva dice «Rinnovo l'accesso…» mentre si aspetta; la riga quieta «ripreso»
+         *   una volta per giro, solo se la ripetizione è partita. Il rinnovo che fallisce lancia il SUO codice (rete, accesso scaduto),
+         *   che lo schermo trasforma nella scheda giusta. «Ferma» durante il rinnovo ferma subito, senza ripetere. Senza la dipendenza
+         *   (la forma della CLI) non cambia niente: il 401 resta com'era.
+         */
+        if (errore.stato === 401 && typeof dipendenze?.rinnovaTokenDelPiano === 'function' && contesto && typeof contesto === 'object'
+          && !contesto.rinnovatoDopoRifiuto && rinnovoDelGiro.rinnovi < RINNOVI_DOPO_RIFIUTO_PER_GIRO) {
+          contesto.rinnovatoDopoRifiuto = true;
+          rinnovoDelGiro.rinnovi += 1;
+          const rifiutato = typeof contesto.tokenUsato === 'string' ? contesto.tokenUsato : null;
+          const dallApp = dipendenze.rinnovoDelPianoDallApp === true;
+          const comuni = { requestId: randomUUID(), tentativo: 1, tentativiMassimi: 1,
+            ...(dallApp ? { chiedeTokenAllApp: true, ...(rifiutato ? { impronta: improntaDelToken(rifiutato) } : {}) } : {}) };
+          await rigaDelRinnovo(FRASE_RINNOVO_IN_CORSO, { riga: 'rinnovo-accesso', dati: { fase: 'invio', ...comuni, at: Date.now() } });
+          try {
+            await conSegnaleDiStop(dipendenze.rinnovaTokenDelPiano({ rifiutato, signal: opzioni.signal }), opzioni.signal);
+          } catch (nonRinnovato) {
+            if (nonRinnovato?.name === 'AbortError' || opzioni.signal?.aborted) throw nonRinnovato;
+            throw erroreDelPiano(nonRinnovato);
+          } finally {
+            await rigaDelRinnovo(FRASE_RINNOVO_IN_CORSO, { riga: 'rinnovo-accesso', dati: { fase: 'fine', ...comuni, at: Date.now() } });
+          }
+          const ripresa = await invia(url, opzioni, contesto);
+          /* D3 di R116 (forma §5, R12): righe quiete ≤1 per giro — dopo un «rinnovato» dello stesso giro il «ripreso» non si scrive */
+          if (!rinnovoDelGiro.ripreso) {
+            rinnovoDelGiro.ripreso = true;
+            if (!rinnovoDelGiro.rinnovato) await rigaDelRinnovo(FRASE_ACCESSO_RIPRESO, { riga: 'accesso-chatgpt', dati: { esito: 'ripreso', allInvio: false } });
+          }
+          return ripresa;
+        }
+        /* D1 di R116 (forma §8): la richiesta ripetuta DOPO il rinnovo è rifiutata di nuovo ⇒ l'accesso collegato non vale; lo si dice alla
+           custodia (solo il PC dà il gancio), così `chatgpt_account` `sign_in` torna a mettere la carta invece di «Nothing to do».
+           C2 della revisione del blocco chat (04/11): lo stesso quando il rinnovo è saltato SOLO per il tetto del giro (il giro finisce in
+           «Accedi»); un 401 senza il gancio di rinnovo (la forma della CLI) resta senza segno, come prima. */
+        if (errore.stato === 401 && (contesto?.rinnovatoDopoRifiuto || (typeof dipendenze?.rinnovaTokenDelPiano === 'function' && rinnovoDelGiro.rinnovi >= RINNOVI_DOPO_RIFIUTO_PER_GIRO))
+          && typeof dipendenze?.segnaAccessoRifiutato === 'function') {
+          try { dipendenze.segnaAccessoRifiutato(); } catch { /* un segno, mai la causa di un guasto */ }
+        }
         /* 18/10/2026, custode nell'app (`chatgpt-accesso-ospite.mjs`): un 401 vuol dire che il token spinto dall'app non vale più. r4 non
            lo rinnova (non ha un refresh token): lo dimentica e lo DICE con `CHATGPT_TOKEN_DA_RINNOVARE`, l'app rinnova e riprova.
            Senza il gancio (desktop, custodia nostra) il 401 resta `CHATGPT_ACCESSO_NON_VALIDO`, come prima. */
@@ -1796,6 +2098,10 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         // Il corpo originale non viene mai restituito al logger/kernel: può contenere la chiave.
         let testo = '';
         try { testo = await leggiDettaglioRifiuto(response, 16_385); } catch { /* lo stato resta disponibile */ }
+        /* 01/11/2026, vista locale: QUI il corpo vero c'è ancora (sotto viene sostituito dal messaggio pubblico, e chi lo legge dopo non
+           può più riconoscerlo — preso dalla prova VSP-6). Un'immagine che il modello locale non può leggere sale col suo codice. */
+        const nonVede = FONTI_DI_MOTORE_LOCALE.has(fonte) ? motoreLocaleNonVede(response.status, testo) : null;
+        if (nonVede) { contesto.errore = nonVede; throw nonVede; }
         /* F1 della CLI (16/10/2026): un «contesto pieno» del fornitore (413, o il suo testo) usciva come «The provider did not accept
            the request.» e nessuno lo riprovava — né K8, né il ritentativo di «Non aspettare se entra». Si riconosce QUI, dal testo che
            solo questo adattatore vede, con lo stesso classificatore di chi riprova. */
@@ -1819,6 +2125,14 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         if (opzioni.signal?.aborted && opzioni.signal.reason?.name !== 'TimeoutError') throw opzioni.signal.reason;
         if (error === contesto.errore) throw error;
         const classificazione = classificaGuasto(error);
+        /* 04/11/2026: la connessione non si è aperta (rifiutata, nome sconosciuto, nessuna strada): niente è partito, niente si paga.
+           Il codice che c'era già per «fornitore irraggiungibile» (`inviaCloudProtetta`, `PROVIDER_NETWORK_ERROR`, tradotto nelle carte e
+           `transient_network` nei flussi), classe `rete` transitoria, e il segno che chi riprova o cambia fornitore lo fa senza doppio costo. */
+        const codiceDiRete = codiceDiRichiestaNonPartita(error);
+        if (codiceDiRete) {
+          contesto.errore = erroreFornitorePubblico({ ...classificazione, code: 'PROVIDER_NETWORK_ERROR', classe: 'rete', transitorio: true, richiestaNonPartita: true, codiceDiRete });
+          throw contesto.errore;
+        }
         // No HTTP rejection was received. A POST may already have been processed.
         contesto.errore = erroreEsitoProviderIncerto(classificazione);
         throw contesto.errore;
@@ -1826,7 +2140,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
     };
     const instradata = creaFetchInstradata(rete, { risolvi, dipendenze: {
       ...dipendenze, leggiChiave: p => p === fonte && scelta ? scelta.chiave : dipendenze.leggiChiave(p),
-    }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi, chiaveDiSessione, senzaPersona });
+    }, onAvviso, instradaOpenRouter: true, inattivitaGenerazioneMs, sorvegliaCorpo, memoriaAttrezzi, chiaveDiSessione, sessioneDelGiro, senzaPersona });
     try {
       const risposta = await instradata(url, opzioni);
       /* ⛔ BUG-25 — il rifiuto-credito CON scadenza dichiarata NON si lancia come eccezione: si
@@ -1889,18 +2203,18 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       try {
         risultato = await chiama({ modello: `${destinazione.provider}:${destinazione.model}`, fetchDiRete: (url, init) => invia(url, init, contesto), tentativiMassimi: TENTATIVI_DELLA_SECONDARIA, attesaRitentaMassimaMs: ATTESA_MASSIMA_DELLA_SECONDARIA_MS });
       } catch (error) {
-        if (contesto.scelta && typeof onConsumoFornitore === 'function') {
+        if (contesto.scelta && (typeof onConsumoFornitore === 'function' || typeof onConsumoDiServizio === 'function')) {
           const fermato = Boolean(opzioni.segnaleStop?.aborted || error?.fermatoSuRichiesta || error?.name === 'AbortError');
           const usage = fermato ? null : consumoPubblico(error?.usage);
           try {
-            await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato: usage?.cost ?? null, esito: fermato ? 'fermato' : 'interrotto' });
+            await deposita(contesto, { tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato: usage?.cost ?? null, esito: fermato ? 'fermato' : 'interrotto' });
           } catch { /* il deposito non copre l'errore vero */ }
         }
         throw error;
       }
       const usage = consumoPubblico(risultato?.usage);
       const costoDichiarato = typeof usage?.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0 ? usage.cost : null;
-      if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato, esito: 'completato' });
+      await deposita(contesto, { tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato, esito: 'completato' });
       if (REGISTRO_FORNITORI[destinazione.provider]?.auth?.tipo === 'oauth-pkce' && typeof dipendenze?.registraUsoDelPiano === 'function') {
         try { await dipendenze.registraUsoDelPiano({ esito: 'completato', usage }); } catch { /* il conteggio è un di più */ }
       }
@@ -1944,8 +2258,8 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
              * ⛔ Solo se la richiesta è partita (`contesto.scelta`): uno stop prima della rete non è un giro. E un deposito che
              *   fallisce non deve coprire lo stop.
              */
-            if (contesto.scelta && typeof onConsumoFornitore === 'function') {
-              try { await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage: null, costoDichiarato: null, esito: 'fermato' }); } catch { /* lo stop resta lo stop */ }
+            if (contesto.scelta && (typeof onConsumoFornitore === 'function' || typeof onConsumoDiServizio === 'function')) {
+              try { await deposita(contesto, { tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage: null, costoDichiarato: null, esito: 'fermato' }); } catch { /* lo stop resta lo stop */ }
             }
             throw error;
           }
@@ -1974,7 +2288,17 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
              (developers.openai.com/siwc/token-sharing-open-source/errors-and-recovery, riletta l'11/10/2026). */
           if (typeof error?.code === 'string' && error.code.startsWith('CHATGPT_')) throw error;
           // tentativi del limite finiti: il giro si ferma col codice del piano, non con un «troppo traffico» generico
-          if (REGISTRO_FORNITORI[destinazione.provider]?.auth?.tipo === 'oauth-pkce') throw erroreDelPiano(error);
+          if (REGISTRO_FORNITORI[destinazione.provider]?.auth?.tipo === 'oauth-pkce') {
+            /* Un flusso caduto a metà risposta non ha uno stato: non è un rifiuto del piano, è un esito incerto, e il ritento del kernel vale anche qui. Prima il giro moriva con
+               `CHATGPT_ERRORE`, una caduta del collegamento aperto a 19 minuti su H (31/10/2026). Stessa strada di pagamento: si rifà la stessa richiesta, mai un altro fornitore. */
+            const delPiano = erroreDelPiano(error);
+            const senzaRifiuto = delPiano.code === 'CHATGPT_ERRORE' && !delPiano.dichiarato && (delPiano.stato === null || delPiano.stato === 200);
+            if (!flussoDelPianoCaduto(error) && !(senzaRifiuto && error?.parziale)) {
+              /* Detto dal servizio a flusso partito: il testo già arrivato resta, e il segno dice al kernel di non ripetere. */
+              if (error?.parziale) Object.assign(delPiano, { parziale: error.parziale, causaDiTrasporto: 'PROVIDER_STREAM_ERROR' });
+              throw delPiano;
+            }
+          }
           /* ⛔ BC-79.2 — e nemmeno il rifiuto di un motore locale: non è transitorio, non è colpa di
              una chiave, e un fornitore di riserva non c'entra niente con un GGUF che sta in casa. */
           if (error?.code === 'LOCAL_ENGINE_REJECTED_REQUEST') throw error;
@@ -1990,12 +2314,30 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
           const statoLanciato = error?.stato ?? error?.statusCode;
           const classificazione = contesto.errore ?? limiteNonContesto(classificaGuasto(error, statoLanciato), Number(statoLanciato));
           const incerto = error?.esitoIncerto === true || contesto.errore?.esitoIncerto === true
-            || contesto.rispostaAccettata || rispostaInterrotta || Boolean(error?.parziale);
-          const pulito = incerto ? erroreEsitoProviderIncerto({ ...classificazione, code: error?.code, causaDiTrasporto: error?.causaDiTrasporto ?? classificazione.causaDiTrasporto, usage: error?.usage })
+            || contesto.rispostaAccettata || rispostaInterrotta || Boolean(error?.parziale) || flussoDelPianoCaduto(error);
+          /* Un rifiuto detto dal fornitore a flusso partito è un esito noto: esce come un rifiuto HTTP, con la sua classe e la sua frase, mai come «risposta
+             interrotta». `PROVIDER_STREAM_ERROR` è il segno che il kernel conosce: un errore esplicito non si ritenta da solo (BUG-16, R-44). */
+          const dichiarato = erroreDichiaratoNelFlusso(error);
+          /* Cura 324, giro 12 (sonda V15 dei fornitori): la finestra piena che il kernel ha letto DENTRO il flusso (`finestraPiena`) è un esito
+             noto anche a risposta accettata: esce come il contesto pieno dell'HTTP, coi numeri, mai come «risposta interrotta» che nessuno
+             compatta. Resta `incerto` per il resto (niente panchina, niente riserva), come ogni flusso partito. */
+          const pienaNelFlusso = error?.finestraPiena === true && classificazione.classe === 'contesto';
+          const pulito = incerto && !dichiarato && !pienaNelFlusso ? erroreEsitoProviderIncerto({ ...classificazione, code: error?.code, causaDiTrasporto: error?.causaDiTrasporto ?? classificazione.causaDiTrasporto, usage: error?.usage })
             : erroreFornitorePubblico(classificazione, error?.stato ?? contesto.errore?.stato,
               classificazione.classe === 'contesto' ? numeriDelContestoPieno(contesto.errore ?? error) : null); // R10-2: i numeri restano
           // Keep partial text for explicit recovery; changing providers must never replay this request.
+          if (dichiarato) Object.assign(pulito, { dichiarato: true, transitorio: false, causaDiTrasporto: 'PROVIDER_STREAM_ERROR' });
           if (error?.parziale) pulito.parziale = error.parziale;
+          // Cura 324, giro 11: il codice del pacchetto d'errore nel flusso, prima di ogni testo (campo opzionale del kernel)
+          if (error?.statoNelFlusso) pulito.statoNelFlusso = error.statoNelFlusso;
+          /* Giro 12: il ragionamento già trasmesso (il prefill era entrato) e il tipo del pacchetto, un nome corto; il messaggio del fornitore
+             resta qui come ogni suo testo (R10-2) */
+          if (error?.ragionamentoNelFlusso === true) pulito.ragionamentoNelFlusso = true;
+          if (typeof error?.tipoDelFornitore === 'string' && /^[\w.-]{1,64}$/u.test(error.tipoDelFornitore)) pulito.tipoDelFornitore = error.tipoDelFornitore;
+          if (contesto.ripetutaDopoCaduta) pulito.inviiInPiu = 1; // il rilancio della caduta prima del primo pezzo conta nel tetto dei reinvii
+          /* Cura 324, giro 10: chi ha dato l'errore, come l'esito porta chi ha risposto (campi opzionali, il contratto resta). Dopo un cambio dentro
+             la stessa chiamata è la riserva: il kernel ricorda il rifiuto del prefill su di lei (Hermes `agent/message_sanitization.py:953-961`) */
+          Object.assign(pulito, { fornitoreEffettivo: destinazione.provider, modelloEffettivo: destinazione.model });
           if (!incerto && ['guasto-fornitore', 'traffico'].includes(classificazione.classe) && contesto.scelta
             && (contesto.guastiHttp.get(contesto.scelta.impronta) ?? 0) >= 2) {
             providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, {
@@ -2015,7 +2357,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
             providerStore.mettiInPanchina(destinazione.provider, contesto.scelta.impronta, { classe: 'credito', headers: new Headers(contesto.headersRitenta) });
           }
           const usage = consumoPubblico(pulito.usage);
-          if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato: usage?.cost ?? null, esito: classificazione.classe === 'traffico' ? 'traffico' : 'interrotto' });
+          await deposita(contesto, { tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato: usage?.cost ?? null, esito: classificazione.classe === 'traffico' ? 'traffico' : 'interrotto' });
           // BUG-25: la scadenza dichiarata dal fornitore viaggia con l'errore onesto (scheda quota, bottone «riprendi»).
           if (Number.isFinite(error?.retryAfterMs)) pulito.retryAfterMs = error.retryAfterMs;
           else if (contesto.creditoDichiarato === true && contesto.headersRitenta['Retry-After-Ms']) pulito.retryAfterMs = Number(contesto.headersRitenta['Retry-After-Ms']);
@@ -2039,7 +2381,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         // Un errore nel deposito della prova non deve provocare un'altra chiamata pagabile.
         const usage = consumoPubblico(risultato?.usage);
         const costoDichiarato = typeof usage?.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0 ? usage.cost : null;
-        if (typeof onConsumoFornitore === 'function') await onConsumoFornitore({ tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato, esito: 'completato' });
+        await deposita(contesto, { tipo: 'consumo-fornitore', ...destinazione, ...tettoInviatoNelConsumo(contesto), usage, costoDichiarato, esito: 'completato' });
         /* 11/10/2026 — il conteggio nostro del piano ChatGPT (`chatgpt-uso.mjs`): una riga per richiesta COMPLETATA col piano, coi
            soli token. Mai il token d'accesso, mai il testo. Un guasto del registro non tocca la risposta già arrivata. */
         if (REGISTRO_FORNITORI[destinazione.provider]?.auth?.tipo === 'oauth-pkce' && typeof dipendenze?.registraUsoDelPiano === 'function') {
@@ -2313,11 +2655,14 @@ export function createOwnerRuntimeAdapter({
         inattivitaGenerazioneMs: leggiInattivitaGenerazioneMs(),
         dipendenze: destinazioneModelloDeps, providerStore, fallbackProviders, modelloSessione: input?.modello, zaiSoloIndirizzo,
         onAvviso: input?.onAvviso, onCambioFornitore: input?.onCambioFornitore, onConsumoFornitore: input?.onConsumoFornitore,
+        onConsumoDiServizio: input?.onConsumoDiServizio, // spesa di servizio, parte 2 A
         /* O1: l'id della sessione non esce in chiaro verso il fornitore, solo la sua impronta (64 caratteri, sotto i 256 di OpenRouter) */
         chiaveDiSessione: typeof input?.checkpointSessionId === 'string' && input.checkpointSessionId
           ? `talos-s-${createHash('sha256').update(input.checkpointSessionId).digest('hex')}`.slice(0, 64) : null,
+        sessioneDelGiro: typeof input?.checkpointSessionId === 'string' && input.checkpointSessionId ? input.checkpointSessionId : null,
         /* L1 1.3, revisione blocco 5 (A-4): automazione, passo di Workflow o sotto-agente ⇒ sul rifiuto del motore locale si riassume. */
         senzaPersona: input?.senzaPersona === true,
+        fasciaDiServizioFn: typeof input?.fasciaDiServizioFn === 'function' ? input.fasciaDiServizioFn : null,
       });
       const fetchConImmagini = async (url, init = {}, successiva = fetchInstradata) => {
         // BC-48 C-bis: GLM via OpenRouter usa cache implicita (fonti nel rapporto
@@ -2371,14 +2716,17 @@ export function createOwnerRuntimeAdapter({
         let body;
         try { body = JSON.parse(init.body); } catch { return successiva(url, init); }
         if (!Array.isArray(body.messages)) return successiva(url, init);
-        const hasImages = body.messages.some(m => Array.isArray(m.content) && m.content.some(p => p?.type === 'image_url'));
-        if (hasImages) {
+        let inUscita = body.messages;
+        const immagini = immaginiPerUnModelloSenzaVista(body.messages);
+        if (immagini.immagini) {
           const capability = await Promise.resolve(modelCapabilityFn(body.model)).catch(() => null);
           if (capability?.inputModalities?.length && !capability.inputModalities.includes('image')) {
-            throw new OwnerRuntimeUnavailableError('The selected model does not accept images. Choose a model with vision.', 'MODEL_IMAGE_NOT_SUPPORTED');
+            /* Desktop 01/11/2026, the phone's rule (owner 27/07): only an image in the input sent NOW is refused; older ones become a line */
+            if (immagini.nuove) throw new OwnerRuntimeUnavailableError('The selected model does not accept images. Choose a model with vision.', 'MODEL_IMAGE_NOT_SUPPORTED');
+            inUscita = immagini.messaggi;
           }
         }
-        const messages = await resolveImagesFn(body.messages);
+        const messages = await resolveImagesFn(inUscita);
         return successiva(url, { ...init, body: JSON.stringify({ ...body, messages }) });
       };
       if (fetchInstradata.eseguiConFallback) {
@@ -2390,7 +2738,7 @@ export function createOwnerRuntimeAdapter({
       // una modifica soltanto del body non resterebbe nello storico della sessione.
       // Gli hook legacy non vengono inventati: ciò disabiliterebbe la loro compattazione.
       let contextHooks = input?.contextHooks;
-      if (contextHooks && input?.cartella && !input?.mobile) {
+      if (contextHooks && input?.cartella && !input?.mobile && input?.senzaIstruzioniDelProgetto !== true) {
         const [file, radice] = await Promise.all([
           trovaIstruzioniDiProgetto(input.cartella), trovaRadiceProgetto(input.cartella),
         ]);
@@ -2408,7 +2756,7 @@ export function createOwnerRuntimeAdapter({
       /* revisione blocco 6 (A-R5): il riassunto del motore del contesto è una chiamata di servizio — mai una riapertura, mai una carta */
       const routed = creaFetchMultiProvider(fetchDiRete, { dipendenze: destinazioneModelloDeps, senzaPersona: true });
       const key = provider === 'openrouter' ? destinazioneModelloDeps.leggiChiave?.('openrouter') : null;
-      if (provider === 'openrouter' && !key) fail('CTX_TOKEN_AUTH', 'The key of the selected provider is not available.');
+      if (provider === 'openrouter' && !key) throw Object.assign(new Error('The key of the selected provider is not available.'), { code: 'CTX_TOKEN_AUTH', senzaChiave: true });
       /*
        * ⛔ 09/09/2026 — trovato dal giro vero D1 (z-ai/glm-5.3-flash via OpenRouter): la sintesi tornava
        *   SENZA testo, perché il modello ragiona per difetto e il ragionamento si mangiava il budget della
@@ -2422,7 +2770,7 @@ export function createOwnerRuntimeAdapter({
        *   max_tokens», `effort: 'none'` disabilita e va evitato sui modelli «mandatory».
        */
       const capability = provider === 'openrouter' ? await Promise.resolve(modelCapabilityFn(model)).catch(() => null) : null;
-      const reasoning = provider === 'openrouter' ? normalizzaReasoningPerModello({ effort: 'low' }, capability) : undefined;
+      let reasoning = provider === 'openrouter' ? ragionamentoPerSintesiOpenRouter(capability, model) : undefined;
       /*
        * ⭐ F3, onda 2 di F2 (24/09/2026) — FUORI da OpenRouter il corpo INVIATO porta le stesse opzioni di
        *   ragionamento del corpo CONTATO (`context-token-counters.mjs::opzioniRagionamentoPerSintesi`, rapporto F4
@@ -2432,7 +2780,7 @@ export function createOwnerRuntimeAdapter({
        *   `tools/server/README.md` («If `none`, reasoning/thinking is disabled»).
        */
       const opzioniSintesi = provider === 'openrouter' ? {} : (opzioniRagionamentoPerSintesi(provider) ?? {});
-      const response = await routed(ENDPOINT_OPENROUTER, {
+      const invia = () => routed(ENDPOINT_OPENROUTER, {
         method: 'POST', headers: { 'Content-Type': 'application/json', ...(key ? { Authorization: `Bearer ${key}` } : {}) },
         body: JSON.stringify({ model: provider === 'openrouter' ? model : `${provider}:${model}`, messages: structuredClone(messages), tools: [], max_tokens: maxOutputTokens, stream: false, ...(reasoning ? { reasoning } : {}), ...opzioniSintesi, ...(provider === 'openrouter' ? { transforms: [], plugins: [{ id: 'context-compression', enabled: false }] } : {}) }),
         /*
@@ -2443,14 +2791,44 @@ export function createOwnerRuntimeAdapter({
          */
         signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(leggiInattivitaGenerazioneMs() || 1_800_000)]),
       });
-      if (!response.ok) {
+      let response = await invia();
+      /* 04/11 (condizione di Performance): un 400 sulla sintesi col pensiero spento si ritenta UNA volta con `low`, lo stesso clamp di prima */
+      const ripiego = reasoning?.effort === 'none' && response.status === 400;
+      if (ripiego) {
         await response.body?.cancel();
-        fail('CTX_SUMMARY_HTTP', `The summary model answered with HTTP ${response.status}.`);
+        SINTESI_SENZA_NONE.add(model);
+        reasoning = ragionamentoPerSintesiOpenRouter(capability, model);
+        response = await invia();
+      }
+      if (!response.ok) {
+        /* Banco del 01/11: senza lo stato la catena del riassunto non riconosceva questo errore, e sulla strada del motore niente riserva né
+           avviso. Il limite del piano si legge dal corpo, a tetto, e viaggia in `classe` (`eLimiteDiAccount`), mai nel testo: il messaggio
+           finisce a schermo (Mobile, 01/11). Vale anche per una riserva sullo stesso fornitore. Un 400 o 404 di un modello che non c'è passa
+           dalla stessa tabella della chat: lo stato da solo non lo distingue da una richiesta sbagliata.
+           D6 (revisione di fine fase, 01/11/2026): il 402 di OpenRouter (credito finito, tetto della chiave) passa dalla stessa tabella della chat, a tetto
+           suo: senza classe la catena non lo leggeva, e col credito finito la riserva su un altro fornitore non partiva. */
+        const del402 = provider === 'openrouter' && response.status === 402;
+        const corpo = del402 ? await leggiDettaglioRifiuto(response, 16_385)
+          : [400, 404, 429].includes(response.status) ? await leggiDettaglioRifiuto(response) : (await response.body?.cancel(), '');
+        const attesa = leggiAttesaRichiestaDalFornitore(response.headers);
+        const classe = del402 ? classificaLimiteOpenRouter(corpo).classe
+          : /subscription_sharing_usage_limit_exceeded/u.test(corpo) ? 'limite-credito' : classificaRifiutoNoto(corpo, response.status)?.classe;
+        throw Object.assign(new Error(`The summary model answered with HTTP ${response.status}.`), { code: 'CTX_SUMMARY_HTTP', httpStatus: response.status,
+          ...(Number.isFinite(attesa) ? { retryAt: Date.now() + attesa } : {}),
+          ...(classe ? { classe } : {}) });
       }
       let result;
       try { result = await response.json(); } catch { fail('CTX_SUMMARY_RESPONSE_INVALID', 'Unreadable summary response.'); }
       const choice = result?.choices?.[0];
       const usage = result?.usage;
+      /* Banco del 01/11: su `claude-haiku-5.5`, coi file del banco, 9 `/compact` su 15 tornavano rifiutati dal modello, una risposta NORMALE senza
+         testo, e uscivano come «risposta illeggibile». Il rifiuto riguarda questa conversazione, non il modello: va alla riserva, senza fermare lo scelto
+         (platform.claude.com/docs/en/build-with-claude/refusals-and-fallback, letta il 01/11; Hermes `context_compressor.py:208-216`: il rifiuto
+         dichiarato vince anche se c'è del testo). Il testo del fornitore parla agli integratori: non va a schermo. */
+      const rifiutoDichiarato = typeof choice?.message?.refusal === 'string' && choice.message.refusal.trim() !== '';
+      if (rifiutoDichiarato || choice?.finish_reason === 'content_filter') {
+        throw Object.assign(new Error('The summary model declined this conversation.'), { code: 'CTX_SUMMARY_REFUSED', classe: 'rifiuto-del-modello', ...(usage !== undefined ? { usage } : {}) });
+      }
       if (choice?.message?.tool_calls?.length) fail('CTX_SUMMARY_TOOLS', 'The summary cannot run tools.', usage);
       // 09/09 — il caso visto dal vivo: niente testo ma token di ragionamento spesi. Non è una risposta
       //   «invalida» da guardare nel codice: è un budget finito nel pensiero, e va detto in quelle parole.
@@ -2459,7 +2837,7 @@ export function createOwnerRuntimeAdapter({
         fail('CTX_TRUNCATED_SUMMARY', `The model spent ${reasoningTokens} tokens on reasoning and left no room for the summary.`, usage);
       }
       if (typeof choice?.message?.content !== 'string' || typeof choice?.finish_reason !== 'string') fail('CTX_SUMMARY_RESPONSE_INVALID', 'The summary does not declare text and final state.', usage);
-      return { text: choice.message.content, finishReason: choice.finish_reason, usage };
+      return { text: choice.message.content, finishReason: choice.finish_reason, usage, ...(ripiego ? { tentativi: 2 } : {}) };
     },
     async eseguiComandoSandboxato(...args) {
       if (typeof args[2]?.onBytes === 'function') {

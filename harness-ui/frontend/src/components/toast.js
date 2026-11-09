@@ -114,8 +114,11 @@ export function creaToast(dati) {
   badge.className = `talos-badge talos-badge--sm talos-badge--${configurazione.badge}`;
   badge.textContent = String(dati.titolo || '');
   const testo = document.createElement('p');
-  testo.textContent = messaggioUmano(dati.messaggio) || String(dati.titolo || '');
-  vivo.append(badge, testo);
+  const messaggio = messaggioUmano(dati.messaggio);
+  testo.textContent = messaggio || String(dati.titolo || '');
+  /* 31/10/2026: un toast col solo titolo diceva la stessa frase due volte, nel badge e sotto */
+  if (messaggio) vivo.append(badge, testo);
+  else { testo.dataset.tono = tono; vivo.append(testo); } // il tono lo portava il badge: un guasto resta rosso
 
   const barra = document.createElement('div');
   barra.className = 'talos-toolbar';

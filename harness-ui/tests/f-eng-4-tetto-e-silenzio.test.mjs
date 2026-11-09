@@ -58,10 +58,10 @@ test('F-ENG-4 SILENCE: data that keeps coming never trips the limit', async () =
   assert.equal(esito.scelta.content, 'xxxxxxxxxxxx.');
 });
 
-async function lavora(risposte) {
+async function lavora(risposte, { modello = 'x' } = {}) {
   const richieste = []; const eventi = [];
   const esito = await talosLavora({
-    cartella: cartellaDiProva('talos-f-eng-4-'), task: { consegna: 'write the answer' }, modello: 'x', chiave: 'y',
+    cartella: cartellaDiProva('talos-f-eng-4-'), task: { consegna: 'write the answer' }, modello, chiave: 'y',
     onDelta: () => {}, onGiro: (e) => eventi.push(e),
     fetchDiRete: async (_url, init) => {
       richieste.push(JSON.parse(init.body));
@@ -98,6 +98,34 @@ test('F-ENG-4 SILENCE: a stream that goes silent after its text is continued lik
     assert.match(ultimoUtente(richieste[1]), /went silent/u);
     assert.deepEqual(richieste[1].messages.filter((m) => m.role === 'assistant').map((m) => m.content), ['I need a listing tool']);
     assert.equal(esito.comeFinita, 'concluso');
+  } finally {
+    if (precedente === undefined) delete process.env.TALOS_STREAM_IDLE_MS; else process.env.TALOS_STREAM_IDLE_MS = precedente;
+  }
+});
+
+/* R-44 (31/10/2026): testo consegnato e una chiamata a metà, mai partita. Sul fornitore in rete vale la continuazione; sul motore locale no. */
+const conChiamataAMeta = () => datiPoiSoloCommenti([testo('I will write it'), { choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'scrivi', arguments: '{"percorso":"a' } }] } }] }]);
+
+test('R44-SILENCE: silence with a half tool call after the text continues the answer on a remote provider', async () => {
+  const precedente = process.env.TALOS_STREAM_IDLE_MS;
+  process.env.TALOS_STREAM_IDLE_MS = '300';
+  try {
+    const { esito, richieste } = await lavora([conChiamataAMeta, [testo(' — done.', 'stop')]]);
+    assert.equal(richieste.length, 2);
+    assert.match(ultimoUtente(richieste[1]), /went silent/u);
+    assert.equal(JSON.stringify(richieste[1].messages).includes('"c1"'), false, 'the half call does not stay in the history');
+    assert.match(ultimoUtente(richieste[1]), /it did not run: call it now/u, 'the model is told the call is gone');
+    assert.equal(esito.comeFinita, 'concluso');
+  } finally {
+    if (precedente === undefined) delete process.env.TALOS_STREAM_IDLE_MS; else process.env.TALOS_STREAM_IDLE_MS = precedente;
+  }
+});
+
+test('R44-SILENCE: on the local engine the same silence stays a manual resume', async () => {
+  const precedente = process.env.TALOS_STREAM_IDLE_MS;
+  process.env.TALOS_STREAM_IDLE_MS = '300';
+  try {
+    await assert.rejects(lavora([conChiamataAMeta, [testo('never', 'stop')]], { modello: 'local:qwen' }), { code: 'PROVIDER_OUTCOME_UNKNOWN' });
   } finally {
     if (precedente === undefined) delete process.env.TALOS_STREAM_IDLE_MS; else process.env.TALOS_STREAM_IDLE_MS = precedente;
   }

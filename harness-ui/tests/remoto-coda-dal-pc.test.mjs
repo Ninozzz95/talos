@@ -46,7 +46,7 @@ function banco() {
     guardaWorkspaceFn: () => () => {},
     modello: 'z-ai/glm-5.3-flash', chiave: 'k',
   });
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry: registro });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   const operazioni = creaOperazioni({ chiama, sessionRegistry: registro, iscriviConRigiocata });
   const ricevuti = [];

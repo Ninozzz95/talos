@@ -65,7 +65,7 @@ test('GUARDIA-04 — una scrittura da un altro sito si rifiuta; i metodi sicuri 
 test('GUARDIA-05 — dal server vero: Host, CORS, preflight e scritture; i programmi senza intestazioni passano', async (t) => {
   const { createServer, request } = await import('node:http')
   const { createHttpApp } = await import('../src/http-app.mjs')
-  const server = createServer(createHttpApp({ staticHandler: async () => null }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null }))
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
   t.after(() => new Promise((ok) => server.close(ok)))
   const porta = server.address().port

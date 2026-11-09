@@ -1,3 +1,4 @@
+import os from 'node:os';
 import { test, expect } from '@playwright/test';
 
 /*
@@ -48,7 +49,7 @@ async function apri(page, { modo = 'dark', aspetto = {}, lingua = 'it', forza = 
     try { if (forza || !localStorage.getItem('talos.harness.desktop.settings.v1')) localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiLanguage, ...extra } })); } catch { /* storage assente */ }
   }, [modo, aspetto, lingua, forza]);
   const tentate = await guardiaScritture(page);
-  await page.route(`**/api/v1/sessions/${ID}/events`, () => { /* resta aperto e muto */ });
+  await page.route(`**/api/v1/sessions/${ID}/events*`, () => { /* resta aperto e muto */ });
   await page.goto('/');
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 10_000 });
@@ -184,9 +185,28 @@ test('BOLLE-REV-02 the actions of a short stuck question can be reached (hover s
  *   l'ordine è rovesciato (prima senza: si stacca e si ricollega? no — il collegamento non si rifà, quindi si misura «senza» su una
  *   pagina nuova) e il conto si ripete due volte per braccio.
  */
-test('BOLLE-REV-03 cost bench, arms in separate pages, two runs each (BOLLE_TURNI turns)', async ({ browser }) => {
+/*
+ * ⛔ 30/10/2026 — ROSSA SOLO SOTTO CARICO (suite a 4 lavoratori, CPU 86-100%; 2/2 verde da sola). Misurava i due bracci uno DOPO
+ *   l'altro, quindi un carico che cambiava fra i due falsava il confronto. Disegno nuovo, dai banchi di Performance (regola 6: si cura
+ *   una volta):
+ *   · ordine ABBA — senza, con, con, senza — ogni braccio su una pagina nuova: una deriva lineare del carico si annulla del tutto;
+ *   · confronto a COPPIE (pagina 1 con 2, pagina 4 con 3): per ogni coppia il rapporto con/senza, coi margini assoluti di sempre portati
+ *     sul rapporto; il cancello guarda la mediana dei rapporti — entra solo ciò che cambia DENTRO la coppia, pochi secondi;
+ *   · il carico si scrive accanto ai numeri (CPU di sistema su 1 s prima di ogni pagina, dai tempi di `os.cpus()`) con la quota di
+ *     fotogrammi oltre 20 ms (senza GPU rAF va a scatti di 16,7 ms: una mediana che salta di un fotogramma sembra «+100%»). Niente
+ *     `skip` per carico e niente ritentativi muti: un rosso con CPU > 60% si legge «disturbato», ma resta rosso.
+ *   Il cancello dell'owner (28/10, «sotto il +10%») non cambia.
+ */
+const cpuDiSistema = async () => {
+  const somma = () => os.cpus().reduce((s, c) => { const t = c.times; return { lavoro: s.lavoro + t.user + t.nice + t.sys + t.irq, tutto: s.tutto + t.user + t.nice + t.sys + t.irq + t.idle }; }, { lavoro: 0, tutto: 0 });
+  const a = somma(); await new Promise((ok) => setTimeout(ok, 1000)); const b = somma();
+  return Math.round(((b.lavoro - a.lavoro) / Math.max(1, b.tutto - a.tutto)) * 100);
+};
+const mediana = (xs) => { const s = [...xs].sort((a, b) => a - b); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+test('BOLLE-REV-03 cost bench, arms in ABBA order on separate pages, compared in pairs (BOLLE_TURNI turns)', async ({ browser }) => {
   test.setTimeout(1_800_000);
   const misuraIn = async (stacca) => {
+    const cpu = await cpuDiSistema();
     const contesto = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
     const page = await contesto.newPage();
     sequenza = 0;
@@ -197,6 +217,8 @@ test('BOLLE-REV-03 cost bench, arms in separate pages, two runs each (BOLLE_TURN
     if (stacca) await page.evaluate(() => window.__talosHarnessUiRuntime.domandaAppiccicata().scollega());
     const corsa = () => page.evaluate(async () => {
       const sc = document.querySelector('#conversation').parentElement;
+      /* R-41 (31/10, Performance): i ricalcoli della domanda PER FOTOGRAMMA, scritti nel log: qui ogni scrollTop fa uno scrollend, cioè un ricalcolo a fotogramma (artefatto del banco; il braccio con la rotella vera è BOLLE-REV-03-ROTELLA) */
+      const ricalcoliPrima = window.__talosHarnessUiRuntime.domandaAppiccicata?.()?.conteggi?.().ricalcoli ?? 0;
       const fotogrammi = []; let prima = performance.now(); sc.scrollTop = 0;
       const passo = Math.max(97, Math.ceil((sc.scrollHeight - sc.clientHeight) / 1500));
       for (let y = 0; y < sc.scrollHeight - sc.clientHeight; y += passo) {
@@ -204,21 +226,37 @@ test('BOLLE-REV-03 cost bench, arms in separate pages, two runs each (BOLLE_TURN
         await new Promise((ok) => requestAnimationFrame(() => { const ora = performance.now(); fotogrammi.push(ora - prima); prima = ora; ok(); }));
       }
       fotogrammi.sort((a, b) => a - b);
-      return { passi: fotogrammi.length, p50: +fotogrammi[Math.floor(fotogrammi.length * 0.5)].toFixed(1), p95: +fotogrammi[Math.floor(fotogrammi.length * 0.95)].toFixed(1) };
+      return { passi: fotogrammi.length, p50: +fotogrammi[Math.floor(fotogrammi.length * 0.5)].toFixed(1), p95: +fotogrammi[Math.floor(fotogrammi.length * 0.95)].toFixed(1),
+        oltre20: +(fotogrammi.filter((f) => f > 20).length / Math.max(1, fotogrammi.length)).toFixed(2),
+        ricalcoliPerFotogramma: +(((window.__talosHarnessUiRuntime.domandaAppiccicata?.()?.conteggi?.().ricalcoli ?? 0) - ricalcoliPrima) / Math.max(1, fotogrammi.length)).toFixed(3) };
     });
     await corsa();
     const a = await corsa(); const b = await corsa();
     await contesto.close();
-    return [a, b];
+    // la pagina: media delle sue due corse, e il carico preso prima di aprirla
+    return { cpu, p50: (a.p50 + b.p50) / 2, p95: (a.p95 + b.p95) / 2, oltre20: (a.oltre20 + b.oltre20) / 2, ricalcoliPerFotogramma: (a.ricalcoliPerFotogramma + b.ricalcoliPerFotogramma) / 2, corse: [a, b] };
   };
-  const senza = await misuraIn(true);
-  const con = await misuraIn(false);
-  console.log('BOLLE-REV-03', TURNI_BANCO, JSON.stringify({ senza, con }));
+  /* ABBA: senza, con, con, senza — le coppie sono (1, 2) e (4, 3) */
+  const p1 = await misuraIn(true);
+  const p2 = await misuraIn(false);
+  const p3 = await misuraIn(false);
+  const p4 = await misuraIn(true);
+  /* ⛔ 03/11/2026 sera (regola 6, come la sorella BOLLE-REV-03-ROTELLA in ceab4ca86): con DUE coppie la «mediana» è la media delle
+     due, e una coppia disturbata decideva tutto (rossa «disturbata» a CPU 100% nel treno E). Con una terza coppia (senza, con) la
+     mediana è vera: una coppia disturbata non decide, un difetto che c'è in tutte resta rosso. Il cancello dell'owner non cambia. */
+  const p5 = await misuraIn(true);
+  const p6 = await misuraIn(false);
+  const coppie = [[p1, p2], [p4, p3], [p5, p6]];
   /* owner 28/10/2026, «Accetta con la cura»: a 1000 turni deve tornare sotto il +10%. Il cancello vale a ogni misura (300 di serie,
-     BOLLE_TURNI=1000 a mano): media delle due corse per braccio, un piccolo margine assoluto per il rumore dei fotogrammi. */
-  const media = (xs, k) => xs.reduce((a, x) => a + x[k], 0) / xs.length;
-  expect(media(con, 'p50'), 'median frame with the stuck question').toBeLessThanOrEqual(media(senza, 'p50') * 1.10 + 1);
-  expect(media(con, 'p95'), '95th percentile frame with the stuck question').toBeLessThanOrEqual(media(senza, 'p95') * 1.10 + 2);
+     BOLLE_TURNI=1000 a mano). Per coppia: (con − margine) / senza, coi margini assoluti di sempre (+1 ms su p50, +2 ms su p95) */
+  const r50 = coppie.map(([s, c]) => (c.p50 - 1) / s.p50);
+  const r95 = coppie.map(([s, c]) => (c.p95 - 2) / s.p95);
+  const cpuMassima = Math.max(p1.cpu, p2.cpu, p3.cpu, p4.cpu, p5.cpu, p6.cpu);
+  console.log('BOLLE-REV-03', TURNI_BANCO, JSON.stringify({ abba: [p1, p2, p3, p4, p5, p6].map(({ cpu, p50, p95, oltre20, ricalcoliPerFotogramma }) => ({ cpu, p50, p95, oltre20, ricalcoliPerFotogramma })),
+    rapporti: { p50: r50.map((r) => +r.toFixed(3)), p95: r95.map((r) => +r.toFixed(3)) }, disturbato: cpuMassima > 60 }));
+  const nota = cpuMassima > 60 ? ` (disturbato: CPU fino al ${cpuMassima}%, da rifare a macchina libera)` : '';
+  expect(mediana(r50), `median frame with the stuck question, paired ratio${nota}`).toBeLessThanOrEqual(1.10);
+  expect(mediana(r95), `95th percentile frame with the stuck question, paired ratio${nota}`).toBeLessThanOrEqual(1.10);
 });
 
 /*
@@ -292,9 +330,15 @@ test('BOLLE-REV-05 with the whole stuck question shown, "Whole question" covers 
   expect(prima, 'the long stuck question shows "Whole question"').not.toBeNull();
   expect(prima.dentroLaFascia, 'cut: the button sits on the last visible line').toBe(true);
   /* il puntatore sulla parte visibile, lontano dal pulsante: dopo l'attesa la domanda è intera */
-  const bolla = await page.locator('#conversation > .talos-turn[data-domanda-corrente] .talos-message__body').first().boundingBox();
-  await page.mouse.move(bolla.x + 40, bolla.y + 12);
-  await page.waitForTimeout(400);
+  /* ⛔ 04/11/2026, settima suite della candidata (8 lavoratori, memoria bassa): con 400 ms fissi `dopo` era identico a `prima`, cioè
+     la domanda non era ancora intera. Il CSS sposta il pulsante 120 ms dopo l'ingresso del puntatore; sotto carico il riquadro letto
+     prima del gesto può essere già scivolato. Si aspetta la condizione vera (il pulsante fuori dal testo), rimettendo il puntatore sul
+     riquadro di ADESSO a ogni lettura; il tetto è quello di `expect` e un pulsante che non scende mai resta rosso. */
+  await expect.poll(async () => {
+    const bolla = await page.locator('#conversation > .talos-turn[data-domanda-corrente] .talos-message__body').first().boundingBox();
+    await page.mouse.move(bolla.x + 40, bolla.y + 12);
+    return (await misura())?.sopraIlTesto;
+  }, { message: 'whole question: the button leaves the text once the pointer is on the visible part' }).toBe(false);
   const dopo = await misura();
   console.log('BOLLE-REV-05', JSON.stringify({ prima, dopo }));
   expect(dopo, 'the button is still there with the whole question').not.toBeNull();

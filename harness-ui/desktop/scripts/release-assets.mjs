@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs';
 import { appendFile, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { MOTORE_FISSATO } from '../../src/motore-fissato.mjs';
 import { NOME_FIRMA, NOME_MANIFESTO, chiavePubblicaDa, firmaManifesto, leggiManifesto, sha512Base64, verificaFirmaManifesto } from '../firma-aggiornamenti.mjs';
 
 export function nomiArtefatti(versione) {
@@ -126,14 +127,14 @@ ${cambiamenti}
 Open ${nomi.exe}: NSIS installer for the current user, no administrator prompt.
 Alternatively extract ${nomi.zip} in full and open TALOS.exe, keeping resources and the DLLs next to the executable.
 
-The v0.1 is **not code-signed**: SmartScreen may show "Windows protected your PC" and an unknown publisher.
+This release is **not code-signed**: SmartScreen may show "Windows protected your PC" and an unknown publisher.
 After checking the SHA256 and the provenance, choose "More info", check the name ${nomi.exe}, then "Run anyway" if you intend to proceed.
 If your device management blocks that option, ask your administrator. Do not turn SmartScreen or Defender off.
 The GitHub attestation certifies where the build came from; it is not an Authenticode signature and does not remove the SmartScreen warning.
 
 ## What is inside
 
-An Electron 44.3.0 shell with the Node runtime included, the TALOS backend, the built frontend, the kernel, the context engine, native addons, and llama.cpp v0.7.0 (build b11669) CPU/Vulkan builds with their licences.
+An Electron 44.3.0 shell with the Node runtime included, the TALOS backend, the built frontend, the kernel, the context engine, native addons, and llama.cpp v${MOTORE_FISSATO.versione} (build b${MOTORE_FISSATO.build}) CPU/Vulkan builds with their licences.
 Vulkan needs a compatible driver; the CPU engine is included as the alternative.
 Node.js 24.18.0 and ripgrep 15.0.0 for Linux, with their licences: when WSL is installed and a session runs its commands in Linux, the file tools run there too, with these binaries. Nothing is installed inside the WSL distribution.
 No GGUF model and no credential is bundled, and there is no telemetry.

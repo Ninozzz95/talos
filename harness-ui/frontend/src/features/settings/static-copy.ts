@@ -29,26 +29,33 @@ export const SETTINGS_COPY: ReadonlyArray<readonly [string, string]> = [
   ['[data-settings-group="desktop"] > .talos-eyebrow', 'impostazioni.copy.desktop'],
   ['[data-settings-group="desktop"] > h3', 'impostazioni.copy.workspace'],
   ['[data-settings-group="desktop"] > p', 'impostazioni.copy.windowAndReadingSpacePreferences'],
-  ['#setting-panel-tools > .talos-card > p', 'impostazioni.copy.rulesSavedWithTheSession'],
+  /* decisione 331 (07/11/2026), terzo giro: per nome, come privacy e account qui sotto. «Ogni carta degli Strumenti» riscriveva a ogni
+     ricerca e a ogni cambio di sezione la spiegazione di «Uso del computer», di «Tieni sveglio il PC» (anche la sua riga di stato) e di
+     «Dove girano i comandi» con la frase della politica (FORME-09) */
+  ['#setting-panel-tools > [data-settings-card="tools-policy"] > p', 'impostazioni.copy.rulesSavedWithTheSession'],
   ['#setting-panel-tools [data-open-sheet="permissions"]', 'impostazioni.copy.managePermissions'],
   ['#setting-panel-tools [data-vaia="capability"]', 'impostazioni.copy.manageTools'],
   /* ⛔ 23/09/2026 — le due righe di `#setting-panel-providers` sono ritirate con la sezione
      (decisione owner, «Provider e accessi» tolta del tutto): il pannello non esiste più, e un
      selettore che non pesca niente è una riga morta — la stessa ragione delle sette del 19/09. */
-  ['#setting-panel-memoria > .talos-card > p:first-of-type', 'impostazioni.copy.contextAlreadyOccupiedBeforeYou'],
-  ['#setting-panel-memoria > .talos-card > p:last-child', 'impostazioni.copy.toolUsageIsAnEstimate'],
-  ['#setting-panel-costi > .talos-card > p:first-of-type', 'impostazioni.copy.usageByDayAndModel'],
+  /* decisione 331 (07/11/2026), quarto giro: per nome anche qui. «Ogni carta della Memoria» riscriveva a ogni ricerca e a ogni cambio di
+     sezione la spiegazione di «Motore del contesto» e di «Compattazione della conversazione», che si montano dopo, con la frase di
+     «Ripartizione del contesto» (revisioni correttezza e vista del terzo giro; FORME-10). Costi e spazio di lavoro, stessa forma: per nome
+     anche loro, prima che una carta nuova ci arrivi (FORME-11). */
+  ['#setting-panel-memoria > [data-settings-card="memoria-context"] > p:first-of-type', 'impostazioni.copy.contextAlreadyOccupiedBeforeYou'],
+  ['#setting-panel-memoria > [data-settings-card="memoria-context"] > p:last-child', 'impostazioni.copy.toolUsageIsAnEstimate'],
+  ['#setting-panel-costi > [data-settings-card="costi-usage"] > p:first-of-type', 'impostazioni.copy.usageByDayAndModel'],
   ['#setting-panel-costi h4:first-of-type', 'impostazioni.copy.byDay'],
   ['#setting-panel-costi h4:last-of-type', 'impostazioni.copy.byModel'],
   ['#costiNota', 'impostazioni.copy.currencyAmountsAreReportedBy'],
-  ['#setting-panel-privacy > .talos-card:first-child > p', 'impostazioni.copy.localDataAndProfilePreferences'],
+  ['#setting-panel-privacy > [data-settings-card="privacy-local"] > p', 'impostazioni.copy.localDataAndProfilePreferences'], // decisione owner 164: la prima carta ora è «Link dalla chat», si aggancia per nome
   ['#settingsTrasferimento > h3', 'impostazioni.copy.transferPreferences'],
   ['#settingsTrasferimento > p:first-of-type', 'impostazioni.copy.exportOrImportAPreferences'],
   ['#settingsEsporta', 'impostazioni.copy.exportToAFile'],
   ['#settingsImporta', 'impostazioni.copy.importFromAFile'],
   ['#settingsRipristina', 'impostazioni.copy.restoreDefaults'],
   ['#settingsSvuotaLocali', 'impostazioni.copy.clearThisBrowsersPreferences'],
-  ['#setting-panel-workspace > .talos-card > p', 'impostazioni.copy.folderAndDataForThe'],
+  ['#setting-panel-workspace > [data-settings-card="workspace-session"] > p', 'impostazioni.copy.folderAndDataForThe'],
   ['#setting-panel-workspace [data-open-panel="inspector"]', 'impostazioni.copy.openTheFileTree'],
   ['#settingsNuovaSessioneAltrove', 'impostazioni.copy.newSessionInAnotherFolder'],
   // 01/10/2026: per chiave, non «la prima carta»: la scheda «Aggiornamenti» ora sta in testa e prendeva questo testo

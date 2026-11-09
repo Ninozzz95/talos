@@ -1,0 +1,4 @@
+root = Tabella("t", null, colonne, [r1, r2])
+colonne = [{id: "a", titolo: "A", tipo: "testo"}]
+r1 = ["uno"]
+r2 = ['due \'e\' tre']

@@ -15,7 +15,7 @@ const base = 'http://127.0.0.1:5196';
 await mkdir(out, { recursive: true });
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(TALOS_|OPENAI_|ANTHROPIC_|OPENROUTER_|GOOGLE_API_KEY|GEMINI_API_KEY|NODE_OPTIONS)/i.test(key)));
 const result = { source: execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(), node: process.version, mockedApis: false, paidInference: false, screenshots: [], checks: [], errors: [], warnings: [], failures: [], inspectedVisually: false };
-const server = spawn(process.execPath, [join(root, 'harness-ui/server.mjs')], { cwd: root, env: { ...env, TALOS_HARNESS_UI_HOST: '127.0.0.1', TALOS_HARNESS_UI_PORT: '5196', TALOS_DESKTOP_PROFILE: 'preview', TALOS_DESKTOP_DATA_DIR: data, TALOS_HARNESS_UI_SESSIONS_DIR: join(data, 'sessions'), TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: join(data, 'scratch'), TALOS_HARNESS_UI_PUBLIC_DIR: join(root, 'harness-ui/frontend/dist') }, stdio: ['ignore','pipe','pipe'] });
+const server = spawn(process.execPath, [join(root, 'harness-ui/server.mjs'), '--senza-gettone=prove'], { cwd: root, env: { ...env, TALOS_HARNESS_UI_HOST: '127.0.0.1', TALOS_HARNESS_UI_PORT: '5196', TALOS_DESKTOP_PROFILE: 'preview', TALOS_DESKTOP_DATA_DIR: data, TALOS_HARNESS_UI_SESSIONS_DIR: join(data, 'sessions'), TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: join(data, 'scratch'), TALOS_HARNESS_UI_PUBLIC_DIR: join(root, 'harness-ui/frontend/dist') }, stdio: ['ignore','pipe','pipe'] });
 let logs = '', browser, page;
 server.stdout.on('data', d => { logs += d; }); server.stderr.on('data', d => { logs += d; });
 async function snapshot(name) {

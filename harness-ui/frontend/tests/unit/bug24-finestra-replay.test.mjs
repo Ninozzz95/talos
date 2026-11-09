@@ -573,6 +573,13 @@ function bancoCambioSessione(b) {
     frameGrafoMadre: null, agentiInDiretta: new Map(), frameAgentiInDiretta: null, figliLettura: 0,
     figliErrore: null, figliAggiornati: null, contextCompactor: null, contextMonitor: null,
     contextChatSnapshot: null, richiestaCacheSessione: null,
+    passiDelGiro: null, // FE-008 (04/11/2026): la lista dei Passi si toglie al cambio (prove in passi-del-giro e passi-chat-nuova)
+    aggancioDeiBlocchi: null, // cura BG3 round 4 (E1): the blocks' hook is reset at the change (tests in blocchi-regola-277-giro-4)
+    visteDeiBlocchi: null, // cura BG3 round 5: the block's views close at the change (tests in blocchi-regola-277-giro-5)
+    schedeAccesso: { dimentica: niente }, // D4 di R116: la ripresa armata si dimentica al cambio (prove in rinnovo-accesso-116)
+    ripresaDopoLoStop: { dimentica: niente }, // decisione 166 (revisione R-5 del 05/11/2026): «Riprendi» si dimentica al cambio (prove in ux-decisioni-166)
+    chatLasciate: [], ponteBolla: { lascia: (id) => { b.chatLasciate.push(id); } }, // FE-071 (05/11/2026): la chat lasciata col computer use la segue il ponte (B24-10b qui sotto, il resto in ponte-bolla)
+    rigaVivaMotore: { chatCambiata: niente }, // FE-050 (01/11/2026): la riga viva del modello locale si dimentica al cambio (prove in riga-viva-motore)
     risorseProcessi: { timer: 0, inVolo: false, letture: 2, vivi: 0, agganciato: true }, // C1 (10/10/2026): CPU e memoria, la lettura riparte al cambio
     $: (selector) => selector === '#conversation' ? b.colonna : null,
   });
@@ -586,6 +593,9 @@ function bancoCambioSessione(b) {
     'nascondiAvvisoPiano', 'syncRunComposerState',
     'azzeraSchedaContesto', // C1 (10/10/2026): la scheda Contesto della sessione di prima si dimentica al cambio
     'renderizzaFasciaObiettivo', // /goal G6 (15/10/2026): la fascia dell'obiettivo si spegne al cambio (prove in obiettivo-fascia)
+    'lasciaModalitaVeloce', // FE-047: la scelta veloce si lascia col cambio di sessione (prove in modalita-veloce)
+    'parcheggiaBozzaAllegati', // D27: la bozza di una chat ha la sua prova (CHAT-FILES-BOZZA)
+    'aggiornaBarraApprovazioni', 'chiamataDeiPassi', // FE-011 e Passi, unione del 03/11: hanno le loro prove
     'parcheggiaChatAperta']) b[nome] = niente; // B1 (10/10/2026): il parcheggio della chat lasciata ha le sue prove (chat-pronte, b1-chat-pronte)
   return funzione('nuovaGenerazioneSessione', b);
 }
@@ -606,6 +616,23 @@ test('B24-10 SESSIONE-VUOTA-RESET: cambio senza eventi elimina subito registro e
   assert.equal(b.risorseProcessi.letture, 0);
   b.aggiungiPaginaPrecedenti();
   assert.equal(b.colonna.children.length, 0, 'un gesto tardivo ha rimontato la chat precedente nella sessione vuota');
+});
+
+/* Revisione B sul gemello (05/11/2026), difetto 3: il banco non aveva `realSession.id`, quindi `app.js` non arrivava mai a
+   `ponteBolla.lascia` e lo stub poteva sparire senza un rosso (M9). Qui la chat lasciata ha il suo id. */
+test('B24-10b BOLLA-CHAT-LASCIATA: al cambio la chat che si lascia passa al ponte della bolla una volta, col suo id; la ripresa no', () => {
+  const b = bancoFinestra();
+  b.state.realSession.id = 'sessione-lasciata';
+  const nuovaGenerazione = bancoCambioSessione(b);
+  nuovaGenerazione();
+  assert.deepEqual(b.chatLasciate, ['sessione-lasciata'], 'la chat lasciata arriva al ponte col suo id');
+  /* Revisione cure B sul gemello 274 (REVISIONE-CURE-B-GEMELLO-274-2026-11-05.md, LOW 1): il primo cambio azzera
+     `realSession.id` (app.js, `state.realSession.id = null` in fondo a `nuovaGenerazioneSessione`), quindi senza un id
+     la ripresa non arrivava mai a `lascia` e il «la ripresa no» passava anche con `lascia` chiamato in ripresa.
+     Qui la chat ripresa ha di nuovo il suo id: solo la guardia `!continua` la tiene lontana dal ponte. */
+  b.state.realSession.id = 'sessione-ripresa';
+  nuovaGenerazione({ continua: true });
+  assert.deepEqual(b.chatLasciate, ['sessione-lasciata'], 'la ripresa della stessa chat, col suo id, non la lascia');
 });
 
 test('B24-11 ORDINE-TRE-PAGINE: ciascun prepend carica i predecessori contigui, cronologia vecchio→nuovo', () => {
@@ -1105,19 +1132,28 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     disegnaChipAllegati: (article, allegati) => chips.push({ article, allegati }),
     collegaAzioniMessaggioUtente: (article, data) => actions.push({ article, data }),
     markMotionEnter() {}, oraMessaggio: () => '12:34', tr: key => key,
+    chiudiCartaRifiuto() {}, // FE-051: la carta del rifiuto ha le sue prove (`carta-rifiuto.spec.mjs`)
+    ripresaDopoLoStop: { giroNuovo() {} }, // decisione 166 (revisione R-5 del 05/11/2026): le sue prove in `ux-decisioni-166.test.mjs`
+    schedeAccesso: { giroNuovo() {} }, ripresaDopoAccesso: { giroFinito: async () => false }, EVENTO_ACCESSO_CHATGPT: 'talos.accesso-chatgpt', aggiornaRigaAccessoChatgpt: () => null, // decisione 116 C: le sue prove in `rinnovo-accesso-116.test.mjs`
     nomeLeggibileSessione: id => id, etichettaPermessiGiro: () => '',
     pubblicaSegui: () => { counts.published += 1; },
     fermaRiarmoRuotaConversazione: () => { counts.cancelled += 1; },
     fermaFondoRipristino: () => { counts.stopped += 1; },
     scrollStreamingOutput: () => { counts.writer += 1; },
     eventoPerLoSchermo: event => event, providerRetryUi: { evento() {} },
+    ponteBolla: { evento() {} }, // FE-070 (05/11): il ponte verso il canale della bolla ha le sue prove (`ponte-bolla.test.mjs`)
     runRealeAttivo: () => false, interpretaEventoCompattazione: () => null,
     // 17/10/2026 (owner, «Avviso in chat + stato in Estensioni»): il server MCP che non parte, detto dal gestore degli eventi
     EVENTO_MCP_AVVIO: 'talos.mcp-avvio', avvisiMcpDetti: new Map(), nuoviServerNonPartiti: () => [], creaNotaMcpNonPartito: () => null,
     // L1 1.3 (26/10/2026): la riga della finestra del modello locale allargata da sola, disegnata dal gestore degli eventi
     EVENTO_FINESTRA_LOCALE: 'talos.finestra-locale', aggiornaRigaFinestraLocale: () => null,
+    // FE-053 (01/11/2026): la riga del modello dei riassunti inutilizzabile, nello stesso gestore (prove nelle sue)
+    EVENTO_MODELLO_INUTILIZZABILE: 'talos.riassunto-modello-inutilizzabile', aggiornaRigaModelloInutilizzabile: () => null,
+    // FE-050 (01/11/2026): le righe del ripiego del motore locale e della scheda lenta, nello stesso gestore (prove nelle loro)
+    EVENTO_RIPIEGO_LOCALE: 'talos.ripiego-locale', aggiornaRigaRipiegoLocale: () => null, EVENTO_SCHEDA_LENTA: 'talos.scheda-lenta', aggiornaRigaSchedaLenta: () => null,
     // 29/10/2026 (owner, CONTRATTO-CONTROLLO-SPENTO): la riga del controllo delle scritture spento, nello stesso gestore
     leggiControlloSpento: () => null, aggiornaRigaControlloSpento: () => null,
+    chiamataDeiPassi: () => false, // FE-008 (unione del 03/11): la lista dei Passi ha le sue prove; qui nessun evento è dei Passi
     aggiornaAvvisoSogliaContesto() {}, accendiRagionamentiApertiDopoLaStoria() {},
     disegnaTestiRimastiNellaStoria: () => { counts.testiRimasti = (counts.testiRimasti ?? 0) + 1; }, // TESTO-PERSO: il testo rimasto indietro, al confine
     aggiornaRiassuntoSegmento() {}, disegnaFasciaPianoRichiesto() {},
@@ -1133,6 +1169,7 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     spintaDiagrammaDeleghe: null, frameGrafoMadre: null, ultimoEventoGrafoMadre: null,
     caricaCacheSessioneDalRegistro() {}, EVENTI_DELLE_SCHEDE_AGENTE: new Set(),
     segnalaRigaSessioneViva() {}, chiudiAttrezziInterrotti: () => 0,
+    piegaEventoDaRiprendere: (stato) => stato, aggiornaTastoRiprendi() {}, // decisione 198: il ▶ sugli eventi vivi
     chiudiBatchTool() {}, chiudiSegmentoAttivo() {}, contextMonitor: null,
     aggiornaServerLocali: async () => {}, // owner 27/10/2026: al confine della storia si rilegge lo stato vivo dei server locali
     sommaUsage: () => ({}), aggiornaUsageSessione() {},

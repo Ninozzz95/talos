@@ -34,7 +34,7 @@ test('AVVIO-FALLITO-ESCE-01 — sulla porta già presa il server dice perché ed
     TALOS_DESKTOP_DATA_DIR: join(radice, 'desktop'), TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_HARNESS_UI_KEYRING_SCOPE: '', TALOS_SCRATCH_DIR: join(radice, 'scratch'),
     TEMP: temp, TMP: temp, TMPDIR: temp,
   };
-  const figlio = spawn(process.execPath, ['server.mjs'], { cwd: RADICE, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env });
+  const figlio = spawn(process.execPath, ['server.mjs', '--senza-gettone=prove'], { cwd: RADICE, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env });
   t.after(() => { if (figlio.exitCode === null) figlio.kill(); });
   let errore = '';
   figlio.stderr.on('data', (c) => { errore += c; });

@@ -24,7 +24,7 @@ const SCENA = () => [
   figlia('e', 324, { taskCorto: 'Rivedi il lavoro', attivita: { file: [], chiamate: 0, attrezzoCorrente: null, passi: [] } }),
 ];
 
-test('DELEGHE-ATTIVITA-01 — ogni scheda dice che cosa fa l’agente: l’attrezzo in volo col SUO file, «ragiona», fra due operazioni, o quando ha fatto l’ultima cosa; il modello scende accanto allo stato e la scheda non cresce', async ({ page }) => {
+test('DELEGHE-ATTIVITA-01 — ogni scheda dice che cosa fa l’agente: lo strumento in volo col SUO file, «ragiona», fra due operazioni, o quando ha fatto l’ultima cosa; il modello scende accanto allo stato e la scheda non cresce', async ({ page }) => {
   /* la scena è VIVA (una funzione): dopo l'evento il prodotto rilegge le figlie, e la rotta deve rispondere coi fatti nuovi.
      Con una scena fissa la rilettura riportava «d» a «Ragionamento in corso» quando arrivava dopo l'evento: 2 corse rosse su 28
      a quattro lavoratori (13/10/2026, vista dal bugfixer 1 volta su 7) — un difetto del banco, non del diagramma. */
@@ -44,7 +44,7 @@ test('DELEGHE-ATTIVITA-01 — ogni scheda dice che cosa fa l’agente: l’attre
   const piede = grafo.locator('[data-sessione="c"] .gv-passo-piede');
   await expect(piede.locator('.gv-passo-pill')).toHaveText('In corso'); // le parole delle deleghe (owner 14/10/2026), non «In esecuzione»
   // owner 13/10/2026: accanto allo stato il nome CORTO del modello (come nella lista delle sessioni); quello intero resta nel suggerimento
-  await expect(piede.locator('.gv-passo-modello')).toHaveText('glm-5.3-flash');
+  await expect(piede.locator('.gv-passo-modello')).toHaveText('GLM 5.3 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   await expect(grafo.locator('[data-sessione="c"]')).toHaveAttribute('title', /z-ai\/glm-5\.3-flash$/u);
   await grafo.locator('.gv-percento').click();
   await expect(grafo.locator('.gv-percento')).toHaveText('100%');
@@ -64,7 +64,7 @@ test('DELEGHE-ATTIVITA-02 — la scheda in cima dice che cosa fa la conversazion
   const cima = grafo.locator('.gv-sessione');
   await expect(cima).toContainText('Aspetta 3 agenti');
   // il modello col nome corto, come sulle schede degli agenti (13/10/2026); l'intero, col fornitore, sta nel suggerimento
-  await expect(cima).toContainText('glm-5.3-flash');
+  await expect(cima).toContainText('GLM 5.3 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   await expect(cima).not.toContainText('z-ai/');
   await expect(cima.locator('.talos-wfg__passo-modello')).toHaveAttribute('title', /z-ai\/glm-5\.3-flash/u);
   // AL CONTRARIO: quando nessuno lavora più la scheda non dice più che aspetta

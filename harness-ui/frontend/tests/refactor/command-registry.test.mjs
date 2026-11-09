@@ -9,7 +9,7 @@ const empty = { sessionId: null, running: false };
 const idle = { sessionId: 'session-real', running: false };
 const busy = { sessionId: 'session-real', running: true };
 test('NAV-02: stable unique command ids, all routes real and no first-run command', () => {
-  assert.equal(COMMANDS.length, 30);
+  assert.equal(COMMANDS.length, 31); // decisione 198: «retry»
   assert.equal(new Set(COMMANDS.map(c => c.id)).size, COMMANDS.length);
   for (const command of COMMANDS) {
     assert.match(command.id, /^[a-z][a-z-]*$/);

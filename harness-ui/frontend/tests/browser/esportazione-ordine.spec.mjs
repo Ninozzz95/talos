@@ -35,7 +35,7 @@ test('EXPORT-ORDINE-01 — uno spazio, poi il ragionamento, poi il testo: nel fi
  * finto: ogni ragionamento si chiude dopo il testo e dopo l'avvio dell'attrezzo del suo passo. Prima nel file usciva
  * R1, attrezzo, T2, R2, attrezzo, T3, R3: ogni testo sopra il proprio ragionamento.
  */
-test('EXPORT-ORDINE-04 — tre passi nell\'ordine del server: ogni ragionamento sta sopra il suo testo e il suo attrezzo', async ({ page }) => {
+test('EXPORT-ORDINE-04 — tre passi nell\'ordine del server: ogni ragionamento sta sopra il suo testo e il suo strumento', async ({ page }) => {
   const pensa = (id, segno) => [{ type: 'ReasoningMessageStart', messageId: id }, { type: 'ReasoningMessageContent', messageId: id, delta: segno }];
   const md = await esporta(page, [
     { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'Lancia due comandi.' } },
@@ -63,7 +63,7 @@ test('EXPORT-ORDINE-04 — tre passi nell\'ordine del server: ogni ragionamento 
   expect(ordine).toEqual([...ordine].sort((a, b) => a - b));
 });
 
-test('EXPORT-ORDINE-02 — AL CONTRARIO: un testo VERO prima del ragionamento resta sopra; e l\'attrezzo sta dove è partito', async ({ page }) => {
+test('EXPORT-ORDINE-02 — AL CONTRARIO: un testo VERO prima del ragionamento resta sopra; e lo strumento sta dove è partito', async ({ page }) => {
   const md = await esporta(page, [
     { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'Leggi il README.' } },
     { type: 'TextMessageStart', messageId: 'm', role: 'assistant' },

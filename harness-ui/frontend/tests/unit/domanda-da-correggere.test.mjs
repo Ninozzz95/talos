@@ -20,7 +20,7 @@ test('DOMANDA-DA-CORREGGERE — i motivi veri del contratto diventano frasi brev
   assert.deepEqual(motivoDomandaDaCorreggere('ask_user_question', vero('questions[0].options[0] contiene campi non riconosciuti')), { frase: 'chat.question.fix.invalidShape' });
 });
 
-test('DOMANDA-DA-CORREGGERE — AL CONTRARIO: altri attrezzi, altri codici, una risposta vera non sono «da correggere»', () => {
+test('DOMANDA-DA-CORREGGERE — AL CONTRARIO: altri strumenti, altri codici, una risposta vera non sono «da correggere»', () => {
   assert.equal(motivoDomandaDaCorreggere('note_crea', vero('questions[0].why è obbligatorio')), null, 'solo la domanda');
   assert.equal(motivoDomandaDaCorreggere('ask_user_question', 'ask_user_question failed [QUESTION_ALREADY_PENDING]: c’è già una domanda aperta'), null);
   assert.equal(motivoDomandaDaCorreggere('ask_user_question', '{"status":"answered","answers":{"a":"b"}}'), null);

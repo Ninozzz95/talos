@@ -349,6 +349,50 @@ for (const faultPoint of ['aside-after-move', 'crash-aside-after-move']) {
   });
 }
 
+/* RIP-3 (block 21 second review, 01/11/2026): the announcement that the archive went aside travels in the transaction of the move */
+const annuncio = (overrides = {}) => ({ schema: 'talos.context.event.v1', id: 'announcement', sessionId: 'a', kind: 'context.archive.set-aside', createdAt, payload: { asideId: 'a.aside-1' }, ...overrides });
+for (const faultPoint of ['aside-after-outbox', 'crash-aside-after-outbox']) {
+  test(`CTX-SET-ASIDE-NOTICE-CRASH ${faultPoint}: the move and its announcement stand or fall together`, async t => {
+    const { store, databasePath } = await fixture(t, { faultPoint });
+    await store.appendOriginalBatch({ sessionId: 'a', records: [record('r1')], expectedRevision: 0 });
+    await assert.rejects(store.setAsideSession({ sessionId: 'a', asideId: 'a.aside-1', event: annuncio() }), { code: faultPoint.startsWith('crash') ? 'CTX_WORKER_EXIT' : 'CTX_PERSISTENCE_FAILED' });
+    await store.close();
+    const reopened = createSqliteContextStore({ databasePath });
+    try {
+      assert.deepEqual((await reopened.readOriginals({ sessionId: 'a' })).map(r => r.id), ['r1'], 'nothing moved');
+      assert.equal(await reopened.readContextSnapshot({ sessionId: 'a.aside-1' }), null);
+      assert.deepEqual(await reopened.readContextOutbox({ sessionId: 'a' }), [], 'nothing announced');
+    } finally { await reopened.close(); }
+  });
+}
+
+test('CTX-SET-ASIDE-NOTICE: the announcement goes behind what was already waiting, survives a reopen, and leaves only when acknowledged', async t => {
+  const { store, databasePath } = await fixture(t);
+  await store.appendOriginalBatch({ sessionId: 'a', records: [record('r1')], expectedRevision: 0 });
+  await store.recordContextNotice({ sessionId: 'a', event: annuncio({ id: 'waiting', kind: 'context.compaction.cooling', payload: {} }) });
+  await store.setAsideSession({ sessionId: 'a', asideId: 'a.aside-1', event: annuncio() });
+  assert.deepEqual((await store.readOriginals({ sessionId: 'a.aside-1' })).map(r => r.id), ['r1'], 'moved');
+  await store.close();
+  const reopened = createSqliteContextStore({ databasePath });
+  try {
+    assert.deepEqual((await reopened.readContextOutbox({ sessionId: 'a' })).map(e => e.id), ['waiting', 'announcement']);
+    assert.deepEqual((await reopened.readContextOutbox({ sessionId: 'a' })).at(-1), annuncio(), 'the event as it was given');
+    await reopened.ackContextEvent({ sessionId: 'a', eventId: 'waiting' });
+    await reopened.ackContextEvent({ sessionId: 'a', eventId: 'announcement' });
+    assert.deepEqual(await reopened.readContextOutbox({ sessionId: 'a' }), []);
+    assert.deepEqual(await reopened.readContextOutbox({ sessionId: 'a.aside-1' }), [], 'the copy set aside has no queue of its own');
+  } finally { await reopened.close(); }
+});
+
+test('CTX-SET-ASIDE-NOTICE, the other way round: an announcement of another conversation is refused and nothing moves; with no event nothing is queued', async t => {
+  const { store } = await fixture(t);
+  await store.appendOriginalBatch({ sessionId: 'a', records: [record('r1')], expectedRevision: 0 });
+  await assert.rejects(store.setAsideSession({ sessionId: 'a', asideId: 'a.aside-1', event: annuncio({ sessionId: 'b' }) }), { code: 'CTX_INVALID_INPUT' });
+  assert.deepEqual((await store.readOriginals({ sessionId: 'a' })).map(r => r.id), ['r1']);
+  await store.setAsideSession({ sessionId: 'a', asideId: 'a.aside-2' });
+  assert.deepEqual(await store.readContextOutbox({ sessionId: 'a' }), []);
+});
+
 test('CTX-SET-ASIDE moves the archive under another id in one transaction, and the immutability guards still hold', async t => {
   const { store, databasePath } = await fixture(t);
   await store.appendOriginalBatch({ sessionId: 'a', records: [record('r1'), record('r2')], expectedRevision: 0 });

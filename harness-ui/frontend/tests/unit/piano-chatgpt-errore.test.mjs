@@ -27,7 +27,10 @@ test('PIANO-ERRORE-01: a plan error mid-turn gets its own card, in English and I
       // a network failure is a "try again", not a "sign in again"
       const rete = spiegaErrore('OpenAI could not be reached.', 'CHATGPT_RETE');
       assert.equal(rete.id, 'piano-chatgpt');
-      assert.ok(rete.rimedi.some((r) => riprova.test(r)), `${lingua}: ${rete.rimedi}`);
+      /* decisione 116 C (owner 04/11/2026): the network failure is the «Try again» card — the reason says to try again, the buttons are
+         the remedies (none to read), and still no sign-in */
+      assert.equal(rete.schedaAccesso, 'riprova');
+      assert.match(rete.perche, riprova, `${lingua}: ${rete.perche}`);
       assert.ok(!rete.rimedi.some((r) => collegare.test(r)), 'no sign-in for a network failure');
       for (const codice of ['CHATGPT_ACCESSO_SCADUTO', 'CHATGPT_PIANO_NON_ABILITATO', 'CHATGPT_RINNOVO_FALLITO', 'CHATGPT_SERVIZIO_NON_DISPONIBILE', 'CHATGPT_RICHIESTA_NON_AMMESSA', 'CHATGPT_PIANO_NON_AMMESSO']) {
         const s = spiegaErrore('', codice);

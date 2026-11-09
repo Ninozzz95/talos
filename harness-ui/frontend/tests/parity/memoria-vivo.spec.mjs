@@ -13,9 +13,9 @@ async function foto(page,nome,info){await mkdir(FOTO,{recursive:true});await pag
 const payload=memorie=>({ok:true,data:{memorie,errore:null}});
 test('MEMORIA-REALE: vuoto onesto, stessa API originale, ricarico senza fixture',async({page,request,browser},info)=>{
  const errori=[];page.on('pageerror',e=>errori.push(e.message));await pronta(page);await apriMemoria(page);
- await expect(page.locator('[data-memory-stato]')).toHaveText('0 ricordi');await expect(page.locator('#schermoMemoria [data-c="MemoryRow"]')).toHaveCount(0);
+ await expect(page.locator('[data-memory-stato]')).toHaveText('');await expect(page.locator('#schermoMemoria [data-c="MemoryRow"]')).toHaveCount(0);
  await expect(page.locator('[data-memory-list]')).toContainText('Nessun ricordo salvato');await foto(page,'app-vuota',info);
- await page.reload();await expect(page.getByRole('button',{name:'Memoria 0',exact:true})).toBeVisible();await apriMemoria(page);await expect(page.locator('[data-memory-stato]')).toHaveText('0 ricordi');expect(errori).toEqual([]);
+ await page.reload();await expect(page.getByRole('button',{name:'Memoria 0',exact:true})).toBeVisible();await apriMemoria(page);await expect(page.locator('[data-memory-stato]')).toHaveText('');expect(errori).toEqual([]);
  const contesto=await browser.newContext({...info.project.use,locale:'it-IT'}),originale=await contesto.newPage();await pronta(originale,ORIGINALE);
  // Il comando visibile nel vecchio pannello e la stessa Memoria globale.
  if(info.project.use.viewport.width<=1040)await originale.locator('.desktop-context-toggle').click();
@@ -39,7 +39,7 @@ test('MEMORIA-RECUPERO: errori, payload non valido e risposta obsoleta',async({p
  await pronta(page);await page.route('**/api/v1/sessions/*/memory',r=>r.fulfill({status:503,json:{ok:false,error:{code:'OFFLINE',message:'Servizio non disponibile'}}}));await apriMemoria(page);
  await expect(page.locator('[data-memory-stato]')).toContainText('Servizio non disponibile');await expect(page.locator('[data-memory-stato]')).toBeInViewport();await expect(page.locator('#schermoMemoria .talos-topbar__path')).toHaveText('Ricordi non disponibili');await foto(page,'app-errore',info);
  await page.unroute('**/api/v1/sessions/*/memory');await page.route('**/api/v1/sessions/*/memory',r=>r.fulfill({json:payload([null])}));await page.locator('[data-memory-refresh]').click();await expect(page.locator('[data-memory-stato]')).toContainText('Elenco dei ricordi non valido');
- await page.unroute('**/api/v1/sessions/*/memory');await page.locator('[data-memory-refresh]').click();await expect(page.locator('[data-memory-stato]')).toHaveText('0 ricordi');
+ await page.unroute('**/api/v1/sessions/*/memory');await page.locator('[data-memory-refresh]').click();await expect(page.locator('[data-memory-stato]')).toHaveText('');
  let libera;const attesa=new Promise(r=>{libera=r;});let richieste=0;
  await page.route('**/api/v1/sessions/*/memory',async r=>{richieste++;if(richieste===1){await attesa;await r.fulfill({json:payload([MEMORIE[0]])});}else await r.fulfill({json:payload([MEMORIE[1]])});});
  try {

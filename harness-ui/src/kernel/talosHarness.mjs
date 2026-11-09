@@ -49,6 +49,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { createToolOutputPreview } from './tool-output-preview.mjs'
 import { captureProcessOutput, formatCapturedOutput } from './process-output-capture.mjs'
 import { createZeroTestScanner } from './zero-test-scanner.mjs'
+import { comandoCheModifica, comandoFinitoRosso, deveRiaprireSuProvaRossa, eComandoDiProve } from './prova-rossa.mjs' // R-58
 import { normalizzaMetadatiCattura } from '../process-output-contract.mjs'
 import { creaRegistroLetture, registraLetturaRighe, registraLetturaDentroRiga, registraScritturaPropria, motivoPerNonSovrascrivere, frasePerNonSovrascrivere, serveImpronta, haImpronta, registraImpronta } from '../letture-prima-di-sovrascrivere.mjs' // T25/B09: la lettura prima di sovrascrivere
 import { PROCESS_OUTPUT_ENCODINGS } from '../process-output-encoding.mjs' // OEM36: solo l'elenco; iconv-lite si carica lì, e solo a richiesta
@@ -56,7 +57,15 @@ import { StringDecoder } from 'node:string_decoder'
 import { createParser } from 'eventsource-parser'
 import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, erroreEsitoProviderIncertoEsaurito, erroreNessunaPrimaRispostaEsaurito, leggiRifiutoProvider } from '../provider-retry.mjs'
 import { SilenzioDelFornitoreError, leggiInattivitaDatiMs } from '../generation-idle.mjs'
+import { fornitoriDelModello } from '../openrouter-fornitori.mjs' // decisione 193: i fornitori del modello, per evitare chi perde la cache
+import { prefillInCodaArriva } from '../openai-compatible-runtime.mjs' // decisione 330: che cosa del prefill arriva al filo del modello
+import { classificaErroreFornitore, numeriDelContestoPieno } from './compattazione-desktop.mjs' // giro 8 della 324: una finestra piena non è un rifiuto del prefill; giro 12: i suoi numeri
 import { rifiutoOspiteDalCodice } from '../accesso-locale-ospite.mjs' // 21/10: i rifiuti del motore dell'app anche dentro il flusso
+import { promptDelCatalogo } from '../blocchi/prompt-del-catalogo.mjs' // FE-003: il catalogo dei blocchi, solo se chi ospita lo chiede
+import { ATTREZZO_BLOCCO_AGGIORNA, NOME_BLOCCO_AGGIORNA, daJson as richiestaDiBloccoAggiorna, rispostaAlModello as rigaDiBloccoAggiorna } from '../blocchi/aggiorna.mjs' // FE-081: cambiare un blocco vivo per nome
+import { nominaBlocchi } from '../blocchi/versioni.mjs' // FE-081: i nomi bN dei blocchi, dati da TALOS
+import { NOME_PASSI, TETTI_PASSI, applicaPassi, creaContenitorePassi, esitoPassi, leggiArgomentiPassi } from '../passi-del-giro.mjs' // FE-008
+import { CHIAMATA_NEL_TESTO, argomentiDalFrammento, codaChiamataNelTesto, creaFiltroChiamataNelTesto, eModelloLocale } from './chiamata-nel-testo.mjs' // PERF R-34: la chiamata arrivata come testo in coda alla risposta
 import { PREFISSO_SINTESI_RECINTATA, costruisciBloccoFatti } from './ricarica-post-compact.mjs' // ⭐ 06/10/2026: la ricarica della memoria post-compact (opzione A + C-a + C-b, ricerca 5×5×5×5 §6.4)
 import { createHash, generateKeyPairSync, randomUUID, sign as firmaCrypto, verify as verificaCrypto } from 'node:crypto'
 import { lookup as risolviDns } from 'node:dns'
@@ -86,6 +95,9 @@ import { creaFiltroGitignore } from '../gitignore-elenco.mjs'
 import { etichettaSandbox } from './etichetta-sandbox.mjs'
 import { creaRegistroTentativi } from './registro-tentativi.mjs' // L1 1.2 (26/10/2026): il freno sull'esito
 import { creaFiltroRagionamentoNelTesto, separaRagionamentoNelTesto } from './ragionamento-nel-testo.mjs' // L1 motore locale (20/10/2026): il `<think>` dentro il testo
+import { creaSorveglianzaArgomenti, RITENTATIVI_ARGOMENTI_SENZA_FINE } from './argomenti-senza-fine.mjs' // R-47: la chiamata che si perde in spazi vuoti
+import { DEFINIZIONE_AIUTO, NOME_AIUTO } from './aiuto-talos.mjs'
+import { DEFINIZIONE_IMPOSTAZIONI, NOME_IMPOSTAZIONI, AZIONI_IMPOSTAZIONI_NEL_PIANO, azioneImpostazioni, cartaAncheInAccessoPieno } from './impostazioni-app.mjs' // Fase 8 «Impostazioni dalla chat» (01/11/2026)
 import { dividiPerIlPonte, pesoInToken, budgetElencoDelPonte, cercaAttrezzi, descriviAttrezzi, risolviChiamataDelPonte, NOME_CHIAMATA_ATTREZZO, NOME_RICERCA_ATTREZZI, NOME_DESCRIZIONE_ATTREZZI } from './ponte-attrezzi.mjs'
 /*
  * ⛔ F15 (17/09/2026) — la GRAMMATICA DEI SEGRETI vive in `path-policy.mjs`, dove già vive
@@ -95,7 +107,7 @@ import { dividiPerIlPonte, pesoInToken, budgetElencoDelPonte, cercaAttrezzi, des
  * (solo `node:fs`/`node:os`/`node:path`) come gli altri tre import qui sopra: il kernel resta
  * trasportabile nel bundle del banco.
  */
-import { motivoDaChiedere, eUnFileSegreto, scritturaDiUnaCredenziale, credenzialeDellaCasaLetta, bloccataDa, comandoNominaUnaBloccata } from '../path-policy.mjs'
+import { motivoDaChiedere, eUnFileSegreto, scritturaDiUnaCredenziale, credenzialeDellaCasaLetta, bloccataDa, comandoNominaUnaBloccata, chiaveDelConsensoDi } from '../path-policy.mjs'
 import { percorsoTaskkill } from '../taskkill-di-sistema.mjs' // G-R5 (revisione del blocco 10, 27/10/2026, d'accordo con la CLI)
 import { withoutEchoedMarker } from '../eco-del-marcatore.mjs'
 import { ARGOMENTI_NESSUNO, argomentiVuoti, conArgomentiVuotiComeOggetto } from '../argomenti-vuoti.mjs'
@@ -109,10 +121,14 @@ import { ARGOMENTI_NESSUNO, argomentiVuoti, conArgomentiVuotiComeOggetto } from 
  * `elenco-profondo.mjs`/`gitignore-elenco.mjs` qui sopra.
  */
 import { CARTELLA_RICERCA, NOME_RAPPORTO, idRicercaValido } from '../research-store.mjs'
+import { talosResearchPlanCost, talosResearchPlanFor, talosResearchPlanTotals } from '../research/plan.mjs' // D4: il costo stimato sulla carta della ricerca
+import { formattaDollari, prezzoDelModelloEntro, prezzoPerLaRicerca } from './costo-in-dollari.mjs' // decisioni 57 e 144: i dollari sulla carta
 import { LIMITI_DOMANDA_UTENTE, validaDomandeUtente, ESITO_DOMANDA_SENZA_INTERFACCIA } from '../user-question-contract.mjs'
 import { LIMITI_PIANO, validaPiano, esitoPianoPerIlModello } from '../plan-contract.mjs'
 import { discoNode, fontiDaDisco, cancelloSemantico, libreriaStandard, ESTENSIONI_SORGENTE }
     from './dist/kernelPerIlBanco.js'
+import { cancelloWorkerAmmesso, giudicaNelWorker, scaldaIlCancello, PERCORSO_DEL_CANCELLO_WORKER, statoCancelloWorker } from './cancello-in-worker.mjs'
+export { PERCORSO_DEL_CANCELLO_WORKER, statoCancelloWorker }
 import { pezzoConSeparatore } from './accoda-con-a-capo.mjs' // T-15 28/09: l'append non salda le righe (il modulo documenta fonti e perché)
 import { classificaPercorsoDiRete, destinazioneDiRete, motivoNamespacePercorso } from './file-namespace-contract.mjs'
 import { TETTO_PAGINA_WEB, paginaTagliataPerIlModello, salvaPaginaIntera, eUnaPaginaSalvata } from './pagina-web-tagliata.mjs' // politica di taglio di `naviga`, owner 01/10/2026 «Come Hermes»
@@ -123,10 +139,14 @@ import { avvolgiDati, avvisoSospetto, scansionaIstruzioni, luogoDellaFonte, ISTR
 export { APERTURA_DATI, CHIUSURA_DATI, avvolgiDati, avvisoSospetto, neutralizzaDati, scansionaIstruzioni, togliConfiniDati, testoPerLoSchermo, luogoDellaFonte, ISTRUZIONE_CONFINE_DATI, ISTRUZIONE_CONFINE_DATI_CON_ADOZIONE, istruzioneConfineDati, SEGNO_ISTRUZIONE_CONFINE, ECCEZIONE_ADOZIONE, SEGNO_ECCEZIONE_ADOZIONE, TIPI_DI_LUOGO, INTESTAZIONE_RISULTATO_FIGLIO, testoDelRisultatoFiglio, sospettoNeiRisultatiFigli, INTESTAZIONE_ESITO_WORKFLOW, testoDellEsitoWorkflow } from './confine-dati.mjs'
 import { serveLoStatoDelBersaglio, motivoPerNonScrivereTesto } from './guardia-scrittura-binari.mjs' // F-001, owner 02/10/2026: «tutta la guardia di Hermes»
 import { bloccoDelPavimento, rifiutoDelPavimento } from './pavimento-comandi.mjs' // N-02, owner 02/10/2026: il pavimento di Hermes, parti 1+2+3
+import { notaPaginaDaAggiungere, indirizzoPulito, titoloPulito, RIGA_PAGINA_DA_ALTROVE, TESTA_PAGINA_BROWSER } from './pagina-del-browser.mjs' // decisione 201 (04/11/2026)
+import { cancellazioneCritica } from './cancellazioni-critiche.mjs' // decisione 155 (04/11/2026): la sola carta nuova dell'Accesso pieno
 import { notaDoveSei, ultimaNotaDove, aliasDelPercorso, argomentiConAlias } from './dove-sei.mjs' // L1 (owner 20/10/2026): il percorso vero e gli alias
 import { homedir } from 'node:os'
 import { vistaWindows, vistaLinux } from './percorsi-casa-linux.mjs' // Fase B, owner 01/10/2026: le due viste dello stesso percorso
-import { SCRIPT_FATTI_WSL, leggiFattiWsl, sceltaUtenteWsl, discoDellaCartella } from './utente-wsl.mjs' // F009, owner 01/10/2026: con che utente girano i comandi Linux
+import { SCRIPT_FATTI_WSL, leggiFattiWsl, sceltaUtenteWsl, discoDellaCartella, distroSenzaUtenteNormale, comandoChiedeRootWsl } from './utente-wsl.mjs' // F009, owner 01/10/2026: con che utente girano i comandi Linux
+import { notaProgrammaMancante } from './programma-mancante.mjs' // COD-207, 30/10/2026: «"git" is not available in this environment»
+import { conNotaDegliAccorciati } from './avviso-accorciato.mjs' // M2 della cura per Luna 6 (05/11/2026): la nota in coda sugli esiti accorciati
 
 /**
  * ⭐ Ri-esportato per Harness UI (piano elegant-spinning-dongarra.md, §1.3,
@@ -714,6 +734,23 @@ export function datiDelRifiuto({ codice, ritentabile, motivo } = {}) {
     if (typeof codice !== 'string' || !/^[A-Z][A-Z0-9_]*$/u.test(codice)) return null
     return { codice, ...(typeof ritentabile === 'boolean' ? { ritentabile } : {}), motivo: typeof motivo === 'string' ? motivo.trim() : '' }
 }
+/*
+ * Il «no» della persona (Tester R2, R3, R4, 03/11/2026; forma `in-corso/FORMA-DECISIONE-44-TESTO-2026-11-03.md`, aggiunta del 03/11): un no su una carta
+ *   arrivava come `REFUSED.`, la parola dei rifiuti di sicurezza. Il passo si vedeva fallito, in rosso, e il modello lo leggeva come «permesso non ancora dato»:
+ *   chiedeva di nuovo, con una domanda e «Sì» consigliato. Ora, se a dire no è stata la persona (le frasi di serie del no), il modello legge DECLINED e la
+ *   consegna di non chiedere ancora. I rifiuti di sicurezza restano REFUSED. Le deleghe restano come sono (`rifiutoDellaDelega`, condizione della CLI).
+ */
+export const TESTO_DEL_NO = 'DECLINED. The person said no to this. Do not ask again for it, by a card or a question, unless the person brings it up. Go on without it, or say in one line what you can do instead.'
+/** Il motivo di un cancello che lancia: nessuno ha detto no, la domanda non è partita. Uno solo per le tre porte (scrittura, strumenti, testo). */
+export const MOTIVO_CANCELLO_ROTTO = 'the approval could not be asked (the gate failed); nothing was approved.'
+const FRASI_DEL_NO = Object.freeze(['the person declined to run this call.', 'the person did not approve it.', 'the owner did not approve this action.'])
+/** `REFUSED. <frase di serie del no> <coda>` ⇒ `DECLINED. …<coda>`; altrimenti `null` (un rifiuto di sicurezza, o un testo che non è un rifiuto). */
+export function comeNoDellaPersona(testo) {
+    if (typeof testo !== 'string' || !testo.startsWith('REFUSED. ')) return null
+    const resto = testo.slice('REFUSED. '.length)
+    const frase = FRASI_DEL_NO.find((f) => resto.startsWith(f))
+    return frase ? `${TESTO_DEL_NO}${resto.slice(frase.length)}` : null
+}
 export function rifiutoDellaDelega({ codice, ritentabile, motivo } = {}) {
     const conCodice = typeof codice === 'string' && /^[A-Z][A-Z0-9_]*$/u.test(codice)
     const grezzo = typeof motivo === 'string' && motivo.trim() ? motivo.trim() : 'the delegation was refused.'
@@ -731,7 +768,65 @@ export function rifiutoDellaDelega({ codice, ritentabile, motivo } = {}) {
 
 export const CONTINUAZIONI_MASSIME = 3
 export const NOTA_CONTINUA_DOPO_TETTO = '[TALOS: your previous answer was cut off by the output length limit. Continue exactly where it stopped, without repeating what you already wrote. If you were about to call a tool, call it now.]'
-export const NOTA_CONTINUA_DOPO_SILENZIO = '[TALOS: the provider went silent and your previous answer was cut off mid-stream. This is a transport interruption, not a change in your tools. Continue exactly where it stopped, without repeating what you already wrote.]'
+/*
+ * R-53 (owner 01/11/2026, «Sì, entra»; forma con Desktop, CLI e Mobile, `in-corso/PROPOSTA-RIAPERTURA-SU-COMANDO-ROSSO-2026-11-01.md`): il modello chiude con le prove ancora
+ * rosse e lo dichiara. Su 57 corse di Luna a `high`, 4 fallite su 4 chiudevano con l'ultimo comando in errore, e solo 2 riuscite su 53. Si riapre una volta sola sull'esito
+ * VERO del comando, senza leggere il testo del modello e senza un secondo modello. Hermes lo fa spento di serie, dopo le modifiche senza una prova fresca e fino a due volte
+ * (`agent/verification_stop.py:53`, `:161`); Codex (`core/src/session/turn.rs:720`) e Claude Code lo lasciano ai ganci della persona. Il testo della nota è quello misurato in `hv26`.
+ */
+export const NOTA_RILEGGI_PRIMA_DI_CHIUDERE = '[TALOS: Before you close: reread the request. If any part of it is not done and checked, and you can still do it, carry on now. If everything is done, say so in one line.]'
+/*
+ * R-58 (02/11/2026, forma con gli OK di CLI, Mobile e Desktop): i testi di ripartenza stanno in un posto solo, scelti per motivo.
+ * `prova-rossa`: l'ultima prova del giro è rossa e il giro ha modificato file (`prova-rossa.mjs`). Il testo non dice che le modifiche hanno
+ * causato il rosso (Desktop) e non suggerisce di riportare indietro i file: la via corta per il modello sarebbe `git stash`/`checkout`/`reset`,
+ * che in Accesso pieno perderebbero il lavoro non salvato della persona (revisione del Mobile, S1-1). Riferimento pulito: `git worktree add`.
+ */
+export const NOTE_DI_RIPARTENZA = Object.freeze({
+    'comando-rosso': NOTA_RILEGGI_PRIMA_DI_CHIUDERE,
+    'prova-rossa': '[TALOS: The last test run in this turn ended with failures. Before you close, sort them out: a failure that comes from your changes must be fixed now; a failure that was already there before your changes must be reported to the person, with the evidence. To tell them apart, compare with the test results you saw earlier in this turn; if you need a reference without your changes, run the tests in a separate copy made with git worktree add. Never use git stash, checkout, reset, restore or clean on the working files.]',
+})
+export const PASSI_MINIMI_PER_RIAPRIRE = 3
+/*
+ * R-53 bis (owner 01/11/2026, «Sì, entra», `in-corso/PROPOSTA-RIAPERTURA-ROSSO-RILANCIATO-2026-11-01.md`): in `hv27` la prova è uscita rossa due volte, un controllo a mano è
+ * uscito 0 e il modello ha chiuso dichiarando le prove rosse; l'ultimo comando era verde, e nessuno ha riaperto. Conta anche un comando con due errori di fila (owner, «Due
+ * errori di fila»): un verde azzera il conteggio, quindi rosso, verde, rosso non basta. Così un `grep` di verifica che esce 0 prima della cura e 1 dopo non riapre un lavoro
+ * riuscito (revisione del Blocco 21, R16). Rigiocata su 66 corse: 5 fallite su 5 invece di 4, 13 riuscite svegliate su 61 invece di 3. Chiave: il testo del comando e la sua
+ * cartella (Desktop: `npm test` verde altrove non azzera un rosso qui); nessun elenco di programmi di prova. Senza il testo del comando quell'esecuzione non entra, e resta
+ * il segnale dell'ultimo comando.
+ */
+export const ROSSI_DI_FILA_PER_RIAPRIRE = 2
+export const COMANDI_RICORDATI = 64
+export const registraComando = (comandi, processo, rosso) => {
+    if (typeof processo?.comando !== 'string') return
+    const testo = processo.comando.trim().replace(/\s+/gu, ' ')
+    if (!testo) return
+    const chiave = `${processo.cwd ?? ''}\u0000${testo}`
+    const prima = comandi.get(chiave)
+    comandi.delete(chiave) // in coda: al tetto esce il più vecchio
+    comandi.set(chiave, rosso ? (prima ?? 0) + 1 : 0) // i rossi di fila
+    if (comandi.size > COMANDI_RICORDATI) comandi.delete(comandi.keys().next().value)
+}
+export const rossoRilanciato = (comandi) => [...comandi.values()].some((rossiDiFila) => rossiDiFila >= ROSSI_DI_FILA_PER_RIAPRIRE)
+/* `motoreLocale`: rileggere la finestra lì costa minuti e non è misurato (Mobile, 01/11). `giro + 1 < giriMassimi`: una fine pulita non diventa un errore di tetto (CLI). */
+export const deveRiaprireSuComandoRosso = ({ comandoRosso, fileModificati, giaRiaperto, giro, giriMassimi, finishReason, motoreLocale, testo, fermato, rifiutata, tagliata }) =>
+    comandoRosso === true && fileModificati === true && giaRiaperto !== true && fermato !== true && rifiutata !== true && !tagliata && motoreLocale !== true
+    && giro >= PASSI_MINIMI_PER_RIAPRIRE && giro + 1 < giriMassimi
+    && (finishReason === null || finishReason === undefined || finishReason === 'stop')
+    && String(testo ?? '').trim() !== ''
+
+/* PERF R-34 (owner 30/10/2026): la chiamata arrivata come testo in coda alla risposta (vedi `chiamata-nel-testo.mjs`) non si esegue mai
+   per un modello in rete: si toglie e si chiede di rifarla, al più RIPRESE_CHIAMATA_NEL_TESTO volte di fila. Nota di TALOS (prefisso
+   «[TALOS:», `eNotaDiTalos`): va solo al modello — la CLI non disegna `messaggi` (cli/src/tui/event-adapter.ts:165-168, misurato dalla CLI). */
+export const RIPRESE_CHIAMATA_NEL_TESTO = 1
+export const NOTA_CHIAMATA_NEL_TESTO = '[TALOS: your last tool call arrived as plain text inside your answer, not as a tool call, so it was NOT run. If you still need it, call the tool again now with a real tool call; otherwise give your final answer.]'
+export const NOTA_CONTINUA_DOPO_SILENZIO = '[TALOS: the provider went silent and your previous answer was cut off mid-stream. This is a transport interruption, not a change in your tools. If you were about to call a tool, it did not run: call it now. Continue exactly where it stopped, without repeating what you already wrote.]'
+/* Decisions 198-199 (owner 04/11/2026; OK from Performance: fixed text, a `user` note at the END, so the prefix of the cache stays whole).
+   The person pressed ▶ «Resume» on a turn that did not finish: `resume()` (session-registry) adds one of these with
+   `talosOrigin: 'resume-notice'`, never shown as the person. After an error whose answer was cut in the tail, the model would otherwise
+   find its own answer as the last message with no question; after a restart, calls in flight never completed. The second one is the
+   shape of Claude Code («Continue from where you left off…», strings of claude.exe 2.1.318). */
+export const NOTA_RIPRENDI_DOPO_ERRORE = '[TALOS: the previous turn ended before it finished. The person asked to resume it. Continue from where you left off, without repeating what you already wrote.]'
+export const NOTA_RIPRENDI_DOPO_INTERRUZIONE = '[TALOS: the previous turn was interrupted before it finished (TALOS was closed or restarted). The person asked to resume it. Tool calls that were in flight did not complete: check the state of files and commands before relying on them, then continue from where you left off without repeating what is already done.]'
 
 /*
  * ⛔ Tetto all'attesa AUTO-DECISA del canale incerto (lezione `Retry-After`/`x-should-retry` del
@@ -801,7 +896,12 @@ const SENTINELLA_FERMATO = Symbol('fermato-su-richiesta')
 /** Come SENTINELLA_FERMATO: il tempo dei dati è scaduto (F-ENG-4, `leggiInattivitaDatiMs`). */
 const SENTINELLA_SILENZIO = Symbol('silenzio-dei-dati')
 
-export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetizioniMassime = RIPETIZIONI_IDENTICHE_MASSIME, onChiamataCompleta, inattivitaDatiMs = leggiInattivitaDatiMs() } = {}) {
+/* R1-R (CLI 30/10; Desktop e Mobile): il fornitore tace mentre R-34 tiene solo un possibile attacco ⇒ dopo questa pausa torna testo.
+   Solo per la vista dal vivo: la garanzia è lo svuotamento a ogni fine del flusso, che non dipende da nessun timer. */
+const SENTINELLA_PAUSA = Symbol('pausa-col-trattenuto')
+export const RILASCIO_DOPO_PAUSA_MS = 300
+
+export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetizioniMassime = RIPETIZIONI_IDENTICHE_MASSIME, onChiamataCompleta, inattivitaDatiMs = leggiInattivitaDatiMs(), nomiAttrezzi = null } = {}) {
     /*
      * ⛔⛔ STREAM-JSON-INTERO (08/10/2026, bugfixer; trovato indagando BC76-07) — un fornitore, un proxy o un server locale che
      *   IGNORA `stream: true` e risponde con un `application/json` COMPLETO. Qui sotto non diventava nessun evento: «flusso finito
@@ -855,11 +955,17 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
     /* 29/10/2026 (owner «Toglierla dalla risposta»): dopo il `<think>`, le righe del confine dei dati che un modello piccolo ricopia
        nella sua risposta (`confine-dati.mjs`). Qui, PRIMA dei delta e della storia: schermo, CLI, riprese e giro dopo escono puliti. */
     const filtroDeiConfini = creaFiltroConfiniNelTesto()
+    /* PERF R-34 (owner 30/10/2026; condizione della CLI): dopo i confini, la chiamata arrivata come testo in coda — trattenuta dal suo
+       attacco e tolta a fine flusso, così non arriva mai a un delta (la CLI stampa dal vivo). Senza attrezzi offerti non fa niente. */
+    const filtroDelleChiamate = creaFiltroChiamataNelTesto(nomiAttrezzi)
+    let chiamataTolta = null
     let ragionamentoNativo = false
     let ragionamentoDalTesto = ''
     const toolCalls = []
+    const sorveglianzeArgomenti = [] // R-47: una per chiamata
     let usage = null
     let providerState = null
+    const dettagliVisti = [] // decisione 326 (B): i `reasoning_details` di OpenRouter, uniti pezzo per pezzo
     let finishReason = null
     /*
      * ⛔⛔ 25/09/2026 notte — IL MOTIVO CHE IL FORNITORE CI DICEVA, E NOI BUTTAVAMO (sessione vera `c15ba17c…`, Gemini 3.8).
@@ -870,6 +976,7 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
      */
     let nativeFinishReason = null
     let erroreFornitore = null
+    let rifiutoDelModello = false // Blocco 20: il testo del rifiuto non si tiene, basta sapere che c'è stato (arriva a pezzi in `delta.refusal`)
     /*
      * ⛔ Decisione 14 dell'owner (08/10/2026 sera) — CHI HA RISPOSTO DAVVERO. OpenRouter dice in ogni pacchetto quale fornitore a
      *   valle ha servito la richiesta (`"provider": "DeepInfra"`, docs OpenRouter «API reference», lette l'08/10). Hermes lo scrive
@@ -914,16 +1021,42 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
      */
     let ultimoDatoAlle = null
     let datiVisti = 0
+    /* R1-R: la lettura in corso NON si butta quando vince la pausa — la si riprende al giro dopo (un pezzo perso sarebbe peggio della
+       parola mancante). Si libera solo quando il suo pezzo è arrivato. */
+    let letturaInCorso = null
     const leggiInGara = () => {
-        const corse = [lettore.read()]
+        letturaInCorso ??= lettore.read()
+        const corse = [letturaInCorso]
         if (abortito) corse.push(abortito)
         let timer = null
+        let timerPausa = null
         if (ultimoDatoAlle !== null && Number.isFinite(inattivitaDatiMs) && inattivitaDatiMs > 0) {
             const resta = Math.max(0, ultimoDatoAlle + inattivitaDatiMs - Date.now())
             corse.push(new Promise((risolvi) => { timer = setTimeout(() => risolvi(SENTINELLA_SILENZIO), resta); timer.unref?.() }))
         }
+        if (filtroDelleChiamate.inAttesaDiAttacco()) {
+            corse.push(new Promise((risolvi) => { timerPausa = setTimeout(() => risolvi(SENTINELLA_PAUSA), RILASCIO_DOPO_PAUSA_MS); timerPausa.unref?.() }))
+        }
         if (corse.length === 1) return corse[0]
-        return Promise.race(corse).finally(() => { if (timer !== null) clearTimeout(timer) })
+        /* chi vince la gara spegne TUTTI i timer: dopo la fine del flusso nessun rilascio può arrivare (Desktop, CLI) */
+        return Promise.race(corse).finally(() => { if (timer !== null) clearTimeout(timer); if (timerPausa !== null) clearTimeout(timerPausa) })
+    }
+    /* R1-R (Mobile: la garanzia vera): a una fine NON normale del flusso — Stop, errore del fornitore, silenzio, taglio del trasporto —
+       ciò che i filtri del testo tengono esce UNA volta, nel testo e nei delta, prima dell'errore. Un attacco già cominciato non esce:
+       torna come «interrotta» (il giro lo scrive nel giornale, `chiamata-nel-testo`). Il `<think>` resta come prima (fuori da R1-R). */
+    const svuotaAllaFineInterrotta = () => {
+        let testo = ''
+        let interrotta = null
+        try {
+            testo = filtroDelleChiamate.scrivi(filtroDeiConfini.chiudi())
+            const c = filtroDelleChiamate.chiudiInterrotto()
+            testo += c.testo
+            interrotta = c.interrotta
+        } catch { /* un guasto qui non copre il motivo vero della fine */ }
+        content += testo // il parziale resta giusto anche se chi ascolta lancia
+        /* revisione del Desktop S3 (30/10): un ascoltatore che lancia QUI non deve sostituire l'errore vero (Stop, fornitore, silenzio) */
+        try { if (testo) onDelta?.({ tipo: 'testo', delta: testo }) } catch { /* idem */ }
+        try { if (interrotta) onDelta?.({ tipo: 'chiamata-nel-testo-interrotta', ...interrotta }) } catch { /* idem */ }
     }
 
     /*
@@ -1105,6 +1238,12 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
     for (;;) {
         const datiPrima = datiVisti
         const letto = await leggiInGara()
+        if (letto === SENTINELLA_PAUSA) {
+            const fuori = filtroDelleChiamate.rilascia()
+            if (fuori) { content += fuori; onDelta?.({ tipo: 'testo', delta: fuori }) }
+            continue
+        }
+        letturaInCorso = null
         if (letto === SENTINELLA_SILENZIO) {
             await lettore.cancel().catch(() => { /* la connessione se ne va comunque */ })
             throw new SilenzioDelFornitoreError(inattivitaDatiMs)
@@ -1146,6 +1285,7 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
             if (typeof motivoFinale === 'string' && finishReason !== 'error') finishReason = motivoFinale
             if (typeof motivoFinale === 'string') datiVisti += 1 // F-ENG-4: la fine della risposta è un dato
             if (typeof sceltaDelPacchetto?.native_finish_reason === 'string' && sceltaDelPacchetto.native_finish_reason) nativeFinishReason = sceltaDelPacchetto.native_finish_reason
+            if (portaUnRifiuto(sceltaDelPacchetto)) rifiutoDelModello = true
             const delta = sceltaDelPacchetto?.delta
             if (!delta) {
                 /*
@@ -1170,12 +1310,14 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
             }
             vistoUnDelta = true
             /* F-ENG-4: un delta vuoto (solo `role`, o contenuto '') non è un dato: è un fornitore che dice «ci sono» */
-            if (delta.content || delta.reasoning_content || delta.reasoning || delta.tool_calls?.length) datiVisti += 1
+            /* I3: `talos_respiro` is the breath of a call held by the emulated tools (`attrezzi-emulati.mjs`): a datum for this guard, and nothing else — never saved, never an event */
+            if (delta.content || delta.reasoning_content || delta.reasoning || delta.tool_calls?.length || delta.reasoning_details?.length || delta.talos_respiro === true) datiVisti += 1
             if (delta.talos_provider_state?.version === 1) providerState = delta.talos_provider_state
+            if (Array.isArray(delta.reasoning_details)) aggiungiDettagliDelRagionamento(dettagliVisti, delta.reasoning_details)
             if (delta.content) {
                 const parti = filtroDelTesto.scrivi(delta.content)
                 if (parti.ragionamento) { ragionamentoDalTesto += parti.ragionamento; if (!ragionamentoNativo) onDelta?.({ tipo: 'ragionamento', delta: parti.ragionamento }) }
-                const testoPulito = filtroDeiConfini.scrivi(parti.testo)
+                const testoPulito = filtroDelleChiamate.scrivi(filtroDeiConfini.scrivi(parti.testo))
                 if (testoPulito) { content += testoPulito; onDelta?.({ tipo: 'testo', delta: testoPulito }) }
             }
             const ragionamento = delta.reasoning_content ?? delta.reasoning
@@ -1186,7 +1328,11 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
                 const eraNuova = toolCalls.length > quanteErano
                 if (pezzo.id) toolCalls[i].id = pezzo.id
                 if (pezzo.function?.name) toolCalls[i].function.name += pezzo.function.name
-                if (pezzo.function?.arguments) toolCalls[i].function.arguments += pezzo.function.arguments
+                if (pezzo.function?.arguments) {
+                    toolCalls[i].function.arguments += pezzo.function.arguments
+                    sorveglianzeArgomenti[i] ??= creaSorveglianzaArgomenti()
+                    if (sorveglianzeArgomenti[i](pezzo.function.arguments)) throw Object.assign(new Error('The arguments of a tool call turned into endless blank space.'), { code: 'PROVIDER_STREAM_INVALID', argomentiSenzaFine: true })
+                }
                 /*
                  * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 —
                  * TERZO tipo di delta, mai emesso prima d'ora: gli argomenti
@@ -1230,10 +1376,11 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
         throw Object.assign(new Error("The provider's stream finished without a final event."), { code: 'PROVIDER_STREAM_INCOMPLETE' })
     }
     } catch (errore) {
+        svuotaAllaFineInterrotta() // R1-R: prima di qualunque uscita, anche lo Stop
         // Preserve the reader's diagnostics; orchestration owns the recovery decision.
         if (errore?.fermatoSuRichiesta || segnaleStop?.aborted) throw errore
         const chiamateInCorso = toolCalls.some(Boolean)
-        if (chiamateInCorso) annullaAnnunciate(0, '⛔ The connection to the provider dropped before this call was complete: it was not run.')
+        if (chiamateInCorso) annullaAnnunciate(0, errore?.argomentiSenzaFine ? '⛔ The model filled this call with blank space: it was not run.' : '⛔ The connection to the provider dropped before this call was complete: it was not run.')
         await lettore.cancel().catch(() => {})
         if (errore && typeof errore === 'object') {
             errore.parziale = { content: !vistoUnDelta && typeof messaggioIntero?.content === 'string' ? togliRigheDiConfineNelTesto(separaRagionamentoNelTesto(messaggioIntero.content).testo) : content, chiamateInCorso } // D4 (revisione 20/10): niente `<think>` nel frammento rimesso in storia
@@ -1253,12 +1400,16 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
            quello preso dal testo — invece di sommarli mentre arrivano: un blocco nel testo arrivato PRIMA del nativo non resta
            accodato, e il ritiro di un blocco mai chiuso vale anche se il nativo è arrivato a metà. */
         if (!ragionamentoNativo) reasoning = ragionamentoDalTesto
-        const finale = filtroDeiConfini.scrivi(coda.testo) + filtroDeiConfini.chiudi()
+        const finaleConfini = filtroDeiConfini.scrivi(coda.testo) + filtroDeiConfini.chiudi()
+        /* con chiamate STRUTTURATE nella stessa risposta R-34 non interviene: il trattenuto torna testo com'era */
+        const chiusaChiamate = (() => { const prima = filtroDelleChiamate.scrivi(finaleConfini); const c = filtroDelleChiamate.chiudi(); return c.tolta && toolCalls.some(Boolean) ? { testo: prima + c.grezzo, tolta: null } : { testo: prima + c.testo, tolta: c.tolta } })()
+        if (chiusaChiamate.tolta) chiamataTolta = chiusaChiamate.tolta // PERF R-34: il giro la vede sulla risposta
+        const finale = chiusaChiamate.testo
         if (finale) { content += finale; onDelta?.({ tipo: 'testo', delta: finale }) }
     }
     finalizza(-1)
     const motiviDelFornitore = { ...(nativeFinishReason ? { nativeFinishReason } : {}), ...(erroreFornitore ? { erroreFornitore } : {}),
-        ...(fornitoreAValle ? { fornitoreAValle } : {}) }
+        ...(fornitoreAValle ? { fornitoreAValle } : {}), ...(rifiutoDelModello ? { rifiutoDelModello } : {}) }
     /*
      * Le copie oltre la soglia non entrano nella conversazione. ⛔ Si taglia
      * l'ARRAY, non solo l'esecuzione: un `tool_call` senza il suo
@@ -1332,12 +1483,19 @@ export async function consumaFlussoSSE(response, onDelta, { segnaleStop, ripetiz
         if (limite.toolCalls.length > 0) sceltaIntera.tool_calls = limite.toolCalls
         const ragionamentoIntero = (messaggioIntero.reasoning_content ?? messaggioIntero.reasoning) || nelTesto.ragionamento
         if (ragionamentoIntero) sceltaIntera.reasoning_content = ragionamentoIntero
+        if (Array.isArray(messaggioIntero.reasoning_details) && messaggioIntero.reasoning_details.length > 0) {
+            Object.defineProperty(sceltaIntera, DETTAGLI_DEL_RAGIONAMENTO, { value: aggiungiDettagliDelRagionamento([], messaggioIntero.reasoning_details), enumerable: false })
+        }
         return { scelta: sceltaIntera, usage, ...(finishReason !== null ? { finishReason } : {}), ...(limite.ripetizione ? { ripetizione: limite.ripetizione } : {}), ...motiviDelFornitore }
     }
     const scelta = { role: 'assistant', content: content || null }
     if (toolCalls.length > 0) scelta.tool_calls = toolCalls
     if (reasoning) scelta.reasoning_content = reasoning
     if (streamCompleted && !ripetizione && providerState) scelta.talos_provider_state = providerState
+    /* PERF R-34: il frammento tolto dal flusso, su una proprietà-simbolo (non va nel JSON verso il fornitore); il giro decide che farne */
+    if (chiamataTolta && toolCalls.length === 0) Object.defineProperty(scelta, CHIAMATA_NEL_TESTO, { value: chiamataTolta, enumerable: false })
+    /* Decisione 326 (B): i dettagli del ragionamento, fuori dal JSON come sopra; li rimanda solo la continuazione di una vuota */
+    if (dettagliVisti.length > 0 && !ripetizione) Object.defineProperty(scelta, DETTAGLI_DEL_RAGIONAMENTO, { value: dettagliVisti, enumerable: false })
     return { scelta, usage, ...(finishReason !== null ? { finishReason } : {}), ...(ripetizione ? { ripetizione } : {}), ...motiviDelFornitore,
         ...(tempiDelMotore ? { timings: tempiDelMotore } : {}) }
 }
@@ -1367,7 +1525,36 @@ function descriviErroreDelFornitore(errore) {
     const messaggio = typeof errore.message === 'string' ? errore.message.slice(0, 300) : ''
     const codice = typeof errore.code === 'string' || Number.isFinite(errore.code) ? errore.code : null
     const tipo = typeof errore.metadata?.error_type === 'string' ? errore.metadata.error_type : null
-    return { messaggio, codice, tipo }
+    /* Giro 13 (MEDIO del revisore dei fornitori): il messaggio del fornitore a valle che OpenRouter avvolge in `metadata.raw` si legge, NON
+       enumerabile così la forma che `chiama` restituisce (`erroreFornitore`) resta la stessa per chi la legge (la CLI). */
+    return Object.defineProperty({ messaggio, codice, tipo }, 'aValle', { value: messaggioAValle(errore.metadata?.raw), enumerable: false })
+}
+
+/* Giro 13 (MEDIO del revisore dei fornitori): OpenRouter avvolge l'errore del fornitore a valle in `metadata.raw`, una stringa JSON e a volte
+   un oggetto («Errors and debugging»: «metadata.raw: the raw error from the provider»). Come Hermes (`agent/error_classifier.py:1424-1428`,
+   `_openrouter_wrapped_message`: il `message` dell'errore interno di `raw`) se ne prende il messaggio, con una lettura limitata (8 KiB al
+   massimo da analizzare, 300 caratteri in uscita) che non lancia mai: un `raw` strano dà la stringa vuota o il suo inizio. */
+const RAW_DA_ANALIZZARE_MASSIMO = 8_192
+function messaggioAValle(raw) {
+    try {
+        let interno = raw
+        if (typeof raw === 'string') {
+            if (raw.length > RAW_DA_ANALIZZARE_MASSIMO) return raw.slice(0, 300)
+            try { interno = JSON.parse(raw) } catch { return raw.slice(0, 300) }
+            if (typeof interno === 'string') return interno.slice(0, 300)
+        }
+        if (!interno || typeof interno !== 'object') return ''
+        const dentro = interno.error
+        const testo = typeof dentro === 'string' ? dentro
+            : typeof dentro?.message === 'string' ? dentro.message
+                : typeof interno.message === 'string' ? interno.message : ''
+        return testo.slice(0, 300)
+    } catch { return '' }
+}
+
+/** Il testo con cui si riconosce la finestra piena: il messaggio del pacchetto e quello del fornitore a valle (giro 13). */
+function testoDelFornitore(descritto) {
+    return [descritto?.messaggio, descritto?.aValle].filter(Boolean).join(' ')
 }
 
 /*
@@ -1378,16 +1565,59 @@ function descriviErroreDelFornitore(errore) {
  *   overflow di contesto, si compatta e non si ripete) il codice o il marcatore nel messaggio la fanno riconoscere; sotto esce il
  *   «contesto pieno» dei fili compatibili (`erroreFinestraPiena`), senza reinvii.
  */
+/* Cura 324, giro 12 (MEDIO del revisore delle prove, sonda V15 dei fornitori): OpenRouter dice la finestra piena anche DENTRO il flusso
+   col pacchetto documentato, `{ code: 400, message: "This endpoint's maximum context length is …", metadata: { error_type:
+   "context_length_exceeded" } }`: il codice è lo stato HTTP, il segno sta nel tipo e nel messaggio. Si leggono come l'HTTP: il tipo
+   (Hermes `agent/error_classifier.py:689`, `context_length_exceeded` e `max_tokens_exceeded` ⇒ overflow) e lo stesso classificatore del
+   corpo HTTP (`classificaErroreFornitore`: i suoi segni, un 413 sì, un 429 mai). Il classificatore vale solo quando il codice è uno stato
+   HTTP o manca: un codice CON NOME (il motore dell'app, LOS-11) decide lui, e la frase «context window» non lo scavalca.
+   Giro 13 (MEDIO del revisore delle prove): `max_tokens_exceeded` è il tetto d'USCITA (OpenRouter, «Errors and debugging»: «output limit
+   reached»), ridurre l'ingresso non lo cura: come Codex (`codex-rs/codex-api/src/sse/responses_error.rs:47-48`, solo
+   `context_length_exceeded` ⇒ finestra piena) non è finestra piena su nessuno dei due fili, e il tipo si legge uguale nel flusso e in HTTP.
+   Un codice in sole cifre è uno stato o un codice numerico del fornitore (Z.AI `1261`): decide il classificatore, un 429 mai. */
 function eFinestraPienaDelFornitore(errore) {
     if (!errore || typeof errore !== 'object') return false
+    if (Number(errore.codice) === 429) return false
+    const codiceDiStato = errore.codice == null || /^\d+$/u.test(String(errore.codice))
+    const testo = testoDelFornitore(errore)
     return /^(?:context_length_exceeded|local_context_exceeded)$/iu.test(String(errore.codice ?? ''))
-        || /context[_ ]length[_ ]exceeded/iu.test(String(errore.messaggio ?? ''))
+        || /^context_length_exceeded$/iu.test(String(errore.tipo ?? ''))
+        || /context[_ ]length[_ ]exceeded/iu.test(testo)
+        || (codiceDiStato && classificaErroreFornitore({ stato: errore.codice, message: testo, code: errore.codice }) === 'contesto-pieno')
 }
 
-/** Il «contesto pieno» dei fili compatibili (`runtime-owner-adapter.mjs`, classe `contesto`, F1 della CLI 0.6.8): non si ripete. */
-function erroreFinestraPiena(usage) {
-    return Object.assign(new Error('The request is larger than the model context window (context_length_exceeded).'),
+/** La frase dei numeri del fornitore, la stessa che `numeriDelContestoPieno` rilegge per prima (`frasePienoConNumeri` dell'adattatore). */
+function fraseDeiNumeri(numeri) {
+    return numeri ? `: ${numeri.richiesti} input tokens requested, ${numeri.massimo} maximum${Number.isSafeInteger(numeri.uscita) ? `, ${numeri.uscita} output tokens` : ''}` : ''
+}
+
+/** Il «contesto pieno» dei fili compatibili (`runtime-owner-adapter.mjs`, classe `contesto`, F1 della CLI 0.6.8): non si ripete.
+ *  Giro 12: i numeri del fornitore (`numeriDelContestoPieno`) restano nella frase che l'adattatore usa già (`frasePienoConNumeri`),
+ *  così chi compatta sceglie il bersaglio dai numeri veri come per il corpo HTTP, mai il 70% di ripiego. */
+function erroreFinestraPiena(usage, numeri = null) {
+    return Object.assign(new Error(`The request is larger than the model context window (context_length_exceeded)${fraseDeiNumeri(numeri)}.`),
         { code: 'PROVIDER_REQUEST_ERROR', classe: 'contesto', transitorio: false, stato: null, finestraPiena: true, ...(usage ? { usage } : {}) })
+}
+
+/* Giro 13 (MEDIO del revisore dei fornitori): il corpo HTTP di un rifiuto si legge come il pacchetto nel flusso. Il messaggio dell'errore
+   porta i primi 300 caratteri del corpo; quando la finestra piena sta più in là (un messaggio lungo, il fornitore a valle in `metadata.raw`)
+   o i numeri letti lì non sono quelli del fornitore, si aggiunge il marcatore coi numeri veri, la stessa frase del flusso. Corpo analizzato
+   solo fino a 64 KiB, mai un lancio; un 429 è traffico, mai finestra piena (CP-REV-01). */
+const CORPO_DA_ANALIZZARE_MASSIMO = 65_536
+function fraseDellaFinestraNelCorpo(corpo, stato) {
+    if (stato === 429 || corpo.length > CORPO_DA_ANALIZZARE_MASSIMO) return ''
+    let j
+    try { j = JSON.parse(corpo) } catch { return '' }
+    const errore = j?.error
+    if (!errore || typeof errore !== 'object' || Array.isArray(errore)) return ''
+    const descritto = descriviErroreDelFornitore(errore)
+    if (!eFinestraPienaDelFornitore(descritto)) return ''
+    const numeri = numeriDelContestoPieno({ message: testoDelFornitore(descritto) })
+    const inizio = corpo.slice(0, 300)
+    const giaLetti = numeriDelContestoPieno({ message: inizio })
+    const stessiNumeri = giaLetti?.richiesti === numeri?.richiesti && giaLetti?.massimo === numeri?.massimo && giaLetti?.uscita === numeri?.uscita
+    if (stessiNumeri && classificaErroreFornitore({ stato, message: inizio }) === 'contesto-pieno') return ''
+    return ` (context_length_exceeded)${fraseDeiNumeri(numeri)}`
 }
 
 /**
@@ -2111,6 +2341,12 @@ function caratteriDelMessaggio(m) {
  * li tiene distinti, perché quella rottura non la causa nessuno) · 'sistema' · 'compattazione' (la storia di prima non è più un
  * prefisso di questa: riassunta o riscritta) · 'pausa' (stessa impronta, il fornitore rilegge 0 dopo averne riletti, ed è passata la
  * durata del marcatore) · 'sconosciuto' (lo stesso, ma prima della durata).
+ * Decisione 183 (owner 04/11/2026): «sconosciuto» non lo dice più nessuno. Stessa impronta e cache a 0 prima della durata vuol dire che
+ * la richiesta è uscita IDENTICA (misurato: il risveglio dopo un comando in sottofondo allunga la richiesta di prima byte per byte) e a
+ * perderla è stato chi la serve: 'fornitore' se il fornitore a valle è cambiato (un fatto, vince anche sulla pausa), 'persa-dal-fornitore'
+ * se è lo stesso o non è detto (OpenRouter, stesso corpo e stesso endpoint di Particle AI: 0, 0, letti, letti, letti, 0; DeepSeek
+ * dichiara la sua cache «best-effort», api-docs.deepseek.com/guides/kv_cache, letta il 04/11/2026). Il valore resta nel contratto: gli
+ * eventi già scritti si rileggono, e chi non conosce i due nomi nuovi li mostra come «un motivo che questa versione non conosce».
  */
 const impronta = (valore) => createHash('sha256').update(typeof valore === 'string' ? valore : JSON.stringify(valore ?? null)).digest('hex').slice(0, 16)
 export function improntaDellaRichiesta({ modello = '', messaggi = [], attrezzi = [] } = {}) {
@@ -2128,7 +2364,69 @@ export function improntaDellaRichiesta({ modello = '', messaggi = [], attrezzi =
         messaggi: lista.slice(fineTesta, fineStoria).map((m) => impronta(senzaMarcatoriDiCache(m))),
     }
 }
-export function motivoDellaCacheRicominciata(prima, adesso, { tokenDaCache = null, ora = Date.now() } = {}) {
+/*
+ * ⭐ Decisione 193, punto 1 (owner 04/11/2026 19:41): «se un fornitore a valle perde la cache due volte nella stessa sessione, la sessione lo
+ *   evita e passa a un altro». Forma: FORMA-CACHE-193-194-2026-11-04 (OK di Mobile, CLI e Performance). Misura: lo stesso corpo su Particle AI
+ *   ha riletto 0, 0, 39168, 39168, 39168, 0 token; su Wafer 99,6-99,9% a ogni risveglio (RAPPORTO-CACHE-183).
+ * Il conto vive nello stato della cache (`perditeDelFornitore`, `fornitoriEvitati`, `senzaEvitare`), che passa fra le richieste e fra i giri
+ *   (`statoCachePrecedente`): conta solo `persa-dal-fornitore` (stesso fornitore, stessa richiesta, prima della scadenza), mai `fornitore`
+ *   (un cambio di chi serve è una scelta di OpenRouter) né `pausa`. Per modello: un altro modello ha altri fornitori.
+ * ⛔ Lo slug si legge dagli endpoint del modello (mai indovinato dal nome), e si evita solo se ne resta almeno un altro: altrimenti
+ *   l'evento lo dice (`unico-fornitore`) e il corpo resta com'è. Solo verso OpenRouter: un compatibile di terzi non conosce `provider`.
+ */
+const PERDITE_PER_EVITARE = 2
+/** Vero per un modello che va a OpenRouter: senza fonte davanti, o con `openrouter:` (la fonte si separa con `:`, `provider-registry.mjs`). */
+export function modelloDiOpenRouter(modello) {
+    if (typeof modello !== 'string' || !modello.includes('/')) return false
+    const fonte = /^([a-z][a-z0-9-]*):(?=.)/u.exec(modello)?.[1]
+    return !fonte || fonte === 'openrouter'
+}
+function memoriaDeiFornitori(stato) {
+    const memoria = {}
+    for (const campo of ['perditeDelFornitore', 'fornitoriEvitati', 'senzaEvitare']) {
+        if (stato?.[campo] && typeof stato[campo] === 'object') memoria[campo] = stato[campo]
+    }
+    return memoria
+}
+/** Lo stato senza gli evitati di `modello`, e con `modello` fra quelli per cui la sessione non evita più (dopo un 404 di OpenRouter). */
+export function senzaEvitatiPer(stato, modello) {
+    if (!stato || typeof stato !== 'object') return stato
+    const { [modello]: _tolti, ...altri } = stato.fornitoriEvitati ?? {}
+    return { ...stato, fornitoriEvitati: altri, senzaEvitare: [...new Set([...(Array.isArray(stato.senzaEvitare) ? stato.senzaEvitare : []), modello])] }
+}
+/**
+ * Una perdita in più per `fornitore` su `modello`; alla seconda si decide UNA volta (`avvisa` riceve l'evento `fornitore-evitato`).
+ * Pura salvo la lettura degli endpoint; una lettura che non riesce non decide (si riprova alla perdita dopo).
+ */
+export async function contaPerditaDelFornitore(memoria, { modello, fornitore, fetchDiRete, segnale = null, avvisa = () => {} }) {
+    if (Array.isArray(memoria.senzaEvitare) && memoria.senzaEvitare.includes(modello)) return memoria
+    const delModello = memoria.perditeDelFornitore?.[modello] ?? {}
+    const prima = delModello[fornitore] ?? { volte: 0, deciso: false }
+    const voce = { ...prima, volte: prima.volte + 1 }
+    const conVoce = (v, evitati) => ({ ...memoria, perditeDelFornitore: { ...memoria.perditeDelFornitore, [modello]: { ...delModello, [fornitore]: v } },
+        ...(evitati ? { fornitoriEvitati: { ...memoria.fornitoriEvitati, [modello]: evitati } } : {}) })
+    if (voce.deciso || voce.volte < PERDITE_PER_EVITARE) return conVoce(voce)
+    let elenco
+    try { elenco = await fornitoriDelModello({ modello, fetchFn: fetchDiRete, ...(segnale ? { signal: segnale } : {}) }) }
+    catch { return conVoce(voce) }
+    const nome = fornitore.trim().toLowerCase()
+    const suoi = [...new Set(elenco.filter((f) => f.nome.trim().toLowerCase() === nome).map((f) => f.slug))]
+    const evitati = memoria.fornitoriEvitati?.[modello] ?? []
+    if (suoi.length !== 1) {
+        avvisa({ modello, fornitore, slug: null, escluso: false, motivo: 'slug-sconosciuto', volte: voce.volte })
+        return conVoce({ ...voce, deciso: true })
+    }
+    const [slug] = suoi
+    const restano = elenco.filter((f) => f.slug !== slug && !evitati.some((e) => e.slug === f.slug))
+    if (!restano.length) {
+        avvisa({ modello, fornitore, slug, escluso: false, motivo: 'unico-fornitore', volte: voce.volte })
+        return conVoce({ ...voce, deciso: true })
+    }
+    avvisa({ modello, fornitore, slug, escluso: true, volte: voce.volte })
+    return conVoce({ ...voce, deciso: true }, [...evitati, { slug, fornitore }])
+}
+
+export function motivoDellaCacheRicominciata(prima, adesso, { tokenDaCache = null, ora = Date.now(), fornitore = null } = {}) {
     if (!prima || !adesso) return null
     if (prima.modello !== adesso.modello) return 'modello'
     if (prima.attrezzi !== adesso.attrezzi) {
@@ -2139,7 +2437,8 @@ export function motivoDellaCacheRicominciata(prima, adesso, { tokenDaCache = nul
     if (prima.sistema !== adesso.sistema) return 'sistema'
     if (!(prima.messaggi ?? []).every((h, i) => adesso.messaggi[i] === h)) return 'compattazione'
     if (Number(prima.tokenDaCache) > 0 && tokenDaCache === 0) {
-        return Number.isFinite(prima.at) && Number.isFinite(prima.durataMs) && ora - prima.at > prima.durataMs ? 'pausa' : 'sconosciuto'
+        if (typeof prima.fornitore === 'string' && typeof fornitore === 'string' && prima.fornitore !== fornitore) return 'fornitore' // 183
+        return Number.isFinite(prima.at) && Number.isFinite(prima.durataMs) && ora - prima.at > prima.durataMs ? 'pausa' : 'persa-dal-fornitore'
     }
     return null
 }
@@ -2271,6 +2570,11 @@ async function chiamaConRitentaBase({
        variabile, `TALOS_MAX_RETRIES` cambia il numero di ritentativi (0 = nessuno). */
     tentativiMassimi = 1 + ritentativiDiSerie(),
     fetchDiRete = fetch,
+    /* Spesa di servizio (owner 30/10/2026; contratto CONTRATTO-SPESA-DI-SERVIZIO §5.4, progetto parte 2 A): una chiamata che NON è una
+       richiesta della chat (il riassunto) lo dice QUI, dove nasce — `{ scopo, inPrimoPiano }` viaggia alla fetch del giro come
+       `init.talosServizio` (un campo che `fetch` ignora; il multi-fornitore lo toglie prima della rete) e la sua spesa va in
+       `consumo-di-servizio` invece che in `consumo-fornitore`. Assente ⇒ come sempre. */
+    servizio = null,
     /*
      * ⛔⛔⛔ L'ATTESA FRA UN RITENTA E L'ALTRO ERA L'ULTIMO «PUNTO SICURO» —
      * 11/09/2026, misurato PRIMA di toccare una riga (sonda su un finto
@@ -2313,6 +2617,10 @@ async function chiamaConRitentaBase({
        Punto 4: `null` ⇒ nessun marcatore — un riassunto nella forma di sempre (senza attrezzi) non rilegge il prefisso della conversazione
        e nessuno rileggerà il suo: ogni punto comprerebbe solo una scrittura, a 2× col tetto di un'ora. */
     marcatoreDiCache = MARCATORE_CACHE_UN_ORA,
+    /* Decisione 193 (owner 04/11/2026): gli slug di BASE dei fornitori a valle che QUESTA sessione evita (hanno perso la cache due volte).
+       Solo il ciclo di `talosLavora` lo passa, e solo per un modello di OpenRouter: diventa `provider.ignore` («List of provider slugs to
+       skip for this request», docs «Provider routing», lette il 04/11/2026). Vuoto o assente ⇒ il corpo di sempre, byte per byte. */
+    fornitoriDaEvitare = null,
 }) {
     if (attesaRitentaMassimaMs !== undefined && !(typeof attesaRitentaMassimaMs === 'number' && Number.isFinite(attesaRitentaMassimaMs) && attesaRitentaMassimaMs >= 0)) {
         throw Object.assign(new Error('The cap on the wait between attempts must be a finite, non-negative number of milliseconds.'), { code: 'RETRY_CAP_INVALID' })
@@ -2406,6 +2714,7 @@ async function chiamaConRitentaBase({
                 ...(maxOutputTokens !== undefined ? { max_tokens: maxOutputTokens } : {}),
                 ...(inStreaming ? { stream: true, stream_options: { include_usage: true } } : {}),
                 ...(reasoning ? { reasoning } : {}),
+                ...(Array.isArray(fornitoriDaEvitare) && fornitoriDaEvitare.length ? { provider: { ignore: [...fornitoriDaEvitare] } } : {}), // decisione 193
             }),
             /*
              * ⭐⭐⭐ 08/09/2026 — il segnale di stop arriva FIN QUI. Prima c'era
@@ -2433,13 +2742,27 @@ async function chiamaConRitentaBase({
              *   si RIGENERANO dal sorgente a ogni consegna, non si patchano a mano.
              */
             signal: segnaleStop,
+            ...(servizio && typeof servizio === 'object' ? { talosServizio: servizio } : {}),
         })
         if (r.ok) {
             if (inStreaming) {
-                const { scelta, usage, ripetizione, finishReason, nativeFinishReason, erroreFornitore, fornitoreAValle, timings } = await consumaFlussoSSE(r, onDelta, { segnaleStop, ...(onChiamataCompleta ? { onChiamataCompleta } : {}) })
+                const { scelta, usage, ripetizione, finishReason, nativeFinishReason, erroreFornitore, fornitoreAValle, timings, rifiutoDelModello } = await consumaFlussoSSE(r, onDelta, { segnaleStop, ...(onChiamataCompleta ? { onChiamataCompleta } : {}),
+                    /* PERF R-34: il filtro del flusso vale per tutti — dalla parte 2 (30/10) anche per i modelli locali, la cui coda si
+                       promuove col permesso della persona nel giro: il markup non va mai a schermo */
+                    nomiAttrezzi: (Array.isArray(attrezzi) ? attrezzi : []).map((a) => a?.function?.name ?? a?.name) })
                 if (erroreFornitore || finishReason === 'error') {
                     for (const [indice, chiamata] of (scelta.tool_calls ?? []).entries()) onDelta?.({ tipo: 'tool-annullato', indice, toolCallId: chiamata.id, nome: chiamata.function?.name, motivo: '⛔ The provider cut the response short: this tool did not run.' })
-                    if (eFinestraPienaDelFornitore(erroreFornitore)) throw erroreFinestraPiena(usage)
+                    /* Giro 12 (BASSO del revisore del filo, N2): un ragionamento già trasmesso prima del pacchetto dice che la richiesta era
+                       stata accettata, prefill compreso: il ripiego la ripete senza ma non segna il filo, e chiude a schermo quel ragionamento.
+                       Come Hermes, dove il ragionamento non conta come uscita consegnata (`agent/chat_completion_helpers.py:2822-2835`) */
+                    const ragionamentoNelFlusso = !scelta.content && !scelta.tool_calls?.length
+                        && Boolean(scelta.reasoning_content || scelta[DETTAGLI_DEL_RAGIONAMENTO]?.length)
+                    /* Giro 13 (MEDIO del revisore del filo, sonde X5 e X6): la finestra piena si riconosce SOLO prima di ogni testo e di ogni
+                       attrezzo, come `statoNelFlusso` qui sotto. Dopo un'uscita consegnata resta l'esito incerto: il parziale si chiude e resta
+                       in storia, nessun reinvio (Hermes `agent/chat_completion_helpers.py:3596-3604`: dopo una consegna non si ripete). */
+                    if (!scelta.content && !scelta.tool_calls?.length && eFinestraPienaDelFornitore(erroreFornitore)) {
+                        throw Object.assign(erroreFinestraPiena(usage, numeriDelContestoPieno({ message: testoDelFornitore(erroreFornitore) })), ragionamentoNelFlusso ? { ragionamentoNelFlusso } : {})
+                    }
                     /* 21/10/2026, contratto del Mobile: dopo la coda del motore dell'app i suoi rifiuti (occupato, modello cambiato, nessun
                        modello aperto) arrivano come pacchetto d'errore nel flusso, non più come 409/503. Prima di qualunque testo non c'è
                        niente di incerto: è lo stesso rifiuto noto dell'HTTP (`rifiutoDelMotoreOspite`), con la sua frase e senza reinvii.
@@ -2447,11 +2770,22 @@ async function chiamaConRitentaBase({
                     const rifiutoOspite = typeof modello === 'string' && modello.startsWith('locale-ospite:')
                         && !scelta.content && !scelta.tool_calls?.length ? rifiutoOspiteDalCodice(erroreFornitore?.codice) : null
                     if (rifiutoOspite) throw rifiutoOspite
-                    throw erroreEsitoProviderIncerto({ code: 'PROVIDER_STREAM_ERROR', usage,
+                    const incerto = erroreEsitoProviderIncerto({ code: 'PROVIDER_STREAM_ERROR', usage,
                         parziale: { content: typeof scelta.content === 'string' ? scelta.content : '', chiamateInCorso: Boolean(scelta.tool_calls?.length) } })
+                    /* Cura 324, giro 11 (MEDIO dei fornitori): prima di ogni testo il codice HTTP del pacchetto (OpenRouter: `error.code`
+                       400, numero o cifre) resta leggibile in un campo opzionale, così il ripiego del prefill lo tratta come il 400 detto
+                       negli header. Hermes legge lo stato anche da `error.code` del corpo (`agent/chat_completion_helpers.py:144-157`). */
+                    const codiceNelFlusso = Number(erroreFornitore?.codice)
+                    if (!scelta.content && !scelta.tool_calls?.length && Number.isInteger(codiceNelFlusso) && codiceNelFlusso >= 400 && codiceNelFlusso < 600) incerto.statoNelFlusso = codiceNelFlusso
+                    /* Giro 12: il messaggio e il tipo del fornitore restano leggibili (campi opzionali), come Hermes tiene codice e messaggio
+                       del pacchetto (`agent/chat_completion_helpers.py:120-131`) */
+                    if (erroreFornitore?.messaggio) incerto.messaggioDelFornitore = erroreFornitore.messaggio
+                    if (erroreFornitore?.tipo) incerto.tipoDelFornitore = erroreFornitore.tipo
+                    if (ragionamentoNelFlusso) incerto.ragionamentoNelFlusso = true
+                    throw incerto
                 }
                 const motivi = { ...(nativeFinishReason ? { nativeFinishReason } : {}), ...(erroreFornitore ? { erroreFornitore } : {}), ...(timings ? { timings } : {}),
-                    ...(fornitoreAValle ? { fornitoreAValle } : {}) }
+                    ...(fornitoreAValle ? { fornitoreAValle } : {}), ...(rifiutoDelModello ? { rifiutoDelModello } : {}) }
                 /*
                  * ⛔⛔ 25/09/2026 notte — UNA RISPOSTA VUOTA NON È UN FLUSSO INTERROTTO (sessione `c15ba17c…`, Gemini 3.8, decisione
                  *   owner «come Hermes, in piccolo»). Questa eccezione diventava «La risposta del fornitore si è interrotta.»
@@ -2464,20 +2798,29 @@ async function chiamaConRitentaBase({
                     if (!accettaVuota) throw new Error('SSE stream with neither content nor tool_calls')
                     return {
                         scelta, usage, tentativi: tentativo + 1, ...(finishReason !== undefined ? { finishReason } : {}), ...motivi,
-                        vuota: { finishReason: finishReason ?? null, nativeFinishReason: nativeFinishReason ?? null, erroreFornitore: erroreFornitore ?? null, ragionamento: Boolean(scelta.reasoning_content) },
+                        vuota: { finishReason: finishReason ?? null, nativeFinishReason: nativeFinishReason ?? null, erroreFornitore: erroreFornitore ?? null, ragionamento: portaRagionamento(scelta, usage),
+                            rifiuto: eRifiutoDelModello({ finishReason, nativeFinishReason, rifiutoDelModello }) },
                     }
                 }
                 return { scelta, usage, tentativi: tentativo + 1, ...(finishReason !== undefined ? { finishReason } : {}), ...(ripetizione ? { ripetizione } : {}), ...motivi }
             }
             const j = await r.json()
-            const scelta = j?.choices?.[0]?.message
+            /* Blocco 20, revisione (R7): un rifiuto può non portare il messaggio: è una risposta vuota, non un guasto senza nome */
+            const scelta = j?.choices?.[0]?.message ?? (j?.choices?.[0] && eRifiutoDelModello({ finishReason: j.choices[0].finish_reason, nativeFinishReason: j.choices[0].native_finish_reason, rifiutoDelModello: portaUnRifiuto(j.choices[0]) }) ? { role: 'assistant', content: null } : undefined)
             if (j?.error || j?.choices?.[0]?.error || j?.choices?.[0]?.finish_reason === 'error') {
                 const erroreNelCorpo = j?.error ?? j?.choices?.[0]?.error
-                if (erroreNelCorpo && typeof erroreNelCorpo === 'object' && eFinestraPienaDelFornitore(descriviErroreDelFornitore(erroreNelCorpo))) throw erroreFinestraPiena(j?.usage)
+                // giro 13: come nel flusso, solo prima di ogni testo e di ogni attrezzo; il messaggio a valle (`metadata.raw`) conta
+                const descrittoNelCorpo = erroreNelCorpo && typeof erroreNelCorpo === 'object' ? descriviErroreDelFornitore(erroreNelCorpo) : null
+                if (descrittoNelCorpo && !scelta?.content && !scelta?.tool_calls?.length && eFinestraPienaDelFornitore(descrittoNelCorpo)) throw erroreFinestraPiena(j?.usage, numeriDelContestoPieno({ message: testoDelFornitore(descrittoNelCorpo) }))
                 throw erroreEsitoProviderIncerto({ code: 'PROVIDER_STREAM_ERROR', usage: j?.usage,
                     parziale: { content: typeof scelta?.content === 'string' ? scelta.content : '', chiamateInCorso: Boolean(scelta?.tool_calls?.length) } })
             }
             if (!scelta) throw new Error('response without a message: ' + JSON.stringify(j).slice(0, 300))
+            /* Blocco 20: anche senza streaming un rifiuto esce subito, invece di passare per una risposta riuscita e vuota */
+            if (accettaVuota && !scelta.content && !scelta.tool_calls?.length && eRifiutoDelModello({ finishReason: j?.choices?.[0]?.finish_reason, nativeFinishReason: j?.choices?.[0]?.native_finish_reason, rifiutoDelModello: portaUnRifiuto(j?.choices?.[0]) })) {
+                return { scelta, usage: j?.usage ?? null, tentativi: tentativo + 1, finishReason: j?.choices?.[0]?.finish_reason ?? null,
+                    vuota: { finishReason: j?.choices?.[0]?.finish_reason ?? null, nativeFinishReason: j?.choices?.[0]?.native_finish_reason ?? null, erroreFornitore: null, ragionamento: portaRagionamento(scelta, j?.usage), rifiuto: true } }
+            }
             /* L1 motore locale (20/10/2026): lo stesso filtro dello streaming sul messaggio intero. */
             if (typeof scelta.content === 'string' && scelta.content) {
                 const nelTesto = separaRagionamentoNelTesto(scelta.content)
@@ -2501,11 +2844,14 @@ async function chiamaConRitentaBase({
             const finishReason = j?.choices?.[0]?.finish_reason
             const fornitoreAValle = nomeDelFornitoreAValle(j?.provider) // decisione 14: anche senza streaming
             return { scelta, usage: j?.usage ?? null, tentativi: tentativo + 1, ...(typeof finishReason === 'string' ? { finishReason } : {}), ...(limite.ripetizione ? { ripetizione: limite.ripetizione } : {}),
-                ...(fornitoreAValle ? { fornitoreAValle } : {}), ...(leggiTempiDelMotore(j?.timings) ? { timings: leggiTempiDelMotore(j.timings) } : {}) }
+                ...(fornitoreAValle ? { fornitoreAValle } : {}), ...(leggiTempiDelMotore(j?.timings) ? { timings: leggiTempiDelMotore(j.timings) } : {}),
+                ...(typeof j?.choices?.[0]?.native_finish_reason === 'string' ? { nativeFinishReason: j.choices[0].native_finish_reason } : {}),
+                ...(portaUnRifiuto(j?.choices?.[0]) ? { rifiutoDelModello: true } : {}) }
         }
         ultimoStato = r.status
         ultimoRifiuto = leggiRifiutoProvider(r)
-        ultimoTesto = String(await r.text()).slice(0, 300)
+        const corpoDelRifiuto = String(await r.text())
+        ultimoTesto = corpoDelRifiuto.slice(0, 300) + fraseDellaFinestraNelCorpo(corpoDelRifiuto, r.status)
         /* ⛔ Un 401 o un 400 non migliorano ritentando: si lancia subito. */
         /* G02-10 punto 3: retry-after-ms vince su retry-after (un solo helper, lo stesso dell'adapter). */
         const attesaRichiesta = leggiAttesaRichiestaDalFornitore(r.headers)
@@ -2759,11 +3105,20 @@ const ATTREZZI = [
             type: 'object',
             properties: {
                 testo: { type: 'string', description: 'text to look for inside files' },
+                /*
+                 * PERF R-33 (30/10/2026; proposta PROPOSTA-CERCA-PIU-TERMINI-2026-10-30.md; pareri di Desktop, CLI e Mobile; sì dell'owner il
+                 *   30/10 alle 09:49Z, domanda «Ricerca» nella sessione Performance, «Sì, scrivila», registrato nella proposta): un
+                 *   campo NUOVO accanto a `testo`, che resta una stringa (niente unioni di tipi, regola dello schema qui sotto). Misura che
+                 *   l'ha chiesto: campagna pubblica-ebb04d2c1, «bloccate», 20 ricerche contro le 7 di Claude Code, 5 a vuoto — una frase
+                 *   letterale per chiamata (`--fixed-strings`). Claude Code e opencode cercano una regex (`a|b` in una chiamata, rg `-e`);
+                 *   qui restano letterali, senza maiuscole, e le alternative si dicono per elenco.
+                 */
+                oppure: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'string' }, description: 'More texts, OR-ed with "testo" (literal, any case). Put alternative names in ONE call instead of one search each, e.g. ["loadConfig", "readConfig"].' },
                 nome: { type: 'string', description: 'fragment of the file name or path' },
                 dentro: { type: 'string', description: 'limit the search to this subfolder or file of the workspace, e.g. "src/kernel" or "src/prezzo.mjs"' },
                 offset: { type: 'integer', minimum: 0, maximum: Number.MAX_SAFE_INTEGER, description: 'Skip this many matching files (default0); use nextOffset with unchanged filters. Live search, not a snapshot.' },
                 /* R-24 (owner 29/10): `pattern` sulla forma dell'id — chi decodifica vincolato lo rispetta, per gli altri è un'indicazione in più */
-                continua: { type: 'string', pattern: '^r[0-9]+$', description: 'Only the id of a search still running, given by a previous cerca reply (e.g. "r1"): returns its results so far, or all of them once it has finished. testo, nome and dentro are ignored. Never put the text to look for here: that goes in "testo".' },
+                continua: { type: 'string', pattern: '^r[0-9]+$', description: 'Only an id you received in a previous cerca reply for a search still running; never make one up. Returns its results so far, or all of them once it has finished. testo, oppure, nome and dentro are ignored. Never put the text to look for here: that goes in "testo".' },
             },
             required: [],
         },
@@ -3161,6 +3516,31 @@ export function migraPermessiPerAttrezzo(permessi) {
     return fuori
 }
 const ATTREZZI_ESTESI = [
+    /* FE-008 (forma del 03/11/2026): i Passi. Si offre solo con `listaPassi`. Niente `id`: il modello ne scrive di meno e sbaglia di meno. */
+    {
+        name: NOME_PASSI,
+        description: 'Keep a short list of steps for work with three or more steps; the person sees it above the composer. Send the whole list every time. '
+            + 'Update once per step: the same call closes one step and opens the next. Send it together with your next tool call, never alone. '
+            + 'Only one step in_progress. Mark a step completed only after it is verified done; if it fails, cancel it and add a revised step. '
+            + 'Do not use it for a single quick action.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                steps: {
+                    type: 'array', maxItems: TETTI_PASSI.voci,
+                    items: {
+                        type: 'object',
+                        properties: {
+                            text: { type: 'string', maxLength: TETTI_PASSI.testo },
+                            status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'cancelled'] },
+                        },
+                        required: ['text', 'status'],
+                    },
+                },
+            },
+            required: ['steps'],
+        },
+    },
     {
         name: 'web_search',
         description: 'Searches the web and returns candidate pages: title, url, a short snippet, '
@@ -3181,7 +3561,11 @@ const ATTREZZI_ESTESI = [
         description: 'Writes a complete, self-contained HTML document (inline <style> and <script>, no '
             + 'external resources) and shows it as an interactive visual in the chat — a diagram, a '
             + 'chart, a small simulation. The document runs isolated: no network access, no access to '
-            + 'the workspace, no way to call back into this conversation. Not for a plain text answer.',
+            + 'the workspace, no way to call back into this conversation. Not for a plain text answer.'
+            /* Revisione J, D1 (04/11/2026, forma FORMA-D1-BLOCCHI-IN-LIBRERIA, OK di CLI, Mobile e Performance): la seconda porta di
+               «Salva in Libreria» si dice dove il modello la usa, come la guida dei consegnabili di Hermes (`agent/prompt_builder.py:320-321`).
+               Costante: lo schema resta byte-identico fra i giri (cache dei prompt). */
+            + ' To save a live block from this chat in the person\'s Library instead, pass the block source (`root = …`) as html.',
         input_schema: {
             type: 'object',
             properties: {
@@ -3196,7 +3580,7 @@ const ATTREZZI_ESTESI = [
        rifarebbe un artefatto invece di aggiornarlo. */
     {
         name: 'artifact_update',
-        description: 'Changes an artifact you created earlier (a chart, a diagram, a page) instead of making a new one. The '
+        description: 'Changes an artifact you created earlier (a chart, a diagram, a page, a live block saved in the Library) instead of making a new one. The '
             + 'conversation keeps every version; the person sees the new one and can go back. Give either the whole new '
             + 'document in `html`, or small exact replacements in `edits`, applied one after the other.',
         input_schema: {
@@ -3214,6 +3598,9 @@ const ATTREZZI_ESTESI = [
             required: ['id'],
         },
     },
+    /* FE-081 (scena 1+4, 05/11/2026): accanto ad artifact_update. Offerto SOLO col catalogo acceso e almeno un blocco nella conversazione
+       (vedi `offreBlocchi`); le versioni le tiene chi ospita, non il kernel. */
+    ATTREZZO_BLOCCO_AGGIORNA,
     {
         name: 'document_create',
         description: 'Create a real document file and save it into the workspace. Use `report` for a '
@@ -3440,6 +3827,19 @@ const ATTREZZI_ESTESI = [
             },
             required: ['port'],
         },
+    },
+    /*
+     * Decisione 201 dell'owner (04/11/2026): la pagina aperta nel Browser non è più un allegato del messaggio dopo; il modello la legge
+     *   quando gli serve, come Hermes `read_preview` (`tools/preview_tool.py:43-69`). Forma: FORMA-BROWSER-201-2026-11-04, OK di
+     *   Performance, Mobile e CLI. Nessun parametro: legge la pagina che la PERSONA ha aperto, mai un indirizzo scelto dal modello (per
+     *   quello c'è `naviga`). Offerto SOLO se l'ospite passa `leggiPaginaBrowserFn`, e mai a una figlia (il Browser è della persona).
+     *   Nessuna conferma prima della lettura, in ogni modo dei permessi (decisione 205 dell'owner).
+     */
+    {
+        name: 'browser_page',
+        description: 'Read the page the person has open in the Browser tab of TALOS: its title, address and visible text. '
+            + 'A TALOS note says which page is open; read it only when the request needs it. Long pages are cut, with a way to read the rest.',
+        input_schema: { type: 'object', properties: {} },
     },
     /*
      * ⭐⭐⭐ FASE N (29/8), piano elegant-spinning-dongarra.md — Libreria,
@@ -3966,6 +4366,7 @@ const ATTREZZI_ESTESI = [
         description: 'Start a deep research: TALOS searches the web, reads the sources and writes a report. '
             + 'It takes MINUTES and spends real search credit. Use it only when the user asks to investigate, '
             + 'compare or produce a documented answer — "research this", "dig into", "write me a report on". '
+            + 'A question about research is not a request. '
             + 'For a single fact or a quick check, use web_search instead: it answers in seconds and costs '
             + 'almost nothing. This returns as soon as the research has started, not when it is finished — tell '
             + 'the user it is running and that they can ask about it later (research_find, research_read).',
@@ -4366,14 +4767,17 @@ const ATTREZZI_ESTESI = [
      */
     {
         name: 'child_control',
-        description: 'Stop, pause or resume one direct child agent, together with its own children. stop: it ends now. pause: '
-            + 'the tool it is using finishes, then it waits with its conversation kept. resume: a paused child continues from where '
-            + 'it stopped and its result reaches you as usual (its own children stay paused until it resumes them). Returns the '
+        /* Decisione 198 (owner 04/11/2026, due porte; OK di Performance: l'enum cambia nella stessa candidata degli altri cambi di schema,
+           la cache salta una volta sola): `resume` anche per una figlia FERMATA, `retry` per una figlia FALLITA (`riprendiFiglia`). */
+        description: 'Stop, pause, resume or retry one direct child agent, together with its own children. stop: it ends now. pause: '
+            + 'the tool it is using finishes, then it waits with its conversation kept. resume: a paused or stopped child continues from where '
+            + 'it stopped and its result reaches you as usual (its own children stay paused until it resumes them). retry: a failed child '
+            + 'tries its task again in the same conversation, told why it failed. Returns the '
             + 'previous state. Use list_children first to get the childId, or pass childId "all" to apply the action to every '
-            + 'direct child it fits (working children for stop and pause, paused ones for resume).',
+            + 'direct child it fits (working children for stop and pause, paused ones for resume, failed ones for retry).',
         input_schema: { type: 'object', properties: {
             childId: { type: 'string', description: 'A childId from list_children, or "all".' },
-            action: { type: 'string', enum: ['stop', 'pause', 'resume'] },
+            action: { type: 'string', enum: ['stop', 'pause', 'resume', 'retry'] },
         }, required: ['childId', 'action'] },
     },
     {
@@ -4597,6 +5001,17 @@ const ATTREZZI_ESTESI = [
         }, required: ['kind', 'title'] },
     },
     /*
+     * ⭐ CENTRO ASSISTENZA (owner 01/11/2026, «Leggera, dalle pagine del sito»): la guida di TALOS letta a sezioni brevi, invece di
+     *   rispondere a memoria su pulsanti e impostazioni. Il kernel delega a `aiutoTalos.rispondi(argomenti)` (`aiuto-talos.mjs`):
+     *   senza, l'attrezzo NON ESISTE. Dietro il ponte (Performance 01/11). Solo lettura: anche in Piano e in sola lettura.
+     */
+    { ...DEFINIZIONE_AIUTO },
+    /*
+     * ⭐ Fase 8 «IMPOSTAZIONI DALLA CHAT» (owner 01/11/2026, D1-D8): un attrezzo solo, guidato dal catalogo dell'ospite
+     *   (`onImpostazioniFn`, `impostazioni-app.mjs`): senza ospite NON ESISTE. Dietro il ponte; al root; nel Piano solo la lettura.
+     */
+    { ...DEFINIZIONE_IMPOSTAZIONI },
+    /*
      * ⭐ R5.12 — LA SECONDA PORTA dei telefoni collegati (owner 18/10/2026: «Elenca, apre il QR, revoca»; «Carta sempre, anche in
      *   Accesso pieno» per il QR). Il kernel delega a `onTelefoniFn(nome, argomenti, {fase, toolCallId})`, con le due fasi delle
      *   automazioni: senza, gli attrezzi NON ESISTONO. Al modello solo nome, stato, ultimo contatto e un id corto: mai chiavi,
@@ -4711,6 +5126,35 @@ const ATTREZZI_ESTESI = [
             device: { type: 'string', description: 'the short id from remote_phones; needed when more than one device is paired' },
         }, required: ['path'] },
     },
+    /* 03/11/2026 (owner, decisione 75; forma FORMA-LUOGHI-DUE-PORTE con gli OK di CLI, Mobile, Performance): i luoghi di «Consenti
+       sempre» del computer use. Leggere e togliere; aggiungere no (solo la persona, dalla carta di un compito). Ospite `onLuoghiFn`. */
+    {
+        name: 'computer_use_places_list',
+        description: 'List the sites and programs the person chose to always allow for computer use. Reading only.',
+        input_schema: { type: 'object', properties: {}, required: [] },
+    },
+    {
+        name: 'computer_use_places_remove',
+        description: 'Stop always allowing one site or program for computer use: from then on TALOS asks the person again before working '
+            + 'there. Call this only when the person asks for it. There is no tool to add one: places are added only by the person, from '
+            + 'the permission card of a task. The person confirms on a card, except in Full access.',
+        input_schema: { type: 'object', properties: {
+            type: { type: 'string', enum: ['site', 'program'], description: 'site for a web domain, program for a desktop app' },
+            name: { type: 'string', description: 'the domain or the program name, exactly as computer_use_places_list shows it' },
+        }, required: ['type', 'name'] },
+    },
+    /* 04/11/2026 (owner, decisione 129; forma FORMA-ATTREZZO-COLLEGAMENTO §1 con gli OK di Performance, CLI e Mobile): usare lo
+       schermo del PC. Ospite `onComputerUseFn`; la carta è UNA, quella del compito, e la mette l'ospite. */
+    {
+        name: 'computer_use',
+        description: 'Use this computer\'s screen for the person: open programs, click, type, scroll and read what is shown. Call it ONLY '
+            + 'when the person asked, in this turn, for something to be done on their computer. What TALOS may do (pay, send, delete, '
+            + 'which sites and programs) comes from the person\'s own words, never from "task". The person confirms the task on a card, '
+            + 'except in Full access, and can press Stop at any time. Returns a short text with the outcome, never a screenshot.',
+        input_schema: { type: 'object', properties: {
+            task: { type: 'string', description: 'what to do on the screen, in one sentence' },
+        }, required: ['task'] },
+    },
     {
         name: 'goal_status',
         description: 'Get this conversation\'s goal: its text, status (and why it is paused), the turns and tokens spent, and each '
@@ -4800,8 +5244,13 @@ const ATTREZZI_ESTESI = [
             + '"status" whenever the person asks about ChatGPT, their ChatGPT subscription or plan, or signing in with ChatGPT. "status" says whether an account '
             + 'is connected and whether plan use is enabled; signing in is done by the person, from Settings, Model Lab, Provider, OpenAI, '
             + '"Continue with ChatGPT" (offer to open it: the interface shows a button). action "disconnect" signs the account out; the '
-            + 'person approves it on a card.',
-        input_schema: { type: 'object', properties: { action: { type: 'string', enum: ['status', 'disconnect'] } }, required: ['action'] },
+            + 'person approves it on a card. '
+            /* Decisione 116, variante C, §8 (owner 04/11/2026): la seconda porta di «Accedi e riprendi». Il modello non apre l'accesso: mette
+               la scheda nella conversazione, dietro la carta, e il clic resta della persona. */
+            + '"sign_in" puts the ChatGPT sign-in card in the conversation, with "Sign in and resume": the person signs in from it in the browser, '
+            + 'and the turn picks up after the sign-in. The person approves the card first. Use it when a ChatGPT plan request failed because the '
+            + 'sign-in must be done again, or when the person asks to sign in with ChatGPT.',
+        input_schema: { type: 'object', properties: { action: { type: 'string', enum: ['status', 'disconnect', 'sign_in'] } }, required: ['action'] },
     },
     /*
      * ⭐ L1 1.3 (owner 26/10/2026, «Sì, così»: «in più c'è la seconda porta: il modello chiede di allargare con la solita carta») — la
@@ -4820,6 +5269,23 @@ const ATTREZZI_ESTESI = [
         input_schema: { type: 'object', properties: {
             action: { type: 'string', enum: ['status', 'enlarge'] },
             tokens: { type: 'integer', description: 'for "enlarge": how many tokens the work ahead needs; the window opens a little above it, never above the model maximum' },
+        }, required: ['action'] },
+    },
+    /*
+     * 01/11/2026 (owner: «Modelli dalla chat: Sì, con la carta di conferma»; forma `FORMA-MODELLI-DALLA-CHAT-2026-11-01.md`, OK di
+     *   Desktop, CLI, Mobile e Frontend) — la seconda porta del Laboratorio modelli. «status» è libero; «open», «switch» e «free» passano
+     *   dalla carta, tranne in Accesso pieno (legge dell'owner del 12/10). `model` è SOLO l'id opaco che «status» restituisce (Mobile).
+     *   Stesso canale dei fornitori (`onFornitoriFn`), solo al root, solo dove l'ospite lo sa fare.
+     */
+    {
+        name: 'local_model',
+        description: 'The local models downloaded on this computer (llama.cpp). action "status" lists them with their id, size and whether '
+            + 'each fits in memory, and says which one is open. action "open" opens one (the open one closes); action "free" closes the '
+            + 'open model and frees its memory. "open" and "free" are approved by the person on a card. This tool does not change the '
+            + 'model of the conversation: that is app_settings. Pass "model" exactly as an id returned by "status": never a name or a path.',
+        input_schema: { type: 'object', properties: {
+            action: { type: 'string', enum: ['status', 'open', 'free'] },
+            model: { type: 'string', description: 'for "open": an id returned by "status"' },
         }, required: ['action'] },
     },
 ]
@@ -4879,7 +5345,7 @@ export const ATTREZZI_AUTOMAZIONI = new Set(['automation_list', 'automation_runs
     'automation_control']) // C5: era automation_pause/resume/run/stop — l'ospite li riceve ancora coi nomi di prima
 
 /** 0.1.25 (owner 09/10/2026): gli attrezzi dei fornitori a valle esclusi, che passano da `onFornitoriFn`. */
-export const ATTREZZI_FORNITORI = new Set(['provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', 'local_model_window'])
+export const ATTREZZI_FORNITORI = new Set(['provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', 'local_model_window', 'local_model'])
 
 /*
  * ⭐ Full access non chiede (owner 12/10/2026, «per legge»; quarta tornata 17/10, due consigliate): in «Full access» le carte delle
@@ -4889,7 +5355,7 @@ export const ATTREZZI_FORNITORI = new Set(['provider_exclusions_list', 'provider
  *   Come fanno gli altri: Claude Code bypassPermissions (docs «permissions»), Hermes yolo (`tools/approval.py:483-488`), Codex
  *   `AskForApproval::Never` (`protocol/src/protocol.rs:1003-1005`): nessuna domanda in quella modalità.
  */
-export const SENZA_CARTA_IN_ACCESSO_PIENO = new Set([...ATTREZZI_AUTOMAZIONI, 'provider_exclude', 'provider_allow', 'local_model_window', 'file_changes_undo', 'remote_phone_revoke', 'remote_phone_folder_revoke', 'remote_device_send_file']) // R5.11: owner 18/10, «senza carta, come la legge» · R5.12 cartelle: owner 23/10 · R5.13: owner 24/10, la carta dell'invio come le altre
+export const SENZA_CARTA_IN_ACCESSO_PIENO = new Set([...ATTREZZI_AUTOMAZIONI, 'computer_use_places_remove', 'provider_exclude', 'provider_allow', 'local_model_window', 'local_model', 'file_changes_undo', 'remote_phone_revoke', 'remote_phone_folder_revoke', 'remote_device_send_file', NOME_IMPOSTAZIONI]) // Fase 8 (01/11): solo fuori dai gruppi sicurezza e aggiornamenti (`cartaAncheInAccessoPieno`) · R5.11: owner 18/10, «senza carta, come la legge» · R5.12 cartelle: owner 23/10 · R5.13: owner 24/10, la carta dell'invio come le altre · computer use 03/11: togliere un luogo ricordato
 // ⛔ R5.12 (owner 18/10/2026): `remote_phone_pair` NON sta qui — la carta del QR c'è sempre, anche in Accesso pieno (seconda eccezione dopo `chatgpt_account`)
 // ⛔ R5.12 (owner 23/10/2026): nemmeno `remote_phone_folder_allow` — consentire una cartella a un dispositivo chiede sempre
 
@@ -4927,6 +5393,10 @@ export function validaArgomentiSegnalazione(argomenti) {
     if (description.length > 4000) return { ok: false, messaggio: '"description" must be at most 4000 characters. Nothing was shown.' }
     return { ok: true, argomenti: { kind, title, description } }
 }
+/** 03/11/2026: i luoghi di «Consenti sempre» del computer use, che passano da `onLuoghiFn`. */
+export const ATTREZZI_LUOGHI = new Set(['computer_use_places_list', 'computer_use_places_remove'])
+/** 04/11/2026 (decisione 129): l'attrezzo del computer use, che passa da `onComputerUseFn`. Fuori da ATTREZZI_PIANO e dalla carta generica. */
+export const NOME_COMPUTER_USE = 'computer_use'
 /** R5.12 (owner 18/10/2026): i telefoni collegati dalla chat, che passano da `onTelefoniFn`. */
 export const ATTREZZI_TELEFONI = new Set(['remote_phones', 'remote_phone_pair', 'remote_phone_revoke', 'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', 'remote_phone_folder_unblock', 'remote_control', 'remote_device_send_file']) // R5.12 cartelle: owner 23/10 · R5.14: remote_control · R5.13: mandare un file (24/10)
 /** 19/10/2026: la riga della lingua del solo profilo del telefono. SUPERATA il 28/10 da `rigaLinguaDelleRisposte` (sotto): resta perché
@@ -5594,8 +6064,34 @@ const ISTRUZIONI = [
     '',
     ISTRUZIONE_CONFINE_DATI,
 ].join('\n')
+/*
+ * Owner 1/11/2026, sì di Desktop, CLI e Mobile (`PROPOSTA-COME-SI-LAVORA-2026-10-31.md`). La scelta di tenere `ISTRUZIONI` magra veniva da un banco che
+ *   non distingueva le soluzioni parziali (R-43): sul banco corretto, a `high`, senza regole il modello chiudeva in una corsa su due dichiarando il lavoro
+ *   incompleto. Su un modello che fabbrica risultati questo testo non è provato: nessuno dei tre provati fabbrica col testo vecchio, quindi la prova non
+ *   discrimina, dice solo che non peggiora. Niente coi modelli locali del telefono: lì non è misurato e ogni token pesa (Mobile).
+ */
+export const RIGA_AIUTO = 'For questions about TALOS itself, call talos_help through the tool catalog before answering; never answer from memory.'
+const ISTRUZIONI_DI_LAVORO = [
+    'Finish the job',
+    '- Stay on the task until what was asked is actually done. A required check that is still red, or required work you can still do, is not a stopping point.',
+    '- Saying honestly what is missing does not replace doing it. End your turn early only when something you cannot change blocks you, a permission was refused, or only the person can decide; say which.',
+    /* Decisione 245 (owner 05/11/2026): DeepSeek chiudeva «il contesto è agli ultimi token»; Claude Code dice al suo modello che il contesto
+       si riassume da solo («you don't need to wrap up early or hand off mid-task»). Non arriva ai modelli del telefono (`istruzioniDiBase`). */
+    '- Context is never a reason to stop: TALOS compacts the conversation by itself and keeps your task and a summary. Never end a turn, defer work or say you are running out of context. A note that older output was trimmed is TALOS keeping things short, not a limit on you.',
+    '- Never weaken, skip or delete a check to make it pass, and never report a result you did not get. A change that only silences a check is not done.',
+    '',
+    'How to work',
+    '- Each reply costs a full round trip. Put in one reply every call you can already decide; reads run together. Wait only for a call that depends on a result you do not have yet.',
+    '- Locate first: one search naming all the candidates, then one read covering the whole stretch that matters.',
+    '- Do not read again what you can still see in full; a result marked as shortened is not fully visible.',
+    '- A file edit without an error has changed the file: go on, there is nothing to confirm.',
+    '- Prove the change with the smallest command that can fail. If the request names a check, that check decides.',
+].join('\n')
 /* owner 14/10/2026: le stesse istruzioni con l'eccezione dei file adottati dalla persona (interruttore `fileAdottatiDallaPersona`) */
-const istruzioniDiBase = (adozione) => (adozione ? ISTRUZIONI.replace(ISTRUZIONE_CONFINE_DATI, () => istruzioneConfineDati({ adozione: true })) : ISTRUZIONI)
+const istruzioniDiBase = (adozione, modello) => {
+    const base = adozione ? ISTRUZIONI.replace(ISTRUZIONE_CONFINE_DATI, () => istruzioneConfineDati({ adozione: true })) : ISTRUZIONI
+    return typeof modello === 'string' && modello.startsWith('locale-ospite:') ? base : `${base}\n\n${ISTRUZIONI_DI_LAVORO}`
+}
 
 /* ⛔ 02/10/2026 — CLI tappa 6b: la guida di una figlia che può raggiungere la persona (l'host la mostra, `domandeDeiFigli`). */
 const ISTRUZIONI_ASK_FIGLIA = 'Your parent agent delegated this task. Use ask_parent for a fact or a decision your parent can give. '
@@ -5621,12 +6117,97 @@ const ISTRUZIONI_ASK = 'When user input is needed to continue, call ask_user_que
  *   3. si smette prima se il vuoto è DETERMINISTICO: due tentativi di fila con la stessa firma e nessuna uscita provata
  *      (`agent/empty_response_guard.py:207-226`) — il prompt si paga anche quando non esce niente;
  *   4. altrimenti un errore ONESTO, col motivo del fornitore quando c'è: mai «interrotta», la risposta è arrivata vuota.
- * ⛔ Né il prefill del ragionamento né il fornitore di riserva: fuori dalla scelta dell'owner («in piccolo»).
+ * ⛔ Il fornitore di riserva resta fuori dalla scelta dell'owner («in piccolo»). Decisione 324 (owner 06/11/2026 21:34, «Cura come
+ *   Hermes ora», `FORMA-VUOTA-SOLO-RAGIONAMENTO-2026-11-06.md`): l'owner ha visto «4 times in a row; provider reason: stop», un modello
+ *   che RAGIONAVA e chiudeva senza testo, e la scala rifaceva la domanda da capo. Decisione 326 (owner 06/11 ~22:20, secondo giro).
+ * ⇒ 0. Se la risposta vuota porta ragionamento (testo, `reasoning_details` di OpenRouter anche cifrati, stato nativo del fornitore, o
+ *   solo i `reasoning_tokens` dell'uso; non rifiuto, non tetto: escono prima nel ciclo), fino a DUE «continuazioni» (Hermes
+ *   `_thinking_prefill_retries < 2`, `agent/turn_empty_response.py:246-265`, clone hermes-agent-2026-11-01). La continuazione è un
+ *   assistant IN CODA col ragionamento già scritto (prefill: llama.cpp lo prosegue, `tools/server/server-common.cpp:1452-1458`),
+ *   MAI seguito da una nota `user`: con la nota i template di Qwen3/3.5, GLM-4.7 e DeepSeek V3.2 buttano il ragionamento
+ *   dell'assistant che non è l'ultimo (decisione 326, reperto A). Vive SOLO nella richiesta (`prefillInCorso` nel giro), mai in
+ *   `messaggi`: l'archivio del motore è a sola aggiunta, e Hermes salta allo stesso modo l'impalcatura nel salvataggio
+ *   (`agent/session_persistence.py:33-43`). Due continuazioni sommano il ragionamento; i `reasoning_details` partono solo verso
+ *   OpenRouter (gli altri rifiutano i campi che non conoscono). Un fornitore che rifiuta l'assistant in coda (400/422) riceve la
+ *   stessa domanda senza, e per il resto del giro la scala di oggi: mai un errore nuovo. I fili nativi (Anthropic, Responses,
+ *   Gemini) lo tolgono come Hermes su tutti i fili (`agent/turn_request_assembly.py:179-187`, «Anthropic-style backends 400 on a
+ *   trailing thinking block»).
+ * ⇒ Decisione 330 (giro 3, revisori 1 e 3): SENZA niente da rimandare non c'è continuazione, perché sarebbe la stessa domanda subito,
+ *   una chiamata in più senza attesa: la scala di oggi. Niente da rimandare = il prefill che arriverebbe al filo del modello è vuoto
+ *   (`prefillInCodaArriva`): fili nativi e ACP, chi dichiara di non proseguirlo, Groq e Mistral che rifiutano `reasoning_content`
+ *   (fuori da OpenRouter i dettagli non partono), i soli `reasoning_tokens` dell'uso, il solo stato nativo del fornitore. Come Hermes,
+ *   che continua solo con qualcosa da rimettere in coda (`_has_structured`, `turn_empty_response.py:246-250`, l'uso non conta).
+ *   Lo stato nativo (`talos_provider_state`) non entra più nel prefill: il filo chat lo toglie (`stripNativeMetadata`) e i fili
+ *   nativi tolgono il prefill intero, quindi non arrivava a nessuno.
+ * ⛔ L'ORDINE È DIVERSO DA HERMES, apposta: Hermes dopo gli attrezzi spinge PRIMA (`turn_empty_response.py:218-243`) e prova il
+ *   prefill dopo; ma salta la spinta quando il pensiero è nel testo (`_has_inline_thinking`, «thinking model still working — let
+ *   prefill handle»). In TALOS il ragionamento arriva sempre separato dal testo (`separaRagionamentoNelTesto`), quindi la forma della
+ *   324 vuole la continuazione PRIMA della spinta, come Hermes fa per il pensiero in linea.
+ * ⇒ «Dopo gli attrezzi» si decide UNA volta, alla prima vuota dello stallo (la finestra degli ultimi cinque si sposta con la spinta).
+ *   Le continuazioni non entrano nella firma deterministica (Hermes registra il candidato vuoto solo a prefill esauriti,
+ *   `turn_empty_response.py:270-274`) ma l'errore onesto le conta. Il tetto di due si riarma a ogni risposta che porta qualcosa,
+ *   giro di attrezzi compreso (Hermes `agent/turn_tool_round.py:295-302`); la spinta no (R2 della 245 conta su `spintaFatta`).
+ *   Ogni continuazione è una chiamata in più (P3 della 245); dopo il richiamo della 245 nessuna.
  */
 export const SEGNAPOSTO_RISPOSTA_VUOTA = '(empty)'
 export const NOTA_RISPOSTA_VUOTA = 'You just executed tool calls but returned an empty response. Please process the tool '
     + 'results above and continue with the task.'
 export const RITENTATIVI_RISPOSTA_VUOTA_MASSIMI = 2
+export const CONTINUAZIONI_SUL_RAGIONAMENTO_MASSIME = 2
+
+/* Decisione 326 (B): i `reasoning_details` di OpenRouter (anche cifrati) di una risposta in flusso, su una proprietà-simbolo come
+   `CHIAMATA_NEL_TESTO`: non vanno mai nel JSON della storia, li legge solo la continuazione. */
+export const DETTAGLI_DEL_RAGIONAMENTO = Symbol.for('talos.dettagli-del-ragionamento')
+const dettaglioInConflitto = (a, b) => a !== undefined && a !== null && b !== undefined && b !== null && a !== b
+/* I pezzi dello stesso blocco arrivano a delta: testo o sommario di fila si uniscono, la prima firma e il primo formato non vuoti
+   vincono; i cifrati non si uniscono mai (opencode `packages/ai/src/protocols/openai-chat.ts:974-1036`, `mergeReasoningDetails`). */
+function unisciDettaglio(prima, dopo) {
+    if (dettaglioInConflitto(prima.id, dopo.id) || dettaglioInConflitto(prima.index, dopo.index) || dettaglioInConflitto(prima.format, dopo.format)
+        || (prima.signature && dopo.signature && prima.signature !== dopo.signature)) return undefined
+    const campo = prima.type === 'reasoning.text' && dopo.type === 'reasoning.text' ? 'text'
+        : prima.type === 'reasoning.summary' && dopo.type === 'reasoning.summary' ? 'summary' : null
+    if (!campo) return undefined
+    const unito = { ...prima, ...dopo, [campo]: `${prima[campo] ?? ''}${dopo[campo] ?? ''}` }
+    const firma = prima.signature || dopo.signature || (prima.signature !== undefined ? prima.signature : dopo.signature)
+    const formato = prima.format || dopo.format || (prima.format !== undefined ? prima.format : dopo.format)
+    if (firma !== undefined) unito.signature = firma
+    if (formato !== undefined) unito.format = formato
+    return unito
+}
+export function aggiungiDettagliDelRagionamento(lista, nuovi) {
+    for (const dettaglio of Array.isArray(nuovi) ? nuovi : []) {
+        if (!dettaglio || typeof dettaglio !== 'object') continue
+        const unito = lista.length > 0 ? unisciDettaglio(lista.at(-1), dettaglio) : undefined
+        if (unito) lista[lista.length - 1] = unito
+        else lista.push({ ...dettaglio })
+    }
+    return lista
+}
+const dettagliDelRagionamento = (risposta) => risposta?.[DETTAGLI_DEL_RAGIONAMENTO] ?? (Array.isArray(risposta?.reasoning_details) ? risposta.reasoning_details : [])
+
+/** Decisione 326 (B): la risposta vuota porta ragionamento? Come Hermes `_has_structured` (`turn_empty_response.py:246-250`), più lo
+ *  stato nativo del fornitore e i soli `reasoning_tokens` dell'uso (il modello ha pensato, il testo non si vede). */
+export function portaRagionamento(scelta, usage = null) {
+    if (scelta?.reasoning_content || scelta?.reasoning) return true
+    if (dettagliDelRagionamento(scelta).length > 0) return true
+    if (Array.isArray(scelta?.talos_provider_state?.content) && scelta.talos_provider_state.content.some((p) => p?.type === 'reasoning')) return true
+    return Number(usage?.completion_tokens_details?.reasoning_tokens) > 0
+}
+
+/** Decisione 326 (A, B): l'assistant in coda della continuazione, o `null` se non c'è niente da rimandare (allora nessuna continuazione,
+ *  decisione 330). `precedente`: il prefill della continuazione prima, il cui ragionamento si prosegue. `conTesto`: il filo riceve
+ *  `reasoning_content` (`prefillInCodaArriva`); `conDettagli`: il filo è OpenRouter. Mai lo stato nativo (decisione 330, vedi sopra). */
+export function prefillDiContinuazione(risposta, precedente = null, { conDettagli = false, conTesto = true } = {}) {
+    /* giro 7 (BASSO del revisore 1): una risposta letta senza normalizzare porta il pensiero in `reasoning` (Ollama, Cerebras, OpenRouter senza
+       flusso), come legge `portaRagionamento`. Giro 8: nel ciclo di `talosLavora` oggi ci arrivano solo le risposte in flusso, dove `reasoning`
+       è già diventato `reasoning_content` (`consumaFlussoSSE`, delta e JSON intero); senza flusso una risposta di solo ragionamento non è
+       segnata `vuota` e la scala non parte (voce a sé, anteriore alla 324). Qui serve a chi chiama la funzione con la risposta grezza */
+    const nuovo = [risposta?.reasoning_content, risposta?.reasoning].find((v) => typeof v === 'string' && v !== '') ?? ''
+    const testo = conTesto ? `${precedente?.reasoning_content ?? ''}${nuovo}` : ''
+    const dettagli = conDettagli ? [...(precedente?.reasoning_details ?? []), ...dettagliDelRagionamento(risposta)] : []
+    if (!testo && dettagli.length === 0) return null
+    return { role: 'assistant', content: '', ...(testo ? { reasoning_content: testo } : {}), ...(dettagli.length > 0 ? { reasoning_details: dettagli } : {}) }
+}
 
 /** La firma di un tentativo vuoto: due tentativi con la stessa firma e nessuna uscita dicono che il terzo sarebbe uguale. */
 function tentativoVuoto(vuota, usage) {
@@ -5638,13 +6219,30 @@ function tentativoVuoto(vuota, usage) {
     }
 }
 
+/** Giro 10 della 324: il filo che ha dato l'errore, se l'adattatore lo scrive (`fornitoreEffettivo` e `modelloEffettivo`, campi opzionali
+ *  come nell'esito di `eseguiConFallback`); stessa forma di `modelloDelFilo`. null se manca uno dei due. */
+function filoDellErrore(errore) {
+    const fornitore = errore?.fornitoreEffettivo
+    const modelloEffettivo = errore?.modelloEffettivo
+    return typeof fornitore === 'string' && fornitore && typeof modelloEffettivo === 'string' && modelloEffettivo ? `${fornitore}:${modelloEffettivo}` : null
+}
+
 /**
- * Pura: che cosa fare di una risposta vuota. `stato` vive un giro solo: `{ spintaFatta, ritentativi, tentativi }`.
- * @returns {{azione: 'spinta'|'ritenta'|'fine', attesaIndice?: number, deterministico?: boolean}}
+ * Pura: che cosa fare di una risposta vuota. `stato` vive uno stallo solo: `{ spintaFatta, continuazioni, ritentativi, tentativi,
+ * dopoAttrezzi }`. `dopoAttrezzi` si fissa alla PRIMA vuota dello stallo (decisione 326, D). `dopoIlRichiamo`: dopo il richiamo della
+ * decisione 245 nessuna continuazione (P3). `continuazioniSpente`: il fornitore ha rifiutato l'assistant in coda, torna la scala di oggi.
+ * `daRimandare` (decisione 330): c'è un prefill che arriva al filo; senza, la continuazione sarebbe la stessa domanda: la scala di oggi.
+ * Le continuazioni restano fuori da `tentativi` (la firma deterministica), come Hermes `turn_empty_response.py:270-274`.
+ * @returns {{azione: 'continua'|'spinta'|'ritenta'|'fine', attesaIndice?: number, deterministico?: boolean}}
  */
-export function decidiRispostaVuota(stato, { vuota, usage = null, dopoAttrezzi = false }) {
+export function decidiRispostaVuota(stato, { vuota, usage = null, dopoAttrezzi = false, dopoIlRichiamo = false, continuazioniSpente = false, daRimandare = true }) {
+    if (stato.dopoAttrezzi === undefined) stato.dopoAttrezzi = dopoAttrezzi
+    if (vuota?.ragionamento && daRimandare && !dopoIlRichiamo && !continuazioniSpente && (stato.continuazioni ?? 0) < CONTINUAZIONI_SUL_RAGIONAMENTO_MASSIME) {
+        stato.continuazioni = (stato.continuazioni ?? 0) + 1
+        return { azione: 'continua' }
+    }
     stato.tentativi.push(tentativoVuoto(vuota, usage))
-    if (dopoAttrezzi && !stato.spintaFatta) {
+    if (stato.dopoAttrezzi && !stato.spintaFatta) {
         stato.spintaFatta = true
         return { azione: 'spinta' }
     }
@@ -5655,6 +6253,74 @@ export function decidiRispostaVuota(stato, { vuota, usage = null, dopoAttrezzi =
         return { azione: 'ritenta', attesaIndice: stato.ritentativi - 1 }
     }
     return { azione: 'fine', deterministico }
+}
+
+/* R2 della revisione di 245 (05/11/2026): il giro ha fatto lavoro VERO con gli attrezzi dopo l'ultimo messaggio `user`, note di TALOS
+   comprese. Come Hermes `agent/agent_runtime_helpers.py:3358` `tool_results_this_turn`: «ANY user row ends the window, the continuation
+   nudges included: that is what bounds the degenerate-final guard to one re-prompt per collapse». */
+export function attrezziDopoLUltimoUser(messaggi) {
+    for (let i = (messaggi?.length ?? 0) - 1; i >= 0; i--) {
+        const ruolo = messaggi[i]?.role
+        if (ruolo === 'user') return false
+        if (ruolo === 'tool') return true
+    }
+    return false
+}
+
+/*
+ * Decisione 245 (owner 05/11/2026, forma con Performance, Mobile e CLI: `FORMA-MAI-FERMARSI-PER-IL-CONTESTO-2026-11-05.md`): DeepSeek
+ *   chiudeva il giro con «Riprendo dal punto 1 al prossimo giro: il contesto di questa sessione è agli ultimi token…», ma TALOS compatta da
+ *   solo. Accanto alla risposta vuota e con la sua forma (`stato` vive un giro): UNA chiamata in più con una nota, poi il giro si chiude come
+ *   oggi. Come Gemini CLI (`packages/core/src/core/client.ts:905-934`: nessun attrezzo, segnale non fermato, «Please continue.», il
+ *   richiamo conta nel tetto), ma riconosciuto con una regex sulla sola risposta finale invece di una seconda chiamata al modello (P3).
+ * - Riconoscimento (M1, C3): nella STESSA frase una parola del contesto E il modello in prima persona che si ferma o rimanda. «The context
+ *   engine now resumes…» è il motore, non il modello; «riprendo domani» senza contesto e «la finestra è di 128k token» non bastano.
+ * - Lineare (P3): alternative di parole fisse, nessun quantificatore annidato; 50 KB sotto i 5 ms (`mai-fermarsi-per-il-contesto.test.mjs`).
+ */
+export const NOTA_FERMATA_CONTESTO = '[TALOS: Context is compacted automatically and is not a reason to stop. Continue the task from where you are.]'
+const confini = (alternative) => new RegExp(`(?<![\\p{L}\\p{N}_])(?:${alternative})(?![\\p{L}\\p{N}_])`, 'iu')
+const RE_PAROLA_DEL_CONTESTO = confini('contexts?|contesto|ultimi token|pochi token|token (?:rimasti|residui|disponibili)|tokens? (?:left|remaining)|out of tokens|token (?:budget|limit)')
+const RE_IL_MODELLO_SI_FERMA = confini([
+    // inglese, prima persona
+    'I(?:\'ll|’ll| will| am going to|\'m going to|’m going to| need to| have to| must| should| shall|\'d|’d)? (?:stop|pause|resume|continue|defer|break off|pick (?:it |this |that |things )?(?:back )?up|wrap (?:it |this |things )?up|hand (?:it |this )?off|end (?:my |the |this )?turn)',
+    'let me (?:stop|pause|wrap up|end)',
+    'I(?:\'m|’m| am) (?:running (?:out|low)|almost out|stopping|pausing)',
+    '^\\s*(?:stopping|pausing|resuming|continuing)',
+    // italiano, prima persona
+    'riprendo|riprenderò|riprenderei|continuo|continuerò|proseguo|proseguirò|mi fermo|mi fermerò|mi interrompo|devo fermarmi|preferisco fermarmi|chiudo qui|termino qui|lascio il resto|rimando|sospendo',
+].join('|'))
+const FINE_DELLA_FRASE = /[.!?…\n]+/u
+
+/** Pura: la risposta dice che il MODELLO si ferma o rimanda per il contesto (inglese, italiano, misti), nella stessa frase. */
+export function diceDiFermarsiPerIlContesto(testo) {
+    if (typeof testo !== 'string' || !testo) return false
+    return testo.split(FINE_DELLA_FRASE).some((frase) => RE_PAROLA_DEL_CONTESTO.test(frase) && RE_IL_MODELLO_SI_FERMA.test(frase))
+}
+
+/**
+ * Pura: che cosa fare di una risposta finale (senza attrezzi). `stato` vive un giro solo: `{ richiamato }`.
+ * Mai dopo uno Stop di chiunque (persona, sistema, tempo: tutti `controller.abort()`, C2, M2), mai al tetto dei passi (il richiamo
+ * conta nel tetto, C2), mai in un giro senza attrezzi, mai se un'altra chiamata in più c'è già stata (spinta, ritentativo, riapertura: P3).
+ * @returns {{azione: 'richiama'|'fine'}}
+ */
+export function decidiFermataPerContesto(stato, { testo, dopoAttrezzi = false, fermato = false, alTettoDeiPassi = false, altraChiamataInPiu = false }) {
+    if (stato.richiamato || fermato || alTettoDeiPassi || altraChiamataInPiu || !dopoAttrezzi || !diceDiFermarsiPerIlContesto(testo)) return { azione: 'fine' }
+    stato.richiamato = true
+    return { azione: 'richiama' }
+}
+
+/*
+ * Blocco 20 (01/11/2026, forma con CLI e Mobile): un modello che RIFIUTA la conversazione non si richiama. Risposta normale con `content` vuoto e
+ * `finish_reason: content_filter`, `native_finish_reason: refusal` o `message.refusal` (a pezzi in `delta.refusal`): la stessa domanda dà lo stesso rifiuto, e un
+ * rifiuto può essere pagato (platform.claude.com, «Refusals and fallback», letta il 01/11: si prova un altro modello). Si esce PRIMA della scala: niente spinta, niente
+ * ritentativi. Il codice resta quello che i tre prodotti conoscono; cambia la classe, la stessa parola della catena dei riassunti.
+ */
+const portaUnRifiuto = (scelta) => [scelta?.delta?.refusal, scelta?.message?.refusal].some((r) => typeof r === 'string' && r.trim() !== '')
+export const eRifiutoDelModello = ({ finishReason = null, nativeFinishReason = null, rifiutoDelModello = false } = {}) =>
+    rifiutoDelModello === true || nativeFinishReason === 'refusal' || finishReason === 'content_filter'
+export function erroreRifiutoDelModello() {
+    return Object.assign(new Error('The model refused to answer this conversation.'), { code: 'PROVIDER_EMPTY_RESPONSE', classe: 'rifiuto-del-modello', transitorio: false,
+        chiave: 'server.providerOutcome.refused' })
 }
 
 /** L'errore onesto di fine scala: dice quante volte, e il motivo del fornitore quando c'è. */
@@ -5684,7 +6350,7 @@ export const PASSI_TETTO_USCITA_MASSIMI = 2
 export const TETTO_USCITA_DI_SERIE = 32_000
 /** I codici con cui un giro può finire dal lato del fornitore: la CLI li percorre per controllare che ognuno abbia le sue parole. */
 export const CODICI_ERRORE_DEL_GIRO = Object.freeze(['PROVIDER_EMPTY_RESPONSE', 'PROVIDER_OUTCOME_UNKNOWN', 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO',
-    CODICE_TETTO_USCITA_ESAURITO])
+    CODICE_TETTO_USCITA_ESAURITO, 'rifiuto-del-modello'])
 const LIVELLI_DI_RAGIONAMENTO = Object.freeze(['max', 'xhigh', 'high', 'medium', 'low'])
 
 /** Il taglio è del tetto: `length` (o il motivo nativo), oppure i token usciti sono arrivati al tetto inviato (GLM manda un errore). */
@@ -5765,7 +6431,7 @@ export function storiaDelGiroFallito(messaggi, frase) {
     const storia = [...messaggi]
     while (storia.length > 0) {
         const ultimo = storia.at(-1)
-        if ((ultimo?.role === 'user' && ultimo.content === NOTA_RISPOSTA_VUOTA)
+        if ((ultimo?.role === 'user' && (ultimo.content === NOTA_RISPOSTA_VUOTA || ultimo.content === NOTA_FERMATA_CONTESTO))
             || (ultimo?.role === 'assistant' && ultimo.content === SEGNAPOSTO_RISPOSTA_VUOTA && !ultimo.tool_calls?.length)) storia.pop()
         else break
     }
@@ -6230,6 +6896,8 @@ const MAX_LETTURE_INSIEME = 8
  *   vederne l'effetto, esattamente come una `cerca` dopo una `scrivi`.
  */
 const LETTURE_PURE = new Set(['cerca', 'leggi', 'elenca', 'naviga', 'web_search'])
+/* FE-008, Performance 03/11: `steps_update` non cambia niente, quindi non spezza il gruppo di letture in parallelo. Non parte in anticipo: `partenzaDellaLettura` non lo conosce */
+export const nonFermaLeLetture = (nome) => LETTURE_PURE.has(nome) || nome === NOME_PASSI
 /*
  * ⛔ P19 (27/09/2026, sessione cad61a7e dell'owner su talos-code 0.3.0): `disco.leggi` legge QUALUNQUE file come UTF-8
  * (`kernelPerIlBanco.js` `readFile(…, "utf8")`), e `leggi` su 5 screenshot PNG ha messo nella conversazione i loro BYTE come
@@ -6880,6 +7548,9 @@ const esitoSenzaRisultati = (avvisi, altrimenti) => (avvisi.length > 0 ? RICERCA
 const MAX_RIGHE_RG = 100
 const MAX_RIGHE_PER_FILE = 5
 const MAX_COLONNE_RG = 200
+/* PERF R-33: tetti di `cerca.oppure` — 8 voci (lo dice anche lo schema) e un termine non più lungo di una riga di codice lunga */
+const MAX_TERMINI_OPPURE = 8
+const MAX_CARATTERI_TERMINE = 500
 const MAX_BYTE_RG = 4_000_000
 const TEMPO_MAX_RG_MS = 20_000
 let ripgrepRisolto = null
@@ -7080,7 +7751,8 @@ function paginaDeiNomiRg(ricerca, { chiaveNome, offset, continua = null, inCorso
         + coda + nota
 }
 /* La pagina del TESTO dall'uscita di rg: la stessa per la ricerca che risponde subito e per quella ripresa. */
-function paginaDelContenutoRg(ricerca, { testo, chiaveNome, offset, continua = null, inCorso = false, intestazione = () => '' }) {
+function paginaDelContenutoRg(ricerca, { testo, termini = null, chiaveNome, offset, continua = null, inCorso = false, intestazione = () => '' }) {
+    const cercati = Array.isArray(termini) && termini.length > 1 ? termini.map((t) => `"${t}"`).join(' or ') : `"${testo}"`
     /* rg lavora in parallelo e non promette un ordine: si ordina qui, cosi' la stessa domanda da' la stessa risposta. */
     const perFile = new Map()
     for (const riga of ricerca.testo.split(/\r?\n/u)) {
@@ -7105,8 +7777,8 @@ function paginaDelContenutoRg(ricerca, { testo, chiaveNome, offset, continua = n
     if (fine) return testa + fine + coda + nota
     if (file.length === 0) {
         const dove = chiaveNome ? ` in paths containing "${chiaveNome}"` : ''
-        if (inCorso) return `${testa}no file matches "${testo}"${dove} yet.${coda}${nota}`
-        return `${testa}${esitoSenzaRisultati(avvisi, `no file matches "${testo}"${dove}`)} (searched with ripgrep; .gitignore respected, binaries skipped). Try a shorter or different "testo"${chiaveNome ? ' or a broader "nome"' : ''}.${coda}${nota}`
+        if (inCorso) return `${testa}no file matches ${cercati}${dove} yet.${coda}${nota}`
+        return `${testa}${esitoSenzaRisultati(avvisi, `no file matches ${cercati}${dove}`)} (searched with ripgrep; .gitignore respected, binaries skipped). Try a shorter or different "testo"${chiaveNome ? ' or a broader "nome"' : ''}.${coda}${nota}`
     }
     const righe = []
     let righeTesto = 0, fileMostrati = 0
@@ -7140,7 +7812,10 @@ async function cercaNomiConRipgrep(radice, chiaveNome, dentro, segnale, offset, 
     ricerca.radice = radice
     return paginaDeiNomiRg(ricerca, { chiaveNome, offset, ...pagineDellaRicercaViva(ricerca) })
 }
-async function cercaConRipgrep(radice, testo, chiaveNome, dentro, segnale, offset, opzioniRg = {}) {
+async function cercaConRipgrep(radice, termini, chiaveNome, dentro, segnale, offset, opzioniRg = {}) {
+    /* PERF R-33: un `-e` per termine (rg li unisce in OR), sempre `--fixed-strings --ignore-case`; con un termine solo gli argomenti sono quelli di prima */
+    const testo = termini[0]
+    const parametri = termini.length > 1 ? { testo, chiaveNome, termini } : { testo, chiaveNome }
     const rg = await percorsoRipgrep()
     if (!rg) return null
     const comuni = [...argomentiComuniRipgrep(radice), ...globDiEsclusione(opzioniRg.escludi)]
@@ -7152,12 +7827,12 @@ async function cercaConRipgrep(radice, testo, chiaveNome, dentro, segnale, offse
        i percorsi in uscita restano relativi alla radice del workspace, la grammatica che `leggi` già parla. */
     const ricerca = await eseguiRipgrep(rg, [...comuni, '--line-number', '--with-filename', '--no-heading', '--color', 'never',
         '--fixed-strings', '--ignore-case', '--max-count', String(MAX_RIGHE_PER_FILE), '--max-columns', String(MAX_COLONNE_RG),
-        '--max-columns-preview', '-e', testo, '--', dentro || '.'], radice, segnale, { ...opzioniRg, descrizione: { tipo: 'testo', parametri: { testo, chiaveNome } } })
+        '--max-columns-preview', ...termini.flatMap((t) => ['-e', t]), '--', dentro || '.'], radice, segnale, { ...opzioniRg, descrizione: { tipo: 'testo', parametri } })
     if (ricerca === null) return null
     if (ricerca.fermato) return 'stopped: the search was interrupted.'
     if (ricerca.errore) ricerca.erroriRg = erroriDiRipgrep(ricerca.stderr, radice)
     ricerca.radice = radice
-    return paginaDelContenutoRg(ricerca, { testo, chiaveNome, offset, ...pagineDellaRicercaViva(ricerca) })
+    return paginaDelContenutoRg(ricerca, { ...parametri, offset, ...pagineDellaRicercaViva(ricerca) })
 }
 /* Aspetta la fine di una ricerca viva al più `ms`, o lo Stop. */
 function attendiAlPiu(promessa, ms, segnale) {
@@ -7180,7 +7855,7 @@ async function riprendiRicerca(id, offset, { ricerche, segnale, tempoMs, radice 
            modello sceglie quella giusta invece di indovinare un numero. */
         const tenute = typeof ricerche.elenco === 'function' ? ricerche.elenco() : []
         const statoLeggibile = { 'in-corso': 'running', finita: 'finished', fermata: 'stopped', scaduta: 'timed out', troppa: 'stopped: too much output' }
-        const domanda = (v) => (v.tipo === 'nomi' ? `nome ${JSON.stringify(v.parametri?.chiaveNome ?? '')}` : `testo ${JSON.stringify(v.parametri?.testo ?? '')}`)
+        const domanda = (v) => (v.tipo === 'nomi' ? `nome ${JSON.stringify(v.parametri?.chiaveNome ?? '')}` : `testo ${JSON.stringify(v.parametri?.testo ?? '')}${v.parametri?.termini?.length > 1 ? ` oppure ${JSON.stringify(v.parametri.termini.slice(1))}` : ''}`)
         const elenco = tenute.length > 0
             ? ` Searches kept in this session: ${tenute.slice(0, 10).map((v) => `${v.id} for ${domanda(v)} (${statoLeggibile[v.stato] ?? v.stato})`).join(', ')}; continue one of them with its id.`
             : ' No search is kept in this session right now.'
@@ -7278,8 +7953,18 @@ async function eUnBinarioDaCercare(disco, radice, percorso) {
  * @param {{radice?: string}} [opzioni] — la cartella VERA, per leggere il `.gitignore`.
  *   Assente (test, ponte del telefono) ⇒ si usa il ripiego `POTATE_SENZA_GITIGNORE`.
  */
-export async function cercaNelProgetto(disco, { testo, nome, dentro, offset = 0, continua }, { radice, segnale, ricerche = null, tempoRgMs, escludi = [], salta = null } = {}) {
+export async function cercaNelProgetto(disco, { testo, oppure, nome, dentro, offset = 0, continua }, { radice, segnale, ricerche = null, tempoRgMs, escludi = [], salta = null } = {}) {
     if (!Number.isSafeInteger(offset) || offset < 0) return 'INVALID. "offset" must be a non-negative safe integer counting matching files; nothing was searched.'
+    /*
+     * PERF R-33 (30/10/2026): `oppure` assente o null = il comportamento di prima, byte per byte. Un elenco vuoto, una voce vuota o non
+     *   testuale, o più di MAX_TERMINI_OPPURE voci si RIFIUTANO: un elenco vuoto letto come «nessun filtro» cercherebbe tutto
+     *   (la lezione «un elenco vuoto non limita, allarga»).
+     */
+    const altriTermini = oppure === undefined || oppure === null ? [] : oppure
+    if (!Array.isArray(altriTermini) || (oppure !== undefined && oppure !== null && altriTermini.length === 0) || altriTermini.length > MAX_TERMINI_OPPURE
+        || altriTermini.some((t) => typeof t !== 'string' || !t.trim() || t.trim().length > MAX_CARATTERI_TERMINE)) {
+        return `INVALID. "oppure" takes a list of 1 to ${MAX_TERMINI_OPPURE} non-empty texts (each at most ${MAX_CARATTERI_TERMINE} characters), e.g. ["loadConfig", "readConfig"]; nothing was searched.`
+    }
     /* F001b (owner 01/10/2026): una ricerca che continua si riprende per riferimento; le altre chiavi qui non contano. */
     const tempoMs = tempoRgMs ?? tempoRipgrepPer(radice)
     /*
@@ -7296,7 +7981,7 @@ export async function cercaNelProgetto(disco, { testo, nome, dentro, offset = 0,
     const conNota = (nota, esito) => (typeof esito === 'string' ? `${nota}${esito}` : esito)
     // ⛔ R-24 (CLI): i segnaposto di R-01 PRIMA di tutto il resto, se no «undefined» diventerebbe una ricerca vera
     if (cursoreSegnaposto(continua)) {
-        return conNota(notaIgnorata, await cercaNelProgetto(disco, { testo, nome, dentro, offset }, { radice, segnale, ricerche, tempoRgMs, escludi, salta }))
+        return conNota(notaIgnorata, await cercaNelProgetto(disco, { testo, oppure, nome, dentro, offset }, { radice, segnale, ricerche, tempoRgMs, escludi, salta }))
     }
     const riferimento = riferimentoDiRicerca(continua)
     if (riferimento) return riprendiRicerca(riferimento, offset, { ricerche, segnale, tempoMs, radice })
@@ -7307,13 +7992,19 @@ export async function cercaNelProgetto(disco, { testo, nome, dentro, offset = 0,
      *   È una ricerca in sola lettura: nessun effetto a parte, e la nota rende la scelta visibile.
      */
     if (testoContinua) {
-        if (String(testo ?? '').trim() || String(nome ?? '').trim()) {
-            return conNota(notaIgnorata, await cercaNelProgetto(disco, { testo, nome, dentro, offset }, { radice, segnale, ricerche, tempoRgMs, escludi, salta }))
+        if (String(testo ?? '').trim() || String(nome ?? '').trim() || altriTermini.length > 0) {
+            return conNota(notaIgnorata, await cercaNelProgetto(disco, { testo, oppure, nome, dentro, offset }, { radice, segnale, ricerche, tempoRgMs, escludi, salta }))
         }
         const notaCercata = `NOTE: "continua" was ${JSON.stringify(continua)}, which is not a search id (those look like "r1"), so it was searched as "testo". Put the text to search in "testo"; "continua" only takes the id a running search gave you.\n`
         return conNota(notaCercata, await cercaNelProgetto(disco, { testo: testoContinua, dentro, offset }, { radice, segnale, ricerche, tempoRgMs, escludi, salta }))
     }
-    const chiaveTesto = String(testo ?? '').trim().toLowerCase()
+    /* PERF R-33: i termini in OR, `testo` per primo; un doppione (senza maiuscole) si cerca una volta. `chiaveTesto` resta il primo */
+    const termini = []
+    for (const t of [String(testo ?? '').trim(), ...altriTermini.map((t) => t.trim())]) {
+        if (t && !termini.some((g) => g.toLowerCase() === t.toLowerCase())) termini.push(t)
+    }
+    const chiaviTesto = termini.map((t) => t.toLowerCase())
+    const chiaveTesto = chiaviTesto[0] ?? ''
     const chiaveNome = String(nome ?? '').trim().toLowerCase()
     if (!chiaveTesto && !chiaveNome) return 'give at least one of "testo" or "nome".'
     /*
@@ -7395,7 +8086,7 @@ export async function cercaNelProgetto(disco, { testo, nome, dentro, offset = 0,
        `null` = rg assente o fallito: si prosegue con la camminata JS qui sotto, invariata. */
     if (radice) {
         const conRg = chiaveTesto
-            ? await cercaConRipgrep(radice, String(testo).trim(), chiaveNome, dentroPulito, segnale, offset, { ricerche, tempoMs, escludi })
+            ? await cercaConRipgrep(radice, termini, chiaveNome, dentroPulito, segnale, offset, { ricerche, tempoMs, escludi })
             : await cercaNomiConRipgrep(radice, chiaveNome, dentroPulito, segnale, offset, { ricerche, tempoMs, escludi })
         if (conRg !== null) return conRg
     }
@@ -7455,7 +8146,8 @@ export async function cercaNelProgetto(disco, { testo, nome, dentro, offset = 0,
             conto.letti += 1
             if (sembraBinario(contenuto)) { conto.binari += 1; continue }
             if (originale.length > contenuto.length) conto.testiTroncati += 1
-            if (contenuto.toLowerCase().includes(chiaveTesto)) perTesto.push(p)
+            const contenutoBasso = contenuto.toLowerCase()
+            if (chiaviTesto.some((k) => contenutoBasso.includes(k))) perTesto.push(p)
         }
         catch {
             if (segnale?.aborted) return 'stopped: the search was interrupted.'
@@ -7599,10 +8291,22 @@ export function shellDeiComandi(piattaforma = process.platform) {
     return piattaforma === 'android' ? '/system/bin/sh' : true
 }
 
-export function ambienteSenzaCredenziali() {
+/*
+ * Blocco 20 (01/11/2026, forma della CLI): `aggiunte` entra DOPO la pulizia e passa dallo stesso filtro per nome: una chiamata non può rimettere una credenziale nell'ambiente di un
+ * comando. Serve al Git approvato da solo, che è del modello e non si può riscrivere con `-c`: la cura di Git sicuro passa da `GIT_CONFIG_*`.
+ */
+export function ambienteSenzaCredenziali(aggiunte = null) {
     const ambiente = {}
     for (const [chiave, valore] of Object.entries(process.env)) {
         if (!eUnaCredenziale(chiave)) ambiente[chiave] = valore
+    }
+    if (aggiunte && typeof aggiunte === 'object') {
+        for (const [chiave, valore] of Object.entries(aggiunte)) {
+            if (typeof valore !== 'string' || eUnaCredenziale(chiave)) continue
+            /* Blocco 20, revisione (R10): su Windows un nome con altre maiuscole fa un doppione, e Node ne tiene uno solo */
+            if (process.platform === 'win32') for (const presente of Object.keys(ambiente)) if (presente !== chiave && presente.toUpperCase() === chiave.toUpperCase()) delete ambiente[presente]
+            ambiente[chiave] = valore
+        }
     }
     return ambiente
 }
@@ -7915,6 +8619,24 @@ export const contieneMarcaFermatoMentreGirava = (testo) => {
 }
 /** La frase concordata con la CLI, INTERA: la CLI confronta righe intere (`error-view.ts` KERNEL_TOOL_STOP_EN). */
 const FRASE_FERMATO_NON_ESEGUITO = '⛔ Stopped on request: it could not run, the session was stopped first. This tool did not run.'
+/*
+ * Decisione dell'owner 166 (04/11/2026, riga 43 della revisione d'uso): dopo uno Stop la domanda nuova ha la precedenza. La risposta a
+ *   metà non entra in storia (vedi il `catch` della chiamata al modello nel ciclo), quindi senza un segno il giro dopo vedeva due
+ *   richieste della persona di fila e rispondeva PRIMA a quella fermata. Il segno è una nota di sistema in coda al giro fermato:
+ *   un'etichetta strutturale che il modello non ha motivo di ripetere (Hermes, `agent_runtime_helpers_placeholders.py:9-16`), detta
+ *   come la guida di Codex (`codex-rs/core/src/context/turn_aborted.rs:12`, scritta da `tasks/mod.rs:1029-1041` a ogni interruzione;
+ *   commit «fix: prevent repeating interrupted turns (#9043)»). Claude Code scrive «[Request interrupted by user]».
+ *   Una ripresa SENZA messaggio nuovo lo toglie (`talosLavora`, ramo della storia presente): lì la persona chiede proprio di riprendere.
+ */
+/* Il segno vive in `sistema-piegato.mjs` (lo leggono anche gli adattatori dei fornitori); qui si riesporta per chi lo prendeva dal nucleo. */
+import { SEGNO_GIRO_FERMATO } from './sistema-piegato.mjs'
+export { SEGNO_GIRO_FERMATO }
+const NOTA_GIRO_FERMATO = `${SEGNO_GIRO_FERMATO} The person stopped the previous request on purpose, before it was finished. Do not resume or finish it unless they ask you to: their next message is a new request.`
+/* Revisione del blocco UI (R1): la porta di chi ospita dice se a fermare è stata la persona; assente o guasta ⇒ no (nessuna nota). */
+function laPersonaHaFermato(fermataDallaPersona) {
+    if (typeof fermataDallaPersona !== 'function') return false
+    try { return fermataDallaPersona() === true } catch { return false }
+}
 const FRASE_FERMATO_TEMPO_SCADUTO = '⛔ Stopped when the 120 seconds ran out: it did not finish on its own.'
 
 /*
@@ -7967,8 +8689,10 @@ export function normalizzaTimeoutShell(v) {
 export const FRASI_DI_PERMESSO = Object.freeze({
     'server.approval.outsideProject.verified': 'It wants to write outside the session folder, in {cartella}. With «Writes to the project» this needs your yes.',
     'server.approval.outsideProject.unverified': 'It could not be verified where «{percorso}» ends up: it may be outside the session folder. With «Writes to the project» this needs your yes.',
-    'server.approval.wslRoot.user': "This command would run in {linux} as {utente}. With this session's permissions commands run without asking, but as {utente} it can change the whole Linux system and write to the Windows disks. If you confirm, commands in {linux} can run as {utente} for the rest of this session without asking again.",
-    'server.approval.wslRoot.unverifiedUser': "This command would run in {linux}, and the user could not be verified: it could be root, which can change the whole Linux system and write to the Windows disks. With this session's permissions commands run without asking. If you confirm, commands in {linux} can run for the rest of this session without asking again.",
+    'server.approval.wslRoot.user': "This command would run in {linux} as {utente}. With this session's permissions commands run without asking, but as {utente} it can change the whole Linux system and write to the Windows disks. A yes applies to this chat, unless you choose only this time.",
+    'server.approval.wslRoot.commandChoosesRoot': "This command asks to run in {linux} as {utente}, by its own choice. As {utente} it can change the whole Linux system and write to the Windows disks. A yes applies to this chat, unless you choose only this time.",
+    'server.approval.wslRoot.noNormalUser': "This command would run in {linux} as {utente}, because this Linux has no normal user, and TALOS does not create one by itself. As {utente} it can change the whole Linux system and write to the Windows disks. A yes applies to this chat, unless you choose only this time. To stop this question, create a normal user: the Linux user section of the session permissions shows how.",
+    'server.approval.wslRoot.unverifiedUser': "This command would run in {linux}, and the user could not be verified: it could be root, which can change the whole Linux system and write to the Windows disks. With this session's permissions commands run without asking. A yes applies to this chat, unless you choose only this time.",
     'server.approval.network.sessionFolder': "The session folder is on a network computer ({ospite}): opening its files sends your Windows credentials to that computer. If you allow it, it applies to the whole session.",
     'server.approval.network.link': 'It wants to {cosa} through a link ({collegamento}) that leads to a network computer ({ospite}): just opening it sends your Windows credentials to that computer. It needs your yes.',
     'server.approval.network.listFolder': 'It wants to see the files of a folder on a network computer ({ospite}): just opening it sends your Windows credentials to that computer. It needs your yes.',
@@ -7979,7 +8703,35 @@ export const FRASI_DI_PERMESSO = Object.freeze({
     'server.approval.network.action.list': 'see the files of a folder',
     'server.approval.network.action.search': 'search the files of a folder',
     'server.approval.network.action.open': 'open a file',
+    /* Decisione 155 (04/11/2026): la sola carta della shell in Accesso pieno, una frase per ogni posto critico (`cancellazioni-critiche.mjs`) */
+    'server.approval.criticalDelete.root': 'This command deletes {percorso}, the root of a disk. With any permission, Full access included, this needs your yes every time.',
+    'server.approval.criticalDelete.topLevel': 'This command deletes {percorso}, a top-level folder of the disk. With any permission, Full access included, this needs your yes every time.',
+    'server.approval.criticalDelete.phone': "This command deletes {percorso}, the phone's shared storage. With any permission, Full access included, this needs your yes every time.",
+    'server.approval.criticalDelete.home': 'This command deletes {percorso}, your user folder. With any permission, Full access included, this needs your yes every time.',
+    'server.approval.criticalDelete.project': 'This command deletes {percorso}, the folder of this project. With any permission, Full access included, this needs your yes every time.',
+    'server.approval.criticalDelete.aboveProject': 'This command deletes {percorso}, a folder that contains this project. With any permission, Full access included, this needs your yes every time.',
+    'server.approval.criticalDelete.substitution': 'This command deletes a folder whose name is worked out only while it runs ({percorso}), so it cannot be checked first. With any permission, Full access included, this needs your yes every time.',
+    /* Decisione 179 e revisione del blocco permessi (04/11/2026): le radici del telefono e il parser che fallisce chiuso */
+    'server.approval.criticalDelete.phoneFolder': "This command deletes {percorso}, a main folder of the phone's shared storage (photos, downloads, documents). With any permission, Full access included, this needs your yes every time.",
+    'server.approval.criticalDelete.appData': 'This command deletes {percorso}, where TALOS keeps its keys and conversations on this phone. With any permission, Full access included, this needs your yes every time.',
+    'server.approval.criticalDelete.projectsFolder': 'This command deletes {percorso}, the folder that holds all your projects. With any permission, Full access included, this needs your yes every time.',
+    'server.approval.criticalDelete.tooNested': 'This command deletes something inside too many nested shells to check it first. With any permission, Full access included, this needs your yes every time.',
+    /* R-34 parte 2 (30/10/2026): un modello LOCALE ha scritto la chiamata come testo; il nucleo l'ha ricostruita e chiede SEMPRE */
+    'server.approval.callFromText': 'The model wrote this tool call as text instead of calling the tool ({nome}). TALOS rebuilt it: run it?',
+    /* E1, decisione 121 (03/11/2026): un modello SENZA attrezzi propri; li fa funzionare TALOS e chiede prima di ogni azione */
+    'server.approval.emulatedCall': 'This model has no tools of its own: TALOS runs them for it, and asks first ({nome}). Run it?',
+    'server.approval.research.quick': 'Depth: quick. Estimated cost: searches ~{ricerche}, pages ~{pagine}, tokens ~{token}, time ~{minuti} min.',
+    'server.approval.research.deep': 'Depth: deep. Estimated cost: searches ~{ricerche}, pages ~{pagine}, tokens ~{token}, time ~{minuti} min.',
+    'server.approval.research.exhaustive': 'Depth: exhaustive. Estimated cost: searches ~{ricerche}, pages ~{pagine}, tokens ~{token}, time ~{minuti} min.',
+    /* Decisioni 57 e 144 (04/11/2026): col prezzo pubblicato del modello, i dollari davanti al lavoro (che resta) */
+    'server.approval.research.quickPriced': 'Depth: quick. Estimated cost: {dollari} at the published price; searches ~{ricerche}, pages ~{pagine}, tokens ~{token}, time ~{minuti} min.',
+    'server.approval.research.deepPriced': 'Depth: deep. Estimated cost: {dollari} at the published price; searches ~{ricerche}, pages ~{pagine}, tokens ~{token}, time ~{minuti} min.',
+    'server.approval.research.exhaustivePriced': 'Depth: exhaustive. Estimated cost: {dollari} at the published price; searches ~{ricerche}, pages ~{pagine}, tokens ~{token}, time ~{minuti} min.',
 })
+
+/** Decisione 155: il perché di `cancellazioneCritica` → la coda della chiave della frase, e le parole per il modello quando nessuno è davanti. */
+const CHIAVE_CRITICA = Object.freeze({ radice: 'root', 'primo-livello': 'topLevel', telefono: 'phone', casa: 'home', progetto: 'project', 'sopra-il-progetto': 'aboveProject', sostituzione: 'substitution', 'cartella-del-telefono': 'phoneFolder', 'dati-dell-app': 'appData', 'tutti-i-progetti': 'projectsFolder', 'troppo-annidato': 'tooNested' })
+const DOVE_CRITICO = Object.freeze({ radice: 'the root of a disk', 'primo-livello': 'a top-level folder of the disk', telefono: "the phone's shared storage", casa: 'the user folder', progetto: 'the project folder', 'sopra-il-progetto': 'a folder that contains the project', sostituzione: 'a path known only while the command runs', 'cartella-del-telefono': "a main folder of the phone's shared storage", 'dati-dell-app': "the app's keys and conversations on the phone", 'tutti-i-progetti': 'the folder that holds all the projects', 'troppo-annidato': 'a deletion inside too many nested shells to check first' })
 
 /** `{ frase, fraseChiave, fraseParams }` di una carta di permesso. ⛔ Sostituzione con FUNZIONE: un percorso con `$&` resta com'è. */
 export function fraseDiPermesso(chiave, params) {
@@ -8002,6 +8754,120 @@ export const SFONDO_DIR = '.talos/processi-sfondo'
 /** Il percorso nativo del log di sfondo di UN comando: `<cartella sessione>/.talos/processi-sfondo/<toolCallId>.log`. */
 export function percorsoFileSfondo(cartella, toolCallId) {
     return join(String(cartella ?? '.'), ...SFONDO_DIR.split('/'), `${toolCallId}.log`)
+}
+
+/*
+ * ⛔⛔ Blocco 26 (rilievo R6 del Tester, forma chiusa il 01/11/2026 con l'OK di CLI, Mobile e Performance) — PO-26 anche per i
+ *   registri dello sfondo. `.talos/processi-sfondo/` era una cartella nuova nel repository della persona, non ignorata da git. Con
+ *   l'opzione `cartellaSfondo` del nucleo (la radice dei dati del progetto, come `cartellaRicerche`) il registro va in
+ *   `<dati del progetto>/background/<toolCallId>.log`, fuori dal progetto; senza, tutto resta com'era (la CLI la passerà lei).
+ *   Come i concorrenti, letti nel codice e nelle segnalazioni il 02/11/2026: Hermes scrive `hermes_bg_<id>.log` nella cartella
+ *   temporanea (`tools/process_registry.py:1287`, clone del 22/10), Claude Code nella sua `tasks/<id>.output` sotto la temp
+ *   (anthropics/claude-code#15700, #33789) — mai nel progetto.
+ * ⛔ Il nome da MOSTRARE è relativo alla cartella dati (`background/<id>.log`, condizione del Mobile): è quello che leggono il modello,
+ *   la riga dei Processi del telefono e la nota di fine; il percorso assoluto (che porta il nome dell'utente) resta sul PC.
+ *   `leggi` sa risolverlo (nota 3 di Performance), e solo per i registri di QUESTA sessione (`eUnRegistroDiSfondo`).
+ */
+export const SFONDO_DIR_DATI = 'background'
+/** Il nome da mostrare del registro di un comando, relativo alla cartella dati del progetto. */
+export function nomeMostratoFileSfondo(toolCallId) {
+    return `${SFONDO_DIR_DATI}/${toolCallId}.log`
+}
+/** Il percorso nativo del registro di un comando dentro la cartella dati del progetto. */
+export function percorsoFileSfondoNeiDati(cartellaDati, toolCallId) {
+    return join(String(cartellaDati), SFONDO_DIR_DATI, `${toolCallId}.log`)
+}
+/*
+ * Ritocco D1 (Desktop, 02/11/2026; condizione del Mobile) — lo STESSO testo, per gli eventi: il modello legge `<percorso pieno>
+ *   (<nome corto>)`, un evento (che può andare al ponte) solo `<nome corto>`. `file` è il percorso pieno, `mostrato` il nome corto.
+ *   Misurato (chars/4): la riga del modello ~52 token contro ~30 di prima del blocco 26; quella dell'evento ~15.
+ */
+export function testoSfondoPerGliEventi(testo, file, mostrato) {
+    const s = String(testo ?? '')
+    if (typeof file !== 'string' || file === '' || typeof mostrato !== 'string' || mostrato === '') return s
+    /* Revisione del blocco 26 (Mobile, R26-1/R26-2): non solo la forma esatta — lo stesso registro scritto con le barre nell'altro verso
+       (`C:/Users/…`, come lo scrivono Git Bash, Node e i modelli), senza distinguere le maiuscole su Windows, e visto da WSL
+       (`/mnt/c/Users/…`, con «dove girano i comandi» su WSL). Ogni forma, con o senza « (<nome corto>)» dopo, diventa il nome corto. */
+    const forme = formeDelPercorso(file)
+    if (!forme) return s
+    const corto = mostrato.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+    return s.replace(new RegExp(`${forme.sorgente}(?: \\(${corto}\\))?`, forme.bandiere), () => mostrato)
+}
+/** Il nome da mostrare di un registro dato col percorso pieno: `background/<f>` nella cartella dati, `.talos/processi-sfondo/<f>` per un
+ *  registro di prima rimasto nel progetto (regola unica del Mobile: relativo alla SUA cartella); `null` se non è nessuno dei due. */
+export function nomeMostratoDaPercorsoSfondo(file) {
+    const m = /(?:^|[\\/])(background|\.talos[\\/]processi-sfondo)[\\/]([^\\/]+\.log)$/u.exec(String(file ?? ''))
+    if (!m) return null
+    return m[1] === SFONDO_DIR_DATI ? `${SFONDO_DIR_DATI}/${m[2]}` : `.talos/processi-sfondo/${m[2]}`
+}
+/** Il modello di tutte le forme di un percorso pieno: separatori in tutti e due i versi; per un percorso di Windows anche `/mnt/<lettera>/`
+ *  e senza distinguere le maiuscole. `null` per un percorso vuoto. */
+function formeDelPercorso(file) {
+    const normale = String(file).replace(/\\/gu, '/')
+    if (normale === '') return null
+    const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+    const windows = /^([A-Za-z]):\/(.*)$/u.exec(normale)
+    const pezzi = (windows ? windows[2] : normale.replace(/^\//u, '')).split('/').filter((p) => p !== '').map(esc)
+    const corpo = pezzi.join('[\\\\/]+')
+    if (windows) return { sorgente: `(?:${windows[1]}:[\\\\/]+|/mnt/${windows[1].toLowerCase()}/+)${corpo}`, bandiere: 'giu' }
+    return { sorgente: `[\\\\/]+${corpo}`, bandiere: 'gu' }
+}
+/** Il nome del file di un riferimento corto `background/<nome>.log` (anche con la barra di Windows), o `null`. Mai una cartella in
+ *  mezzo: il riferimento nomina un file e basta. */
+/* Decisione 43: la forma del nome corto di un allegato (`src/allegati-dati.mjs`). Solo un filtro economico: decide il confronto esatto con l'elenco della conversazione. */
+const RIFERIMENTO_ALLEGATO = /^attachments\/[0-9a-f]{24}\/[^/\\]+$/iu
+/* BD17: un modello su Windows può scriverlo con `./`, con le barre rovesciate o con altre maiuscole: resta lo stesso allegato */
+const riferimentoNormale = (grezzo) => String(grezzo ?? '').trim().replaceAll('\\', '/').replace(/^(?:\.\/)+/u, '')
+const MOTIVO_ALLEGATO_SOLA_LETTURA = 'REFUSED. An attached file cannot be changed: nothing was written. Read it, then write the new version as a file of the project.'
+export function nomeDaRiferimentoSfondo(percorso) {
+    const m = /^background[\\/]([^\\/]+\.log)$/u.exec(String(percorso ?? '').trim())
+    return m ? m[1] : null
+}
+
+/*
+ * ⛔⛔ È UN REGISTRO DI SFONDO SCRITTO DA TALOS IN QUESTA SESSIONE? — l'unica lettura fuori dal progetto che il blocco 26 apre senza
+ *   chiedere, con le tre condizioni di Performance:
+ *   1. un INSIEME di percorsi esatti, mai un prefisso: un altro file della cartella dati (anche il registro di un'altra sessione,
+ *      accanto) non c'è dentro, e chiede come prima;
+ *   2. normalizzati col percorso REALE: il percorso reale del file richiesto deve essere quello dichiarato (nessun collegamento sulla
+ *      strada, né la cartella né il file), e il file è un file vero con UN nome solo (`nlink === 1`: un collegamento fisico verso un
+ *      segreto messo al posto del registro ne ha due) — la stessa disciplina di `eUnaPaginaSalvata`;
+ *   3. nessun'altra lettura si apre: qualunque dubbio (errore di disco, nome che non torna) ⇒ `false`, e `leggi` chiede come sempre.
+ *      Sbagliare qui costa una domanda, mai una lettura.
+ */
+export async function eUnRegistroDiSfondo(percorsi, percorsoAssoluto) {
+    return (await identitaRegistroDiSfondo(percorsi, percorsoAssoluto)) !== null
+}
+/*
+ * Revisione del blocco 26 (Mobile, S3): fra il controllo e l'apertura un comando in sottofondo (che il modello controlla) potrebbe mettere
+ *   un collegamento al posto del registro. Il controllo restituisce l'IDENTITÀ del file (`dev`, `ino`); dopo la lettura `leggi` la
+ *   ricontrolla (`stessoRegistroDiSfondo`) e, se è cambiata, scarta ciò che ha letto e rifiuta. `null` = non è un registro della sessione.
+ */
+export async function identitaRegistroDiSfondo(percorsi, percorsoAssoluto) {
+    if (!percorsi || typeof percorsoAssoluto !== 'string' || percorsoAssoluto === '') return null
+    const chiave = (p) => (process.platform === 'win32' ? p.toLowerCase() : p)
+    try {
+        const dichiarato = resolve(percorsoAssoluto)
+        let nellInsieme = false
+        for (const p of percorsi) if (typeof p === 'string' && p !== '' && chiave(resolve(p)) === chiave(dichiarato)) { nellInsieme = true; break }
+        if (!nellInsieme) return null
+        const info = await lstat(dichiarato, { bigint: true })
+        if (!info.isFile() || info.nlink !== 1n) return null
+        if (chiave(await realpath(dichiarato)) !== chiave(dichiarato)) return null
+        return { percorso: dichiarato, dev: info.dev, ino: info.ino }
+    } catch {
+        return null
+    }
+}
+/** Il registro è ancora lo stesso file del controllo (stesso `dev`/`ino`, un nome solo, nessun collegamento)? Ogni dubbio ⇒ `false`. */
+export async function stessoRegistroDiSfondo(identita) {
+    if (!identita) return false
+    try {
+        const info = await lstat(identita.percorso, { bigint: true })
+        return info.isFile() && info.nlink === 1n && info.dev === identita.dev && info.ino === identita.ino
+    } catch {
+        return false
+    }
 }
 
 /**
@@ -8030,15 +8896,17 @@ const NOTA_SFONDO_OUTPUT = '⏳ The command keeps running in the background (it 
 /** Il testo dell'esito-sfondo: il modello legge «il comando vive, ecco dove guardare l'output».
  *  ⛔ L'intestazione `IN BACKGROUND` è un CONTRATTO: `esitoDelProcesso` (session-registry) la legge
  *  a inizio contenuto per segnare la riga «in sfondo» nei Processi. Cambiala lì insieme a qui. */
-function testoSfondo({ da, file, attesaMs = TIMEOUT_SHELL_PREDEFINITO_MS, uscitaParziale = '' }) {
+function testoSfondo({ da, file, mostrato = null, attesaMs = TIMEOUT_SHELL_PREDEFINITO_MS, uscitaParziale = '' }) {
     const secondi = Math.max(1, Math.round(attesaMs / 1000))
     const chi = da === 'persona'
         ? 'moved to the background by the person (Processes tab)'
         : da === 'tempo-scaduto'
             ? `timed out after ${secondi} s and was moved to the background instead of being killed`
             : 'started in the background on request'
+    /* Blocco 26, ritocco D1 (Desktop, 02/11/2026): al MODELLO il percorso pieno (lo rilegge anche dalla shell: tail, cat) e accanto il
+       nome corto relativo alla cartella dati, che `leggi` risolve. Gli eventi lo vedono col solo nome corto (`perGliEventi`). */
     const rigaFile = file
-        ? `Output file: ${file}`
+        ? `Output file: ${file}${mostrato ? ` (${mostrato})` : ''}`
         : '(No output file: the folder refused the write; the output is not collected any more.)'
     return `${INTESTAZIONE_SFONDO}: ${chi}. ${NOTA_SFONDO_OUTPUT}\n${rigaFile}${uscitaParziale ? `\n\nOutput so far:\n${uscitaParziale}` : ''}`
 }
@@ -8070,7 +8938,11 @@ function creaGestoreSfondo({ p, segnaleSfondo, fileSfondo, cattura = null, eConc
             p.once('error', () => fine({ codice: null, segnale: null, errore: true }))
         })
         if (fermaTimer) fermaTimer()
-        const file = fileSfondo ? sfondaOutputSuFile(p, fileSfondo) : null
+        /* Blocco 26: la destinazione è il percorso (come sempre) o `{ percorso, mostrato }` — il registro nella cartella dati e il nome
+           da mostrare relativo a lei. Il testo per il modello porta solo il nome corto: il percorso assoluto resta sul PC. */
+        const destinazione = typeof fileSfondo === 'string' ? fileSfondo : (typeof fileSfondo?.percorso === 'string' && fileSfondo.percorso ? fileSfondo.percorso : null)
+        const mostrato = fileSfondo && typeof fileSfondo === 'object' && typeof fileSfondo.mostrato === 'string' && fileSfondo.mostrato ? fileSfondo.mostrato : null
+        const file = destinazione ? sfondaOutputSuFile(p, destinazione) : null
         cattura?.stacca()
         finisciTubi?.()
         const parziale = String(await leggiParziale() ?? '')
@@ -8079,7 +8951,8 @@ function creaGestoreSfondo({ p, segnaleSfondo, fileSfondo, cattura = null, eConc
             messoInSfondo: true,
             daSfondo: da,
             ...(file ? { fileSfondo: file } : {}),
-            testo: testoSfondo({ da, file, attesaMs, uscitaParziale: parziale }),
+            ...(file && mostrato ? { fileSfondoMostrato: mostrato } : {}),
+            testo: testoSfondo({ da, file, mostrato: file ? mostrato : null, attesaMs, uscitaParziale: parziale }),
             parziale,
             uscita,
         })
@@ -8950,8 +9823,13 @@ export async function fattiWsl(distro, { adesso = Date.now() } = {}) {
  * ⛔ `usaUtenteNormale` assente o falso ⇒ l'utente predefinito della distro, come prima (TALOS-BANCO, CLI e mobile non
  *   passano la preferenza): cambia solo ciò che si DICHIARA, non chi esegue.
  */
-export async function destinazioneDelComando(comando, { dove = null, usaUtenteNormale = false, automaticoInLinux = false } = {}) {
+export async function destinazioneDelComando(comando, { dove = null, usaUtenteNormale = false, automaticoInLinux = false, piattaforma = process.platform } = {}) {
     if (dove === 'windows') return { ambiente: 'windows' }
+    /* 31/10/2026 (Desktop, forma con CLI e Mobile): `wsl.exe` è di Windows. Dentro WSL con l'interop acceso risponde anche da Linux, e il
+       comando rientrava da Windows in un'altra shell, senza il gruppo che serve a fermarlo (AND-08/09). Su Linux e Android si esegue qui,
+       anche con `dove: 'wsl2'`: l'ambiente `windows` vuol dire «su questa macchina». Altrove (macOS) un comando chiesto in Linux non parte. */
+    if (piattaforma === 'linux' || piattaforma === 'android') return { ambiente: 'windows' }
+    if (piattaforma !== 'win32') return { ambiente: dove === 'wsl2' ? 'assente' : 'windows' }
     const distro = distroWslPredefinita()
     if (!distro) return { ambiente: dove === 'wsl2' ? 'assente' : 'windows' }
     const fatti = await fattiWsl(distro)
@@ -8970,9 +9848,11 @@ export async function destinazioneDelComando(comando, { dove = null, usaUtenteNo
  * verificare: si tratta come root, perché chi non riesce a valutare deve chiedere, non lasciar passare.
  */
 export async function rootWslDelComando(comando, opzioni) {
+    /* Revisione del blocco dati, BD3: l'utente lo può scegliere il comando, da Windows o da Linux: vale prima di dove gira e con chi lo lancia TALOS */
+    if (comandoChiedeRootWsl(comando)) return { distro: distroWslPredefinita(), utente: 'root', sceltoDalComando: true }
     const destinazione = await destinazioneDelComando(comando, opzioni)
     if (destinazione.ambiente !== 'wsl2' || (destinazione.scelta && !destinazione.scelta.root)) return null
-    return { distro: destinazione.distro, utente: destinazione.scelta ? destinazione.scelta.utente : null }
+    return { distro: destinazione.distro, utente: destinazione.scelta ? destinazione.scelta.utente : null, ...(distroSenzaUtenteNormale(destinazione.fatti) ? { nessunUtenteNormale: true } : {}) }
 }
 
 /**
@@ -9357,7 +10237,7 @@ export function staccaCartellaFinale(testo, marcatore = MARCATORE_CARTELLA) {
  *   poterlo scegliere, ora che «dove gira un comando» e' una decisione della sessione e non piu'
  *   una conseguenza di quale programma hai scritto.
  */
-function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella = false, segnaleStop, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false, onAvvio = null } = {}) {
+function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella = false, segnaleStop, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false, onAvvio = null, aggiunteAmbiente = null } = {}) {
     if (onBytes !== undefined && typeof onBytes !== 'function') throw new TypeError('onBytes must be a function')
     return new Promise((risolvi) => {
         /* ⛔ Su Windows la shell qui e' cmd: la coda parla la sua lingua, non quella di bash. */
@@ -9366,7 +10246,7 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
         const marcatore = nuovoMarcatoreCartella()
         const coda = tracciaCartella ? codaCheStampaLaCartella(perWindows, marcatore) : ''
         const metadata = onBytes && normalizzaMetadatiCattura({ schema: 'talos.process-output-metadata.v1', controlFooter: tracciaCartella ? { type: 'cwd-marker-v1', stream: 'stdout', marker: marcatore, prefixBytes: perWindows ? 0 : 1 } : null })
-        const p = spawn(`${comando}${coda}`, { cwd: cartella, shell: shellDeiComandi(), windowsHide: true, env: ambienteSenzaCredenziali(), ...opzioniGruppoDelComando() })
+        const p = spawn(`${comando}${coda}`, { cwd: cartella, shell: shellDeiComandi(), windowsHide: true, env: ambienteSenzaCredenziali(aggiunteAmbiente), ...opzioniGruppoDelComando() })
         puliziaDeiGruppi.registra(p) // revisione 15/10: il gruppo si ferma anche se l'host esce (vedi creaPuliziaDeiGruppi)
         annunciaAvvio(onAvvio, p) // C1 (10/10/2026): il PID della shell, per CPU e memoria nella scheda Processi
         let fuori = ''
@@ -9509,7 +10389,7 @@ function eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella 
     })
 }
 
-export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, onBytes, tracciaCartella = false, dove = null, segnaleStop, wsl = null, automaticoInLinux = false, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false, onAvvio = null } = {}) {
+export async function eseguiComandoSandboxato(comando, cartella, { mobile = false, onPezzo, onBytes, tracciaCartella = false, dove = null, segnaleStop, wsl = null, automaticoInLinux = false, timeoutMs = TIMEOUT_SHELL_PREDEFINITO_MS, segnaleSfondo = null, fileSfondo = null, inSfondoSubito = false, onAvvio = null, aggiunteAmbiente = null } = {}) {
     if (onBytes !== undefined && typeof onBytes !== 'function') throw new TypeError('onBytes must be a function')
     /*
      * ⛔⛔ BC-56, 16/09/2026 — IL COMANDO VUOTO AVEVA TRE ESITI, TUTTI SBAGLIATI.
@@ -9646,6 +10526,7 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
                 messoInSfondo: true,
                 daSfondo: wslRisultato.daSfondo,
                 ...(wslRisultato.fileSfondo ? { fileSfondo: wslRisultato.fileSfondo } : {}),
+                ...(wslRisultato.fileSfondoMostrato ? { fileSfondoMostrato: wslRisultato.fileSfondoMostrato } : {}), // blocco 26
                 ...(wslRisultato.uscita ? { uscita: wslRisultato.uscita } : {}), // A6-bis: l'uscita di wsl.exe è quella del comando
                 testo: wslRisultato.testo,
                 enforcement: 'wsl2',
@@ -9702,7 +10583,8 @@ export async function eseguiComandoSandboxato(comando, cartella, { mobile = fals
             cartellaFinale: cartellaFinaleValida(ripulito.cartella),
         }
     }
-    return eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella, segnaleStop, timeoutMs: attesaMs, segnaleSfondo, fileSfondo, inSfondoSubito, onAvvio })
+    /* `aggiunteAmbiente` vale solo qui: su WSL e sul dispositivo il kernel non può garantirla, e si ignora (forma della CLI, Blocco 20) */
+    return eseguiSuWindows(comando, cartella, { onPezzo, onBytes, tracciaCartella, segnaleStop, timeoutMs: attesaMs, segnaleSfondo, fileSfondo, inSfondoSubito, onAvvio, aggiunteAmbiente })
 }
 
 /**
@@ -10161,6 +11043,17 @@ function cartellaLibTypescriptRisolta() {
     return join(dirname(createRequire(import.meta.url).resolve('typescript/package.json')), 'lib')
 }
 
+/* R-39: le stesse due cartelle, nello stesso ordine, per il worker del cancello (che legge i `lib.*.d.ts` da sé). */
+let cartelleLibCalcolate = null
+export function cartelleLibreriaTs() {
+    if (!cartelleLibCalcolate) {
+        let risolta = null
+        try { risolta = cartellaLibTypescriptRisolta() } catch { /* nessun typescript raggiungibile: resta il percorso fisso */ }
+        cartelleLibCalcolate = [CARTELLA_LIB_TYPESCRIPT, risolta].filter(Boolean)
+    }
+    return cartelleLibCalcolate
+}
+
 export async function leggiLibreriaStandardTs(nome, { cartellaFissa = CARTELLA_LIB_TYPESCRIPT, risolviCartella = cartellaLibTypescriptRisolta } = {}) {
     try {
         return await readFile(join(cartellaFissa, nome), 'utf8')
@@ -10196,6 +11089,28 @@ export async function premessaDellaScrittura(radice, percorso, contenuto, { legg
     if (!ESTENSIONI_SORGENTE.includes(estensione)) {
         const contenutoPrima = await (leggiPrima ?? ((p) => discoNode({ radice }).leggi(p)))(percorso).then((testo) => testo, () => null)
         return { stato: 'presente', esisteva: contenutoPrima !== null, contenutoPrima }
+    }
+    /*
+     * ⛔ R-39 (Performance, 30/10/2026; forma chiusa con Desktop, CLI e Mobile): il compilatore è lavoro SINCRONO, e qui fermava il
+     *   processo 1,4–1,5 s alla prima scrittura di un sorgente e ~0,4 s alle altre (TUI, flusso del modello, timer). Ora lo fa un worker
+     *   del nucleo (`cancello-in-worker.mjs`) con la stessa funzione sugli stessi dati del disco. Restano qui, apposta: le prove che
+     *   passano un altro cancello, la casa Linux (`leggiPrima`: condizione della CLI), il telefono e `TALOS_CANCELLO_WORKER=0`
+     *   (`cancelloWorkerAmmesso`). Se il worker non risponde (caduto, tetto della memoria, tempo) si giudica qui sotto come prima.
+     */
+    if (cancello === cancelloSemantico && leggiPrima === null && cancelloWorkerAmmesso()) {
+        const [daWorker, contenutoPrima] = await Promise.all([
+            giudicaNelWorker({ radice, percorso, contenuto, cartelleLib: cartelleLibreriaTs() }),
+            discoNode({ radice }).leggi(percorso).then((testo) => testo, () => null),
+        ])
+        if (daWorker?.rotta) {
+            return { stato: 'ignoto', perche: daWorker.rotta.message, codice: CODICI_CONTROLLO_SPENTO.includes(daWorker.rotta.codiceCancello) ? daWorker.rotta.codiceCancello : 'errore-interno' }
+        }
+        if (daWorker?.esito) {
+            const esito = daWorker.esito
+            const esisteva = contenutoPrima !== null
+            if (esito.stato === 'assente') return { stato: 'assente', perche: esito.perche ?? 'it introduces a reference that does not exist', esisteva }
+            return { stato: esito.stato, esisteva, contenutoPrima, ...(esito.stato === 'ignoto' && esito.perche ? { perche: esito.perche, codice: CODICI_CONTROLLO_SPENTO.includes(esito.codice) ? esito.codice : 'errore-interno' } : {}) }
+        }
     }
     try {
         const fonti = fontiDaDisco(discoNode({ radice }))
@@ -10618,6 +11533,9 @@ const AZIONI_MOBILE_PER_ATTREZZO = {
  *   `generate_image`, che è l'UNICO con `canTransmit:true`).
  */
 export const SICUREZZA_PER_ATTREZZO = {
+    // 03/11/2026 (Mobile): l'elenco dei luoghi ricordati è un dato privato; toglierne uno non manda niente fuori
+    computer_use_places_list: { risk: 'R0', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    computer_use_places_remove: { risk: 'R1', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     scrivi: { risk: 'R1', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
     /*
      * ⭐ PO-12 (13/09/2026) — `file_edit` ha ESATTAMENTE la sicurezza di `scrivi`, e non per
@@ -11218,6 +12136,14 @@ export function attrezziNegatiDalLivello({ livelloAccesso, permessiPerAttrezzo }
         if (override === 'sempre' || override === 'chiedi') continue
         negati.add(nome)
     }
+    /*
+     * ⛔ Revisione del passo 5, difetto 8 (04/11/2026): `computer_use` agisce sul PC della persona (clic, scrittura, invio): in
+     *   Sola lettura e in Ricerca non si offre mai, nemmeno con una scelta per-attrezzo (il suo permesso è la carta del compito, non
+     *   `verificaPermessoScrittura`, quindi un override qui non ha un cancello da raggiungere). Condizione di Performance (11:19):
+     *   togliendolo non cambia l'ordine degli altri, e lo schema CON l'ospite è identico byte per byte a quello SENZA (prova
+     *   computer-use-revisione-passo5). Hermes nega il computer use quando il permesso non lo copre (`tools/approval.py:483-487`).
+     */
+    negati.add(NOME_COMPUTER_USE)
     return negati
 }
 
@@ -11444,7 +12370,8 @@ export async function verificaAzioneAutomazione(azione, { chiediApprovazioneFn, 
         approvato = gara ? await Promise.race([domanda, gara]) : await domanda
     }
     catch {
-        approvato = false
+        /* revisione del 03/11 pomeriggio, D3: un cancello che lancia non è un no della PERSONA (come `verificaPermessoScrittura`): resta REFUSED */
+        return { consentito: false, motivo: MOTIVO_CANCELLO_ROTTO }
     }
     if (approvato === FERMATO) {
         return { consentito: false, via: 'fermato-su-richiesta', motivo: `${MOTIVO_FERMATO_CHIEDENDO} for "${azione.tipo}".` }
@@ -11452,6 +12379,188 @@ export async function verificaAzioneAutomazione(azione, { chiediApprovazioneFn, 
     const risposta = esitoApprovazione(approvato)
     if (!risposta.approvato) return { consentito: false, motivo: risposta.motivo ?? 'the person did not approve it.' }
     return { consentito: true }
+}
+
+/*
+ * R-34 parte 2, revisione del Desktop S1 (30/10/2026): i segni di una carta che il nucleo (o chi ospita) FORZA anche con «sempre» —
+ *   il segreto (F15), la trifecta, fuori dal progetto, il contenuto sospetto, root in WSL, il computer di rete, il file di controllo
+ *   dell'agente (W1-13). Il «sì solo» della chiamata scritta come testo NON li salta mai: la carta del testo mostra nome e argomenti,
+ *   non l'avviso di quel rischio.
+ */
+/*
+ * Revisione avversaria della fase 8, REV8-01 (01/11/2026 notte; OK di CLI, Mobile e Performance) — LA CARTA SEMPRE. Le azioni che
+ *   l'owner ha voluto con la carta anche in Accesso pieno (`app_settings` dei gruppi sicurezza e aggiornamenti, D3 e D7; il QR di
+ *   `remote_phone_pair`, R5.12; l'uscita da ChatGPT di `chatgpt_account`, 12/10) portano questo segno, e il «sì solo» della chiamata
+ *   scritta come testo non lo salta: la carta del testo mostra nome e JSON, non l'avvertenza né le righe prima → dopo. È un SIMBOLO,
+ *   non un campo: JSON.stringify e structuredClone saltano le chiavi simbolo (MDN, ricerca del 01/11/2026), quindi non arriva negli
+ *   eventi, nel `pending` né sul disco — nessun campo nuovo nel contratto. Lo legge in processo anche il registro (`rispondiApprovazione`:
+ *   un sì AUTOMATICO, di una regola o della modalità, su questa carta è un no, condizione della CLI). `Symbol.for`: lo stesso anche se il
+ *   modulo si carica due volte.
+ */
+export const CARTA_SEMPRE = Symbol.for('talos.cartaSempre')
+/** Gli attrezzi del ramo «anteprima, carta, esegui» la cui carta, quando c'è, è sempre della persona (oltre ai due gruppi di `app_settings`).
+ *  02/11/2026 notte (OK di CLI, Mobile e Performance): anche le cartelle consentite e sbloccate e il controllo remoto, che chiedevano già
+ *  in Accesso pieno (R5.12 23/10, R5.14) ma senza segno, quindi il «sì solo» del testo li copriva. Il Mobile: la lista non si tiene a mano
+ *  ⇒ ogni attrezzo di quel ramo sta in UNA delle tre classi (`SENZA_CARTA_IN_ACCESSO_PIENO`, questa, `ATTREZZI_SENZA_CARTA_DALL_OSPITE`),
+ *  e una prova fallisce se un attrezzo nuovo non è classificato. */
+export const ATTREZZI_CARTA_SEMPRE = Object.freeze(new Set(['remote_phone_pair', 'chatgpt_account', 'remote_phone_folder_allow', 'remote_phone_folder_unblock', 'remote_control']))
+/** E1, revisione avversaria del Desktop D1 (04/11/2026, regola 17; OK di CLI, Mobile e Performance): gli attrezzi che chiedono GIÀ alla
+ *  persona con la loro scheda (la domanda, il piano, la carta della ricerca, le carte sempre). La carta emulata davanti sarebbe la seconda
+ *  interruzione per la stessa scelta: si salta, come R-34 parte 2 fa già per `research_start`. */
+export const ATTREZZI_CHE_CHIEDONO_DA_SE = Object.freeze(new Set(['ask_user_question', 'present_plan', 'research_start', ...ATTREZZI_CARTA_SEMPRE]))
+/** Gli attrezzi del ramo che in Accesso pieno non mostrano mai la carta perché è l'OSPITE a non darla: letture (nessuna carta) e /goal
+ *  (`obiettivo/per-il-modello.mjs`: «sempre, tranne in Accesso pieno», owner 15/10). Computer use 03/11: l'elenco dei luoghi ricordati è
+ *  una lettura, l'ospite non dà carta (LUOGHI-K-02). Computer use 04/11 (passo 5): `computer_use` non passa dall'anteprima del nucleo,
+ *  la carta del compito la dà l'ospite (`consensoDelCompito`, attrezzo.mjs) tranne in Accesso pieno, come /goal. */
+export const ATTREZZI_SENZA_CARTA_DALL_OSPITE = Object.freeze(new Set(['provider_exclusions_list', 'remote_phones', 'remote_phone_folders', 'goal_status', 'goal_create', 'goal_update', 'computer_use_places_list', NOME_COMPUTER_USE]))
+export const SEGNI_DI_CARTA_FORZATA = Object.freeze(['segreto', 'trifecta', 'fuoriDalProgetto', 'contenutoSospetto', 'wslRoot', 'percorsoDiRete', 'fileDiControllo', 'cancellazioneCritica', CARTA_SEMPRE])
+/** L'involucro di `chiediApprovazioneFn` per il «sì solo»: risponde sì da sé SOLO alla carta ORDINARIA del permesso di una chiamata già
+ *  approvata sulla carta del testo; tutto il resto (le carte forzate, quella del testo stessa, ogni altro id) arriva alla persona. */
+export function chiediConUnSiSolo(chiediDellOspite, approvate) {
+    return (azione) => (azione?.tipo !== 'chiamata-dal-testo' && typeof azione?.toolCallId === 'string' && approvate.has(azione.toolCallId)
+        && !SEGNI_DI_CARTA_FORZATA.some((segno) => azione[segno] !== undefined && azione[segno] !== null && azione[segno] !== false)
+        ? Promise.resolve(true) : chiediDellOspite(azione))
+}
+
+/**
+ * Ricerca a due porte (01/11/2026) — la `chiamataIniziale` che il kernel accetta: lista bianca di UN nome, domanda 1-500 caratteri
+ *   (lo schema di `research_start.question`), profondità fra le tre dello schema o assente. Qualunque altra forma ⇒ `null`: il giro
+ *   parte come sempre, col modello.
+ * @returns {{ nome: 'research_start', argomenti: { question: string, depth?: string } } | null}
+ */
+export const NOMI_CHIAMATA_INIZIALE = Object.freeze(['research_start'])
+export const PROFONDITA_RICERCA = Object.freeze(['quick', 'deep', 'exhaustive'])
+export const DOMANDA_RICERCA_MASSIMA = 500
+/* L'id della chiamata della persona: lo legge il registro per sapere se il primo passo è partito (revisione S3-1, ripiego sul cloud) */
+export const PREFISSO_CHIAMATA_DELLA_PERSONA = 'persona-'
+export function chiamataInizialeValida(c) {
+    if (!c || typeof c !== 'object' || !NOMI_CHIAMATA_INIZIALE.includes(c.nome)) return null
+    const question = typeof c.argomenti?.question === 'string' ? c.argomenti.question.trim() : ''
+    if (question.length < 1 || question.length > DOMANDA_RICERCA_MASSIMA) return null
+    const depth = c.argomenti?.depth
+    if (depth !== undefined && depth !== null && !PROFONDITA_RICERCA.includes(depth)) return null
+    return { nome: c.nome, argomenti: { question, ...(depth ? { depth } : {}) } }
+}
+
+/*
+ * ⛔⛔ D4 (owner 02/11/2026 sera, registro decisione 35, poi la modifica dopo la ricerca; OK di CLI, Mobile e Performance) — LA CARTA DELLA
+ *   RICERCA. Dalla chat una ricerca approfondita parte solo con il sì della persona, a ogni livello d'accesso, una carta per ricerca: domanda
+ *   modificabile, profondità, costo stimato, Avvia e Annulla. Gemini e ChatGPT fanno correggere il piano prima di partire; qui si aggiunge il
+ *   costo, senza un giro di pianificazione in più. Il costo sta nelle parole (`server.approval.research.*`), un punto solo: questa funzione,
+ *   sul piano deterministico dell'orchestratore (`talosResearchPlanFor`, che non costa un token). Decisioni 57 e 144 dell'owner (04/11/2026):
+ *   dollari dove il prezzo è noto, altrimenti il lavoro. Il prezzo `{ in, out }` per milione lo dà l'ospite (`prezzoDelModelloFn`, dal catalogo);
+ *   la cifra è `talosResearchPlanCost` sullo stesso piano, la stessa che l'orchestratore dice al modello quando la ricerca parte (`costoDetto`).
+ *   ⛔ Non è `semprePersona` (condizione della CLI: quella strada arriva solo a chi dichiara `chiamata-dal-testo`): è una carta normale col
+ *   segno `CARTA_SEMPRE`, che un sì automatico non apre (`rispondiApprovazione`). La domanda corretta torna nel campo facoltativo
+ *   `domandaModificata` della risposta: chi non lo manda approva la domanda così com'è, e CLI e telefono possono ignorarlo.
+ */
+export function azioneCartaRicerca(toolCallId, argomenti, prezzo = null) {
+    const depth = PROFONDITA_RICERCA.includes(argomenti?.depth) ? argomenti.depth : 'deep'
+    const question = typeof argomenti?.question === 'string' ? argomenti.question.trim() : ''
+    const totali = talosResearchPlanTotals(talosResearchPlanFor(question, depth))
+    const params = { ricerche: totali.searches, pagine: totali.pages, token: `${Math.round(totali.tokens / 1000)}k`, minuti: Math.max(1, Math.round(totali.minutes)) }
+    const costo = talosResearchPlanCost(totali, prezzoPerLaRicerca(prezzo))
+    const dollari = costo.known ? formattaDollari(costo.amount) : null
+    const frase = dollari ? fraseDiPermesso(`server.approval.research.${depth}Priced`, { dollari, ...params }) : fraseDiPermesso(`server.approval.research.${depth}`, params)
+    return { tipo: 'research_start', toolCallId, question, ...frase, [CARTA_SEMPRE]: true }
+}
+/** Il filtro del canale della carta: toglie dalla risposta la domanda corretta, che al cancello non serve (per lui un sì è solo `true`, C-005). */
+export function chiediCartaRicerca(chiediApprovazioneFn, domandaCorretta) {
+    return async (azione) => {
+        const risposta = await chiediApprovazioneFn(azione)
+        if (risposta?.approvato !== true || typeof risposta.domandaModificata !== 'string') return risposta
+        domandaCorretta(risposta.domandaModificata)
+        return true
+    }
+}
+export const PREFISSO_DOMANDA_CORRETTA = 'The person edited the question on the card; this is what runs: '
+export const MOTIVO_RICERCA_SENZA_PERSONA = "a deep research starts only with the person's yes on its card, and nobody is here to answer. Say what you would research and let the person start it."
+
+/**
+ * R-34 parte 2 (owner 30/10/2026; PROPOSTA-R34-PARTE-2-2026-10-30.md, sì di Desktop, CLI e Mobile) — la CARTA di una chiamata che un
+ *   modello LOCALE ha scritto come testo. Gemella di `verificaAzioneAutomazione` (corre contro lo Stop, approva SOLO `true`, C-005),
+ *   con una risposta in più: `{ nessunaPersona: true }` (chi ospita non ha un client capace di mostrarla, o la persona non c'è) NON è
+ *   un «no» — il giro chiede al modello di rifare la chiamata, come in rete. L'azione porta `semprePersona: true` (CLI: un ospite non
+ *   la approva MAI da solo; senza una persona rifiuta).
+ * @returns {Promise<{consentito: true} | {consentito: false, via?: string, motivo: string} | {nessunaPersona: true, motivo: string}>}
+ */
+export async function verificaChiamataDalTesto(azione, { chiediApprovazioneFn, segnaleStop } = {}) {
+    if (typeof chiediApprovazioneFn !== 'function') return { nessunaPersona: true, motivo: 'nessun-client' }
+    const FERMATO = Symbol('fermato-mentre-chiedevo')
+    const gara = segnaleStop
+        ? new Promise((risolvi) => {
+            if (segnaleStop.aborted) risolvi(FERMATO)
+            else segnaleStop.addEventListener('abort', () => risolvi(FERMATO), { once: true })
+        })
+        : null
+    let risposta = false
+    try {
+        const domanda = chiediApprovazioneFn({ ...azione, toolCallId: azione.toolCallId, semprePersona: true }) // l'id della chiamata, nominato (APPROVAZIONI-CHIAMATA-01)
+        risposta = gara ? await Promise.race([domanda, gara]) : await domanda
+    }
+    catch {
+        return { consentito: false, motivo: MOTIVO_CANCELLO_ROTTO } // D3, come `verificaAzioneAutomazione`
+    }
+    if (risposta === FERMATO) return { consentito: false, via: 'fermato-su-richiesta', motivo: `${MOTIVO_FERMATO_CHIEDENDO} for "${azione.tipo}".` }
+    if (risposta && typeof risposta === 'object' && risposta.nessunaPersona === true) {
+        return { nessunaPersona: true, motivo: risposta.motivo === 'nessuna-persona' ? 'nessuna-persona' : 'nessun-client' }
+    }
+    const esito = esitoApprovazione(risposta)
+    if (!esito.approvato) return { consentito: false, motivo: esito.motivo ?? 'the person declined to run this call.' }
+    return { consentito: true }
+}
+
+/*
+ * ⛔⛔ E1, decisione 121 dell'owner (03/11/2026, opzione (d); forma `FORMA-CARTA-EMULATI-D-2026-11-03.md` con gli OK di CLI, Mobile e
+ *   Performance; fonti in `RICERCA-CARTA-EMULATI-2026-11-03.md`) — un modello SENZA attrezzi propri lavora con gli attrezzi emulati:
+ *   l'adattatore (`attrezzi-emulati.mjs`) dà alle sue chiamate l'id `emulata-<uuid>`. La decisione 44 vale anche lì: una chiamata
+ *   emulata passa prima dalla carta della persona, a ogni livello d'accesso, tranne
+ *   (a) una lettura DENTRO il progetto (`LETTURE_EMULATE`; il percorso, se c'è, misurato sul disco come per le scritture);
+ *   (b) un attrezzo a cui la persona ha già detto «sì per questo strumento in questa conversazione» (`strumentiEmulatiConsentiti`,
+ *       messo dal registro con `ambito: 'strumento'`, il nome preso dalla domanda).
+ *   Il segno può solo AGGIUNGERE una carta: i divieti di oggi (Piano, sola lettura, «nega», segreto, trifecta, fuori dal progetto)
+ *   restano sopra e decidono dopo il sì, come per la chiamata scritta come testo (R-34 parte 2).
+ */
+export const PREFISSO_CHIAMATA_EMULATA = 'emulata-'
+export const LETTURE_EMULATE = Object.freeze(new Set(['leggi', 'elenca', 'cerca', 'view_image', 'library_find', 'library_read', NOME_RICERCA_ATTREZZI, NOME_DESCRIZIONE_ATTREZZI, 'time_now',
+    /* revisione del Desktop D9 (04/11/2026, regola 17): le letture senza rete che il Piano tratta già come letture; fuori restano la
+       rete (`naviga`, `web_search`, `local_page`), le scelte e tutto ciò che scrive */
+    'notes_find', 'notes_read', 'memory_find', 'tasks_find', 'research_find', 'research_read', 'conversation_search', NOME_AIUTO,
+    'library_file_origin', 'goal_status', 'process_output', 'workflow_status', 'workflow_output']))
+/** Il campo che porta il percorso di una lettura emulata; le altre letture non toccano il disco del progetto. */
+const PERCORSO_DELLA_LETTURA_EMULATA = Object.freeze({ leggi: 'percorso', elenca: 'percorso', cerca: 'dentro', view_image: 'path' })
+/** Una lettura emulata che resta nel progetto? Un percorso che non si misura (assente sul disco, di forma strana) ⇒ no: si chiede. */
+export async function letturaEmulataNelProgetto(nome, argomenti, cartella, posizioneFn) {
+    if (!LETTURE_EMULATE.has(nome)) return false
+    const campo = PERCORSO_DELLA_LETTURA_EMULATA[nome]
+    if (!campo) return true
+    const percorso = argomenti?.[campo]
+    if (percorso === undefined || percorso === null || percorso === '') return true
+    if (typeof percorso !== 'string' || !cartella) return false
+    /* revisione del Desktop D4: nel giro la misura è quella del cancello (`posizioneDelGiro`: nella casa Linux dal servente) */
+    try { return (typeof posizioneFn === 'function' ? await posizioneFn(percorso) : await posizioneNelProgetto(cartella, percorso)).dentro === true } catch { return false }
+}
+
+/**
+ * E1, revisione avversaria del Desktop D2, via (b) (04/11/2026, regola 17; OK di CLI, Mobile e Performance): una scrittura emulata che
+ *   il cancello chiederà COMUNQUE con un segno forzato (un segreto fuori dall'Accesso pieno, una cartella fuori dal progetto in
+ *   «Scrive nel progetto») non prende anche la carta emulata: la carta forzata è già della persona. Si misura con le stesse funzioni del
+ *   cancello (`motivoDaChiedere`, `scritturaFuoriDalProgetto`) e la stessa posizione. Solo `scrivi` e `file_edit`: sono i rami che
+ *   passano SEMPRE dal cancello prima di scrivere, quindi la rete di `verificaPermessoConBarriera` (se il cancello non chiede, chiede
+ *   la carta emulata) li copre anche quando questa misura sbaglia.
+ * @returns {Promise<'segreto' | 'fuoriDalProgetto' | null>}
+ */
+export async function cartaForzataPrevista(nome, argomenti, { livelloAccesso, cartella, posizioneFn, consensiSessione } = {}) {
+    if (nome !== 'scrivi' && nome !== 'file_edit') return null
+    const percorso = argomenti?.percorso
+    if (typeof percorso !== 'string' || percorso === '') return null
+    const livello = livelloLetto(livelloAccesso)
+    if (livello !== 'accesso-pieno') {
+        const segreto = motivoDaChiedere({ tipo: nome, percorso, cartella, accessoPieno: false })
+        if (segreto && !consensiSessione?.segretiConsentiti?.includes?.(chiaveDelConsensoDi(segreto, nome, percorso))) return 'segreto'
+    }
+    if (livello === 'scrittura-progetto' && await scritturaFuoriDalProgetto({ percorso }, { cartella, posizioneFn, consensiSessione })) return 'fuoriDalProgetto'
+    return null
 }
 
 /**
@@ -11467,8 +12576,21 @@ function motivoCredenzialeDellaCasa(percorso, cartella) {
         : null
 }
 
-export async function verificaPermessoScrittura(azione, { livelloAccesso, modalitaOperativa = 'normale', chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena = CATENA_VUOTA, segnaleStop, posizioneFn, consensiSessione, reteConsentita = false, sospetto = null, tracciaConsenso = null } = {}) {
+export async function verificaPermessoScrittura(azione, { livelloAccesso, modalitaOperativa = 'normale', chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena = CATENA_VUOTA, segnaleStop, posizioneFn, consensiSessione, reteConsentita = false, sospetto = null, tracciaConsenso = null, accessoPienoDellOspite = null, progettiCritici = null } = {}) {
     livelloAccesso = livelloLetto(livelloAccesso) // una grammatica sola anche per chi chiama il cancello da fuori
+    /*
+     * ⛔⛔ Forma A (revisione del blocco permessi 04/11/2026, reperti A1 e A2, OK di Desktop, Performance e Mobile) — la CLI manda
+     *   «On request» e applica il SUO Full access da sé (`accessoPienoDellOspite`, richiesta CLI 16/10 notte): il suo bypass dice sì a ogni
+     *   carta che non porta un segno. Le due sole carte che l'Accesso pieno AGGIUNGE (la cancellazione critica, 155, e la lettura di una
+     *   credenziale di casa, 161) si calcolano quindi anche col pieno dell'ospite, e il segno viaggia sulla carta (`cancellazioneCritica`,
+     *   `segreto.credenzialeDellaCasa`): la CLI li legge (87d1188c7, `from-approval.ts:39,68`). Tutto il resto resta sul livello: le carte
+     *   che il pieno TOGLIE le toglie già il bypass della CLI. Una funzione dell'ospite che lancia vale «no» (come nel registro).
+     *   Fonte: code.claude.com/docs/en/permission-modes (letta 04/11): «Explicit ask rules and recognized rm and rmdir critical-path
+     *   removals still prompt» anche in bypassPermissions.
+     */
+    const pienoDellOspite = livelloAccesso !== 'accesso-pieno' && typeof accessoPienoDellOspite === 'function'
+        && (() => { try { return accessoPienoDellOspite() === true } catch { return false } })()
+    const cartaDelPieno = livelloAccesso === 'accesso-pieno' || pienoDellOspite
     const override = permessiPerAttrezzo?.[azione.tipo]
     if (modalitaOperativa === 'piano' && azione.tipo !== 'leggi' && azione.tipo !== 'elenca') {
         return {
@@ -11532,11 +12654,15 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
     /* ⛔ Owner 16/10/2026 notte («Sì, anche sul desktop»): in Full access LEGGERE una credenziale della casa (`~/.ssh`, `.aws`, `.netrc`,
        `.npmrc`…) chiede lo stesso — l'eccezione dichiarata al «Full access non chiede mai» del 12/10. Fuori da Full access chiede già
        come segreto. Nessuno davanti ⇒ il rifiuto col motivo, come ogni segreto. */
-    const credenzialeLetta = livelloAccesso === 'accesso-pieno' && (lettura || azione.tipo === 'shell')
+    const credenzialeLetta = cartaDelPieno && (lettura || azione.tipo === 'shell') // forma A: anche col pieno dell'ospite (A2)
         ? credenzialeDellaCasaLetta({ tipo: azione.tipo, percorso: azione.percorso, comando: azione.comando, cartella, segreto: segretoDelPercorso })
         : null
     /* il segno `credenzialeDellaCasa` arriva con la domanda anche quando il percorso era già un segreto per nome: l'ospite lo riconosce */
-    const segreto = segretoDelPercorso && credenzialeLetta ? { ...segretoDelPercorso, credenzialeDellaCasa: true } : (segretoDelPercorso ?? credenzialeLetta)
+    /* ⛔ Decisione 155 (04/11/2026): in Accesso pieno la guardia dei biglietti non fa carte; se lo stesso comando legge ANCHE una credenziale
+       di casa (161), la carta dice la credenziale, non i biglietti (`percorso: 'biglietto-talos'` è il segnaposto della guardia). */
+    const segreto = segretoDelPercorso && credenzialeLetta
+        ? (segretoDelPercorso.percorso === 'biglietto-talos' ? credenzialeLetta : { ...segretoDelPercorso, credenzialeDellaCasa: true })
+        : (segretoDelPercorso ?? credenzialeLetta)
     /* ⛔ 04/10/2026, BUG-A (owner: «Aggiungi Consenti per la sessione davanti ai segreti») — il sì
        dato con `ambito: 'percorso'` resta in `consensiSessione.segretiConsentiti` (SOLO il percorso
        chiamato in causa dalla domanda, mai un prefisso, mai una cartella): quel percorso non
@@ -11544,7 +12670,8 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
        con il percorso che il kernel ha messo nella domanda (stessa disciplina di `cartelleFuori`,
        F4-03): il client non dice mai il percorso. Additivo: chi non passa `consensiSessione`
        (TALOS-BANCO, CLI) non vede nessuna differenza. */
-    const chiaveDelSegreto = segreto ? (segreto.chiaveDelConsenso ?? segreto.percorso) : null
+    /* decisione 107 (owner 03/11 sera): la chiave porta azione e motivo, e la compone la stessa funzione che usa il registro quando salva il sì */
+    const chiaveDelSegreto = segreto ? chiaveDelConsensoDi(segreto, azione.tipo, azione.comando ?? azione.percorso) : null
     const segretoConsentito = Boolean(segreto && consensiSessione?.segretiConsentiti?.includes?.(chiaveDelSegreto))
     /*
      * ⛔⛔ BUG-17 (owner 05/10/2026, «in full access ogni comando terminale viene accettato in automatico
@@ -11561,6 +12688,21 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
        `bypassPermissions` (code.claude.com/docs/en/permissions, letta il 12/10/2026) e Hermes «yolo» (`tools/approval.py:483-488`).
        Un «chiedi» o un «nega» per attrezzo scelto dalla persona restano sovrani (più sotto). */
     const segretoForzaConferma = Boolean(segreto) && !segretoConsentito && (!accessoPieno || Boolean(credenzialeLetta))
+    /*
+     * ⛔⛔ Decisione 155 dell'owner (04/11/2026) — in Accesso pieno, come Claude Code in `bypassPermissions`, chiede ancora una cancellazione
+     *   critica: radice di un disco, cartella di primo livello, cartella utente, cartella del progetto o una sua madre, radici del telefono
+     *   (`cancellazioni-critiche.mjs`). Ogni volta, anche con «shell: sempre» e anche dopo un «per la sessione» (la doc: «critical paths…
+     *   always prompt»). Il pavimento, che rifiuta già «/», le cartelle di sistema e `~`, gira prima di questo cancello.
+     * ⛔⛔ Decisione 208 dell'owner (04/11/2026 sera, reperto M2 della revisione del blocco permessi 2): la stessa carta in OGNI modo dei
+     *   permessi, non solo in Accesso pieno. Prima «Scrive nel progetto» e «Su richiesta» con «shell: sempre» lasciavano passare `rm -rf .`
+     *   senza domanda, mentre l'Accesso pieno la faceva: il modo più largo era il più prudente. Come Hermes, che mette il pavimento PRIMA di
+     *   yolo e di ogni «sempre» (`tools/approval.py:1079-1102`, chiamato a `:1170` prima di `_yolo_active()` a `:1180`), e come Claude
+     *   Code: «no allow rule approves one», e in acceptEdits «Recognized rm and rmdir critical-path removals» chiedono ancora
+     *   (code.claude.com/docs/en/permission-modes, letta il 04/11/2026). Le sottocartelle non sono critiche: passano come prima.
+     *   Senza livello (il banco, che non ha nessuno davanti) niente cambia: la riga resta bit per bit quella di prima.
+     */
+    const critica = azione.tipo === 'shell' && (cartaDelPieno || livelloAccesso !== undefined) ? cancellazioneCritica(azione.comando, { cartella, ...(Array.isArray(progettiCritici) ? { progettiCritici } : {}) }) : null // forma A (A1); K: il progetto vero quando la cartella è allargata
+    const criticaForzaConferma = Boolean(critica)
     /* C2 R6 (08/10/2026): il sì «questo percorso per la sessione» ha evitato una domanda vera (non con l'Accesso pieno sulla
        shell, dove il segreto non chiede comunque) ⇒ se l'ha dato un antenato, la traccia lo dice. Opzione facoltativa: chi non
        la passa (banco, CLI, mobile) non vede differenze. */
@@ -11648,7 +12790,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
     /* Taccuino del 10/10/2026: «accesso pieno» aveva due grafie — il livello ('accesso-pieno') e la parola della politica
        ('Full access'). Dal 10/10 sera la parola si traduce all'ingresso (`livelloLetto`), quindi basta il livello. */
     const reteForzaConferma = azione?.rete === true && !accessoPieno
-    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare && !segretoForzaConferma && !fuoriForzaConferma && !sospettoForzaConferma && !reteForzaConferma) {
+    if (haOverride && override === 'sempre' && !trifectaChiude && !sempreDaConfermare && !segretoForzaConferma && !fuoriForzaConferma && !sospettoForzaConferma && !reteForzaConferma && !criticaForzaConferma) {
         return { consentito: true, via: 'permesso-per-attrezzo-sempre' }
     }
     if (!soloSegreto && !haOverride && livelloAccesso === 'lettura') {
@@ -11740,7 +12882,7 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      */
     /* Owner 09/10/2026 (lane CLI): un comando che chiede la rete (`rete: true`) si chiede sempre, tranne in «Full access»; nessun
        «sempre» per-attrezzo la concede da solo — la decide chi ospita (la CLI: Accesso completo sì, altrimenti la persona). */
-    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello || segretoForzaConferma || fuoriForzaConferma || sospettoForzaConferma || reteForzaConferma
+    const vaChiesto = sempreDaConfermare || (haOverride && override === 'chiedi') || trifectaForzaConferma || richiestoDalLivello || segretoForzaConferma || fuoriForzaConferma || sospettoForzaConferma || reteForzaConferma || criticaForzaConferma
     /*
      * ⛔ F15 — `segreto-forza-conferma` viene PRIMA di «trifecta» e di «per-attrezzo: chiedi»
      * nella scelta della via: quando due meccanismi avrebbero chiesto la stessa cosa, la
@@ -11748,17 +12890,27 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      * mezzo» è un fatto sul comando; «l'attrezzo era su chiedi» è un fatto sulle impostazioni.
      * ⛔ F4-03 — `fuori-dal-progetto` subito dopo, per la stessa ragione: è un fatto sul percorso.
      */
-    const viaRichiesta = segretoForzaConferma ? 'segreto-forza-conferma' : fuoriForzaConferma ? 'fuori-dal-progetto' : sospettoForzaConferma ? 'contenuto-sospetto' : sempreDaConfermare ? 'attrezzo-sempre-da-confermare' : trifectaForzaConferma ? 'trifecta-forza-conferma' : richiestoDalLivello ? 'livello-su-richiesta' : 'permesso-per-attrezzo-chiedi'
+    const viaRichiesta = criticaForzaConferma ? 'cancellazione-critica' : segretoForzaConferma ? 'segreto-forza-conferma' : fuoriForzaConferma ? 'fuori-dal-progetto' : sospettoForzaConferma ? 'contenuto-sospetto' : sempreDaConfermare ? 'attrezzo-sempre-da-confermare' : trifectaForzaConferma ? 'trifecta-forza-conferma' : richiestoDalLivello ? 'livello-su-richiesta' : 'permesso-per-attrezzo-chiedi'
     if (!vaChiesto) {
         return { consentito: true, via: 'nessun-vincolo' }
     }
     if (!chiediApprovazioneFn) {
-        const percheRichiesto = segretoForzaConferma
+        const percheRichiesto = criticaForzaConferma
+            ? `this command ${critica.percorso ? `deletes "${critica.percorso}", which is ${DOVE_CRITICO[critica.perche] ?? 'a critical place'}` : `runs ${DOVE_CRITICO[critica.perche] ?? 'a deletion that cannot be checked first'}`}: that always needs a person's yes, in every permission mode (Full access included), every time`
+            : segretoForzaConferma
             // ⛔ F15 — al MODELLO si dice il fatto tecnico (è lui che legge questo testo e deve
             //   capire cosa riprovare); la frase in lingua naturale è per la PERSONA, e viaggia
             //   in `azione.segreto.frase` qui sotto. Due destinatari, due testi.
+            // 03/11/2026 (forma approvata da Performance, CLI e Mobile): la guardia dei biglietti porta
+            //   `percorso: 'biglietto-talos'`, che NON è un percorso ma il segnaposto della chiave del consenso
+            //   (decisione 107: resta com'è). Al modello si dice il perché vero, senza nomi di file, come Hermes
+            //   dice al modello che cosa è stato fermato e perché (tools/approval.py:112-114, hermes-agent-2026-11-01).
             ? (segreto.classe === 'fuori-workspace'
                 ? `the path "${segreto.percorso}" is outside the session folder: reading or listing outside the project needs a human yes`
+                : segreto.perche === 'troppo-complesso'
+                ? 'this command is too complex to check safely (nested shells, or past a limit of the guard): a human confirmation is needed even with an "always" permission'
+                : segreto.perche === 'biglietti'
+                ? 'this command prints an entry ticket for the TALOS server: a human confirmation is needed even with an "always" permission'
                 : `the path "${segreto.percorso}" belongs to the class of reserved files (keys, credentials, keychains): a human confirmation is needed even with an "always" permission`)
             : fuoriForzaConferma
             ? `the path "${azione.percorso}" ${fuori.verificato ? `ends up outside the session folder (in "${fuori.cartella}")` : 'could not be verified, and may end up outside the session folder'}: with the project-write policy a human yes is needed`
@@ -11817,15 +12969,20 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
         const contenutoSospetto = sospettoForzaConferma
             ? { fonte: sospetto.fonte, motivi: sospetto.motivi, luogo: luogoDellaFonte(sospetto.fonte) } // la domanda la scrive l'interfaccia (`kernel.contenutoSospetto.domanda`)
             : null
-        const azioneDaChiedere = (segretoForzaConferma || trifectaForzaConferma || fuoriForzaConferma || sospettoForzaConferma)
-            ? { ...azione, ...(trifectaForzaConferma ? { trifecta: true } : {}), ...(segretoForzaConferma ? { segreto } : {}), ...(fuoriForzaConferma ? { fuoriDalProgetto: fuori } : {}), ...(contenutoSospetto ? { contenutoSospetto } : {}) }
+        /* decisione 155: la carta della cancellazione critica dice che cosa si cancella e perché è critico; la frase la traduce l'interfaccia */
+        const cancellazioneCriticaDaDire = criticaForzaConferma
+            ? { percorso: critica.percorso, perche: critica.perche, ...fraseDiPermesso(`server.approval.criticalDelete.${CHIAVE_CRITICA[critica.perche] ?? 'substitution'}`, { percorso: critica.percorso }) }
+            : null
+        const azioneDaChiedere = (segretoForzaConferma || trifectaForzaConferma || fuoriForzaConferma || sospettoForzaConferma || criticaForzaConferma)
+            ? { ...azione, ...(trifectaForzaConferma ? { trifecta: true } : {}), ...(segretoForzaConferma ? { segreto } : {}), ...(fuoriForzaConferma ? { fuoriDalProgetto: fuori } : {}), ...(contenutoSospetto ? { contenutoSospetto } : {}), ...(cancellazioneCriticaDaDire ? { cancellazioneCritica: cancellazioneCriticaDaDire } : {}) }
             : azione
         const domanda = chiediApprovazioneFn(azioneDaChiedere)
         approvato = gara ? await Promise.race([domanda, gara]) : await domanda
     }
     catch {
         // ⛔ un cancello che lancia non autorizza in silenzio: stessa disciplina di premessaDellaScrittura sopra.
-        approvato = false
+        /* 03/11: e non è un no della PERSONA: resta REFUSED (il modello non deve leggere «hai detto di no», `comeNoDellaPersona`) */
+        return { consentito: false, via: viaRichiesta, motivo: MOTIVO_CANCELLO_ROTTO }
     }
     if (approvato === FERMATO) {
         return { consentito: false, via: 'fermato-su-richiesta', motivo: `${MOTIVO_FERMATO_CHIEDENDO} for "${azione.tipo}".` }
@@ -11860,7 +13017,10 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
 // ⭐ FASE N, quinto sistema (30/8) — le 4 mutazioni Tasks si aggiungono, stesso trattamento.
 // ⭐ FASE N, sesto sistema (30/8) — le 3 mutazioni Memory si aggiungono, stesso trattamento.
 // ⭐ PO-12 (13/09/2026) — `file_edit` muta un file quanto `scrivi`: un hook che puo' bloccare l'una deve poter bloccare l'altra, altrimenti la modifica mirata sarebbe la porta di servizio della scrittura.
-const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'file_edit', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create', 'workflow_plan_propose', 'file_changes_undo', 'remote_phone_pair', 'remote_phone_revoke', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', 'remote_control', 'remote_device_send_file'] // R5.13 (24/10/2026): mandare un file a un dispositivo cambia lo stato del dispositivo
+const AZIONI_MUTANTI_PER_HOOK = ['scrivi', 'file_edit', 'shell', 'document_create', 'generate_image', 'library_rename', 'library_delete', 'library_export', 'library_context_policy_update', 'notes_create', 'notes_update', 'notes_delete', 'tasks_create', 'tasks_complete', 'tasks_update', 'tasks_delete', 'memory_write', 'memory_update', 'memory_delete', 'research_start', 'research_rename', 'research_pause', 'research_resume', 'research_cancel', 'research_delete', 'research_deposit', 'tool_create', 'workflow_plan_propose', 'file_changes_undo', 'remote_phone_pair', 'remote_phone_revoke', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', 'remote_control', 'remote_device_send_file', NOME_COMPUTER_USE] // R5.13 (24/10/2026): mandare un file a un dispositivo cambia lo stato del dispositivo
+// ⛔ Revisione del passo 5, difetto 3 (04/11/2026): `computer_use` clicca e scrive sul PC della persona: un gancio che rifiuta lo ferma come
+//   ogni altra azione che muta. Come Hermes, dove pre_tool_call blocca qualunque attrezzo (`agent/agent_runtime_helpers.py:2488-2500`,
+//   `agent/shell_hooks.py:44`), e come Claude Code (PreToolUse blocca ogni strumento, MCP compresi: code.claude.com/docs/en/hooks).
 
 /*
  * ⭐⭐⭐ 29/8 — un asse DIVERSO da `AZIONI_MUTANTI_PER_HOOK` qui sopra, non lo
@@ -12211,7 +13371,7 @@ export function formattaEsitoForge(risultato) {
     return `${risultato.error?.code ?? 'TALOS_FORGE_FAILED'}: ${risultato.error?.message ?? 'the tool failed.'}`
 }
 
-async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete, onDelta, reasoning, attrezziOpenAI = ATTREZZI_OPENAI, segnaleStop, maxOutputTokens, onChiamataCompleta, onRitenta, attesaRitentaMassimaMs, marcatoreDiCache) {
+async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete, onDelta, reasoning, attrezziOpenAI = ATTREZZI_OPENAI, segnaleStop, maxOutputTokens, onChiamataCompleta, onRitenta, attesaRitentaMassimaMs, marcatoreDiCache, fornitoriDaEvitare) {
     return chiamaConRitenta({
         modello, chiave, messaggi, attrezzi: attrezziOpenAI, maxOutputTokens,
         ...(fetchDiRete ? { fetchDiRete } : {}),
@@ -12222,6 +13382,7 @@ async function chiamaIlModelloConRitenta(modello, chiave, messaggi, fetchDiRete,
         ...(segnaleStop ? { segnaleStop } : {}),
         ...(attesaRitentaMassimaMs !== undefined ? { attesaRitentaMassimaMs } : {}), // G02-10
         ...(marcatoreDiCache ? { marcatoreDiCache } : {}), // owner 28/10: cache, punto 1
+        ...(Array.isArray(fornitoriDaEvitare) && fornitoriDaEvitare.length ? { fornitoriDaEvitare } : {}), // decisione 193
         // la risposta vuota la decide il ciclo di `talosLavora` (spinta, ritentativi, errore onesto): vedi RISPOSTA VUOTA
         accettaVuota: true,
     })
@@ -12332,6 +13493,12 @@ export async function talosLavora({
        giro: gli attrezzi in volo finiscono e i loro risultati entrano nella storia, il modello non riceve la richiesta dopo, e il
        giro si chiude «in-pausa». Chi non la passa (la CLI) non vede niente di diverso. */
     segnalePausa = null,
+    /* Decisione owner 166, seconda forma (OK di Performance, CLI e Mobile, 04/11 sera; revisione del blocco UI R1): `() => boolean`, CHI ha
+       fermato. La nota «la persona ha fermato il giro» si scrive SOLO se torna `true`: lo Stop della persona sì; un messaggio mandato a
+       giro in corso (`reindirizza`, il «Seguito», l'Alt+S della CLI), lo stop del modello (`stop_child`) o del sistema (domanda scaduta)
+       no. Chi non la passa non scrive mai la nota (valore sicuro, condizione della CLI); una funzione che lancia vale «no». ⛔ Mai
+       `abort(motivo)` al suo posto: col motivo il fetch rifiuta con quel valore e non con `AbortError`, e cambia ogni classificazione. */
+    fermataDallaPersona = null,
     /* ⛔ Stop per riga (owner 02/10/2026): `({ toolCallId, ferma }) => sgancia`. Ogni `shell` e `prova` ha il SUO segnale,
        registrato col suo `toolCallId` finché gira: fermarlo chiude quel comando (130, «fermato su richiesta») e il giro continua. */
     registraComandoFermabile = null,
@@ -12435,12 +13602,19 @@ export async function talosLavora({
     /* Owner 28/10/2026 (cache, punto 1): un passo di Workflow, una delega o un'automazione — la macchina detta il ritmo (vedi
        `marcatoreDiCachePer`). Lo passa già il servizio (revisione blocco 5, A-4); qui lo legge anche il nucleo. */
     senzaPersona = false,
+    /* R-34 parte 2 (Mobile 30/10): la persona è davanti ADESSO? Letta quando si decide la carta di una chiamata scritta come testo da un
+       modello locale (il telefono messo via a metà giro). Assente ⇒ vale `nessunoDavanti`. In memoria, mai sul disco (lo tiene chi ospita). */
+    personaPresenteFn = null,
+    /* Decisione 44 dell'owner (02/11, riconfermata il 03/11 come 56): il testo libero di un modello non diventa un'azione. Solo il modo emulato
+       (`attrezzi-emulati.mjs`) dà chiamate vere col formato imposto al motore. `true` solo per un ospite che lo chiede (condizione del Mobile:
+       il telefono finché il Codice locale non è provato sul Pad) e per le prove di R-34. Forma: `in-corso/FORMA-DECISIONE-44-TESTO-2026-11-03.md`. */
+    promuoviDalTesto = false,
     /* Owner 28/10/2026 (cache, punto 2): lo stato della cache alla fine del giro prima (`esito.statoCache`), dal registro. Assente ⇒ il
        primo giro della sessione non ha con chi confrontarsi. */
     statoCachePrecedente = null,
     agentRole = 'root', askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose,
     listChildrenFn, stopChildFn, // K3 (F-014, 03/10): elenco e stop dei figli diretti, dal registro
-    pauseChildFn, resumeChildFn, // C3 tappa 4: pausa e ripresa dei figli diretti, dal registro (facoltative: la CLI non le passa)
+    pauseChildFn, resumeChildFn, retryChildFn, // C3 tappa 4 (retry: decisione 198): pausa e ripresa dei figli diretti, dal registro (facoltative: la CLI non le passa)
     /*
      * ⭐⭐⭐ P-13 (10/09) — il contesto STABILE del progetto: oggi l'elenco dei file.
      *   Opzionale come tutti gli altri: chi non lo passa (TALOS-BANCO senza la leva
@@ -12459,9 +13633,25 @@ export async function talosLavora({
        19/10/2026 (owner, «Essenziali + ponte per il resto»): `'essenziali'` ⇒ davanti SOLO `ATTREZZI_ESSENZIALI_LOCALI`, tutto il
        resto dietro il ponte — il modello locale del telefono (fonte `locale-ospite`), lo sceglie il registro. */
     attrezziDifferiti = false,
+    /* Ricerca approfondita a due porte (owner 22/10/2026; forma `FORMA-RICERCA-DUE-PORTE-2026-11-01.md`, OK di Mobile, CLI e Performance).
+       `ricercaDavanti: true` ⇒ col ponte acceso `research_start` resta davanti, ma solo se c'è chi la esegue (`onRicercaAvvia`) e mai nel
+       modo «essenziali» né dentro una ricerca. Spento di serie: la lista resta byte per byte quella di prima (decisione della CLI, 01/11).
+       `chiamataIniziale: { nome: 'research_start', argomenti: { question, depth? } }` ⇒ il PRIMO passo non chiama il modello: la chiamata
+       la fa la persona (la pillola «Deep research»), passa per il ramo di sempre col suo sì (`approvateDalTesto`, R-34), i divieti
+       restano. Lista bianca di un nome; una forma storta si ignora. Precedenti: Codex `/review` → `Op::Review` eseguita dal server
+       (`codex-rs/core/src/session/handlers.rs:745`); chatjs.dev «Explicit tool selection» (letto 01/11/2026) lega la scelta della UI
+       alla richiesta ma la affida ancora al prompt — qui la chiamata non dipende dal modello. */
+    ricercaDavanti = false,
+    chiamataIniziale = null,
     /* Owner 28/10/2026: la lingua delle risposte (`rigaLinguaDelleRisposte`). `linguaDelleRisposte` è l'impostazione «Lingua» (codice
        BCP 47; assente o `'auto'` = Automatica); `linguaInterfaccia` (`'en'`|`'it'`) è il ripiego quando la lingua non si capisce. */
     linguaDelleRisposte = null,
+    catalogoBlocchi = null, // FE-003: `{ tipi?, clic? }` da chi ospita; assente o null = nessuna riga in più
+    /* FE-008: i Passi. `listaPassi: true` offre `steps_update`; `passiIniziali` è la lista della sessione, `onPassi` riceve ogni lista cambiata. */
+    listaPassi = false,
+    passiIniziali = null,
+    onPassi = null,
+    contenitorePassi = null,
     linguaInterfaccia = null,
     /* …e `linguaDelMessaggio` (codice BCP 47, facoltativo): la lingua dell'ultimo messaggio quando chi chiama la sa (dettatura,
        riconoscitore). Vale solo in Automatica, come nota in coda (`notaLinguaDelMessaggio`). */
@@ -12500,6 +13690,12 @@ export async function talosLavora({
     // (id, { html } | { edits }, { titolo, copiaInLibreria }) => {id, versione, totale, titolo} — usato solo se 'artifact_update' è in strumentiEstesi;
     // lancia con `code` (NOT_FOUND, NOT_AN_ARTIFACT, EDIT_NOT_FOUND, EDIT_AMBIGUOUS, ARTIFACT_TOO_LARGE). Contratto con la CLI, 24/10/2026.
     onAggiornaArtefatto,
+    // FE-081: ({blocco, sorgente} | {blocco, modifiche}) => {ok:true, blocco, versione, tipo} | {ok:false, codice, riga} | Rotto, anche Promise.
+    // Senza, `blocco_aggiorna` non si offre. Il kernel non tiene versioni: le tiene chi ospita (`blocchi/versioni.mjs`).
+    onAggiornaBlocco,
+    sorgentiCorrentiDeiBlocchi = null, // FE-081: { bN: sorgente corrente } — il modello vede la versione che la persona ha davanti
+    prossimoNomeDeiBlocchi = 1, // G-B2: il contatore dei nomi della conversazione, tenuto da chi ospita (un ramo eredita quello della sorgente)
+    onNomiDeiBlocchi = null, // G-B2: ({nuovi:[{nome,sorgente}], nomi, prossimo}) => void — i nomi nuovi, da salvare col messaggio
     // (spec) => {ok, esito} — usato solo se 'document_create' è in strumentiEstesi. `spec` è {format,title,body?,rows?,slides?,report?} così come li ha mandati il modello, invariati. `ok:false` porta `esito` come messaggio onesto (mai un successo inventato); `ok:true` porta `esito` come RIGA da mostrare al modello (chi implementa decide cosa dire — dimensione, verifica, dove è finito).
     onDocumento,
     // (spec) => {ok, esito} — FASE H (29/8), stesso identico contratto di onDocumento appena sopra, usato solo se 'generate_image' è in strumentiEstesi. `spec` è {prompt,shape?} così come li ha mandati il modello. Questo file non chiama MAI OpenRouter direttamente per le immagini (zero dipendenze, come document_create) — chi implementa decide quale modello (nativo/dedicato) usare e dove salva il file.
@@ -12512,11 +13708,26 @@ export async function talosLavora({
     /* Owner 27/10/2026, `view_image`: (modello) => true | false | null — il modello del giro vede immagini? Letta una volta all'avvio del
        giro. Solo `true` accende l'attrezzo e porta le immagini al fornitore; `false`/`null`/assente (la CLI: null = non si sa) no. */
     vedeImmaginiFn,
+    /* 01/11/2026 (contratto chiuso da Desktop con Frontend e Mobile): (modello) => true | false — il motore locale di questo modello si sta
+       ancora aprendo? Letta solo allo Stop. Assente (la CLI) = come prima. Vera: il punto della carta dice «while the model was still
+       loading»: frase ESATTA, il telefono la riconosce dal testo. */
+    motoreInCaricamentoFn,
+    /* Decisioni 57 e 144 (04/11/2026): (modello) => { in, out } | null (dollari per milione, dal catalogo; anche asincrona) — il prezzo
+       pubblicato del modello, chiesto solo quando esce la carta della ricerca, con un tetto di 300 ms (Performance). Assente (la CLI) o ignoto: il lavoro come prima. */
+    prezzoDelModelloFn,
     /* Owner 27/10/2026, `local_page`: ({ porta, percorso, guarda, segnale }) => { ok, url?, testo?, console?: string[], immagine?:
        { riferimento, mime, larghezza, altezza }, motivo? }. L'ospite apre la pagina nella scheda Browser della conversazione SOLO se la
        porta è di un suo server di sviluppo pronto, e ricontrolla l'indirizzo finale; un rifiuto porta `motivo`. Senza, l'attrezzo
        non si offre. */
     apriPaginaLocaleFn,
+    /* Decisione 201 (04/11/2026), `browser_page`: ({ segnale }) => { ok, url?, titolo?, testo?, copiaPubblica?, motivo? }. L'ospite legge la
+       pagina che la persona ha aperto nel Browser di QUESTA conversazione (la scheda viva, o la copia pubblica); un rifiuto porta `motivo`.
+       Senza, l'attrezzo non si offre. */
+    leggiPaginaBrowserFn,
+    /* …e `paginaBrowser`: la pagina che il messaggio del giro dice aperta (`{ url, titolo }`), `null` per «nessuna», ASSENTE quando il
+       messaggio non porta il campo (telefono, CLI, un giro partito altrove). Serve alla nota (`pagina-del-browser.mjs`) e alla riga del
+       Mobile nell'esito; la pagina da leggere la sa l'ospite. */
+    paginaBrowser,
     /*
      * ⭐⭐⭐ FASE N (29/8) — Libreria, prima fetta. Quattro callback, uno
      * per tool, usati solo se il rispettivo nome è in `strumentiEstesi`
@@ -12622,6 +13833,9 @@ export async function talosLavora({
      *   le stesse due fasi delle automazioni (`anteprima` ⇒ carta o rifiuto; `esegui` ⇒ testo). Assente ⇒ non si offrono.
      */
     onFornitoriFn,
+    /* Fase 8 «Impostazioni dalla chat» (owner 01/11/2026) — `onImpostazioniFn(nome, argomenti, {fase, toolCallId})`: il canale di
+       `app_settings`, con le due fasi dei fornitori. Assente, o non una funzione ⇒ l'attrezzo non esiste (la CLI, il telefono oggi). */
+    onImpostazioniFn,
     /* /goal G6 (owner 15/10/2026) — `onObiettivoFn(nome, argomenti, {fase, toolCallId})`: il canale di `ATTREZZI_OBIETTIVO`, con
        le due fasi delle automazioni (`anteprima` ⇒ carta o rifiuto; `esegui` ⇒ testo). Assente ⇒ non si offrono (la CLI oggi). */
     onObiettivoFn,
@@ -12632,9 +13846,18 @@ export async function talosLavora({
        `{ok:true}` o `{ok:false, messaggio}`. Una fase sola: non c'è niente da approvare, la persona decide sulla bozza. Assente ⇒
        l'attrezzo non esiste (la CLI, il telefono, una figlia, nessuno davanti). */
     onSegnalazioneFn,
+    /* Centro assistenza (owner 01/11/2026) — `aiutoTalos`: l'oggetto di `creaAiutoTalos({cartella|leggiIndice, prodotto, versione,
+       lingua})`, con `rispondi(argomenti)` ⇒ `{testo, errore}`. Assente ⇒ `talos_help` non esiste (un ospite senza la guida). */
+    aiutoTalos,
     /* R5.12 (owner 18/10/2026) — `onTelefoniFn(nome, argomenti, {fase, toolCallId})`: il canale di `ATTREZZI_TELEFONI`, con le due
        fasi delle automazioni. Assente ⇒ gli attrezzi non esistono (la CLI, una figlia, nessuno davanti). */
     onTelefoniFn,
+    /* 03/11/2026 — `onLuoghiFn(nome, argomenti, {fase, toolCallId})`: il canale di `ATTREZZI_LUOGHI`, con le due fasi delle
+       automazioni. Assente ⇒ gli attrezzi non esistono: lo passa il PC solo col computer use acceso, deciso all'inizio della sessione (Performance). */
+    onLuoghiFn,
+    /* 04/11/2026 (decisione 129) — `onComputerUseFn(nome, { task }, { fase, toolCallId, segnale, livelloAccesso })` ⇒ `{ ok, testo }`: il
+       computer use. Assente ⇒ l'attrezzo non esiste (la CLI, il telefono, una figlia, nessuno davanti, interruttore spento). */
+    onComputerUseFn,
     /* Giri in tondo (owner 09/10/2026, lane CLI): la guardia fra un giro e l'altro (`creaGuardiaGiriInTondo`). Spenta di serie. */
     guardiaGiriInTondo = false,
     /* L1 1.2 (owner 26/10/2026; contratto con la CLI `CONTRATTO-FRENO-CICLI-2026-10-26.md`): il registro dei tentativi, che guarda
@@ -12683,6 +13906,27 @@ export async function talosLavora({
      *   solo la radice, e il cancello `livello-ricerca` confronta la stessa radice che si usa per scrivere.
      */
     cartellaRicerche = null,
+    /*
+     * ⛔⛔ Blocco 26 (PO-26, forma chiusa il 01/11/2026 con CLI, Mobile e Performance) — DOVE vanno i registri dei comandi in
+     * sottofondo. Come `cartellaRicerche`: una stringa, o una funzione (anche asincrona) che restituisce la radice dei dati del
+     * progetto; il registro va in `<radice>/background/<toolCallId>.log`, col nome da mostrare `background/<toolCallId>.log`.
+     * ⛔ ASSENTE ⇒ `<cartella>/.talos/processi-sfondo/`, bit per bit come prima (TALOS-BANCO, i test, la CLI finché non la passa).
+     * ⛔ Una radice che non si risolve (la funzione lancia o torna vuoto) NON ricade nel progetto: il comando gira senza registro e
+     *   l'esito lo dice («No output file»), come quando il disco rifiuta la scrittura.
+     */
+    cartellaSfondo = null,
+    /*
+     * Blocco 26 — i registri dello sfondo che TALOS ha scritto in QUESTA sessione nei giri precedenti: `() => Iterable<string>` di
+     * percorsi assoluti (il registro li ricava dal giornale, `registriSfondoDaEventi`). Insieme a quelli di questo giro sono l'UNICA
+     * lettura fuori dal progetto che `leggi` fa senza chiedere (`eUnRegistroDiSfondo`). Assente ⇒ solo quelli di questo giro.
+     */
+    registriSfondoFn = null,
+    /*
+     * Decisioni 43 e 47 (forma `FORMA-ALLEGATI-NEI-DATI-2026-11-02.md`) — gli allegati di QUESTA conversazione: `() => Iterable<{ riferimento,
+     * percorso }>`, il nome corto che il modello conosce e il percorso vero. L'elenco lo tiene l'ospite nel giornale della conversazione
+     * (`allegatiDaEventi`): nasce dall'invio, da un campo strutturato, mai dal testo. Assente ⇒ nessuno: una figlia delegata, la CLI.
+     */
+    allegatiConversazioneFn = null,
     /*
      * ⭐⭐⭐⭐ FASE N, nono e ultimo sistema (30/8) — Tool Forge.
      * `onForgeCrea` è il `(spec) => {ok,esito}` di `tool_create`, stesso
@@ -12776,6 +14020,13 @@ export async function talosLavora({
      * oggi, invariato (TALOS-BANCO non lo passa mai).
      */
     livelloAccesso, chiediApprovazioneFn, permessiPerAttrezzo,
+    /* Forma A (revisione del blocco permessi 04/11/2026, A1 e A2): `() => boolean`, il Full access che l'ospite applica da sé (la CLI
+       manda «On request»). Arriva al cancello a ogni chiamata (`verificaPermessoScrittura`), che ne fa solo le due carte che il pieno
+       aggiunge. Assente ⇒ vale solo `livelloAccesso`, come prima. */
+    accessoPienoDellOspite = null,
+    /* K (forma permessi 2, 04/11/2026): le cartelle che il cancello critico tratta come il progetto quando `cartella` è più larga (Accesso
+       pieno con una cartella dell'elenco: `cartella` è la radice del disco). Un elenco di stringhe; assente ⇒ come prima (la CLI). */
+    progettiCritici = null,
     /*
      * ⭐⭐⭐ 28/8 — piano `elegant-spinning-dongarra.md`, FASE A (ricerca:
      * Hermes ha hook "universali e attivi di default" su OGNI tool —
@@ -13011,8 +14262,33 @@ export async function talosLavora({
     lavoroDellAgenteFn = null,
 }) {
     livelloAccesso = livelloLetto(livelloAccesso) // una grammatica sola (vedi `livelloLetto`): assente resta assente, l'illeggibile è «Sola lettura»
+    /*
+     * R-39, cancello caldo (Performance, 30/10/2026; forma chiusa coi tre): mentre il modello pensa, il worker del cancello prepara il
+     *   «prima» della cartella, così la prima scrittura del giro paga solo il «dopo». Regole scritte prima della misura e applicate ai
+     *   numeri: solo dove nel processo si è già giudicata una scrittura di questa cartella (`scaldaIlCancello` lo sa), mai in Piano,
+     *   sola lettura o Ricerca, mai con un cancello delle prove. Nessuna attesa: parte al giro dopo del ciclo degli eventi.
+     */
+    if (!cancelloDelleScritture && modalitaOperativa !== 'piano' && livelloAccesso !== 'lettura' && livelloAccesso !== 'ricerca' && typeof cartella === 'string') {
+        setImmediate(() => { try { scaldaIlCancello(cartella, { cartelleLib: cartelleLibreriaTs() }) } catch { /* un aiuto di velocità non ferma mai il giro */ } })
+    }
+    /* R-34 parte 2: UN sì solo. La chiamata che un modello locale ha scritto come testo e che la persona ha approvato sulla SUA carta
+       (`verificaChiamataDalTesto`) non chiede di nuovo il «chiedi» del suo attrezzo: la carta diceva già cosa parte. I divieti restano
+       (piano, sola lettura, segreti, «nega»): questa porta tocca solo la DOMANDA. */
+    const chiediApprovazioneDellOspite = chiediApprovazioneFn
+    const approvateDalTesto = new Set()
+    const rifiutateDalTesto = new Map() // toolCallId → l'esito per il modello (la persona ha detto no)
+    /* E1, revisione del Desktop D2 (b): le chiamate emulate la cui carta è quella forzata del cancello (`cartaForzataPrevista`), id → nome */
+    const emulateAlCancello = new Map()
+    let chiamateDalTesto = 0 // per `daTesto-<n>`, gli id del nucleo
+    let chiamataDellaPersona = chiamataInizialeValida(chiamataIniziale) // ricerca a due porte: consumata al primo passo
+    /* Revisione del blocco, R1: l'id esatto generato qui sotto. Il prefisso non prova niente: l'id di una chiamata normale lo sceglie il fornitore. */
+    let idChiamataDellaPersona = null
+    if (typeof chiediApprovazioneDellOspite === 'function') chiediApprovazioneFn = chiediConUnSiSolo(chiediApprovazioneDellOspite, approvateDalTesto)
+    let rifiutiDalTestoNelGiro = 0 // revisione del Desktop S3: al secondo «no» nello stesso giro non si promuove più (niente raffica di carte)
     /* R-21 D2: i secondi già aspettati con `sleep` corti in questo turno */
     let attesiNelTurnoS = 0
+    /* COD-207 (30/10/2026): i programmi mancanti già detti al modello in questo giro (`programma-mancante.mjs`) */
+    const programmiMancantiDetti = new Set()
     /* R-26 B: ciò che l'agente ha scritto in questo turno — chiave del percorso → impronta dei byte dopo la scrittura */
     const scrittiDallAgente = new Map()
     const registraScrittoDallAgente = async (percorso) => {
@@ -13028,11 +14304,14 @@ export async function talosLavora({
     let turnoVivo = true
     const seguiSfondo = (toolCallId, p, comando) => {
         if (!p?.messoInSfondo || !p.uscita) return
-        const voce = { comando, file: p.fileSfondo ?? null, finito: null, consegnato: false }
+        /* Blocco 26, ritocco D1 (Desktop, 02/11/2026): la nota DENTRO il turno va al modello col percorso pieno (l'evento lo sostituisce col
+           nome corto, `perGliEventi`); quella che va all'ospite porta il nome corto, perché il suo testo viaggia nella coda e negli eventi
+           verso il ponte (condizione del Mobile). */
+        const voce = { comando, file: p.fileSfondo ?? null, fileOspite: p.fileSfondoMostrato ?? p.fileSfondo ?? null, finito: null, consegnato: false }
         sfondiDelTurno.set(toolCallId, voce)
         p.uscita.then((u) => {
             if (turnoVivo && !voce.consegnato) { voce.finito = u ?? {}; return }
-            if (!voce.consegnato && typeof segnalaUscitaSfondo === 'function') segnalaUscitaSfondo({ toolCallId, ...(u ?? {}), comando, file: voce.file })
+            if (!voce.consegnato && typeof segnalaUscitaSfondo === 'function') segnalaUscitaSfondo({ toolCallId, ...(u ?? {}), comando, file: voce.fileOspite })
         }).catch(() => {})
     }
     const noteDegliSfondiFiniti = () => {
@@ -13042,7 +14321,7 @@ export async function talosLavora({
             voce.consegnato = true
             note.push(notaFineSfondo({ comando: voce.comando, file: voce.file, ...voce.finito }))
             if (typeof segnalaUscitaSfondo === 'function') {
-                try { segnalaUscitaSfondo({ toolCallId, ...voce.finito, comando: voce.comando, file: voce.file, giaDettoAlModello: true }) } catch { /* l'ospite non ferma il giro */ }
+                try { segnalaUscitaSfondo({ toolCallId, ...voce.finito, comando: voce.comando, file: voce.fileOspite, giaDettoAlModello: true }) } catch { /* l'ospite non ferma il giro */ }
             }
         }
         return note
@@ -13053,7 +14332,7 @@ export async function talosLavora({
             if (!voce.finito || voce.consegnato) continue
             voce.consegnato = true
             if (typeof segnalaUscitaSfondo === 'function') {
-                try { segnalaUscitaSfondo({ toolCallId, ...voce.finito, comando: voce.comando, file: voce.file }) } catch { /* l'ospite non ferma il giro */ }
+                try { segnalaUscitaSfondo({ toolCallId, ...voce.finito, comando: voce.comando, file: voce.fileOspite }) } catch { /* l'ospite non ferma il giro */ }
             }
         }
     }
@@ -13145,10 +14424,12 @@ export async function talosLavora({
         catch { root = { distro: null, utente: null } }
         if (!root) return null
         const nellaDistro = `Linux (WSL${root.distro ? `, ${root.distro}` : ''})`
-        const laFrase = root.utente
-            ? fraseDiPermesso('server.approval.wslRoot.user', { linux: nellaDistro, utente: root.utente })
-            : fraseDiPermesso('server.approval.wslRoot.unverifiedUser', { linux: nellaDistro })
-        const motivo = `the command would run in WSL as ${root.utente ?? 'an unverified user (possibly root)'} without anyone approving it, which needs the person's confirmation once per session`
+        /* Decisione 41 (owner 02/11/2026): se la distro non ha un utente normale, la preferenza non può fare niente e TALOS non ne crea
+           uno (owner 01/10/2026): la carta dice il perché e dove sta il rimedio. */
+        const laFrase = !root.utente
+            ? fraseDiPermesso('server.approval.wslRoot.unverifiedUser', { linux: nellaDistro })
+            : fraseDiPermesso(root.sceltoDalComando === true ? 'server.approval.wslRoot.commandChoosesRoot' : root.nessunUtenteNormale === true ? 'server.approval.wslRoot.noNormalUser' : 'server.approval.wslRoot.user', { linux: nellaDistro, utente: root.utente })
+        const motivo = `the command would run in WSL as ${root.utente ?? 'an unverified user (possibly root)'} without anyone approving it, which needs the person's confirmation`
         if (typeof chiediApprovazioneFn !== 'function') return { consentito: false, via: 'wsl-root', motivo: `${motivo}, but this session has no approval channel.` }
         const FERMATO = Symbol('fermato-mentre-chiedevo')
         const gara = segnaleStop
@@ -13159,13 +14440,17 @@ export async function talosLavora({
             : null
         let approvato = false
         try {
-            const domanda = chiediApprovazioneFn({ tipo, toolCallId, comando, wslRoot: { distro: root.distro, utente: root.utente, ...laFrase } })
+            const domanda = chiediApprovazioneFn({ tipo, toolCallId, comando, wslRoot: { distro: root.distro, utente: root.utente, ...(root.nessunUtenteNormale === true ? { nessunUtenteNormale: true } : {}), ...laFrase } })
             approvato = gara ? await Promise.race([domanda, gara]) : await domanda
         }
         catch { approvato = false }
         if (approvato === FERMATO) return { consentito: false, via: 'fermato-su-richiesta', motivo: `${MOTIVO_FERMATO_CHIEDENDO} for "${tipo}".` }
-        if (!esitoApprovazione(approvato).approvato) return { consentito: false, via: 'wsl-root', motivo: `${motivo}, and the owner did not confirm it.` }
-        consensiSessione.rootWsl = true
+        /* Decisione 41 (owner 02/11/2026): «Solo questa volta» è un sì che non si ricorda; il sì semplice resta quello per la chat, così i
+           client con un sì solo (CLI, telefono) non cambiano. Forma di Hermes: `tools/approval.py:411`, `_persist_choice` scrive solo
+           «session» e «always», «once» non lascia traccia. Il segno vale solo accanto a un `approvato: true` esatto (C-005). */
+        const soloQuestaVolta = approvato?.approvato === true && approvato.soloQuestaVolta === true
+        if (!soloQuestaVolta && !esitoApprovazione(approvato).approvato) return { consentito: false, via: 'wsl-root', motivo: `${motivo}, and the owner did not confirm it.` }
+        if (!soloQuestaVolta) consensiSessione.rootWsl = true
         return null
     }
     /*
@@ -13344,7 +14629,81 @@ export async function talosLavora({
      *   sua riga nei Processi. Il secondo ferma solo lui — 130, «fermato su richiesta» — e il giro va avanti; lo sgancio lo
      *   toglie dal registro appena il comando finisce, così una riga finita non si può più «fermare».
      */
-    const segnaleDelComando = (toolCallId) => {
+    /*
+     * ⛔ Blocco 26 — la destinazione del registro di sfondo di UN comando: senza `cartellaSfondo` il percorso di sempre nel progetto;
+     *   con, `{ percorso, mostrato }` nella cartella dati. Una radice che non si risolve ⇒ `null` (nessun registro, e l'esito lo dice):
+     *   mai un ripiego silenzioso nel progetto.
+     */
+    const usaCartellaSfondo = typeof cartellaSfondo === 'function' || (typeof cartellaSfondo === 'string' && cartellaSfondo !== '')
+    const destinazioneSfondo = async (toolCallId) => {
+        if (!usaCartellaSfondo) return percorsoFileSfondo(cartella, toolCallId)
+        let radice = null
+        try { radice = typeof cartellaSfondo === 'function' ? await cartellaSfondo() : cartellaSfondo } catch { radice = null }
+        if (typeof radice !== 'string' || radice === '') return null
+        return { percorso: percorsoFileSfondoNeiDati(radice, toolCallId), mostrato: nomeMostratoFileSfondo(toolCallId) }
+    }
+    /* I registri scritti in questo giro (il percorso VERO che l'esecutore ha aperto), più quelli dei giri prima dall'ospite. */
+    const registriSfondoDelGiro = new Set()
+    /* I campi sfondo della riga dei Processi (BUG-14), col nome da mostrare (blocco 26); il registro scritto entra nell'insieme. */
+    /* Ritocco D1: percorso pieno → nome corto dei registri di questo giro, per gli eventi (`perGliEventi`) */
+    const nomiMostratiDelGiro = new Map()
+    const perGliEventi = (testo) => {
+        let s = String(testo ?? '')
+        for (const [file, mostrato] of nomiMostratiDelGiro) s = testoSfondoPerGliEventi(s, file, mostrato)
+        /* Revisione del blocco 26 (Mobile, R26-3): anche i registri dei giri PRIMA — la nota di fine di un comando partito al giro 1 può
+           arrivare nell'esito del giro 2, e la mappa del giro non la conosce. Il nome si ricava dalla cartella del registro. */
+        for (const file of registriSfondoDellaSessione()) {
+            if (nomiMostratiDelGiro.has(file)) continue
+            const mostrato = nomeMostratoDaPercorsoSfondo(file)
+            if (mostrato) s = testoSfondoPerGliEventi(s, file, mostrato)
+        }
+        return s
+    }
+    const campiSfondoDelProcesso = (p) => {
+        if (typeof p?.fileSfondo === 'string' && p.fileSfondo !== '') registriSfondoDelGiro.add(p.fileSfondo)
+        if (typeof p?.fileSfondo === 'string' && p.fileSfondo !== '' && typeof p.fileSfondoMostrato === 'string' && p.fileSfondoMostrato !== '') nomiMostratiDelGiro.set(p.fileSfondo, p.fileSfondoMostrato)
+        return {
+            inSfondo: true,
+            ...(p.fileSfondo ? { fileSfondo: p.fileSfondo } : {}),
+            ...(p.fileSfondo && p.fileSfondoMostrato ? { fileSfondoMostrato: p.fileSfondoMostrato } : {}),
+            ...(p.daSfondo ? { sfondoDa: p.daSfondo } : {}),
+        }
+    }
+    const registriSfondoDellaSessione = () => {
+        const tutti = new Set(registriSfondoDelGiro)
+        if (typeof registriSfondoFn === 'function') {
+            try { for (const p of registriSfondoFn() ?? []) if (typeof p === 'string' && p !== '') tutti.add(p) } catch { /* l'ospite non apre letture: restano quelle del giro */ }
+        }
+        return tutti
+    }
+    /*
+     * Decisioni 43 e 47: `attachments/<id>/<nome>` → il percorso nei dati di TALOS, SOLO se è un allegato di QUESTA conversazione; altrimenti
+     * `null` e il percorso si legge com'è scritto. ⛔ Più stretto di Hermes (`agent/context_references.py:490-500`, che ammette la cartella
+     * intera): un modello non legge gli allegati di un'altra chat. Ritocco di Performance: per ogni altra lettura costa una regex, niente
+     * disco; il confronto è esatto e in memoria. Il riferimento vale solo intero, mai un prefisso.
+     */
+    const allegatoDaRiferimento = (grezzo) => {
+        const riferimento = riferimentoNormale(grezzo)
+        if (typeof allegatiConversazioneFn !== 'function' || !RIFERIMENTO_ALLEGATO.test(riferimento)) return null
+        try {
+            const cercato = riferimento.toLowerCase()
+            for (const a of allegatiConversazioneFn() ?? []) if (typeof a?.riferimento === 'string' && a.riferimento.toLowerCase() === cercato && typeof a.percorso === 'string' && a.percorso !== '') return a.percorso
+        } catch { /* l'ospite non apre letture */ }
+        return null
+    }
+    /* `background/<id>.log` → il percorso nella cartella dati, SOLO se è un registro di questa sessione; altrimenti `null` e il
+       percorso si legge com'è scritto (relativo al progetto). */
+    const registroDaRiferimento = async (grezzo) => {
+        if (!usaCartellaSfondo) return null
+        const nome = nomeDaRiferimentoSfondo(grezzo)
+        if (!nome) return null
+        let radice = null
+        try { radice = typeof cartellaSfondo === 'function' ? await cartellaSfondo() : cartellaSfondo } catch { return null }
+        if (typeof radice !== 'string' || radice === '') return null
+        const pieno = join(radice, SFONDO_DIR_DATI, nome)
+        return (await eUnRegistroDiSfondo(registriSfondoDellaSessione(), pieno)) ? pieno : null
+    }
+    const segnaleDelComando = (toolCallId, destinazione = percorsoFileSfondo(cartella, toolCallId)) => {
         const ferma = new AbortController()
         /* ⛔ BUG-14: ogni comando ha anche il SUO canale di sfondo (il pulsante «Sfondo» della riga nei Processi)
            e il SUO file di output, dentro la cartella della sessione. L'abort qui NON uccide: il gestore di sfondo
@@ -13355,7 +14714,7 @@ export async function talosLavora({
         return {
             annunciaAvvio: avvio.annuncia,
             segnale: segnaleStop ? AbortSignal.any([segnaleStop, ferma.signal]) : ferma.signal,
-            sfondo: { segnale: sfondo.signal, file: percorsoFileSfondo(cartella, toolCallId) },
+            sfondo: { segnale: sfondo.signal, file: destinazione },
             sgancia: () => { if (typeof sgancia === 'function') sgancia() },
         }
     }
@@ -13525,6 +14884,13 @@ export async function talosLavora({
                     + 'Just opening such a path can make Windows send the user’s credentials (NTLM) to another computer, so it is never opened. Use a normal local path.' }
         }
         const ospite = dove.ospite
+        /* ⛔ Decisione 157 dell'owner (04/11/2026): in Accesso pieno i percorsi di rete passano senza carta, come in Claude Code
+           `bypassPermissions`. Letto vivo (`livelloAccesso` cambia nel giro). Il percorso NT qui sopra resta un rifiuto in ogni modalità:
+           non è una condivisione, è lo spazio dei dispositivi. Le altre modalità chiedono come prima. */
+        if (livelloAccesso === 'accesso-pieno') {
+            reteConsentitaPerChiamata.set(toolCallId, null)
+            return null
+        }
         const perLaSessione = dove.via === 'cartella'
         if (perLaSessione && consensiSessione?.reteCartella === true) {
             reteConsentitaPerChiamata.set(toolCallId, origineDelConsenso(consensiSessione, 'reteCartella', true, 'rete'))
@@ -13590,6 +14956,9 @@ export async function talosLavora({
     /* R-03 (17/10/2026, richiesta della CLI): il rifiuto della delega anche come DATI sull'evento d'esito, così un ospite legge
        codice e motivo da un campo e non da una regex sul testo (la CLI traduce il rifiuto per la persona). */
     let rifiutoDellaChiamata = null
+    /* Decisione 116 C, segnale ai clienti (Desktop 15:31, OK di Mobile, CLI e Performance): la scheda «Accedi e riprendi» l'ha messa
+       l'ospite, perché la sua risposta «esegui» porta `schedaChatgpt: true`. Mai dedotto dal nome dell'attrezzo o dall'azione. */
+    let schedaChatgptDellaChiamata = false
     /* Il testo di un messaggio, anche quando porta immagini (`content` a pezzi). */
     const testoDelMessaggio = (contenuto) => (typeof contenuto === 'string' ? contenuto
         : Array.isArray(contenuto) ? contenuto.map((pezzo) => (typeof pezzo?.text === 'string' ? pezzo.text : '')).join('\n') : '')
@@ -13610,6 +14979,13 @@ export async function talosLavora({
         const conSegno = voceInCoda !== null && typeof voceInCoda === 'object' && !Array.isArray(voceInCoda) && Object.hasOwn(voceInCoda, 'testo')
         const messaggioInCoda = conSegno ? voceInCoda.testo : voceInCoda
         messaggi.push({ role: 'user', content: messaggioInCoda })
+        /* Decisione 201: una voce della persona entrata in coda dalla finestra del PC porta la sua pagina del Browser (anche `null`):
+           la nota, se è cambiata, va subito dopo di lei; e da qui `browser_page` sa che il giro viene dalla finestra. */
+        if (conSegno && voceInCoda.dallaPersona === true && Object.hasOwn(voceInCoda, 'paginaBrowser')) {
+            paginaDalloSchermoDelGiro = true
+            const nota = notaPaginaDaAggiungere(messaggi, voceInCoda.paginaBrowser ?? null)
+            if (nota) messaggi.push({ role: 'system', content: nota })
+        }
         sospettoDelGiro ??= sospettoNeiRisultatiFigli(testoDelMessaggio(messaggioInCoda)) // F-027: un risultato sospetto di una figlia
         if (conSegno && voceInCoda.dallaPersona === true && fileAdottatiDallaPersona) {
             const scritto = testoScrittoDallaPersona(testoDelMessaggio(messaggioInCoda))
@@ -13648,6 +15024,7 @@ export async function talosLavora({
         ['naviga', /^HTTP \d{3} · [^\n]*\n/u],
         ['web_search', /^\d+ results for "[^\n]*"\.\n/u],
         ['library_read', /^(?=name: )/u], // la testa sta dentro: il nome del file è del file
+        ['browser_page', TESTA_PAGINA_BROWSER], // decisione 201: titolo e testo sono della pagina, quindi DATI
         ['local_page', /^LOCAL PAGE :\d+[^\n]*\n/u], // owner 27/10/2026 (server locali): il testo e la console della pagina sono DATI
     ])
     const DI_COMANDI = new Set(['shell', 'prova', 'process_output'])
@@ -13710,6 +15087,8 @@ export async function talosLavora({
             ?? (typeof delSempre === 'string' && delSempre ? { sessionId: delSempre, tipo: 'attrezzo' } : null)
         return consentitoDa ? { ...permesso, consentitoDa } : permesso
     }
+    /* D4: l'esito della carta della ricerca. Revisione del blocco, R15: la ricevuta dice che ha risposto la persona, non «nessun vincolo». */
+    const esitoDellaCarta = (verifica) => (verifica.consentito ? { consentito: true, via: 'carta-della-ricerca' } : verifica)
     const verificaPermessoConBarriera = async (azione, opzioni, { conferma } = {}) => {
         /* Owner 27/10/2026: una cartella bloccata per il dispositivo del giro, prima del cancello (vedi `motivoBloccato`) */
         const bersaglioBloccabile = azione?.tipo === 'shell' ? azione.comando : azione?.percorso
@@ -13719,7 +15098,36 @@ export async function talosLavora({
         }
         const traccia = { consentitoDa: null }
         const { origineRete = null, ...opzioniDelCancello } = opzioni ?? {}
-        const permessoBase = await verificaPermessoScrittura(azione, { posizioneFn: posizioneDelGiro, consensiSessione, ...opzioniDelCancello, sospetto: sospettoDelGiro, tracciaConsenso: traccia })
+        /*
+         * E1, revisione del Desktop D2 (b) e condizione della CLI (04/11 14:13): una chiamata emulata affidata alla carta forzata. La carta
+         *   del cancello per QUESTA chiamata porta `semprePersona: true` e il nome dello strumento: nessun ospite la approva da solo (la
+         *   CLI in Accesso pieno approverebbe il segreto, decisione 16/10) e un sì automatico al server è un no (D3). Il sì vale per questa
+         *   chiamata soltanto. ⛔ Rete: se il cancello lascia passare senza chiedere, la misura di `cartaForzataPrevista` ha sbagliato e
+         *   la carta emulata si chiede QUI, prima di scrivere: una chiamata emulata non parte mai senza una carta della persona.
+         */
+        const nomeEmulato = typeof azione?.toolCallId === 'string' ? emulateAlCancello.get(azione.toolCallId) : undefined
+        let chiestoPerEmulata = false
+        if (nomeEmulato !== undefined) {
+            emulateAlCancello.delete(azione.toolCallId)
+            const chiedi = opzioniDelCancello.chiediApprovazioneFn
+            if (typeof chiedi === 'function') {
+                opzioniDelCancello.chiediApprovazioneFn = (domanda) => {
+                    if (domanda?.toolCallId !== azione.toolCallId) return chiedi(domanda)
+                    chiestoPerEmulata = true
+                    return chiedi({ ...domanda, semprePersona: true, nome: nomeEmulato })
+                }
+            }
+        }
+        let permessoBase = await verificaPermessoScrittura(azione, { posizioneFn: posizioneDelGiro, consensiSessione, ...(typeof accessoPienoDellOspite === 'function' ? { accessoPienoDellOspite } : {}), ...(Array.isArray(progettiCritici) ? { progettiCritici } : {}), ...opzioniDelCancello, sospetto: sospettoDelGiro, tracciaConsenso: traccia })
+        if (nomeEmulato !== undefined && permessoBase.consentito && !chiestoPerEmulata) {
+            const decisione = await verificaChiamataDalTesto({ tipo: 'chiamata-dal-testo', emulata: true, toolCallId: azione.toolCallId, nome: nomeEmulato,
+                ...fraseDiPermesso('server.approval.emulatedCall', { nome: nomeEmulato }) }, { chiediApprovazioneFn: chiediApprovazioneDellOspite, segnaleStop })
+            if (decisione.consentito !== true) {
+                permessoBase = { consentito: false, via: 'carta-emulata', motivo: decisione.nessunaPersona
+                    ? `this tool runs only with the person's yes on its card, and nobody is here to answer: nothing was done.`
+                    : (decisione.motivo ?? 'the person declined to run this call.') }
+            }
+        }
         const rifiuto = permessoBase.consentito && typeof conferma === 'function' ? await conferma(permessoBase) : null
         const permesso = conChiHaConsentito(rifiuto ?? permessoBase, azione, traccia, origineRete)
         if (!permesso.consentito || typeof primaDiMutazioneFn !== 'function' || !AZIONI_MOBILE_PER_ATTREZZO[azione?.tipo]) return permesso
@@ -13767,8 +15175,31 @@ export async function talosLavora({
      * inclusa (`negati.size === 0` ⇒ nessun `.filter()`, nessuna copia).
      */
     const negatiDalLivello = attrezziNegatiDalLivello({ livelloAccesso, permessiPerAttrezzo })
-    const attrezziConRete = strumentiEstesi?.length
-        ? [...ATTREZZI_OPENAI, ...ATTREZZI_ESTESI_OPENAI.filter((a) => strumentiEstesi.includes(a.function.name))]
+    /* FE-008: niente modelli locali e niente figlie; le altre condizioni (persona davanti, chiamate parallele) le guarda chi ospita */
+    const offreIPassi = listaPassi === true && agentRole !== 'child' && !eModelloLocale(modello)
+    const passiDelGiro = contenitorePassi ?? creaContenitorePassi(passiIniziali)
+    /* FE-081 C1/C2: i blocchi hanno un nome solo col catalogo acceso (stessa guardia del suo prompt); senza catalogo la storia passa
+       identica, byte per byte, e `blocco_aggiorna` non si offre MAI, nemmeno se chi ospita lo elenca fra gli estesi. */
+    const nominati = catalogoBlocchi && agentRole !== 'child' && !eModelloLocale(modello) && Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0
+        ? nominaBlocchi(messaggiIniziali, { correnti: sorgentiCorrentiDeiBlocchi ?? {}, prossimo: prossimoNomeDeiBlocchi }) : null
+    /* G-B2: i nomi si TIMBRANO sul messaggio quando il blocco nasce, con un contatore per conversazione: una storia rigenerata non
+       riusa mai un nome vecchio, un ricaricamento ridà gli stessi. `nomiVivi` cresce nel giro, così un blocco appena scritto si
+       aggiorna già nel giro dopo. */
+    const nominaVivi = catalogoBlocchi && agentRole !== 'child' && !eModelloLocale(modello)
+    const nomiVivi = new Set(nominati?.nomi ?? [])
+    let prossimoNome = nominati?.prossimo ?? (Number.isInteger(prossimoNomeDeiBlocchi) && prossimoNomeDeiBlocchi > 1 ? prossimoNomeDeiBlocchi : 1)
+    const annunciaNomi = (esito) => {
+        if (typeof onNomiDeiBlocchi !== 'function' || esito.nuovi.length === 0) return
+        try { onNomiDeiBlocchi({ nuovi: esito.nuovi.map(({ nome, sorgente }) => ({ nome, sorgente })), nomi: esito.nomi, prossimo: esito.prossimo }) } catch { /* chi ospita non ferma il giro */ }
+    }
+    if (nominati) annunciaNomi(nominati)
+    const offreBlocchi = (nominati?.nomi.length ?? 0) > 0 && typeof onAggiornaBlocco === 'function'
+    const estesiSenzaBlocchi = strumentiEstesi?.includes(NOME_BLOCCO_AGGIORNA) ? strumentiEstesi.filter((n) => n !== NOME_BLOCCO_AGGIORNA) : strumentiEstesi
+    const estesiDelGiro = offreIPassi || offreBlocchi
+        ? [...(estesiSenzaBlocchi ?? []), ...(offreIPassi ? [NOME_PASSI] : []), ...(offreBlocchi ? [NOME_BLOCCO_AGGIORNA] : [])]
+        : estesiSenzaBlocchi
+    const attrezziConRete = estesiDelGiro?.length
+        ? [...ATTREZZI_OPENAI, ...ATTREZZI_ESTESI_OPENAI.filter((a) => estesiDelGiro.includes(a.function.name))]
         : ATTREZZI_OPENAI
     /* R1 (review del desktop): senza un ospite che chiude la rete, `network` non si offre (vedi `reteChiusaDallOspite`). */
     const attrezziBaseGrezzi = reteChiusaDallOspite === true ? attrezziConRete : attrezziConRete.map((a) => {
@@ -13780,12 +15211,23 @@ export async function talosLavora({
     const vedeImmagini = typeof onGuardaImmagine === 'function' && (strumentiEstesi ?? []).includes('view_image') && typeof vedeImmaginiFn === 'function'
         ? (await Promise.resolve().then(() => vedeImmaginiFn(modello)).catch(() => null)) === true
         : false
+    /* computer_use (04/11/2026, forma §1): solo se il modello del giro vede le immagini; un errore vale «non vede» ⇒ niente attrezzo */
+    const vedeLoSchermo = typeof onComputerUseFn === 'function' && (strumentiEstesi ?? []).includes(NOME_COMPUTER_USE) && typeof vedeImmaginiFn === 'function'
+        ? (await Promise.resolve().then(() => vedeImmaginiFn(modello)).catch(() => null)) === true
+        : false
     const needsRoleFilter = agentRole === 'child' || (strumentiEstesi ?? []).some((name) =>
-        ['ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question', 'list_children', 'child_control', 'workflow_plan_propose', 'present_plan', 'request_plan_mode', 'view_image', 'local_page'].includes(name)
+        ['ask_parent', 'answer_parent_question', 'ask_child', 'answer_child_question', 'list_children', 'child_control', 'workflow_plan_propose', 'present_plan', 'request_plan_mode', 'view_image', 'local_page', 'browser_page'].includes(name)
         // F-012 (§1.5): i tre dei run hanno filtri loro (root, runtime presente) — quando chiesti, si filtra
-        || ATTREZZI_WORKFLOW.has(name) || name === 'process_output' || ATTREZZI_AUTOMAZIONI.has(name) || ATTREZZI_FORNITORI.has(name) || ATTREZZI_OBIETTIVO.has(name) || ATTREZZI_ANNULLA.has(name) || ATTREZZI_TELEFONI.has(name)
+        || ATTREZZI_WORKFLOW.has(name) || name === 'process_output' || ATTREZZI_AUTOMAZIONI.has(name) || ATTREZZI_FORNITORI.has(name) || ATTREZZI_OBIETTIVO.has(name) || ATTREZZI_ANNULLA.has(name) || ATTREZZI_TELEFONI.has(name) || ATTREZZI_LUOGHI.has(name)
         // «Segnala un problema» (29/10/2026): senza questa riga il filtro qui sotto non girava e l'attrezzo si offriva senza ospite
-        || name === NOME_SEGNALAZIONE)
+        || name === NOME_SEGNALAZIONE || name === NOME_AIUTO || name === NOME_IMPOSTAZIONI || name === NOME_COMPUTER_USE)
+    /* D3, revisione del blocco R22: un ospite che lancia vale «non c'è», mai un giro che cade.
+       Ritocco di Performance (03/11/2026): si guarda UNA volta, all'inizio del giro. L'elenco si ricostruisce a giro vivo (il sì al piano, il livello cambiato):
+       una guida sparita lì toglieva un attrezzo in mezzo al giro e la cache del fornitore cadeva. Hermes tiene stabile il prefisso per la stessa ragione (`run_agent.py:1221`). */
+    const aiutoDisponibile = (() => {
+        if (typeof aiutoTalos?.rispondi !== 'function') return false
+        try { return aiutoTalos.disponibile?.() !== false } catch { return false }
+    })()
     const filterBaseTools = (a, negati = negatiDalLivello) => {
         const name = a.function.name
         if (negati.has(name)) return false
@@ -13800,7 +15242,7 @@ export async function talosLavora({
         /* K3: senza il canale del registro (banco, una sessione senza figli possibili) i due attrezzi non si offrono */
         if (name === 'list_children' && typeof listChildrenFn !== 'function') return false
         // C5: `child_control` si offre se c'è almeno un canale; un'azione senza il suo canale si rifiuta per nome
-        if (name === 'child_control' && ![stopChildFn, pauseChildFn, resumeChildFn].some((fn) => typeof fn === 'function')) return false
+        if (name === 'child_control' && ![stopChildFn, pauseChildFn, resumeChildFn, retryChildFn].some((fn) => typeof fn === 'function')) return false
         // D1 «Come Claude» (24/09/2026): in Piano si risponde ancora alle figlie vive.
         if (modalitaOperativa === 'piano' && name === 'answer_child_question' && figliViviAllAvvio !== true) return false
         if (name === 'workflow_plan_propose' && (agentRole === 'child' || typeof onWorkflowPlanPropose !== 'function')) return false
@@ -13818,8 +15260,16 @@ export async function talosLavora({
         if (ATTREZZI_ANNULLA.has(name) && (agentRole === 'child' || typeof onAnnullaFileFn !== 'function')) return false
         /* «Segnala un problema»: della conversazione principale, e solo se l'ospite sa mostrare la bozza (contratto con la CLI) */
         if (name === NOME_SEGNALAZIONE && (agentRole === 'child' || typeof onSegnalazioneFn !== 'function')) return false
+        /* Centro assistenza (01/11/2026): la guida solo se l'ospite la porta (una lettura: anche alle figlie) */
+        if (name === NOME_AIUTO && !aiutoDisponibile) return false // D3: senza pagine resta nascosto
+        /* Fase 8 (01/11/2026): le impostazioni della app solo al root e solo se l'ospite le porta (condizioni 1 e 3 della CLI) */
+        if (name === NOME_IMPOSTAZIONI && (agentRole === 'child' || typeof onImpostazioniFn !== 'function')) return false
         /* R5.12: i telefoni sono della conversazione principale, e solo se l'ospite sa rispondere */
         if (ATTREZZI_TELEFONI.has(name) && (agentRole === 'child' || typeof onTelefoniFn !== 'function')) return false
+        /* 03/11/2026: i luoghi ricordati, come i telefoni */
+        if (ATTREZZI_LUOGHI.has(name) && (agentRole === 'child' || typeof onLuoghiFn !== 'function')) return false
+        /* 04/11/2026 (decisione 129, forma §1): il computer use solo alla radice, con l'ospite, e se il modello vede lo schermo */
+        if (name === NOME_COMPUTER_USE && (agentRole === 'child' || typeof onComputerUseFn !== 'function' || !vedeLoSchermo)) return false
         /* ⛔ Rilievo 3 (piano §1.7): il modo Piano lo può chiedere SOLO il root in Normale, col
            canale presente — in Piano l'attrezzo non esiste, ai figli nemmeno. */
         if (name === 'request_plan_mode' && (agentRole === 'child' || modalitaOperativa === 'piano' || typeof onRichiestaPianoFn !== 'function')) return false
@@ -13828,6 +15278,8 @@ export async function talosLavora({
         if (name === 'view_image' && !vedeImmagini) return false
         /* Owner 27/10/2026 (server locali): la pagina locale solo se l'ospite sa aprirla nella scheda della conversazione */
         if (name === 'local_page' && typeof apriPaginaLocaleFn !== 'function') return false
+        /* Decisione 201: la pagina del Browser solo se l'ospite sa leggerla, e mai a una figlia (il Browser è della persona) */
+        if (name === 'browser_page' && (agentRole === 'child' || typeof leggiPaginaBrowserFn !== 'function')) return false
         return true
     }
     const attrezziBase = negatiDalLivello.size || needsRoleFilter
@@ -13902,7 +15354,10 @@ export async function talosLavora({
         NOME_RICERCA_ATTREZZI, NOME_DESCRIZIONE_ATTREZZI,
         'present_plan', // 24/09/2026, decisione owner 36
         'view_image', // owner 27/10/2026: guardare un'immagine è una lettura
+        NOME_AIUTO, // Centro assistenza (01/11/2026): leggere la guida di TALOS è una lettura
+        NOME_IMPOSTAZIONI, // Fase 8 (01/11/2026): nel Piano si legge e basta — un `set` o `undo` lo rifiuta il ramo (`AZIONI_IMPOSTAZIONI_NEL_PIANO`)
         'local_page', // owner 27/10/2026 (server locali): guardare la pagina del proprio server di sviluppo è una lettura
+        'browser_page', // decisione 201 (04/11/2026): leggere la pagina che la persona ha aperto è una lettura
         'library_find', 'library_read', 'library_file_origin', // C5: library_find accorpa elenco e ricerca
         'notes_find', 'tasks_find', 'memory_find', 'research_find', 'research_read', // C5: *_find accorpa elenco e ricerca
         // 27/09/2026, decisione owner (capacità delle sezioni): le letture nuove
@@ -13918,8 +15373,11 @@ export async function talosLavora({
         'goal_status',
         // R5.12: dei telefoni, del Piano entrano solo gli elenchi (dei dispositivi e, dal 23/10, delle loro cartelle)
         'remote_phones', 'remote_phone_folders',
+        // 03/11/2026: dei luoghi ricordati, del Piano entra solo l'elenco
+        'computer_use_places_list',
         // «Segnala un problema» (29/10/2026): preparare una bozza non scrive e non manda niente
         NOME_SEGNALAZIONE,
+        NOME_PASSI, // FE-008: la lista del giro non tocca niente fuori dalla sessione
         // K3 (03/10): guardare i propri figli e fermarne uno non tocca il disco (desktop, revisione della proposta)
         // C5: `child_control` sta nel Piano per stop e pausa (non toccano il disco); la ripresa la rifiuta il ramo (riparte un lavoro)
         'list_children', 'child_control',
@@ -13958,7 +15416,13 @@ export async function talosLavora({
        al modello parte la sua divisione, che per la stessa lista è lo stesso oggetto ⇒ la richiesta resta uguale fra i giri. */
     /* Gli attrezzi centrali del compito restano davanti: la Ricerca approfondita (riconosciuta da `task.ricercaId`, che sopravvive
        alla ripresa) deposita il rapporto con `research_deposit` (owner 17/10, dopo la revisione H). */
-    const attrezziCentrali = typeof task?.ricercaId === 'string' && task.ricercaId ? ['research_deposit'] : []
+    const dentroUnaRicerca = typeof task?.ricercaId === 'string' && Boolean(task.ricercaId)
+    const attrezziCentrali = dentroUnaRicerca ? ['research_deposit'] : []
+    /* Ricerca a due porte: `research_start` davanti solo con l'opzione dell'ospite E chi la esegue (Mobile, 01/11: nel Codice del
+       telefono la ricerca non parte, e lì resta fuori come oggi); nel modo «essenziali» resta dietro il ponte. */
+    const centraliConRicerca = ricercaDavanti === true && typeof onRicercaAvvia === 'function' && !dentroUnaRicerca
+        ? [...attrezziCentrali, 'research_start'] : attrezziCentrali
+    const centraliDel = (modo) => (modo === 'essenziali' ? attrezziCentrali : centraliConRicerca)
     /* L1 (20/10): la ricerca del motore locale proponeva il 15% («se attrezzi > 15% della finestra si attiva il profilo essenziali
        + ponte»): due volte il 5% che Hermes dà al solo elenco, perché davanti restano comunque gli schemi interi degli essenziali */
     const finestraAttrezzi = Number.isSafeInteger(finestraPerGliAttrezzi) && finestraPerGliAttrezzi > 0 ? finestraPerGliAttrezzi : null
@@ -13971,12 +15435,12 @@ export async function talosLavora({
         if (attrezziDifferiti === 'essenziali') return 'essenziali'
         if (finestraAttrezzi === null) return 'su-richiesta'
         if (!versoEssenziali) {
-            const suRichiesta = dividiPerIlPonte(attrezziOpenAI, attrezziCentrali, 'su-richiesta', { budgetElenco })
+            const suRichiesta = dividiPerIlPonte(attrezziOpenAI, centraliDel('su-richiesta'), 'su-richiesta', { budgetElenco })
             versoEssenziali = pesoInToken(JSON.stringify(suRichiesta.attrezzi)) > finestraAttrezzi * QUOTA_ATTREZZI_DELLA_FINESTRA
         }
         return versoEssenziali ? 'essenziali' : 'su-richiesta'
     }
-    const divisioneDelGiro = () => dividiPerIlPonte(attrezziOpenAI, attrezziCentrali, modoDellaDivisione(), finestraAttrezzi === null ? undefined : { budgetElenco })
+    const divisioneDelGiro = () => { const modo = modoDellaDivisione(); return dividiPerIlPonte(attrezziOpenAI, centraliDel(modo), modo, finestraAttrezzi === null ? undefined : { budgetElenco }) }
     const attrezziVersoIlModello = () => (attrezziDifferiti ? divisioneDelGiro().attrezzi : attrezziOpenAI)
     const nomiToolMcp = attrezziMcpOpenAI ? new Set(attrezziMcpOpenAI.map((a) => a.function.name)) : null
     const nomiToolPlugin = attrezziPluginOpenAI ? new Set(attrezziPluginOpenAI.map((a) => a.function.name)) : null
@@ -14039,6 +15503,9 @@ export async function talosLavora({
             return RISALITA.test(base) || classificaPercorsoDiRete(base) || motivoDaChiedere({ tipo: 'elenca', percorso: percorsoDelGiro(base) || '.', cartella, accessoPieno: livelloAccesso === 'accesso-pieno' }) ? null : seLocale(base || '.', () => elencaDelGiro(base, { ...parametriDiElenca(argomenti), spiegaErrore: (e) => spiegaCollegamentoLinux('elenca', argomenti, e) }))
         }
         if (nome === 'leggi') {
+            /* Blocco 26: `background/<id>.log` si risolve nel ramo, dopo il controllo dell'insieme — mai una lettura anticipata */
+            if (usaCartellaSfondo && nomeDaRiferimentoSfondo(percorsoDiFile(argomenti))) return null
+            if (allegatoDaRiferimento(percorsoDiFile(argomenti))) return null // decisione 43: l'allegato passa dai suoi controlli, non dalla lettura anticipata
             const percorso = percorsoDelGiro(percorsoDiFile(argomenti))
             /* Un percorso di rete non parte MAI in anticipo: toccarlo è già il danno (vedi `controllaPercorsoDiRete`). */
             return percorso === '' || classificaPercorsoDiRete(percorso) || motivoDaChiedere({ tipo: 'leggi', percorso, cartella, accessoPieno: livelloAccesso === 'accesso-pieno' }) ? null : seLocale(percorso, () => leggiTestoDelGiro(percorso, { offset: argomenti.offset, limit: argomenti.limit, format: argomenti.format, byteOffset: argomenti.byteOffset }))
@@ -14062,7 +15529,10 @@ export async function talosLavora({
     const storiaPresente = Array.isArray(messaggiIniziali) && messaggiIniziali.length > 0
     const ricostruzioneIniziale = ricostruisciContestoIniziale === true && storiaPresente && messaggiIniziali[0]?.role !== 'system'
     if (storiaPresente && !ricostruzioneIniziale) {
-        messaggi = [...messaggiIniziali]
+        messaggi = [...(nominati?.messaggi ?? messaggiIniziali)]
+        /* Decisione owner 166: una ripresa SENZA messaggio nuovo («Continua adesso con…», `/resume` vuoto) è la persona che chiede di
+           riprendere il giro fermato: il segno «non riprendere» in coda si toglie, altrimenti il modello leggerebbe il contrario. */
+        if (messaggi.at(-1)?.role === 'system' && testoDelMessaggio(messaggi.at(-1).content).startsWith(SEGNO_GIRO_FERMATO)) messaggi.pop()
         /*
          * ⛔ F-027, estensione (owner 03/10/2026): una sessione nata PRIMA del confine ha il suo prompt di sistema di allora, e
          *   una ripresa non lo riscrive (romperebbe la cache del prefisso). Senza la frase, il modello vedrebbe i confini senza
@@ -14083,12 +15553,22 @@ export async function talosLavora({
         const askDisponibile = agentRole !== 'child' && askOfferto && nessunoDavanti !== true
         // CLI 6b: una figlia con il canale della persona riceve la SUA guida (ask_parent prima, la persona solo per ciò che decide lei)
         const guidaAsk = askDisponibile ? ISTRUZIONI_ASK : agentRole === 'child' && askOfferto ? ISTRUZIONI_ASK_FIGLIA : null
+        /* D3 (collaudo del treno; forma con OK di Performance, CLI e Mobile): `talos_help` resta dietro il ponte, e senza nominarlo il modello non lo cercava e rispondeva
+           a memoria il falso su TALOS. Una riga sola, tetto +50 token, solo dove l'attrezzo c'è davvero dietro il ponte: mai per `locale-ospite`, mai senza la guida (l'ospite senza
+           `index.json` non passa `aiutoTalos`, e l'attrezzo non si offre). Come Hermes `agent/prompt_builder.py:172-190`, la riga che manda alla propria documentazione. */
+        const rigaAiuto = attrezziDifferiti === true && !(typeof modello === 'string' && modello.startsWith('locale-ospite:')) && attrezziOpenAI.some((a) => a.function?.name === NOME_AIUTO) ? `\n\n${RIGA_AIUTO}` : ''
         /* Owner 28/10/2026 (supera il 19/10 «Solo per il modello del telefono»): la riga della lingua va in TUTTI i profili — PC, CLI,
            banco, telefono — perché anche i modelli grandi rispondevano in inglese a chi scriveva in persiano. In fondo al primo
            messaggio: dipende solo dall'impostazione, quindi il prefisso resta identico per tutta la sessione. ⛔ Cambia il preambolo
            del banco (TALOS-BANCO): dichiararlo nelle campagne che lo confrontano con quelle di prima. */
-        const rigaLingua = `\n\n${rigaLinguaDelleRisposte({ lingua: linguaDelleRisposte, linguaInterfaccia })}`
-        messaggi = [{ role: 'system', content: `${guidaAsk ? `${istruzioniDiBase(fileAdottatiDallaPersona)}\n\n${guidaAsk}` : istruzioniDiBase(fileAdottatiDallaPersona)}${rigaLingua}` }]
+        const rigaLingua = `${rigaAiuto}\n\n${rigaLinguaDelleRisposte({ lingua: linguaDelleRisposte, linguaInterfaccia })}`
+        /* FE-003 (03/11/2026): il catalogo dei blocchi nella parte fissa, solo su una conversazione nuova: dipende da impostazioni fisse, quindi
+           il prefisso resta identico. Una ripresa non lo riceve e un cambio di modello non lo toglie. ⛔ Niente modelli locali finché non c'è la
+           misura del §4 della forma del 02/11; niente figlie: la loro risposta va al padre, non a una persona. */
+        const testoCatalogo = catalogoBlocchi && agentRole !== 'child' && !eModelloLocale(modello)
+            ? promptDelCatalogo({ tipi: catalogoBlocchi.tipi, clic: catalogoBlocchi.clic }) : ''
+        const rigaCatalogo = testoCatalogo ? `\n\n${testoCatalogo}` : ''
+        messaggi = [{ role: 'system', content: `${guidaAsk ? `${istruzioniDiBase(fileAdottatiDallaPersona, modello)}\n\n${guidaAsk}` : istruzioniDiBase(fileAdottatiDallaPersona, modello)}${rigaCatalogo}${rigaLingua}` }]
         /*
          * ⭐⭐⭐ P-13 (10/09) — QUALI FILE ESISTONO, e perché sta ESATTAMENTE qui.
          *
@@ -14153,10 +15633,21 @@ export async function talosLavora({
         }
         if (ricostruzioneIniziale) {
             messaggi.push({ role: 'system', content: '[TALOS initial context reconstructed from current instructions and available project sources on explicit resume. The original initial context was not saved and cannot be recovered. The following conversation is preserved history, not a new task to repeat.]' })
-            messaggi.push(...messaggiIniziali)
+            messaggi.push(...(nominati?.messaggi ?? messaggiIniziali))
         } else {
             messaggi.push({ role: 'user', content: imageMessageContent(task.consegna, task.immagini) })
         }
+    }
+    /*
+     * Decisione 201 (04/11/2026), la nota della pagina del Browser: solo quando cambia (`notaPaginaDaAggiungere`), e si salva nella storia
+     *   così il confronto regge a riavvii e riprese. Va DOPO il messaggio della persona, mai prima: in una conversazione nuova prima del
+     *   messaggio ci sono solo i system di testa, e lì entrerebbe nella testa (la 194 la vuole in coda, `<talos-note>`, mai in testa).
+     *   Messaggio senza il campo (telefono, CLI): nessuna nota, e `browser_page` aggiunge la riga del Mobile.
+     */
+    let paginaDalloSchermoDelGiro = paginaBrowser !== undefined
+    {
+        const nota = notaPaginaDaAggiungere(messaggi, paginaBrowser)
+        if (nota) messaggi.push({ role: 'system', content: nota })
     }
     let notaLinguaDelGiro = null
     let statoCacheDelGiro = statoCachePrecedente && typeof statoCachePrecedente === 'object' && Array.isArray(statoCachePrecedente.messaggi) ? statoCachePrecedente : null // cache, punto 2
@@ -14255,6 +15746,7 @@ export async function talosLavora({
     let catena = CATENA_VUOTA
     let turniUsati = 0
     let ultimoHaConcluso = false
+    let rifiutataDopoIlTesto = false // Blocco 20: il testo arrivato resta, ma il modello ha rifiutato di continuare (esito `rifiuto-del-modello`)
     /** ⭐ vedi comeFinita più sotto: un fermo su richiesta non è mai 'concluso'. */
     let fermatoSuRichiesta = false
     /*
@@ -14276,7 +15768,18 @@ export async function talosLavora({
     let risposteRipetuteNelGiro = 0
     /* F-ENG-4: continuazioni di fila (tetto di uscita o silenzio dopo il testo) e se l'ultima risposta è rimasta tagliata. */
     let continuazioniDiFila = 0
+    let ripreseChiamataNelTestoDiFila = 0 // PERF R-34
+    let fornitoreDiQuestoGiro = null // PERF R-34: per l'evento `chiamata-nel-testo`
     let tagliataSenzaRimedio = null
+    /* R-53: l'esito dell'ultimo `shell` o `prova` eseguito davvero, se il giro ha modificato file, e la sola riapertura ammessa */
+    let comandoRosso = false
+    const comandiDelGiro = new Map() // R-53 bis: l'ultimo esito di ogni comando
+    let fileModificatiNelGiro = false
+    let riapertoSuComandoRosso = false
+    /* R-58: l'esito dell'ultima PROVA (attrezzo `prova`, o `shell` che lancia un esecutore di prove), e se il giro ha toccato file anche da
+       shell. Il secondo vale solo per R-58: R-53 resta com'era (le sue prove dicono che un `node -e` verde non è una modifica). */
+    let provaRossa = false
+    let fileForseModificatiNelGiro = false
     /* Giri in tondo: la guardia del giro, e la chiamata su cui la persona (o nessuno) ha detto di fermarsi. */
     const giriInTondo = guardiaGiriInTondo === true ? creaGuardiaGiriInTondo() : null
     const stessoAttrezzo = guardiaGiriInTondo === true ? creaGuardiaStessoAttrezzo() : null // R-03, stesso interruttore
@@ -14305,12 +15808,37 @@ export async function talosLavora({
     let compattazioni = 0
     /* ⛔ 25/09/2026 notte — la scala della RISPOSTA VUOTA (vedi `decidiRispostaVuota`): la spinta una volta per giro, i
        ritentativi e le firme si azzerano a ogni risposta che porta qualcosa. */
-    let statoVuote = { spintaFatta: false, ritentativi: 0, tentativi: [] }
+    let statoVuote = { spintaFatta: false, continuazioni: 0, ritentativi: 0, tentativi: [] } // decisione 324: le continuazioni sul ragionamento, al più due per stallo
+    /* Decisione 326 (A): l'assistant in coda della continuazione vive solo nella PROSSIMA richiesta, mai in `messaggi`; un fornitore che
+       lo rifiuta (400/422) lo spegne per il resto del giro, su quel filo */
+    let prefillInCorso = null
+    /* Giro 9 della 324 (BASSO del revisore dei fornitori): il rifiuto vale per il FILO che ha rifiutato (`modelloDelFilo` di quando il
+       prefill è nato), non per tutto il giro: dopo un cambio di fornitore la riserva continua. Come Hermes, che lo impara per (fornitore,
+       host, modello), `agent/message_sanitization.py:649` e `:986` `record_reasoning_field_rejection` */
+    const filiCheRifiutanoIlPrefill = new Set()
+    let filoDelPrefill = null
+    /* Giro 10 della 324 (MEDIO del revisore del filo): una finestra piena col prefill in volo chiude le continuazioni dello STALLO. La
+       vuota dopo la ripartenza va alla scala (spinta, o ritentativo con l'attesa), mai una seconda continuazione lunga uguale che
+       tornerebbe fuori finestra con un'altra copia subito. Si riapre con una risposta che porta qualcosa o con una compattazione, come
+       Hermes azzera `_thinking_prefill_retries` (`agent/turn_context_compaction.py:58-64`, `agent/turn_tool_round.py:295-302`) */
+    let prefillNonEntraNelloStallo = false
+    /* Giro 6 (i tre revisori del giro 5, stessa radice): il prefill DAVVERO partito con l'ultima richiesta, null se è partita senza (passo del
+       tetto, 402, ripresa dopo il silenzio, gradini della scala, ripiego del 400/422). Da lui nasce il prossimo prefill e lui rimettono i
+       reinvii del giro: la stessa richiesta, mai un prefill che lei non aveva (Hermes ricostruisce il prefill dalla risposta corrente,
+       `agent/turn_empty_response.py:246-252`) */
+    let prefillInviato = null
+    /* Decisione 245: il richiamo dopo una fermata per il contesto (`decidiFermataPerContesto`), una volta per giro. `chiamateInPiuDelGiro`
+       conta spinte e ritentativi della risposta vuota: con il richiamo non si sommano (P3). */
+    const statoFermataContesto = { richiamato: false }
+    let chiamateInPiuDelGiro = 0
+    let attrezziNelGiro = false
     /* CONTRATTO-R30-R31: la scala del tetto d'uscita (vive finché una risposta usabile non arriva) e il tetto davvero inviato */
     let scalaTetto = null
     let tettoInviatoDelGiro = null
     let giroDelTetto = 0 // il giro corrente, per gli eventi della scala (aggiornato all'inizio di ogni giro)
     const motoreLocale = typeof modello === 'string' && /^(?:locale-ospite|local):/u.test(modello) // come `motoreAPostoUnico`
+    /* R-44: tutti i motori di questo computer, anche quelli che non sono a posto unico (`ID_MOTORI_LOCALI_OPENAI` del registro dei fornitori) */
+    const motoreDiQuestoComputer = motoreLocale || (typeof modello === 'string' && /^(?:ollama|lmstudio):/u.test(modello))
     const passoDelTetto = (caso, usageDelTaglio = null) => {
         if (!scalaTetto) scalaTetto = { caso, passi: [], ultimo: null, tetto: null, ragionamento: undefined, tettoPrima: null, requestId: null }
         const da = ragionamentoDelGiro()
@@ -14433,15 +15961,32 @@ export async function talosLavora({
         return `\n\nNote: the reference check is unavailable here (${premessa.perche}), so this write was not checked for names, imports or members that do not exist. Verify them yourself.`
     }
     const catturaSenzaFermare = async (reason, giroCorrente = 0) => {
+        /* COD-220 (Mobile 30/10/2026): una figlia locale fermata dopo ~5 minuti senza nessuna chiamata; il registro del motore del telefono
+           aveva solo «capture fallita (finished) durante uno Stop: CTX_HISTORY_DIVERGED», senza di chi né perché. Ora il registro del
+           processo dice la DURATA di una cattura lunga (oltre 2 s) e, per un errore, l'id della sessione e il dettaglio della divergenza
+           (solo numeri, forma e ruolo: mai il contenuto, R-05). Niente eventi, niente disco. */
+        const inizioCattura = performance.now()
+        const durataCattura = () => Math.round(performance.now() - inizioCattura)
+        const perIlRegistro = (errore) => {
+            const d = errore?.dettaglio
+            const parti = []
+            if (typeof errore?.sessionId === 'string' && /^[\w-]{1,64}$/u.test(errore.sessionId)) parti.push(`session=${errore.sessionId}`)
+            for (const k of ['archiviati', 'attivi', 'primoDiverso']) if (Number.isSafeInteger(d?.[k])) parti.push(`${k}=${d[k]}`)
+            if (d?.forma === 'piu-corta' || d?.forma === 'riscritta') parti.push(`forma=${d.forma}`)
+            if (['user', 'assistant', 'tool', 'system'].includes(d?.ruolo)) parti.push(`ruolo=${d.ruolo}`)
+            return parti.length > 0 ? ` [${parti.join(' ')}]` : ''
+        }
         try {
             await contextHooks?.capture?.({ messages: messaggi, reason })
             if (typeof contextHooks?.capture === 'function') ripiegoInCorso = null
+            if (durataCattura() > 2_000) console.warn(`[talos] context capture "${reason}" took ${durataCattura()} ms`)
         }
         catch (errore) {
+            if (durataCattura() > 2_000) console.warn(`[talos] context capture "${reason}" failed after ${durataCattura()} ms`)
             // uno Stop arrivato durante la capture INIZIALE non lancia: il giro si chiude «before round 1» (FERMATA-INVIO-05)
             if (segnaleStop?.aborted && reason === 'start') {
                 // revisione del bugfixer: uno Stop non deve NASCONDERE un errore vero della capture — lo si lascia nel registro del processo
-                if (errore?.name !== 'AbortError') console.warn(`[talos] capture iniziale fallita durante uno Stop: ${errore?.code ?? errore?.name ?? 'errore'}`)
+                if (errore?.name !== 'AbortError') console.warn(`[talos] capture iniziale fallita durante uno Stop: ${errore?.code ?? errore?.name ?? 'errore'}${perIlRegistro(errore)}`)
                 return
             }
             /*
@@ -14452,12 +15997,16 @@ export async function talosLavora({
              * registro del processo; `prepare` ripara al giro dopo, come per ogni altro errore della capture.
              */
             if (segnaleStop?.aborted && errore?.name !== 'AbortError') {
-                console.warn(`[talos] capture fallita (${reason}) durante uno Stop: ${errore?.code ?? errore?.name ?? 'errore'}`)
+                console.warn(`[talos] capture fallita (${reason}) durante uno Stop: ${errore?.code ?? errore?.name ?? 'errore'}${perIlRegistro(errore)}`)
                 throw Object.assign(new Error('⛔ stopped on request.'), { name: 'AbortError', fermatoSuRichiesta: true })
             }
             if (errore?.name === 'AbortError' || segnaleStop?.aborted) throw errore
-            console.warn(`[talos] context capture failed (${reason}), the turn goes on: ${errore?.code ?? errore?.name ?? 'error'}`)
+            console.warn(`[talos] context capture failed (${reason}), the turn goes on: ${errore?.code ?? errore?.name ?? 'error'}${perIlRegistro(errore)}`)
             const codice = typeof errore?.code === 'string' ? errore.code : null
+            /* D9 (04/11/2026, OK di CLI, Mobile e Performance; come l'adattatore del desktop): la cattura INIZIALE che trova il modello locale
+               ancora in apertura non dice «ripiego», come lo «skipped» di Hermes (`agent/compaction_events.py:67`). Non segna niente come detto:
+               se alla richiesta è ancora non pronto, la cattura `before-request` lo dice (condizione di Performance). */
+            if (reason === 'start' && codice === 'CTX_RUNTIME_PROFILE_MISMATCH' && errore?.details?.nonPronto === true) return
             const giaDetto = catturaFallitaDetta || ripiegoInCorso === (codice ?? 'unknown')
             ripiegoInCorso = codice ?? 'unknown'
             if (!giaDetto) {
@@ -14565,6 +16114,12 @@ export async function talosLavora({
             if (esito.compattato) {
                 messaggi = esito.messaggi
                 compattazioni += 1
+                /* Giro 6 (BASSO del revisore 1): la richiesta compattata riparte da capo, come Hermes
+                   (`agent/turn_context_compaction.py:58-64`, `_reset_retry_state_after_compaction`: `_thinking_prefill_retries = 0`,
+                   `_empty_content_retries = 0`): niente prefill scritto sulla storia di prima, e le continuazioni dello stallo ripartono */
+                prefillInCorso = null // la prossima richiesta parte senza, e `prefillInviato` lo prende da lì
+                statoVuote = { spintaFatta: statoVuote.spintaFatta, continuazioni: 0, ritentativi: 0, tentativi: [] }
+                prefillNonEntraNelloStallo = false // giro 10: la storia compattata ha di nuovo posto per il prefill
             }
             /* ⛔ 21/10/2026 (inventario della CLI, D4; forma concordata con la CLI): una compattazione fallita del ciclo di base non resta
              * più MUTA — l'evento è lo stesso del desktop (`talosHarness.desktop-hotfix.mjs`), col perché di `compattaConversazione`. */
@@ -14587,7 +16142,12 @@ export async function talosLavora({
         let ripetizione = null
         let finishReason = null
         let nativeFinishReason = null
+        let rifiutoNellaRisposta = false
         let vuota = null
+        /* Giro 8 della 324 (MEDIO del revisore dei fornitori): il modello che ha DAVVERO risposto. Dopo un cambio di fornitore la richiesta va alla
+           riserva per il resto del giro (`runtime-owner-adapter.mjs`, `fornitoreEffettivo` e `modelloEffettivo` nell'esito): il filo del prefill si
+           decide da lì; senza, il modello della sessione */
+        let modelloDelFilo = modello
         /*
          * ⭐⭐ VELOCITÀ (owner 27/09/2026, «partenza durante lo streaming, come Codex») — una lettura del PREFISSO parte appena
          *   la sua chiamata e' completa nello stream (`onChiamataCompleta` in `consumaFlussoSSE`), mentre il modello scrive
@@ -14613,7 +16173,7 @@ export async function talosLavora({
         const firmaDellaLettura = (nome, grezzi, calcolo) => `${nome}\x00${grezzi}\x00${calcolo?.alias ? JSON.stringify(calcolo.argomenti) : ''}`
         const osservaChiamataCompleta = ({ indice, nome, argomenti }) => {
             nomiNelloStream[indice] = nome
-            for (let k = 0; k <= indice; k += 1) if (!LETTURE_PURE.has(nomiNelloStream[k])) return
+            for (let k = 0; k <= indice; k += 1) if (!nonFermaLeLetture(nomiNelloStream[k])) return
             if (partiteNelloStream.size >= MAX_LETTURE_INSIEME || segnaleStop?.aborted) return
             const calcolo = argomentiConAliasDi(nome, argomenti)
             if (!calcolo) return
@@ -14626,7 +16186,34 @@ export async function talosLavora({
            contesto) diceva «while the model was answering», ma il modello non era ancora stato chiamato. Il segno si accende quando
            la richiesta parte davvero. */
         let richiestaPartita = false
-        try {
+        /* D8 (forma b, 03/11/2026, OK di Mobile, Frontend e CLI): sul motore locale, fra «motore aperto» e la prima parola il modello
+           legge la conversazione, e uno Stop lì non è «answering». Hermes separa le stesse due fasi prima della prima parola
+           (`agent/chat_completion_local.py:70-98`: «⏳ loading … into memory» e poi «⚙ processing prompt», «Otherwise a cold load reads
+           as a generic stall»). Il segno si accende al primo evento del flusso di QUESTA richiesta; senza flusso non si sa, e resta «answering». */
+        let primaParolaArrivata = false
+        /* Ricerca a due porte (01/11/2026): al primo passo la chiamata è della PERSONA (pillola «Deep research»), non del modello.
+           Nessuna richiesta parte: la risposta è quella che il modello avrebbe dato, col sì della persona già dato (`approvateDalTesto`,
+           la porta di R-34 che tocca solo la domanda). Da qui il giro è quello di sempre: il ramo di `research_start`, poi il modello. */
+        /* Revisione del blocco dati, BD1: il sì vale per la chiamata che il nucleo ha costruito, nel passo in cui l'ha costruita. Il modello quell'id
+           lo vede nella storia: riusato al passo dopo, non apre più niente. Hermes lega il sì al comando (`tools/approval.py:411`), mai a un id. */
+        approvateDalTesto.clear()
+        idChiamataDellaPersona = null
+        const dellaPersona = giro === 0 ? chiamataDellaPersona : null
+        if (dellaPersona) {
+            chiamataDellaPersona = null
+            const chiamata = { id: `${PREFISSO_CHIAMATA_DELLA_PERSONA}${randomUUID().replace(/-/gu, '').slice(0, 12)}`, type: 'function', function: { name: dellaPersona.nome, arguments: JSON.stringify(dellaPersona.argomenti) } }
+            approvateDalTesto.add(chiamata.id)
+            idChiamataDellaPersona = chiamata.id
+            risposta = { role: 'assistant', content: null, tool_calls: [chiamata] }
+            finishReason = 'tool_calls'
+            onDelta?.({ giro, tipo: 'tool-inizio', indice: 0, toolCallId: chiamata.id, nome: chiamata.function.name, dallaPersona: true })
+            onDelta?.({ giro, tipo: 'tool-args', indice: 0, toolCallId: chiamata.id, delta: chiamata.function.arguments })
+            onGiro?.({ giro, tipo: 'chiamata-della-persona', nome: chiamata.function.name })
+        }
+        else try {
+            /* giro 6: ogni richiesta che parte senza prefill azzera quello ricordato. Giro 7 (Q1 e Q2 del revisore 2): si prende PRIMA di
+               `contextHooks.prepare`, che può lanciare (nessuna prima risposta): il reinvio porta il prefill di QUESTA richiesta, mai quello di prima */
+            prefillInviato = prefillInCorso
             await catturaSenzaFermare('before-request', giro)
             /*
              * ⛔⛔ 24/09/2026 sera — ASK NELLE SESSIONI NATE PRIMA DI ASK (difetto dell'owner, decisione «nota in coda, come
@@ -14667,7 +16254,9 @@ export async function talosLavora({
                 : null
             const marcatoreDelGiro = marcatoreDiCachePer({ modello, ritmoDellaMacchina: nessunoDavanti === true || senzaPersona === true || agentRole === 'child' })
             const improntaInviata = improntaDellaRichiesta({ modello, messaggi: preparedContext?.messages ?? messaggiDelGiro, attrezzi: attrezziVersoIlModello() }) // cache, punto 2
-            const invoke = (signal = segnaleStop) => chiamaIlModelloConRitenta(
+            /* Decisione 193: chi questa sessione evita per QUESTO modello (solo OpenRouter), letto a ogni invio. */
+            const evitatiDelGiro = () => (modelloDiOpenRouter(modello) ? (statoCacheDelGiro?.fornitoriEvitati?.[modello] ?? []).map((f) => f.slug) : [])
+            const invocaCon = (signal, fornitoriDaEvitare) => chiamaIlModelloConRitenta(
                 /* Stallo dell'owner (07/10/2026), revisione avversariale: senza Context Engine la storia parte com'è, e una sessione avvelenata
                    dall'eco del marcatore la rimanderebbe al modello. La copia per il fornitore si ripulisce (la storia viva no). */
                 /* 08/10/2026: e una chiamata vecchia salvata con argomenti `''` parte come `{}` (la storia viva non si tocca). */
@@ -14678,22 +16267,104 @@ export async function talosLavora({
                    «Runs unconditionally (not gated on context_compressor)»). Si rilegge a ogni `invoke`: l'overflow dell'adattatore
                    rimpiazza la lista sul posto e richiama. Stessa lista se non c'è niente da togliere: sul motore già pulito non costa. */
                 /* view_image (owner 27/10/2026): il campo interno delle immagini si toglie sempre e diventa il messaggio costruito al volo */
-                modello, chiave, conImmaginiDegliAttrezzi(conArgomentiVuotiComeOggetto(withoutEchoedMarker(preparedContext?.messages ?? messaggiDelGiro)),
-                    { vedeImmagini, contenutoImmagini: imageMessageContent }), fetchDiRete,
-                onDelta ? (e) => onDelta({ giro, ...e }) : undefined,
+                /* M2 della cura per Luna 6 (05/11/2026, forma corretta da Performance): se nella lista che parte ci sono esiti della
+                   richiesta in corso accorciati (M1, la riga in testa), una nota `system` IN CODA li elenca (REV-M2-PIEGA: la piega della
+                   decisione 194 negli adattatori la avvolge in <talos-note>; chi non piega la riceve `user` <talos-note>). Mai salvata, mai
+                   nell'impronta inviata: si ricalcola a ogni `invoke`, quindi vale anche per i ritentativi dopo un rifiuto per finestra. */
+                /* Decisione 326 (A): il prefill della continuazione in coda a TUTTO, note comprese (la piega le mette davanti a lui) */
+                modello, chiave, conPrefillInCoda(conNotaDegliAccorciati(conImmaginiDegliAttrezzi(conArgomentiVuotiComeOggetto(withoutEchoedMarker(preparedContext?.messages ?? messaggiDelGiro)),
+                    { vedeImmagini, contenutoImmagini: imageMessageContent }))), fetchDiRete,
+                onDelta ? (e) => {
+                    primaParolaArrivata = true // D8: qualunque evento del flusso vuol dire che il modello ha finito di leggere
+                    /* R1-R: un attacco già cominciato e tagliato (Stop, errore) non va a schermo: va nel giornale, esito «interrotta» */
+                    if (e?.tipo === 'chiamata-nel-testo-interrotta') {
+                        onGiro?.({ giro, tipo: 'chiamata-nel-testo', esito: 'interrotta', nome: e.nome ?? null, forma: e.forma, modello,
+                            ...(fornitoreDiQuestoGiro ? { fornitore: fornitoreDiQuestoGiro } : {}), frammento: String(e.frammento ?? '').slice(0, 4_000) })
+                        return
+                    }
+                    /* Una lettura già partita è avvenuta: «not run» e `cancelled` direbbero il contrario (revisione del blocco 17, M5) */
+                    if (e?.tipo === 'tool-annullato' && e.causa !== 'copia' && partiteNelloStream.has(e.indice)) { onDelta({ giro, ...e, partita: true, motivo: '⛔ This read had started, but its result was not kept.' }); return }
+                    onDelta({ giro, ...e })
+                } : undefined,
                 ragionamentoDelGiro(), attrezziVersoIlModello(), signal, (tettoInviatoDelGiro = tettoDaInviare(preparedContext?.measurement?.responseReserve)) ?? undefined,
                 onDelta ? osservaChiamataCompleta : undefined,
                 onGiro ? evento => onGiro({ giro, tipo: 'provider-retry', ...evento }) : undefined,
                 attesaRitentaMassimaMs,
                 marcatoreDelGiro,
+                fornitoriDaEvitare,
             )
-            const esitoChiamata = contextHooks?.infer
-                ? await contextHooks.infer({ signal: segnaleStop }, (signal) => {
-                    richiestaPartita = true
-                    // un invio rifiutato senza Stop (il «contesto pieno» che il guscio riprova) non è «il modello che risponde» (revisione 16/10)
-                    return invoke(signal).catch((errore) => { if (!segnaleStop?.aborted) richiestaPartita = false; throw errore })
-                })
-                : await (richiestaPartita = true, invoke())
+            /* Decisione 193, rete di sicurezza (condizione di Performance, 04/11): il conto «ne resta almeno uno» non vede le regole dell'account
+               su OpenRouter (dati, fornitori vietati). Se una richiesta con gli evitati del nucleo torna 404 («No endpoints found…», docs
+               «Provider routing»: «the request fails with a 404»), si riprova UNA volta senza, e per questo modello la sessione smette di evitare. */
+            const conPrefillInCoda = (lista) => (prefillInCorso ? [...lista, prefillInCorso] : lista)
+            /* Decisione 326 (A): un fornitore che rifiuta l'assistant in coda (Mistral: «Expected last role User or Tool», 400) riceve
+               subito la stessa domanda senza, e per il resto del giro la scala di oggi: mai un errore nuovo per una continuazione. */
+            /* Giro 13 (BASSO del revisore delle prove, sonda X11d): un ragionamento trasmesso prima della finestra piena nel flusso si chiude a
+               schermo PRIMA che l'errore vada a chi compatta (il guscio riprova dentro infer, e la linea era Q R Q C), come la chiusura della
+               ripartenza dopo un rifiuto qui sotto. Il ramo della finestra piena del ciclo non chiude: una chiusura sola. */
+            const chiudiIlRagionamentoDellaPiena = (errore) => {
+                if (errore?.ragionamentoNelFlusso && classificaErroreFornitore(errore) === 'contesto-pieno') onGiro?.({ giro, tipo: 'risposta', risposta: { role: 'assistant', content: '' } })
+            }
+            const invoke = async (signal = segnaleStop) => {
+                try { return await invokeSenzaRipiego(signal) }
+                catch (errore) {
+                    if (!prefillInCorso || signal?.aborted || segnaleStop?.aborted) {
+                        if (!prefillInCorso && !signal?.aborted && !segnaleStop?.aborted) chiudiIlRagionamentoDellaPiena(errore)
+                        throw errore
+                    }
+                    /* Giro 8 della 324: una FINESTRA PIENA non è il fornitore che rifiuta il prefill. Giro 9 (MEDIO e BASSO del revisore del filo):
+                       si classifica PRIMA dello stato (un 413 è sempre finestra piena), e la stessa domanda riparte UNA volta senza prefill, che
+                       può essere proprio ciò che non entrava: solo se anche lei è piena l'errore passa a chi compatta (il guscio o il ciclo).
+                       Giro 10: le continuazioni dello stallo si chiudono (`prefillNonEntraNelloStallo`), quelle degli stalli dopo restano.
+                       Hermes riprova una volta dopo un rifiuto (`agent/turn_recovery.py:301-307`) e riparte senza prefill dopo una
+                       compattazione (`agent/turn_context_compaction.py:58-64`) */
+                    const finestraPiena = classificaErroreFornitore(errore) === 'contesto-pieno'
+                    /* Giro 11 (MEDIO dei fornitori): lo stesso rifiuto detto DENTRO il flusso, prima di ogni testo (`statoNelFlusso`) */
+                    const stato = errore?.stato ?? errore?.statoNelFlusso
+                    if (!finestraPiena && stato !== 400 && stato !== 422) throw errore
+                    prefillInCorso = null
+                    prefillInviato = null // giro 6: la stessa domanda riparte senza
+                    if (finestraPiena) prefillNonEntraNelloStallo = true
+                    /* Giro 10 (BASSO dei revisori del filo e dei fornitori): il rifiuto va al filo che lo ha DATO. Dopo un 429 dentro la chiamata
+                       col prefill è la riserva a rifiutare: l'adattatore lo scrive sull'errore (`fornitoreEffettivo`, `modelloEffettivo`), la
+                       stessa chiave di `modelloDelFilo`; senza, il filo per cui il prefill è nato. Hermes lo registra sulla strada attiva quando
+                       la richiesta è partita (`agent/message_sanitization.py:953-961`, `reasoning_route_key`) */
+                    /* Giro 12 (BASSO del filo, N2, e SONDA-B delle prove): dopo un ragionamento trasmesso il prefill era entrato, il filo non
+                       lo rifiuta; quel ragionamento si chiude a schermo come il parziale senza testo del ciclo, prima della ripartenza */
+                    else if (!errore?.ragionamentoNelFlusso) filiCheRifiutanoIlPrefill.add(filoDellErrore(errore) ?? filoDelPrefill ?? modello)
+                    if (errore?.ragionamentoNelFlusso) onGiro?.({ giro, tipo: 'risposta', risposta: { role: 'assistant', content: '' } })
+                    /* Giro 11 (MEDIO del filo): se anche la domanda senza prefill è piena, la compatta chi la riceve, e il guscio del desktop
+                       compatta DENTRO infer, dove il ciclo base non azzera nulla: la storia che ripartirà è un'altra, e lo stallo si riapre
+                       qui, come Hermes dopo ogni compattazione (`agent/turn_context_compaction.py:58-64`) */
+                    try { return await invokeSenzaRipiego(signal) }
+                    catch (secondo) {
+                        if (classificaErroreFornitore(secondo) === 'contesto-pieno') prefillNonEntraNelloStallo = false
+                        if (!signal?.aborted && !segnaleStop?.aborted) chiudiIlRagionamentoDellaPiena(secondo)
+                        throw secondo
+                    }
+                }
+            }
+            const invokeSenzaRipiego = async (signal = segnaleStop) => {
+                const evitati = evitatiDelGiro()
+                if (!evitati.length) return invocaCon(signal, null)
+                try { return await invocaCon(signal, evitati) }
+                catch (errore) {
+                    if (errore?.stato !== 404 || signal?.aborted || segnaleStop?.aborted) throw errore
+                    statoCacheDelGiro = senzaEvitatiPer(statoCacheDelGiro, modello)
+                    onGiro?.({ giro, tipo: 'fornitore-evitato', modello, escluso: false, motivo: 'nessun-fornitore-rimasto', slug: null, fornitore: null, volte: null, evitati, at: new Date().toISOString() })
+                    return invocaCon(signal, null)
+                }
+            }
+            let esitoChiamata
+            try {
+                esitoChiamata = contextHooks?.infer
+                    ? await contextHooks.infer({ signal: segnaleStop }, (signal) => {
+                        richiestaPartita = true
+                        // un invio rifiutato senza Stop (il «contesto pieno» che il guscio riprova) non è «il modello che risponde» (revisione 16/10)
+                        return invoke(signal).catch((errore) => { if (!segnaleStop?.aborted) richiestaPartita = false; throw errore })
+                    })
+                    : await (richiestaPartita = true, invoke())
+            } finally { prefillInCorso = null } // decisione 326: il prefill vale per UNA richiesta (coi ritentativi del guscio); i reinvii del giro lo rimettono (giro 5)
             risposta = esitoChiamata.scelta
             usage = esitoChiamata.usage
             {
@@ -14701,20 +16372,32 @@ export async function talosLavora({
                 const tokenDaCache = Number.isFinite(Number(usage?.prompt_tokens_details?.cached_tokens)) ? Number(usage.prompt_tokens_details.cached_tokens)
                     : Number.isFinite(Number(usage?.cached_tokens)) ? Number(usage.cached_tokens) : null
                 const ora = Date.now()
-                const motivo = motivoDellaCacheRicominciata(statoCacheDelGiro, improntaInviata, { tokenDaCache, ora })
+                const fornitoreServito = typeof esitoChiamata.fornitoreAValle === 'string' && esitoChiamata.fornitoreAValle ? esitoChiamata.fornitoreAValle : null // 183
+                const motivo = motivoDellaCacheRicominciata(statoCacheDelGiro, improntaInviata, { tokenDaCache, ora, fornitore: fornitoreServito })
                 if (motivo) onGiro?.({ giro, tipo: 'cache-ricominciata', motivo, tokenDaRileggere: Number.isFinite(Number(usage?.prompt_tokens)) ? Number(usage.prompt_tokens) : null, at: new Date(ora).toISOString() })
+                /* Decisione 193: la memoria dei fornitori (perdite e evitati) passa da una richiesta all'altra e da un giro all'altro */
+                let memoriaFornitori = memoriaDeiFornitori(statoCacheDelGiro)
+                if (motivo === 'persa-dal-fornitore' && fornitoreServito && modelloDiOpenRouter(modello)) {
+                    memoriaFornitori = await contaPerditaDelFornitore(memoriaFornitori, { modello, fornitore: fornitoreServito, fetchDiRete, segnale: segnaleStop,
+                        avvisa: (e) => onGiro?.({ giro, tipo: 'fornitore-evitato', ...e, at: new Date(ora).toISOString() }) })
+                }
                 /* punto 4: gli attrezzi COME PARTITI (non solo la loro impronta), per il riassunto di fine giro che deve rimandarli identici */
-                statoCacheDelGiro = { ...improntaInviata, attrezziInviati: attrezziVersoIlModello(), ...(reasoning ? { reasoningInviato: reasoning } : {}), marcatoreInviato: marcatoreDelGiro, tokenDaCache, at: ora, durataMs: puntiSuiMessaggiOnorati(modello) && marcatoreDelGiro?.ttl === '1h' ? 3_600_000 : 300_000 } // RIV14-4: un'ora solo dove il marcatore è onorato
+                statoCacheDelGiro = { ...improntaInviata, attrezziInviati: attrezziVersoIlModello(), ...(reasoning ? { reasoningInviato: reasoning } : {}), marcatoreInviato: marcatoreDelGiro, tokenDaCache, ...(fornitoreServito ? { fornitore: fornitoreServito } : {}), ...memoriaFornitori, at: ora, durataMs: puntiSuiMessaggiOnorati(modello) && marcatoreDelGiro?.ttl === '1h' ? 3_600_000 : 300_000 } // RIV14-4: un'ora solo dove il marcatore è onorato
             }
             ripetizione = esitoChiamata.ripetizione ?? null
             finishReason = esitoChiamata.finishReason ?? null
             nativeFinishReason = esitoChiamata.nativeFinishReason ?? null
+            rifiutoNellaRisposta = esitoChiamata.rifiutoDelModello === true
             vuota = esitoChiamata.vuota ?? null
+            if (typeof esitoChiamata.fornitoreEffettivo === 'string' && esitoChiamata.fornitoreEffettivo && typeof esitoChiamata.modelloEffettivo === 'string' && esitoChiamata.modelloEffettivo) {
+                modelloDelFilo = `${esitoChiamata.fornitoreEffettivo}:${esitoChiamata.modelloEffettivo}`
+            }
             /* Decisione 14 (owner 08/10/2026 sera): chi ha servito QUESTO giro, per l'ospite (il desktop lo scrive nella testata
                della risposta). Un evento a sé, additivo: chi non lo conosce (la CLI) lo ignora. */
             if (typeof esitoChiamata.fornitoreAValle === 'string' && esitoChiamata.fornitoreAValle) {
                 onGiro?.({ giro, tipo: 'fornitore-a-valle', fornitore: esitoChiamata.fornitoreAValle, modello })
             }
+            fornitoreDiQuestoGiro = typeof esitoChiamata.fornitoreAValle === 'string' && esitoChiamata.fornitoreAValle ? esitoChiamata.fornitoreAValle : null // R-34
         }
         catch (rotta) {
             /*
@@ -14729,9 +16412,17 @@ export async function talosLavora({
              */
             if (segnaleStop?.aborted) {
                 fermatoSuRichiesta = true
-                puntoDiFermata ??= richiestaPartita
-                    ? `while the model was answering, at round ${giro + 1}`
-                    : `before the request was sent, at round ${giro + 1}`
+                let staAprendo = false
+                if (richiestaPartita && typeof motoreInCaricamentoFn === 'function') {
+                    try { staAprendo = motoreInCaricamentoFn(modello) === true } catch { staAprendo = false }
+                }
+                puntoDiFermata ??= !richiestaPartita
+                    ? `before the request was sent, at round ${giro + 1}`
+                    : staAprendo
+                        ? `while the model was still loading, at round ${giro + 1}`
+                        : motoreLocale && typeof onDelta === 'function' && !primaParolaArrivata
+                            ? `while the model was reading the conversation, at round ${giro + 1}`
+                            : `while the model was answering, at round ${giro + 1}`
                 break
             }
             /* CONTRATTO-R30-R31 (CLI): un 402 subito dopo un tetto ALZATO è il credito controllato su max_tokens × prezzo — si torna una volta
@@ -14756,7 +16447,7 @@ export async function talosLavora({
                (`CTX-HOTFIX-OVERFLOW-TWICE-IN-A-ROW`). */
             if (rotta?.finestraPiena === true || rotta?.code === 'NATIVE_CONTEXT_WINDOW_EXCEEDED'
                 || ((rotta?.esitoIncerto === true || rotta?.parziale) && /context_length_exceeded/iu.test(String(rotta?.message ?? '')))) {
-                throw erroreFinestraPiena(rotta?.usage)
+                throw erroreFinestraPiena(rotta?.usage, numeriDelContestoPieno(rotta)) // giro 12: i numeri del fornitore restano
             }
             // RETRY-02: retain delivered text for explicit recovery, never repeat an uncertain generation.
             const parziale = rotta?.parziale
@@ -14779,8 +16470,11 @@ export async function talosLavora({
             }
             /* ⛔ F-ENG-4: il fornitore è rimasto muto DOPO aver consegnato testo, e nessun attrezzo è partito né annunciato: il testo
                è già in storia (qui sopra), il modello riceve la nota e continua (CONTINUAZIONI_MASSIME). Senza testo decide BUG-16. */
+            /* ⛔ R-44 (31/10/2026): una chiamata annunciata e mai partita non ferma più la ripresa, sul fornitore in rete. Sui motori
+               locali sì: lì una caduta è più spesso il motore morto che la rete, e ritentare vorrebbe dire ricaricare il modello. */
+            const chiamataNonFerma = parziale?.chiamateInCorso !== true || !motoreDiQuestoComputer
             if (rotta?.code === 'PROVIDER_SILENCE' && typeof parziale?.content === 'string' && parziale.content.trim()
-                && parziale.chiamateInCorso !== true && partiteNelloStream.size === 0 && continuazioniDiFila < CONTINUAZIONI_MASSIME) {
+                && chiamataNonFerma && partiteNelloStream.size === 0 && continuazioniDiFila < CONTINUAZIONI_MASSIME) {
                 continuazioniDiFila += 1
                 messaggi.push({ role: 'user', content: NOTA_CONTINUA_DOPO_SILENZIO })
                 onGiro?.({ giro, tipo: 'continuazione', motivo: 'silenzio', tentativo: continuazioniDiFila, tentativiMassimi: CONTINUAZIONI_MASSIME })
@@ -14799,11 +16493,10 @@ export async function talosLavora({
              *   · nessun attrezzo partito — `partiteNelloStream.size === 0`: l'acceleratore
              *     VELOCITÀ non fa partire che LETTURE PURE, e una lettura partita è pur sempre
              *     un attrezzo in volo: con anche solo una in sospeso il reinvio NON è sicuro;
-             *   · nessuna chiamata ANNUNCIATA — `parziale.chiamateInCorso !== true`: una
-             *     tool_call arrivata nello stream (argomenti completi o a metà) è già il
-             *     modello che entra in territorio d'azione, e a schermo esiste la sua card
-             *     annullata (`tool-annullato`): il giro non è più «a zero effetti» e la
-             *     ripresa resta manuale (STREAM-TOOL-ABORT in tests/provider-outcome-unknown.test.mjs);
+             *   · una chiamata ANNUNCIATA non conta — R-44: era esclusa come «territorio d'azione», ma
+             *     non è partita (qui sopra) e la sua carta resta annullata. Hermes ritenta allo stesso modo
+             *     (`agent/chat_completion_helpers.py:3620-3625`, «no tool has executed yet»), Codex anche
+             *     (`session/turn.rs:1742`). Resta manuale solo sui motori locali (`chiamataNonFerma`);
              *   · il fornitore non ha DETTO errore — `rotta.causaDiTrasporto !==
              *     'PROVIDER_STREAM_ERROR'`: un frame di errore esplicito (HTTP 200 con errore
              *     dentro) è un esito NOTO, non incerto: chi possiede i ritenti lì è la lane
@@ -14818,17 +16511,18 @@ export async function talosLavora({
              * manuale resta l'ultima spiaggia, ma dice quanti reinvii ha già provati da sola.
              */
             const nessunTestoConsegnato = !(typeof parziale?.content === 'string' && parziale.content.trim())
-            if (parziale && nessunTestoConsegnato && parziale.chiamateInCorso !== true
+            const tettoEsitiIncerti = rotta?.argomentiSenzaFine === true ? RITENTATIVI_ARGOMENTI_SENZA_FINE : ESITI_INCERTI_RITENTABILI_MASSIMI
+            if (parziale && nessunTestoConsegnato && chiamataNonFerma
                 && rotta.causaDiTrasporto !== 'PROVIDER_STREAM_ERROR' && partiteNelloStream.size === 0
-                && esitiIncertiDelGiro < ESITI_INCERTI_RITENTABILI_MASSIMI) {
-                esitiIncertiDelGiro += 1
+                && esitiIncertiDelGiro < tettoEsitiIncerti) {
+                esitiIncertiDelGiro = Math.min(esitiIncertiDelGiro + 1 + (rotta?.inviiInPiu ?? 0), tettoEsitiIncerti)
                 /* G02-10: anche questa attesa auto-decisa rispetta il tetto FACOLTATIVO dell'ospite
                    (`attesaRitentaMassimaMs`, lo stesso che lega l'attesa CHIESTA dal fornitore; il desktop
                    non lo passa mai ⇒ qui vale sempre il tetto di 60 s). I test lo passano piccolo. */
                 const attesa = Math.min(attesaDelTentativo(esitiIncertiDelGiro - 1),
                     attesaRitentaMassimaMs ?? ATTESA_INCERTA_MASSIMA_MS, ATTESA_INCERTA_MASSIMA_MS)
                 onGiro?.({ giro, tipo: 'provider-retry', fase: 'attesa', tentativo: esitiIncertiDelGiro,
-                    tentativiMassimi: ESITI_INCERTI_RITENTABILI_MASSIMI, attesaMs: attesa,
+                    tentativiMassimi: tettoEsitiIncerti, attesaMs: attesa,
                     retryAt: Date.now() + attesa,
                     /* R1 della review avversariale: l'attesa visibile richiede requestId+modello (la validazione
                        del frontend li esige) e un CANALE dichiarato, perché qui non c'è nessun HTTP status da
@@ -14844,9 +16538,12 @@ export async function talosLavora({
                     puntoDiFermata ??= `while waiting to resend after an uncertain provider outcome, at round ${giro + 1}`
                     break
                 }
+                /* giro 5 (M1 del revisore 2) e giro 6 (MEDIO del revisore 3): si rimanda la STESSA richiesta, col prefill che lei aveva
+                   davvero (nessuno dopo un passo del tetto, un 402, il silenzio, o il ripiego del 400/422) */
+                prefillInCorso = prefillInviato
                 continue
             }
-            if (parziale && nessunTestoConsegnato && parziale.chiamateInCorso !== true
+            if (parziale && nessunTestoConsegnato && chiamataNonFerma
                 && rotta.causaDiTrasporto !== 'PROVIDER_STREAM_ERROR' && partiteNelloStream.size === 0) {
                 throw erroreEsitoProviderIncertoEsaurito(rotta, esitiIncertiDelGiro)
             }
@@ -14875,9 +16572,11 @@ export async function talosLavora({
                     puntoDiFermata ??= `while waiting to resend after the provider did not answer, at round ${giro + 1}`
                     break
                 }
+                prefillInCorso = prefillInviato // giro 6: come il reinvio dell'esito incerto qui sopra
                 continue
             }
-            throw parziale ? erroreEsitoProviderIncerto(rotta) : rotta
+            /* Un errore detto dal servizio è un esito noto: esce col suo codice anche se ha lasciato del testo. */
+            throw parziale && rotta?.dichiarato !== true ? erroreEsitoProviderIncerto(rotta) : rotta
         }
         if (usage) {
             conto.prompt_tokens += Number(usage.prompt_tokens ?? 0) || 0
@@ -14897,16 +16596,63 @@ export async function talosLavora({
         if (vuota) {
             // a schermo il ragionamento di questo tentativo si chiude, o resterebbe aperto per sempre (come la ripresa del 24/09)
             onGiro?.({ giro, tipo: 'risposta', risposta: { role: 'assistant', content: '' }, ...(usage ? { usage } : {}), ...(conto.giri > 0 ? { totali: { ...conto } } : {}) })
+            /* Decisione 245, P3 («al più UNA chiamata in più per giro, contando richiamo, spinta e ritentativi»): dopo il richiamo per il
+               contesto una risposta vuota non sale nessun gradino della scala (spinta, ritentativi, passo del tetto: sarebbero la seconda).
+               Subito dopo il richiamo: la nota esce dalla storia e il giro si chiude sulla risposta che si fermava, come oggi
+               (`ultimoHaConcluso` è ancora il suo). Più avanti nel giro: l'errore onesto della fine scala, col lavoro del giro. */
+            if (statoFermataContesto.richiamato) {
+                if (messaggi.at(-1)?.role === 'user' && messaggi.at(-1).content === NOTA_FERMATA_CONTESTO) {
+                    messaggi.pop()
+                    break
+                }
+                if (vuota.rifiuto === true) throw erroreRifiutoDelModello()
+                /* R2 della revisione di 245: dopo la nota il modello ha lavorato con gli attrezzi e poi è tornato vuoto ⇒ la spinta della
+                   risposta vuota torna disponibile, UNA volta nel giro (`spintaFatta`), mai i ritentativi né il passo del tetto. Senza il
+                   lavoro nuovo resta l'errore onesto: l'altra chiamata in più sarebbe a vuoto (P3). */
+                if (!statoVuote.spintaFatta && attrezziDopoLUltimoUser(messaggi)) {
+                    decidiRispostaVuota(statoVuote, { vuota, usage, dopoAttrezzi: true, dopoIlRichiamo: true })
+                    chiamateInPiuDelGiro += 1
+                    messaggi.push({ role: 'assistant', content: SEGNAPOSTO_RISPOSTA_VUOTA, ...(risposta?.reasoning_content ? { reasoning_content: risposta.reasoning_content } : {}) })
+                    messaggi.push({ role: 'user', content: NOTA_RISPOSTA_VUOTA })
+                    continue
+                }
+                statoVuote.tentativi.push(tentativoVuoto(vuota, usage))
+                throw erroreRispostaVuota(vuota, statoVuote.tentativi.length + (statoVuote.continuazioni ?? 0))
+            }
             // «dopo gli attrezzi» come Hermes: un esito di attrezzo fra gli ultimi cinque messaggi (`turn_empty_response.py:193`)
+            if (vuota.rifiuto === true) throw erroreRifiutoDelModello() // Blocco 20: prima della scala, ogni gradino sarebbe una richiesta in più
             /* CONTRATTO-R30-R31, caso (a): vuota PERCHÉ il tetto se l'è mangiato il ragionamento — non si ripete la stessa richiesta */
             if (tagliatoDalTetto({ finishReason: vuota.finishReason, nativeFinishReason: vuota.nativeFinishReason, usage, tettoInviato: tettoInviatoDelGiro })) {
                 if (passoDelTetto('ragionamento', usage)) continue
                 throw erroreTettoUscitaEsaurito('ragionamento', scalaTetto?.passi ?? [])
             }
-            const dopoAttrezzi = messaggi.slice(-5).some((m) => m?.role === 'tool')
-            const decisione = decidiRispostaVuota(statoVuote, { vuota, usage, dopoAttrezzi })
+            const dopoAttrezzi = messaggi.slice(-5).some((m) => m?.role === 'tool') // decisione 326 (D): letto solo alla prima vuota dello stallo
+            /* decisione 330: il prefill si costruisce PRIMA di decidere, con ciò che il filo di questo modello riceve; vuoto ⇒ la scala di oggi.
+               Giro 8: il filo è quello del fornitore che ha risposto (la riserva dopo un cambio), come Hermes decide i campi del ragionamento
+               dal fornitore che riceve (`agent/message_sanitization.py:718`, `route_reasoning_carriers(provider, base_url)`) */
+            const arrivaAlFilo = prefillInCodaArriva(modelloDelFilo)
+            const opzioniDelPrefill = arrivaAlFilo ? { conDettagli: modelloDiOpenRouter(modelloDelFilo), conTesto: arrivaAlFilo.testo } : null
+            const prefillCandidato = opzioniDelPrefill ? prefillDiContinuazione(risposta, prefillInviato, opzioniDelPrefill) : null
+            /* giro 4 (M1 del revisore 1): si continua solo se QUESTA risposta porta ragionamento nuovo che arriva al filo. Dopo una
+               continuazione, una vuota coi soli reasoning_tokens rimanderebbe il prefill accumulato, cioè la stessa richiesta, pagata di nuovo
+               (Hermes conta i tentativi sul ragionamento della risposta corrente, `agent/turn_empty_response.py:244-265`) */
+            const nuovo = opzioniDelPrefill ? prefillDiContinuazione(risposta, null, opzioniDelPrefill) : null
+            /* giro 5 (M2 del revisore 1, L2 del revisore 2): soli spazi non sono ragionamento, come sul filo (`haRagionamento` col trim) */
+            const daRimandare = nuovo !== null && (nuovo.reasoning_details?.length > 0 || Boolean(nuovo.reasoning_content?.trim()))
+            const decisione = decidiRispostaVuota(statoVuote, { vuota, usage, dopoAttrezzi, continuazioniSpente: prefillNonEntraNelloStallo || filiCheRifiutanoIlPrefill.has(modelloDelFilo), daRimandare })
+            if (decisione.azione !== 'fine') chiamateInPiuDelGiro += 1 // decisione 245, P3: col richiamo per il contesto non si sommano
+            /* giro 5 (M1 del revisore 1) e giro 6: dopo un gradino della scala la richiesta riparte senza prefill, e il ragionamento nato
+               da lei non si incolla a quello di prima: lo dice `prefillInviato`, preso all'invio */
+            /* Decisioni 324 e 326: la continuazione, prima della spinta (vedi `decidiRispostaVuota`): il ragionamento già scritto torna al
+               modello, senza attesa, come assistant IN CODA alla prossima richiesta, mai una nota dopo di lui e mai in `messaggi` */
+            if (decisione.azione === 'continua') {
+                prefillInCorso = prefillCandidato
+                filoDelPrefill = modelloDelFilo // giro 9: chi lo rifiuta è il filo per cui è nato
+                continue
+            }
             if (decisione.azione === 'spinta') {
-                messaggi.push({ role: 'assistant', content: SEGNAPOSTO_RISPOSTA_VUOTA })
+                /* Blocco 20 (01/11/2026, 400 vero del fornitore di beam, 2 corse su 5: «missing its reasoning»): il segnaposto tiene il ragionamento della risposta vuota, come Hermes (`agent/turn_empty_response.py:213`, `_build_assistant_message`) */
+                messaggi.push({ role: 'assistant', content: SEGNAPOSTO_RISPOSTA_VUOTA, ...(risposta?.reasoning_content ? { reasoning_content: risposta.reasoning_content } : {}) })
                 messaggi.push({ role: 'user', content: NOTA_RISPOSTA_VUOTA })
                 continue
             }
@@ -14920,9 +16666,12 @@ export async function talosLavora({
                 }
                 continue
             }
-            throw erroreRispostaVuota(vuota, statoVuote.tentativi.length)
+            throw erroreRispostaVuota(vuota, statoVuote.tentativi.length + (statoVuote.continuazioni ?? 0)) // il conto onesto: continuazioni comprese
         }
-        statoVuote = { spintaFatta: statoVuote.spintaFatta, ritentativi: 0, tentativi: [] }
+        /* Decisione 326 (E): una risposta che porta qualcosa (un giro di attrezzi compreso) chiude lo stallo: continuazioni, ritentativi,
+           firme e «dopo gli attrezzi» ripartono, come Hermes `agent/turn_tool_round.py:295-302`; la spinta resta una per giro (R2 della 245) */
+        statoVuote = { spintaFatta: statoVuote.spintaFatta, continuazioni: 0, ritentativi: 0, tentativi: [] }
+        prefillNonEntraNelloStallo = false // giro 10: lo stallo nuovo può continuare di nuovo
         ultimoHaConcluso = false
         if (risposta.content) ultimoTesto = String(risposta.content)
         /*
@@ -14986,7 +16735,98 @@ export async function talosLavora({
                 tentativo: Math.max(1, scalaTetto.passi.length), tentativiMassimi: PASSI_TETTO_USCITA_MASSIMI, tettoNuovo: tettoInviatoDelGiro ?? null, costoDiNuovo: !motoreLocale })
             scalaTetto = null
         }
-        messaggi.push(risposta)
+        /*
+         * PERF R-34 (owner 30/10/2026; campagna pubblica-ebb04d2c1, G-confine TALOS r3): una risposta SENZA `tool_calls` che finisce con
+         *   una chiamata scritta come testo. Il frammento si toglie PRIMA che la risposta entri nella storia: così né il modello né la
+         *   risposta salvata (evento `risposta`) lo portano; il frammento resta solo nell'evento `chiamata-nel-testo` (giornale grezzo).
+         */
+        let codaNelTesto = null
+        let codaLasciata = null
+        let promossaDalTesto = null // R-34 parte 2: { c, chiamata, approvata, motivo }
+        let motivoDellaRipresa = null // R-34 parte 2: perché un modello LOCALE riprende invece di promuovere
+        if (!(risposta?.tool_calls?.length)) {
+            /* dal flusso (già tolta prima dei delta), oppure — risposta non in streaming — dal testo intero */
+            const dalFlusso = risposta?.[CHIAMATA_NEL_TESTO] ?? null
+            codaNelTesto = dalFlusso ? { ...dalFlusso, pulito: String(risposta.content ?? '') }
+                : typeof risposta?.content === 'string' ? codaChiamataNelTesto(risposta.content, attrezziVersoIlModello().map((a) => a?.function?.name ?? a?.name)) : null
+            /*
+             * R-34 parte 2 (owner 30/10/2026; PROPOSTA-R34-PARTE-2-2026-10-30.md, sì di Desktop, CLI e Mobile): un modello LOCALE ⇒ la
+             *   chiamata si PROMUOVE, ma solo (1) con argomenti che si leggono e reggono lo schema, (2) con la persona davanti adesso
+             *   (`personaPresenteFn`, `nessunoDavanti`, `senzaPersona`, figlia), (3) col SUO sì sulla carta, a qualunque livello
+             *   d'accesso. Un ospite senza un client capace risponde `{ nessunaPersona }`. Altrimenti si riprende come in rete.
+             */
+            if (codaNelTesto && eModelloLocale(modello) && promuoviDalTesto !== true) motivoDellaRipresa = 'decisione-44'
+            else if (codaNelTesto && eModelloLocale(modello)) {
+                const attrezzo = attrezziVersoIlModello().find((a) => (a?.function?.name ?? a?.name) === codaNelTesto.nome)
+                const argomenti = argomentiDalFrammento(codaNelTesto, attrezzo?.function?.parameters ?? attrezzo?.parameters)
+                let presente = nessunoDavanti !== true && senzaPersona !== true && agentRole !== 'child'
+                if (presente && typeof personaPresenteFn === 'function') { try { presente = personaPresenteFn() !== false } catch { presente = false } }
+                /* ⛔ Un ospite che NON passa `personaPresenteFn` non sa ancora decidere presenza e capacità dei client (il filtro di
+                   `semprePersona` su eventi, `pending` e bolla della figlia, lato registro): la sua carta arriverebbe anche a un client
+                   vecchio, che la mostra cieca (Mobile 30/10). Senza la porta ⇒ nessuna carta, ripresa come in rete. La porta è il suo «so farlo». */
+                const ospiteCapace = typeof personaPresenteFn === 'function'
+                if (!argomenti) motivoDellaRipresa = 'argomenti'
+                else if (!ospiteCapace) motivoDellaRipresa = 'nessun-client'
+                else if (!presente) motivoDellaRipresa = 'nessuna-persona'
+                /* revisione del Desktop S3: dopo due «no» nello stesso giro il modello che riscrive la chiamata come testo non porta
+                   un'altra carta alla persona: si riprende come in rete */
+                else if (rifiutiDalTestoNelGiro >= 2) motivoDellaRipresa = 'gia-rifiutata'
+                else {
+                    chiamateDalTesto += 1
+                    /* CLI e Desktop S3: un id UNICO per tutta la conversazione (trascrizione, ricevute, giornale e /resume legano per id;
+                       il contatore del giro ripartirebbe a ogni giro), e mai uguale a quelli dei fornitori (call_, toolu_…) */
+                    const chiamata = { id: `daTesto-${randomUUID().replace(/-/gu, '').slice(0, 12)}-${chiamateDalTesto}`, type: 'function', function: { name: codaNelTesto.nome, arguments: JSON.stringify(argomenti) } }
+                    /* Revisione del blocco, R3: la ricerca ha la sua carta, a ogni livello, con la domanda e il costo; la carta del testo prima di lei sarebbe la seconda (regola 17) */
+                    const decisione = codaNelTesto.nome === 'research_start' ? { consentito: true } : await verificaChiamataDalTesto({ tipo: 'chiamata-dal-testo', toolCallId: chiamata.id, nome: codaNelTesto.nome, argomenti,
+                        ...fraseDiPermesso('server.approval.callFromText', { nome: codaNelTesto.nome }) },
+                        { chiediApprovazioneFn: chiediApprovazioneDellOspite, segnaleStop })
+                    if (decisione.nessunaPersona) motivoDellaRipresa = decisione.motivo
+                    else promossaDalTesto = { c: codaNelTesto, chiamata, approvata: decisione.consentito === true, motivo: decisione.motivo ?? null }
+                }
+            }
+            if (promossaDalTesto) {
+                /* la risposta diventa quella che il modello avrebbe dovuto dare: il testo prima della coda + la chiamata vera */
+                const { chiamata, approvata, motivo } = promossaDalTesto
+                risposta = { ...risposta, content: promossaDalTesto.c.pulito, tool_calls: [chiamata] }
+                if (approvata) approvateDalTesto.add(chiamata.id)
+                else {
+                    rifiutiDalTestoNelGiro += 1
+                    rifiutateDalTesto.set(chiamata.id, `REFUSED. ${motivo ?? 'the person declined to run this call.'} This call was written as text; nothing was done.`)
+                }
+                /* la riga dell'attrezzo come per una chiamata dal flusso, col segno `daTesto` (additivo; nessuna etichetta a schermo senza bozzetto) */
+                onDelta?.({ giro, tipo: 'tool-inizio', indice: 0, toolCallId: chiamata.id, nome: chiamata.function.name, daTesto: true })
+                onDelta?.({ giro, tipo: 'tool-args', indice: 0, toolCallId: chiamata.id, delta: chiamata.function.arguments })
+                onGiro?.({ giro, tipo: 'chiamata-nel-testo', esito: 'promossa', approvata, nome: chiamata.function.name, forma: promossaDalTesto.c.forma, modello,
+                    ...(fornitoreDiQuestoGiro ? { fornitore: fornitoreDiQuestoGiro } : {}), frammento: promossaDalTesto.c.frammento.slice(0, 4_000) })
+                codaNelTesto = null
+            }
+            else if (codaNelTesto && ripreseChiamataNelTestoDiFila >= RIPRESE_CHIAMATA_NEL_TESTO) {
+                /* Mobile 30/10: la seconda coda di fila si LASCIA com'è, come prima di R-34 — mai una risposta vuota senza spiegazione (la
+                   riga visibile a schermo aspetta il bozzetto e il sì dell'owner). Dal flusso il frammento era stato trattenuto: si ridà adesso. */
+                if (dalFlusso) {
+                    onDelta?.({ giro, tipo: 'testo', delta: dalFlusso.frammento })
+                    risposta = { ...risposta, content: `${String(risposta.content ?? '')}${dalFlusso.frammento}` }
+                }
+                codaLasciata = codaNelTesto
+                codaNelTesto = null
+            }
+            else if (codaNelTesto && !dalFlusso) risposta = { ...risposta, content: codaNelTesto.pulito }
+        }
+        /* una risposta che era SOLO il frammento non entra nella storia (Hermes, codex_responses_adapter.py:1279: «leaked text must not
+           be replayed as a completed assistant message»; e un messaggio dell'assistente vuoto alcuni fornitori lo rifiutano). Revisione
+           del Desktop N-4: allora la nota segue il messaggio della persona ⇒ due `user` di fila, che i fornitori in rete accettano (questa
+           strada è solo per loro: i modelli locali non ci arrivano). R-34 parte 2: un modello LOCALE ci arriva quando riprende, e alcuni
+           modelli da PC rifiutano due `user` di fila (template a turni alterni) ⇒ per lui un messaggio dell'assistente VUOTO fra i due. */
+        if (!(codaNelTesto && !codaNelTesto.pulito.trim())) {
+            const timbrata = nominaVivi && typeof risposta?.content === 'string' ? nominaBlocchi([risposta], { prossimo: prossimoNome, rinomina: true }) : null
+            if (timbrata && timbrata.nomi.length > 0) {
+                prossimoNome = timbrata.prossimo
+                for (const n of timbrata.nomi) nomiVivi.add(n)
+                annunciaNomi(timbrata)
+                messaggi.push(timbrata.messaggi[0])
+            } else messaggi.push(risposta)
+        }
+        else if (eModelloLocale(modello)) messaggi.push({ role: 'assistant', content: '' })
         await catturaSenzaFermare('response', giro)
         /*
          * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 3 —
@@ -15004,6 +16844,17 @@ export async function talosLavora({
          * il motivo nativo che OpenRouter porta a parte (Pi `api/anthropic-messages.ts:1510` e Hermes normalizzano gli
          * stessi su «length»). Prove: tests/rev-finish-reason.test.mjs.
          */
+        /* Blocco 20, revisione (R1, R5, R6): un modello che rifiuta non si richiama, qualunque cosa abbia scritto prima: le chiamate della stessa risposta non partono
+           (Hermes tratta i rifiuti come terminali, `agent/empty_response_guard.py:4`), la coda resta per il messaggio dopo, e solo spazi vale come risposta vuota. */
+        if (eRifiutoDelModello({ finishReason, nativeFinishReason, rifiutoDelModello: rifiutoNellaRisposta })) {
+            for (const [indice, chiamata] of (risposta.tool_calls ?? []).entries()) onDelta?.({ giro, tipo: 'tool-annullato', indice, toolCallId: chiamata.id, nome: chiamata.function?.name, motivo: '⛔ The model refused to continue: this tool did not run.' })
+            delete risposta.tool_calls
+            if (!String(risposta.content ?? '').trim()) {
+                onGiro?.({ giro, tipo: 'risposta', risposta: { role: 'assistant', content: '' }, ...(usage ? { usage } : {}), ...(conto.giri > 0 ? { totali: { ...conto } } : {}) })
+                throw erroreRifiutoDelModello()
+            }
+            rifiutataDopoIlTesto = true
+        }
         const troncataDalTetto = finishReason === 'length'
             || (typeof nativeFinishReason === 'string' && /^(?:length|max_tokens|max_output_tokens)$/iu.test(nativeFinishReason))
         onGiro?.({
@@ -15030,6 +16881,22 @@ export async function talosLavora({
             }
             tagliataSenzaRimedio = { volte: continuazioniDiFila + 1 }
         } else if (!troncataDalTetto) continuazioniDiFila = 0
+        if (chiamate.length > 0) { ripreseChiamataNelTestoDiFila = 0; attrezziNelGiro = true }
+        if (chiamate.length === 0 && (codaNelTesto || codaLasciata)) {
+            /* PERF R-34: modello in rete ⇒ mai eseguita; si chiede di rifarla, al più RIPRESE_CHIAMATA_NEL_TESTO volte di fila */
+            const c = codaNelTesto ?? codaLasciata
+            const evento = { giro, tipo: 'chiamata-nel-testo', nome: c.nome, forma: c.forma, modello,
+                ...(fornitoreDiQuestoGiro ? { fornitore: fornitoreDiQuestoGiro } : {}), frammento: c.frammento.slice(0, 4_000),
+                /* R-34 parte 2: perché un modello LOCALE non ha promosso (argomenti, nessuna-persona, nessun-client, gia-rifiutata) */
+                ...(motivoDellaRipresa ? { motivo: motivoDellaRipresa } : {}) }
+            if (codaNelTesto) {
+                ripreseChiamataNelTestoDiFila += 1
+                messaggi.push({ role: 'user', content: NOTA_CHIAMATA_NEL_TESTO })
+                onGiro?.({ ...evento, esito: 'ripresa' })
+                continue
+            }
+            onGiro?.({ ...evento, esito: 'lasciata' })
+        }
         if (chiamate.length === 0) {
             /*
              * ⭐⭐⭐ FASE D (28/8) — qui, e SOLO qui: il modello ha appena
@@ -15039,18 +16906,48 @@ export async function talosLavora({
              */
             let messaggioInCoda = null
             try {
-                messaggioInCoda = vocePiena(codaMessaggiFn?.() ?? null)
+                messaggioInCoda = rifiutataDopoIlTesto ? null : vocePiena(codaMessaggiFn?.() ?? null)
             }
             catch {
                 // ⛔ un cancello che lancia non autorizza in silenzio: stessa disciplina di chiediApprovazioneFn/hookFn sopra. Qui "autorizzare" è "consegnare un messaggio" — un fallimento tratta la coda come vuota, il task si conclude normalmente.
                 messaggioInCoda = null
             }
             if (messaggioInCoda) {
+                comandoRosso = false // R-53: la persona ha parlato, vince lei
+                comandiDelGiro.clear()
+                provaRossa = false // R-58, idem
                 consegnaVoceInCoda(messaggioInCoda)
+                continue
+            }
+            /* R-53 per primo, poi R-58; una ripartenza sola per giro, qualunque sia il motivo. Il testo si sceglie qui, da NOTE_DI_RIPARTENZA. */
+            const condizioniDellaChiusura = { giaRiaperto: riapertoSuComandoRosso || statoFermataContesto.richiamato, giro, giriMassimi: giriMassimiEffettivi, finishReason, motoreLocale: motoreDiQuestoComputer,
+                testo: risposta.content, fermato: segnaleStop?.aborted === true, rifiutata: rifiutataDopoIlTesto, tagliata: tagliataSenzaRimedio }
+            const motivoDellaRipartenza = deveRiaprireSuComandoRosso({ ...condizioniDellaChiusura, comandoRosso: comandoRosso || rossoRilanciato(comandiDelGiro), fileModificati: fileModificatiNelGiro })
+                ? 'comando-rosso'
+                : deveRiaprireSuProvaRossa({ ...condizioniDellaChiusura, provaRossa, fileModificati: fileModificatiNelGiro || fileForseModificatiNelGiro, passiMinimi: PASSI_MINIMI_PER_RIAPRIRE })
+                    ? 'prova-rossa'
+                    : null
+            if (motivoDellaRipartenza) {
+                riapertoSuComandoRosso = true
+                comandoRosso = false
+                comandiDelGiro.clear()
+                provaRossa = false
+                messaggi.push({ role: 'user', content: NOTE_DI_RIPARTENZA[motivoDellaRipartenza] })
+                onGiro?.({ giro, tipo: 'continuazione', motivo: motivoDellaRipartenza, tentativo: 1, tentativiMassimi: 1 })
                 continue
             }
             ultimoHaConcluso = Boolean(String(risposta.content ?? '').trim())
                 && (finishReason === null || finishReason === 'stop')
+            /* Decisione 245: il modello dice di fermarsi per il contesto ⇒ UNA chiamata in più con la nota. La sua risposta resta nella
+               storia; nessuna carta e nessun avviso: la riga «ripreso dopo una fermata per il contesto» va solo al giornale su disco
+               (`agent-service`, `talos.continuazione`). Le richieste del riassunto non passano mai di qui (chiamate a parte). */
+            if (decidiFermataPerContesto(statoFermataContesto, { testo: risposta.content, dopoAttrezzi: attrezziNelGiro, fermato: segnaleStop?.aborted === true,
+                alTettoDeiPassi: !(giro + 1 < giriMassimiEffettivi),
+                altraChiamataInPiu: chiamateInPiuDelGiro > 0 || riapertoSuComandoRosso || rifiutataDopoIlTesto || Boolean(tagliataSenzaRimedio) }).azione === 'richiama') {
+                messaggi.push({ role: 'user', content: NOTA_FERMATA_CONTESTO })
+                onGiro?.({ giro, tipo: 'continuazione', motivo: 'fermata-contesto', tentativo: 1, tentativiMassimi: 1 })
+                continue
+            }
             break
         }
 
@@ -15073,7 +16970,7 @@ export async function talosLavora({
            fino a `MAX_LETTURE_INSIEME` in tutto; quelle gia' partite durante lo streaming si riprendono se la chiamata e'
            identica (indice e firma). Una lettura sola resta al suo turno, come dopo P18. */
         const lettureAvviate = new Map()
-        const primaNonLettura = chiamate.findIndex((c) => !LETTURE_PURE.has(c.function?.name))
+        const primaNonLettura = chiamate.findIndex((c) => !nonFermaLeLetture(c.function?.name))
         const prefissoDiLettura = primaNonLettura === -1 ? chiamate : chiamate.slice(0, primaNonLettura)
         /* F-Y-004 (15/10/2026): togliendo le copie identiche gli indici dopo una copia si spostano di uno — la lettura già partita si
            riconosce dalla FIRMA (nome + argomenti grezzi), che dopo la cura è unica nella risposta; l'indice resta il primo tentativo */
@@ -15110,6 +17007,7 @@ export async function talosLavora({
             sospettoDellaChiamata = null // F-027: il segno della scheda è di QUESTA chiamata
             senzaCartaDellaChiamata = null
             rifiutoDellaChiamata = null
+            schedaChatgptDellaChiamata = false
             /*
              * ⛔⛔ 08/09/2026 — quello che avevamo già ACCODATO va fermato
              * anche lui. È il limite noto di chi si ferma solo a monte
@@ -15193,6 +17091,8 @@ export async function talosLavora({
             let erroreTool
             /* `view_image`: il campo interno del messaggio `tool` (`CAMPO_IMMAGINI`), solo quando l'immagine c'è davvero */
             let immaginiDellaChiamata = null
+            /* Decisione 201, condizione 1 del Mobile: testo di TALOS da mettere DOPO il confine dei dati, solo per questa chiamata */
+            let codaDiTalosDellaChiamata = null
             /*
              * ⭐⭐⭐ FASE A (hook) — pre_tool_call, chiamato per OGNI attrezzo
              * (Hermes: "universale", vedi la doc su talosLavora sopra) MA il
@@ -15237,10 +17137,48 @@ export async function talosLavora({
                 notaPermessiCambiati = frasePermessiCambiati(livelloPrimaDellaChiamata, livelloAccesso)
                 if (agentRole !== 'child' && modalitaOperativa === 'normale') attrezziOpenAI = attrezziDopoIlPiano(livelloAccesso)
             }
+            /* R-34 parte 2: la persona ha detto no sulla carta della chiamata scritta come testo ⇒ non parte, il modello lo legge */
+            if (!rifiutoDelPonte && rifiutateDalTesto.has(c.id)) rifiutoDelPonte = rifiutateDalTesto.get(c.id)
             const azioneMutantePerHook = AZIONI_MUTANTI_PER_HOOK.includes(nome)
             const bloccatoDallaDelega = !consenteAttrezzoDelega(task, nome)
             const bloccatoDalPiano = modalitaOperativa === 'piano' && !ATTREZZI_PIANO.has(nome)
             const motivoBloccoNamespace = inCasaLinux() ? null : motivoNamespaceDellaChiamata(nome, argomenti)
+            /*
+             * E1, decisione 121 — la carta di una chiamata EMULATA (vedi `PREFISSO_CHIAMATA_EMULATA`). Solo se niente la blocca già
+             *   (regola 17: nessuna carta per una chiamata che la delega, il Piano o lo spazio dei nomi rifiutano comunque, né per un
+             *   attrezzo su «nega»). Il sì entra in `approvateDalTesto`: la carta ORDINARIA dello stesso id è coperta dal «sì solo»,
+             *   le carte forzate (segreto, trifecta, fuori dal progetto…) arrivano lo stesso alla persona. Senza nessuno davanti, o dopo
+             *   due «no» nel giro, non parte niente.
+             */
+            const emulataDaDecidere = !rifiutoDelPonte && !bloccatoDallaDelega && !bloccatoDalPiano && !motivoBloccoNamespace
+                && typeof c.id === 'string' && c.id.startsWith(PREFISSO_CHIAMATA_EMULATA) && !approvateDalTesto.has(c.id)
+                && !ATTREZZI_CHE_CHIEDONO_DA_SE.has(nome) // revisione del Desktop D1: la sua scheda è già della persona
+            /* Desktop 04/11 11:46 (revisione di 5293085ef, regola 17): in sola lettura, un attrezzo che il livello non ammette (fuori dalle
+               letture del Piano) e senza un permesso per attrezzo si rifiuta subito, senza carta: finirebbe comunque nel rifiuto del livello. */
+            if (emulataDaDecidere && livelloAccesso === 'lettura' && !ATTREZZI_PIANO.has(nome) && permessiPerAttrezzo?.[nome] === undefined) {
+                rifiutoDelPonte = 'REFUSED. the session is read-only: no write, command or document is allowed right now. Nothing was done.'
+            }
+            else if (emulataDaDecidere && permessiPerAttrezzo?.[nome] !== 'nega' && !(await letturaEmulataNelProgetto(nome, argomenti, cartella, posizioneDelGiro))) {
+                const consentiti = consensiSessione?.strumentiEmulatiConsentiti
+                if (Array.isArray(consentiti) && consentiti.includes(nome)) approvateDalTesto.add(c.id)
+                /* revisione del Desktop D2 (b): la carta forzata del cancello basta (vedi `verificaPermessoConBarriera`) */
+                else if (await cartaForzataPrevista(nome, argomenti, { livelloAccesso, cartella, posizioneFn: posizioneDelGiro, consensiSessione })) emulateAlCancello.set(c.id, nome)
+                else {
+                    let presente = nessunoDavanti !== true && senzaPersona !== true && agentRole !== 'child' && typeof personaPresenteFn === 'function'
+                    if (presente) { try { presente = personaPresenteFn() !== false } catch { presente = false } }
+                    const decisione = !presente ? { nessunaPersona: true }
+                        : rifiutiDalTestoNelGiro >= 2 ? { consentito: false, giaRifiutata: true }
+                        : await verificaChiamataDalTesto({ tipo: 'chiamata-dal-testo', emulata: true, toolCallId: c.id, nome, argomenti,
+                            ...fraseDiPermesso('server.approval.emulatedCall', { nome }) }, { chiediApprovazioneFn: chiediApprovazioneDellOspite, segnaleStop })
+                    if (decisione.consentito === true) approvateDalTesto.add(c.id)
+                    else if (decisione.nessunaPersona) rifiutoDelPonte = `REFUSED. This tool runs only with the person's yes on its card, and nobody is here to answer. Nothing was done. Say what you would do with "${nome}" and let the person decide.`
+                    else if (decisione.giaRifiutata) rifiutoDelPonte = 'REFUSED. The person already said no twice in this turn; no more cards are shown. Nothing was done. Go on without it, or say in one line what you can do instead.'
+                    else {
+                        rifiutiDalTestoNelGiro += 1
+                        rifiutoDelPonte = `REFUSED. ${decisione.motivo ?? 'the person declined to run this call.'} Nothing was done.`
+                    }
+                }
+            }
             let motivoBloccoPreHook = null
             if (!rifiutoDelPonte && !bloccatoDallaDelega && !bloccatoDalPiano && !motivoBloccoNamespace && hookFn) {
                 try {
@@ -15403,7 +17341,13 @@ export async function talosLavora({
                      * `dentro('')` torna la radice) e `readFile` su una cartella da' `EISDIR`: un
                      * messaggio che non nomina nessun campo e non dice cosa fare.
                      */
-                    const percorso = percorsoDelGiro(percorsoDiFile(argomenti)) // Fase B: la vista Windows per permessi e T25
+                    /* Blocco 26 (nota 3 di Performance): `background/<id>.log` è il riferimento corto a un registro di sfondo di QUESTA
+                       sessione nella cartella dati; se non lo è, il percorso si legge com'è scritto (relativo al progetto). */
+                    const allegatoCorto = allegatoDaRiferimento(percorsoDiFile(argomenti)) // decisione 43: l'allegato di QUESTA conversazione
+                    const registroCorto = allegatoCorto === null ? await registroDaRiferimento(percorsoDiFile(argomenti)) : null
+                    const percorso = percorsoDelGiro(allegatoCorto ?? registroCorto ?? percorsoDiFile(argomenti)) // Fase B: la vista Windows per permessi e T25
+                    /* Al modello il nome corto, mai il percorso col nome utente del PC (ritocco 4 della CLI) */
+                    const percorsoDetto = allegatoCorto === null ? mostrato(percorso) : percorsoDiFile(argomenti)
                     /*
                      * ⛔⛔⛔⛔ F15, 17/09/2026 — L'UNICO CANCELLO CHE `leggi` ATTRAVERSA, e solo
                      * quando c'è qualcosa da chiedere.
@@ -15430,10 +17374,17 @@ export async function talosLavora({
                        Claude Code: l'avviso di `naviga` ne dà la chiamata esatta (vedi `eUnaPaginaSalvata` per i controlli). */
                     /* 01/10/2026: un percorso di rete si decide PRIMA di qualunque contatto (vedi `controllaPercorsoDiRete`). */
                     const rifiutoRete = percorso === '' ? null : await controllaPercorsoDiRete('leggi', percorso, c.id)
+                    /* Blocco 26: il registro di un comando in sottofondo di QUESTA sessione (insieme esatto, percorso reale), con la sua identità */
+                    const registroSfondo = !rifiutoRete && percorso !== '' && usaCartellaSfondo
+                        ? await identitaRegistroDiSfondo(registriSfondoDellaSessione(), percorsoComeDiscoNode(cartella, percorso)) : null
+                    /* Decisione 43, ritocco 2 della CLI: il file dev'essere quello vero, con un nome solo, anche attraverso una giunzione; se no si rifiuta, senza carta che proponga il percorso */
+                    const fileAllegato = allegatoCorto !== null && !rifiutoRete ? await identitaRegistroDiSfondo([allegatoCorto], allegatoCorto) : null
+                    const allegatoCambiato = allegatoCorto !== null && !rifiutoRete && fileAllegato === null
                     const paginaSalvata = !rifiutoRete && percorso !== ''
                         && ((Boolean(cartellaPagineWeb) && await eUnaPaginaSalvata(cartellaPagineWeb, percorsoComeDiscoNode(cartella, percorso)))
-                            || (Boolean(cartellaIncollati) && await eUnaPaginaSalvata(cartellaIncollati, percorsoComeDiscoNode(cartella, percorso))))
-                    const daChiedere = rifiutoRete || percorso === '' || paginaSalvata ? null : motivoDaChiedere({ tipo: 'leggi', percorso, cartella, accessoPieno: livelloAccesso === 'accesso-pieno' })
+                            || (Boolean(cartellaIncollati) && await eUnaPaginaSalvata(cartellaIncollati, percorsoComeDiscoNode(cartella, percorso)))
+                            || registroSfondo !== null || fileAllegato !== null)
+                    const daChiedere = rifiutoRete || percorso === '' || paginaSalvata || allegatoCambiato ? null : motivoDaChiedere({ tipo: 'leggi', percorso, cartella, accessoPieno: livelloAccesso === 'accesso-pieno' })
                     const permessoLettura = daChiedere
                         ? await verificaPermessoConBarriera(
                             { tipo: 'leggi', toolCallId: c.id, percorso },
@@ -15441,8 +17392,15 @@ export async function talosLavora({
                         )
                         : null
                     let letta = null
-                    if (!rifiutoRete && percorso !== '' && !(permessoLettura && !permessoLettura.consentito)) {
+                    let permessoLetturaSostituito = false
+                    if (!rifiutoRete && percorso !== '' && !allegatoCambiato && !(permessoLettura && !permessoLettura.consentito)) {
                         letta = await anticipataOppure(lettureAvviate, c, () => leggiTestoDelGiro(percorso, { offset: argomenti.offset, limit: argomenti.limit, format: argomenti.format, byteOffset: argomenti.byteOffset })) /* P19 + REV-READ-BOUNDS + READ22/24 */
+                        /* Revisione del blocco 26 (S3): il registro letto senza chiedere dev'essere ANCORA lo stesso file del controllo; se nel
+                           frattempo è stato sostituito (un collegamento al suo posto), ciò che è stato letto si scarta e la lettura si rifiuta. */
+                        if ((registroSfondo ?? fileAllegato) !== null && !(await stessoRegistroDiSfondo(registroSfondo ?? fileAllegato))) {
+                            letta = null
+                            permessoLetturaSostituito = true
+                        }
                         /* T25/B09: ciò che il modello ha VISTO di questo file, con l'istantanea del momento (la guardia di `scrivi`).
                            ⛔ F-001: il testo ESTRATTO da un docx/pdf non è il file, e non si registra come lettura. Oggi è una
                            seconda difesa: la sovrascrittura la ferma prima `rifiutoTestoSuBinario` (tutti e quattro i formati estratti
@@ -15459,8 +17417,12 @@ export async function talosLavora({
                         ? messaggioArgomentiAssenti('leggi', { troncati: argomentiTroncati.has(c.id) })
                         : permessoLettura && !permessoLettura.consentito
                             ? `REFUSED. ${permessoLettura.motivo} The file was not read.`
-                            : esitoDellaLettura(letta, mostrato(percorso), { avvolgi: avvolgiEsterno(`leggi ${mostrato(percorso)}`, {}, { adottabile: fileAdottatoNelGiro(percorsoDiFile(argomenti), percorso) }) }))
-                    erroreTool = Boolean(rifiutoRete) || percorso === '' || Boolean(permessoLettura && !permessoLettura.consentito)
+                            : allegatoCorto !== null && (allegatoCambiato || permessoLetturaSostituito)
+                                ? 'REFUSED. The attachment is no longer the file the person sent. The file was not read.'
+                                : permessoLetturaSostituito
+                                ? 'REFUSED. The background log changed while it was being read: it is no longer the file TALOS wrote. The file was not read.'
+                                : esitoDellaLettura(letta, percorsoDetto, { avvolgi: avvolgiEsterno(`leggi ${percorsoDetto}`, {}, { adottabile: fileAdottatoNelGiro(percorsoDiFile(argomenti), percorso) }) }))
+                    erroreTool = Boolean(rifiutoRete) || percorso === '' || Boolean(permessoLettura && !permessoLettura.consentito) || permessoLetturaSostituito || allegatoCambiato
                 }
                 else if (nome === 'view_image') {
                     /*
@@ -15513,6 +17475,31 @@ export async function talosLavora({
                         catch (rotto) {
                             esito = `view_image failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
                         }
+                    }
+                }
+                else if (nome === 'browser_page') {
+                    /* Decisione 201 (04/11/2026): l'ospite legge la pagina che la persona ha aperto (scheda viva, o copia pubblica senza i suoi
+                       accessi); qui la testa di TALOS, il titolo e il testo nel confine, e il taglio di `naviga`. Nessuna conferma (205). */
+                    erroreTool = true
+                    try {
+                        const r = await leggiPaginaBrowserFn({ segnale: segnaleStop })
+                        if (r?.ok !== true) esito = `REFUSED. ${String(r?.motivo ?? 'The page could not be read.')}`
+                        else {
+                            erroreTool = false
+                            const indirizzo = indirizzoPulito(r.url) ?? 'unknown address'
+                            const copia = r.copiaPubblica === true ? " · public copy, read without the person's sign-ins" : ''
+                            const testo = String(r.testo ?? '')
+                            const vista = cartellaPagineWeb && testo.length > TETTO_PAGINA_WEB
+                                ? paginaTagliataPerIlModello(testo, await salvaPaginaIntera(cartellaPagineWeb, indirizzo, testo))
+                                : uscitaUtile(testo, 4_000, 0.25)
+                            esito = `BROWSER PAGE · ${indirizzo}${copia}\nTitle: ${titoloPulito(r.titolo, r.url)}\n\n${vista}`
+                            /* Condizione 1 del Mobile: il messaggio del giro non viene dalla finestra del PC ⇒ la pagina è l'ultima che il PC
+                               ha detto, forse non quella che la persona guarda adesso */
+                            if (!paginaDalloSchermoDelGiro) codaDiTalosDellaChiamata = RIGA_PAGINA_DA_ALTROVE
+                        }
+                    }
+                    catch (rotto) {
+                        esito = `browser_page failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
                     }
                 }
                 else if (nome === 'local_page') {
@@ -15571,6 +17558,11 @@ export async function talosLavora({
                         esito = String(await readProcessOutputFn(argomenti, {signal: segnaleStop}))
                         erroreTool = false
                     }
+                }
+                /* BD18: «correggi l'allegato» scriveva nel progetto un file col suo nome, e la rilettura ridava l'originale: il modello credeva di averlo cambiato */
+                else if ((nome === 'scrivi' || nome === 'file_edit') && allegatoDaRiferimento(percorsoDiFile(argomenti)) !== null) {
+                    esito = MOTIVO_ALLEGATO_SOLA_LETTURA
+                    erroreTool = true
                 }
                 else if (nome === 'scrivi') {
                     /*
@@ -15826,6 +17818,7 @@ export async function talosLavora({
                              */
                             const contenutoDopo = accoda ? contenutoProiettato : contenuto
                             onScrittura?.(percorso, contenutoDopo, p.esisteva, p.contenutoPrima)
+                            fileModificatiNelGiro = true // R-53
                             await registraScrittoDallAgente(percorso) // R-26 B: il file com'è dopo la scrittura dell'agente
                             contenutoRealmenteScritto = contenutoDopo
                             postcondizioneScrivi = verdetto.esito
@@ -16051,6 +18044,7 @@ export async function talosLavora({
                                             if (dopo) await registraScritturaConImpronta(percorso, dopo, false)
                                         }
                                         onScrittura?.(percorso, sostituzione.testo, premessa.esisteva, premessa.contenutoPrima)
+                                        fileModificatiNelGiro = true // R-53
                                         await registraScrittoDallAgente(percorso) // R-26 B: il file com'è dopo la modifica dell'agente
                                         contenutoRealmenteScritto = sostituzione.testo
                                         postcondizioneModifica = verdetto.esito
@@ -16137,7 +18131,7 @@ export async function talosLavora({
                             /* ⭐ OSS-1 — `performance.now()` e non `Date.now()`: un orologio monotono non torna indietro se l'ora di sistema cambia a meta' comando. */
                             const primaDiProvare = performance.now()
                             await verificaAmbienteComandi()
-                            const fermabile = segnaleDelComando(c.id) // Stop per riga + canale sfondo (BUG-14)
+                            const fermabile = segnaleDelComando(c.id, await destinazioneSfondo(c.id)) // Stop per riga + canale sfondo (BUG-14); blocco 26: il registro nella cartella dati
                             const esegui = async ({ onBytes } = {}) => {
                                 if (captureProcessFn) await verificaAmbienteComandi()
                                 return eseguiProva(comandoProva, cartella, {
@@ -16169,9 +18163,15 @@ export async function talosLavora({
                     }
                     // ⭐ FASE D — 'prova' non produce un artefatto testuale: hashContenuto resta null, non un valore inventato.
                     erroreTool = !permesso.consentito || (!p?.messoInSfondo && (p?.codice !== 0 || p?.outputStorageFailed === true)) // H-04: un NOT RUN (codice null) non è un successo; un SFONDO non è un errore
+                    if (permesso.consentito && p && !p.messoInSfondo) { // R-53: un no della persona non è un comando rosso
+                        /* R-58: `prova` è sempre una prova; il riepilogo letto nell'uscita conta solo verso il rosso */
+                        comandoRosso = comandoFinitoRosso({ comando: comandoProva, codice: p.codice, testo: p.testo, diProve: true })
+                        provaRossa = comandoRosso
+                        registraComando(comandiDelGiro, processoPerEvento, comandoRosso)
+                    }
                     if (Number.isSafeInteger(p?.codice)) processoPerEvento = { ...processoPerEvento, exitCode: p.codice }
                     /* ⛔ BUG-14: la riga dei Processi deve dire «in sfondo» e DOVE guarda l'output — campi additivi. */
-                    if (p?.messoInSfondo) processoPerEvento = { ...processoPerEvento, inSfondo: true, ...(p.fileSfondo ? { fileSfondo: p.fileSfondo } : {}), ...(p.daSfondo ? { sfondoDa: p.daSfondo } : {}) }
+                    if (p?.messoInSfondo) processoPerEvento = { ...processoPerEvento, ...campiSfondoDelProcesso(p) }
                     seguiSfondo(c.id, p, comandoProva) // A6-bis (G2); C06; R-21 D3: dentro il turno col prossimo esito, se no all'ospite
                     ricevutaEmessa = true
                     {
@@ -16261,7 +18261,7 @@ export async function talosLavora({
                             /* ⭐ OSS-1 — stessa misura del ramo `prova`, stesso orologio monotono. */
                             const primaDelComando = performance.now()
                             await verificaAmbienteComandi()
-                            const fermabile = segnaleDelComando(c.id) // Stop per riga + canale sfondo (BUG-14)
+                            const fermabile = segnaleDelComando(c.id, await destinazioneSfondo(c.id)) // Stop per riga + canale sfondo (BUG-14); blocco 26: il registro nella cartella dati
                             const esegui = async ({ onBytes } = {}) => {
                                 if (captureProcessFn) await verificaAmbienteComandi()
                                 return eseguiComandoSandboxatoFn(comandoDiShell(argomenti), cartella, {
@@ -16318,13 +18318,25 @@ export async function talosLavora({
                             esito = p.messoInSfondo
                                 ? `${p.testo}\n${notaDellaSveglia(svegliaDisponibile)}` // R-21 D1: come ne saprà la fine
                                 : `exit ${p.codice} [sandbox: ${etichettaSandbox(p.enforcement, p.wsl)}]\n${p.testo}`
+                            /* COD-207: un programma mancante si dice, una volta per programma per giro; codice e output restano identici */
+                            const notaMancante = p.messoInSfondo ? '' : notaProgrammaMancante({ codice: p.codice, testo: p.testo, mobile,
+                                attrezzi: new Set(attrezziOpenAI.map((a) => a.function?.name)), detti: programmiMancantiDetti })
+                            if (notaMancante) esito = `${esito}\n${notaMancante}`
                         }
                     }
                     esitoPermessoPerRicevuta = permessoShell
                     erroreTool = !permessoShell.consentito || (!p?.messoInSfondo && (p?.codice !== 0 || p?.outputStorageFailed === true)) // un sfondo non è un errore (BUG-14)
+                    if (permessoShell.consentito && p && !p.messoInSfondo) { // R-53
+                        const comandoEseguito = comandoDiShell(argomenti)
+                        const diProve = eComandoDiProve(comandoEseguito)
+                        comandoRosso = comandoFinitoRosso({ comando: comandoEseguito, codice: p.codice, testo: p.testo, diProve }) // R-58: anche `npm test | tail`
+                        if (diProve) provaRossa = comandoRosso // R-58: grep, git e cat non cambiano l'esito delle prove
+                        if (p.codice === 0 && comandoCheModifica(comandoEseguito)) fileForseModificatiNelGiro = true // R-58, revisione del Mobile S2-1
+                        registraComando(comandiDelGiro, processoPerEvento, comandoRosso)
+                    }
                     if (Number.isSafeInteger(p?.codice)) processoPerEvento = { ...processoPerEvento, exitCode: p.codice }
                     /* ⛔ BUG-14: la riga dei Processi deve dire «in sfondo» e DOVE guarda l'output — campi additivi. */
-                    if (p?.messoInSfondo) processoPerEvento = { ...processoPerEvento, inSfondo: true, ...(p.fileSfondo ? { fileSfondo: p.fileSfondo } : {}), ...(p.daSfondo ? { sfondoDa: p.daSfondo } : {}) }
+                    if (p?.messoInSfondo) processoPerEvento = { ...processoPerEvento, ...campiSfondoDelProcesso(p) }
                     seguiSfondo(c.id, p, comandoDiShell(argomenti)) // A6-bis (G2); C06; R-21 D3: dentro il turno col prossimo esito, se no all'ospite
                     // ⭐ FASE D — l'output di un comando shell non è "un artefatto scritto" nello stesso senso di un file: hashContenuto resta null qui, coerente con 'prova'.
                     ricevutaEmessa = true
@@ -16415,6 +18427,21 @@ export async function talosLavora({
                             ? `created: "${titolo}" (id: ${risultato.voceLibreriaId}, version 1). To change it later, call artifact_update with this id.`
                             : (risultato.salvata === false ? `created: "${titolo}" (id: ${risultato.id}, not saved: it cannot be updated later).` : `created: "${titolo}" (id: ${risultato.id})`)
                     }
+                }
+                else if (nome === NOME_BLOCCO_AGGIORNA) {
+                    /* FE-081: una riga sola al modello; un nome che non è nella conversazione non arriva a chi ospita */
+                    const richiesta = richiestaDiBloccoAggiorna(argomenti)
+                    let r
+                    if (typeof richiesta?.codice === 'string') r = richiesta
+                    else if (!nomiVivi.has(richiesta.blocco)) r = { ok: false, codice: 'bloccoSconosciuto', riga: `no live block named ${richiesta.blocco.slice(0, 40)} in this chat` }
+                    else if (typeof onAggiornaBlocco !== 'function') r = { ok: false, codice: 'erroreInterno', riga: 'block updates are not configured on this harness: nothing was changed' }
+                    else {
+                        /* G-B2 UIG-1.14: chi ospita che lancia o rifiuta diventa UNA riga al modello, mai un giro rotto */
+                        try { r = await onAggiornaBlocco(richiesta) }
+                        catch { r = { ok: false, codice: 'erroreInterno', riga: 'the block update failed on the host: nothing was changed' } }
+                    }
+                    esito = rigaDiBloccoAggiorna(r)
+                    erroreTool = JSON.parse(esito).ok !== true
                 }
                 else if (nome === 'artifact_update') {
                     erroreTool = true
@@ -17079,10 +19106,28 @@ export async function talosLavora({
                  */
                 else if (nome === 'research_start') {
                     erroreTool = true
-                    const permesso = await verificaPermessoConBarriera(
-                        { tipo: 'research_start', toolCallId: c.id },
-                        { livelloAccesso, modalitaOperativa, chiediApprovazioneFn, permessiPerAttrezzo, cartella, catena, segnaleStop },
-                    )
+                    /* D4: dalla sezione «New research» il sì è il gesto della persona (`chiamataIniziale`); dalla chat, la carta (`azioneCartaRicerca`) */
+                    const dallaPersona = c.id === idChiamataDellaPersona
+                    /* Non `personaPresenteFn`: sul registro vuol dire anche «client che dichiara `chiamata-dal-testo`», e la CLI non la dichiara (sua condizione) */
+                    const personaDavanti = nessunoDavanti !== true && senzaPersona !== true && agentRole !== 'child' && typeof chiediApprovazioneFn === 'function'
+                    let domandaDellaPersona = null
+                    const chiediCarta = dallaPersona ? chiediApprovazioneFn : chiediCartaRicerca(chiediApprovazioneFn, (domanda) => { domandaDellaPersona = domanda })
+                    const domandaValida = typeof argomenti?.question === 'string' && argomenti.question.trim() !== '' && argomenti.question.trim().length <= DOMANDA_RICERCA_MASSIMA
+                    /* Decisioni 57 e 144: il prezzo del modello del giro si chiede solo se una carta può uscire (le stesse condizioni dei rami qui sotto):
+                       non dalla sezione (gesto della persona), non senza una persona davanti, non per una domanda che si respinge al modello */
+                    const cartaPossibile = !dallaPersona && personaDavanti && (domandaValida || !onRicercaAvvia)
+                    const azioneCarta = azioneCartaRicerca(c.id, argomenti, cartaPossibile ? await prezzoDelModelloEntro(prezzoDelModelloFn, modello) : null)
+                    const permesso = !dallaPersona && onRicercaAvvia && !personaDavanti
+                        ? { consentito: false, via: 'ricerca-senza-persona', motivo: MOTIVO_RICERCA_SENZA_PERSONA }
+                        /* Revisione del blocco, R11 e R12: una domanda vuota o oltre il tetto dello schema non arriva alla persona, si corregge il modello */
+                        : !dallaPersona && onRicercaAvvia && !domandaValida ? { consentito: false, via: 'ricerca-senza-domanda', motivo: `"question" must be text of 1 to ${DOMANDA_RICERCA_MASSIMA} characters.` }
+                        : await verificaPermessoConBarriera(
+                            { ...(dallaPersona ? { tipo: 'research_start' } : azioneCarta), toolCallId: c.id },
+                            { livelloAccesso, modalitaOperativa, chiediApprovazioneFn: chiediCarta, permessiPerAttrezzo, cartella, catena, segnaleStop },
+                            /* Le due vie che consentono senza interpellare nessuno (`confermaRootWsl`): lì la carta la chiede questo ramo, una sola */
+                            dallaPersona || !onRicercaAvvia ? {} : { conferma: async (dato) => (dato?.via === 'nessun-vincolo' || dato?.via === 'permesso-per-attrezzo-sempre'
+                                ? esitoDellaCarta(await verificaAzioneAutomazione({ ...azioneCarta, toolCallId: c.id }, { chiediApprovazioneFn: chiediCarta, segnaleStop })) : null) },
+                        )
                     esitoPermessoPerRicevuta = permesso
                     if (!permesso.consentito) {
                         esito = `REFUSED. ${permesso.motivo} No research was started.`
@@ -17092,9 +19137,10 @@ export async function talosLavora({
                     }
                     else {
                         try {
-                            const risultato = confermaEsitoMutazione(await onRicercaAvvia(argomenti), nome)
+                            const risultato = confermaEsitoMutazione(await onRicercaAvvia(domandaDellaPersona === null ? argomenti : { ...argomenti, question: domandaDellaPersona }), nome)
                             erroreTool = !risultato.ok
                             esito = String(risultato?.esito ?? (risultato?.ok ? 'started' : 'failed'))
+                            if (domandaDellaPersona !== null) esito = `${PREFISSO_DOMANDA_CORRETTA}${domandaDellaPersona}\n${esito}`
                         }
                         catch (rotto) {
                             erroreTool = true
@@ -17645,6 +19691,54 @@ export async function talosLavora({
                  *   c'è la bozza, che l'ospite mette a schermo. Argomenti controllati qui prima di chiamarlo; il testo al modello è
                  *   quello del contratto con la CLI, parola per parola.
                  */
+                else if (nome === NOME_PASSI && offreIPassi) {
+                    /* FE-008: nessuna carta e nessun permesso. La lista va a chi ospita prima del risultato, così un guasto non la perde a metà */
+                    const letto = leggiArgomentiPassi(argomenti)
+                    if (!letto.ok) {
+                        erroreTool = true
+                        esito = `REFUSED. ${letto.messaggio}`
+                    }
+                    else {
+                        const { stato, cambiata } = applicaPassi(passiDelGiro.leggi(), letto, Date.now())
+                        if (cambiata) {
+                            passiDelGiro.scrivi(stato)
+                            await Promise.resolve().then(() => onPassi?.(stato)).catch(() => { /* la lista a schermo non ferma mai il lavoro */ })
+                        }
+                        esito = esitoPassi(stato, letto)
+                    }
+                }
+                /*
+                 * computer_use (04/11/2026, decisione 129; forma FORMA-ATTREZZO-COLLEGAMENTO §1): NON passa dalla strada delle automazioni
+                 *   né dalla carta generica. La carta è UNA, quella del compito, e la mette l'ospite dentro il ciclo col canale delle
+                 *   domande. Il cancello dell'offerta si ripete qui: chiamato a forza (un nome scritto come testo) non parte.
+                 */
+                else if (nome === NOME_COMPUTER_USE) {
+                    const task = typeof argomenti?.task === 'string' ? argomenti.task.trim() : ''
+                    if (agentRole === 'child' || typeof onComputerUseFn !== 'function' || !vedeLoSchermo) {
+                        erroreTool = true
+                        esito = `${nome} is not available in this session.`
+                    }
+                    /* difetto 8 (04/11/2026): `livelloAccesso` è quello riletto a QUESTA chiamata (`permessiCorrentiFn` qui sopra) */
+                    else if (livelloAccesso === 'lettura' || livelloAccesso === 'ricerca') {
+                        erroreTool = true
+                        esito = `REFUSED. ${nome} is not available with the current access level (read only). Nothing was done.`
+                    }
+                    else if (!task) {
+                        erroreTool = true
+                        esito = 'REFUSED. computer_use needs "task": one sentence with what to do on the screen. Nothing was done.'
+                    }
+                    else {
+                        try {
+                            const r = await onComputerUseFn(nome, { task }, { fase: 'esegui', toolCallId: c.id, segnale: segnaleStop, livelloAccesso })
+                            esito = typeof r?.testo === 'string' && r.testo ? r.testo : 'computer_use ended without a result.'
+                            if (r?.ok !== true) erroreTool = true
+                        }
+                        catch (rotto) {
+                            erroreTool = true
+                            esito = `${nome} failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`
+                        }
+                    }
+                }
                 else if (nome === NOME_SEGNALAZIONE) {
                     const valida = validaArgomentiSegnalazione(argomenti)
                     if (!valida.ok) {
@@ -17670,9 +19764,11 @@ export async function talosLavora({
                         }
                     }
                 }
-                else if (ATTREZZI_AUTOMAZIONI.has(nome) || ATTREZZI_FORNITORI.has(nome) || ATTREZZI_OBIETTIVO.has(nome) || ATTREZZI_ANNULLA.has(nome) || ATTREZZI_TELEFONI.has(nome)) {
+                else if (ATTREZZI_AUTOMAZIONI.has(nome) || ATTREZZI_FORNITORI.has(nome) || ATTREZZI_OBIETTIVO.has(nome) || ATTREZZI_ANNULLA.has(nome) || ATTREZZI_TELEFONI.has(nome) || ATTREZZI_LUOGHI.has(nome) || nome === NOME_IMPOSTAZIONI) {
                     const fornitori = ATTREZZI_FORNITORI.has(nome)
-                    const ospiteFn = fornitori ? onFornitoriFn : ATTREZZI_OBIETTIVO.has(nome) ? onObiettivoFn : ATTREZZI_ANNULLA.has(nome) ? onAnnullaFileFn : ATTREZZI_TELEFONI.has(nome) ? onTelefoniFn : onAutomazioneFn
+                    /* Fase 8 (01/11/2026): `app_settings` passa dalla STESSA strada (anteprima, carta, esegui), col suo ospite; mai alle figlie */
+                    const impostazioni = nome === NOME_IMPOSTAZIONI
+                    const ospiteFn = impostazioni ? (agentRole === 'child' ? undefined : onImpostazioniFn) : fornitori ? onFornitoriFn : ATTREZZI_OBIETTIVO.has(nome) ? onObiettivoFn : ATTREZZI_ANNULLA.has(nome) ? onAnnullaFileFn : ATTREZZI_TELEFONI.has(nome) ? onTelefoniFn : ATTREZZI_LUOGHI.has(nome) ? onLuoghiFn : onAutomazioneFn
                     /* C5: `automation_control` arriva all'ospite col nome di prima (`automation_<azione>`), con i soli campi dell'azione */
                     const azioneAutomazione = nome === 'automation_control' && typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : null
                     const nomeOspite = nome === 'automation_control' ? `automation_${azioneAutomazione}` : nome
@@ -17682,6 +19778,11 @@ export async function talosLavora({
                         erroreTool = true
                         esito = `REFUSED. automation_control needs action "pause", "resume", "run" or "stop" (got ${JSON.stringify(argomenti?.action ?? null)}). Nothing was done.`
                     }
+                    /* Fase 8: nel Piano `app_settings` legge e basta; un cambio si rifiuta qui, prima di chiedere all'ospite */
+                    else if (impostazioni && modalitaOperativa === 'piano' && !AZIONI_IMPOSTAZIONI_NEL_PIANO.includes(azioneImpostazioni(argomenti))) {
+                        erroreTool = true
+                        esito = 'REFUSED. In Plan mode app_settings can only list settings. Nothing was changed.'
+                    }
                     else if (typeof ospiteFn !== 'function') {
                         erroreTool = true
                         esito = `${nome} is not available in this session.`
@@ -17690,14 +19791,26 @@ export async function talosLavora({
                         try {
                             const anteprima = await ospiteFn(nomeOspite, argomentiOspite, { fase: 'anteprima', toolCallId: c.id })
                             let via = Boolean(anteprima?.ok)
+                            /* Decisione 116 §8 (CLI 04/11 14:30): un'anteprima che dice già l'esito, `{ ok:true, carta:false, testo }`, È l'esito: niente
+                               carta e niente esecuzione, quel testo al modello (la CLI risponde così a `sign_in`, che lì non ha la scheda). Nessun
+                               ospite di prima mette `testo` nell'anteprima: per loro non cambia niente. */
+                            const esitoDallAnteprima = via && !anteprima.carta && typeof anteprima.testo === 'string'
+                            if (esitoDallAnteprima) {
+                                via = false
+                                esito = uscitaUtile(anteprima.testo, 16_000, 0.25)
+                            }
                             /* Full access non chiede (vedi SENZA_CARTA_IN_ACCESSO_PIENO): il livello è quello riletto per QUESTA chiamata */
+                            /* Fase 8 (D3, D5, D7): per `app_settings` i gruppi sicurezza e aggiornamenti chiedono anche in Accesso pieno */
                             const senzaCarta = via && Boolean(anteprima.carta) && livelloAccesso === 'accesso-pieno' && SENZA_CARTA_IN_ACCESSO_PIENO.has(nome)
-                            if (!via) {
+                                && !(impostazioni && cartaAncheInAccessoPieno(anteprima.azione))
+                            if (!via && !esitoDallAnteprima) {
                                 erroreTool = true
-                                esito = `REFUSED. ${anteprima?.messaggio ?? (fornitori ? 'this provider request is not valid.' : 'this automation request is not valid.')}`
+                                esito = `REFUSED. ${anteprima?.messaggio ?? (impostazioni ? 'this settings request is not valid.' : fornitori ? 'this provider request is not valid.' : 'this automation request is not valid.')}`
                             }
                             else if (anteprima.carta && !senzaCarta) {
-                                const verifica = await verificaAzioneAutomazione({ ...(anteprima.azione ?? {}), tipo: nomeOspite, toolCallId: c.id },
+                                /* REV8-01: la carta sempre porta il suo segno, così il «sì solo» di una chiamata scritta come testo non la salta */
+                                const cartaSempre = impostazioni ? cartaAncheInAccessoPieno(anteprima.azione) : ATTREZZI_CARTA_SEMPRE.has(nome)
+                                const verifica = await verificaAzioneAutomazione({ ...(anteprima.azione ?? {}), tipo: nomeOspite, toolCallId: c.id, ...(cartaSempre ? { [CARTA_SEMPRE]: true } : {}) },
                                     { chiediApprovazioneFn, segnaleStop })
                                 if (!verifica.consentito) {
                                     via = false
@@ -17706,9 +19819,12 @@ export async function talosLavora({
                                 }
                             }
                             if (via) {
-                                const fatto = await ospiteFn(nomeOspite, argomentiOspite, { fase: 'esegui', toolCallId: c.id })
+                                /* Fase 8, cura 2 (01/11 sera): solo per `app_settings`, l'ospite sa se la carta NON c'era (Accesso pieno) ⇒
+                                   «confermato da nessuno»; chi ha detto sì a una carta lo sa chi ospita, per `toolCallId`. Il sì resta `true`. */
+                                const fatto = await ospiteFn(nomeOspite, argomentiOspite, { fase: 'esegui', toolCallId: c.id, ...(impostazioni ? { senzaCarta } : {}) })
                                 if (fatto?.ok) {
                                     esito = uscitaUtile(String(fatto.testo ?? ''), 16_000, 0.25)
+                                    if (fornitori && fatto.schedaChatgpt === true) schedaChatgptDellaChiamata = true // 116 C: solo dalla risposta «esegui»
                                     if (senzaCarta) esito += notaSenzaCarta(anteprima.azione)
                                     const avvisiSenzaCarta = senzaCarta && ATTREZZI_AUTOMAZIONI.has(nome) ? anteprima.azione?.avvisi : null
                                     const oltreSenzaCarta = Array.isArray(avvisiSenzaCarta?.oltre) ? avvisiSenzaCarta.oltre : []
@@ -17718,10 +19834,12 @@ export async function talosLavora({
                                         senzaCartaDellaChiamata = { oltre: oltreSenzaCarta, minacce: minacceSenzaCarta, ...(typeof id === 'string' && id ? { automazioneId: id } : {}) }
                                     }
                                     if (nome === 'automation_runs') esito = avvolgiEsterno('automation_runs')(esito)
+                                    // un dato privato letto conta per la trifecta (Mobile, 03/11): solo gli attrezzi che il catalogo nomina
+                                    if (ATTREZZI_LUOGHI.has(nome)) catena = avanzaCatena(catena, SICUREZZA_PER_ATTREZZO[nome])
                                 }
                                 else {
                                     erroreTool = true
-                                    esito = `REFUSED. ${fatto?.messaggio ?? (fornitori ? 'the provider change did not happen.' : 'the automation action did not happen.')}`
+                                    esito = `REFUSED. ${fatto?.messaggio ?? (impostazioni ? 'the settings change did not happen.' : fornitori ? 'the provider change did not happen.' : 'the automation action did not happen.')}`
                                 }
                             }
                         }
@@ -17838,6 +19956,8 @@ export async function talosLavora({
                                Una copia dell'array: le righe che il giro aggiunge dopo non devono cambiare ciò che si salva. */
                             const rispostaUtente = await chiediDomandaFn(questions, { toolCallId: c.id, messaggi: [...messaggi] })
                             esito = JSON.stringify(rispostaUtente)
+                            /* R-53 bis, revisione del Blocco 21: una risposta è un messaggio della persona. Una domanda annullata, saltata o scaduta no. */
+                            if (rispostaUtente?.status === 'answered') { comandoRosso = false; comandiDelGiro.clear() }
                         }
                         catch (rotto) {
                             esito = ['QUERY_INVALID', 'QUESTION_ALREADY_PENDING'].includes(rotto?.code)
@@ -17863,7 +19983,7 @@ export async function talosLavora({
                         try {
                             const piano = validaPiano(argomenti?.plan)
                             const scelta = await presentaPianoFn({ plan: piano, toolCallId: c.id, messaggi: [...messaggi] })
-                            esito = esitoPianoPerIlModello(scelta)
+                            esito = esitoPianoPerIlModello(scelta, { conPassi: offreIPassi })
                             if (scelta?.decisione === 'procedi-con-conferma' || scelta?.decisione === 'procedi-accetta-modifiche') {
                                 modalitaOperativa = 'normale'
                                 modalitaAllAvvio = 'normale'
@@ -17921,16 +20041,16 @@ export async function talosLavora({
                      *   - in Piano stop e pausa sì (non toccano il disco), la ripresa no (riparte un lavoro già approvato alla delega).
                      */
                     const azione = typeof argomenti?.action === 'string' ? argomenti.action.trim().toLowerCase() : ''
-                    const AZIONI_FIGLIO = { stop: [stopChildFn, 'stopped'], pause: [pauseChildFn, 'paused'], resume: [resumeChildFn, 'resumed'] }
+                    const AZIONI_FIGLIO = { stop: [stopChildFn, 'stopped'], pause: [pauseChildFn, 'paused'], resume: [resumeChildFn, 'resumed'], retry: [retryChildFn, 'retried'] } // retry: decisione 198
                     const [fnControllo, participio] = Object.hasOwn(AZIONI_FIGLIO, azione) ? AZIONI_FIGLIO[azione] : [null, null]
                     const tipoVecchio = `${azione}_child`
                     const override = sceltaPiuStretta(permessiPerAttrezzo?.[`child_control:${azione}`], permessiPerAttrezzo?.[tipoVecchio])
                     if (!participio) {
-                        esito = `REFUSED. child_control needs action "stop", "pause" or "resume" (got ${JSON.stringify(argomenti?.action ?? null)}). Nothing was done.`
+                        esito = `REFUSED. child_control needs action "stop", "pause", "resume" or "retry" (got ${JSON.stringify(argomenti?.action ?? null)}). Nothing was done.`
                         erroreTool = true
                     }
-                    else if (modalitaOperativa === 'piano' && azione === 'resume') {
-                        esito = 'REFUSED. In Plan mode a child can be stopped or paused, not resumed: resuming restarts work. Nothing was done.'
+                    else if (modalitaOperativa === 'piano' && (azione === 'resume' || azione === 'retry')) {
+                        esito = azione === 'retry' ? 'REFUSED. In Plan mode a child can be stopped or paused, not retried: retrying restarts work. Nothing was done.' : 'REFUSED. In Plan mode a child can be stopped or paused, not resumed: resuming restarts work. Nothing was done.'
                         erroreTool = true
                     }
                     else {
@@ -17959,6 +20079,14 @@ export async function talosLavora({
                 }
                 else if (nome === 'time_now') {
                     esito = formattaOraCorrente(orologioFn())
+                }
+                else if (nome === NOME_AIUTO) {
+                    // Centro assistenza (01/11/2026): offerto solo con `aiutoTalos`; chiamato senza (dal ponte) è un rifiuto onesto
+                    const risposta = typeof aiutoTalos?.rispondi === 'function'
+                        ? await aiutoTalos.rispondi(argomenti ?? {})
+                        : { testo: 'REFUSED. The TALOS help is not available here.', errore: true }
+                    esito = risposta.testo
+                    if (risposta.errore) erroreTool = true
                 }
                 // C5 attrezzi differiti: il catalogo si ricava dalla lista viva del giro (Hermes: «stateless — rebuilt every assembly»)
                 else if (attrezziDifferiti && nome === NOME_RICERCA_ATTREZZI) {
@@ -18248,12 +20376,21 @@ export async function talosLavora({
                quello letto dall'esito GIÀ nel confine, dove il contenuto esterno non può imitare una forma di TALOS. Una volta sola, per
                le due guardie: prima i giri in tondo prendevano uno `scrivi` RIFIUTATO per un passo avanti (`!erroreTool` con
                `erroreTool` assente), e la nota delle chiamate identiche non scattava (owner: «Sì, nello stesso ramo»). */
+            /* il no della persona: DECLINED, e il passo non è un guasto (Tester R2-R4). Revisione del 03/11 pomeriggio, D4: PRIMA delle guardie,
+               che leggevano ancora REFUSED (tre no di fila erano «a loop», e la nota delle chiamate identiche rimandava il REFUSED). Per loro
+               un no non è un fallimento e nemmeno un passo avanti: non ha cambiato niente. */
+            let dettoNo = false
+            {
+                const no = nome === 'delega_sottotask' ? null : comeNoDellaPersona(typeof esito === 'string' ? esito : null)
+                if (no) { esito = no; erroreTool = false; dettoNo = true }
+            }
             const fallitoOsservato = (giriInTondo || stessoAttrezzo || registroDeiTentativi)
                 ? (typeof erroreTool === 'boolean' ? erroreTool : esitoFallito(conConfine(nome, esito, { segna: false })))
                 : Boolean(erroreTool)
+            const progressoOsservato = AZIONI_MUTANTI_PER_HOOK.includes(nome) && !fallitoOsservato && !dettoNo
             let notaRipetizione = null
             if (giriInTondo) {
-                const volte = giriInTondo.osserva({ nome, argomenti, esito, progresso: AZIONI_MUTANTI_PER_HOOK.includes(nome) && !fallitoOsservato })
+                const volte = giriInTondo.osserva({ nome, argomenti, esito, progresso: progressoOsservato })
                 if (volte >= GIRI_IN_TONDO_AVVISO) {
                     notaRipetizione = notaGiriInTondo(nome, volte, String(esito), { nelConfine: (testo) => conConfine(nome, testo), nessunoDavanti: nessunoDavanti === true })
                     if (volte >= GIRI_IN_TONDO_DOMANDA) {
@@ -18269,7 +20406,7 @@ export async function talosLavora({
                di cambiare strada e basta una. */
             let notaStesso = null
             if (stessoAttrezzo) {
-                const volte = stessoAttrezzo.osserva({ nome, fallito: fallitoOsservato, progresso: AZIONI_MUTANTI_PER_HOOK.includes(nome) && !fallitoOsservato })
+                const volte = stessoAttrezzo.osserva({ nome, fallito: fallitoOsservato, progresso: progressoOsservato })
                 if (volte >= STESSO_ATTREZZO_CHE_FALLISCE_AVVISO && !notaRipetizione) notaStesso = notaStessoAttrezzo(nome, volte)
             }
             /* L1 1.2: il registro legge l'esito GREZZO (prima del confine, che ha un id nuovo a ogni chiamata). La sua nota va in coda
@@ -18282,6 +20419,7 @@ export async function talosLavora({
                 if (r.nota) onGiro?.({ giro, tipo: 'registro-tentativi', toolCallId: c.id, livello: r.livello, tentativiStagnanti: r.A, ritorni: r.B, ...(r.motivo ? { motivo: r.motivo } : {}) })
             }
             esito = notaRipetizione ?? conConfine(nome, esito) // F-027: il contenuto esterno nel confine, prima del taglio e dell'evento
+            if (codaDiTalosDellaChiamata && !notaRipetizione) esito = `${esito}\n\n${codaDiTalosDellaChiamata}` // decisione 201, Mobile 1: fuori dal confine
             if (notaStesso) esito = `${esito}\n\n${notaStesso}` // testo di TALOS, dopo il risultato e fuori dal confine (Hermes: in coda)
             if (notaRegistro) esito = `${esito}\n\n${notaRegistro}` // L1 1.2, testo di TALOS in coda, fuori dal confine
             /* C16: testo di TALOS, fuori dal confine dei dati, una volta sola */
@@ -18305,10 +20443,12 @@ export async function talosLavora({
             /* ⭐ OSS-1/OSS-2 — i campi del processo, quando il ramo li ha misurati. Spread e non chiavi
                fisse: chi non misura non manda `durataMs: undefined`, che in JSON diventerebbe una
                chiave fantasma e romperebbe i `deepStrictEqual` gia' scritti altrove. */
-            onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: contenutoTool, ...(processoPerEvento ?? {}), ...(typeof erroreTool === 'boolean' ? { isError: erroreTool } : {}),
+            /* Blocco 26, ritocco D1: l'evento (che può andare al ponte) porta i registri dello sfondo col nome corto; il modello, sopra, il percorso pieno */
+            onGiro?.({ giro, tipo: 'tool-esito', toolCallId: c.id, content: perGliEventi(contenutoTool), ...(processoPerEvento ?? {}), ...(typeof erroreTool === 'boolean' ? { isError: erroreTool } : {}),
                 ...(sospettoDellaChiamata ? { contenutoSospetto: sospettoDellaChiamata } : {}),
                 ...(senzaCartaDellaChiamata ? { senzaCarta: senzaCartaDellaChiamata } : {}),
                 ...(rifiutoDellaChiamata ? { rifiuto: rifiutoDellaChiamata } : {}),
+                ...(schedaChatgptDellaChiamata && erroreTool !== true ? { schedaChatgpt: true } : {}), // 116 C: la scheda c'è davvero
                 /* view_image (contratto 27/10/2026, punto 8): l'immagine guardata, per la miniatura nella riga — riferimento, formato e misure,
                    mai i byte; lo stesso evento arriva al dispositivo collegato */
                 ...(immaginiDellaChiamata && !notaRipetizione ? { immagini: immaginiDellaChiamata.map(({ riferimento, mime, larghezza, altezza }) => ({ riferimento, mime, larghezza, altezza })) } : {}) })
@@ -18407,6 +20547,8 @@ export async function talosLavora({
                     messaggioInCoda = null // stessa disciplina del blocco di fine turno: una coda che lancia è vuota
                 }
                 if (!messaggioInCoda) break
+                comandoRosso = false // R-53: la persona ha parlato, vince lei
+                comandiDelGiro.clear()
                 consegnaVoceInCoda(messaggioInCoda)
             }
         }
@@ -18439,6 +20581,8 @@ export async function talosLavora({
      * il fermo resta un esito dedicato: neppure una risposta testuale
      * precedente o una tool call ancora da eseguire lo rende 'concluso'.
      */
+    /* Decisione owner 166: il giro fermato si chiude col suo segno in storia (vedi `SEGNO_GIRO_FERMATO`), così la domanda dopo è una richiesta nuova. */
+    if (fermatoSuRichiesta && laPersonaHaFermato(fermataDallaPersona)) messaggi.push({ role: 'system', content: NOTA_GIRO_FERMATO })
     const comeFinita = fermatoSuRichiesta
         ? {
             esito: 'fermato',
@@ -18474,6 +20618,10 @@ export async function talosLavora({
             }
             /* ⛔ F-ENG-4: l'ultima risposta è rimasta tagliata dal tetto di uscita anche dopo le continuazioni. Il testo arrivato è
                in storia; la frase dice il motivo vero invece di «generation stopped without an answer». */
+            /* Blocco 20 (forma con CLI, Mobile e Performance, 01/11/2026): il modello ha scritto del testo e poi ha rifiutato di continuare. Il testo è
+               in storia e il suo uso resta nel conto: un esito suo, invece di «generation stopped without an answer», che qui non è vero. */
+            : rifiutataDopoIlTesto
+            ? { esito: 'rifiuto-del-modello', detto: '⛔ the model stopped and refused to continue: the text that arrived is kept.' }
             : tagliataSenzaRimedio && !ultimoHaConcluso
             ? {
                 esito: 'tetto-uscita',

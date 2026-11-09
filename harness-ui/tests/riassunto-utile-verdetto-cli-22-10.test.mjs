@@ -192,7 +192,11 @@ test('VERDETTO-CLI-CORNICE-01 — nel giro la cornice conta: con la soglia dove 
       conti.primaRichiesta ??= corpo.messages;
       return rispostaFinta('OK', stima(corpo.messages));
     };
-    await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: messaggi, contestoDelProgetto: 'Project files:\n', fetchDiRete });
+    /* ⛔ 28/10/2026 — contratto C1, owner 27/10/2026, «Sì, mai aspettare»: all'emergenza il riassunto del modello non si paga più dentro
+       il giro ma in sottofondo, e può partire quando il giro ha già restituito. Il conto si legge quindi dopo averlo atteso: la regola che
+       la prova difende (la cornice conta nel decidere se un riassunto si paga) vale lì, nella stessa preparazione. */
+    const ris = await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: messaggi, contestoDelProgetto: 'Project files:\n', fetchDiRete });
+    await ris.compattazioneInPreparazione;
     return conti;
   };
   const misura = await corsa(200_000);
@@ -320,8 +324,11 @@ test('VERDETTO-CLI-GIT-02 — git non sopravvive al giro: né con un riassunto c
   const fallito = await giroConGitLento(t, { storiaDa: 4_400, ritardo: 1_500, fetchDelRiassunto: async () => new Response(JSON.stringify({ error: { message: 'invalid request' } }), { status: 400, headers: { 'Content-Type': 'application/json' } }) });
   assert.ok(fallito.letture >= 1, `premessa: git è partito (${JSON.stringify(fallito)})`);
   assert.equal(fallito.aperti, 0, `riassunto fallito: nessuna lettura di git ancora aperta al ritorno del giro (${JSON.stringify(fallito)})`);
-  /* git rallentato di 2 s: se lo Stop non lo fermasse, il giro (che lo aspetta) tornerebbe dopo 2 s */
-  const fermato = await giroConGitLento(t, { stopDopoMs: 50, ritardo: 2_000, fetchDelRiassunto: (o) => new Promise((_ok, ko) => {
+  /* git rallentato di 2 s: se lo Stop non lo fermasse, il giro (che lo aspetta) tornerebbe dopo 2 s.
+     ⛔ Trasformata il 28/10/2026 (C-1, contratto C1 «mai aspettare»): prima la storia era da 6.000 (EMERGENZA), dove oggi il giro non aspetta
+     più nessun riassunto e lo Stop non ha un riassunto atteso da interrompere. Il riassunto ATTESO c'è ancora alla SOGLIA (con l'istantanea
+     spenta, «fra la soglia e l'emergenza non cambia niente»): lo Stop durante quel riassunto deve fermare anche git. */
+  const fermato = await giroConGitLento(t, { storiaDa: 4_400, stopDopoMs: 50, ritardo: 2_000, fetchDelRiassunto: (o) => new Promise((_ok, ko) => {
     const ferma = () => ko(Object.assign(new Error('aborted'), { name: 'AbortError' }));
     if (o.signal?.aborted) ferma(); else o.signal?.addEventListener('abort', ferma, { once: true });
   }) });

@@ -60,9 +60,9 @@ test('B3-RECUPERO: errori di lista e metriche, Aggiorna recupera senza valori in
  await foto(page,'app-errore',info);await page.unroute('**/api/v1/sessions');
  await page.route('**/api/v1/sessions/*/metrics',route=>route.fulfill({status:503,json:{ok:false,error:{code:'OFFLINE',message:'Metriche non disponibili'}}}));
  await page.locator('[data-board-refresh]').click();await expect(page.locator('[data-board-refresh]')).toBeEnabled();await expect(page.locator('#boardEsito')).toContainText('Metriche non disponibili per 73');
- await expect(page.locator('#schermoBoard tbody tr').first().locator('td').nth(5)).toHaveText('— · 74,2k');
+ await expect(page.locator('#schermoBoard tbody tr').first().locator('td').nth(5)).toHaveText('— · 74,2 k');
  await page.unroute('**/api/v1/sessions/*/metrics');await page.locator('[data-board-refresh]').click();await expect(page.locator('[data-board-refresh]')).toBeEnabled();
- await expect(page.locator('#boardEsito')).not.toContainText('non disponibili');await expect(page.locator('#schermoBoard tbody tr').first().locator('td').nth(5)).toHaveText('83% · 74,2k');
+ await expect(page.locator('#boardEsito')).not.toContainText('non disponibili');await expect(page.locator('#schermoBoard tbody tr').first().locator('td').nth(5)).toHaveText('83% · 74,2 k');
 });
 
 test('B3-EMBEDDED: aggiornamento e filtro rispettano il confine senza backend',async({page})=>{

@@ -19,7 +19,19 @@ const instruction = 'Output only conforming JSON: {"schema":"talos.context.summa
  * (`maxOutputTokens` = responseReserve): si dice in parole — un quarto dei token, che sull'italiano
  * misurato (≈2 token/parola) lascia metà del budget di scorta — e sul ritentativo si dimezza.
  */
-export function buildSummaryRequest({ segment, focus = '', summaries, maxOutputTokens, compact = false, formatRetry = false }) {
+/*
+ * 05/11/2026 — voci B1 e B2 della cura per Luna 6 (forma `FORMA-CURA-COMPATTAZIONE-LUNA-2026-11-05.md`, §2a e §3; OK di CLI,
+ * Performance e Mobile, §8). Al banco del 04/11 il lavoro moriva nella FUSIONE con CTX_INVALID_SOURCE: la richiesta dava `sourceIds: []`
+ * e l'istruzione di citare «the original», che il modello lì non vede, e Luna citava il `text` di un segmento. La richiesta di fusione
+ * ora dice la verità: gli id sono quelli delle fonti GIÀ verificate dei segmenti, e le citazioni si copiano da lì. Il controllo
+ * (`validateSummary`) resta identico. Hermes non ha questo problema perché non chiede citazioni verificate
+ * (`agent/context_compressor.py`, clone 2026-11-01): la fusione per livelli e il controllo sono nostri.
+ */
+const fusione = " The data are summaries whose sources are already verified. Copy `sources` only from their `sources` lists, unchanged (same recordId, same quote). Never quote the summaries' own text.";
+const fontiRipresa = ' The previous answer quoted text that is not in the originals: copy sources only from the verified sources listed.';
+const idDelleFonti = summaries => [...new Set(summaries.flatMap(summary => (summary?.sources ?? []).map(source => source.recordId)))];
+
+export function buildSummaryRequest({ segment, focus = '', summaries, maxOutputTokens, compact = false, formatRetry = false, sourcesRetry = false }) {
   const source = summaries ? JSON.stringify({ verifiedSegments: summaries }) : segment.text;
   const parole = Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 ? Math.max(80, Math.floor(maxOutputTokens / (compact ? 8 : 4))) : null;
   const limite = parole ? ` Maximum total length: about ${parole} words; "text" at most ${Math.max(40, Math.floor(parole / 4))} words; each list at most 10 short items; 3 to 6 sources.` : '';
@@ -27,7 +39,9 @@ export function buildSummaryRequest({ segment, focus = '', summaries, maxOutputT
   /* C1 (09/10/2026, banco A/B): una sintesi su tre di glm-5.3-flash non era JSON conforme e la compattazione moriva lì. La riprova
      è UNA, ed è una richiesta diversa: dice che cosa era sbagliato. */
   const formato = formatRetry ? ' The previous answer was not JSON conforming to the schema: answer ONLY with the JSON object, with no text before or after, no comments and no code fences.' : '';
-  return { messages: [{ role: 'system', content: instruction + limite + ripresa + formato }, { role: 'user', content: JSON.stringify({ task: 'Summarize the following data', focus, sourceIds: segment?.sourceIds ?? [], untrustedSource: source }) }], tools: [] };
+  const fonti = summaries ? fusione + (sourcesRetry ? fontiRipresa : '') : '';
+  const sourceIds = summaries ? idDelleFonti(summaries) : segment?.sourceIds ?? [];
+  return { messages: [{ role: 'system', content: instruction + limite + ripresa + formato + fonti }, { role: 'user', content: JSON.stringify({ task: 'Summarize the following data', focus, sourceIds, untrustedSource: source }) }], tools: [] };
 }
 
 export function validateSummary(response, { records }) {
@@ -52,10 +66,9 @@ export function validateSummary(response, { records }) {
    */
   const verified = []; const dropped = [];
   for (const ref of summary.sources) {
-    const record = sources.get(ref.recordId);
+    const record = sources.get(ref.recordId) ?? recordDallaCitazione(ref, records);
     if (!record) { dropped.push({ recordId: ref.recordId, quote: ref.quote, reason: 'unknown-record' }); continue; }
-    const content = record.message.content;
-    const plain = typeof content === 'string' ? content : Array.isArray(content) ? content.filter(p => ['text', 'input_text', 'output_text'].includes(p?.type) && typeof p.text === 'string').map(p => p.text).join('\n') : '';
+    const plain = testoDelRecord(record);
     const span = locateQuote(plain, ref.quote);
     if (!span) { dropped.push({ recordId: ref.recordId, quote: ref.quote, reason: span === null ? 'out-of-order' : 'not-found' }); continue; }
     /* C1 (09/10/2026, banco v2 su 4c3e1649): la citazione VERIFICATA porta il testo dell'originale fra start ed end, non quello
@@ -64,7 +77,7 @@ export function validateSummary(response, { records }) {
        elisioni) faceva morire la compattazione con CTX_ARCHIVE_INVALID. Un'elisione lunga tiene il solo primo frammento:
        le fonti entrano nella memoria del contesto e costano token. */
     const tratto = span.end - span.start <= MAX_VERIFIED_QUOTE_CHARS ? span : span.first;
-    verified.push({ recordId: ref.recordId, quote: plain.slice(tratto.start, tratto.end), start: tratto.start, end: tratto.end });
+    verified.push({ recordId: record.id, quote: plain.slice(tratto.start, tratto.end), start: tratto.start, end: tratto.end });
   }
   if (records.length && !verified.length) {
     const first = dropped[0];
@@ -73,6 +86,31 @@ export function validateSummary(response, { records }) {
   summary.sources = verified;
   if (dropped.length) summary.unverifiedSources = dropped;
   return summary;
+}
+
+const testoDelRecord = (record) => {
+  const content = record.message.content;
+  return typeof content === 'string' ? content : Array.isArray(content) ? content.filter(p => ['text', 'input_text', 'output_text'].includes(p?.type) && typeof p.text === 'string').map(p => p.text).join('\n') : '';
+};
+
+/*
+ * Banco di Performance sulla candidata (04/11/2026, glm-5.3-flash, 4 /compact su 10 morti con CTX_INVALID_SOURCE): le citazioni
+ * c'erano alla lettera, il `recordId` no — «message-7 (174)», «message-7:174», «174», «184» (il numero di una riga del file letto).
+ * Regola del Mobile (OK di CLI e Performance): un id che non esiste si ricava SOLO se un solo record contiene la citazione; se più
+ * record la contengono, solo se ESATTAMENTE uno ha l'id che apre il recordId scritto, a confine di parola («message-7 (174)» ⇒
+ * message-7, mai message-70). In ogni altro caso niente: mai a caso. La citazione resta verificata nel testo vero.
+ * E solo per un id STORPIATO: un id di questo segmento seguito da altro, o un numero nudo (una riga). Un id d'altro genere
+ * («another-chat») resta una fonte che non è di qui, respinta come prima (`summary.test.mjs`, CTX-SOURCE-VALIDATION).
+ * Hermes non verifica citazioni (`agent/context_compressor.py:3424-3447`, clone 2026-11-01: etichette «[TOOL RESULT <id>]»).
+ */
+function recordDallaCitazione(ref, records) {
+  const scritto = String(ref.recordId);
+  const apre = record => scritto.startsWith(record.id) && /^\W/u.test(scritto.slice(record.id.length));
+  if (!/^\d+$/u.test(scritto) && !records.some(apre)) return null;
+  const conLaCitazione = records.filter(record => locateQuote(testoDelRecord(record), ref.quote));
+  if (conLaCitazione.length === 1) return conLaCitazione[0];
+  const perId = conLaCitazione.filter(apre);
+  return perId.length === 1 ? perId[0] : null;
 }
 
 /** Mappa carattere per carattere (stessa lunghezza, così gli indici restano quelli dell'originale). */

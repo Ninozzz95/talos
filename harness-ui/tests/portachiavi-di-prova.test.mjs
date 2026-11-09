@@ -50,7 +50,7 @@ test('KEYRING-PROVA-03 — un server con la custodia di prova non vede né la cu
   mkdirSync(temp, { recursive: true });
   mkdirSync(join(radice, 'workspace'), { recursive: true });
   const porta = await portaLibera();
-  const figlio = spawn(process.execPath, ['server.mjs'], {
+  const figlio = spawn(process.execPath, ['server.mjs', '--senza-gettone=prove'], {
     cwd: fileURLToPath(new URL('..', import.meta.url)), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,
@@ -102,7 +102,8 @@ test('KEYRING-PROVA-04 — ogni avvio di server.mjs nelle prove usa la custodia 
     }
   };
   for (const c of cartelle) { try { if (statSync(c).isDirectory()) visita(c, c.endsWith('frontend') ? 4 : 0); } catch {} }
-  const avvia = /\[\s*'server\.mjs'\s*\]|\['?[^'\n]*harness-ui\/server\.mjs'\]|node \.\.\/server\.mjs|command:\s*'node server\.mjs'/;
+  /* «Gettone sempre» (02/11/2026): anche il modo prove è un avvio: senza `--senza-gettone=prove` in questa espressione la guardia non vedrebbe più nessuna prova */
+  const avvia = /\[\s*'server\.mjs'\s*(?:,\s*'--senza-gettone=prove'\s*)?\]|\['?[^'\n]*harness-ui\/server\.mjs'(?:,\s*'--senza-gettone=prove')?\]|node \.\.\/server\.mjs|command:\s*'node server\.mjs(?: --senza-gettone=prove)?'/;
   const senza = [];
   for (const p of new Set(file)) {
     const testo = readFileSync(p, 'utf8');

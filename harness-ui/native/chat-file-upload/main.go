@@ -14,7 +14,7 @@ import (
 	"unicode/utf8"
 )
 
-const maxBytes int64 = 25 * 1024 * 1024
+const maxBytes int64 = 100 * 1024 * 1024
 const abortFrame uint32 = ^uint32(0)
 const tempPrefix = ".talos-chat-upload-"
 
@@ -73,7 +73,7 @@ func readFrames(source io.Reader, destination io.Writer) (int64, error) {
 		length := binary.LittleEndian.Uint32(header[:])
 		if length == abortFrame { return 0, fail("UPLOAD_ABORTED", "Caricamento interrotto") }
 		if length == 0 {
-			if overLimit { return 0, fail("PAYLOAD_LIMIT", "File troppo grande: massimo 25 MiB") }
+			if overLimit { return 0, fail("PAYLOAD_LIMIT", "File troppo grande: massimo 100 MiB") }
 			return total, nil
 		}
 		remaining := int64(length)

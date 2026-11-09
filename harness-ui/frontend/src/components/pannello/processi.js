@@ -263,7 +263,7 @@ function vociProcesso(ui, r, azioni) {
   const voci = [];
   if (azioni.mostraUscita) voci.push({ chiave: 'uscita', etichetta: t('pannello.processi.mostraUscita'), icona: 'i-doc', aziona: () => azioni.mostraUscita(r.p) });
   if (r.porte.length && r.vivo && azioni.apriNelBrowser) voci.push({ chiave: 'browser', etichetta: t('pannello.processi.apriNelBrowserBreve'), icona: 'i-globe', aziona: () => azioni.apriNelBrowser(r.porte[0].url) });
-  if (FERMABILE.has(r.stato) && azioni.sfonda) voci.push({ chiave: 'sfondo', etichetta: t('pannello.processi.sfonda'), icona: 'i-sfondo', aziona: () => eseguiNellaRiga(ui, r.id, () => azioni.sfonda(r.id), { inCorso: t('pannello.processi.sfondoInCorso'), fatto: t('pannello.processi.sfondato') }) });
+  if (FERMABILE.has(r.stato) && azioni.sfonda) voci.push({ chiave: 'sfondo', etichetta: t('pannello.processi.sfonda'), icona: 'i-layers', aziona: () => eseguiNellaRiga(ui, r.id, () => azioni.sfonda(r.id), { inCorso: t('pannello.processi.sfondoInCorso'), fatto: t('pannello.processi.sfondato') }) });
   if (FERMABILE_O_SFONDO.has(r.stato) && azioni.ferma) voci.push({ chiave: 'ferma', etichetta: t('pannello.processi.ferma'), icona: 'i-stop', pericolo: true, separaPrima: voci.length > 0, aziona: () => fermaRiga(ui, r, azioni) });
   if (TOGLIBILE.has(r.stato) && azioni.togli) voci.push({ chiave: 'togli', etichetta: t('pannello.processi.togli'), icona: 'i-trash', separaPrima: voci.length > 0, aziona: () => eseguiNellaRiga(ui, r.id, () => azioni.togli(r.id), { inCorso: t('pannello.processi.togliInCorso'), fatto: t('pannello.processi.tolto') }) });
   return voci;

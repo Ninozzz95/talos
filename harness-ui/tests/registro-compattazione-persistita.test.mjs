@@ -820,3 +820,48 @@ test('CTX-REG-ISTANTANEA-03 — owner 15/10 notte, «passa al giro dopo»: un gi
     }
   }
 });
+
+/*
+ * Seguito (a) della revisione delle cure C-1..C-9 (28/10/2026): il kernel attacca all'errore di un giro fallito il riassunto già pronto
+ * e quello ancora in preparazione (`talosHarness.desktop-hotfix.mjs`, C-9: «viaggiano additivi per chi li sa usare»), ma il servizio non
+ * li rimandava e il registro li leggeva solo dall'esito di un giro RIUSCITO: il giro dopo ripagava un riassunto già pagato. Come Hermes,
+ * che il riassunto fatto lo tiene anche quando il giro dopo fallisce (`agent/context_compressor.py:5114-5139`).
+ */
+test('CTX-REG-ISTANTANEA-05a — servizio: un giro FALLITO rimanda al registro il riassunto pronto e quello in preparazione, additivi; AL CONTRARIO, senza, niente', async () => {
+  const { avviaSessione } = await import('../src/agent-service.mjs');
+  const pronta = { record: { schema: 'talos.compattazione.v1', coveredThrough: 4, riassunto: [], at: '2026-10-28T10:00:00.000Z', tokenPrima: 10, tokenDopo: 5 }, impronta: 'f05', base: 'nessuna', soloCoda: false };
+  const inPreparazione = Promise.resolve(pronta);
+  const giro = (errore) => avviaSessione({ cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn: async () => { throw errore; } });
+  const con = await giro(Object.assign(new Error('HTTP 500'), { code: 'HTTP_500', compattazionePronta: pronta, compattazioneInPreparazione: inPreparazione }));
+  assert.equal(con.ok, false);
+  assert.deepEqual(con.compattazionePronta, pronta);
+  assert.equal(con.compattazioneInPreparazione, inPreparazione, 'la stessa promessa del kernel, non una copia');
+  const senza = await giro(Object.assign(new Error('HTTP 500'), { code: 'HTTP_500', compattazioneInPreparazione: 'non è una promessa' }));
+  assert.equal('compattazionePronta' in senza, false);
+  assert.equal('compattazioneInPreparazione' in senza, false, 'solo una promessa vera');
+});
+
+test('CTX-REG-ISTANTANEA-05 — registro: un giro FALLITO col riassunto già pronto, o ancora in arrivo, lo passa al giro dopo (pagato una volta sola); AL CONTRARIO, un giro fallito senza non ne inventa uno', async (t) => {
+  conTetto(t, 2_000);
+  for (const caso of ['pronta', 'in-arrivo', 'nessuno']) {
+    const cartellaStore = cartellaStoreVera();
+    const storia = storiaDiBase();
+    const pronta = { record: recordDiProva(storia), impronta: `f05-${caso}`, base: 'nessuna', soloCoda: false };
+    const { finte, avviaSessioneFn } = sessioniControllabili(2);
+    try {
+      const registro = createSessionRegistry({ cartellaStore, avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'z-ai/glm-5.3-flash', chiave: 'k', riassumiPerCompattazioneFn: riassuntoreFinto().fn, compattazioneIstantanea: true });
+      const { sessionId } = registro.avvia('task-vero');
+      finte[0].concludi({ type: 'RunError', message: 'HTTP 500', code: 'internal-error' }, { ok: false, esito: null, erroreInterno: 'HTTP 500', codiceErrore: 'internal-error',
+        ...(caso === 'pronta' ? { compattazionePronta: pronta } : caso === 'in-arrivo' ? { compattazioneInPreparazione: Promise.resolve(pronta) } : {}) });
+      await attendiScritture({ cartellaStore, sessionId });
+      await new Promise((r) => setTimeout(r, 50));
+      registro.resume(sessionId, 'riprova');
+      if (caso === 'nessuno') assert.equal(finte[1].ultimoInput.compattazionePronta, undefined);
+      else assert.deepEqual(finte[1].ultimoInput.compattazionePronta, pronta, caso);
+      finte[1].concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [...finte[1].ultimoInput.messaggiIniziali, { role: 'assistant', content: 'ok' }], recordDiCompattazione: [] } });
+      await attendiScritture({ cartellaStore, sessionId });
+    } finally {
+      rimuoviCartellaDiProva(cartellaStore);
+    }
+  }
+});

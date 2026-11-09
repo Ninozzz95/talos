@@ -36,14 +36,19 @@ async function fixture({binary=false, limit=100_000}={}) {
   const {sessionId}=registry.avvia('fixture20');await registry.attendiAssestamento(sessionId);
   const receipt=registry.esporta(sessionId).eventi.filter(e=>e.type==='CUSTOM'&&e.name==='talos.process-output').at(-1).value;
   const requests=[];
-  const app=createHttpApp({staticHandler:createStaticHandler(fileURLToPath(new URL('../../dist/',import.meta.url))),token:'test20',sessionRegistry:registry});
+  /* Decisione 106 (03/11/2026): il resto dell'API va al server di prova di QUESTO lavoratore (`playwright.config.mjs`), non a una
+     4176 scritta a mano: con `TALOS_HARNESS_UI_TEST_PORT` diversa o coi due server (`--server=2`) la 4176 è di qualcun altro, o vuota. */
+  const serverDiProva=new URL(test.info().project.use.baseURL).origin;
+  const app=createHttpApp({ senzaGettone: 'prove', staticHandler:createStaticHandler(fileURLToPath(new URL('../../dist/',import.meta.url))),token:'test20',sessionRegistry:registry});
   const server=createServer(async(req,res)=>{
     if(req.url.includes('/process-outputs/'))requests.push(req.url);
     // A real same-origin HTTP boundary also exercises downloads, which do not pass through page.route.
     if(!req.url.startsWith('/api/')||req.url.startsWith('/api/v1/sessions'))return app(req,res);
     try {
       const body=[];for await(const chunk of req)body.push(chunk);
-      const response=await fetch(`http://127.0.0.1:4176${req.url}`,{method:req.method,headers:{'Content-Type':req.headers['content-type']||'application/json'},
+      const response=await fetch(`${serverDiProva}${req.url}`,{method:req.method,headers:{'Content-Type':req.headers['content-type']||'application/json',
+        /* «Gettone sempre» (owner 02/11/2026): il server di prova del lavoratore vuole il cookie della corsa, come il browser. */
+        ...(process.env.TALOS_PW_GETTONE?{cookie:`talos_token=${process.env.TALOS_PW_GETTONE}`}:{})},
         ...(body.length?{body:Buffer.concat(body)}:{})});
       const bytes=Buffer.from(await response.arrayBuffer());
       res.writeHead(response.status,{'Content-Type':response.headers.get('content-type')||'application/octet-stream','Content-Length':bytes.length});res.end(bytes);
@@ -58,6 +63,9 @@ async function fixture({binary=false, limit=100_000}={}) {
 async function open(page,f,theme='dark') {
   await page.context().addCookies([{name:'talos_token',value:'test20',url:f.base,httpOnly:true,sameSite:'Strict'}]);
   await page.addInitScript(theme=>{if(window!==window.top)return;localStorage.setItem('talos.harness.desktop.settings.v1',JSON.stringify({version:1,appearance:{colorMode:theme,uiLanguage:'it',interfaceMotion:false}}));},theme);
+  /* 31/10/2026 (barra variante D: «Spazi di lavoro» nasce chiuso). Questo server di prova ha una porta sua, quindi la memoria del gruppo
+     aperto di `playwright.config.mjs` (che vale per l'origine della 4177) qui non arriva: la si scrive come la salverebbe la persona. */
+  await page.addInitScript(()=>{if(window!==window.top)return;localStorage.setItem('talos.harness.desktop.barra.gruppi.v1','{"lavoro":true}');});
   await page.goto(f.base);await page.waitForFunction(()=>window.__talosHarnessUiRuntime);await page.locator('#talosAvvio').waitFor({state:'detached'});
   await page.locator('.talos-nav-item[data-vaia="chat"]').click();
   await selectSession(page,f);

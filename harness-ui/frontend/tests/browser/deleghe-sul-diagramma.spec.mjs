@@ -342,7 +342,7 @@ test('DELEGHE-DIAGRAMMA-17 — ambito «Cartella»: le altre conversazioni della
   expect(scritture).toEqual([]);
 });
 
-test('DELEGHE-DIAGRAMMA-18 — conversazione RIAPERTA: i giri non portano l’ora (solo l’avvio degli attrezzi), e le richieste si distinguono lo stesso', async ({ page }) => {
+test('DELEGHE-DIAGRAMMA-18 — conversazione RIAPERTA: i giri non portano l’ora (solo l’avvio degli strumenti), e le richieste si distinguono lo stesso', async ({ page }) => {
   /* la forma vera del giornale (sessione 91f2b6e2 del 13/10/2026 sul 4177): `RunStarted` senza `at`, poi un `ToolCallStart` con
      `avviatoA`. Prima di questa cura le richieste restavano senza ora, venivano scartate, e i 6 agenti finivano tutti insieme. */
   const ms = (s) => Date.parse(at(s));
@@ -411,6 +411,9 @@ test('DELEGHE-DIAGRAMMA-21 — confini: un nipote in diretta entra sotto il suo 
   const errori = []; page.on('pageerror', (e) => errori.push(e.message));
   const figli = [figlia('a', 10), figlia('b', 11)];
   const { grafo } = await apri(page, figli);
+  /* Treno 02/11/2026 (regola 6): `apri` torna quando il riquadro c'è, non quando il diagramma ha finito la prima lettura. Mandato in quella finestra, l'evento aspetta la
+     rilettura dopo (misurato col processore rallentato 4 volte: 1,1-1,5 s contro 0,4-0,6 s), e sotto il carico della suite sforava i 2 s. Si aspetta il primo disegno, come fa la 21b. */
+  await expect(grafo.locator('[data-sessione]')).toHaveCount(2);
   const manda = (value) => page.evaluate((v) => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ type: 'CUSTOM', name: 'talos.agenti', value: v }, r.realSessionState.generation); }, value);
   const nipote = figlia('nipote', 40, { padreId: 'a', parentId: 'a', taskCorto: 'Nipote in diretta' });
   await manda({ version: 1, sessionId: RADICE, parentId: 'a', childId: 'nipote', reason: 'created', agent: nipote });
@@ -458,6 +461,9 @@ test('DELEGHE-DIAGRAMMA-22 — ciò che il server sa di più nuovo sostituisce l
      Nel diagramma nuovo lo riporta la rilettura (il battito): lo stato in diretta non resta attaccato alla scheda. */
   const figli = [figlia('a', 10)];
   const { grafo } = await apri(page, figli);
+  /* Coda 04/11/2026 (regola 6, come la 21): l'evento mandato prima della prima lettura aspetta la rilettura dopo e sotto carico sfora i 2 s
+     (giro 9 della coda e riprova da sola a macchina carica: 1 rossa su 3, «element(s) not found»). Si aspetta il primo disegno. */
+  await expect(grafo.locator('[data-sessione]')).toHaveCount(1);
   const nuova = figlia('z', 12);
   figli.push(nuova);
   await page.evaluate(([radice, agente]) => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ type: 'CUSTOM', name: 'talos.agenti', _sequenza: 60001, value: { version: 1, sessionId: radice, parentId: radice, childId: agente.sessionId, agent: agente } }, r.realSessionState.generation); }, [RADICE, nuova]);

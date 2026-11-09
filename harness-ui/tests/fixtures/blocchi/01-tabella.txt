@@ -1,0 +1,8 @@
+root = Tabella("vendite", "Vendite per mese", [
+  {id: "mese", titolo: "Mese", tipo: "testo"},
+  {id: "euro", titolo: "Euro", tipo: "soldi"}
+], [
+  ["Gennaio", 1200],
+  ["Febbraio", 980.5],
+  ["Marzo"]
+], true)

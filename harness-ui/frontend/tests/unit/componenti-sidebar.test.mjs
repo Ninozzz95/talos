@@ -13,7 +13,7 @@ test('WorkspaceFooter: cartella, tema e fornitore dai dati del monolite — e ni
   assert.equal(fornitoreDelModello('local:qwen3-8b'), 'locale');
   assert.equal(fornitoreDelModello('google/gemini-3.7-flash'), 'google');
   assert.equal(fornitoreDelModello('claude-opus-5'), null);
-  assert.deepEqual(testiPiede({ cartella: null, tema: 'calm', modello: 'local:x' }), { titolo: 'Workspace locale', sotto: 'Tema Calm · locale' });
+  assert.deepEqual(testiPiede({ cartella: null, tema: 'calm', modello: 'local:x' }), { titolo: 'Spazio di lavoro locale', sotto: 'Tema Calm · locale' });
   assert.deepEqual(testiPiede({ cartella: 'D:\\lavoro\\talos', tema: 'forge', modello: 'claude-opus-5' }), { titolo: 'talos', sotto: 'Tema Forge' });
   assert.equal(testiPiede({ cartella: null, nomeAnteprima: 'nuovo-progetto', tema: 'ignoto' }).titolo, 'nuovo-progetto');
   /*

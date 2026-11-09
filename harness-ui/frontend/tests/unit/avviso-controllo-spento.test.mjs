@@ -73,7 +73,7 @@ test('CSP-UI-03 il DOM: la riga sorella della finestra allargata, «Details» ap
   assert.equal(dettagli.hidden, false);
   assert.equal(button.textContent, 'Hide');
   assert.match(dettagli.children[0].testo, /^This installation has no TypeScript compiler\./u);
-  assert.equal(dettagli.querySelector('summary').textContent, 'Server text');
+  assert.equal(dettagli.querySelector('summary').textContent, 'Technical details'); // blocco 26: era «Server text»
   assert.equal(dettagli.querySelector('pre').textContent, PERCHE);
   button.click();
   assert.equal(dettagli.hidden, true);

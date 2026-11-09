@@ -495,3 +495,50 @@ test('R4-ASK-RECEIPT-ALTROVE: con la testata «da un’altra finestra» la ricev
     assert.ok(!tutto.some((t) => t.includes(mai)), 'mai «' + mai + '» sotto una risposta data altrove');
   }
 });
+
+/*
+ * D29 del Tester (02/11/2026): un allegato messo mentre il modello aspetta una domanda resta nel campo, e la risposta parte senza che
+ *   nessuno lo dica. La risposta è l'esito di un attrezzo e non porta file, come in Hermes: la carta lo dice prima, il file resta.
+ */
+test('D29-01: con un file nel campo la carta dice che non parte con la risposta, e si aggiorna quando il file cambia', async () => {
+  const { impostaLingua } = await import('../../src/components/lingua.js');
+  impostaLingua('en');
+  try {
+    const view = fixture();
+    let quanti = 0;
+    const dock = mountUserQuestionDock({ root: view.root, composer: view.composer, question, onSubmit: async () => {}, allegatiInAttesa: () => quanti });
+    const nota = () => view.all('p').find((node) => node.className === 'talos-question-card__notice');
+    assert.equal(nota().hidden, true, 'senza file niente avviso');
+    quanti = 1;
+    dock.aggiornaAllegati();
+    assert.equal(nota().hidden, false);
+    assert.equal(nota().textContent, 'The attached file does not go with this answer. It stays in the message box and goes with your next message.');
+    quanti = 3;
+    dock.aggiornaAllegati();
+    assert.equal(nota().textContent, 'The 3 attached files do not go with this answer. They stay in the message box and go with your next message.');
+    dock.segnalaRipresa();
+    assert.match(nota().textContent, /^The server restarted: .+ The 3 attached files do not go/u);
+    quanti = 0;
+    dock.aggiornaAllegati();
+    assert.doesNotMatch(nota().textContent, /attached/u);
+  } finally { impostaLingua('it'); }
+});
+
+test('D29-02: in italiano, e al contrario una carta già chiusa non torna a dirlo', async () => {
+  const view = fixture();
+  const dock = mountUserQuestionDock({ root: view.root, composer: view.composer, question, onSubmit: async () => {}, allegatiInAttesa: () => 1 });
+  const nota = () => view.all('p').find((node) => /talos-question-card__notice/u.test(node.className));
+  assert.equal(nota().textContent, 'Il file allegato non parte con questa risposta. Resta nel campo del messaggio e parte col tuo prossimo messaggio.');
+  dock.render({ stage: 'resolved', status: 'answered', esito: { answers: {} } });
+  const chiusa = nota().textContent;
+  dock.aggiornaAllegati();
+  assert.equal(nota().textContent, chiusa);
+  assert.doesNotMatch(chiusa, /file allegato/u);
+});
+
+test('D29-03: al contrario, una carta montata senza il lettore degli allegati (i client vecchi, le prove) resta com era', () => {
+  const view = fixture();
+  const dock = mountUserQuestionDock({ root: view.root, composer: view.composer, question, onSubmit: async () => {} });
+  dock.aggiornaAllegati();
+  assert.equal(view.all('p').find((node) => node.className === 'talos-question-card__notice').hidden, true);
+});

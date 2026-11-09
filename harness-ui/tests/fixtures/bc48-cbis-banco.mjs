@@ -152,7 +152,7 @@ export async function eseguiBanco({ ordine = 'C', ricostruisci = false, osservaW
         return esito;
       },
     });
-    serverApp = createServer(createHttpApp({ staticHandler: (_req, res) => { res.writeHead(404); res.end(); }, sessionRegistry: registro }));
+    serverApp = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: (_req, res) => { res.writeHead(404); res.end(); }, sessionRegistry: registro }));
     const app = await ascolta(serverApp);
     const post = async (path, body) => {
       const res = await fetch(app + '/api/v1/sessions/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });

@@ -6,7 +6,7 @@ import { AREE } from '../frontend/src/i18n/testi/index.js';
 import { createHttpApp } from '../src/http-app.mjs';
 
 async function listen(t, capacitaMacchinaFn, extra = {}) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, capacitaMacchinaFn, ...extra }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, capacitaMacchinaFn, ...extra }));
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;
@@ -97,7 +97,7 @@ test('HTTP-LOCAL-SESSION-01 inoltra provider/runtime/model e consenso senza pass
   const response = await fetch(`${base}/api/v1/sessions`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ taskId: 'task-vero', provider: 'local', runtimeId: 'ollama', modelId: 'qwen3:8b', fallbackConsent: true }) });
   assert.equal(response.status, 200);
   assert.equal(request.taskId, 'task-vero');
-  assert.deepEqual(request.options, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null, provider: 'local', runtimeId: 'ollama', modelId: 'qwen3:8b', fallbackConsent: true });
+  assert.deepEqual(request.options, { modelloScelto: null, modelloPlannerScelto: null, reasoningScelto: null, fasciaVeloceScelta: false, mobile: false, permessiScelto: null, permessiPerAttrezzoScelto: null, modalitaOperativaScelta: null, provider: 'local', runtimeId: 'ollama', modelId: 'qwen3:8b', fallbackConsent: true });
 });
 
 test('MODEL-LAB-HTTP-MODEL-ACTIONS-01 espone rinomina, copia percorso relativo ed eliminazione', async (t) => {

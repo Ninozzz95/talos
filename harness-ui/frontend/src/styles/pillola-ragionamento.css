@@ -13,3 +13,23 @@
 .talos-pillola-ragionamento__nota{max-width:340px}
 .talos-pillola-ragionamento__mostra{align-items:center; justify-content:space-between; margin-top:2px; padding-top:10px; border-top:1px solid var(--talos-border-subtle); border-radius:0 0 9px 9px}
 .talos-pillola-ragionamento__mostra .talos-switch{flex:none; pointer-events:none}
+/*
+ * FE-047 (owner 31/10/2026) — la riga «Modalità veloce», sotto «Mostra ragionamento», copiata dal bozzetto approvato: niente secondo filo
+ * fra le due righe, la nota del costo attaccata alla sua.
+ */
+.talos-pillola-ragionamento__mostra + .talos-pillola-ragionamento__mostra{margin-top:0; border-top:0; padding-top:6px}
+.talos-pillola-ragionamento__nota--veloce{margin:0; padding:0 10px 8px; border-top:0}
+/* senza pillola: la stessa riga nel riquadro «Modello», sotto l'interruttore */
+.talos-modalita-veloce-riquadro__nota{margin:0; padding:6px 12px 10px; border-top:0}
+/*
+ * Il segno sul chip (strada A dell'owner, 01/11/2026, `bozzetto-fulmine-logo`): dopo il nome, 13 px, colore d'accento, pieno. Il logo resta.
+ * Il nome cede, il fulmine mai: `flex:none` qui e, solo da accesa, il tetto minimo del nome scende da 6ch a 2ch.
+ */
+.talos-chip__veloce{display:inline-flex; flex:none; align-items:center; color:var(--talos-accent)}
+.talos-chip__veloce[hidden]{display:none}
+.talos-composer__bar .talos-badge--lg > .talos-chip__veloce{overflow:visible}
+.talos-chip__veloce .i{width:13px; height:13px; flex:none; fill:currentColor}
+.talos-composer__bar [data-open-sheet="model"]:has(> .talos-chip__veloce:not([hidden])) .talos-chip__label{min-width:2ch; flex:0 1 auto}
+/* Frontend, 01/11/2026: lo spazio del fulmine lo paga il solo nome del modello. Misurato a 1920 con la barra a 738 px: i 7,3 px che mancavano si
+   dividevano fra tre pillole (2,53 modello, 1,67 ragionamento, 3,11 permesso) e il taglio del permesso faceva salire la scala fino allo scudo. */
+.talos-composer__bar:has([data-open-sheet="model"] > .talos-chip__veloce:not([hidden])) > :is(#pillRagionamento, [data-open-sheet="permissions"], #pillTerminale){flex-shrink:0}

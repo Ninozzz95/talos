@@ -7,7 +7,7 @@ import { createProviderCredentialStore } from '../src/provider-credential-store.
 import { createOpenAiCompatibleRuntime } from '../src/openai-compatible-runtime.mjs';
 
 async function listen(t, providerStore, extra = {}) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, providerStore, ...extra }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore, ...extra }));
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;
@@ -141,8 +141,21 @@ test('PROVIDER-HTTP-07 (P-C, verso contrario) LM Studio spento NON diventa «zer
   const store = createProviderCredentialStore({ env: {}, keyring: { get: () => null, set() {}, remove() {} } });
   const base = await listen(t, store, { localRuntimes: { lmstudio: { listModels: () => runtime.listModels('lmstudio') } } });
   const risposta = await request(base, '/api/v1/providers/lmstudio/models');
-  assert.equal(risposta.status, 503);
-  assert.equal((await risposta.json()).error.code, 'RUNTIME_UNREACHABLE');
+  /* Decisione 63 dell'owner (03/11/2026): spento è un dato, non un 503 in console a ogni apertura del selettore. «Non acceso» e «nessun modello»
+     restano due fatti diversi: lo dice `raggiungibile: false`, e il selettore lo disegna come prima disegnava l'errore. */
+  assert.equal(risposta.status, 200);
+  assert.deepEqual((await risposta.json()).data, { provider: 'lmstudio', modelli: [], raggiungibile: false, motivo: 'non-acceso' });
+});
+
+test('PROVIDER-HTTP-07b (decisione 63, AL CONTRARIO) un altro guasto del motore locale resta un errore', async (t) => {
+  const store = createProviderCredentialStore({ env: {}, keyring: { get: () => null, set() {}, remove() {} } });
+  const rotto = { listModels: async () => { throw Object.assign(new Error('bad answer'), { code: 'RUNTIME_INVALID' }); } };
+  const base = await listen(t, store, { localRuntimes: { lmstudio: rotto } });
+  const risposta = await request(base, '/api/v1/providers/lmstudio/models');
+  assert.notEqual(risposta.status, 200, 'resta un errore');
+  const corpo = await risposta.json();
+  assert.equal(corpo.ok, false);
+  assert.equal(corpo.data?.raggiungibile, undefined, 'mai detto «non acceso» per un guasto diverso');
 });
 
 test('PROVIDER-HTTP-08 (P-C, verso contrario) senza runtime locale configurato si dichiara, non si finge', async (t) => {

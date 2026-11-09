@@ -36,7 +36,7 @@ async function banco(t) {
     programmaTrovatoFn: async () => true,
     eseguiComandoDellaProvaFn: async (riga, dove, o) => { o.onPezzo({ flusso: 'errori', testo: '2 failing\n' }); return { codice: 1, enforcement: 'none' }; },
   });
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: b.registro }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: b.registro }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));

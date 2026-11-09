@@ -33,7 +33,9 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { createReadStream, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync, promises as fsp } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 
-import { MAX_CHAT_FILE_BYTES, checkedName, saveChatFile } from '../chat-file-upload.mjs';
+import { allegatiDaEventi } from '../allegati-dati.mjs'; // decisione 47
+import { realeScrittoDallaChat, scrittureConfermateDaEventi } from '../file-scritti-dalla-chat.mjs'; // decisione 215
+import { MAX_DEVICE_FILE_BYTES, checkedName, saveChatFile } from '../chat-file-upload.mjs';
 import { bloccataDa } from '../path-policy.mjs';
 import { CHAT_IMAGE_MAX_BYTES } from '../chat-image-attachments.mjs';
 
@@ -53,8 +55,6 @@ const ID_TRASFERIMENTO = /^[A-Za-z0-9_-]{22}$/u;
 const ID_FILE = /^[A-Za-z0-9_-]{32}$/u;
 const SHA256 = /^[0-9a-f]{64}$/iu;
 const BASE64URL = /^[A-Za-z0-9_-]*$/u;
-/* gli attrezzi che scrivono un file, coi nomi dell'argomento del percorso — la stessa lettura di `proveDelGiro` (obiettivo/giudice.mjs) */
-const ATTREZZI_DI_SCRITTURA = new Set(['scrivi', 'file_edit']);
 
 function errore(code, message, extra = {}) {
   return Object.assign(new Error(message), { code }, extra);
@@ -62,7 +62,7 @@ function errore(code, message, extra = {}) {
 const sconosciuto = () => errore('TRANSFER_UNKNOWN', 'This transfer is not known on this computer.', { stato: 404 });
 const scaduto = () => errore('TRANSFER_EXPIRED', 'This transfer expired: start it again.', { stato: 410 });
 const sparito = () => errore('FILE_GONE', 'This file changed or is no longer in this conversation.', { stato: 410 });
-const troppoGrande = () => errore('FILE_TOO_LARGE', `A file can be at most ${MAX_CHAT_FILE_BYTES} bytes.`, { stato: 413, reason: 'file-too-large', params: { massimo: MAX_CHAT_FILE_BYTES } });
+const troppoGrande = () => errore('FILE_TOO_LARGE', `A file can be at most ${MAX_DEVICE_FILE_BYTES} bytes.`, { stato: 413, reason: 'file-too-large', params: { massimo: MAX_DEVICE_FILE_BYTES } });
 const malformato = (message) => errore('BAD_MESSAGE', message, { stato: 400 });
 
 /** Il tipo di un file dai suoi primi byte, mai dal nome. `immagine` solo per i quattro formati che una carta mostra in linea. */
@@ -91,7 +91,11 @@ const dentro = (figlio, padre) => {
   return r === '' ? false : r !== '..' && !r.startsWith(`..${sep}`) && !isAbsolute(r);
 };
 /** REV6-F2/F3 (25/10/2026): il percorso dentro la cartella della conversazione, con «/», per la finestra (scheda, «Download», menu). */
-const relativoDi = (reale, base) => relative(base, reale).split(sep).join('/');
+export const relativoDi = (reale, base) => {
+  const r = relative(base, reale);
+  /* decisione 215: un file scritto dalla chat su un ALTRO disco darebbe il percorso assoluto del PC: al telefono va solo il nome */
+  return isAbsolute(r) ? basename(reale) : r.split(sep).join('/');
+};
 const realeOppureNull = (p) => { try { return realpathSync.native(p); } catch { return null; } };
 
 /**
@@ -99,11 +103,25 @@ const realeOppureNull = (p) => { try { return realpathSync.native(p); } catch { 
  * `eventiDellaSessione(sessionId) → eventi[]`: per i file allegati e scritti dal modello. `salva`: `saveChatFile` (le prove non lo
  * sostituiscono: è l'unico scrittore). `clock`: l'orologio, per le scadenze.
  */
+/* una voce si può eliminare dalla finestra o dal modello, strade che il ponte non vede: una copia per un dispositivo non resta oltre questo tempo */
+const VITA_COPIA_MS = 30 * 60_000;
+/* D-34 (revisione del blocco 14): `checkedName` rifiutava nomi veri (`Nota finale.`, `CON`, una domanda «Con»): il PC li scarica, il dispositivo riceveva QUERY_INVALID. Il nome sul disco
+   lo sceglie il PC, sempre lo stesso in una cartella a caso: nessun nome riservato, nessun tetto. Quello da mostrare resta il suo, senza caratteri di controllo, direzione del testo e barre */
+const NOME_DELLA_COPIA = 'copia';
+const nomeDaMostrare = (nome) => {
+  const mostrato = typeof nome === 'string' ? nome.replace(/[\p{Cc}\p{Zl}\p{Zp}‪-‮⁦-⁩]/gu, '').replace(/[\\/]/gu, ' ').trim() : '';
+  if (!mostrato) throw malformato('What is offered needs a name to show.');
+  return mostrato;
+};
+
 export function creaFileDeiDispositivi({
   cartella, sessionRegistry, eventiDellaSessione = () => [], salva = saveChatFile, clock = () => Date.now(), casuale = (n) => randomBytes(n),
   /* D-5 del Mobile (25/10/2026, contratto Parte 2 «Revision 3»): `({nome, dataUrl}) → {id, mimeType, byte}`, l'archivio delle
      immagini della chat (`chat-image-attachments.mjs`), lo stesso della finestra; senza, le immagini dal dispositivo non ci sono */
   salvaImmagine = null,
+  /* Decisioni 43 e 47: l'archivio degli allegati nei dati di TALOS, lo stesso della finestra. Il telefono nuovo lo dichiara al `begin` (`datiTalos`) */
+  archivioAllegati = null,
+  vitaCopiaMs = VITA_COPIA_MS,
   /* A10-4: la rinomina del salvataggio atomico, iniettabile solo per provare i suoi guasti */
   rinomina = renameSync,
   /* Revisione blocco 11 (A-R2): `async (dispositivoId) => string[]`, le cartelle bloccate per quel dispositivo. Un file dentro una di
@@ -118,7 +136,13 @@ export function creaFileDeiDispositivi({
     try { bloccati = await bloccateDi(dispositivoId); } catch { return { radice: null, illeggibile: true }; }
     return Array.isArray(bloccati) && bloccati.length ? bloccataDa(reale, { bloccati }) : null;
   }
+  /* D-33 (owner 27/10: cartella revocata = bloccata, il nega vince): una copia vive fra i dati di TALOS, quindi il suo percorso non dice niente: conta la cartella della sessione */
+  const percorsoDaControllare = (riga) => (riga.offerta?.dati === true ? riga.offerta.cartellaSessione : riga.reale);
   const dirTrasferimenti = join(cartella, 'trasferimenti');
+  /* 31/10/2026 (forma col Mobile): i byte che non stanno nella cartella della sessione (una voce della Libreria, che con PO-26 vive fra i dati; un'esportazione, che non è un file)
+     si offrono da una copia qui: mai un percorso del PC. La copia muore con l'offerta: scarico finito, voce sostituita o eliminata, conversazione o
+     dispositivo che se ne vanno, riavvio. E non è un file mandato (revisione del Mobile, 31/10): non compare in `file.list`, nelle offerte in attesa, né sulla carta del PC */
+  const dirDatiOfferti = join(cartella, 'dati-offerti');
   const fileOfferte = join(cartella, 'offerte.json');
   const fileCaricati = join(cartella, 'caricati.json');
   const fileSegreto = join(cartella, 'segreto');
@@ -176,6 +200,12 @@ export function creaFileDeiDispositivi({
   const salvaOfferte = () => {
     try { scriviAtomicoSync(fileOfferte, JSON.stringify({ v: 1, offerte: offerte.slice(-OFFERTE_RICORDATE) })); } catch { /* alla prossima */ }
   };
+  const togliCopia = (o) => {
+    if (o?.dati !== true) return;
+    try { rmSync(dirname(o.percorso), { recursive: true, force: true }); } catch { /* occupata: la toglie il prossimo avvio */ }
+  };
+  if (offerte.some((o) => o.dati === true)) { offerte = offerte.filter((o) => o.dati !== true); salvaOfferte(); }
+  try { rmSync(dirDatiOfferti, { recursive: true, force: true }); } catch { /* occupata: al prossimo avvio */ }
   const salvaCaricati = () => {
     try { scriviAtomicoSync(fileCaricati, JSON.stringify({ v: 1, caricati: caricati.slice(-CARICATI_RICORDATI) })); } catch { /* alla prossima */ }
   };
@@ -189,6 +219,7 @@ export function creaFileDeiDispositivi({
     else if (viste.has(sessionId)) {
       viste.delete(sessionId);
       const prima = offerte.length + caricati.length;
+      for (const o of offerte) if (o.sessionId === sessionId) togliCopia(o);
       offerte = offerte.filter((o) => o.sessionId !== sessionId);
       caricati = caricati.filter((c) => c.sessionId !== sessionId);
       if (offerte.length + caricati.length !== prima) { try { salvaOfferte(); salvaCaricati(); } catch { /* si riprova alla prossima scrittura */ } }
@@ -224,6 +255,7 @@ export function creaFileDeiDispositivi({
     ...(o.cambiatoDopo ? { cambiatoDopo: true } : {}),
   });
   const avvisaOfferta = (o) => {
+    if (o.dati === true) return;
     for (const fn of [...ascoltatoriOfferte]) { try { fn(vistaOfferta(o)); } catch { /* niente */ } }
   };
 
@@ -349,8 +381,8 @@ export function creaFileDeiDispositivi({
   /* ---------- i file di una conversazione, per un dispositivo ---------- */
   /** I percorsi che la conversazione nomina: allegati delle bolle (solo sotto `allegati/`) e scritture riuscite del modello. */
   const daiEventi = (eventi) => {
-    const allegati = []; const scritti = [];
-    const chiamate = new Map();
+    const allegati = [];
+    const chiamate = new Set(); // le chiamate aperte: i loro eventi non portano allegati delle bolle
     let giro = 0;
     const cercaAllegati = (v, profondita) => {
       if (!v || typeof v !== 'object' || profondita > 5) return;
@@ -360,20 +392,20 @@ export function creaFileDeiDispositivi({
     };
     for (const e of Array.isArray(eventi) ? eventi : []) {
       if (e?.type === 'RunStarted') giro += 1;
-      if (e?.type === 'ToolCallStart' && typeof e.toolCallId === 'string') chiamate.set(e.toolCallId, { nome: String(e.toolCallName ?? ''), argomenti: '' });
-      else if (e?.type === 'ToolCallArgs' && chiamate.has(e.toolCallId)) { const c = chiamate.get(e.toolCallId); if (c.argomenti.length < 1_000_000) c.argomenti += String(e.delta ?? ''); }
-      else if (e?.type === 'ToolCallResult' && chiamate.has(e.toolCallId)) {
-        const c = chiamate.get(e.toolCallId);
-        chiamate.delete(e.toolCallId);
-        if (ATTREZZI_DI_SCRITTURA.has(c.nome) && e.isError !== true) {
-          let p = null;
-          try { const a = JSON.parse(c.argomenti); p = a?.percorso ?? a?.path ?? a?.file_path ?? null; } catch { /* argomenti illeggibili: il file non si nomina */ }
-          if (typeof p === 'string' && p) scritti.push({ percorso: p, giro });
-        }
-      } else cercaAllegati(e, 0);
+      if (e?.type === 'ToolCallStart' && typeof e.toolCallId === 'string') chiamate.add(e.toolCallId);
+      else if (e?.type === 'ToolCallArgs' && chiamate.has(e.toolCallId)) { /* argomenti: le scritture si contano sotto */ }
+      else if (e?.type === 'ToolCallResult' && chiamate.has(e.toolCallId)) chiamate.delete(e.toolCallId);
+      else cercaAllegati(e, 0);
     }
-    return { allegati, scritti };
+    /* Un `file_edit` fallito («NOT FOUND», `isError` falso) metteva il file fra quelli del modello, e il telefono lo scaricava.
+       Ora entra solo lo `StateDelta` `/file/<p>` che il nucleo manda dopo aver scritto, arrivato dentro la chiamata di `scrivi` o
+       `file_edit`: il percorso è quello scritto davvero, con qualunque alias. ⚠ RESTRINGE l'elenco: ciò che non è confermato esce. */
+    return { allegati, scritti: scrittureConfermateDaEventi(eventi) };
   };
+
+  /** Decisione 215 (owner 04/11/2026): `reale` (già passato da realpath) è uno dei file che questa chat ha creato o scritto. La lista
+      viene dagli eventi registrati, mai dal percorso chiesto; i percorsi relativi si risolvono contro la stessa `base` delle righe. */
+  const scrittoDallaChat = (sessionId, base, reale) => realeScrittoDallaChat({ cartella: base, percorso: reale, eventi: eventiDellaSessione(sessionId) }) !== null;
 
   /** Le righe vere (col percorso reale, che NON esce di qui) dei file di `sessionId` per `dispositivoId`. */
   const righeInterne = async (dispositivoId, sessionId) => {
@@ -381,18 +413,27 @@ export function creaFileDeiDispositivi({
     const base = await cartellaDellaSessione(sessionId);
     if (!base) return [];
     const allegatiDir = join(base, 'allegati');
+    /* D-35: `reale` passa da `realpathSync.native`, e il confronto vuole la stessa forma: dietro una giunzione o col nome corto di Windows la copia sembrava fuori */
+    const copieDir = realeOppureNull(dirDatiOfferti) ?? dirDatiOfferti;
     const candidati = [];
     for (const o of offerte) if (o.dispositivoId === dispositivoId && o.sessionId === sessionId && o.stato !== 'cambiato') candidati.push({ percorso: o.percorso, origine: 'inviato', offerta: o });
     for (const c of caricati) if (c.sessionId === sessionId) candidati.push({ percorso: c.percorso, origine: 'allegato', caricato: c });
     const { allegati, scritti } = daiEventi(eventiDellaSessione(sessionId));
     for (const a of allegati) candidati.push({ percorso: a.percorso, origine: 'allegato', giro: a.giro, soloAllegati: true });
     for (const s of scritti) candidati.push({ percorso: s.percorso, origine: 'modello', giro: s.giro });
+    /* Decisione 47: un allegato nei dati di TALOS sta fuori dalla cartella: il suo percorso lo dice l'archivio, per il legame scritto nel giornale */
+    for (const a of allegatiDaEventi(eventiDellaSessione(sessionId))) {
+      const dove = archivioAllegati?.percorsoDi(a.allegatoId);
+      if (dove) candidati.push({ percorso: dove, origine: 'allegato', allegatoId: a.allegatoId });
+    }
     const righe = []; const perChiave = new Map();
     let offerteCambiate = false;
     for (const c of candidati) {
       if (righe.length >= RIGHE_MASSIME) break;
       const reale = realeOppureNull(isAbsolute(c.percorso) ? c.percorso : resolve(base, c.percorso));
-      const valida = reale && dentro(reale, c.soloAllegati ? allegatiDir : base);
+      const valida = reale && (c.allegatoId ? chiave(reale) === chiave(c.percorso) : dentro(reale, c.offerta?.dati === true ? copieDir : c.soloAllegati ? allegatiDir : base)
+        /* decisione 215: un file MANDATO dal PC che sta fuori dalla cartella resta valido solo se questa chat l'ha scritto */
+        || (c.offerta && c.offerta.dati !== true && scrittoDallaChat(sessionId, base, reale)));
       let st = null;
       if (valida) { try { st = statSync(reale); } catch { st = null; } }
       const versione = st?.isFile() ? versioneDi(reale, st) : null;
@@ -410,7 +451,7 @@ export function creaFileDeiDispositivi({
       if (perChiave.has(k)) { const r = perChiave.get(k); if (r.giro === undefined && c.giro !== undefined) r.giro = c.giro; continue; }
       const sha256 = c.offerta?.sha256 ?? (c.caricato && c.caricato.versione === versione ? c.caricato.sha256 : null)
         ?? caricati.find((x) => x.sessionId === sessionId && chiave(x.percorso) === k && x.versione === versione)?.sha256 ?? null;
-      const riga = { reale, st, fileId: idDelFile(sessionId, reale), versione, origine: c.origine, ...(c.giro !== undefined ? { giro: c.giro } : {}), ...(sha256 ? { sha256 } : {}), ...(c.offerta ? { offerta: c.offerta } : {}) };
+      const riga = { reale, st, fileId: idDelFile(sessionId, reale), versione, origine: c.origine, ...(c.allegatoId ? { allegatoId: c.allegatoId } : {}), ...(c.giro !== undefined ? { giro: c.giro } : {}), ...(sha256 ? { sha256 } : {}), ...(c.offerta ? { offerta: c.offerta } : {}) };
       perChiave.set(k, riga);
       righe.push(riga);
     }
@@ -419,6 +460,12 @@ export function creaFileDeiDispositivi({
   };
   /* l'ultima lettura dell'elenco per (dispositivo, sessione): `file.read` non rilegge tutta la conversazione a ogni pezzo */
   const ricordoRighe = new Map();
+  const ritiraCopia = (o) => {
+    togliCopia(o);
+    offerte = offerte.filter((x) => x !== o);
+    ricordoRighe.delete(`${o.dispositivoId}\0${o.sessionId}`);
+    salvaOfferte();
+  };
   const rigaPerLettura = async (dispositivoId, sessionId, fileId) => {
     const k = `${dispositivoId}\0${sessionId}`;
     let righe = ricordoRighe.get(k)?.righe;
@@ -434,12 +481,16 @@ export function creaFileDeiDispositivi({
     PEZZO_MASSIMO,
 
     /** P2.1 `file.upload.begin`: un trasferimento nuovo, o la ripresa di uno vivo (`riprendi`). */
-    async inizia({ dispositivoId, sessionId, nome, dimensione, sha256, riprendi, immagine = false } = {}) {
+    async inizia({ dispositivoId, sessionId, nome, dimensione, sha256, riprendi, immagine = false, datiTalos = false } = {}) {
       if (typeof dispositivoId !== 'string' || !dispositivoId) throw malformato('A device is needed.');
       /* D-5/D-6 (25/10/2026, «Revision 3»): un'IMMAGINE per il modello, come quella della finestra — senza conversazione (si può
          allegare anche al primo messaggio), mai in `allegati/`, al più 5 MiB, il tipo deciso sui byte alla fine */
       const perImmagine = immagine === true;
       if (perImmagine && sessionId !== undefined && sessionId !== null) throw malformato('An image for the model carries no session.');
+      /* Decisione 47: il telefono nuovo lo dice con un segnale esplicito, e non manda la sessione: il file va nei dati di TALOS, il legame nasce dall'invio. Quello vecchio manda la sessione, e scrive nel progetto come prima. */
+      const perDati = datiTalos === true;
+      if (perDati && sessionId !== undefined && sessionId !== null) throw malformato('A file for the TALOS data carries no session.');
+      const senzaSessione = perImmagine || perDati;
       if (riprendi !== undefined && riprendi !== null) {
         /* ⛔ Revisione a blocco 9 (B9-1): la risposta a `end` persa per strada (o il PC riavviato dopo) ⇒ il dispositivo riprende un
            trasferimento che qui è GIÀ finito. Prima: TRANSFER_UNKNOWN, e il dispositivo ricaricava tutto (un secondo «nome-2.txt» in
@@ -448,11 +499,11 @@ export function creaFileDeiDispositivi({
         const finito = typeof riprendi === 'string' ? completati.get(chiaveT(dispositivoId, riprendi)) : null;
         if (finito && clock() - finito.at < VITA_TRASFERIMENTO_MS) {
           const dimensione = finito.dimensione ?? finito.risultato?.dimensione ?? finito.risultato?.byte;
-          if ((finito.sessionId ?? null) !== (sessionId ?? null) || Boolean(finito.immagine) !== perImmagine || !Number.isSafeInteger(dimensione)) throw sconosciuto();
+          if ((finito.sessionId ?? null) !== (sessionId ?? null) || Boolean(finito.immagine) !== perImmagine || Boolean(finito.datiTalos) !== perDati || !Number.isSafeInteger(dimensione)) throw sconosciuto();
           return { trasferimentoId: riprendi, pezzo: PEZZO_MASSIMO, ricevuti: dimensione };
         }
         const meta = await cerca(dispositivoId, riprendi);
-        if ((meta.sessionId ?? null) !== (sessionId ?? null) || Boolean(meta.immagine) !== perImmagine) throw sconosciuto();
+        if ((meta.sessionId ?? null) !== (sessionId ?? null) || Boolean(meta.immagine) !== perImmagine || Boolean(meta.datiTalos) !== perDati) throw sconosciuto();
         /* ⛔ A10-1 (revisione a blocco 10): una ripresa è attività. Senza, dopo una pausa di oltre 10 minuti il tetto (B9-3) poteva
            liberare proprio il trasferimento appena ripreso, e il pezzo dopo diceva TRANSFER_EXPIRED */
         meta.attivoAlle = clock();
@@ -465,14 +516,19 @@ export function creaFileDeiDispositivi({
       /* il nome prima di tutto: un nome ostile non fa partire un trasferimento (stesso controllo di `saveChatFile`, una volta sola) */
       const nomeValido = checkedName(nome);
       if (!Number.isSafeInteger(dimensione) || dimensione < 0) throw malformato('The size must be a whole number of bytes.');
-      if (dimensione > MAX_CHAT_FILE_BYTES) throw troppoGrande();
+      if (dimensione > MAX_DEVICE_FILE_BYTES) throw troppoGrande();
       /* B8-7 (revisione a blocco 8): un'immagine vuota non è «troppo grande» */
       if (perImmagine && dimensione === 0) throw errore('BAD_MESSAGE', 'An image for the model cannot be empty.', { stato: 400, reason: 'image-empty' });
       if (perImmagine && dimensione > CHAT_IMAGE_MAX_BYTES) {
         throw errore('BAD_MESSAGE', 'An image for the model is at most 5 MiB.', { stato: 413, reason: 'image-too-large' });
       }
       if (typeof sha256 !== 'string' || !SHA256.test(sha256)) throw malformato('The sha256 must be 64 hexadecimal characters.');
-      if (!perImmagine && !esiste(sessionId)) throw errore('NOT_FOUND', 'Session not found.', { stato: 404 });
+      if (!senzaSessione && !esiste(sessionId)) throw errore('NOT_FOUND', 'Session not found.', { stato: 404 });
+      /* BD14: il no arriva prima che il file viaggi (ritocco 3 della CLI, «prima di scrivere») */
+      if (perDati) {
+        if (!archivioAllegati?.disponibile) throw errore('ATTACHMENTS_UNAVAILABLE', 'The TALOS data folder is not available, so the file was not saved.', { stato: 503, reason: 'attachments-no-data-folder' });
+        await archivioAllegati.controllaSpazio({ byte: dimensione, dispositivo: dispositivoId });
+      }
       /* ⛔ A10-2 (revisione a blocco 10): fra il conto dei posti e `aperti.set` ci sono degli `await`, e tre `begin` in parallelo
          contavano tutti 7 e arrivavano a 10 aperti. I `begin` NUOVI dello stesso dispositivo passano uno alla volta (una fila sua,
          diversa da quella dei singoli trasferimenti); fra dispositivi diversi niente attesa. */
@@ -491,7 +547,7 @@ export function creaFileDeiDispositivi({
           await seppellisci(fermo);
         }
         const ora = clock();
-        const meta = { trasferimentoId: casuale(16).toString('base64url'), dispositivoId, sessionId: perImmagine ? null : sessionId, nome: nomeValido, dimensione, sha256: sha256.toLowerCase(), creatoAlle: ora, attivoAlle: ora, ricevuti: 0, ...(perImmagine ? { immagine: true } : {}) };
+        const meta = { trasferimentoId: casuale(16).toString('base64url'), dispositivoId, sessionId: senzaSessione ? null : sessionId, nome: nomeValido, dimensione, sha256: sha256.toLowerCase(), creatoAlle: ora, attivoAlle: ora, ricevuti: 0, ...(perImmagine ? { immagine: true } : {}), ...(perDati ? { datiTalos: true } : {}) };
         await fsp.mkdir(dirDi(dispositivoId), { recursive: true });
         await fsp.writeFile(file(meta, 'part'), Buffer.alloc(0), { flag: 'wx', mode: 0o600 });
         /* A10-4: senza il suo `.json` il `.part` non lo ritrova nessuno, nemmeno al riavvio: se la scheda non si salva, via anche lui */
@@ -580,6 +636,16 @@ export function creaFileDeiDispositivi({
           ricordaCompletato(k, { at: clock(), risultato, sessionId: null, immagine: true, dimensione: meta.dimensione });
           return risultato;
         }
+        if (meta.datiTalos === true) {
+          const tipoDati = tipoDaiByte(await testaDi(parziale));
+          let ricevuta;
+          try {
+            ricevuta = await archivioAllegati.salva({ nome: meta.nome, source: createReadStream(parziale), previsti: meta.dimensione, dispositivo: dispositivoId });
+          } finally { await butta(meta); } // BD14: anche se lo spazio finisce mentre il file viaggia, il parziale non resta
+          const risultato = { allegatoId: ricevuta.allegatoId, nome: ricevuta.nome, percorso: ricevuta.percorso, dimensione: ricevuta.bytes, mime: tipoDati.mime, immagine: tipoDati.immagine, sha256: meta.sha256 };
+          ricordaCompletato(k, { at: clock(), risultato, sessionId: null, immagine: false, datiTalos: true, dimensione: meta.dimensione });
+          return risultato;
+        }
         const base = await cartellaDellaSessione(meta.sessionId);
         if (!base) throw errore('NOT_FOUND', 'Session not found.', { stato: 404 });
         const tipo = tipoDaiByte(await testaDi(parziale));
@@ -605,19 +671,28 @@ export function creaFileDeiDispositivi({
     async elenco({ dispositivoId, sessionId } = {}) {
       const tutte = await righeInterne(dispositivoId, sessionId);
       const righe = [];
-      for (const r of tutte) if (!(await bloccataPerIlDispositivo(dispositivoId, r.reale))) righe.push(r); // A-R2
+      for (const r of tutte) if (!(await bloccataPerIlDispositivo(dispositivoId, percorsoDaControllare(r)))) righe.push(r); // A-R2
       ricordoRighe.set(`${dispositivoId}\0${sessionId}`, { righe });
       const items = [];
       for (const r of righe) {
+        if (r.offerta?.dati === true) continue; // leggibile, ma non è un file della conversazione
         let tipo = { mime: 'application/octet-stream', immagine: false };
         try { tipo = tipoDaiByte(await testaDi(r.reale)); } catch { /* illeggibile adesso: resta il tipo generico */ }
         items.push({ fileId: r.fileId, nome: basename(r.reale), dimensione: r.st.size, mime: tipo.mime, immagine: tipo.immagine, origine: r.origine, versione: r.versione,
           ...(r.giro !== undefined ? { giro: r.giro } : {}), ...(r.sha256 ? { sha256: r.sha256 } : {}),
           /* D-1 del Mobile (25/10/2026): una riga «inviato» porta l'id dell'offerta e l'ora dell'invio, perché il dispositivo metta la
              riga al suo posto nella conversazione (l'esito dell'attrezzo è testo per il modello, e il dispositivo non lo legge) */
-          ...(r.offerta ? { offertaId: r.offerta.offertaId, inviataAlle: r.offerta.at } : {}) });
+          ...(r.offerta ? { offertaId: r.offerta.offertaId, inviataAlle: r.offerta.at } : {}),
+          ...(r.allegatoId ? { allegatoId: r.allegatoId } : {}) }); // ritocco del Mobile: `anteprimaDalPc` cerca per riferimento, non per nome
       }
       return { items };
+    },
+
+    /** Se `fileId` è una copia per il dispositivo, che cosa copia e di quale cartella. Punti 8-11 del Mobile: la copia guarda il consenso e la voce a ogni lettura, e questo glielo dice. */
+    async copiaDelFile({ dispositivoId, sessionId, fileId } = {}) {
+      if (typeof fileId !== 'string' || !ID_FILE.test(fileId)) return null;
+      const o = (await rigaPerLettura(dispositivoId, sessionId, fileId).catch(() => null))?.offerta;
+      return o?.dati === true ? { chiave: o.chiaveDati, cartella: o.cartellaSessione } : null;
     },
 
     /** P2.2 `file.read`: al più 512 KiB da `da`; `FILE_GONE` se la versione non torna. Conta lo scarico delle offerte. */
@@ -628,14 +703,14 @@ export function creaFileDeiDispositivi({
       if (typeof fileId !== 'string' || !ID_FILE.test(fileId)) throw sparito();
       const riga = await rigaPerLettura(dispositivoId, sessionId, fileId);
       if (!riga || riga.versione !== versione) throw sparito();
-      if (await bloccataPerIlDispositivo(dispositivoId, riga.reale)) throw sparito(); // A-R2: per lui il file non c'è
+      if (await bloccataPerIlDispositivo(dispositivoId, percorsoDaControllare(riga))) throw sparito(); // A-R2: per lui il file non c'è
       const fh = await fsp.open(riga.reale, 'r').catch(() => { throw sparito(); });
       let letti; let st; let dati;
       try {
         /* il file APERTO deve essere quello elencato: stessa versione (percorso + dimensione + mtime + inode), o è stato sostituito */
         st = await fh.stat();
         if (versioneDi(riga.reale, st) !== versione) throw sparito();
-        if (st.size > MAX_CHAT_FILE_BYTES) throw troppoGrande();
+        if (st.size > MAX_DEVICE_FILE_BYTES) throw troppoGrande();
         if (da > st.size) throw malformato('`da` is past the end of the file.');
         const buf = Buffer.alloc(Math.min(quanti, st.size - da));
         letti = buf.length ? (await fh.read(buf, 0, buf.length, da)).bytesRead : 0;
@@ -653,6 +728,7 @@ export function creaFileDeiDispositivi({
           if (fine && (o.letti ?? 0) >= st.size) { o.stato = 'scaricato'; o.percentuale = 100; o.scaricatoAlle = clock(); }
           else { o.stato = 'in-scaricamento'; o.percentuale = percentuale; }
         }
+        if (o.dati === true && o.stato === 'scaricato') { ritiraCopia(o); return { dati, fine }; }
         if (o.stato !== prima) salvaOfferte();
         avvisaOfferta(o);
       }
@@ -676,13 +752,16 @@ export function creaFileDeiDispositivi({
       const richiesto = isAbsolute(percorso) ? resolve(percorso) : resolve(base, percorso);
       const reale = realeOppureNull(richiesto);
       /* il controllo del contenitore si fa sul nome chiesto E sul reale: `../fuori/x` che non esiste è «fuori», non «assente» */
-      if (!dentro(richiesto, base) || (reale && !dentro(reale, base))) throw Object.assign(sparito(), { motivo: 'fuori' });
+      /* decisione 215: fuori dalla cartella passa solo il file che questa chat ha scritto (realpath contro realpath) */
+      if ((!dentro(richiesto, base) || (reale && !dentro(reale, base))) && !(reale && scrittoDallaChat(sessionId, base, reale))) {
+        throw Object.assign(sparito(), { motivo: 'fuori' });
+      }
       if (!reale) throw Object.assign(sparito(), { motivo: 'assente' });
       let st;
       try { st = statSync(reale); } catch { throw Object.assign(sparito(), { motivo: 'assente' }); }
       if (st.isDirectory()) throw Object.assign(sparito(), { motivo: 'cartella' });
       if (!st.isFile()) throw Object.assign(sparito(), { motivo: 'assente' });
-      if (st.size > MAX_CHAT_FILE_BYTES) throw Object.assign(troppoGrande(), { dimensione: st.size, relativo: relativoDi(reale, base) });
+      if (st.size > MAX_DEVICE_FILE_BYTES) throw Object.assign(troppoGrande(), { dimensione: st.size, relativo: relativoDi(reale, base) });
       const bloccata = await bloccataPerIlDispositivo(dispositivoId, reale); // A-R2
       if (bloccata) throw Object.assign(sparito(), { motivo: 'bloccata', radice: bloccata.radice ?? null });
       return { percorso: reale, relativo: relativoDi(reale, base), nome: basename(reale), dimensione: st.size, versione: versioneDi(reale, st) };
@@ -694,11 +773,11 @@ export function creaFileDeiDispositivi({
       const base = await cartellaDellaSessione(sessionId);
       if (!base || typeof percorso !== 'string' || !percorso) throw sparito();
       const reale = realeOppureNull(isAbsolute(percorso) ? percorso : resolve(base, percorso));
-      if (!reale || !dentro(reale, base)) throw sparito();
+      if (!reale || (!dentro(reale, base) && !scrittoDallaChat(sessionId, base, reale))) throw sparito(); // decisione 215
       let st;
       try { st = statSync(reale); } catch { throw sparito(); }
       if (!st.isFile()) throw sparito();
-      if (st.size > MAX_CHAT_FILE_BYTES) throw troppoGrande();
+      if (st.size > MAX_DEVICE_FILE_BYTES) throw troppoGrande();
       const bloccata = await bloccataPerIlDispositivo(dispositivoId, reale); // A-R2: anche fra la carta e l'invio
       if (bloccata) throw Object.assign(sparito(), { motivo: 'bloccata', radice: bloccata.radice ?? null });
       /* R5.13 corsa 2: la carta ha mostrato QUESTA versione; se il file è cambiato dopo, non si manda quello che la persona non ha visto
@@ -718,10 +797,60 @@ export function creaFileDeiDispositivi({
       return { offertaId: o.offertaId, fileId, versione, nome: o.nome, relativo: o.relativo, dimensione: o.dimensione, sha256 };
     },
 
+    /**
+     * Offre dei byte che non stanno nella cartella della sessione (una voce della Libreria, un'esportazione). Rimandare lo stesso nome sostituisce la copia: un dispositivo
+     * che guarda dieci volte la stessa nota non lascia dieci file sul PC. La lettura resta `file.read`, con le sue regole.
+     */
+    async offriDati({ sessionId, dispositivoId, chiave: cheCosa, nome, bytes } = {}) {
+      if (typeof dispositivoId !== 'string' || !dispositivoId) throw malformato('A device is needed.');
+      if (typeof cheCosa !== 'string' || !cheCosa) throw malformato('What is offered must be named.');
+      if (!esiste(sessionId)) throw errore('NOT_FOUND', 'Session not found.', { stato: 404 });
+      const mostrato = nomeDaMostrare(nome);
+      if (!Buffer.isBuffer(bytes) && !(bytes instanceof Uint8Array)) throw malformato('The bytes are needed.');
+      if (bytes.length > MAX_DEVICE_FILE_BYTES) throw troppoGrande();
+      /* D-33: senza una cartella non c'è blocco da guardare, e la copia non si leggerebbe comunque (`righeInterne` torna vuota): si dice subito */
+      const cartellaSessione = await cartellaDellaSessione(sessionId);
+      if (!cartellaSessione) throw sparito();
+      if (await bloccataPerIlDispositivo(dispositivoId, cartellaSessione)) throw Object.assign(sparito(), { motivo: 'bloccata' });
+      const stessa = (x) => x.dati === true && x.dispositivoId === dispositivoId && x.sessionId === sessionId && x.chiaveDati === cheCosa;
+      for (const o of offerte.filter(stessa)) togliCopia(o);
+      offerte = offerte.filter((x) => !stessa(x));
+      const dir = join(dirDatiOfferti, casuale(12).toString('base64url'));
+      let reale; let st;
+      try {
+        mkdirSync(dir, { recursive: true });
+        const file = join(dir, NOME_DELLA_COPIA);
+        writeFileSync(file, bytes, { mode: 0o600 }); // come gli altri file di questa cartella: su Linux e macOS la copia è solo di chi la scrive
+        reale = realpathSync.native(file); // D-35: la stessa forma di `righeInterne`, o fileId e versione non tornano
+        st = statSync(reale);
+      } catch (e) {
+        try { rmSync(dir, { recursive: true, force: true }); } catch { /* al prossimo avvio */ }
+        /* D-37: l'errore del disco porta il percorso del PC, e un codice che il dispositivo non conosce */
+        throw errore('OPERATION_FAILED', 'The copy for the device could not be saved on this computer.', { stato: 500, reason: 'save-failed', causa: e?.code ?? null });
+      }
+      const versione = versioneDi(reale, st);
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      const o = { offertaId: casuale(12).toString('base64url'), dispositivoId, sessionId, percorso: reale, relativo: mostrato, nome: mostrato, dimensione: st.size, versione, sha256, stato: 'offerto', at: clock(), dati: true, chiaveDati: cheCosa, cartellaSessione };
+      offerte.push(o);
+      salvaOfferte();
+      ricordoRighe.delete(`${dispositivoId}\0${sessionId}`);
+      setTimeout(() => { if (offerte.includes(o)) ritiraCopia(o); }, vitaCopiaMs).unref?.();
+      return { offertaId: o.offertaId, fileId: idDelFile(sessionId, reale), versione, nome: mostrato, dimensione: st.size, sha256 };
+    },
+    /** La cosa offerta non c'è più (voce eliminata, versione ripristinata, ricerca eliminata): spariscono le sue copie, per ogni dispositivo. */
+    togliDati(sessionId, cheCosa) {
+      const sua = (o) => o.dati === true && o.sessionId === sessionId && (o.chiaveDati === cheCosa || String(o.chiaveDati).startsWith(`${cheCosa}/`));
+      const via = offerte.filter(sua);
+      if (!via.length) return;
+      for (const o of via) { togliCopia(o); ricordoRighe.delete(`${o.dispositivoId}\0${o.sessionId}`); }
+      offerte = offerte.filter((o) => !sua(o));
+      salvaOfferte();
+    },
+
     /** Le offerte di una conversazione, per la carta del PC (stato, percentuale, ora dello scarico). */
     offerte(sessionId) {
       if (!esiste(sessionId)) return [];
-      return offerte.filter((o) => o.sessionId === sessionId).map(vistaOfferta);
+      return offerte.filter((o) => o.sessionId === sessionId && o.dati !== true).map(vistaOfferta);
     },
     /**
      * R5.13 corsa 2 (24/10/2026) — le offerte per la FINESTRA, dopo aver riguardato i file: un file cambiato dopo l'invio fa morire la
@@ -744,7 +873,7 @@ export function creaFileDeiDispositivi({
         }
       }
       for (const o of offerte) {
-        if (o.sessionId !== sessionId || o.stato === 'cambiato' || o.cambiatoDopo) continue;
+        if (o.sessionId !== sessionId || o.dati === true || o.stato === 'cambiato' || o.cambiatoDopo) continue;
         let versione = null;
         try { const st = statSync(o.percorso); versione = st.isFile() ? versioneDi(o.percorso, st) : null; } catch { versione = null; }
         if (versione === o.versione) continue;
@@ -755,7 +884,7 @@ export function creaFileDeiDispositivi({
         cambiate = true; avvisaOfferta(o);
       }
       if (cambiate) salvaOfferte();
-      return offerte.filter((o) => o.sessionId === sessionId)
+      return offerte.filter((o) => o.sessionId === sessionId && o.dati !== true)
         .map((o) => vistaOfferta(relativiDiOra.has(o) ? { ...o, relativo: relativiDiOra.get(o) } : o));
     },
     /**
@@ -769,7 +898,7 @@ export function creaFileDeiDispositivi({
       const items = [];
       let cambiate = false;
       for (const o of offerte) {
-        if (o.dispositivoId !== dispositivoId || (o.stato !== 'inviato' && o.stato !== 'in-scaricamento') || !esiste(o.sessionId)) continue;
+        if (o.dati === true || o.dispositivoId !== dispositivoId || (o.stato !== 'inviato' && o.stato !== 'in-scaricamento') || !esiste(o.sessionId)) continue;
         let st = null;
         try { st = statSync(o.percorso); } catch { st = null; }
         if (!st?.isFile() || versioneDi(o.percorso, st) !== o.versione) { o.stato = 'cambiato'; cambiate = true; avvisaOfferta(o); continue; }
@@ -802,6 +931,7 @@ export function creaFileDeiDispositivi({
         if (meta.dispositivoId === dispositivoId) await inFila(chiaveT(meta.dispositivoId, meta.trasferimentoId), () => butta(meta));
       }
       const prima = offerte.length;
+      for (const o of offerte) if (o.dispositivoId === dispositivoId) togliCopia(o);
       offerte = offerte.filter((o) => o.dispositivoId !== dispositivoId);
       if (offerte.length !== prima) salvaOfferte();
       for (const k of [...ricordoRighe.keys()]) if (k.startsWith(`${dispositivoId}\0`)) ricordoRighe.delete(k);

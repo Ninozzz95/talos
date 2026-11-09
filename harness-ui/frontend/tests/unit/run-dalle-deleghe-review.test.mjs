@@ -33,6 +33,24 @@ test('DELEGHE-REVIEW-01 — lo stato in cima è della CONVERSAZIONE, non di ciò
   assert.equal(runDalleDeleghe({ corrente: conCartella, sessioni: altra, figli: fermi }, { ambito: 'cartella' }).panoramica.status, 'succeeded');
 });
 
+/* Blocco 21 (01/11/2026): dal vivo l'elenco non portava la cartella, quindi l'ambito approvato il 13/10 non si accendeva mai: lo vedevano solo le prove, con una
+   stringa. Ora l'elenco porta `{ cartellaId, nome }`: dopo un JSON due righe della stessa cartella sono oggetti diversi, e si confronta l'id. */
+test('DELEGHE-REVIEW-CARTELLA — l\'ambito «cartella» riconosce la forma vera dell\'elenco, e non confonde due cartelle', () => {
+  const cartella = (cartellaId) => JSON.parse(JSON.stringify({ cartellaId, nome: 'listini' }));
+  const conCartella = { ...MADRE_FINITA, cartella: cartella('id-1') };
+  const sessioni = [{ sessionId: 'altra', avviataAlle: at(1), conclusa: false, cartella: cartella('id-1'), taskCorto: 'Altra' },
+    { sessionId: 'lontana', avviataAlle: at(2), conclusa: false, cartella: cartella('id-2'), taskCorto: 'Lontana' }];
+  const filtro = runDalleDeleghe({ corrente: conCartella, sessioni, figli: [finita('a', 10, 20)] }, { ambito: 'cartella' }).panoramica.filtro;
+  assert.equal(filtro.cartellaNota, true);
+  assert.equal(filtro.ambito, 'cartella');
+  assert.equal(filtro.mostrati, 2, 'la figlia e la conversazione della stessa cartella, non quella dell\'altra');
+  /* al contrario: una cartella non nota lascia l'ambito spento */
+  const senza = runDalleDeleghe({ corrente: { ...MADRE_FINITA, cartella: null }, sessioni, figli: [finita('a', 10, 20)] }, { ambito: 'cartella' }).panoramica.filtro;
+  assert.equal(senza.cartellaNota, false);
+  assert.equal(senza.ambito, 'sessione');
+  assert.equal(senza.mostrati, 1);
+});
+
 test('DELEGHE-REVIEW-02 — con un ramo isolato le voci del menu dello stato contano DENTRO il ramo: una voce accesa non svuota mai il diagramma', () => {
   const figli = [figlia('a', 10), finita('b', 11, 20, { esitoDelega: 'fallito' }), finita('c', 12, 21, { esitoDelega: 'fallito' }),
     { sessionId: 'n1', padreId: 'a', avviataAlle: at(50), conclusa: true, conclusaAlle: at(60), esitoDelega: 'concluso' }];

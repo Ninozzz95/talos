@@ -383,6 +383,9 @@ const MISURA_PIEDE = `(() => {
     for (const d of n.querySelectorAll('*')) {
       const b = d.getBoundingClientRect();
       if (b.width <= 0 || b.height <= 0) continue; /* non disegnato: e' uno stato voluto, non un guasto */
+      /* FE-001 (owner 02/11/2026): la stella per fissare una sessione a riposo non c'e', si vede passando sopra o col fuoco, come nel
+         bozzetto. Trasparente per scelta, e la si salta da sola: ogni altro pezzo trasparente resta preso. */
+      if (d.closest('.td-session-star')) continue;
       const s = getComputedStyle(d);
       if (s.visibility === 'hidden' || parseFloat(s.opacity) <= 0.5 || (s.filter && s.filter !== 'none')) {
         spentiDentro.push({ chi: d.id || d.className.split(' ')[0] || d.tagName, opacita: s.opacity, visibilita: s.visibility, filtro: s.filter, testo: (d.textContent || '').trim().slice(0, 40) });
@@ -472,7 +475,9 @@ function pretendiBarraInColonna(m, dove, quantiAttesi) {
 }
 
 const FIGLI_NORMALI = 5;   // Brand · actions · NavGroups · sessionList · WorkspaceFooter
-const FIGLI_ICONE = 3;     // Brand · NavGroups · WorkspaceFooter (le actions e la lista spariscono)
+/* 31/10/2026, barra chiusa variante B «Menu a comparsa» (owner 30/10 sera): a icone c'è in più la striscia (nuova sessione, ricerca, Home,
+   Sessioni, Spazi, Strumenti); le actions e la lista restano nascoste e si vedono solo nella loro comparsa. */
+const FIGLI_ICONE = 4;     // Brand · IconStrip · NavGroups · WorkspaceFooter
 
 for (const [larghezza, altezza] of [[1440, 1600], [3840, 2060]]) {
   for (const tema of ['dark', 'light']) {

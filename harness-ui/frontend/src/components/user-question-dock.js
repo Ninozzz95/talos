@@ -129,7 +129,7 @@ function ogniSecondoPredefinito(fn) {
  *   si mette in testa e basta. Senza, la carta è quella di sempre.
  */
 export function mountUserQuestionDock({ root, composer, question, onSubmit, annuncia = false, pianifica,
-  scadenzaMs = 0, adesso = () => Date.now(), ogniSecondo = ogniSecondoPredefinito, chiChiede = null, rendiAnteprima = null }) {
+  scadenzaMs = 0, adesso = () => Date.now(), ogniSecondo = ogniSecondoPredefinito, chiChiede = null, rendiAnteprima = null, allegatiInAttesa = () => 0 }) {
   if (!root?.ownerDocument || !composer || !question?.requestId || !Array.isArray(question.questions)
     || typeof onSubmit !== 'function') throw new TypeError('Ask dock requires a real request and submit handler');
   const doc = root.ownerDocument;
@@ -508,7 +508,11 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
     sendButton.hidden = stage !== 'review';
     confirmSkipButton.hidden = stage !== 'skip-review';
     actions.hidden = stage === 'stale';
-    const messaggio = next.message || (busy ? t('chat.question.waitingForServer') : avvisoRipresa);
+    /* D29 del Tester: la risposta è l'esito di un attrezzo e non porta file, come in Hermes (`apps/desktop/src/app/chat/composer/busy-submit-state.ts:37-40`:
+       con una domanda aperta il file resta in coda per il messaggio dopo). Il file non si perde, resta nel campo: la carta lo dice PRIMA della risposta. */
+    const fileInAttesa = allegatiInAttesa();
+    const avvisoAllegati = fileInAttesa > 0 ? tn('chat.question.attachmentStaysOne', 'chat.question.attachmentStaysMany', fileInAttesa) : '';
+    const messaggio = next.message || (busy ? t('chat.question.waitingForServer') : [avvisoRipresa, avvisoAllegati].filter(Boolean).join(' '));
     notice.hidden = !messaggio;
     notice.textContent = messaggio;
     for (const control of [backButton, nextButton, reviewButton, editButton, sendButton, skipButton, confirmSkipButton]) control.disabled = busy;
@@ -636,6 +640,8 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
       avvisoRipresa = t('chat.question.resumedAfterRestart');
       render();
     },
+    /* D29: un file messo o tolto dal campo mentre la domanda è aperta */
+    aggiornaAllegati: () => { render(); },
     destroy: () => {
       if (destroyed) return;
       destroyed = true;

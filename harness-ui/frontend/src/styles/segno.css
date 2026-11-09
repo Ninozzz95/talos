@@ -1,0 +1,19 @@
+/*
+ * FE-070: la pagina del segno. Copiato dal bozzetto approvato (`bozzetto-computer-use-pc/index.html:849-904`): cursore, anello, mouse preso, bordo «TALOS guarda».
+ * Il movimento del cursore non è più una `transition`: lo fa la Web Animations API con la stessa durata e lo stesso andamento, all'orologio dell'annuncio.
+ * La finestra è trasparente e lascia passare i clic: si vede solo il segno.
+ */
+@font-face{font-family:"Instrument Sans";src:url("./fonts/instrument-sans-latin-600-normal.woff2") format("woff2");font-style:normal;font-weight:600;font-display:swap}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent;pointer-events:none}
+.segno{position:fixed;inset:0;pointer-events:none}
+.cursore{position:absolute;left:0;top:0;z-index:4;pointer-events:none;filter:drop-shadow(0 3px 5px rgba(0,0,0,.45))}
+.cursore svg{display:block}
+.cursore b{position:absolute;left:18px;top:20px;padding:1px 7px;border-radius:7px;background:#c98b32;color:#1b1407;font:700 11px 'Instrument Sans',sans-serif}
+.anello{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border:2px solid #c98b32;border-radius:50%;pointer-events:none;z-index:5;animation:anello 650ms ease-out both}
+@keyframes anello{from{opacity:.9;transform:scale(.4)}to{opacity:0;transform:scale(1.6)}}
+.mio{position:absolute;left:0;top:0;z-index:7;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
+.mio--preso::before{content:"";position:absolute;left:-13px;top:-12px;width:40px;height:40px;border-radius:50%;border:2px solid #c98b32;box-shadow:0 0 0 6px rgba(201,139,50,.22)}
+.mio b{position:absolute;left:20px;top:22px;padding:1px 7px;border-radius:7px;background:#c98b32;color:#1b1407;font:700 11px 'Instrument Sans',sans-serif;white-space:nowrap}
+.guarda{position:absolute;z-index:4;pointer-events:none;border-radius:11px;box-shadow:0 0 0 3px #c98b32,0 0 26px rgba(201,139,50,.5);animation:guarda 2s ease-in-out infinite}
+@keyframes guarda{50%{box-shadow:0 0 0 3px #c98b32,0 0 8px rgba(201,139,50,.2)}}
+@media (prefers-reduced-motion:reduce){.anello,.guarda{animation:none}}

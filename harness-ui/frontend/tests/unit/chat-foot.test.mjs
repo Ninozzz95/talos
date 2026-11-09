@@ -36,7 +36,7 @@ test('PIEDE-PERMESSO: nome umano, mai il nome tecnico (H22)', () => {
   assert.equal(tonoPermesso('Read only'), null);
 });
 
-test('PIEDE-ECCEZIONI: la pillola dichiara i cancelli per attrezzo, che il permesso non promette', () => {
+test('PIEDE-ECCEZIONI: la pillola dichiara i cancelli per strumento, che il permesso non promette', () => {
   // il caso misurato: «Accesso pieno» scelto, e due attrezzi su «chiedi» ereditati dal server
   assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: 'chiedi', shell: 'chiedi' }), 'Accesso pieno · 2 eccezioni');
   assert.equal(etichettaPermessoConEccezioni('Full access', { scrivi: 'nega' }), 'Accesso pieno · 1 eccezione');
@@ -127,14 +127,17 @@ test('⛔ la striscia non dice due volte la stessa cosa', () => {
 test('CHIP-PERMESSI-01: «Scrive nel progetto» — file, comandi e documenti passano; il suggerimento dice la politica e cosa chiede sempre', () => {
   const r = riassuntoSenzaChiedere('Workspace write', {});
   assert.equal(r.testo, 'Senza chiedere: file, comandi, documenti');
-  assert.equal(r.suggerimento, 'Permesso: Scrive nel progetto\nChiede sempre: scritture fuori dal progetto, file con segreti, azioni dopo un contenuto sospetto\nCambia il permesso');
+  /* decisione 208 (owner 04/11/2026 sera): cancellare il progetto, una cartella sopra, la casa o un disco chiede in ogni modo */
+  assert.equal(r.suggerimento, 'Permesso: Scrive nel progetto\nChiede sempre: cancellare un disco, una cartella principale, la tua cartella utente o il progetto, scritture fuori dal progetto, file con segreti, azioni dopo un contenuto sospetto\nCambia il permesso');
   // C2b: la Coordinazione sta nella stessa mappa ma non è uno dei sei attrezzi
   assert.equal(riassuntoSenzaChiedere('Workspace write', { delega_sottotask: 'chiedi' }).testo, 'Senza chiedere: file, comandi, documenti');
 });
 
 test('CHIP-PERMESSI-02: «Accesso pieno» dice «tutto» solo se passa davvero tutto; un «chiedi» lo riporta all elenco', () => {
   assert.equal(riassuntoSenzaChiedere('Full access', {}).testo, 'Senza chiedere: tutto');
-  assert.match(riassuntoSenzaChiedere('Full access', {}).suggerimento, /Chiede sempre: file con segreti, azioni dopo un contenuto sospetto/u);
+  /* decisioni 155, 158 e 161 (owner 04/11/2026): in Accesso pieno chiedono solo le cancellazioni critiche, le chiavi salvate e la ricerca che spende */
+  assert.equal(riassuntoSenzaChiedere('Full access', {}).suggerimento, 'Permesso: Accesso pieno\nChiede sempre: cancellare un disco, una cartella principale, la tua cartella utente o il progetto, leggere le tue chiavi salvate, ricerche a pagamento\nCambia il permesso');
+  assert.doesNotMatch(riassuntoSenzaChiedere('Full access', {}).suggerimento, /file con segreti|contenuto sospetto/u, '155: i segreti del progetto e il contenuto sospetto non chiedono in Accesso pieno');
   assert.doesNotMatch(riassuntoSenzaChiedere('Full access', {}).suggerimento, /fuori dal progetto/u, 'fuori dal progetto chiede solo «Scrive nel progetto»');
   // un comando su due chiede ancora: «comandi» si nomina (qualcosa passa), ma «tutto» sarebbe falso
   // review Y2 (owner 10/10): un gruppo a metà si scrive col nome della parte
@@ -146,6 +149,10 @@ test('CHIP-PERMESSI-03: «Chiede prima» chiede tutto; un «Per questa sessione�
   assert.equal(riassuntoSenzaChiedere('On request', {}).testo, 'Chiede tutto');
   assert.equal(riassuntoSenzaChiedere('On request', { shell: 'sempre' }).testo, 'Senza chiedere: comandi (tranne i test)');
   assert.doesNotMatch(riassuntoSenzaChiedere('On request', {}).suggerimento, /Chiede sempre/u, 'chiede già tutto: niente riga in più');
+  /* decisione 208: con i comandi «per la sessione» la riga nomina la cancellazione critica, che chiede lo stesso */
+  assert.match(riassuntoSenzaChiedere('On request', { shell: 'sempre' }).suggerimento, /Chiede sempre: cancellare un disco, una cartella principale, la tua cartella utente o il progetto, /u);
+  /* AL CONTRARIO: un «sempre» sui soli file non fa passare comandi, quindi non la nomina */
+  assert.doesNotMatch(riassuntoSenzaChiedere('On request', { scrivi: 'sempre' }).suggerimento, /cancellare un disco/u);
 });
 
 test('CHIP-PERMESSI-04: «Solo lettura» resta il suo nome; un sempre passa anche lì (il suo ramo nel cancello viene prima)', () => {
@@ -156,16 +163,16 @@ test('CHIP-PERMESSI-04: «Solo lettura» resta il suo nome; un sempre passa anch
   assert.equal(riassuntoSenzaChiedere(undefined, {}).testo, 'Permesso non scelto');
 });
 
-test('CHIP-PERMESSI-05: un gruppo spento («nega» su tutti i suoi attrezzi) lo dice il suggerimento, e il chip non lo nomina', () => {
+test('CHIP-PERMESSI-05: un gruppo spento («nega» su tutti i suoi strumenti) lo dice il suggerimento, e il chip non lo nomina', () => {
   const r = riassuntoSenzaChiedere('Workspace write', { shell: 'nega', prova: 'nega' });
   assert.equal(r.testo, 'Senza chiedere: file, documenti');
   assert.match(r.suggerimento, /Spenti: comandi/u);
   assert.deepEqual(r.spenti, ['commands']);
 });
 
-test('CHIP-PERMESSI-06 (contro il server): i gruppi sono ESATTAMENTE gli attrezzi con un permesso proprio, e i livelli concedono come il cancello', () => {
+test('CHIP-PERMESSI-06 (contro il server): i gruppi sono ESATTAMENTE gli strumenti con un permesso proprio, e i livelli concedono come il cancello', () => {
   const nostri = GRUPPI_SENZA_CHIEDERE.flatMap((g) => g.attrezzi);
-  assert.deepEqual([...nostri].sort(), [...ATTREZZI_CON_PERMESSO_PER_ATTREZZO].sort(), 'un attrezzo nuovo col suo permesso deve entrare in un gruppo');
+  assert.deepEqual([...nostri].sort(), [...ATTREZZI_CON_PERMESSO_PER_ATTREZZO].sort(), 'uno strumento nuovo col suo permesso deve entrare in un gruppo');
   for (const livello of LIVELLI_DI_ACCESSO) {
     for (const attrezzo of nostri) {
       assert.equal(attrezzoPassaSenzaChiedere(livello, undefined, attrezzo), livelloConcedeDaSolo(livello, attrezzo), `${livello} · ${attrezzo}`);
@@ -260,7 +267,7 @@ test('CHIP-BREVE-01 nome breve del livello; la frase di C1 apre il suggerimento,
   assert.equal(chipDelPermesso('Full access', {}).testo, 'Accesso pieno');
   assert.equal(chipDelPermesso('On request', {}).testo, 'Chiede prima');
 });
-test('CHIP-BREVE-02 le eccezioni per attrezzo restano a schermo (un «sempre» su Solo lettura non si nasconde)', () => {
+test('CHIP-BREVE-02 le eccezioni per strumento restano a schermo (un «sempre» su Solo lettura non si nasconde)', () => {
   const c = chipDelPermesso('Read only', { scrivi: 'sempre' });
   assert.equal(c.testo, 'Solo lettura · 1 eccezione');
   assert.ok(c.suggerimento.startsWith('Senza chiedere: file (solo scrittura)\n'), c.suggerimento);

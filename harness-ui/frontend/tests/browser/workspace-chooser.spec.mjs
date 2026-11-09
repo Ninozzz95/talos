@@ -50,10 +50,17 @@ async function apriChat(page) {
   await expect(page.locator('#schermoChat')).toBeVisible();
 }
 
-test.beforeEach(async ({ page }) => {
+/* 31/10/2026: la finestra si apre sul progetto scelto. Queste prove guardano l'albero dalla radice del disco: ci salgono col pulsante, come farebbe la persona */
+const DALLA_RADICE = /DIALOG-09 — apre|INVERSE-19|KEYBOARD-08|TREE-23|TOOLBAR-09|SEARCH-0[123569]|SEARCH-08/u;
+
+test.beforeEach(async ({ page }, info) => {
   await mockWorkspaceBrowser(page);
   await page.goto('/');
   await page.locator('#newSessionBtn').click();
+  if (DALLA_RADICE.test(info.title)) {
+    await page.locator('.workspace-chooser-up').click();
+    await expect(page.getByRole('treeitem', { name: 'Users' })).toBeVisible();
+  }
 });
 
 test('WORKSPACE-CHOOSER-DIALOG-09 — apre una workbench ampia, semantica e senza picker legacy visibile', async ({ page }) => {
@@ -95,17 +102,20 @@ test('WORKSPACE-CHOOSER-INVERSE-19 — cartella arbitraria non eleva da sola i p
    * solo per `occupato`) e `src/legacy/app.js` («`disabilitato` NON è più `!puoAvviare`»).
    * ⇒ L'invariante di QUESTA prova è un'altra, e si misura sui permessi: la cartella scelta NON
    * eleva da sola. Misurato il 18/09/2026 (sonda-inverse.mjs, porta 4197): con Users scelto,
-   * `Workspace write=true`, `Full access=false`, pulsante acceso «Continua nella chat — Users»,
+   * `Workspace write=true`, `Full access=false`, pulsante acceso «Continua su Users» (FE-040, 31/10/2026),
    * nota/cancello «Non è fra i progetti già autorizzati: viene verificata all'avvio.».
    */
   await expect(page.locator('#workspaceChooserSubmit')).toBeEnabled();
-  await expect(page.locator('#workspaceChooserSubmit')).toContainText('Continua nella chat — Users');
+  await expect(page.locator('#workspaceChooserSubmit')).toContainText('Continua su Users');
   await expect(page.locator('[data-workspace-permission="Workspace write"]')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('[data-workspace-permission="Full access"]')).toHaveAttribute('aria-pressed', 'false');
   await expect(page.locator('[data-workspace-policy-gate]')).toContainText('Non è fra i progetti già autorizzati');
   /* 11/10/2026 (owner, dalla foto): una frase, un posto. Quando si può partire la spiegazione del permesso sta SOLO sotto le carte
-     dei permessi; la nota del piede è vuota, e il pulsante è descritto dalla nota che c'è. */
-  await expect(page.locator('#workspaceChooserSubmitNote')).toHaveText('');
+     dei permessi, e il pulsante è descritto dalla nota che c'è.
+     FE-040 (owner 31/10/2026, bozzetto 4): il piede dice invece il riepilogo, cartella e accesso (qui nessun modello scelto, quindi
+     non si nomina): un'altra frase, mai quella del permesso. */
+  await expect(page.locator('#workspaceChooserSubmitNote')).toHaveText('Users, scrive nel progetto');
+  expect(await page.locator('[data-workspace-policy-gate]').innerText()).not.toContain('Users, scrive nel progetto');
   await expect(page.locator('#workspaceChooserSubmit')).toHaveAttribute('aria-describedby', 'workspaceChooserPolicyGate');
   /* L'elevazione la fa solo la persona, con un gesto — e il cancello cambia testo con lei. */
   await page.locator('[data-workspace-permission="Full access"]').click();
@@ -143,7 +153,7 @@ test('WORKSPACE-CHOOSER-SUBMIT-10 — una cartella allowlisted conserva cartella
     body = route.request().postDataJSON();
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(envelope({ sessionId: 'session-workspace-chooser' })) });
   });
-  await page.route('**/api/v1/sessions/session-workspace-chooser/events', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/session-workspace-chooser/events*', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
   await page.locator('#workspaceChooserSubmit').click();
   /*
    * ⛔ 18/09/2026 — il rosso era la FRETTA della prova, non il prodotto: subito dopo il clic il
@@ -323,8 +333,16 @@ test('WORKSPACE-CHOOSER-DIALOG-09 — 1280 e 1024 restano contenuti nel viewport
 
 test('WORKSPACE-CHOOSER-REDUCED-MOTION-16 — il chooser rispetta reduced motion', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  const transition = await page.locator('.workspace-chooser-shortcut').first().evaluate((element) => getComputedStyle(element).transitionDuration);
-  expect(transition.split(',').every((value) => Number.parseFloat(value) <= 0.001)).toBe(true);
+  await expect(page.locator('.workspace-chooser-shortcut.active')).toBeVisible(); // la finestra si apre sul progetto: le schede si ridisegnano alla seconda lettura
+  /* 04/11/2026, settima suite della candidata: rosso 1 volta su 3 anche da solo. Misurato con una sonda (40 corse): 10 volte la scheda letta
+     era GIÀ staccata dal secondo disegno (`isConnected` falso), e una scheda staccata non ha stile calcolato: `transitionDuration` è «»,
+     `parseFloat` dà NaN e il confronto fallisce senza che nessuna transizione esista. Si legge la scheda accesa di ADESSO, e si rilegge
+     finché non è quella attaccata alla pagina; una transizione vera resta rossa allo scadere del tempo di `expect`. */
+  await expect.poll(async () => {
+    const durata = await page.locator('.workspace-chooser-shortcut.active').first()
+      .evaluate((element) => (element.isConnected ? getComputedStyle(element).transitionDuration : null));
+    return durata === null ? 'scheda staccata dal secondo disegno' : durata.split(',').every((value) => Number.parseFloat(value) <= 0.001);
+  }, { message: 'reduced motion: the active shortcut of the page has no transition' }).toBe(true);
 });
 
 test('MODAL-RESIZE-PERSIST-01 — la diagonale salva entrambe le dimensioni per Nuova sessione', async ({ page }) => {
@@ -332,6 +350,8 @@ test('MODAL-RESIZE-PERSIST-01 — la diagonale salva entrambe le dimensioni per 
   const dialog = page.locator('#sheetDialog');
   const handle = dialog.locator('[data-dialog-resize="both"]');
   await expect(handle).toBeVisible();
+  // 31/10: sotto carico l'entrata della finestra anima ancora qui, e la presa misurata durante il movimento non è dove arriva il mouse
+  await dialog.evaluate((element) => Promise.all(element.getAnimations().map((animation) => animation.finished)));
   const before = await dialog.boundingBox();
   const grip = await handle.boundingBox();
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
@@ -491,4 +511,192 @@ test('WORKSPACE-TOOLBAR-09 — Nuova cartella, Aggiorna, Comprimi e Copia percor
   await page.getByLabel('Nome nuova cartella').fill('Nuovo progetto');
   await page.getByRole('button', { name: 'Crea cartella' }).click();
   await expect.poll(() => calls).toEqual([{ parentPath: 'C:\\', name: 'Nuovo progetto' }]);
+});
+
+/* FE-040 «Cerca o incolla un percorso» (tabella approvata 31/10/2026, forma della Frontend): un campo solo che cerca per nome fra ciò
+   che la finestra ha già (tessere e albero) e apre un percorso come prima. */
+test('WORKSPACE-CHOOSER-SEARCH-01 — a name filters tiles and tree rows, highlights the match, and Enter opens the first one', async ({ page }) => {
+  const campo = page.locator('#workspaceChooserPath');
+  await expect(campo).toHaveAttribute('placeholder', /Cerca o incolla un percorso|Search or paste a path/u);
+  await campo.fill('win');
+  await expect(page.getByRole('treeitem', { name: 'Windows' })).toBeVisible();
+  await expect(page.getByRole('treeitem', { name: 'Users' })).toBeHidden();
+  await expect(page.getByRole('treeitem', { name: 'Windows' }).locator('mark')).toHaveText('Win');
+  await expect(page.locator('.workspace-chooser-shortcut:not([hidden])')).toHaveCount(0);
+  // 31/10 (Frontend): nessuna tessera trovata ⇒ niente fascia vuota; l'albero resta sotto la barra del percorso, il piede in fondo
+  await expect(page.locator('.workspace-chooser-shortcuts')).toBeHidden();
+  const righe = await page.locator('#workspaceChooser').evaluate((f) => ({ colonne: getComputedStyle(f.querySelector('.workspace-chooser-columns')).gridRowStart, piede: getComputedStyle(f.querySelector('.workspace-chooser-footer')).gridRowStart }));
+  expect(righe).toEqual({ colonne: '2', piede: '3' });
+  await campo.press('Enter');
+  await expect(campo).toHaveValue(`${root}Windows`);
+  await expect(page.getByRole('treeitem', { name: 'Users' })).toHaveCount(0);
+});
+
+test('WORKSPACE-CHOOSER-SEARCH-02 — nothing found says so; the first Esc puts everything back, the second does what it always did', async ({ page }) => {
+  const campo = page.locator('#workspaceChooserPath');
+  await campo.fill('zzz');
+  await expect(page.locator('.workspace-chooser-search-empty')).toBeVisible();
+  await expect(page.locator('.workspace-chooser-search-empty')).toContainText('zzz');
+  await campo.press('Escape');
+  // 31/10: «visibile» da solo passava anche con la finestra già in chiusura (l'uscita anima per qualche decimo di secondo)
+  await expect(page.locator('#sheetDialog'), 'il primo Esc non avvia la chiusura della finestra').not.toHaveClass(/motion-exit/u);
+  expect(await page.locator('#sheetDialog').evaluate((d) => d.open && d.getAnimations().length === 0), 'la finestra resta aperta, nessuna uscita in corso').toBe(true);
+  await expect(campo).toBeVisible();
+  await expect(campo).toHaveValue(root);
+  await expect(page.locator('.workspace-chooser-search-empty')).toBeHidden();
+  await expect(page.getByRole('treeitem', { name: 'Users' })).toBeVisible();
+  await expect(page.locator('.workspace-chooser-shortcut', { hasText: 'AVM-harness-desktop' })).toBeVisible();
+  await expect(page.locator('.workspace-chooser-shortcuts'), 'svuotata la ricerca la fascia torna').toBeVisible();
+  await campo.press('Escape');
+  await expect(campo).toBeHidden();
+});
+
+test('WORKSPACE-CHOOSER-TESTI-01 — i testi piccoli della colonna di destra non scendono sotto le misure del bozzetto (Frontend 31/10: nome della carta 13, riga sotto 11,5, note 12)', async ({ page }) => {
+  const misure = await page.locator('#workspaceChooser').evaluate((f) => {
+    const px = (sel) => [...f.querySelectorAll(sel)].map((n) => parseFloat(getComputedStyle(n).fontSize));
+    return {
+      nomeCarta: px('.workspace-chooser-permission strong'), rigaCarta: px('.workspace-chooser-permission small'),
+      interruttore: px('.workspace-chooser-inline-toggle strong'), sottotitolo: px('.workspace-chooser-inline-toggle small'),
+      nomeTessera: px('.workspace-chooser-shortcut strong'), rigaTessera: px('.workspace-chooser-shortcut small'),
+      note: [...px('.workspace-chooser-help'), ...px('.workspace-chooser-policy-gate'), ...px('.workspace-chooser-section-head p')],
+    };
+  });
+  for (const [chi, minimo] of [['nomeCarta', 13], ['rigaCarta', 11.5], ['interruttore', 13], ['sottotitolo', 11.5], ['nomeTessera', 13], ['rigaTessera', 11.5], ['note', 12]]) {
+    expect(misure[chi].length, `${chi}: ci sono`).toBeGreaterThan(0);
+    expect(Math.min(...misure[chi]), `${chi}: ${JSON.stringify(misure[chi])}`).toBeGreaterThanOrEqual(minimo);
+  }
+});
+
+test('WORKSPACE-CHOOSER-SEARCH-03 — AL CONTRARIO: a path of any drive is not a search, nothing is filtered', async ({ page }) => {
+  const campo = page.locator('#workspaceChooserPath');
+  const barra = String.fromCharCode(92);
+  for (const percorso of [`D:${barra}lavoro`, 'E:', `${barra}${barra}server${barra}condivisa`, '~/progetti']) {
+    await campo.fill(percorso);
+    await expect(page.getByRole('treeitem', { name: 'Users' }), percorso).toBeVisible();
+    await expect(page.locator('.workspace-chooser-search-empty'), percorso).toBeHidden();
+  }
+});
+
+/* Revisione dei blocchi 10-12, difetti minori della ricerca */
+test('WORKSPACE-CHOOSER-SEARCH-05 — D-10: with a search active the arrows reach the row found', async ({ page }) => {
+  await page.locator('#workspaceChooserPath').fill('win');
+  await expect(page.getByRole('treeitem', { name: 'Windows' })).toBeVisible();
+  await page.locator('.workspace-chooser-tree-row[aria-level="1"]').focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.getByRole('treeitem', { name: 'Windows' })).toBeFocused();
+});
+
+/* D-21 (revisione del blocco 13): la prova di prima pretendeva la riga «Windows» dopo l'errore e un secondo Invio che richiedesse la cartella,
+   cioè il mondo prima del `catch` che svuota l'albero: passava solo se arrivava prima di lui (5 rosse su 8). Dopo un errore le righe sono 0: resta
+   la ricerca nel campo, si ritenta con «Riprova», e il secondo Invio non legge «win» come un percorso. «Riprova» fa anche da controllo: se Invio
+   avesse chiesto qualcosa, la lista lo direbbe. */
+test('WORKSPACE-CHOOSER-SEARCH-06 — D-11: a folder that does not open leaves the search as it was; a second Enter does not read the name as a path, and «Try again» asks for the folder', async ({ page }) => {
+  const chieste = [];
+  await page.route('**/api/v1/workspace-browser**', (route) => {
+    chieste.push(new URL(route.request().url()).searchParams.get('path'));
+    return route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ title: 'no', status: 403 }) });
+  });
+  const campo = page.locator('#workspaceChooserPath');
+  await campo.fill('win');
+  await campo.press('Enter');
+  const riprova = page.locator('.workspace-chooser-error-actions .secondary-btn');
+  await expect(riprova).toBeVisible();
+  await expect(campo).toHaveValue('win');
+  await expect(page.locator('.workspace-chooser-tree-row')).toHaveCount(0);
+  await campo.press('Enter');
+  await expect(campo).toHaveValue('win');
+  await riprova.click();
+  await expect.poll(() => chieste.length).toBeGreaterThanOrEqual(2);
+  await expect(page.locator('.workspace-chooser-error-actions .secondary-btn')).toBeVisible();
+  expect(chieste).toEqual([`${root}Windows`, `${root}Windows`]);
+});
+
+test('WORKSPACE-CHOOSER-SEARCH-08 — D-20: the right arrow from the open folder reaches the first row found, not a hidden one', async ({ page }) => {
+  await page.locator('#workspaceChooserPath').fill('win');
+  await expect(page.getByRole('treeitem', { name: 'Windows' })).toBeVisible();
+  await page.locator('.workspace-chooser-tree-row[aria-level="1"]').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('treeitem', { name: 'Windows' })).toBeFocused();
+});
+
+test('WORKSPACE-CHOOSER-SEARCH-09 — D-20: on a folder closed by hand the right arrow opens it and still lands on a row found', async ({ page }) => {
+  await page.locator('#workspaceChooserPath').fill('win');
+  const radice = page.locator('.workspace-chooser-tree-row[aria-level="1"]');
+  await radice.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(page.getByRole('treeitem', { name: 'Windows' })).toHaveCount(0);
+  await expect(radice, 'il fuoco torna sulla cartella dopo il ridisegno').toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('treeitem', { name: 'Windows' })).toBeFocused();
+});
+
+/* la cartella che si apre lentamente, coi nomi che la prova sceglie */
+async function cartellaLenta(page, nomi) {
+  let libera; const aperto = new Promise((r) => { libera = r; });
+  const cartella = `${root}Windows`;
+  await page.route((url) => url.pathname === '/api/v1/workspace-browser' && url.searchParams.get('path') === cartella, async (route) => {
+    await aperto;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(envelope({ root, path: cartella, parent: root,
+      items: nomi.map((name) => ({ name, path: `${cartella}\\${name}`, projectId: null })), recommended: [] })) });
+  });
+  return { cartella, libera };
+}
+
+test('WORKSPACE-CHOOSER-SEARCH-10 — D-23: what you type while a folder loads stays there, keeps the focus and filters the folder that arrives', async ({ page }) => {
+  const { cartella, libera } = await cartellaLenta(page, ['System32', 'Temp']);
+  const campo = page.locator('#workspaceChooserPath');
+  await campo.fill(cartella);
+  await campo.press('Enter');
+  await expect(page.locator('#workspaceChooser [aria-busy="true"], #workspaceChooser[aria-busy="true"]').first()).toBeAttached();
+  await campo.fill('sys');
+  libera();
+  await expect(page.getByRole('treeitem', { name: 'System32' })).toBeVisible();
+  await expect(page.getByRole('treeitem', { name: 'Temp' })).toBeHidden();
+  await expect(campo).toHaveValue('sys');
+  await page.evaluate(() => new Promise((r) => { setTimeout(r, 50); }));
+  await expect(campo).toBeFocused();
+  await campo.press('Escape');
+  await expect(campo, 'Esc dice di nuovo dove si è').toHaveValue(cartella);
+});
+
+test('WORKSPACE-CHOOSER-SEARCH-11 — D-23 AL CONTRARIO: typed and taken back with Esc, the field says where you are', async ({ page }) => {
+  const { cartella, libera } = await cartellaLenta(page, ['System32']);
+  const campo = page.locator('#workspaceChooserPath');
+  await campo.fill(cartella);
+  await campo.press('Enter');
+  await expect(page.locator('#workspaceChooser [aria-busy="true"], #workspaceChooser[aria-busy="true"]').first()).toBeAttached();
+  await campo.fill('sys');
+  await campo.press('Escape');
+  libera();
+  await expect(page.getByRole('treeitem', { name: 'System32' })).toBeVisible();
+  await expect(campo).toHaveValue(cartella);
+});
+
+test('WORKSPACE-CHOOSER-SEARCH-07 — D-12: the highlight holds when a letter changes length in lower case', async ({ page }) => {
+  await page.unroute('**/api/v1/workspace-browser**');
+  await page.route('**/api/v1/workspace-browser**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(envelope({
+    root, path: root, parent: null, items: [{ name: 'İstanbul', path: `${root}istanbul`, projectId: null }], recommended: [],
+  })) }));
+  const campo = page.locator('#workspaceChooserPath');
+  await campo.fill(root);
+  await campo.press('Enter');
+  await expect(page.locator('.workspace-chooser-tree-row', { hasText: 'stanbul' })).toHaveCount(1);
+  await campo.fill('stan');
+  await expect(page.locator('.workspace-chooser-tree-row mark')).toHaveText('stan');
+});
+
+test('WORKSPACE-CHOOSER-SEARCH-04 — AL CONTRARIO: a folder name with HTML in it stays text, in the tree and in a tile', async ({ page }) => {
+  await page.unroute('**/api/v1/workspace-browser**');
+  const strano = '<img src=x onerror="window.__iniettato=1">tag';
+  await page.route('**/api/v1/workspace-browser**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(envelope({
+    root, path: root, parent: null,
+    items: [{ name: strano, path: `${root}strana`, projectId: null }],
+    recommended: [{ label: strano, path: `${root}strana`, kind: 'known', projectId: null }],
+  })) }));
+  await page.locator('#workspaceChooserPath').fill(root);
+  await page.locator('#workspaceChooserPath').press('Enter');
+  await expect(page.locator('.workspace-chooser-tree-row', { hasText: 'tag' })).toHaveCount(1);
+  await expect(page.locator('.workspace-chooser-tree-row img, .workspace-chooser-shortcut img')).toHaveCount(0);
+  await expect(page.locator('.workspace-chooser-tree-row', { hasText: 'tag' }).locator('[data-workspace-nome]')).toHaveText(strano);
+  expect(await page.evaluate(() => window.__iniettato ?? null)).toBeNull();
 });

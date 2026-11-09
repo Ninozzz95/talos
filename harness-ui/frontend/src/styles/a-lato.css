@@ -1,0 +1,9 @@
+/* FE-010: la scheda «A lato». Dal bozzetto `bozzetto-superfici-vive`, righe 30431-30438. */
+.lato{display:flex;flex-direction:column;gap:10px;height:100%}
+#railLato[hidden]{display:none}
+.lato-filo{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:10px}
+.lato-msg p{margin:2px 0 0;font-size:13.5px;color:var(--talos-text);overflow-wrap:anywhere;white-space:pre-wrap}
+.lato-campo{display:flex;gap:8px}
+.lato-campo input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--talos-border);border-radius:9px;background:var(--talos-panel-soft);color:var(--talos-text);font:inherit;font-size:13px}
+.lato-piede{display:flex;align-items:center;gap:8px;min-height:32px}
+.lato-piede [hidden]{display:none}

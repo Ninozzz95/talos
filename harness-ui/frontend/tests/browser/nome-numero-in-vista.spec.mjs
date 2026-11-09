@@ -35,7 +35,7 @@ for (const modo of ['light', 'dark']) {
         { ...base, sessionId: 'numero-1', nome: SEMPLICE, avviataAlle: '2026-10-15T08:00:00.000Z' },
       ];
       await page.route(/\/api\/v1\/sessions(\?.*)?$/, (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { items: righe }, meta: { schema: 'talos.harness-ui.api.v1' } }) }));
-      await page.route('**/api/v1/sessions/*/events', (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
+      await page.route('**/api/v1/sessions/*/events*', (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
       await page.goto('/');
       await page.waitForFunction(() => window.__talosHarnessUiRuntime);
       await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });

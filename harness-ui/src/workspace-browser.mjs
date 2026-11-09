@@ -23,6 +23,17 @@ export class WorkspaceBrowserError extends Error {
   }
 }
 
+/*
+ * FE-040 (bozzetto 4): «non esiste» e «senza permesso» erano la stessa frase. Il motivo è un identificatore stabile, mai il percorso né il testo del sistema;
+ * la frase resta quella di sempre per chi non conosce il motivo.
+ */
+const MOTIVI_DEL_SISTEMA = Object.freeze({ ENOENT: 'folder-missing', ENOTDIR: 'folder-missing', EACCES: 'folder-denied', EPERM: 'folder-denied' });
+function cartellaNonDisponibile(causa) {
+  const errore = new WorkspaceBrowserError('This folder is not available. Choose another or check Doctor.');
+  if (Object.hasOwn(MOTIVI_DEL_SISTEMA, causa?.code ?? '')) errore.reason = MOTIVI_DEL_SISTEMA[causa.code];
+  return errore;
+}
+
 function failQuery() {
   throw new WorkspaceBrowserError('Choose a folder within the shown disk.', 'QUERY_INVALID');
 }
@@ -79,7 +90,7 @@ async function assertNoSymbolicLinkSegments(root, candidate, lstatFn) {
     }
   } catch (error) {
     if (error instanceof WorkspaceBrowserError) throw error;
-    throw new WorkspaceBrowserError('This folder is not available. Choose another or check Doctor.');
+    throw cartellaNonDisponibile(error);
   }
 }
 
@@ -192,16 +203,16 @@ export function createWorkspaceBrowser({
       let canonicalCandidate;
       try {
         [canonicalRoot, canonicalCandidate] = await Promise.all([realpathFn(lexicalRoot), realpathFn(candidate)]);
-      } catch {
-        throw new WorkspaceBrowserError('This folder is not available. Choose another or check Doctor.');
+      } catch (error) {
+        throw cartellaNonDisponibile(error);
       }
       if (!inside(canonicalRoot, canonicalCandidate)) failQuery();
 
       let entries;
       try {
         entries = await readdirFn(canonicalCandidate, { withFileTypes: true });
-      } catch {
-        throw new WorkspaceBrowserError('This folder is not available. Choose another or check Doctor.');
+      } catch (error) {
+        throw cartellaNonDisponibile(error);
       }
       const items = entries
         .filter((entry) => entry?.isDirectory?.() && !entry?.isSymbolicLink?.())

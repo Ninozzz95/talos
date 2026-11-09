@@ -290,12 +290,41 @@ test('⭐⭐ onDelta "ragionamento" produce ReasoningMessage* — un canale SEPA
   const tipi = eventi.map((e) => e.type);
   assert.deepEqual(tipi, [
     'RunStarted',
-    'ReasoningMessageStart', 'ReasoningMessageContent', 'ReasoningMessageContent',
+    'ReasoningMessageStart', 'ReasoningMessageContent',
+    'CUSTOM', // revisione D R1 (30/10/2026): il battito del ragionamento, dopo il primo pezzo e poi al più ogni 5 s
+    'ReasoningMessageContent',
     'TextMessageStart', 'TextMessageContent',
     'TextMessageEnd', 'ReasoningMessageEnd', // testo chiuso prima, poi ragionamento — ordine deterministico di agent-service.mjs
     'RunFinished',
   ]);
   assert.equal(eventi.find((e) => e.type === 'ReasoningMessageStart').role, 'reasoning');
+});
+
+test('revisione D R1 (30/10/2026) — il battito del ragionamento nasce QUI, nel codice condiviso: { giro, at, titolo }, titolo oscurato, e si spegne al primo testo', async () => {
+  const eventi = [];
+  const talosLavoraFn = talosLavoraFinto({
+    script: {
+      esito: { comeFinita: 'concluso', detto: 'fatto' },
+      deltas: [
+        { giro: 1, tipo: 'ragionamento', delta: '**Checking OPENROUTER_API_KEY=abc123secretvalue**\n\n' },
+        { giro: 1, tipo: 'testo', delta: 'fatto' },
+        { giro: 1, tipo: 'ragionamento', delta: '**Tardivo**' },
+        /* un giro che comincia col testo non «sta ragionando» nemmeno se poi arriva un pezzo di ragionamento (mutante sopravvissuto) */
+        { giro: 2, tipo: 'testo', delta: 'subito' },
+        { giro: 2, tipo: 'ragionamento', delta: '**Dopo il testo**' },
+      ],
+      risposta: { role: 'assistant', content: 'fatto', tool_calls: [] },
+    },
+  });
+
+  await avviaSessione({ cartella: '/tmp/x', task: TASK, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e), talosLavoraFn });
+
+  const battiti = eventi.filter((e) => e.type === 'CUSTOM' && e.name === 'talos.ragionamento-in-corso');
+  assert.equal(battiti.length, 1, 'dopo il primo testo il giro non è più «sta ragionando»');
+  assert.equal(battiti[0].value.giro, 1);
+  assert.equal(battiti[0].value.titolo, 'Checking OPENROUTER_API_KEY=[redacted]');
+  assert.ok(!Number.isNaN(Date.parse(battiti[0].value.at)));
+  assert.equal(JSON.stringify(eventi).includes('[redacted]'), true);
 });
 
 test('⭐⭐⭐ e AL CONTRARIO: le tool-call restano emesse anche se il testo di quel giro era già streamato', async () => {

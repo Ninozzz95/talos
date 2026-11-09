@@ -21,7 +21,7 @@ import {
 } from '../src/kernel/compattazione-desktop.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
-import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const CONV = 'z-ai/glm-5.3-flash';
 const AUX = 'z-ai/glm-4.7-flash';
@@ -101,7 +101,7 @@ async function fineGiro(t, opzioni = {}) {
   t.after(async () => {
     if (prima === undefined) delete process.env[VARIABILE_TETTO_TOKEN]; else process.env[VARIABILE_TETTO_TOKEN] = prima;
     await attendiScritture({ cartellaStore });
-    rimuoviCartellaDiProva(cartellaStore);
+    await rimuoviCartellaDiProvaAttesa(cartellaStore);
   });
   const { sessionId } = registro.avvia('task-vero');
   await attendi(() => g.tutti.length === 1, 'il giro non è partito');
@@ -194,7 +194,8 @@ async function giroAdattatore(t, extra) {
   process.env[VARIABILE_TETTO_TOKEN] = '4000';
   t.after(() => { if (prima === undefined) delete process.env[VARIABILE_TETTO_TOKEN]; else process.env[VARIABILE_TETTO_TOKEN] = prima; });
   const cartella = mkdtempSync(join(tmpdir(), 'riassunto-aux-giro-'));
-  t.after(() => rimuoviCartellaDiProva(cartella));
+  // Il rimuovitore che aspetta: sotto carico un processo figlio puo tenere la cartella (EPERM con rmSync, che non ritenta); `rm` vede EBUSY e ritenta (AUX-08, quarta suite del 04/11).
+  t.after(() => rimuoviCartellaDiProvaAttesa(cartella));
   for (let i = 1; i <= 12; i += 1) writeFileSync(join(cartella, `f${i}.txt`), `${'riga del file '.repeat(60)}\n`);
   const riassunti = [];
   let fatte = 0;
@@ -242,4 +243,28 @@ test('AUX-09 fine giro: il limite d\'uscita è quello del modello dei riassunti,
   assert.equal(r.chiamate.length, 1);
   assert.equal(r.chiamate[0].modello, AUX);
   assert.ok(r.chiamate[0].maxOutputTokens <= 3_000, `tetto ${r.chiamate[0].maxOutputTokens}`);
+});
+
+/*
+ * C6 (contratto «mai aspettare» 27/10; forma concordata con la CLI il 28/10): la scelta della PERSONA (Impostazioni → Memoria e contesto) vince
+ * su quella dell'ospite (`modelloRiassuntoFn`, il modello leggero della CLI); senza, tutto com'era (AUX-02/03).
+ */
+const PERSONA = 'openai/gpt-6-luna';
+test('AUX-06 C6: la scelta della persona vince su quella dell\'ospite, alla fine del giro', async (t) => {
+  const { r } = await fineGiro(t, {
+    sceltaDelRiassuntoFn: () => ({ modelloDelRiassunto: PERSONA, riservaDelRiassunto: null }),
+    modelloRiassuntoFn: () => AUX,
+    finestraTokenFn: () => 200_000,
+  });
+  assert.equal(r.chiamate.length, 1);
+  assert.equal(r.chiamate[0].modello, PERSONA);
+});
+
+test('AUX-07 C6 al contrario: la persona ha scelto il modello della conversazione ⇒ quello, e l\'ospite non lo scavalca; una scelta vuota, storta o rotta ⇒ l\'ospite, come oggi', async (t) => {
+  const stessa = await fineGiro(t, { sceltaDelRiassuntoFn: () => ({ modelloDelRiassunto: CONV, riservaDelRiassunto: null }), modelloRiassuntoFn: () => AUX, finestraTokenFn: () => 200_000 });
+  assert.equal(stessa.r.chiamate[0].modello, CONV);
+  for (const sceltaDelRiassuntoFn of [() => null, () => ({ modelloDelRiassunto: null, riservaDelRiassunto: null }), () => ({ modelloDelRiassunto: 'non un modello' }), () => { throw new Error('rotto'); }]) {
+    const { r } = await fineGiro(t, { sceltaDelRiassuntoFn, modelloRiassuntoFn: () => AUX, finestraTokenFn: () => 200_000 });
+    assert.equal(r.chiamate[0].modello, AUX, String(sceltaDelRiassuntoFn));
+  }
 });

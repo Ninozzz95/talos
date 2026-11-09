@@ -413,7 +413,7 @@ test('PROC-COMANDO: la riga mostra il comando a SEGMENTI e l’icona della famig
     datiProcesso({ id: 'y', comando: 'curl -sS https://example.org', stato: 'riuscito', giro: 1, durataMs: 10, uscita: 0 }),
   ]);
   const simboli = carte(rail2).map((c) => href(c));
-  assert.ok(simboli[0].includes('#i-grid'), `docker: ${simboli[0].join(', ')}`);
+  assert.ok(simboli[0].includes('#i-container'), `docker: ${simboli[0].join(', ')}`);
   assert.ok(simboli[1].includes('#i-globe'), `curl: ${simboli[1].join(', ')}`);
   /* ⛔ AL CONTRARIO: due righe di famiglie DIVERSE non possono avere lo stesso simbolo di famiglia. */
   assert.notDeepEqual(simboli[0], simboli[1]);
@@ -802,7 +802,7 @@ test('PROC-CONSENSO-03 al contrario: consenso negato → «Non eseguito»; un co
     { type: 'ToolCallArgs', toolCallId: 'c1', delta: '{"comando":"ls"}' },
     { type: 'ApprovalRequested', requestId: 'r9', toolCallId: 'scrivi-7' },
   ], { adesso: 1_500 })[0];
-  assert.equal(altro.stato, 'in-corso', 'il consenso chiesto per un altro attrezzo non è di questa riga');
+  assert.equal(altro.stato, 'in-corso', 'il consenso chiesto per un altro strumento non è di questa riga');
 });
 
 test('PROC-CHI-TU — 02/10/2026: il comando `!` della persona dice «tu · terminale», non «agente · giro N»', () => {
@@ -984,4 +984,14 @@ test('PROC-VIVO-02 (verso contrario) — un processo vivo SENZA istante d’avvi
   assert.equal(misura.dataset.viva, undefined, 'senza avvio niente contatore');
   assert.equal(conClasse(carte(rail)[0], 'talos-process__durata-viva').length, 0);
   assert.equal(rail.__processi?.orologioVive ?? null, null, 'nessuna riga viva con un avvio: nessun orologio');
+});
+
+test('R44-PROCESSI: un comando annullato dal kernel prima di partire è «Non eseguito», non «Non riuscito»', () => {
+  const eventi = (extra) => [
+    { type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'shell', ricevutoA: 1_000 },
+    { type: 'ToolCallArgs', toolCallId: 'c1', delta: '{"comando":"npm run build"}' },
+    { type: 'ToolCallResult', toolCallId: 'c1', ricevutoA: 1_001, errore: true, uscita: null, ...extra },
+  ];
+  assert.equal(processiDagliEventi(eventi({ annullata: true }), { adesso: 2_000 })[0].stato, 'non-eseguito');
+  assert.equal(processiDagliEventi(eventi({}), { adesso: 2_000 })[0].stato, 'fallito', 'al contrario: senza il campo resta un errore');
 });

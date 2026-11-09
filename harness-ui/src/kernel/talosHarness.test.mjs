@@ -3689,7 +3689,10 @@ describe('talosLavora — verificaPermessoScrittura (livelloAccesso/chiediApprov
         assert.deepEqual(azioniViste, [{ tipo: 'scrivi', toolCallId: 'call_1', percorso: 'nuovo.txt', contenutoPrima: null, contenutoProposto: 'ciao' }])
         assert.equal(existsSync(join(cartella, 'nuovo.txt')), false)
         const messaggioTool = rete.chiamate[1].corpo.messages.find((m) => m.role === 'tool')
-        assert.match(messaggioTool.content, /did not approve/)
+        /* Tester R2-R4 (03/11/2026): il no della persona è DECLINED, con la consegna di non chiedere ancora; la coda dello strumento resta */
+        assert.match(messaggioTool.content, /^DECLINED\. The person said no to this\. Do not ask again for it/u)
+        assert.match(messaggioTool.content, /Nothing was written\.$/u)
+        assert.doesNotMatch(messaggioTool.content, /^REFUSED/u)
     })
 
     it('⭐⭐⭐ 28/8, ledger permessi §7.A — chiediApprovazioneFn su un file ESISTENTE riceve il contenuto VERO di prima, non null', async () => {
@@ -6156,6 +6159,8 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
         assert.match(messaggioTool.content, /^research_read failed: libreria irraggiungibile$/)
     })
 
+    /* D4: dalla chat la ricerca parte col si sulla sua carta */
+    const siSullaCartaDellaRicerca = (nome) => (nome === 'research_start' ? { chiediApprovazioneFn: async () => true } : {})
     for (const [nome, callbackKey, argomenti, esitoOk, arguments5] of [
         ['research_start', 'onRicercaAvvia', { question: 'Come funziona il caching di OpenRouter?', depth: 'deep' }, 'Started the research «Come funziona il caching di OpenRouter?» (id sess-99). It runs in the background.'],
         ['research_rename', 'onRicercaRinomina', { id: 'sess-1', title: 'Nuovo titolo' }, 'Renamed that research to «Nuovo titolo».'],
@@ -6179,7 +6184,7 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
             const rete = reteDiRisposte(chiamataTool(nome, argomenti), CONCLUSO_SUBITO)
             const ricevuti = []
             const esito = await talosLavora({
-                cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: [nome],
+                cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: [nome], ...siSullaCartaDellaRicerca(nome),
                 [callbackKey]: async (spec) => { ricevuti.push(spec); return { ok: true, esito: esitoOk } },
             })
             assert.equal(esito.comeFinita, 'concluso')
@@ -6192,7 +6197,7 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
             const cartella = cartellaVuota(it)
             const rete = reteDiRisposte(chiamataTool(nome, argomenti), CONCLUSO_SUBITO)
             const esito = await talosLavora({
-                cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: [nome],
+                cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: [nome], ...siSullaCartaDellaRicerca(nome),
                 [callbackKey]: async () => { throw new Error('disco pieno') },
             })
             assert.equal(esito.comeFinita, 'concluso')
@@ -6204,7 +6209,7 @@ describe('talosLavora - Deep Research (FASE N, ottavo sistema, "fetta onesta")',
             const cartella = cartellaVuota(it)
             const rete = reteDiRisposte(chiamataTool(nome, argomenti), CONCLUSO_SUBITO)
             const esito = await talosLavora({
-                cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: [nome],
+                cartella, task: TASK, modello: 'x', chiave: 'y', fetchDiRete: rete.fetch, strumentiEstesi: [nome], ...siSullaCartaDellaRicerca(nome),
                 [callbackKey]: async () => ({ ok: false, esito: 'There is no research with that id. Call research_find to see the current ones.' }),
             })
             assert.equal(esito.comeFinita, 'concluso')

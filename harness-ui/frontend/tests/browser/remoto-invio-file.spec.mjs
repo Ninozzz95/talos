@@ -53,11 +53,20 @@ for (const lingua of ['en', 'it']) {
           return route.fulfill({ contentType: 'application/json', body: INVOLUCRO({ disponibile: true, acceso: true, sceltaFatta: true, relay: { modo: 'n0' },
             inLinea: banco.dispositivi.filter((d) => d.inLinea).map((d) => d.id), telefoni: banco.dispositivi, attese: [], accoppiamento: { sbagliati: 0 } }) });
         });
+        /* lo stato del remoto è letto all'avvio: il menu sa quali dispositivi ci sono.
+           ⛔ Decisione 106 (03/11/2026, prove del browser più veloci): prima qui c'era `expect(pillola).toBeVisible({ timeout: 10_000 })
+           .catch(() => null)`. La pillola sta nel piede del compositore, che sulla schermata d'avvio non si vede: l'attesa scadeva
+           SEMPRE, 10 s in ognuna delle 40 prove (496 s del file nel treno G del 03/11), e il `.catch` taceva. Ora si aspetta
+           il fatto che serve: la lettura `GET /api/v1/remote` dell'avvio è arrivata ed è stata APPLICATA (`leggiEApplicaRemoto`,
+           `app.js`: con un dispositivo in linea toglie `hidden` alla pillola; le schede dei file leggono le offerte solo se lo
+           stato ha già un dispositivo). Prima questa premessa non si controllava affatto; ora, se manca, la prova è rossa. */
+        const statoLetto = page.waitForResponse((r) => r.request().method() === 'GET' && new URL(r.url()).pathname === '/api/v1/remote', { timeout: 10_000 });
         await page.goto('/');
         await page.waitForFunction(() => window.__talosHarnessUiRuntime);
         await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 15_000 });
-        /* lo stato del remoto è letto all'avvio: il menu sa quali dispositivi ci sono */
-        await expect(page.locator('[data-remoto-pillola]')).toBeVisible({ timeout: 10_000 }).catch(() => null);
+        await statoLetto;
+        if (dispositivi.some((d) => d.inLinea)) await expect(page.locator('[data-remoto-pillola]'), 'lo stato del remoto letto all\'avvio è applicato').not.toHaveAttribute('hidden', { timeout: 10_000 });
+        else await page.evaluate(() => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok))));
         await page.evaluate(({ id, L }) => {
           const r = window.__talosHarnessUiRuntime;
           r.passaASessione(id, 'workspace', L.domanda.slice(0, 20), 'z-ai/glm-5.3-flash', { conclusa: true, modello: 'z-ai/glm-5.3-flash' });

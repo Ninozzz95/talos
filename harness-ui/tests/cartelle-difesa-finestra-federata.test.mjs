@@ -17,7 +17,7 @@ function banco({ cartelleDispositiviFn } = {}) {
     cartellaPerChatFile: async () => ({ cartella: 'C:\\progetti\\avm' }),
     resume: (sessionId) => { ripresi.push(sessionId); return { sessionId } },
   }
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry,
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry,
     ...(cartelleDispositiviFn ? { cartelleDispositiviFn: () => cartelleDispositiviFn(chiesti) } : {}) })
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 })
   return { chiama, ripresi, chiesti }

@@ -45,11 +45,11 @@
 /** «Spazi di lavoro»: dove vive il lavoro di una sessione. */
 export const SPAZI_DI_LAVORO = Object.freeze([
   { vaia: 'chat', icona: 'i-list', etichetta: 'Conversazioni' },
-  { vaia: 'note', conteggio: 'note', icona: 'i-doc', etichetta: 'Note' },
-  { vaia: 'attivita', icona: 'i-check-sq', etichetta: 'Attività' },
-  { vaia: 'libreria', icona: 'i-files', etichetta: 'Libreria' },
-  { vaia: 'memoria', icona: 'i-brain', etichetta: 'Memoria' },
-  { vaia: 'ricerca', icona: 'i-globe', etichetta: 'Ricerca approfondita' },
+  { vaia: 'note', conteggio: 'note', icona: 'i-sticky-note', etichetta: 'Note' },
+  { vaia: 'attivita', icona: 'i-list-todo', etichetta: 'Attività' },
+  { vaia: 'libreria', icona: 'i-library', etichetta: 'Libreria' },
+  { vaia: 'memoria', icona: 'i-book-marked', etichetta: 'Memoria' },
+  { vaia: 'ricerca', icona: 'i-telescope', etichetta: 'Ricerca approfondita' },
   { vaia: 'progetti', icona: 'i-folder', etichetta: 'Progetti' },
   { vaia: 'board', icona: 'i-grid', etichetta: 'Board' },
 ]);
@@ -60,11 +60,11 @@ export const SPAZI_DI_LAVORO = Object.freeze([
  *   modelli», e il monolite gestisce questa voce a parte (`app.js`, la regia del mockup).
  */
 export const STRUMENTI = Object.freeze([
-  { vaia: 'modelli', icona: 'i-bolt', etichetta: 'Modelli' },
-  { vaia: 'capability', icona: 'i-list', etichetta: 'Capability' },
-  { vaia: 'officina', icona: 'i-code', etichetta: 'Officina attrezzi' },
-  { vaia: 'automazioni', icona: 'i-clock', etichetta: 'Automazioni' },
-  { vaia: 'doctor', icona: 'i-shield', etichetta: 'Doctor' },
+  { vaia: 'modelli', icona: 'i-cpu', etichetta: 'Modelli' },
+  { vaia: 'capability', icona: 'i-blocks', etichetta: 'Capability' },
+  { vaia: 'officina', icona: 'i-wrench', etichetta: 'Officina attrezzi' },
+  { vaia: 'automazioni', icona: 'i-calendar-clock', etichetta: 'Automazioni' },
+  { vaia: 'doctor', icona: 'i-stethoscope', etichetta: 'Doctor' },
 ]);
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -119,9 +119,35 @@ export function impostaConteggioNav(voce, conteggio) {
   if (!badge) {
     badge = voce.ownerDocument.createElement('span');
     badge.className = 'talos-nav-item__count';
-    voce.append(badge);
+    const sotto = voce.querySelector('.talos-nav-item__sub');
+    if (sotto) sotto.before(badge); else voce.append(badge); // decisione 187: il numero resta sulla prima riga
   }
   badge.textContent = String(Math.trunc(conteggio));
+}
+
+/**
+ * Decisione 187 dell'owner (04/11/2026, variante C del bozzetto N3): una riga piccola SOTTO il nome della voce, testo visibile (si legge
+ * anche al tocco: niente fumetto), parte del nome accessibile come il badge. `testo` vuoto toglie la riga e la voce torna alta una riga.
+ * La riga sta dopo il badge e va a capo da sola (`[data-sotto]`, `index.css`): il nome resta lo `span` che il dizionario riscrive
+ * (`data-t`), così cambiare lingua non la cancella.
+ * @param {Element} voce il `.talos-nav-item`
+ * @param {string} testo
+ */
+export function impostaSottoNav(voce, testo) {
+  if (!voce) return;
+  let riga = voce.querySelector('.talos-nav-item__sub');
+  if (!testo) {
+    riga?.remove();
+    delete voce.dataset.sotto;
+    return;
+  }
+  if (!riga) {
+    riga = voce.ownerDocument.createElement('span');
+    riga.className = 'talos-nav-item__sub';
+    voce.append(riga);
+  }
+  riga.textContent = String(testo);
+  voce.dataset.sotto = '';
 }
 
 /**

@@ -26,6 +26,21 @@ test('TUTTI-ESCLUSI-01: il codice vince sul testo grezzo; la carta porta il perc
   } finally { impostaLingua('it'); }
 });
 
+test('RESTRIZIONE-CONTO-01: la restrizione del conto OpenRouter ha la sua carta, che dice dove si cambia, in italiano e in inglese', () => {
+  try {
+    for (const [lingua, perche] of [['it', /non sta in TALOS/u], ['en', /not in TALOS/u]]) {
+      impostaLingua(lingua);
+      const s = spiegaErrore('The provider did not accept the request.', 'OPENROUTER_GUARDRAIL_BLOCKED');
+      assert.equal(s.id, 'restrizione-conto'); assert.equal(s.riconosciuto, true);
+      assert.match(s.rimedi[0], /openrouter\.ai\/workspaces\/default\/guardrails/u);
+      assert.match(s.perche, perche);
+      assert.doesNotMatch(s.rimedi[0], /Provider → OpenRouter|Provider → OpenRouter → Configura/u, 'non manda alle impostazioni di TALOS');
+      assert.match(s.tecnico, /OPENROUTER_GUARDRAIL_BLOCKED/u);
+      assert.notEqual(vestizioneErrore(s).badge, vestizioneErrore(spiegaErrore('', 'PROVIDER_KEY_SPEND_LIMIT')).badge, 'non è «Limite del servizio»');
+    }
+  } finally { impostaLingua('it'); }
+});
+
 test('TUTTI-ESCLUSI-02: AL CONTRARIO — lo stesso testo senza il codice non diventa questa carta', () => {
   assert.notEqual(spiegaErrore('All providers have been ignored.', 'PROVIDER_REQUEST_ERROR').id, 'tutti-esclusi');
   assert.notEqual(spiegaErrore('Every provider of this model is in your excluded list on OpenRouter.', '').id, 'tutti-esclusi');

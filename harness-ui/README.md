@@ -27,8 +27,11 @@ it; the launcher then opens the Doctor screen when no access is configured.
 node harness-ui/server.mjs
 ```
 
-Open `http://127.0.0.1:4174/` (or the next free port, printed on start; set
-`TALOS_HARNESS_UI_PORT` to require an exact one). Set `OPENROUTER_API_KEY` to
+Open the link it prints: it works once and lasts 60 seconds, and the browser
+stays signed in until the server stops. The address is `127.0.0.1:4174`, or the
+next free port (set `TALOS_HARNESS_UI_PORT` to require an exact one). Every
+server has a token: it lives in memory and reaches the browser as an HttpOnly
+cookie. A launcher passes it on stdin, never in the environment. Set `OPENROUTER_API_KEY` to
 start sessions; without it the server still starts, read-only, and starting
 a session fails
 per request with `CONFIG_INVALID`.

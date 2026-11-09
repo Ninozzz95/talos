@@ -15,7 +15,9 @@ export function risolviPercorsi({ appPath, isPackaged = false, resourcesPath, ha
   }) : undefined;
   /* Fase B «casa di esecuzione» (owner 01/10/2026, «dentro l'installatore»): Node e rg per Linux, come i runtime di llama. */
   const casaLinux = isPackaged && !harnessDir ? join(resourcesPath, 'casa-linux', 'linux-x64') : undefined;
-  return Object.freeze({ root: resolve(root), server: join(root, 'server.mjs'), bootstrap: join(appPath, 'child-bootstrap.mjs'), localRuntime, casaLinux });
+  /* Decisioni dell'owner 248-249 (05/11/2026): l'aiutante del PC per il computer use viaggia nel pacchetto, con la sua impronta. */
+  const aiutantePc = isPackaged && !harnessDir ? join(resourcesPath, 'aiutante-pc', 'cua-driver.exe') : undefined;
+  return Object.freeze({ root: resolve(root), server: join(root, 'server.mjs'), bootstrap: join(appPath, 'child-bootstrap.mjs'), localRuntime, casaLinux, aiutantePc });
 }
 
 export function scegliMotoreLocale({ percorsi, env = process.env, sonda = spawnSync, preferenza = 'auto' }) {
@@ -63,10 +65,12 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
   if (!portaValida(port)) throw new Error('La porta del figlio non è consentita.');
   if (!/^[a-f0-9]{64}$/.test(token ?? '')) throw new Error('Credenziale locale non valida.');
   if (!['desktop', 'desktop-preview'].includes(keyringScope)) throw new Error('Scope del portachiavi Desktop non valido.');
-  const ambiente = Object.fromEntries(Object.entries(env).filter(([k, v]) => v !== undefined && !/^(NODE_OPTIONS|NODE_PATH|TALOS_PACKAGED_NODE|ELECTRON_RUN_AS_NODE|ELECTRON_ENABLE_LOGGING|ELECTRON_LOG_FILE|ELECTRON_NO_ASAR)$/i.test(k) && !(installata && NOME_VARIABILE_KERNEL.test(k))));
+  const ambiente = Object.fromEntries(Object.entries(env).filter(([k, v]) => v !== undefined && !/^(NODE_OPTIONS|NODE_PATH|TALOS_PACKAGED_NODE|ELECTRON_RUN_AS_NODE|ELECTRON_ENABLE_LOGGING|ELECTRON_LOG_FILE|ELECTRON_NO_ASAR|TALOS_HARNESS_UI_TOKEN)$/i.test(k) && !(installata && NOME_VARIABILE_KERNEL.test(k))));
   if (motoreLocale) {
     ambiente.TALOS_LLAMA_SERVER_PATH = motoreLocale.percorso;
+    delete ambiente.TALOS_LLAMA_SERVER_DAL_PACCHETTO;
     if (motoreLocale.variante !== 'personalizzato') {
+      ambiente.TALOS_LLAMA_SERVER_DAL_PACCHETTO = '1'; // the shell chose a packaged engine: the path is set, but nobody set it by hand (`versione-del-motore.mjs`)
       delete ambiente.TALOS_LLAMA_SERVER_FALLBACK_PATH;
       if (motoreLocale.variante === 'vulkan' && percorsi.localRuntime?.cpu) ambiente.TALOS_LLAMA_SERVER_FALLBACK_PATH = percorsi.localRuntime.cpu;
     }
@@ -87,7 +91,8 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
   }
   Object.assign(ambiente, {
     ELECTRON_RUN_AS_NODE: '1', TALOS_HARNESS_UI_HOST: '127.0.0.1', TALOS_HARNESS_UI_PORT: String(port),
-    TALOS_HARNESS_UI_TOKEN: token, TALOS_HARNESS_UI_REPORT_FILE: reportFile,
+    /* ⛔ «Gettone sempre» (02/11/2026, condizione del Mobile): il gettone esce dall'ambiente e va dallo stdin (`segreti` qui sotto, `consegnaSegreti`). */
+    TALOS_HARNESS_UI_SEGRETI_DA: 'stdin', TALOS_HARNESS_UI_REPORT_FILE: reportFile,
     /* «Segnala un problema» (revisione D del 29/10/2026, F4): `TALOS_SEGNALAZIONE_PROBLEMA` è l'interruttore POSITIVO della seconda
        porta — l'attrezzo `report_problem` esiste solo dove chi ospita il server lo accende (`segnalazioneAccesaDallAmbiente`); il Pad e
        «Codice in casa» no. ⛔ Il commento sta SOPRA la riga: un commento fra una virgola e il nome lo nasconde alla guardia CLI-REQ-04. */
@@ -116,9 +121,18 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
   /* Fase B: dove sono i binari per Linux del pacchetto (`cartellaCasaLinux` nel server). Dal sorgente non si passa: il server usa
      `.casa-linux/` preparata con `npm run prepara:casa-linux`, o la variabile già dichiarata dal sistema. */
   if (percorsi.casaLinux) ambiente.TALOS_CASA_LINUX = percorsi.casaLinux;
-  return { avvisi, command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, percorsi.server], options: {
-    cwd: percorsi.root, env: ambiente, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], windowsHide: true, shell: false,
+  /* Computer use (decisioni 248-249): dove sta l'aiutante del pacchetto (`percorsoAiutantePredefinito` nel server). Dal sorgente non si
+     passa: il server usa la build di sviluppo di `native/aiutante-nativo/costruisci.mjs potato`. L'impronta resta quella del codice. */
+  if (percorsi.aiutantePc) ambiente.TALOS_AIUTANTE_PC = percorsi.aiutantePc;
+  return { avvisi, segreti: 'TALOS_HARNESS_UI_TOKEN=' + token + '\n', command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, percorsi.server], options: {
+    cwd: percorsi.root, env: ambiente, stdio: ['pipe', 'pipe', 'pipe', 'ipc'], windowsHide: true, shell: false,
   } };
+}
+
+/** Il gettone al figlio, appena nato: lo stdin si chiude subito (`segreti-da-stdin.mjs`: si legge fino all'EOF). Un figlio morto all'avvio non deve far cadere il guscio. */
+export function consegnaSegreti(proc, avvio) {
+  proc.stdin.on('error', () => {});
+  proc.stdin.end(avvio.segreti);
 }
 
 // Il backend rifiuta listen(0). La prenotazione viene rilasciata prima dello spawn.
@@ -182,6 +196,19 @@ export async function scegliPortaPersistente(file) {
 export function validaHandshake(dati, port) {
   if (!dati || dati.host !== '127.0.0.1' || !portaValida(dati.port) || dati.port !== port) throw new Error('Risposta di avvio locale non valida.');
   return `http://127.0.0.1:${port}`;
+}
+
+/*
+ * Revisione R1 (03/11/2026): `/api/v1/browser/proxy` rimanda la CORNICE sull'altro nome di loopback dello stesso server. La finestra resta sulla sua origine; una cornice può
+ * andare solo lì. `will-redirect` scatta anche per le cornici (Electron, web-contents `isMainFrame`, letta il 03/11/2026).
+ */
+export function rimandoConsentito(base, destinazione, finestraPrincipale = true) {
+  try {
+    const da = new URL(base);
+    const a = new URL(destinazione);
+    if (a.origin === da.origin) return true;
+    return !finestraPrincipale && a.protocol === 'http:' && a.port === da.port && !a.username && !a.password && ['127.0.0.1', 'localhost'].includes(a.hostname);
+  } catch { return false; }
 }
 
 export function urlIngresso(base, token) {

@@ -84,7 +84,12 @@ test.beforeEach(async ({ page }) => {
 /** Le righe a schermo che il contratto delle preferenze NON elenca, per nome (PARITA-03, PARITA-07). */
 /* 13/10/2026 (bugfixer): `linkDove` — dove si aprono i link della chat (owner 12/10, `756ecdedd`): una riga della carta «Link dalla
    chat», che scrive nella sua memoria (`siti-fidati.js`), non in `values[field.chiave]`. Fuori dal contratto come le altre due. */
-const FUORI_CONTRATTO = ['workspaceRestore', 'motoreContesto', 'linkDove'];
+/* 01/11/2026 (rossa della suite del blocco 24, classificata dalle cure del blocco 25): «Modello dei riassunti» e «Riserva» della carta «Memoria e
+   compattazione» (`carta-compattazione.js`, `5acee6a51`; owner 28/10 «catena scritta nelle Impostazioni») scrivono le impostazioni del SERVER
+   (`/api/v1/context-settings`), come `motoreContesto`: fuori dal contratto delle preferenze locali. */
+/* 07/11/2026 (curatore, rossa del treno M): due righe nuove fuori dal contratto, ciascuna con la sua memoria: «Blocchi vivi nelle risposte»
+   (`liveBlocksToggle`, 803a748a3, 04/11) e «Uso del computer» in Anteprima (`computerUseToggle`, 17b6c7a17 + 92607b484, decisione 310, 06/11). */
+const FUORI_CONTRATTO = ['workspaceRestore', 'motoreContesto', 'linkDove', 'modelloDelRiassunto', 'riservaDelRiassunto', 'liveBlocksToggle', 'computerUseToggle'];
 
 test('PARITA-01 · i cinque gruppi del mockup, nell’ordine del mockup, con i suoi titoli', async ({ page }) => {
   await apriAspetto(page);
@@ -137,7 +142,9 @@ test('PARITA-02 · i conteggi sono CONTATI dal contratto, non scritti nel markup
   // (ledger R4 «DESK-COMPOSER-STANDARD-2026-09-23»). Il mockup PR27 ne aveva 9: la differenza è voluta.
   // 28/10/2026: torna a 9 perché l'owner ha voluto «Lingua delle risposte e della dettatura» subito dopo «Lingua dei menu» (decisione «come
   // scrivi o parli», impostazione Automatica). Una scelta nuova, non quella tolta il 23/09.
-  expect(attesi, 'le partizioni del contratto non sono più quelle del mockup').toEqual([9, 4, 11, 1, 1]);
+  // 03/11/2026: 10, con «Come si apre Nuova sessione» (Finestra o Cielo Beta, FE-040): una scelta nuova del contratto
+  // (impostazioni-campi.js, `newSessionViewSelect`), non una riga del mockup che torna.
+  expect(attesi, 'le partizioni del contratto non sono più quelle del mockup').toEqual([10, 4, 11, 1, 1]);
   const letti = await page.locator('#setting-panel-appearance > [data-settings-group] [data-settings-group-count]').allTextContents();
   expect(letti).toEqual(attesi.map((n) => `${n} ${n === 1 ? 'CONTROLLO' : 'CONTROLLI'}`));
 });
@@ -156,9 +163,10 @@ test('PARITA-03 · la pastiglia dice i controlli del contratto e i 14 temi, e so
   const righe = await page.evaluate(() => [...document.querySelectorAll('#schermoImpostazioni [data-setting-row]')].map((r) => r.dataset.settingRow));
   /* C1 (10/10/2026): «Motore del contesto» (Memoria e contesto) è un'impostazione del SERVER (`/api/v1/context-settings`), non una
      preferenza locale: fuori dal contratto `CAMPI_IMPOSTAZIONI`, che lega ogni riga a `values[field.chiave]`, come `workspaceRestore`. */
-  expect(righe.length).toBe(CAMPI_IMPOSTAZIONI.length + FUORI_CONTRATTO.length);
   const contratto = new Set(CAMPI_IMPOSTAZIONI.map((campo) => campo.id));
+  // prima QUALI righe stanno fuori dal contratto (dice i nomi), poi quante
   expect(righe.filter((id) => !contratto.has(id)).sort()).toEqual([...FUORI_CONTRATTO].sort());
+  expect(righe.length).toBe(CAMPI_IMPOSTAZIONI.length + FUORI_CONTRATTO.length);
   // E la metà «temi» ha una sorgente sua: le opzioni del select del tema, che sono 14.
   await expect(page.locator('[data-setting-row="themePresetSelect"] select option')).toHaveCount(TEMI.length);
 });

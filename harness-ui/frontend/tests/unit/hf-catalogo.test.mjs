@@ -91,15 +91,17 @@ test('HF-ORDINE: le varianti scendono per qualità, e quella illeggibile va in F
   assert.equal(ordinaVarianti(alfabetico)[0].quant, 'BF16');
 });
 
-test('HF-CONSIGLIO: la più fedele che ENTRA davvero; mai i pesi pieni, mai sotto i 4 bit', () => {
+/* ⛔ Owner 02/11/2026: la fila Q4_K_M → IQ4_XS → Q4_K_S → Q4_0 viene prima della «più fedele che entra» (uguale al telefono e a llama.cpp).
+ * Prima qui si attendeva Q8_0; le altre protezioni (pesi pieni, 4 bit, niente consiglio se niente entra) restano. */
+test('HF-CONSIGLIO: Q4_K_M se ENTRA davvero; mai i pesi pieni, mai sotto i 4 bit', () => {
   const gruppi = gruppiVarianti(DETTAGLIO_HF.files);
   const c = varianteConsigliata(gruppi, STIMA_HF);
-  // F16 è più fedele di Q8_0 ma è «blocked» E sono pesi pieni: si consiglia Q8_0
-  assert.equal(c.gruppo.quant, 'Q8_0');
+  assert.equal(c.gruppo.quant, 'Q4_K_M');
   assert.equal(c.motivo, 'misura');
   // ⛔ verso contrario 1: i pesi pieni non si consigliano NEPPURE quando ci starebbero
   const tuttoEntra = new Map([...STIMA_HF].map(([k, v]) => [k, { ...v, state: 'compatible' }]));
-  assert.equal(varianteConsigliata(gruppi, tuttoEntra).gruppo.quant, 'Q8_0');
+  assert.equal(varianteConsigliata(gruppi, tuttoEntra).gruppo.quant, 'Q4_K_M');
+  assert.notEqual(varianteConsigliata(gruppi.filter((x) => x.quant !== 'Q4_K_M'), tuttoEntra).gruppo.quant, 'F16');
   // ⛔ verso contrario 2: se NIENTE ci sta, non si consiglia niente invece di consigliare il più piccolo
   const nienteEntra = new Map([...STIMA_HF].map(([k, v]) => [k, { ...v, state: 'blocked' }]));
   assert.equal(varianteConsigliata(gruppi, nienteEntra), null);
@@ -114,10 +116,11 @@ test('HF-CONSIGLIO: il pavimento dei 4 bit di Hermes, e il ripiego quando non c�
   const soloPiccole = [g('Q2_K'), g('IQ3_S'), g('IQ1_S')];
   const stimaTutteOk = new Map(soloPiccole.map((x) => [x.chiave, { state: 'compatible' }]));
   assert.equal(varianteConsigliata(soloPiccole, stimaTutteOk), null);
-  // senza misura si ripiega sulla banda Q4-Q5, e il motivo lo DICHIARA
+  // senza misura si ripiega sulla fila (owner 02/11: Q4_K_M per prima), e il motivo lo DICHIARA; senza nessuna della fila, la banda Q4-Q5
   const senzaMisura = varianteConsigliata([g('BF16'), g('Q8_0'), g('Q5_K_M'), g('Q4_K_M'), g('Q2_K')], new Map());
-  assert.equal(senzaMisura.gruppo.quant, 'Q5_K_M');
+  assert.equal(senzaMisura.gruppo.quant, 'Q4_K_M');
   assert.equal(senzaMisura.motivo, 'convenzione');
+  assert.equal(varianteConsigliata([g('BF16'), g('Q8_0'), g('Q5_K_M'), g('Q2_K')], new Map()).gruppo.quant, 'Q5_K_M');
   // ⛔ un set incompleto o senza impronta non si consiglia: non si scaricherebbe comunque
   const rotte = [g('Q5_K_M', { incompleto: true }), g('Q4_K_M', { senzaHash: true }), g('Q4_K_S')];
   assert.equal(varianteConsigliata(rotte, new Map()).gruppo.quant, 'Q4_K_S');

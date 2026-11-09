@@ -9,6 +9,7 @@ const LETTURE = new Set([
   'conversation_search', 'ask_parent', 'answer_parent_question',
   'tool_search', 'tool_describe', // C5 attrezzi differiti: il catalogo si legge; `tool_call` si giudica sull'attrezzo vero
   'view_image', // owner 27/10/2026: guardare un'immagine è una lettura
+  'talos_help', // revisione del blocco 25 (R9): leggere la guida di TALOS è una lettura, anche per una figlia in sola lettura
 ]);
 
 /** Missing metadata is legacy; present but invalid metadata fails closed. */

@@ -142,3 +142,43 @@ test('SED-DATA: una data non registrata resta vuota invece di diventare il 1970'
   assert.equal(dataBreve('non-una-data'), '');
   assert.equal(dataBreve(undefined), '');
 });
+
+/*
+ * Revisione del blocco interfaccia (05/11/2026 sera, difetto basso del pezzo 2, mutante M13 sopravvissuto): «0 selezionate»
+ * accanto al pulsante spento era stato zittito (Tester S4) ma nessuna prova lo leggeva. Si monta la sezione col DOM finto dei
+ * blocchi, come `ux-177-sezioni-sorelle`, e si legge il conteggio a schermo nei due versi: zero scelte, poi una.
+ */
+test('Tester S4 — a selezione vuota il conteggio tace; con una voce scelta torna e dice quante', async () => {
+  const { documento } = await import('./aiuto-dom-blocchi.mjs');
+  const { montaSezione, statoSezione } = await import('../../src/components/sezione-elenco-dettaglio.js');
+  const doc = documento();
+  for (const crea of ['createElement', 'createElementNS']) {
+    const originale = doc[crea];
+    doc[crea] = (...a) => {
+      const n = originale(...a);
+      n.style.setProperty = (k, v) => { n.style[k] = v; };
+      n.style.removeProperty = (k) => { delete n.style[k]; };
+      return n;
+    };
+  }
+  const schermo = doc.createElement('section');
+  doc.body?.append?.(schermo);
+  const config = {
+    chiave: 'tester-s4', nome: 'Note', sostantivo: 'nota', voci: [{ id: 'a', titolo: 'A' }, { id: 'b', titolo: 'B' }], stato: {},
+    filtri: [{ id: 'tutte', etichetta: 'Tutte' }],
+    titoloDi: (v) => v.titolo, quandoDi: () => null, cercaIn: (v) => v.titolo, idDi: (v) => v.id,
+    vuoto: { titolo: 'Niente', testo: 'Niente da mostrare.' },
+    scheda: () => ({}),
+    eliminaInBlocco: async () => ({ riuscite: [], fallite: [] }),
+  };
+  montaSezione(schermo, config);
+  const conteggio = schermo.querySelector('.td-bulk-count');
+  assert.ok(conteggio, 'il conteggio della scelta in blocco c’è');
+  assert.equal(schermo.querySelector('.td-bulk').hidden, false, 'la barra in blocco è visibile: due voci da poter scegliere');
+  assert.equal(conteggio.hidden, true, 'zero scelte: «0 selezionate» non si dice, lo dice già il pulsante spento');
+
+  statoSezione(schermo).selezionateInBlocco.add('a');
+  montaSezione(schermo, config);
+  assert.equal(conteggio.hidden, false, 'verso contrario: con una voce scelta il conteggio torna');
+  assert.match(conteggio.textContent, /^1\b/u, `dice quante (${conteggio.textContent})`);
+});

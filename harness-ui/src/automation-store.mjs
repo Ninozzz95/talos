@@ -88,6 +88,9 @@ export function createAutomationStore({
   piattaforma = process.platform,
   ritentoMs = RITENTO_MS,
   attendi = attendiMs,
+  /* contratto «notifiche» (31/10/2026): un giro chiuso o saltato, dopo che è nello storico — per gli scrittori del registro delle
+     notifiche. Facoltativo; un osservatore che lancia non tocca mai lo storico. */
+  osservaGiro = null,
 } = {}) {
   if (typeof cartella !== 'string' || cartella.length === 0) {
     throw new AutomationStoreError('folder is required', 'AUTOMATION_STORE_MISCONFIGURED');
@@ -459,9 +462,12 @@ export function createAutomationStore({
       const voce = await leggi(id);
       if (!voce || voce.versione !== 2) return null;
       if (voce.giroInCorso?.runId === runId) voce.giroInCorso = null;
-      await aggiungiAlloStorico(id, { runId, evento: 'fine', esito, finitaAlle: clock().toISOString(),
+      const finitaAlle = clock().toISOString();
+      await aggiungiAlloStorico(id, { runId, evento: 'fine', esito, finitaAlle,
         riassunto: typeof riassunto === 'string' ? riassunto.slice(0, RIASSUNTO_MASSIMO) : null, daGuardare: daGuardare === true,
         ...(motivo ? { motivo } : {}) });
+      try { osservaGiro?.({ automazioneId: id, nome: voce.nome ?? '', runId, evento: 'fine', esito, alle: finitaAlle,
+        riassunto: typeof riassunto === 'string' ? riassunto : null, daGuardare: daGuardare === true, motivo }); } catch { /* mai lo storico */ }
       return scrivi(voce);
     });
   }
@@ -478,9 +484,12 @@ export function createAutomationStore({
       const ora = clock();
       if (voce.pianificazione.tipo === 'una-volta') voce.attiva = false;
       voce.prossimaEsecuzione = prossimaDi(voce, { dopo: ora, ultimoGiro: ora });
-      await aggiungiAlloStorico(id, { runId: randomUUID(), evento: 'saltata', previstaAlle, alle: ora.toISOString(), motivo,
+      const runIdSaltato = randomUUID();
+      await aggiungiAlloStorico(id, { runId: runIdSaltato, evento: 'saltata', previstaAlle, alle: ora.toISOString(), motivo,
         ...(typeof dettaglio === 'string' && dettaglio ? { dettaglio: dettaglio.slice(0, RIASSUNTO_MASSIMO) } : {}),
         ...(daGuardare === true ? { daGuardare: true } : {}) });
+      try { osservaGiro?.({ automazioneId: id, nome: voce.nome ?? '', runId: runIdSaltato, evento: 'saltata', esito: 'saltata', alle: ora.toISOString(),
+        riassunto: null, daGuardare: daGuardare === true, motivo }); } catch { /* mai lo storico */ }
       return scrivi(voce);
     });
   }

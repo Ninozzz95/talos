@@ -94,9 +94,38 @@ test('C1-VIVO-03: under pressure the big outputs of the recent part are shortene
   assert.equal(esiti.length, 3, 'no output disappears');
   assert.match(esiti[0].content, /^uscita 1: dato /u, 'the head stays');
   assert.match(esiti[0].content, /fine 1$/u, 'the tail stays');
-  assert.match(esiti[0].content, /characters omitted .*Recover it with conversation_search\./u);
+  assert.match(esiti[0].content, /characters trimmed by TALOS; the full text is kept\. .*Recover it with conversation_search\./u);
   assert.equal(esiti[2].content, grande(3), 'the latest output stays whole');
   assert.ok(preparata.measurement.inputTokens < conta(messaggi));
+});
+
+test('RIGA-ACCORCIATI-01 (owner 01/11): il motore dice quante uscite della richiesta in corso sono state accorciate; quelle delle richieste vecchie non contano', async (t) => {
+  const b = await banco(t, { summarize: () => { throw new Error('no summary expected'); } });
+  for (const i of [1, 2, 3, 4, 5, 6]) await giro(b, i);
+  await b.aggiungi({ role: 'user', content: 'Adesso leggi questi due' });
+  for (const i of [7, 8]) {
+    await b.aggiungi({ role: 'assistant', content: '', tool_calls: [{ id: `c${i}`, type: 'function', function: { name: 'leggi', arguments: `{"percorso":"capitolo-${i}.md"}` } }] });
+    await b.aggiungi({ role: 'tool', content: grande(i, 40_000), tool_call_id: `c${i}` });
+  }
+  const messaggi = (await b.store.readOriginals({ sessionId: 'chat' })).map((r) => r.message);
+  const profilo = { provider: 'openrouter', model: 'fixture', windowTokens: finestra(conta(messaggi) * 0.55, 0.95), responseReserve: 2048 };
+  const preparata = await b.engine.prepareForRequest({ sessionId: 'chat', tools: [], sessionModel: profilo, summaryCeilingMs: 0 }).catch((e) => ({ errore: e }));
+  assert.equal(preparata.errore, undefined, preparata.errore?.message);
+  const esiti = preparata.messages.filter((m) => m.role === 'tool');
+  const nellaRichiesta = esiti.slice(-2).filter((m) => /characters trimmed by TALOS/u.test(m.content)).length;
+  assert.ok(nellaRichiesta >= 1, 'premessa: la richiesta non entrava, e una sua uscita è stata accorciata');
+  assert.equal(preparata.level1.accorciateRichiesta, nellaRichiesta);
+});
+
+test('RIGA-ACCORCIATI-02 — AL CONTRARIO: accorciate solo le uscite delle richieste vecchie, il numero è zero', async (t) => {
+  const b = await banco(t, { summarize: () => { throw new Error('no summary expected'); } });
+  for (const i of [1, 2, 3]) await giro(b, i);
+  const messaggi = (await b.store.readOriginals({ sessionId: 'chat' })).map((r) => r.message);
+  const profilo = { provider: 'openrouter', model: 'fixture', windowTokens: finestra(conta(messaggi), 0.85), responseReserve: 2048 };
+  await b.aggiungi({ role: 'user', content: 'Come va?' });
+  const preparata = await b.engine.prepareForRequest({ sessionId: 'chat', tools: [], sessionModel: profilo });
+  assert.ok(preparata.level1.shortened + preparata.level1.cleared > 0, 'premessa: qualcosa è stato accorciato');
+  assert.equal(preparata.level1.accorciateRichiesta, 0);
 });
 
 test('C1-VIVO-SYSTEM (15/10/2026, cache del piano): with a summary, a late system message after the covered part stays in place in the tail; none is lost or doubled', async (t) => {

@@ -1,4 +1,6 @@
 import { filoRagionamentoDiretti, livelliRagionamentoDiretti } from './model-destination.mjs';
+import { creaLettureAPezzi, fonteOscurataPerIlDispositivo } from './letture-a-pezzi.mjs'; // Context Manager dal dispositivo
+import { conIlProiettore, eProiettore } from './proiettore-visione.mjs'; // 01/11/2026: un proiettore non è mai un modello, e viaggia col suo
 import { filoRagionamentoCatalogo } from './runtime-owner-adapter.mjs'; // A9 seguito OpenRouter (09/10/2026): il filo delle voci del catalogo, dal clamp vero
 import { creaCampionatoreRisorse } from './risorse-processi.mjs'; // C1 (10/10/2026): CPU e memoria dei comandi vivi
 import { pipeline } from 'node:stream/promises';
@@ -9,7 +11,6 @@ import { normalizzaReasoningPerModello } from './runtime-owner-adapter.mjs'; // 
 import { contestoDelProgetto as contestoDelProgettoReale } from './contesto-del-progetto.mjs'; // /goal G2c: il preambolo che vede l'agente
 import { creaFiltroGitignore as creaFiltroGitignoreReale } from './gitignore-elenco.mjs';
 import { comprimiDiffPerMessaggio, promptMessaggioCommit, pulisciMessaggioGenerato } from './messaggio-commit.mjs'; // F6-1 ✨, 26/09
-import { CARTELLA_ASSISTENZA_PREDEFINITA, MAX_DOMANDA_ASSISTENZA, cercaAssistenza } from './assistenza.mjs';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'; // 08/9, BH-06: il nonce CSP del documento, nuovo a ogni risposta; F3 (24/09): il gettone di spegnimento a tempo costante
 import { listRunSummariesForSession, ordinaPerCreazione, readRunHistory, readRunState, removeRun } from './workflow/store.mjs';
 import { readResultBytes } from './workflow/result-store.mjs'; // F-014 (§1.6): l'output integrale di un passo, verificato
@@ -23,15 +24,16 @@ import { approveWorkflowProposal, listWorkflowProposals, readPlannedWorkflowGrap
   readWorkflowProposal, reviseWorkflowBudgets } from './workflow/planning-control.mjs';
 import { leggiArtefatto as leggiArtefattoReale } from './artifact-store.mjs';
 import { nomiPerContentDisposition } from './workspace-files.mjs'; // PO-05: le due forme del nome per Content-Disposition (RFC 6266)
-import { saveChatFile } from './chat-file-upload.mjs';
 import { creaLasciapassarePagine } from './pagine-lasciapassare.mjs'; // F5: gli indirizzi-capacità delle pagine HTML rese
 import { verificaIncorniciabile } from './browser-frame.mjs';
 import { decidiVia } from './browser-proxy-universale.mjs'; // 07/9: la scelta della corsia sta in un posto solo // K-I 06/9: la cornice del Browser si decide dalle intestazioni della pagina
 import { proxyPagina } from './browser-proxy.mjs';
 import { leggiPaginaPerLaVista } from './agent-service.mjs';
+import { paginaBrowserValida } from './pagina-browser-ospite.mjs'; // decisione 201: la pagina del Browser che un messaggio riporta
 import { ritrattoCartella } from './workspace-info.mjs'; // 06/9 F9/F10/F19-F21: cosa c'e' dentro la cartella, PRIMA di darla a un agente // 06/9: gli occhi del modello sulla pagina dove navighi TU // 06/9: il proxy locale per annotare gli elementi
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
-import { bollaValida } from './bolla-della-persona.mjs';
+import { bollaValida, idAllegatiDellaBolla } from './bolla-della-persona.mjs';
+import { byteDichiarati, creaArchivioAllegati, eIdAllegato } from './allegati-dati.mjs'; // decisioni 43 e 47: gli allegati nei dati di TALOS
 import { ORIGINE_REMOTA, bollaConOrigine, origineValida } from './origine-remota.mjs'; // 18/10/2026: «dal telefono X»; R5.8 la chiusura
 
 /** C09 (owner 10/10/2026): la copia per lo schermo viaggia accanto al messaggio e si stacca prima dei validatori dei corpi, che
@@ -55,6 +57,10 @@ import { raccogliDiagnosticaSegnalazione } from './segnalazione-problema.mjs'; /
 import { createSseSession } from './http-lifecycle.mjs';
 import { eventoDiRichiesta } from './remoto/cartelle-dispositivi.mjs'; // R2.1 (24/10/2026): la carta del consenso spinta alla finestra
 import { iscriviConRigiocata } from './iscrizione-sessione.mjs';
+import { ROTTE_LUOGHI, PREFISSO_ROTTE_LUOGHI, creaRotteLuoghi } from './computer-use/luoghi-rotte.mjs'; // 03/11/2026: i luoghi di «Consenti sempre»
+import { COMPUTER_USE_ACCESO } from './computer-use/interruttore.mjs'; // decisioni 79-80: spento in questa release
+import { ROTTE_NOTIFICHE, creaRotteNotifiche } from './notifiche-rotte.mjs'; // contratto «notifiche» 31/10/2026: il registro del «visto» nel server
+import { PREFISSO_ROTTE_IMPOSTAZIONI, ROTTA_APPLICA_IMPOSTAZIONI, ROTTE_IMPOSTAZIONI, applicaToccaLaConversazione, voceCheVuoleIlPc, fraseDelPcPerIlDispositivo, creaRotteImpostazioni } from './impostazioni/rotte-impostazioni.mjs'; // Fase 8 (01/11/2026): impostazioni dalla chat
 import { PREFISSO_ROTTE_REMOTO, ROTTA_EVENTI_REMOTO, ROTTE_REMOTO, creaRotteRemoto } from './remoto/rotte.mjs'; // 18/10/2026: il controllo remoto, rotte della finestra // 18/10/2026: la stessa iscrizione per la finestra e per il telefono
 import { iconaDelDominio } from './favicon-proxy.mjs'; // 10/09: le favicon delle fonti, prese dal server e mai dal browser
 import { creaRegistroAttese, ritornoDaHost, scambiaCodicePerChiave } from './openrouter-oauth.mjs'; // PO-01 10/9: i conti dell'accesso a OpenRouter, puri e provabili senza rete
@@ -77,7 +83,8 @@ import { CARTELLA_MEMORIA, MemoryStoreError, aggiornaMemoria, creaMemoria, elimi
    (`research-store.mjs`): scriverne una seconda qui vorrebbe dire due difese che divergono
    proprio sul confine che conta. Qui serve per rispondere 400 invece di far lanciare il magazzino. */
 import { idRicercaValido } from './research-store.mjs';
-import { hostAmmesso, origineDellaFinestra, rifiutoScritturaDaAltroSito } from './guardia-origine.mjs'; // 0.1.25
+import { aliasDiLoopback, hostAmmesso, origineDellaFinestra, portaDaHost, rifiutoScritturaDaAltroSito } from './guardia-origine.mjs'; // 0.1.25
+import { CAMPO_BIGLIETTO, cookieValido, creaCassaDeiBiglietti, DURATA_COOKIE_S, firmaPaginaLocale, gettoneUguale, MODO_SENZA_GETTONE, NOME_COOKIE, valoreDelCookie } from './gettone.mjs'; // owner 02/11: il gettone c'è sempre
 /* ⭐⭐⭐⭐ 12/09, owner: «la ricerca approfondita deve avere una suite di esportazioni COMPLETA».
    ⛔ Il modulo è UNO e non conosce HTTP: qui si importa solo la porta (`costruisciEsportazione`) e
    l'elenco dei formati, che serve a scrivere il motivo di un 400 senza ricopiarlo. Nessun formato,
@@ -85,6 +92,8 @@ import { hostAmmesso, origineDellaFinestra, rifiutoScritturaDaAltroSito } from '
 import { FORMATI_ESPORTAZIONE, costruisciEsportazione } from './research/esportazioni.mjs';
 import { puntoDelRamo } from './punto-del-ramo.mjs'; // 24/10/2026: il fork «prima del giro» dalla finestra e dal dispositivo
 import { linguaDelTesto } from './lingua-del-testo.mjs'; // owner 28/10/2026 sera: la lingua dei messaggi scritti (ELD)
+import { capacitaDichiarate } from './capacita-dei-client.mjs'; // R-34 parte 2: `pending` filtra la carta di una chiamata scritta come testo
+import { requireRicercaDelMessaggio } from './ricerca-due-porte.mjs'; // 01/11/2026: la ricerca a due porte, il campo `ricerca`
 
 /*
  * La lingua di un messaggio SCRITTO che arriva senza `linguaDelMessaggio` (accordo con il Mobile, 28/10/2026 notte). Il server la riconosce
@@ -171,6 +180,8 @@ const API_ERROR_CODES = new Set([
   'TASK_NOT_ALLOWED',
   'TASK_CATALOG_UNAVAILABLE',
   'SESSION_NOT_READY',
+  'SIDE_CHAT_NO_ANSWER',
+  'SIDE_CHAT_FAILED',
   'SESSION_STORE_WRITE_FAILED',
   'SESSION_STORE_HEADER_FAILED',
   'SESSION_STORE_FS_UNSUPPORTED', // 24/09/2026: cura exFAT, disco senza collegamenti né ripiego
@@ -280,6 +291,7 @@ const API_ERROR_CODES = new Set([
   /* RA-03, 20/10/2026 — dal telefono una cartella qualsiasi del PC no: solo quelle ammesse (403). */
   'NOT_ALLOWED_REMOTELY',
   /* R5.12, 23/10/2026 — le cartelle dei dispositivi col consenso del PC (`remoto/cartelle-dispositivi.mjs`). */
+  'PIECE_CHANGED', 'EXPORT_TOO_LARGE', 'TOO_LARGE', // letture a pezzi
   'CONSENT_REQUIRED', 'CONSENT_NOT_PENDING', 'FOLDER_NOT_LISTED', 'FOLDER_NOT_ALLOWED', 'FOLDER_INVALID', 'REMOTE_CONSENTS_UNREADABLE',
   /* ⛔ CTX-D2, 23/09/2026 — la risposta Ask non è stata salvata: mai un 200 (vedi rispondiDomanda). */
   'QUESTION_ANSWER_NOT_SAVED',
@@ -309,11 +321,19 @@ const API_ERROR_CODES = new Set([
   'WSL_STORE_UNAVAILABLE', // F009 (01/10/2026): la preferenza dell'utente di WSL
   'CONTEXT_SETTINGS_UNAVAILABLE', // C1 (09/10/2026): l'interruttore del motore del contesto
   'COMMAND_SETTINGS_UNAVAILABLE', // owner 27/10/2026: dove girano i comandi, di serie
+  'CHAT_SETTINGS_UNAVAILABLE', // decisione 140 (04/11/2026): «Blocchi vivi nelle risposte»
+  'COMPUTER_USE_SETTINGS_UNAVAILABLE', // decisione 310 (06/11/2026): «Uso del computer (Anteprima)» acceso o spento
+  'FOLDER_TRUST_UNAVAILABLE', // decisioni 173/189/196 (04/11/2026): la fiducia delle cartelle (mai sul telefono)
+  'SETTINGS_UNAVAILABLE', 'SETTINGS_UNDO_REFUSED', // Fase 8 (01/11/2026): le impostazioni dalla chat
+  'SETTINGS_APPLY_REFUSED', 'SETTINGS_CHANGED_MEANWHILE', 'PC_CONFIRMATION_REQUIRED', // 02/11/2026: `/settings` della persona (dal PC e dal ponte)
   'MODEL_PREFERENCES_UNAVAILABLE', 'MODEL_FAVOURITES_FULL', // owner 29/10/2026: preferiti e recenti dei modelli, sul server
   'LOCAL_RUNTIME_NOT_CONFIGURED', // 27/10/2026: «Allarga la finestra» senza motore locale (prima un 500)
   // ⭐ 04/9, W1-10 — token di loopback della shell Electron: /api/* senza il cookie talos_token.
   'AUTH_REQUIRED',
   'CHAT_FILE_ORIGIN_FORBIDDEN',
+  'ATTACHMENTS_UNAVAILABLE',
+  'ATTACHMENTS_FULL',
+  'ATTACHMENT_NOT_AVAILABLE',
   'PAGE_ORIGIN_FORBIDDEN',
   'HOST_FORBIDDEN', 'ORIGIN_FORBIDDEN', // 0.1.25: la guardia dell'Host e delle scritture di tutto il server (guardia-origine.mjs)
   /* ⭐⭐⭐ 05/9, W1-01 — schede terminale per sessione (src/terminal-registry.mjs). Il tetto NON è burocrazia: su Windows ogni PTY porta con sé un processo conhost (node-pty#471). */
@@ -362,7 +382,7 @@ const API_ERROR_CODES = new Set([
      il runtime e' occupato; non essendo registrato qui veniva degradato a
      INTERNAL_ERROR (500), cioe' 'e' colpa nostra, riprova' su una
      situazione perfettamente normale e spiegabile. */
-  'RUNTIME_ALREADY_RUNNING',
+  'RUNTIME_ALREADY_RUNNING', 'RUNTIME_START_CANCELLED',
   'HF_DOWNLOAD_FAILED', 'HF_PATH_REJECTED', 'CHECKSUM_MISMATCH', 'MODEL_FILE_UNREADABLE', 'CANCELLED_BY_OWNER', 'PAUSED_BY_OWNER',
   'HF_IMAGE_URL_INVALID', 'HF_IMAGE_HOST_REJECTED', 'HF_IMAGE_REDIRECT_REJECTED', 'HF_IMAGE_PRIVATE_ADDRESS', 'HF_IMAGE_DNS_FAILED', 'HF_IMAGE_ABORTED', 'HF_IMAGE_UPSTREAM', 'HF_IMAGE_MIME_REJECTED', 'HF_IMAGE_TOO_LARGE', 'HF_IMAGE_CONFIG_INVALID',
   'LOCAL_IMPORT_INVALID', 'LOCAL_IMPORT_TOO_LARGE', 'LOCAL_IMPORT_SIZE_MISMATCH', 'LOCAL_IMPORT_EMPTY', 'LOCAL_IMPORT_NOT_GGUF',
@@ -395,6 +415,8 @@ const API_ERROR_CODES = new Set([
   'REMOTE_UNAVAILABLE', 'REMOTE_RELAY_NOT_CHOSEN', 'REMOTE_RELAY_INVALID', 'REMOTE_KEYRING_MISSING', 'REMOTE_KEY_INVALID',
   'REMOTE_OFF', 'REMOTE_TOO_MANY_PHONES', 'REMOTE_DEVICE_UNKNOWN', 'REMOTE_DEVICE_BAD', 'REMOTE_DEVICES_UNREADABLE', 'PAIR_LOCKED', 'PAIR_NOT_PENDING',
   'REMOTE_ORIGIN_FORBIDDEN',
+  'COMPUTER_USE_UNAVAILABLE', // 03/11/2026: il registro dei luoghi di «Consenti sempre» non c'è
+  'NOTIFICATIONS_UNAVAILABLE', // 31/10/2026: il registro delle notifiche non c'è (server senza cartella dei dati)
   'FILE_GONE', // R5.13 corsa 2 (24/10/2026): un file cambiato fra il menu e l'invio
 ]);
 /** 27/10/2026: i codici dichiarati, per la prova che OGNUNO abbia una frase pubblica e mai la copia dell'errore interno (revisione del blocco 10, A-R1). */
@@ -402,6 +424,7 @@ export const CODICI_DI_ERRORE_DICHIARATI = Object.freeze([...API_ERROR_CODES]);
 
 const STATUS_BY_CODE = Object.freeze({
   NOT_ALLOWED_REMOTELY: 403, // RA-03 (20/10/2026): una cartella qualsiasi del PC si sceglie solo dal PC
+  PIECE_CHANGED: 409, EXPORT_TOO_LARGE: 413, TOO_LARGE: 413, // letture a pezzi
   CONSENT_REQUIRED: 403, CONSENT_NOT_PENDING: 409, FOLDER_NOT_LISTED: 404, FOLDER_NOT_ALLOWED: 403, FOLDER_INVALID: 400, REMOTE_CONSENTS_UNREADABLE: 500, // R5.12
   WORKFLOW_STORE_UNAVAILABLE: 503,
   WORKFLOW_PROPOSAL_NOT_FOUND: 404,
@@ -453,6 +476,8 @@ const STATUS_BY_CODE = Object.freeze({
   TASK_CATALOG_UNAVAILABLE: 503,
   /** ⭐ 409 Conflict: la sessione origine esiste ma non è nello stato giusto per un fork (ancora in corso, o senza storia). */
   SESSION_NOT_READY: 409,
+  SIDE_CHAT_NO_ANSWER: 502, // FE-010
+  SIDE_CHAT_FAILED: 502, // FE-010
   /* /goal G1 (14/10/2026): il testo non va (400, col suo codice: così la frase precisa arriva alla persona, vedi
      `MESSAGGIO_GIA_PER_LA_PERSONA`); l'obiettivo c'è ma non è nello stato giusto per il gesto (409, come
      WORKFLOW_RUN_STATE_CONFLICT); oppure questa conversazione non può averne uno (422: la richiesta è ben formata, è il
@@ -475,6 +500,7 @@ const STATUS_BY_CODE = Object.freeze({
    * risolvibile, invece di accusare il server.
    */
   RUNTIME_ALREADY_RUNNING: 409,
+  RUNTIME_START_CANCELLED: 409,
   /** ⭐ 05/9, W1-01 — stessa famiglia: la richiesta è legittima, è lo STATO attuale (otto schede già aperte) a impedirla. Chiudine una e riprova. */
   TERMINAL_LIMIT_REACHED: 409,
   BROWSER_PROXY_SOLO_LOCALE: 403, // 06/9: il proxy con annotazione solo per un dev server locale
@@ -726,6 +752,14 @@ const STATUS_BY_CODE = Object.freeze({
   WSL_STORE_UNAVAILABLE: 503,
   CONTEXT_SETTINGS_UNAVAILABLE: 503,
   COMMAND_SETTINGS_UNAVAILABLE: 503,
+  CHAT_SETTINGS_UNAVAILABLE: 503,
+  COMPUTER_USE_SETTINGS_UNAVAILABLE: 503,
+  FOLDER_TRUST_UNAVAILABLE: 503,
+  SETTINGS_UNAVAILABLE: 503,
+  SETTINGS_UNDO_REFUSED: 409,
+  SETTINGS_APPLY_REFUSED: 400,
+  SETTINGS_CHANGED_MEANWHILE: 409,
+  PC_CONFIRMATION_REQUIRED: 403,
   MODEL_PREFERENCES_UNAVAILABLE: 503,
   MODEL_FAVOURITES_FULL: 409,
   LOCAL_RUNTIME_NOT_CONFIGURED: 503,
@@ -735,6 +769,9 @@ const STATUS_BY_CODE = Object.freeze({
   SEARCH_FAILED: 502,
   AUTH_REQUIRED: 401,
   CHAT_FILE_ORIGIN_FORBIDDEN: 403,
+  ATTACHMENTS_UNAVAILABLE: 503,
+  ATTACHMENTS_FULL: 507,
+  ATTACHMENT_NOT_AVAILABLE: 409,
   PAGE_ORIGIN_FORBIDDEN: 403,
   HOST_FORBIDDEN: 400, // come Hermes (`host_header_middleware`)
   ORIGIN_FORBIDDEN: 403,
@@ -818,7 +855,7 @@ const STATUS_BY_CODE = Object.freeze({
   LOCAL_GUEST_DISABLED: 404, LOCAL_GUEST_SOCKET_INVALID: 400,
   REMOTE_UNAVAILABLE: 503, REMOTE_RELAY_NOT_CHOSEN: 409, REMOTE_RELAY_INVALID: 400, REMOTE_KEYRING_MISSING: 503, REMOTE_KEY_INVALID: 409,
   REMOTE_OFF: 409, REMOTE_TOO_MANY_PHONES: 409, REMOTE_DEVICE_UNKNOWN: 404, REMOTE_DEVICE_BAD: 400, REMOTE_DEVICES_UNREADABLE: 500, PAIR_LOCKED: 429,
-  PAIR_NOT_PENDING: 409, REMOTE_ORIGIN_FORBIDDEN: 403,
+  PAIR_NOT_PENDING: 409, REMOTE_ORIGIN_FORBIDDEN: 403, NOTIFICATIONS_UNAVAILABLE: 503, COMPUTER_USE_UNAVAILABLE: 503,
 });
 
 export const MESSAGE_BY_CODE = Object.freeze({
@@ -840,6 +877,14 @@ export const MESSAGE_BY_CODE = Object.freeze({
   WSL_STORE_UNAVAILABLE: 'WSL preferences not available',
   CONTEXT_SETTINGS_UNAVAILABLE: 'Context engine settings not available',
   COMMAND_SETTINGS_UNAVAILABLE: 'The default for where commands run is not available',
+  CHAT_SETTINGS_UNAVAILABLE: 'Live blocks in replies is not available',
+  COMPUTER_USE_SETTINGS_UNAVAILABLE: 'The computer use switch is not available',
+  FOLDER_TRUST_UNAVAILABLE: 'Folder trust is not available here',
+  SETTINGS_UNAVAILABLE: 'Settings from the chat are not available',
+  SETTINGS_UNDO_REFUSED: 'The settings change was not undone',
+  SETTINGS_APPLY_REFUSED: 'The settings change was not applied',
+  SETTINGS_CHANGED_MEANWHILE: 'This setting changed in the meantime: nothing was changed',
+  PC_CONFIRMATION_REQUIRED: 'Confirm this change on the computer',
   MODEL_PREFERENCES_UNAVAILABLE: 'Favourite and recent models are not available',
   MODEL_FAVOURITES_FULL: 'There are already 50 favourite models: remove one before adding another',
   LOCAL_RUNTIME_NOT_CONFIGURED: 'The local engine is not installed on this computer',
@@ -849,13 +894,16 @@ export const MESSAGE_BY_CODE = Object.freeze({
   SEARCH_FAILED: 'The search failed',
   AUTH_REQUIRED: 'This server only accepts the TALOS window that started it',
   CHAT_FILE_ORIGIN_FORBIDDEN: 'Upload the file from this session’s TALOS window',
+  ATTACHMENTS_UNAVAILABLE: 'The TALOS data folder is not available, so the file was not saved',
+  ATTACHMENTS_FULL: 'The space for attached files is full',
+  ATTACHMENT_NOT_AVAILABLE: 'This attached file is no longer available',
   PAGE_ORIGIN_FORBIDDEN: 'Open the page from this session’s TALOS window',
   HOST_FORBIDDEN: 'TALOS answers only at its own local address (127.0.0.1 or localhost)',
   ORIGIN_FORBIDDEN: 'Changes can be made only from the TALOS window',
   TERMINAL_LIMIT_REACHED: 'You already have the maximum number of open terminals for this session: close one and try again',
   TERMINAL_STORE_UNAVAILABLE: 'Terminals are not available on this server',
   BROWSER_PROXY_SOLO_LOCALE: 'The annotation proxy only works for a dev server on your computer',
-  BROWSER_PROXY_NON_HTML: 'Not an HTML page',
+  BROWSER_PROXY_NON_HTML: 'Not an HTML page: open it in Text',
   BROWSER_PROXY_TROPPO_GRANDE: 'The page is over 5 MB',
   BROWSER_PROXY_IRRAGGIUNGIBILE: 'The page does not respond',
   GIT_NOT_A_REPOSITORY: 'This folder is not a git repository',
@@ -938,6 +986,8 @@ export const MESSAGE_BY_CODE = Object.freeze({
   NOT_FOUND: 'Resource not found',
   TASK_NOT_ALLOWED: 'Task not allowed',
   SESSION_NOT_READY: 'Session not ready for this action',
+  SIDE_CHAT_NO_ANSWER: 'The model did not answer the side question',
+  SIDE_CHAT_FAILED: 'The side question did not get an answer',
   AUTOMATION_INVALID: 'Invalid automation parameters',
   AUTOMATION_SCHEDULE_INVALID: 'This schedule is not valid',
   AUTOMATION_SCHEDULE_TOO_FREQUENT: 'An automation runs at most every 5 minutes',
@@ -1042,6 +1092,10 @@ export const MESSAGE_BY_CODE = Object.freeze({
   MODE_WORKFLOW_RETIRED: 'Workflow mode no longer exists: choose Normal or Plan',
   NOT_ALLOWED_REMOTELY: 'From the device a new session opens only in one of the allowed folders',
   CONSENT_REQUIRED: 'The computer must allow this device to write in this folder',
+  PIECE_CHANGED: 'This changed on the computer: read the list again',
+  EXPORT_TOO_LARGE: 'This conversation is too large to export from a device',
+  /* 01/11 sera: TOO_LARGE è anche il codice del filo remoto (`remoto/filo.mjs:37`, stesso tetto di 1 MiB): una sola frase per codice, o il dizionario non la traduce */
+  TOO_LARGE: 'A message cannot exceed 1048576 bytes.',
   CONSENT_NOT_PENDING: 'This request is no longer waiting',
   FOLDER_NOT_LISTED: 'This folder is no longer on the computer',
   FOLDER_NOT_ALLOWED: 'This folder belongs to TALOS and cannot be given to a device',
@@ -1094,6 +1148,8 @@ export const MESSAGE_BY_CODE = Object.freeze({
   LOCAL_GUEST_DISABLED: 'This server does not take a local engine from an app',
   LOCAL_GUEST_SOCKET_INVALID: 'The local engine socket is not valid: it must be a socket inside the app folder',
   REMOTE_UNAVAILABLE: 'Remote control is not available on this computer',
+  COMPUTER_USE_UNAVAILABLE: 'Computer use is not available on this computer', // 03/11/2026
+  NOTIFICATIONS_UNAVAILABLE: 'Notifications are not available on this computer', // contratto «notifiche» 31/10/2026
   REMOTE_RELAY_NOT_CHOSEN: 'Choose how the device reaches this computer away from home first',
   REMOTE_RELAY_INVALID: 'Enter the https address of your own server, or choose the free servers',
   REMOTE_KEYRING_MISSING: 'Remote control needs the system keyring',
@@ -1127,7 +1183,7 @@ export const MESSAGE_BY_CODE = Object.freeze({
   HF_REPOSITORY_GATED: 'Hugging Face repository gated or unauthorized', HF_RATE_LIMITED: 'Hugging Face request limit reached', HF_REDIRECT_INVALID: 'Invalid Hugging Face redirect',
   HF_REDIRECT_HOST_REJECTED: 'Hugging Face download host not authorized', HF_RESOLVE_INVALID: 'Invalid Hugging Face download URL', HF_TRANSFER_INVALID: 'Invalid model transfer',
   HF_TRANSFER_COLLISION: 'This model is already present: download it again only after removing it',
-  RUNTIME_ALREADY_RUNNING: 'The local runtime already has a model loaded: release it before loading another', HF_DOWNLOAD_FAILED: 'Hugging Face download failed', HF_PATH_REJECTED: 'Model path not authorized',
+  RUNTIME_ALREADY_RUNNING: 'The local runtime already has a model loaded: release it before loading another', RUNTIME_START_CANCELLED: 'The opening of the model was stopped', HF_DOWNLOAD_FAILED: 'Hugging Face download failed', HF_PATH_REJECTED: 'Model path not authorized',
   CHECKSUM_MISMATCH: 'Model checksum verification failed', MODEL_FILE_UNREADABLE: 'Model file not readable', CANCELLED_BY_OWNER: 'Download cancelled', PAUSED_BY_OWNER: 'Download paused',
   HF_IMAGE_URL_INVALID: 'Invalid image URL', HF_IMAGE_HOST_REJECTED: 'Image origin not authorized', HF_IMAGE_REDIRECT_REJECTED: 'Image redirect not authorized', HF_IMAGE_PRIVATE_ADDRESS: 'Image not reachable from a private address', HF_IMAGE_DNS_FAILED: 'Image origin unreachable', HF_IMAGE_ABORTED: 'Image request cancelled', HF_IMAGE_UPSTREAM: 'Image service unavailable', HF_IMAGE_MIME_REJECTED: 'Image format not supported', HF_IMAGE_TOO_LARGE: 'Image too large', HF_IMAGE_CONFIG_INVALID: 'Image proxy not configured',
   LOCAL_IMPORT_INVALID: 'Check the chosen GGUF file and try again', LOCAL_IMPORT_TOO_LARGE: 'The chosen model exceeds the allowed space', LOCAL_IMPORT_SIZE_MISMATCH: 'The file size does not match the declared one', LOCAL_IMPORT_EMPTY: 'The chosen file is empty', LOCAL_IMPORT_NOT_GGUF: 'The chosen file is not a GGUF model',
@@ -1135,7 +1191,7 @@ export const MESSAGE_BY_CODE = Object.freeze({
 
 const SECURITY_HEADERS = Object.freeze({
   'Cache-Control': 'no-store',
-  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' http://localhost:* http://127.0.0.1:* https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", // K-I 06/9: `frame-src` è ciò che NOI incorniciamo (un dev server locale, una pagina https); `frame-ancestors 'none'` resta: nessuno incornicia TALOS
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src 'self' https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", // K-I 06/9: `frame-src` è ciò che NOI incorniciamo (una pagina https; il dev server locale passa dal proxy, `intestazioniDocumentoConNonce`); `frame-ancestors 'none'` resta: nessuno incornicia TALOS
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
@@ -1184,10 +1240,20 @@ function creaNonceCsp() {
  * stringa di rimpiazzo interpreta `$` (già pagato altrove in questo repo), e un nonce base64
  * arriva da bytes casuali.
  */
-function intestazioniDocumentoConNonce(nonce) {
+/*
+ * ⛔⛔ N1 della seconda revisione del gettone (S1, 03/11/2026, `REVISIONE-GETTONE-2-2026-11-03.md`): qui c'era `frame-src … http://localhost:* http://127.0.0.1:*`.
+ *   Una cornice diretta su un altro server di loopback (la lettura di `naviga`, un rimando da una pagina pubblica) è lo STESSO sito della finestra: la porta non
+ *   conta, e il cookie Strict partiva verso il server di un comando (nell'app installata è il gettone vero). Ora il documento ammette in cornice, in http, solo
+ *   l'ALTRO nome alla STESSA porta: è dove `/api/v1/browser/proxy` rimanda la pagina di un dev server, senza cookie. Ogni altra cornice di loopback il browser la rifiuta,
+ *   comunque ci si arrivi. Host assente o non di loopback: nessuna cornice http.
+ */
+function intestazioniDocumentoConNonce(nonce, host) {
+  /* un Host non di loopback non arriva fin qui: la guardia dell'Host lo rifiuta prima (`hostAmmesso`, in testa a `handle`) */
+  const proxy = typeof host === 'string' && host !== '' ? ` http://${aliasDiLoopback(host)}` : '';
   const csp = SECURITY_HEADERS['Content-Security-Policy']
     .replace("script-src 'self'", () => `script-src 'self' 'nonce-${nonce}'`)
-    .replace("style-src 'self'", () => `style-src 'self' 'nonce-${nonce}'`);
+    .replace("style-src 'self'", () => `style-src 'self' 'nonce-${nonce}'`)
+    .replace("frame-src 'self'", () => `frame-src 'self'${proxy}`);
   return { 'Content-Security-Policy': csp };
 }
 
@@ -1255,14 +1321,15 @@ function send(res, statusCode, contentType, body, method, extraHeaders = {}) {
 /*
  * Il documento PROXATO di un dev server locale (06/9). ⛔ Niente CSP di
  * TALOS qui (bloccherebbe script, stili e immagini del dev server, che restano sulla loro origine
- * via <base>): resta `frame-ancestors 'self'` — solo TALOS può incorniciarlo — e `no-store`.
+ * via <base>): resta `frame-ancestors` — solo TALOS può incorniciarlo — e `no-store`.
+ * ⛔ Revisione R1 (03/11/2026): con un server col gettone `antenati` nomina la finestra, perché il documento sta sull'altro nome di loopback.
  */
-function sendHtmlProxato(res, html, method) {
+function sendHtmlProxato(res, html, method, antenati = "'self'") {
   if (res.destroyed || res.writableEnded) return;
   const payload = Buffer.from(html, 'utf8');
   res.writeHead(200, {
     'Cache-Control': 'no-store',
-    'Content-Security-Policy': "frame-ancestors 'self'",
+    'Content-Security-Policy': `frame-ancestors ${antenati}`,
     'Referrer-Policy': 'no-referrer',
     'X-Content-Type-Options': 'nosniff',
     'Content-Type': 'text/html; charset=utf-8',
@@ -1539,6 +1606,18 @@ export function bustaContesto(code, message, clock, errore = null) {
  * ⛔ Le sette frasi italiane dei guasti sono IDENTICHE a quelle che il dizionario ha sotto `errori.OAUTH_*.message`: una prova
  *   (`errori-del-server-nel-dizionario.test.mjs`) lo controlla, così le due strade non si allontanano.
  */
+/* «Gettone sempre» (02/11/2026), condizione del Tester: un biglietto usato o scaduto, aperto nel browser, dice cosa fare. Una frase sola per ogni motivo. */
+const PAGINA_BIGLIETTO = Object.freeze({
+  en: Object.freeze({ titolo: 'This link no longer works', frase: 'An entry link works once and lasts 60 seconds.', poi: 'Ask for a new link, or start TALOS again.' }),
+  it: Object.freeze({ titolo: 'Questo link non vale più', frase: 'Un link d’ingresso vale una volta sola e dura 60 secondi.', poi: 'Chiedi un nuovo link, oppure avvia di nuovo TALOS.' }),
+});
+/* Revisione R8: il browser che arriva senza cookie, per esempio dopo un riavvio del server, non vede un'app che non risponde: vede cosa fare */
+const PAGINA_SENZA_INGRESSO = Object.freeze({
+  en: Object.freeze({ titolo: 'TALOS needs a new link', frase: 'This server restarted, or this browser has not entered yet.', poi: 'Ask for a new link, or start TALOS again.' }),
+  it: Object.freeze({ titolo: 'TALOS vuole un nuovo link', frase: 'Questo server si è riavviato, oppure questo browser non è ancora entrato.', poi: 'Chiedi un nuovo link, oppure avvia di nuovo TALOS.' }),
+});
+const ROTTA_PAGINA_LOCALE = '/api/v1/browser/pagina-locale';
+
 const PAGINA_RITORNO_OPENROUTER = Object.freeze({
   en: Object.freeze({
     titoloKo: 'I could not connect the account',
@@ -1574,6 +1653,17 @@ export function linguaDellaPagina(acceptLanguage) {
   }).filter((voce) => voce.q > 0 && Object.hasOwn(PAGINA_RITORNO_OPENROUTER, voce.primaria))
     .sort((a, b) => b.q - a.q || a.ordine - b.ordine);
   return scelte[0]?.primaria ?? 'en';
+}
+
+const vieneDalBrowser = (req) => String(req.headers.accept ?? '').includes('text/html');
+
+/** Il rifiuto di un biglietto: dal browser la pagina con la frase, per un programma la busta di sempre. Mai il motivo. */
+function rifiutoBiglietto(req, res, method, clock, frasi = PAGINA_BIGLIETTO) {
+  if (!vieneDalBrowser(req)) { sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method); return; }
+  const nonce = randomBytes(16).toString('base64');
+  const lingua = linguaDellaPagina(req.headers['accept-language']);
+  const testi = frasi[lingua];
+  send(res, 401, 'text/html; charset=utf-8', paginaDiRitorno({ lingua, esito: 'fallito', titolo: testi.titolo, nonce, frase: testi.frase, poi: testi.poi }), method, intestazioniDellaPagina({ nonce, lingua }));
 }
 
 /** `problema`: `null` se l'accesso è riuscito; altrimenti `{ codice, messaggio }` (la frase inglese del codice). */
@@ -1774,6 +1864,9 @@ function parseWorkflowVersionPath(raw) {
   return Number.isSafeInteger(version) ? version : null;
 }
 
+const CHIAVI_SCHERMO_SEGNO = Object.freeze(['fx', 'fy', 'fw', 'fh', 'scala']);
+const NUMERO_SCHERMO_SEGNO = /^-?\d{1,6}(?:\.\d{1,6})?$/u;
+
 function requireValidStaticQuery(url) {
   const entries = [...url.searchParams.entries()];
   if (entries.length === 0) return;
@@ -1781,7 +1874,13 @@ function requireValidStaticQuery(url) {
     && entries.length === 1
     && entries[0][0] === 'qa'
     && QA_STATES.has(entries[0][1]);
-  if (!allowsQa) {
+  /* FE-070 (05/11): la finestra del segno del computer use, una per schermo, si apre con il rettangolo dello schermo in pixel fisici e la sua scala. Esattamente quelle
+     cinque chiavi, una volta ciascuna, numeri semplici; la pagina rilegge e scarta misure o scala non positive. */
+  const allowsSchermo = url.pathname === '/segno.html'
+    && entries.length === CHIAVI_SCHERMO_SEGNO.length
+    && new Set(entries.map(([chiave]) => chiave)).size === CHIAVI_SCHERMO_SEGNO.length
+    && entries.every(([chiave, valore]) => CHIAVI_SCHERMO_SEGNO.includes(chiave) && NUMERO_SCHERMO_SEGNO.test(valore));
+  if (!allowsQa && !allowsSchermo) {
     const error = new Error('Invalid query');
     error.code = 'QUERY_INVALID';
     throw error;
@@ -1888,6 +1987,22 @@ function requireLinguaDelleRisposte(body) {
   }
 }
 
+/*
+ * Decisione 201 (04/11/2026): la pagina aperta nel Browser del PC accompagna il messaggio (nuova conversazione, ripresa, coda) come
+ *   `paginaBrowser: { url, titolo, via } | null`. Assente ⇒ `undefined` (il telefono e la CLI non la mandano: «non si sa»). Una forma
+ *   sbagliata si rifiuta. Da un dispositivo remoto non vale: è la pagina della finestra del PC, e il telefono non ne ha una.
+ */
+function requirePaginaBrowser(body, req = null) {
+  if (!body || typeof body !== 'object' || !Object.hasOwn(body, 'paginaBrowser')) return undefined;
+  const pagina = paginaBrowserValida(body.paginaBrowser);
+  if (pagina === undefined) {
+    const errore = new Error('paginaBrowser must be null or {url (http or https, at most 2048 characters), titolo (text up to 300 characters, or null), via ("vivo", "cornice" or "proxy")}');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
+  return req?.[ORIGINE_REMOTA] ? undefined : pagina;
+}
+
 function requireModalitaOperativa(body) {
   if (!('modalitaOperativa' in body) || ['normale', 'piano'].includes(body.modalitaOperativa)) return;
   const ritirato = body.modalitaOperativa === 'workflow';
@@ -1944,12 +2059,19 @@ const ROTTA_MODELLI_FORNITORE = new RegExp(`^/api/v1/providers/(${ID_CATALOGO_IN
 const ROTTE_API = Object.freeze([
   // ⭐ F3 (24/09): lo spegnimento gentile (loopback + gettone) e l'Annulla della compattazione automatica.
   { schema: '/api/v1/admin/shutdown', metodi: ['POST'] },
+  { schema: '/api/v1/browser/pagina-locale', metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction\/([^/]+)\/undo$/, metodi: ['POST'] },
   /* B1 (owner 21/10/2026 sera): «Skip the summary», la persona salta il riassunto che il giro sta aspettando. */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction\/skip$/, metodi: ['POST'] },
+  /* G-B4 (UIG-1.22, 06/11/2026): the B3 block-version route, and folder-trust (missing since B2's head) — a wrong method answers 405 */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/blocchi\/versione$/, metodi: ['POST'] },
+  { schema: '/api/v1/folder-trust', metodi: ['GET', 'POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction-policy$/, metodi: ['GET'] },
   /* C1 (10/10/2026): l'ultima richiesta spedita al modello, per la scheda Contesto (prompt di sistema e messaggi grezzi). Sola lettura. */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/last-request$/, metodi: ['GET'] },
+  /* Context Manager dal dispositivo: le due letture a pezzi, a parte dalle rotte intere che il PC legge (`letture-a-pezzi.mjs`) */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/last-request\/pieces(?:\/\d+)?$/, metodi: ['GET'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/export\/pieces(?:\/data)?$/, metodi: ['GET'] },
   /* C1 (10/10/2026): l'ultima compattazione legacy di una conversazione (record pubblico, riassunto compreso). Sola lettura. */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compaction-state$/, metodi: ['GET'] },
   /* R5.11 (owner 18/10/2026, «Come Hermes, PC e telefono»): i punti di ripristino dei file, l'anteprima e l'annullamento. */
@@ -1986,7 +2108,8 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/workflows\/([^/]+)\/nodes\/([^/]+)\/lineage$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/workflows\/([^/]+)\/versions\/([^/]+)\/nodes\/([^/]+)\/lineage$/, metodi: ['GET'] },
   { schema: '/api/v1/chat-images', metodi: ['POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/chat-files$/, metodi: ['POST'] },
+  { schema: '/api/v1/chat-files', metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/allegati\/([^/]+)(?:\/anteprima)?$/, metodi: ['GET'] }, // decisioni 43 e 47: il chip si apre per riferimento, il PDF in linea
   { schema: /^\/api\/v1\/chat-images\/[a-f0-9]{64}$/, metodi: ['GET'] },
   { schema: ROTTA_MODELLI_FORNITORE, metodi: ['GET'] },
   // ⭐ 10/09: le favicon delle fonti, servite dal server perché il browser non bussi ai siti citati.
@@ -1998,6 +2121,7 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/frequent-dirs', metodi: ['GET'] },
   { schema: '/api/v1/runtime', metodi: ['GET'] },
   { schema: '/api/v1/runtime/bootstrap', metodi: ['GET'] },
+  { schema: '/api/v1/runtime/caricamento', metodi: ['GET'] },
   { schema: '/api/v1/local-models', metodi: ['GET'] },
   { schema: '/api/v1/local-models/fit-estimate', metodi: ['GET'] },
   { schema: '/api/v1/huggingface/search', metodi: ['GET'] },
@@ -2018,6 +2142,8 @@ const ROTTE_API = Object.freeze([
   // «Segnala un problema» (owner 29/10/2026): la diagnostica della segnalazione, già ripulita nel server — sola lettura
   { schema: '/api/v1/diagnostica-segnalazione', metodi: ['GET'] },
   { schema: '/api/v1/workspace-info', metodi: ['GET'] },
+  // Decisioni 173/189/196 (04/11/2026): la fiducia delle cartelle, GET legge e POST scrive; un altro verbo è 405, non 404
+  { schema: '/api/v1/folder-trust', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/browser/incorniciabile', metodi: ['GET'] },
   { schema: '/api/v1/browser/proxy', metodi: ['GET'] },
   { schema: '/api/v1/browser/leggi', metodi: ['GET'] },
@@ -2039,9 +2165,12 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/local-engine/window/enlarge', metodi: ['POST'] }, // L1 1.3: «Enlarge the window» chiesto dalla persona // L1 1.3 (26/10/2026): quando la finestra di un modello locale si riempie // C1 (09/10/2026): l'interruttore del motore del contesto
   { schema: '/api/v1/context-settings', metodi: ['GET', 'POST'] }, // C1 (09/10/2026): l'interruttore del motore del contesto
   { schema: '/api/v1/command-settings', metodi: ['GET', 'POST'] }, // owner 27/10/2026: dove girano i comandi, di serie
+  { schema: '/api/v1/chat-settings', metodi: ['GET', 'POST'] }, // decisione 140 (04/11/2026): «Blocchi vivi nelle risposte»
+  { schema: '/api/v1/computer-use/settings', metodi: ['GET', 'POST'] }, // decisione 310 (06/11/2026): «Uso del computer (Anteprima)», spento di serie
+  { schema: '/api/v1/keep-awake-settings', metodi: ['GET', 'POST'] }, // 01/11/2026: «Tieni sveglio il PC»
+  { schema: '/api/v1/conversation-memory-settings', metodi: ['GET', 'POST'] }, // 01/11/2026: «Memoria delle conversazioni»
   { schema: '/api/v1/model-preferences', metodi: ['GET', 'POST'] }, // owner 29/10/2026: preferiti e recenti dei modelli, PC e dispositivo
   { schema: '/api/v1/sessions', metodi: ['GET', 'POST'] },
-  { schema: '/api/v1/assistenza', metodi: ['POST'] },
   { schema: '/api/v1/automations', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/workspace-launches', metodi: ['POST'] },
   { schema: '/api/v1/workspace-browser/folders', metodi: ['POST'] },
@@ -2096,6 +2225,10 @@ const ROTTE_API = Object.freeze([
   /* 24/10/2026 — le versioni di una voce: l'elenco (GET) e il ripristino di una (POST, crea una versione nuova). */
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/versions$/, metodi: ['GET'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)\/versions\/([^/]+)\/restore$/, metodi: ['POST'] },
+  /* Decisione 142 (04/11/2026): «Salva in Libreria» sotto un blocco vivo; fuori da `/library/:voceId`, che prende PATCH e DELETE. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/blocks\/library$/, metodi: ['POST'] },
+  /* Revisione J, D7 (04/11/2026): in quale versione della Libreria sta un blocco (sola lettura), per «In Libreria · vN» dopo una ricarica. */
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/blocks\/([^/]+)\/library$/, metodi: ['GET'] },
   /*
    * ⭐⭐⭐⭐ 11/9, owner: «il file deve essere visualizzato renderizzato» — un PDF della Libreria
    * si guarda DENTRO TALOS. Rotta GEMELLA di `/file` e non un suo parametro: gli stessi byte
@@ -2188,6 +2321,7 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/terminals\/([^/]+)\/close$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/git\/(stage|unstage|commit|discard|commit-staged|amend|undo-commit|switch|branch-create|branch-rename|branch-delete|stash|stash-pop|stash-drop|hunk|commit-message|fetch|fetch-stop|pull|push)$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/rename$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/pin$/, metodi: ['POST'] }, // decisione 69 (03/11): la stella sul server
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/delete$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/rename$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/tree\/delete$/, metodi: ['POST'] },
@@ -2209,9 +2343,11 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/mcp-elicitation$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/redirect$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/fork$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/retry$/, metodi: ['POST'] }, // decisione 198: «Riprova» in un colpo
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/resume$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/settings$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compact$/, metodi: ['POST'] },
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/a-lato(?:\/trasforma)?$/, metodi: ['POST'] }, // FE-010
   // BC-15 (11/09): «Migliora il prompt» — riscrive il testo del composer col modello DELLA SESSIONE.
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/migliora-prompt$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/?$/, metodi: ['GET'] },
@@ -2264,11 +2400,19 @@ const ROTTE_API = Object.freeze([
   // 18/10/2026: il token spinto dall'app che ospita r4 (custode nell'app); fuori da quella modalità rispondono 409
   { schema: '/api/v1/providers/chatgpt/access', metodi: ['POST'] },
   { schema: '/api/v1/providers/chatgpt/access/remove', metodi: ['POST'] },
+  // R-34 parte 2 (30/10/2026): la presenza spinta dall'app che ospita r4; senza TALOS_PRESENZA_DA_APP risponde 404
+  { schema: '/api/v1/presence', metodi: ['POST'] },
   // 18/10/2026: il motore locale dell'app che ospita r4 (`accesso-locale-ospite.mjs`); senza TALOS_LOCALE_OSPITE_DIR rispondono 404
   { schema: '/api/v1/providers/locale-ospite/access', metodi: ['POST'] },
   { schema: '/api/v1/providers/locale-ospite/access/remove', metodi: ['POST'] },
   // 18/10/2026: il controllo remoto, solo dalla finestra (`remoto/rotte.mjs`)
   ...ROTTE_REMOTO,
+  // 31/10/2026: le notifiche del PC (`notifiche-rotte.mjs`)
+  ...ROTTE_NOTIFICHE,
+  // Fase 8 (01/11/2026): le impostazioni dalla chat, solo dalla finestra (`impostazioni/rotte-impostazioni.mjs`)
+  ...ROTTE_IMPOSTAZIONI,
+  // 03/11/2026: i luoghi di «Consenti sempre» (`computer-use/luoghi-rotte.mjs`); a interruttore spento non esistono (404, decisioni 79-80)
+  ...(COMPUTER_USE_ACCESO ? ROTTE_LUOGHI : []),
   { schema: '/api/v1/auth/openrouter/inizia', metodi: ['POST'] },
   { schema: '/api/v1/auth/openrouter/codice', metodi: ['POST'] },
   { schema: '/api/v1/auth/openrouter/ritorno', metodi: ['GET'] },
@@ -2415,10 +2559,18 @@ function requireFallbackProviders() {
   return [];
 }
 
+/* Modalità veloce (owner 31/10/2026): un vero o falso, nient'altro. */
+function requireFasciaVeloce(body) {
+  if (!('fasciaVeloce' in body) || typeof body.fasciaVeloce === 'boolean') return;
+  const errore = new Error('fasciaVeloce must be true or false');
+  errore.code = 'QUERY_INVALID';
+  throw errore;
+}
+
 function requireTaskIdBody(body) {
   const chiavi = Object.keys(body ?? {});
   // ⭐⭐⭐ 29/8 — FASE K: modelloPlanner riusa la STESSA validazione di modello (modelloRichiestaValido) — è lo stesso formato OpenRouter, mai un secondo validatore.
-  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'provider', 'runtimeId', 'modelId', 'fallbackConsent', 'fallbackProviders', 'linguaInterfaccia', 'linguaDelleRisposte', 'linguaDelMessaggio'];
+  const chiaviAmmesse = ['taskId', 'modello', 'modelloPlanner', 'reasoning', 'fasciaVeloce', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'provider', 'runtimeId', 'modelId', 'fallbackConsent', 'fallbackProviders', 'linguaInterfaccia', 'linguaDelleRisposte', 'linguaDelMessaggio'];
   const soloAmmesse = chiavi.length > 0 && chiavi.length <= chiaviAmmesse.length && chiavi.every((k) => chiaviAmmesse.includes(k)) && chiavi.includes('taskId');
   if (
     !soloAmmesse || typeof body.taskId !== 'string' || body.taskId.length === 0
@@ -2445,6 +2597,7 @@ function requireTaskIdBody(body) {
     errore.code = 'REASONING_INVALID';
     throw errore;
   }
+  requireFasciaVeloce(body);
   if ('permessi' in body && !permessiRichiestaValido(body.permessi)) {
     const errore = new Error('permessi must be one of "Read only", "Workspace write", "On request", "Full access"');
     errore.code = 'PERMISSIONS_INVALID';
@@ -2471,6 +2624,7 @@ function requireTaskIdBody(body) {
     modello: 'modello' in body && body.modello !== undefined ? body.modello : null,
     modelloPlanner: 'modelloPlanner' in body && body.modelloPlanner !== undefined ? body.modelloPlanner : null,
     reasoning: 'reasoning' in body ? body.reasoning : null,
+    fasciaVeloce: body.fasciaVeloce === true,
     mobile: body.client === 'mobile',
     permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
     permessiPerAttrezzo: 'permessiPerAttrezzo' in body && body.permessiPerAttrezzo !== undefined ? body.permessiPerAttrezzo : null,
@@ -2531,6 +2685,8 @@ function requireHuggingFaceDownloadBody(body) {
     && nonVuota(body.id) && nonVuota(body.repo)
     && typeof body.revision === 'string' && REVISIONE_HF.test(body.revision)
     && Array.isArray(body.files) && body.files.length > 0 && body.files.every(fileValido)
+    /* 01/11/2026, vista locale (condizione del Mobile): il primo file è il modello, mai il proiettore; il proiettore viaggia dopo */
+    && !eProiettore(body.files[0].path)
     && interoPositivo(body.bytes)
     && nonVuota(body.path)
     // R-08, 13/09: senza `license` il negozio dei modelli rifiuta il manifesto DOPO l'accettazione
@@ -2543,12 +2699,23 @@ function requireHuggingFaceDownloadBody(body) {
   }
 }
 
+/* Decisioni 43 e 47: gli allegati che un invio porta, dal campo strutturato della bolla. Un id falso o di un'altra chat ferma l'invio prima che parta. */
+async function allegatiLegabili(sessionRegistry, sessionId, bolla) {
+  const ids = idAllegatiDellaBolla(bolla);
+  if (ids.length === 0) return ids;
+  const rifiutato = await sessionRegistry.controllaAllegati(sessionId, ids);
+  if (rifiutato) throw erroreDelRegistro(rifiutato);
+  return ids;
+}
+
 function requireCustomTaskBody(body) {
   // ⭐⭐⭐ 29/8 — FASE K: stesso principio di requireTaskIdBody, modelloPlanner riusa modelloRichiestaValido.
   // /goal G6 (owner 15/10/2026, «chat nuova ferma»): `ferma: true` apre la conversazione SENZA un giro — la persona ha scritto
   // `/goal <testo>` in una chat nuova, e il lavoro parte solo dal suo «Avvia» sulla carta dei controlli
-  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'fallbackProviders', 'linguaInterfaccia', 'linguaDelleRisposte', 'linguaDelMessaggio', 'ferma',
-    'allegaSeTroppoGrande']; // §4.2, regola N (owner 22/10/2026): «Invia come allegato» per questa consegna
+  const AMMESSE = ['cartellaId', 'cartellaLibera', 'workspaceLaunchId', 'consegna', 'comandoProva', 'modello', 'modelloPlanner', 'reasoning', 'fasciaVeloce', 'client', 'permessi', 'permessiPerAttrezzo', 'modalitaOperativa', 'fallbackProviders', 'linguaInterfaccia', 'linguaDelleRisposte', 'linguaDelMessaggio', 'ferma',
+    'allegaSeTroppoGrande', // §4.2, regola N (owner 22/10/2026): «Invia come allegato» per questa consegna
+    'ricerca', // 01/11/2026: «New research» della sezione apre qui la sua chat nuova, l'unica porta della persona (owner 01/11 sera)
+    'paginaBrowser']; // decisione 201: la pagina aperta nel Browser del PC (la forma la controlla `requirePaginaBrowser`)
   const chiavi = Object.keys(body ?? {});
   const haCartellaId = 'cartellaId' in body && body.cartellaId !== undefined;
   const haCartellaLibera = 'cartellaLibera' in body && body.cartellaLibera !== undefined;
@@ -2583,6 +2750,7 @@ function requireCustomTaskBody(body) {
     errore.code = 'REASONING_INVALID';
     throw errore;
   }
+  requireFasciaVeloce(body);
   if ('permessi' in body && !permessiRichiestaValido(body.permessi)) {
     const errore = new Error('permessi must be one of "Read only", "Workspace write", "On request", "Full access"');
     errore.code = 'PERMISSIONS_INVALID';
@@ -2600,7 +2768,15 @@ function requireCustomTaskBody(body) {
     throw errore;
   }
   requireLinguaDelleRisposte(body);
+  /* ricerca a due porte: la consegna è la domanda; una chat che nasce ferma non ha il giro in cui la ricerca parte */
+  const ricerca = requireRicercaDelMessaggio(body.ricerca, body.consegna);
+  if (ricerca && body.ferma === true) {
+    const errore = new Error('Invalid body: a deep research starts with the first turn, it cannot open a conversation that waits (ferma)');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
   return {
+    ...(ricerca ? { ricerca } : {}),
     ...('linguaInterfaccia' in body ? { linguaInterfaccia: body.linguaInterfaccia } : {}), // K3b
     ...('linguaDelleRisposte' in body ? { linguaDelleRisposte: body.linguaDelleRisposte } : {}), // owner 28/10: la lingua delle risposte
     ...('linguaDelMessaggio' in body ? { linguaDelMessaggio: body.linguaDelMessaggio } : {}), // e la lingua di questo messaggio
@@ -2613,6 +2789,7 @@ function requireCustomTaskBody(body) {
     modello: 'modello' in body ? body.modello : null,
     modelloPlanner: 'modelloPlanner' in body && body.modelloPlanner !== undefined ? body.modelloPlanner : null,
     reasoning: 'reasoning' in body ? body.reasoning : null,
+    fasciaVeloce: body.fasciaVeloce === true,
     mobile: body.client === 'mobile',
     permessi: 'permessi' in body && body.permessi !== undefined ? body.permessi : null,
     permessiPerAttrezzo: 'permessiPerAttrezzo' in body && body.permessiPerAttrezzo !== undefined ? body.permessiPerAttrezzo : null,
@@ -2859,7 +3036,7 @@ function requireMemoriaBody(body, { creazione }) {
 function requireSessionSettingsBody(body) {
   // C2 «Per questa sessione» sul server (08/10/2026): `unisciPermessiPerAttrezzo` si unisce alle scelte vere, invece di sostituirle
   // C2-R7 (08/10/2026 sera): `rispettaNega` — il gesto della carta non scrive sopra un «nega» (vedi `aggiornaImpostazioniOra`)
-  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'permessiPerAttrezzo', 'unisciPermessiPerAttrezzo', 'rispettaNega', 'fallbackProviders', 'modalitaOperativa', 'linguaInterfaccia', 'linguaDelleRisposte'];
+  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'fasciaVeloce', 'permessi', 'permessiPerAttrezzo', 'unisciPermessiPerAttrezzo', 'rispettaNega', 'fallbackProviders', 'modalitaOperativa', 'linguaInterfaccia', 'linguaDelleRisposte'];
   const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
   if (chiavi.length === 0 || chiavi.some((chiave) => !ammesse.includes(chiave))) {
     const errore = new Error('Invalid body: at least one recognized session preference is expected');
@@ -2881,6 +3058,7 @@ function requireSessionSettingsBody(body) {
     errore.code = 'REASONING_INVALID';
     throw errore;
   }
+  requireFasciaVeloce(body);
   if ('permessi' in body && (body.permessi === null || !permessiRichiestaValido(body.permessi))) {
     const errore = new Error('permessi not recognized');
     errore.code = 'PERMISSIONS_INVALID';
@@ -2987,26 +3165,29 @@ function requireApprovaBody(body) {
   const chiavi = Object.keys(body ?? {});
   // automazioni a due porte (08/10/2026): `automazioneModificata` = «Modifica» sulla carta d'automazione, solo con un no
   // /goal G6 (owner 15/10/2026): `obiettivoModificato` = «Modifica i controlli» sulla carta di goal_create — la persona l'ha impostato lei
-  const AMMESSE = ['requestId', 'approvato', 'ambito', 'rispostoDa', 'automazioneModificata', 'obiettivoModificato'];
+  const AMMESSE = ['requestId', 'approvato', 'ambito', 'rispostoDa', 'automazioneModificata', 'obiettivoModificato', 'domandaModificata']; // D4: la domanda corretta sulla carta della ricerca, facoltativa
   const conAmbito = chiavi.includes('ambito');
   const conRispostoDa = chiavi.includes('rispostoDa');
   const conModificata = chiavi.includes('automazioneModificata');
   const conObiettivo = chiavi.includes('obiettivoModificato');
+  const conDomanda = chiavi.includes('domandaModificata');
   if (
-    chiavi.length !== 2 + (conAmbito ? 1 : 0) + (conRispostoDa ? 1 : 0) + (conModificata ? 1 : 0) + (conObiettivo ? 1 : 0) || !chiavi.every((k) => AMMESSE.includes(k))
+    chiavi.length !== 2 + (conAmbito ? 1 : 0) + (conRispostoDa ? 1 : 0) + (conModificata ? 1 : 0) + (conObiettivo ? 1 : 0) + (conDomanda ? 1 : 0) || !chiavi.every((k) => AMMESSE.includes(k))
     || (conModificata && (typeof body.automazioneModificata !== 'string' || body.automazioneModificata.length === 0 || body.approvato !== false || conAmbito))
+    || (conDomanda && (typeof body.domandaModificata !== 'string' || !body.domandaModificata.trim() || body.domandaModificata.trim().length > 500 || body.approvato !== true || conAmbito || conModificata || conObiettivo))
     || (conObiettivo && (typeof body.obiettivoModificato !== 'string' || !/^ob-[0-9a-f-]{8,64}$/u.test(body.obiettivoModificato) || body.approvato !== false || conAmbito || conModificata))
     || typeof body.requestId !== 'string' || body.requestId.length === 0
     || typeof body.approvato !== 'boolean'
-    || (conAmbito && ((body.ambito !== 'cartella' && body.ambito !== 'percorso') || body.approvato !== true))
+    /* E1 (decisione 121): 'strumento' = «Sì per questo strumento in questa conversazione»; il nome lo prende il registro dalla domanda */
+    || (conAmbito && (!['cartella', 'percorso', 'volta', 'strumento'].includes(body.ambito) || body.approvato !== true))
     || (conRispostoDa && (typeof body.rispostoDa !== 'string' || body.rispostoDa.length === 0 || body.rispostoDa.length > 200))
   ) {
-    const errore = new Error('Invalid body: expected {requestId, approvato} or {requestId, approvato: true, ambito: "cartella"|"percorso"}, with an optional rispostoDa');
+    const errore = new Error('Invalid body: expected {requestId, approvato} or {requestId, approvato: true, ambito: "cartella"|"percorso"|"volta"|"strumento"}, with an optional rispostoDa');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
   return { requestId: body.requestId, approvato: body.approvato, ...(conAmbito ? { ambito: body.ambito } : {}),
-    ...(conRispostoDa ? { rispostoDa: body.rispostoDa } : {}), ...(conModificata ? { automazioneModificata: body.automazioneModificata } : {}), ...(conObiettivo ? { obiettivoModificato: body.obiettivoModificato } : {}) };
+    ...(conRispostoDa ? { rispostoDa: body.rispostoDa } : {}), ...(conModificata ? { automazioneModificata: body.automazioneModificata } : {}), ...(conObiettivo ? { obiettivoModificato: body.obiettivoModificato } : {}), ...(conDomanda ? { domandaModificata: body.domandaModificata.trim() } : {}) };
 }
 
 /*
@@ -3016,6 +3197,9 @@ function requireApprovaBody(body) {
  *   Fonti: OWASP CSRF Prevention Cheat Sheet «Identifying the Target Origin»; W3C Fetch Metadata Request Headers; jupyter_server
  *   security.rst; GHSA-9f65-56v6-gxw7 (lette il 23-24/09/2026, citate per esteso nella rotta dei Workflow).
  */
+const AZIONI_DELLA_PERSONA = new Set(['approve', 'question', 'settings', 'shell']);
+const FIDUCIE_DELLA_PERSONA = new Set(['hooks', 'mcp', 'plugins']);
+
 function rifiutoOrigineApprovazione(req, { token }) {
   const origin = req.headers.origin;
   const fetchSite = req.headers['sec-fetch-site'];
@@ -3084,7 +3268,8 @@ function requireAbilitaForgeBody(body) {
 function requireQueueBody(body) {
   const chiavi = Object.keys(body ?? {});
   /* §4.2, regola N (owner 22/10/2026, bozzetto 29/10): `allegaSeTroppoGrande` può accompagnare il messaggio, mai da solo */
-  const ammesse = chiavi.every((k) => k === 'messaggio' || k === 'allegaSeTroppoGrande');
+  const ammesse = chiavi.every((k) => k === 'messaggio' || k === 'allegaSeTroppoGrande' || k === 'paginaBrowser'); // decisione 201
+  if (ammesse) requirePaginaBrowser(body); // la forma; il valore lo prende la rotta
   if (!ammesse || !chiavi.includes('messaggio') || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0
     || ('allegaSeTroppoGrande' in body && typeof body.allegaSeTroppoGrande !== 'boolean')) {
     const errore = new Error('Invalid body: expected {messaggio}');
@@ -3123,6 +3308,21 @@ function requireGoalContractBody(body, { conConferma }) {
 }
 
 /** Resume legacy senza body oppure nuovo turno con una sola stringa non vuota. */
+/*
+ * Decisione 116 C (owner 04/11/2026; forma §4) — la ripresa dopo la scheda «Accedi e riprendi» o «Riprova» dice PERCHÉ riprende
+ *   (`ripresaDopo`): il registro scrive allora la riga quieta durevole subito dopo il RunStarted («Accesso rifatto, riprendo da qui»).
+ *   Si toglie dal corpo prima di ogni altro controllo, così il resume di sempre non cambia; un valore che non si conosce è un errore.
+ */
+const RIPRESE_DOPO = new Set(['accesso-rifatto', 'rete-tornata', 'rinnovo']);
+export function separaRipresaDopo(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || !Object.hasOwn(body, 'ripresaDopo')) return { corpo: body, ripresaDopo: null };
+  const { ripresaDopo, ...corpo } = body;
+  if (typeof ripresaDopo !== 'string' || !RIPRESE_DOPO.has(ripresaDopo)) {
+    throw Object.assign(new Error('Invalid body: ripresaDopo must be "accesso-rifatto", "rete-tornata" or "rinnovo".'), { code: 'QUERY_INVALID' });
+  }
+  return { corpo, ripresaDopo };
+}
+
 function requireResumeBody(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     const errore = new Error('Invalid body: expected {messaggio?}');
@@ -3133,8 +3333,9 @@ function requireResumeBody(body) {
   if (chiavi.length === 0) return null;
   /* owner 28/10/2026: la lingua di QUESTO messaggio può accompagnarlo (mai da sola); la forma la controlla `requireLinguaDelleRisposte`.
      §4.2, regola N (owner 22/10, bozzetto 29/10): così anche `allegaSeTroppoGrande`, un booleano, solo col messaggio. */
-  const ammesse = chiavi.every((k) => k === 'messaggio' || k === 'linguaDelMessaggio' || k === 'allegaSeTroppoGrande');
+  const ammesse = chiavi.every((k) => k === 'messaggio' || k === 'linguaDelMessaggio' || k === 'allegaSeTroppoGrande' || k === 'paginaBrowser'); // decisione 201
   if (ammesse && chiavi.includes('linguaDelMessaggio')) requireLinguaDelleRisposte(body);
+  if (ammesse) requirePaginaBrowser(body); // decisione 201: solo la forma; il valore lo prende la rotta
   if (!ammesse || !chiavi.includes('messaggio') || typeof body.messaggio !== 'string' || body.messaggio.trim().length === 0
     || ('allegaSeTroppoGrande' in body && typeof body.allegaSeTroppoGrande !== 'boolean')) {
     const errore = new Error('Invalid body: expected {messaggio?}');
@@ -3377,6 +3578,7 @@ export function createHttpApp({
   /** ⛔ 16/09 — il tetto sul corpo delle richieste: 10 MiB di serie, vedi `MAX_REQUEST_BODY_BYTES`. Iniettabile per i test. */
   limiteCorpoByte = MAX_REQUEST_BODY_BYTES,
   staticHandler, sessionRegistry = null, workflowStore = null, contextService = null, listaTaskDisponibili = () => [],
+  cartellaEsportazioni = null, // Context Manager dal dispositivo: le copie dell'esportazione, fuori dal progetto
   workflowStoreAltro = null, // owner 10/10/2026: l'archivio Workflow di un altro processo TALOS, solo da leggere
   // F3-51c (25/09/2026): orchestratore e scheduler dei Workflow — senza, Avvia e i controlli rispondono «non disponibile» (D22)
   workflowRuntime = null,
@@ -3389,16 +3591,32 @@ export function createHttpApp({
   searchSourceStore = null, provaRicercaWebFn = null,
   // F009 (owner 01/10/2026) — l'utente di WSL: i fatti (GET) e la preferenza «usa un utente normale» (POST).
   preferenzeWslStore = null,
+  archivioAllegati = null, // decisioni 43 e 47: senza, nessuna scrittura e un errore chiaro, mai un ripiego nel progetto
   // C1 (owner 09/10/2026 sera): «Motore del contesto» in Impostazioni → Contesto (`impostazioni-contesto.mjs`).
   impostazioniContesto = null,
+  /* Decisioni 173/189/196 (04/11/2026): la fiducia delle cartelle (`fiducia-cartelle.mjs`); assente sul telefono */
+  fiduciaCartelle = null,
   finestraPiena = null, // L1 1.3: { scelta(), salvaScelta(v) } di `finestra-che-cresce.mjs`
   /* M 28/10/2026 notte: il riconoscitore della lingua dei messaggi scritti (ELD); spento nel profilo del dispositivo (`linguaScrittaDellaRichiesta`) */
   riconosciLinguaScritta = true,
   impostazioniComandi = null, // owner 27/10/2026: dove girano i comandi delle conversazioni nuove
+  impostazioniChat = null, // decisione 140 (04/11/2026): i blocchi vivi delle conversazioni nuove (`impostazioni-chat.mjs`)
+  impostazioneComputerUse = null, // decisione 310 (06/11/2026): «Uso del computer (Anteprima)», spento di serie (`computer-use/impostazione.mjs`)
+  /* 01/11/2026, «Tieni sveglio il PC»: `{ leggi, scrivi }` (`impostazioni-pc-sveglio.mjs`) e se il server gira dentro l'app installata */
+  impostazioniPcSveglio = null,
+  nellAppInstallata = () => false,
+  /* 01/11/2026, «Memoria delle conversazioni»: `{ leggi, scrivi }` (`impostazioni-memoria-conversazioni.mjs`) */
+  impostazioniMemoriaConversazioni = null,
   preferenzeModelli = null, // owner 29/10/2026: preferiti e usati di recente del selettore dei modelli (preferenze-modelli.mjs)
-  cartellaAssistenza = CARTELLA_ASSISTENZA_PREDEFINITA, cercaAssistenzaFn = cercaAssistenza,
-  // ⭐ 04/9, W1-10 — token di loopback (config.token): quando c'è, /api/* vuole il cookie talos_token; `GET /?token=<t>` lo imposta e rimanda a `/`.
+  // ⭐ 04/9, W1-10 — token di loopback: /api/* vuole il cookie talos_token; `GET /?token=<t>` (l'app installata) e `GET /?ingresso=<biglietto>` lo impostano e rimandano a `/`.
   token = null,
+  /* ⛔⛔ «Gettone sempre» (owner 02/11/2026, `src/gettone.mjs`; condizione della CLI): senza `token` si lancia, a meno di questo segno esplicito del modo
+     prove. Un avvio futuro che dimentica il gettone non deve riaprire il buco. */
+  senzaGettone = null,
+  /* Il modo prove del server VERO (`server.mjs --senza-gettone=prove`): le azioni della persona vogliono la finestra (forma §3.3, difesa in profondità).
+     Le prove in processo non lo accendono: parlano alle rotte da programma, e la rotta non è ciò che provano. */
+  origineStrettaSenzaGettone = false,
+  adessoBiglietti = Date.now, // iniettabile per le prove: i 60 secondi si provano con un orologio finto
   /*
    * ⭐ F3, onda 2 di F2 (24/09/2026), decisione 8 — LO SPEGNIMENTO GENTILE: `{ gettone, spegniFn }`. Su Windows nessun
    *   segnale dà un flush («'SIGTERM' is not supported on Windows», doc `process` di Node letta il 24/09/2026; Hermes
@@ -3503,9 +3721,27 @@ export function createHttpApp({
   /* 18/10/2026 — il motore locale dell'app che ospita r4 (`accesso-locale-ospite.mjs`): l'app spinge socket, chiave, modello e
      finestra. Assente o spento (`TALOS_LOCALE_OSPITE_DIR` non data): le rotte rispondono 404 `LOCAL_GUEST_DISABLED`. */
   accessoLocaleOspite = null,
+  /* R-34 parte 2 (30/10/2026): la presenza che l'app del telefono spinge (`presenza-da-app.mjs`); solo con `TALOS_PRESENZA_DA_APP=1`.
+     Assente ⇒ `POST /api/v1/presence` risponde 404. */
+  presenzaDaApp = null,
   /* 18/10/2026 — il controllo remoto (`remoto/index.mjs`). Una FUNZIONE che lo restituisce: il remoto chiama questo stesso gestore
      in processo per le operazioni del telefono, quindi nasce dopo di lui (server.mjs). Assente: le rotte rispondono 503. */
   remotoFn = () => null,
+  /* Contratto «notifiche» (31/10/2026): il registro del PC (`notifiche-registro.mjs`), creato da server.mjs nella cartella dei dati.
+     Una FUNZIONE che lo restituisce, come `remotoFn`. Assente: le rotte delle notifiche rispondono 503. */
+  notificheFn = () => null,
+  /* Fase 8 «Impostazioni dalla chat» (owner 01/11/2026): il servizio delle impostazioni (`impostazioni/servizio-impostazioni.mjs`), uno per
+     server. Le sue rotte (`/api/v1/app-settings/*`) e l'evento `talos.impostazioni-finestra` sul flusso del PC. Assente: 503. */
+  impostazioniApp = null,
+  /* 03/11/2026: il registro dei luoghi di «Consenti sempre» (`computer-use/luoghi-ricordati.mjs`), come funzione. Non passata (computer use
+     spento, `computer-use/interruttore.mjs`): le rotte non esistono, 404. Passata ma senza registro: 503. */
+  luoghiFn = null,
+  /* Decisione 310 (06/11/2026): la scelta della persona dal vivo (`computer-use/interruttore.mjs`). Presente e spenta: le rotte dei luoghi
+     rispondono 404 come una rotta inventata, a ogni metodo. Assente: contano solo `luoghiFn` e la costante. */
+  computerUseAccesoFn = null,
+  /* 05/11/2026, contratto del segno riga 35 (forma del Desktop 05/11 17:45): quale sessione sta usando il computer (`computer-use/sessione-attiva.mjs`), come
+     funzione. Sul flusso del PC l'evento `talos.computer-use-sessione` e all'apertura sempre UNA riga, l'istantanea. Assente (spento): nulla. */
+  sessioneAttivaFn = () => null,
   /* «Segnala un problema» (owner 29/10/2026): `() => ({versione, installata})`, la versione dell'app desktop per la diagnostica (il guscio
      la passa al figlio; da sorgente è quella di `desktop/package.json`). Assente: la diagnostica la dice «non nota». */
   versioneDesktopFn = null,
@@ -3547,7 +3783,12 @@ export function createHttpApp({
      di serie nasce alla prima richiesta e si spegne da solo dopo 30 s senza. */
   campionatoreRisorse: campionatoreRisorseIniettato = null,
 }) {
+  if (!token && senzaGettone !== MODO_SENZA_GETTONE) {
+    throw Object.assign(new Error('TOKEN_REQUIRED: createHttpApp needs a token, or senzaGettone: \'prove\' in a test.'), { code: 'TOKEN_REQUIRED' });
+  }
+  const cassaBiglietti = token ? creaCassaDeiBiglietti({ gettone: token, adesso: adessoBiglietti }) : null;
   let campionatoreRisorse = campionatoreRisorseIniettato;
+  const lettureAPezzi = creaLettureAPezzi({ sessionRegistry, cartella: cartellaEsportazioni });
   /** Il lettore del corpo con il tetto di QUESTA app: le rotte che vogliono un tetto più stretto lo passano come secondo argomento. */
   const leggiCorpoJson = (req, limiteByte = limiteCorpoByte) => leggiCorpoJsonCon(req, limiteByte);
 
@@ -3756,7 +3997,15 @@ export function createHttpApp({
      */
     /* parità, punto 4 (24/10): OGNI scrittura, non solo POST — `session.message.delete` è un DELETE, e un cancello che guarda solo
        POST lo lascerebbe passare senza consenso */
-    if (method !== 'GET' && method !== 'HEAD' && req[ORIGINE_REMOTA] && sessionRegistry) {
+    /* Context Manager dal dispositivo: l'ultima richiesta porta prompt, memoria e uscite in chiaro, l'esportazione l'intera conversazione. Due letture che vogliono il consenso come una scrittura */
+    /* La stessa forma della rotta (riga dei pezzi più sotto): il guardiano dell'inventario la legge come una rotta, e copre le stesse quattro */
+    /* Revisione del blocco 25, R2: anche una fonte dell'archivio del motore del contesto (`message-<n>`), che porta gli stessi messaggi dell'ultima richiesta. Stessa forma
+       della sua rotta (`context/sources/<id>` nell'inventario), e il consenso si guarda QUI, prima che il servizio legga il record */
+    /* E (condizione del Mobile, 01/11/2026 sera) riassunto e indice della compattazione semplice: chi li scrive riceve i `system` iniziali (prompt, progetto, memoria) */
+    const letturaColConsenso = method === 'GET' && (/^\/api\/v1\/sessions\/([^/]+)\/(last-request|export)\/pieces(?:\/(\d+|data))?$/u.test(url.pathname)
+      || /^\/api\/v1\/sessions\/([^/]+)\/context\/sources\/([^/]+)$/u.test(url.pathname)
+      || /^\/api\/v1\/sessions\/([^/]+)\/compaction-state$/u.test(url.pathname));
+    if ((letturaColConsenso || (method !== 'GET' && method !== 'HEAD')) && req[ORIGINE_REMOTA] && sessionRegistry) {
       /* per segmenti, non con un'espressione: è un cancello, non una rotta (il guardiano dell'inventario legge le espressioni come rotte).
          `/api/v1/sessions/<id>/<qualcosa>`, tranne esattamente `…/stop` e `…/close`; `/api/v1/sessions/custom` non ha il terzo pezzo. */
       const pezzi = url.pathname.split('/');
@@ -3764,7 +4013,10 @@ export function createHttpApp({
          (`…/delegation/pause`) sono «fermare» come `stop`: sempre ammessi, non scrivono niente nella cartella. */
       const fermare = (pezzi.length === 6 && (pezzi[5] === 'stop' || pezzi[5] === 'close'))
         || (pezzi.length === 8 && pezzi[5] === 'processes' && pezzi[6] !== '' && pezzi[7] === 'stop')
-        || (pezzi.length === 7 && pezzi[5] === 'delegation' && pezzi[6] === 'pause');
+        || (pezzi.length === 7 && pezzi[5] === 'delegation' && pezzi[6] === 'pause')
+        || (pezzi.length === 7 && pezzi[5] === 'git' && pezzi[6] === 'fetch-stop') // D-30: il ponte le ammette, e qui erano rifiutate
+        || (method === 'DELETE' && pezzi.length === 8 && pezzi[5] === 'context' && pezzi[6] === 'jobs' && pezzi[7] !== '') // Context Manager dal dispositivo: fermare una compattazione
+        || (pezzi.length === 8 && pezzi[5] === 'research' && pezzi[6] !== '' && pezzi[7] === 'pausa');
       const scrittura = pezzi.length >= 6 && pezzi[1] === 'api' && pezzi[2] === 'v1' && pezzi[3] === 'sessions' && pezzi[4] !== ''
         && !fermare;
       const cartelleDisp = scrittura ? (remotoFn()?.cartelle ?? (typeof cartelleDispositiviFn === 'function' ? cartelleDispositiviFn() : null) ?? null) : null;
@@ -3797,10 +4049,34 @@ export function createHttpApp({
      * SameSite=Strict: non leggibile da script, mai inviato cross-site.
      */
     if (token) {
-      if (url.pathname === '/' && url.searchParams.has('token')) {
-        if (url.searchParams.get('token') === token) {
+      /*
+       * ⛔⛔ 02/11/2026, «gettone sempre» — IL BIGLIETTO: la finestra del 4174 e degli avvii da sorgente entra da qui, mai col gettone nell'indirizzo (la
+       *   riga di comando del browser e la cronologia sono file). Monouso, 60 secondi, firmato da chi ha avviato il server (`src/gettone.mjs`). Il cookie
+       *   ha `Max-Age` perché l'owner rientra a browser chiuso: al riavvio il gettone cambia e il cookie non vale più, quindi non allunga la vita del
+       *   segreto. Solo GET: una HEAD non lo brucia. Usato, scaduto o falso rispondono uguale.
+       */
+      if (method === 'GET' && url.pathname === '/' && url.searchParams.has(CAMPO_BIGLIETTO)) {
+        /* Revisione R9: una scheda ripristinata sull'indirizzo col biglietto ha già il cookie: entra, e non si spende niente */
+        if (cookieValido(leggiCookie(req, NOME_COOKIE), token)) {
+          res.writeHead(302, { Location: '/', 'Cache-Control': 'no-store' });
+          res.end();
+        } else if (cassaBiglietti.consuma(url.searchParams.get(CAMPO_BIGLIETTO))) {
           res.writeHead(302, {
-            'Set-Cookie': `talos_token=${token}; HttpOnly; SameSite=Strict; Path=/`,
+            /* Revisione R7: il browser scrive questo cookie nel profilo, quindi non porta il gettone ma un valore derivato */
+            'Set-Cookie': `${NOME_COOKIE}=${valoreDelCookie(token)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${DURATA_COOKIE_S}`,
+            Location: '/',
+            'Cache-Control': 'no-store',
+          });
+          res.end();
+        } else {
+          rifiutoBiglietto(req, res, method, clock);
+        }
+        return;
+      }
+      if (url.pathname === '/' && url.searchParams.has('token')) {
+        if (gettoneUguale(url.searchParams.get('token'), token)) {
+          res.writeHead(302, {
+            'Set-Cookie': `${NOME_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/`,
             Location: '/',
             'Cache-Control': 'no-store',
           });
@@ -3839,8 +4115,56 @@ export function createHttpApp({
          lasciapassare da 32 byte casuali, legato a una sessione e alla cartella di una pagina, che una richiesta COL cookie
          ha chiesto un momento prima. Solo GET, solo sotto `/api/v1/pagine/`. */
       const paginaConLasciapassare = method === 'GET' && url.pathname.startsWith('/api/v1/pagine/');
-      if (!rientroOAuth && !paginaConLasciapassare && url.pathname.startsWith('/api/') && leggiCookie(req, 'talos_token') !== token) {
+      /* ⛔ Revisione R1, la TERZA esenzione, con la stessa forma delle altre due: la difesa è un segreto più stretto, e la rotta è qui sotto */
+      const paginaLocale = method === 'GET' && url.pathname === ROTTA_PAGINA_LOCALE;
+      /*
+       * ⛔ S4 della revisione cloud della PR 20 (04/11/2026; forma con l'OK di Mobile, CLI e Performance): la QUARTA e la QUINTA esenzione, con la stessa forma.
+       *   Col gettone sempre acceso lo spegnimento gentile (`scripts/aggiorna-4174.ps1`) e «Apri cartella con TALOS» (`scripts/windows/open-with-talos.ps1`, che con
+       *   l'app installata non ha una chiave dei biglietti) prendevano 401 qui: i loro chiamanti non sono un browser e non hanno il cookie. La difesa è il segreto
+       *   della rotta, confrontato là a tempo costante. Come Hermes `/api/cron/fire` («the JWT, not this allowlist, is the security boundary»,
+       *   `hermes_cli/dashboard_auth/public_paths.py:24-27`). ⛔ Condizione della CLI: solo POST, solo quel percorso, solo con l'intestazione non vuota e solo se il
+       *   server ha davvero il suo segreto; altrimenti la rotta resta dietro il cookie (un vuoto non combacia mai con un vuoto).
+       */
+      const intestazionePiena = (nome) => typeof req.headers[nome] === 'string' && req.headers[nome].trim() !== '';
+      const spegnimentoColSegreto = method === 'POST' && url.pathname === '/api/v1/admin/shutdown'
+        && typeof spegnimento?.gettone === 'string' && spegnimento.gettone !== '' && intestazionePiena('x-talos-shutdown-token');
+      const aperturaColSegreto = method === 'POST' && url.pathname === '/api/v1/workspace-launches'
+        && Boolean(workspaceLaunchStore) && intestazionePiena('x-talos-launcher-token');
+      const cookieBuono = cookieValido(leggiCookie(req, NOME_COOKIE), token);
+      if (!rientroOAuth && !paginaConLasciapassare && !paginaLocale && !spegnimentoColSegreto && !aperturaColSegreto && url.pathname.startsWith('/api/') && !cookieBuono) {
         sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method);
+        return;
+      }
+      /* Revisione R8: il documento vero solo a chi è entrato. `fetch` e i programmi non chiedono html: per loro resta la pagina statica di sempre, che senza API non fa niente */
+      if (method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html') && !cookieBuono && vieneDalBrowser(req)) {
+        rifiutoBiglietto(req, res, method, clock, PAGINA_SENZA_INGRESSO);
+        return;
+      }
+      /*
+       * ⛔⛔ Revisione R1 (S1), 03/11/2026 — LA PAGINA DI UN SERVER LOCALE NON GIRA SULLA NOSTRA ORIGINE. Era servita da `127.0.0.1:<porta>`: col cookie, con l'`Origin` della
+       *   finestra, cioè per il server era la persona. Un comando del modello accendeva un server, apriva la rotta nel browser e la sua pagina si approvava da sola.
+       *   Qui la pagina sta sull'ALTRO nome di loopback (`/api/v1/browser/proxy` rimanda qui): un altro sito per il browser, dove il cookie `SameSite=Strict` non arriva.
+       * ⛔ Non `sandbox`, che è la cura degli artefatti: con l'origine opaca i moduli partono con `Origin: null`, fuori dalla regola di serie di Vite
+       *   (vite.dev/config/server-options `server.cors`, letta il 03/11/2026: `localhost`, `127.0.0.1`, `[::1]`), e ogni anteprima Vite si romperebbe. L'altro nome la regola lo ammette.
+       * Lasciapassare: HMAC del nome del server e dell'indirizzo, lo rilascia solo chi ha il cookie, vale solo per quella pagina su quel nome e dà soltanto quella pagina. Una ricarica del dev server lo riusa.
+       * Un cookie buono qui vuol dire che la finestra è su questo nome: la pagina con quell'autorità non si serve mai.
+       */
+      if (paginaLocale) {
+        try {
+          const indirizzo = url.searchParams.get('url');
+          if (cookieBuono) { sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method); return; }
+          if (typeof indirizzo !== 'string' || !gettoneUguale(url.searchParams.get('pass'), firmaPaginaLocale(token, req.headers.host, indirizzo))) {
+            sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method);
+            return;
+          }
+          const esito = await proxyPagina(indirizzo, { fetchFn, origineNostra: `http://${req.headers.host}` });
+          if (!esito.ok) { const error = new Error(esito.motivo); error.code = esito.codice; throw error; }
+          const porta = portaDaHost(req.headers.host);
+          sendHtmlProxato(res, esito.html, method, `http://127.0.0.1:${porta} http://localhost:${porta}`);
+        } catch (error) {
+          const normalized = normalizeError(error);
+          sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+        }
         return;
       }
     }
@@ -3857,6 +4181,19 @@ export function createHttpApp({
      */
     // ⛔ non una regex di rotta: il GUARDIANO dell'inventario (404 contro 405) le legge tutte come rotte, e questa è un cancello
     const PREFISSO_SESSIONI = '/api/v1/sessions/';
+    /*
+     * ⛔ «Gettone sempre», modo prove del server vero (forma §1.2 e §3.3): le sette azioni che sono della persona. Col gettone il confine è il cookie e questo
+     *   non conta; senza gettone un programma senza intestazioni non le raggiunge, un `Origin` finto sì: difesa in profondità, non il confine. Un punto solo, e
+     *   non sette rotte da ricordare. Il ponte non passa di qui perché il modo prove non ha ponte con un dispositivo vero.
+     */
+    if (origineStrettaSenzaGettone && !token && method === 'POST' && !req[ORIGINE_REMOTA] && url.pathname.startsWith(PREFISSO_SESSIONI)) {
+      const coda = url.pathname.slice(PREFISSO_SESSIONI.length).split('/').slice(1);
+      const dellaPersona = (coda.length === 1 && AZIONI_DELLA_PERSONA.has(coda[0])) || (coda.length === 3 && FIDUCIE_DELLA_PERSONA.has(coda[0]) && coda[2] === 'trust');
+      if (dellaPersona && rifiutoOrigineApprovazione(req, { token })) {
+        sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method);
+        return;
+      }
+    }
     const partiDiSessione = sessionRegistry && typeof sessionRegistry.allineaSessione === 'function' && url.pathname.startsWith(PREFISSO_SESSIONI)
       ? url.pathname.slice(PREFISSO_SESSIONI.length).split('/') : null;
     const rottaDiSessione = partiDiSessione && partiDiSessione[0]
@@ -3865,7 +4202,8 @@ export function createHttpApp({
       let idAllineato = null;
       try { idAllineato = decodeURIComponent(rottaDiSessione[1]); } catch { /* la rotta stessa risponde 404 */ }
       // il fork LEGGE la sessione d'origine e ne scrive una nuova: si può fare anche da una sessione tenuta altrove
-      const scrive = method !== 'GET' && method !== 'HEAD' && rottaDiSessione[2] !== '/fork';
+      // decisione 198: «Riprova» (`/retry`) è un fork col giro nel ramo nuovo: la sessione d'origine si legge e basta, come per il fork
+      const scrive = method !== 'GET' && method !== 'HEAD' && rottaDiSessione[2] !== '/fork' && rottaDiSessione[2] !== '/retry';
       const apre = !scrive && (rottaDiSessione[2] === undefined || rottaDiSessione[2] === '/events');
       if (idAllineato && (scrive || apre)) {
         let allineamento = null;
@@ -4493,19 +4831,41 @@ export function createHttpApp({
         if (req[ORIGINE_REMOTA] || rifiutoOrigineApprovazione(req, { token })) { sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method); return; }
         const remoto = remotoFn();
         const cartelleDisp = remoto?.cartelle;
-        if (typeof cartelleDisp?.ascolta !== 'function') { sendJson(res, 503, errorEnvelope('REMOTE_UNAVAILABLE', clock), method); return; }
+        const conRemoto = typeof cartelleDisp?.ascolta === 'function';
+        /* Contratto «notifiche» (31/10/2026): il flusso è allargato da «remoto» a «PC» — anche senza remoto porta `talos.notifica`. Senza
+           nessuno dei due resta il 503 di prima (la finestra resta sul suo ripiego, come oggi). */
+        const registroNotifiche = notificheFn();
+        const conNotifiche = typeof registroNotifiche?.ascolta === 'function';
+        /* Fase 8 (01/11/2026, §3.5 strada A): le preferenze cambiate dal modello arrivano alle finestre del PC su questo flusso */
+        const conImpostazioni = typeof impostazioniApp?.finestra?.ascolta === 'function';
+        /* segno del computer use (05/11/2026): la sessione che usa il computer, perché la bolla risponda a quella e mai alla chat visibile */
+        const sessioneAttiva = sessioneAttivaFn?.();
+        const conComputerUse = typeof sessioneAttiva?.ascolta === 'function';
+        if (!conRemoto && !conNotifiche && !conImpostazioni && !conComputerUse) { sendJson(res, 503, errorEnvelope('REMOTE_UNAVAILABLE', clock), method); return; }
         const flussoRemoto = createSseSession({ response: res, headers: SECURITY_HEADERS, heartbeatMs: INTERVALLO_BATTITO_SSE_MS,
           setIntervalFn: impostaIntervalloFn, clearIntervalFn: cancellaIntervalloFn });
         if (method === 'HEAD') { flussoRemoto.start(); flussoRemoto.close(); res.end(); return; }
         flussoRemoto.start();
         /* ⛔ ascolto PRIMA dell'istantanea: una richiesta nata in mezzo arriva due volte (la finestra le tiene per id), mai zero */
-        const smetti = [cartelleDisp.ascolta((e) => { flussoRemoto.send(e); }),
-          typeof remoto.ascoltaStato === 'function' ? remoto.ascoltaStato((e) => { flussoRemoto.send(e); }) : null,
+        const smetti = [conRemoto ? cartelleDisp.ascolta((e) => { flussoRemoto.send(e); }) : null,
+          conRemoto && typeof remoto.ascoltaStato === 'function' ? remoto.ascoltaStato((e) => { flussoRemoto.send(e); }) : null,
+          /* `talos.notifica { voce, ultimoSeq, totaleDaFare }`: una voce nuova o cambiata (visto, risolto), dopo che è sul disco */
+          conNotifiche ? registroNotifiche.ascolta((avviso) => { flussoRemoto.send({ type: 'talos.notifica', ...avviso }); }) : null,
           /* R5.13 corsa 2 (24/10/2026): lo stato di un'offerta di file (inviato, in scaricamento con la percentuale, scaricato, cambiato)
              nel momento in cui cambia, per la riga sotto la scheda del file — come la carta del consenso, sull'evento e non al giro dopo */
-          typeof remoto.file?.ascoltaOfferte === 'function' ? remoto.file.ascoltaOfferte((offerta) => { flussoRemoto.send({ type: 'file.offer', offerta }); }) : null];
-        for (const riga of cartelleDisp.inAttesa()) flussoRemoto.send(eventoDiRichiesta(riga));
-        flussoRemoto.send({ type: 'remote.changed', motivo: 'connesso' });
+          conRemoto && typeof remoto.file?.ascoltaOfferte === 'function' ? remoto.file.ascoltaOfferte((offerta) => { flussoRemoto.send({ type: 'file.offer', offerta }); }) : null,
+          /* Fase 8: `talos.impostazioni-finestra {destinatario:'finestre-pc', richiestaId, valori}` — la finestra applica e risponde (`…/window/applied`) */
+          conImpostazioni ? impostazioniApp.finestra.ascolta((e) => { flussoRemoto.send(e); }) : null,
+          /* `{type:'talos.computer-use-sessione', sessionId, attivo}` quando un compito prende o lascia lo schermo */
+          conComputerUse ? sessioneAttiva.ascolta((e) => { flussoRemoto.send(e); }) : null];
+        /* all'apertura la foto delle notifiche (`voce: null`): l'ultimo `seq` e quante cose aspettano la persona */
+        if (conNotifiche) flussoRemoto.send({ type: 'talos.notifica', voce: null, ...(await registroNotifiche.riassunto()) });
+        if (conRemoto) {
+          for (const riga of cartelleDisp.inAttesa()) flussoRemoto.send(eventoDiRichiesta(riga));
+          flussoRemoto.send({ type: 'remote.changed', motivo: 'connesso' });
+        }
+        /* forma del Desktop 05/11 17:45: SEMPRE UNA riga, la sessione corrente o `{sessionId:null, attivo:false}` a riposo */
+        if (conComputerUse) flussoRemoto.send(sessioneAttiva.istantanea());
         const chiudiFlusso = () => { for (const fn of smetti) { try { fn?.(); } catch { /* già tolto */ } } flussoRemoto.close(); };
         if (res.destroyed || res.writableEnded) chiudiFlusso(); else res.once('close', chiudiFlusso);
       } catch (error) {
@@ -4537,6 +4897,106 @@ export function createHttpApp({
       } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
       return;
     }
+    /* Fase 8 «Impostazioni dalla chat» (owner 01/11/2026): le rotte della finestra del PC (`impostazioni/rotte-impostazioni.mjs`). Come le
+       notifiche: un'origine remota si ferma, e tutte (anche le letture: le ricevute portano id di sessioni e dispositivi) passano dalla guardia
+       d'origine della finestra. */
+    if (url.pathname === PREFISSO_ROTTE_IMPOSTAZIONI || url.pathname.startsWith(`${PREFISSO_ROTTE_IMPOSTAZIONI}/`)) {
+      try {
+        requireNoQuery(url);
+        /* `/settings` della persona (02/11/2026): `apply` è la sola rotta che il ponte del dispositivo può chiamare (Mobile, forma
+           FORMA-SETTINGS-DELLA-PERSONA §Risposte); tutte le altre restano della sola finestra. La guardia d'origine vale per tutte. */
+        const remota = req[ORIGINE_REMOTA] ?? null;
+        const applica = method === 'POST' && url.pathname === ROTTA_APPLICA_IMPOSTAZIONI;
+        if ((remota && !applica) || rifiutoOrigineApprovazione(req, { token })) { sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method); return; }
+        const corpo = method === 'POST' ? await leggiCorpoJson(req, 64 * 1024) : null;
+        const dispositivoId = remota && typeof remota.dispositivoId === 'string' && remota.dispositivoId ? remota.dispositivoId : null;
+        /* R5.12 anche qui: dal dispositivo una voce della CONVERSAZIONE è una scrittura in quella sessione, e vuole il consenso della sua
+           cartella (chiuso a guasto come il cancello delle sessioni: solo una sessione che non esiste passa, e la dirà il servizio) */
+        /* Giro 2, voce 6 (condizione del Mobile, 02/11 notte): una voce della conversazione E di un gruppo a carta sempre risponde PRIMA
+           `PC_CONFIRMATION_REQUIRED`, anche senza il consenso della cartella — il controllo più stretto passa per primo */
+        const vocePerIlPc = remota && applica ? voceCheVuoleIlPc(corpo) : null;
+        if (vocePerIlPc) {
+          sendJson(res, 403, errorEnvelope('PC_CONFIRMATION_REQUIRED', clock, { errore: Object.assign(new Error(fraseDelPcPerIlDispositivo(vocePerIlPc.chiave)),
+            { code: 'PC_CONFIRMATION_REQUIRED', reason: 'pc-confirmation-required', params: vocePerIlPc }) }), method);
+          return;
+        }
+        if (remota && applica && applicaToccaLaConversazione(corpo)) {
+          const cartelleDisp = remotoFn()?.cartelle ?? (typeof cartelleDispositiviFn === 'function' ? cartelleDispositiviFn() : null) ?? null;
+          /* Revisione della CLI, F2 (02/11 notte): senza il modulo delle cartelle o senza il registro il consenso non si può verificare ⇒
+             CHIUSO, come dice il commento qui sopra (prima il controllo si saltava e la voce passava) */
+          if (!cartelleDisp || !sessionRegistry || typeof cartelleDisp.consentita !== 'function') {
+            sendJson(res, 403, errorEnvelope('CONSENT_REQUIRED', clock, { errore: Object.assign(new Error('The computer must allow this device to write in this folder.'),
+              { code: 'CONSENT_REQUIRED', reason: 'consent-required' }) }), method);
+            return;
+          }
+          let cartella = null;
+          let inesistente = false;
+          try {
+            const w = await sessionRegistry.cartellaPerChatFile(corpo.sessionId);
+            cartella = typeof w?.cartella === 'string' && w.cartella ? w.cartella : null;
+            inesistente = w?.code === 'NOT_FOUND';
+          } catch { cartella = null; }
+          if (!inesistente && !(cartella && dispositivoId && await cartelleDisp.consentita(dispositivoId, cartella))) {
+            const descritta = cartella && typeof cartelleDisp.descrivi === 'function' ? await Promise.resolve(cartelleDisp.descrivi(cartella)).catch(() => null) : null;
+            sendJson(res, 403, errorEnvelope('CONSENT_REQUIRED', clock, { errore: Object.assign(new Error('The computer must allow this device to write in this folder.'),
+              { code: 'CONSENT_REQUIRED', reason: 'consent-required', ...(descritta ? { params: descritta } : {}) }) }), method);
+            return;
+          }
+        }
+        /* chi ha chiesto e chi ha confermato: li stampa la rotta, come per `approve` (mai il corpo) */
+        const perApplica = applica ? (remota
+          ? { origine: { tipo: 'dispositivo', dispositivoId }, confermatoDa: { tipo: 'dispositivo', dispositivoId } }
+          /* Revisione della CLI, F1 (02/11 notte, S2): SENZA gettone la guardia d'origine non distingue la finestra da un programma locale
+             (anche un comando del modello) ⇒ le voci a carta sempre non passano di qui: la finestra le manda al modello, con la carta */
+          : { origine: { tipo: 'persona' }, confermatoDa: { tipo: 'finestra-pc' }, ...(token ? {} : { serveLaCarta: true }) }) : null;
+        /* PR21-I1 (04/11/2026): senza gettone anche l'Annulla delle voci a carta sempre passa dalla carta (la rotta lo dice al servizio) */
+        const esito = await creaRotteImpostazioni({ servizio: impostazioniApp })({ method, percorso: url.pathname, corpo, origine: { tipo: 'pc' }, perApplica, serveLaCarta: !token });
+        if (esito?.dati !== undefined) { sendJson(res, esito.stato, successEnvelope(esito.dati, clock), method); return; }
+        const codice = esito?.errore?.code;
+        const ripiego = applica ? 'SETTINGS_APPLY_REFUSED' : 'INTERNAL_ERROR'; // il rifiuto di una fonte con un codice non dichiarato resta un rifiuto
+        const dichiarato = API_ERROR_CODES.has(codice) ? codice : ripiego;
+        sendJson(res, esito?.stato ?? 404, errorEnvelope(dichiarato, clock, { errore: esito?.errore ? (applica ? { ...esito.errore, code: dichiarato } : esito.errore) : null }), method, esito?.allow ? { Allow: esito.allow } : undefined);
+      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
+      return;
+    }
+    /* Contratto «notifiche» (31/10/2026): le rotte della finestra del PC. Il telefono passa dal ponte (`notifications.*`), mai di qui:
+       un'origine remota si ferma come per le rotte del remoto. Le scritture («visto») passano dalla guardia d'origine della finestra. */
+    if (url.pathname === PREFISSO_ROTTE_LUOGHI || url.pathname.startsWith(`${PREFISSO_ROTTE_LUOGHI}/`)) {
+      /* decisione 310 (06/11/2026): computer use spento (di serie, o dalla persona dal vivo) ⇒ la rotta non c'è, 404 a ogni metodo come una rotta
+         inventata, anche se l'inventario la conosce (la costante è accesa: la funzione è nella versione, come «Anteprima») */
+      if (typeof luoghiFn !== 'function' || (typeof computerUseAccesoFn === 'function' && computerUseAccesoFn() !== true)) {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      try {
+        requireNoQuery(url);
+        if (req[ORIGINE_REMOTA] || (method === 'POST' && rifiutoOrigineApprovazione(req, { token }))) {
+          sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method);
+          return;
+        }
+        const corpo = method === 'POST' ? await leggiCorpoJson(req, 4 * 1024) : null;
+        const esito = await creaRotteLuoghi({ registro: luoghiFn() })({ method, percorso: url.pathname, corpo });
+        if (esito?.dati !== undefined) { sendJson(res, esito.stato, successEnvelope(esito.dati, clock), method, { 'Cache-Control': 'private, no-store' }); return; }
+        const codice = esito?.stato === 404 ? 'NOT_FOUND' : esito?.stato === 405 ? 'METHOD_NOT_ALLOWED' : esito?.errore?.code;
+        sendJson(res, esito?.stato ?? 404, errorEnvelope(API_ERROR_CODES.has(codice) ? codice : 'INTERNAL_ERROR', clock, { errore: esito?.errore ?? null }), method, esito?.allow ? { Allow: esito.allow } : {});
+      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
+      return;
+    }
+    if (url.pathname === '/api/v1/notifications' || url.pathname.startsWith('/api/v1/notifications/')) {
+      try {
+        if (method !== 'GET') requireNoQuery(url);
+        if (req[ORIGINE_REMOTA] || (method === 'POST' && rifiutoOrigineApprovazione(req, { token }))) {
+          sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method);
+          return;
+        }
+        const corpo = method === 'POST' ? await leggiCorpoJson(req, 64 * 1024) : null;
+        const esito = await creaRotteNotifiche({ registro: notificheFn() })({ method, percorso: url.pathname, query: url.searchParams, corpo });
+        if (esito?.dati !== undefined) { sendJson(res, esito.stato, successEnvelope(esito.dati, clock), method, { 'Cache-Control': 'private, no-store' }); return; }
+        const codice = esito?.stato === 404 ? 'NOT_FOUND' : esito?.stato === 405 ? 'METHOD_NOT_ALLOWED' : esito?.errore?.code;
+        sendJson(res, esito?.stato ?? 404, errorEnvelope(API_ERROR_CODES.has(codice) ? codice : 'INTERNAL_ERROR', clock, { errore: esito?.errore ?? null }), method, esito?.allow ? { Allow: esito.allow } : undefined);
+      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
+      return;
+    }
     /* 18/10/2026 — il motore locale dell'app (contratto con la sessione mobile): `access` tiene socket, chiave, modello e finestra;
        `access/remove` lo dimentica. La chiave non torna mai indietro: la risposta è lo `stato()` dell'accesso. */
     if (url.pathname === ROTTA_ACCESSO_LOCALE_OSPITE || url.pathname === ROTTA_DIMENTICA_LOCALE_OSPITE) {
@@ -4553,6 +5013,22 @@ export function createHttpApp({
           if (rifiuto) throw rifiuto;
         }
         sendJson(res, 200, successEnvelope(accessoLocaleOspite.stato(), clock), method, { 'Cache-Control': 'private, no-store' });
+      } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
+      return;
+    }
+    /* R-34 parte 2 (forma del Mobile, OK di CLI e Performance, 30/10/2026): l'app del telefono dice se la persona è davanti. Solo con la
+       presenza accesa (`TALOS_PRESENZA_DA_APP=1`), dietro la guardia d'origine delle scritture; `presente` dev'essere un booleano,
+       altrimenti 400 e lo stato resta com'era (Performance: un corpo sbagliato non accende la carta). */
+    /* Solo POST: gli altri metodi cadono nell'inventario (ROTTE_API), che risponde 405 con Allow — come ogni altra rotta. */
+    if (method === 'POST' && url.pathname === '/api/v1/presence') {
+      if (!presenzaDaApp) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+      try {
+        requireNoQuery(url);
+        const corpo = await leggiCorpoJson(req, 256);
+        if (!corpo || typeof corpo !== 'object' || typeof corpo.presente !== 'boolean' || Object.keys(corpo).length !== 1) {
+          throw Object.assign(new Error('The presence accepts only { "presente": true | false }.'), { code: 'QUERY_INVALID' });
+        }
+        sendJson(res, 200, successEnvelope(presenzaDaApp.imposta(corpo.presente), clock), method, { 'Cache-Control': 'private, no-store' });
       } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
       return;
     }
@@ -4671,7 +5147,17 @@ export function createHttpApp({
           if (body.idempotencyKey && body.idempotencyKey !== headerKey) throw Object.assign(new Error('Request identity mismatch.'), { code: 'CTX_INVALID_INPUT' });
           body.idempotencyKey = headerKey;
         }
-        const result = await contextService.request({ sessionId, method: method === 'HEAD' ? 'GET' : method, path, body });
+        /* C6 (28/10/2026, concordato con la CLI): questa rotta è la porta della PERSONA (il PC e il dispositivo collegato). Un modello del
+           riassunto scelto qui per la conversazione è della persona, e vince sulla sua scelta globale; l'ospite (la CLI) scrive il suo dal
+           servizio, senza passare di qui. Un'origine già detta non si riscrive. */
+        const modelloScelto = method === 'PATCH' && path === '/settings' ? body?.patch?.model : null;
+        if (modelloScelto && typeof modelloScelto === 'object' && modelloScelto.mode === 'explicit' && modelloScelto.origine === undefined) {
+          body.patch.model = { ...modelloScelto, origine: 'persona' };
+        }
+        const letto = await contextService.request({ sessionId, method: method === 'HEAD' ? 'GET' : method, path, body });
+        /* Revisione del blocco 25, R2: una fonte dell'archivio esce oscurata quando la chiede un dispositivo. Segue l'ORIGINE della richiesta (`ORIGINE_REMOTA`, messa dal
+           ponte anche per una chiamata in processo, come quella della CLI che lo ospita), non il trasporto; dalla finestra del PC resta intera */
+        const result = req[ORIGINE_REMOTA] && /^\/sources\/[^/]+$/u.test(path) ? fonteOscurataPerIlDispositivo(letto) : letto;
         if (!res.destroyed) sendJson(res, 200, result, method);
       } catch (error) {
         if (error?.code?.startsWith('CTX_')) {
@@ -4720,7 +5206,16 @@ export function createHttpApp({
           const runtime = localRuntimes?.[fornitoreId];
           if (!runtime || typeof runtime.listModels !== 'function') { const errore = new Error('Local engine not configured on this server.'); errore.code = 'REPORT_UNAVAILABLE'; throw errore; }
           const stato = (c) => (c && c.state === 'observed' ? (c.value === true ? 'osservato-si' : 'osservato-no') : 'ignoto');
-          const modelli = (await runtime.listModels()).map((m) => ({
+          /* Decisione 63 dell'owner (03/11/2026): un motore locale spento è un DATO, non un guasto. Prima ogni apertura del selettore lasciava un
+             503 in console; ora l'elenco è vuoto e lo dice (`raggiungibile: false`). Un altro errore resta un errore. OK di CLI e Mobile. */
+          let elencoDelMotore;
+          try { elencoDelMotore = await runtime.listModels(); }
+          catch (errore) {
+            if (errore?.code !== 'RUNTIME_UNREACHABLE' && errore?.code !== 'CATALOG_UNREACHABLE') throw errore; // `openai-compatible-runtime.mjs:793`
+            sendJson(res, 200, successEnvelope({ provider: fornitoreId, modelli: [], raggiungibile: false, motivo: 'non-acceso' }, clock), method);
+            return;
+          }
+          const modelli = elencoDelMotore.map((m) => ({
             id: `${fornitoreId}:${m.id}`,
             nome: m.name || m.id,
             provider: fornitoreId,
@@ -5307,6 +5802,81 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * ⭐ Decisione 142 (owner 04/11/2026): «Salva in Libreria» per un blocco vivo. Corpo `{ testo }`: il sorgente del blocco, così come
+     *   la chat lo ha disegnato. Il primo salvataggio crea la voce (v1), il dopo dello stesso blocco aggiunge una versione; stesso testo ⇒
+     *   `nuova:false`. Stessa origine della finestra del ripristino: la scrittura nella Libreria la chiede la finestra di questa sessione.
+     */
+    const bloccoInLibreriaMatch = method === 'POST' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/blocks\/library$/.exec(url.pathname)
+      : null;
+    if (bloccoInLibreriaMatch) {
+      let sessionId;
+      try {
+        sessionId = decodeURIComponent(bloccoInLibreriaMatch[1]);
+      } catch {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      try {
+        requireNoQuery(url);
+        if (rifiutoOrigineApprovazione(req, { token }) === 'altra-finestra') {
+          throw Object.assign(new Error('Save a block from this session’s TALOS window'), { code: 'PAGE_ORIGIN_FORBIDDEN' });
+        }
+        const corpo = await leggiCorpoJson(req);
+        const chiavi = Object.keys(corpo ?? {});
+        if (chiavi.length !== 1 || chiavi[0] !== 'testo' || typeof corpo.testo !== 'string') {
+          throw Object.assign(new Error('Invalid body: expected {testo}'), { code: 'QUERY_INVALID' });
+        }
+        if (typeof sessionRegistry.salvaBloccoInLibreria !== 'function') {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = await sessionRegistry.salvaBloccoInLibreria(sessionId, corpo.testo);
+        if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ id: esito.id, versione: esito.versione, totale: esito.totale, nome: esito.nome, nuova: esito.nuova }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /*
+     * Revisione J, D7 (04/11/2026): SOLA LETTURA. La voce del blocco `:idBlocco` di questa conversazione con l'impronta di ogni versione
+     *   (`{ voce: null }` se il blocco non è in Libreria): il PC confronta l'impronta del blocco che disegna e scrive «In Libreria · vN».
+     *   Il testo del blocco non viaggia nell'indirizzo. Come l'elenco delle versioni: niente domanda nell'indirizzo, nessuna scrittura.
+     */
+    const bloccoVoceMatch = method === 'GET' && sessionRegistry
+      ? /^\/api\/v1\/sessions\/([^/]+)\/blocks\/([^/]+)\/library$/.exec(url.pathname)
+      : null;
+    if (bloccoVoceMatch) {
+      let sessionId;
+      let idBlocco;
+      try {
+        [sessionId, idBlocco] = [decodeURIComponent(bloccoVoceMatch[1]), decodeURIComponent(bloccoVoceMatch[2])];
+      } catch {
+        sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+        return;
+      }
+      try {
+        requireNoQuery(url);
+        if (typeof sessionRegistry.voceDelBloccoInLibreria !== 'function') {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const esito = await sessionRegistry.voceDelBloccoInLibreria(sessionId, idBlocco);
+        if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ voce: esito.voce ?? null }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const libreriaRinominaMatch = method === 'PATCH' && sessionRegistry
       ? /^\/api\/v1\/sessions\/([^/]+)\/library\/([^/]+)$/.exec(url.pathname)
       : null;
@@ -5867,9 +6437,9 @@ export function createHttpApp({
       return;
     }
 
-    const chatFileMatch = method === 'POST' && sessionRegistry
-      && /^\/api\/v1\/sessions\/([^/]+)\/chat-files$/u.exec(url.pathname);
-    if (chatFileMatch) {
+    /* Decisioni 43 e 47: gli allegati stanno nei dati di TALOS, senza cartella né sessione: il legame con la chat nasce dall'invio. BD21: la rotta con la
+       sessione scriveva nel progetto e nessuno la chiamava più: il telefono vecchio passa da `file.upload.*` (`remoto/file-dispositivi.mjs`). */
+    if (method === 'POST' && sessionRegistry && url.pathname === '/api/v1/chat-files') {
       try {
         requireNoQuery(url);
         const rejectedOrigin = rifiutoOrigineApprovazione(req, { token });
@@ -5885,16 +6455,41 @@ export function createHttpApp({
         let name;
         try { name = decodeURIComponent(encodedName); }
         catch { throw Object.assign(new Error('File name not encoded correctly'), { code: 'QUERY_INVALID' }); }
-        const sessionId = decodeURIComponent(chatFileMatch[1]);
-        const workspace = await sessionRegistry.cartellaPerChatFile(sessionId);
-        if ('erroreAvvio' in workspace) {
-          throw erroreDelRegistro(workspace);
-        }
-        const uploaded = await saveChatFile({ rootDir: workspace.cartella, name, source: req });
+        const archivio = archivioAllegati ?? creaArchivioAllegati({ cartella: null });
+        const uploaded = await archivio.salva({ nome: name, source: req, previsti: byteDichiarati(req.headers['content-length']),
+          ...(typeof req[ORIGINE_REMOTA]?.dispositivoId === 'string' ? { dispositivo: req[ORIGINE_REMOTA].dispositivoId } : {}) });
         if (req.aborted || res.destroyed) return;
         sendJson(res, 201, successEnvelope(uploaded, clock), method);
+        void archivio.pulisci().catch(() => {}); // ciò che non è mai stato legato (ritocco del Mobile)
       } catch (error) {
         if (req.aborted || res.destroyed) return;
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /* Decisioni 43 e 47, ritocco del Mobile: il chip di un allegato si apre per riferimento, solo un allegato di QUESTA conversazione */
+    const allegatoMatch = method === 'GET' && sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/allegati\/([^/]+)(\/anteprima)?$/u.exec(url.pathname);
+    if (allegatoMatch) {
+      try {
+        requireNoQuery(url);
+        if (!eIdAllegato(allegatoMatch[2])) throw Object.assign(new Error('Invalid attachment'), { code: 'NOT_FOUND' });
+        const esito = await sessionRegistry.leggiAllegato(decodeURIComponent(allegatoMatch[1]), allegatoMatch[2]);
+        if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+        const inLinea = Boolean(allegatoMatch[3]); // come `/file/anteprima`: solo un PDF vero, con la sua CSP
+        if (inLinea && esito.bytes.subarray(0, 5).toString('latin1') !== '%PDF-') { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const nomi = nomiPerContentDisposition(esito.nome);
+        res.writeHead(200, {
+          'Content-Type': inLinea ? 'application/pdf' : 'application/octet-stream',
+          'Content-Length': esito.bytes.length,
+          'Content-Disposition': `${inLinea ? 'inline' : 'attachment'}; filename="${nomi.ascii}"; filename*=UTF-8''${nomi.utf8}`,
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'private, no-store',
+          'Content-Security-Policy': inLinea ? "default-src 'none'; sandbox allow-scripts; object-src 'none'" : "default-src 'none'; sandbox",
+        });
+        res.end(esito.bytes);
+      } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
       }
@@ -5985,13 +6580,13 @@ export function createHttpApp({
       try {
         requireNoQuery(url);
         const corpo = await leggiCorpoJson(req);
-        const { taskId, modello, modelloPlanner, reasoning, mobile, permessi, permessiPerAttrezzo, modalitaOperativa, provider, runtimeId, modelId, fallbackConsent, fallbackProviders, linguaInterfaccia, linguaDelleRisposte, linguaDelMessaggio } = requireTaskIdBody(corpo);
+        const { taskId, modello, modelloPlanner, reasoning, fasciaVeloce, mobile, permessi, permessiPerAttrezzo, modalitaOperativa, provider, runtimeId, modelId, fallbackConsent, fallbackProviders, linguaInterfaccia, linguaDelleRisposte, linguaDelMessaggio } = requireTaskIdBody(corpo);
         const opzioniSessione = {
           ...(fallbackProviders !== undefined ? { fallbackProviders } : {}),
           ...(linguaInterfaccia ? { linguaInterfaccia } : {}), // K3b: additivo, come gli altri opzionali
           ...(linguaDelleRisposte ? { linguaDelleRisposte } : {}), // owner 28/10: la lingua delle risposte
           ...(linguaDelMessaggio ? { linguaDelMessaggio } : {}), // e la lingua di questo messaggio
-          modelloScelto: modello, modelloPlannerScelto: modelloPlanner, reasoningScelto: reasoning, mobile,
+          modelloScelto: modello, modelloPlannerScelto: modelloPlanner, reasoningScelto: reasoning, fasciaVeloceScelta: fasciaVeloce, mobile,
           permessiScelto: permessi, permessiPerAttrezzoScelto: permessiPerAttrezzo, modalitaOperativaScelta: modalitaOperativa,
         };
         if (provider !== 'cloud' || runtimeId !== null || modelId !== null || fallbackConsent === true) {
@@ -6160,6 +6755,75 @@ export function createHttpApp({
       return;
     }
 
+    if (method === 'POST' && url.pathname === '/api/v1/conversation-memory-settings') {
+      try {
+        requireNoQuery(url);
+        if (!impostazioniMemoriaConversazioni) { const error = new Error('Conversation memory settings not configured'); error.code = 'CONVERSATION_MEMORY_SETTINGS_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req, 4 * 1024);
+        const keys = Object.keys(body || {});
+        if (keys.length !== 1 || !Number.isSafeInteger(body.gb) || body.gb < 0) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+        let data;
+        try { data = await impostazioniMemoriaConversazioni.scrivi({ gb: body.gb }); } catch (e) { if (e?.code === 'CONVERSATION_MEMORY_SETTINGS_INVALID') e.code = 'QUERY_INVALID'; throw e; }
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/api/v1/keep-awake-settings') {
+      try {
+        requireNoQuery(url);
+        if (!impostazioniPcSveglio) { const error = new Error('Keep-awake settings not configured'); error.code = 'KEEP_AWAKE_SETTINGS_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req, 4 * 1024);
+        const keys = Object.keys(body || {});
+        if (keys.length !== 1 || !['mai', 'mentre-lavora', 'sempre'].includes(body.modo)) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+        sendJson(res, 200, successEnvelope({ ...(await impostazioniPcSveglio.scrivi({ modo: body.modo })), nellApp: nellAppInstallata() === true }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/api/v1/computer-use/settings') {
+      /* Decisione 310 (06/11/2026) — Impostazioni → Strumenti, «Uso del computer (Anteprima)»: un campo solo, sì o no; spento di serie. Vale dalla
+         richiesta e dal giro dopo, senza riavviare. Passa dalla guardia d'origine della finestra come le altre scritture. */
+      try {
+        requireNoQuery(url);
+        if (req[ORIGINE_REMOTA] || rifiutoOrigineApprovazione(req, { token })) { sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method); return; }
+        if (!impostazioneComputerUse) { const error = new Error('Computer use settings not configured'); error.code = 'COMPUTER_USE_SETTINGS_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req, 4 * 1024);
+        const keys = Object.keys(body || {});
+        if (keys.length !== 1 || typeof body.acceso !== 'boolean') { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+        /* Revisione dei permessi, 06/11/2026: SENZA gettone la guardia d'origine non distingue la finestra da un programma locale (come F1 della
+           porta generale, `serveLaCarta: !token`) ⇒ accendere passa dalla carta di `app_settings`; spegnere resta libero. */
+        if (body.acceso === true && !token) { sendJson(res, 403, errorEnvelope('PC_CONFIRMATION_REQUIRED', clock), method); return; }
+        sendJson(res, 200, successEnvelope(await impostazioneComputerUse.scrivi({ acceso: body.acceso }), clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/api/v1/chat-settings') {
+      /* Decisione 140 — Impostazioni → Chat, «Blocchi vivi nelle risposte»: un campo solo, sì o no. Vale per le conversazioni nuove. */
+      try {
+        requireNoQuery(url);
+        if (!impostazioniChat) { const error = new Error('Chat settings not configured'); error.code = 'CHAT_SETTINGS_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req, 4 * 1024);
+        const keys = Object.keys(body || {});
+        if (keys.length !== 1 || typeof body.blocchiVivi !== 'boolean') { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+        sendJson(res, 200, successEnvelope(await impostazioniChat.scrivi({ blocchiVivi: body.blocchiVivi }), clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     if (method === 'POST' && url.pathname === '/api/v1/command-settings') {
       try {
         requireNoQuery(url);
@@ -6175,14 +6839,61 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * Decisioni 173, 189 e 196 (owner 04/11/2026): «Ti fidi di questa cartella?». GET legge (true, false, null = mai chiesta); POST la
+     * scrive e la riapplica subito alle conversazioni vive (`riapplicaFiducia`: un «No» abbassa l'Accesso pieno, un «Sì» lo rimette a
+     * chi l'aveva scelto). La cartella si indica come all'avvio: una conversazione, una cartella dell'elenco, una scelta a mano o un
+     * collegamento, una sola. Mai sul telefono (il server non riceve lo store).
+     */
+    if ((method === 'GET' || method === 'POST') && url.pathname === '/api/v1/folder-trust') {
+      try {
+        if (!fiduciaCartelle || typeof sessionRegistry?.cartellaPerLaFiducia !== 'function') { const error = new Error('Folder trust not configured'); error.code = 'FOLDER_TRUST_UNAVAILABLE'; throw error; }
+        const CHIAVI_CARTELLA = ['sessionId', 'cartellaId', 'cartellaLibera', 'workspaceLaunchId'];
+        let scelta;
+        let fidata;
+        if (method === 'GET') {
+          const chiavi = [...url.searchParams.keys()];
+          if (chiavi.length !== 1 || !CHIAVI_CARTELLA.includes(chiavi[0]) || url.searchParams.getAll(chiavi[0]).length !== 1) { const error = new Error('Invalid query'); error.code = 'QUERY_INVALID'; throw error; }
+          scelta = { [chiavi[0]]: url.searchParams.get(chiavi[0]) };
+        } else {
+          requireNoQuery(url);
+          const body = await leggiCorpoJson(req, 8 * 1024);
+          const chiavi = Object.keys(body || {});
+          const dellaCartella = chiavi.filter((k) => CHIAVI_CARTELLA.includes(k));
+          if (dellaCartella.length !== 1 || chiavi.length !== 2 || !chiavi.includes('fidata') || ![true, false, null].includes(body.fidata)
+            || typeof body[dellaCartella[0]] !== 'string') { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+          scelta = { [dellaCartella[0]]: body[dellaCartella[0]] };
+          fidata = body.fidata;
+        }
+        const risolta = sessionRegistry.cartellaPerLaFiducia(scelta);
+        if (!risolta?.ok) { const error = new Error(risolta?.erroreAvvio ?? 'Folder not found'); error.code = risolta?.code ?? 'QUERY_INVALID'; throw error; }
+        if (method === 'GET') {
+          sendJson(res, 200, successEnvelope({ cartella: risolta.cartella, fidata: fiduciaCartelle.stato(risolta.cartella) }, clock), method);
+          return;
+        }
+        const ora = await fiduciaCartelle.imposta(risolta.cartella, fidata);
+        const { cambiate = [] } = sessionRegistry.riapplicaFiducia?.() ?? {};
+        sendJson(res, 200, successEnvelope({ cartella: risolta.cartella, fidata: ora, cambiate }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     if (method === 'POST' && url.pathname === '/api/v1/context-settings') {
       try {
         requireNoQuery(url);
         if (!impostazioniContesto) { const error = new Error('Context settings not configured'); error.code = 'CONTEXT_SETTINGS_UNAVAILABLE'; throw error; }
         const body = await leggiCorpoJson(req, 4 * 1024);
+        /* C6 (28/10/2026): oltre al motore, il modello del riassunto e la sua riserva — una o più scelte alla volta, mai un campo in più */
         const keys = Object.keys(body || {});
-        if (keys.length !== 1 || !['engine', 'legacy'].includes(body.motore)) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
-        sendJson(res, 200, successEnvelope(await impostazioniContesto.scrivi({ motore: body.motore }), clock), method);
+        if (!keys.length || keys.some((k) => !['motore', 'modelloDelRiassunto', 'riservaDelRiassunto'].includes(k))
+          || (keys.includes('motore') && !['engine', 'legacy'].includes(body.motore))) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+        let salvate;
+        try { salvate = await impostazioniContesto.scrivi(body); }
+        catch (e) { if (e?.code === 'CTX_SETTINGS_INVALID') { const error = new Error(e.message); error.code = 'QUERY_INVALID'; throw error; } throw e; }
+        sendJson(res, 200, successEnvelope({ ...salvate, catena: sessionRegistry?.catenaDelleImpostazioni?.() ?? [] }, clock), method); // come il GET: sul ponte evita una seconda lettura (Mobile)
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -6497,7 +7208,7 @@ export function createHttpApp({
           fetch: ['remoto'],
           'fetch-stop': [],
           pull: [],
-          push: ['remoto'],
+          push: ['remoto', 'visto'],
           // ⭐ 28/09 (owner, «come VS Code»): `git init` nella cartella della sessione; `conferma` solo se contiene la cartella utente
           init: ['conferma'],
         };
@@ -6530,7 +7241,7 @@ export function createHttpApp({
           fetch: () => gitService.recupera({ sessionId, remoto: body.remoto ?? null }),
           'fetch-stop': () => gitService.fermaRecupero({ sessionId }),
           pull: () => gitService.scarica({ sessionId }),
-          push: () => gitService.invia({ sessionId, remoto: body.remoto ?? null }),
+          push: () => gitService.invia({ sessionId, remoto: body.remoto ?? null, visto: body.visto ?? null }),
           // ⛔ `conferma` vale solo come `true` letterale, come `forza` sopra
           init: () => gitService.inizializza({ sessionId, conferma: body.conferma === true }),
           /*
@@ -6603,7 +7314,7 @@ export function createHttpApp({
         if (!localRuntimes || typeof body?.runtimeId !== 'string' || typeof body?.modelId !== 'string') { const error = new Error('Invalid runtime body'); error.code = 'QUERY_INVALID'; throw error; }
         const runtime = localRuntimes[body.runtimeId];
         if (!runtime || typeof runtime.load !== 'function') { const error = new Error('Local runtime not available'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
-        const data = await runtime.load(body.modelId, { contextLength: body.contextLength });
+        const data = await (runtime.apri ?? runtime.load)(body.modelId, { contextLength: body.contextLength });
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
@@ -6784,7 +7495,10 @@ export function createHttpApp({
         // 08/9, BH-07 — prima l'input di chi chiama, poi il servizio: stesso ordine di /huggingface/repo e /huggingface/image, e un corpo malformato non torna valido aspettando (vedi la doc su requireHuggingFaceDownloadBody)
         requireHuggingFaceDownloadBody(body);
         if (!localModelTransfer || typeof localModelTransfer.start !== 'function') { const error = new Error('Hugging Face download not configured'); error.code = 'RUNTIME_NOT_AVAILABLE'; throw error; }
-        const data = await localModelTransfer.start(body);
+        /* 01/11/2026, vista locale (forma, punto 1): il proiettore del modello entra nello stesso scarico, con la sua impronta */
+        const { corpo: conVista, proiettore } = await conIlProiettore(body, typeof hfHubClient?.listGgufFiles === 'function' ? (r, v) => hfHubClient.listGgufFiles(r, v) : null);
+        const avviato = await localModelTransfer.start(conVista);
+        const data = proiettore && avviato && typeof avviato === 'object' ? { ...avviato, proiettore: { path: proiettore.path, bytes: proiettore.bytes } } : avviato;
         sendJson(res, 200, successEnvelope(data, clock), method);
       } catch (error) { const normalized = normalizeError(error); sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method); }
       return;
@@ -6831,7 +7545,10 @@ export function createHttpApp({
           }
         }
         const richiesta = requireCustomTaskBody(senzaImmagini);
+        const paginaBrowser = requirePaginaBrowser(senzaImmagini, req); // decisione 201
+        if (paginaBrowser !== undefined) richiesta.paginaBrowser = paginaBrowser;
         if (immagini.length) richiesta.immagini = immagini;
+        const allegatiDellInvio = await allegatiLegabili(sessionRegistry, null, bollaDelClient); // decisioni 43 e 47: il legame nasce dall'invio, dal campo della bolla
         const bolla = bollaConOrigine(bollaDelClient, origine, richiesta.consegna);
         if (bolla) richiesta.bolla = bolla;
         /* owner 27/10/2026: il dispositivo che apre la sessione — le sue cartelle bloccate valgono nei giri che manda (`dispositivoDelGiroDi`) */
@@ -6845,6 +7562,7 @@ export function createHttpApp({
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
+        await sessionRegistry.legaAllegati?.(esito.sessionId, allegatiDellInvio);
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
       } catch (error) {
@@ -7037,6 +7755,26 @@ export function createHttpApp({
         if (!risposta) { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope(risposta, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    /* Decisione 69 (03/11/2026): fissa o toglie la stella. Corpo `{ "fissata": true | false }`; forma in `in-corso/FORMA-FISSATE-SUL-SERVER-2026-11-03.md`. */
+    const pinMatch = method === 'POST' && sessionRegistry && typeof sessionRegistry.fissa === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/pin$/.exec(url.pathname);
+    if (pinMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(pinMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const corpo = await leggiCorpoJson(req);
+        const esito = await sessionRegistry.fissa(sessionId, corpo?.fissata);
+        if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ ok: true, fissata: esito.fissata }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -7575,10 +8313,12 @@ export function createHttpApp({
         const { body, immagini } = await imageInput(corpoRedirect);
         const { messaggio, redirectId } = requireRedirectBody(body);
         const bolla = bollaConOrigine(bollaDelClient, origine, messaggio);
+        const allegatiDellInvio = await allegatiLegabili(sessionRegistry, sessionId, bollaDelClient);
         const esito = sessionRegistry.reindirizza(sessionId, messaggio, { ...(redirectId ? { redirectId } : {}), ...(immagini.length ? { immagini } : {}), ...(bolla ? { bolla } : {}), dispositivoDelGiro: typeof req[ORIGINE_REMOTA]?.dispositivoId === 'string' ? req[ORIGINE_REMOTA].dispositivoId : null });
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
+        await sessionRegistry.legaAllegati?.(sessionId, allegatiDellInvio);
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, redirectId: esito.redirectId }, clock), method);
       } catch (error) {
@@ -7642,6 +8382,43 @@ export function createHttpApp({
       return;
     }
 
+    /* Decisione 198 (owner 04/11/2026; forma §4, K3; OK di Mobile e CLI): «Riprova» in UN colpo — il ramo tagliato prima del giro e lo
+       stesso messaggio rimandato lì (`riprova` del registro). Corpo facoltativo `{ primaDelGiro }`, giudicato come per il fork, prima di
+       toccare il registro; senza, l'ultimo giro della persona. Il telefono la chiama con `session.retry`. */
+    const retryMatch = method === 'POST' && sessionRegistry && typeof sessionRegistry.riprova === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/retry$/.exec(url.pathname);
+    if (retryMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionIdOrigine;
+        try {
+          sessionIdOrigine = decodeURIComponent(retryMatch[1]);
+        } catch {
+          sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
+          return;
+        }
+        const corpo = await leggiCorpoJson(req);
+        const chiavi = corpo && typeof corpo === 'object' && !Array.isArray(corpo) ? Object.keys(corpo) : null;
+        if (!chiavi || chiavi.some((k) => k !== 'primaDelGiro') || (Object.hasOwn(corpo, 'primaDelGiro') && !puntoDelRamo(corpo.primaDelGiro))) {
+          throw Object.assign(new Error('The body accepts only primaDelGiro, the id of a turn.'), { code: 'QUERY_INVALID' });
+        }
+        if (sessionRegistry.staChiudendoIlGiro?.(sessionIdOrigine)) await sessionRegistry.attendiFuoriDallaFinestra(sessionIdOrigine);
+        const esito = sessionRegistry.riprova(sessionIdOrigine, chiavi.length ? { primaDelGiro: corpo.primaDelGiro } : {});
+        if ('erroreAvvio' in esito) {
+          if (esito.code === 'FORK_POINT_NOT_FOUND' || esito.code === 'FORK_POINT_COMPACTED') {
+            throw erroreDelRegistro({ ...esito, code: 'SESSION_NOT_READY', reason: esito.reason ?? (esito.code === 'FORK_POINT_COMPACTED' ? 'fork-point-compacted' : 'fork-point-not-found') });
+          }
+          throw erroreDelRegistro(esito);
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId, forkDa: esito.forkDa, forkPrimaDelGiro: esito.forkPrimaDelGiro }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const resumeMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/resume$/.exec(url.pathname);
     if (resumeMatch) {
@@ -7662,7 +8439,8 @@ export function createHttpApp({
          * campo diverso da stringa: un body malformato resta silenziosamente
          * "nessun messaggio nuovo" invece di rompere il resume classico.
          */
-        const { corpo: corpoRipresa, bolla: bollaDelClient, origine } = separaBolla(await leggiCorpoJson(req), req);
+        const { corpo: corpoConRipresa, bolla: bollaDelClient, origine } = separaBolla(await leggiCorpoJson(req), req);
+        const { corpo: corpoRipresa, ripresaDopo } = separaRipresaDopo(corpoConRipresa); // decisione 116 C
         const { body, immagini } = await imageInput(corpoRipresa);
         const nuovoMessaggioUtente = requireResumeBody(body);
         /* owner 28/10: la lingua di questo messaggio la dice chi lo ha dettato; uno scritto la riconosce il server (`lingua-del-testo.mjs`) */
@@ -7672,11 +8450,15 @@ export function createHttpApp({
         /* REV-SESSION-READY v2: come per il fork, la finestra di chiusura si aspetta. */
         if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
         const bolla = bollaConOrigine(bollaDelClient, origine, nuovoMessaggioUtente);
+        const allegatiDellInvio = await allegatiLegabili(sessionRegistry, sessionId, bollaDelClient);
         /* owner 27/10/2026: chi manda il messaggio (un dispositivo, o il PC) — solo col messaggio della persona */
-        const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente, immagini, ...(nuovoMessaggioUtente ? [{ ...(bolla ? { bolla } : {}), linguaDelMessaggio, ...(body?.allegaSeTroppoGrande === true ? { allegaSeTroppoGrande: true } : {}), dispositivoDelGiro: typeof req[ORIGINE_REMOTA]?.dispositivoId === 'string' ? req[ORIGINE_REMOTA].dispositivoId : null }] : []));
+        const paginaBrowser = nuovoMessaggioUtente ? requirePaginaBrowser(body, req) : undefined; // decisione 201
+        const opzioniDelMessaggio = nuovoMessaggioUtente ? { ...(bolla ? { bolla } : {}), linguaDelMessaggio, ...(paginaBrowser !== undefined ? { paginaBrowser } : {}), ...(body?.allegaSeTroppoGrande === true ? { allegaSeTroppoGrande: true } : {}), dispositivoDelGiro: typeof req[ORIGINE_REMOTA]?.dispositivoId === 'string' ? req[ORIGINE_REMOTA].dispositivoId : null } : null;
+        const esito = sessionRegistry.resume(sessionId, nuovoMessaggioUtente, immagini, ...(opzioniDelMessaggio || ripresaDopo ? [{ ...(opzioniDelMessaggio ?? {}), ...(ripresaDopo ? { ripresaDopo } : {}) }] : []));
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
+        await sessionRegistry.legaAllegati?.(sessionId, allegatiDellInvio);
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
       } catch (error) {
@@ -7686,28 +8468,8 @@ export function createHttpApp({
       return;
     }
 
-    const assistenzaMatch = method === 'POST' && url.pathname === '/api/v1/assistenza';
-    if (assistenzaMatch) {
-      try {
-        requireNoQuery(url);
-        const corpo = await leggiCorpoJson(req, MAX_REQUEST_BODY_BYTES);
-        if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)
-          || Object.keys(corpo).some((chiave) => chiave !== 'domanda')) {
-          throw Object.assign(new Error('The body accepts only the question.'), { code: 'QUERY_INVALID' });
-        }
-        const domanda = typeof corpo.domanda === 'string' ? corpo.domanda.trim() : '';
-        if (!domanda || Array.from(domanda).length > MAX_DOMANDA_ASSISTENZA) {
-          throw Object.assign(new Error(`The question must contain 1 to ${MAX_DOMANDA_ASSISTENZA} characters.`), { code: 'QUERY_INVALID' });
-        }
-        const risposta = await cercaAssistenzaFn({ domanda, cartella: cartellaAssistenza });
-        if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope(risposta, clock), method);
-      } catch (error) {
-        const normalized = normalizeError(error);
-        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
-      }
-      return;
-    }
+    /* Centro assistenza (owner 01/11/2026): `POST /api/v1/assistenza` e le 34 pagine di `docs/assistenza` sono usciti; la guida è
+       quella del sito, letta dal modello con `talos_help` (`src/kernel/aiuto-talos.mjs`). */
 
     const settingsMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/settings$/.exec(url.pathname);
@@ -7818,6 +8580,41 @@ export function createHttpApp({
       return;
     }
 
+    /*
+     * G-B3 (06/11/2026), UIG-1.18: `POST /api/v1/sessions/:id/blocchi/versione` — a block version made on the screen («Bars ↔ Table»,
+     *   «Back to v1») becomes a durable `talos.blocco.versione` (origin vista/ritorno). No turn, no model call: the registry checks it
+     *   and writes it like the block action. Body: the version event value (blocco, versione, sorgente, cosaECambiato, origine, …).
+     */
+    const versioneBloccoMatch = method === 'POST' && sessionRegistry && typeof sessionRegistry.salvaVersioneDelBlocco === 'function'
+      && /^\/api\/v1\/sessions\/([^/]+)\/blocchi\/versione$/.exec(url.pathname);
+    if (versioneBloccoMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(versioneBloccoMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const corpo = await leggiCorpoJson(req, 256 * 1024);
+        const esito = await sessionRegistry.salvaVersioneDelBlocco(sessionId, corpo);
+        if (req.aborted || res.destroyed) return;
+        /* G-B4 (UIG-1.20): the number is the server's — a taken or skipped one answers 409 with the next (`error.params.prossima`), and
+           the client re-sends once with it (a harmless conflict: re-read and re-apply, bounded — docs.proteanhq.com, optimistic
+           concurrency, read 06/11/2026). PIECE_CHANGED is reused («this changed on the computer»): no new code, no new phrase. */
+        if (!esito.ok && esito.codice === 'version-taken' && Number.isInteger(esito.prossima)) {
+          sendJson(res, 409, errorEnvelope('PIECE_CHANGED', clock, { errore: { code: 'PIECE_CHANGED', params: { prossima: esito.prossima } } }), method);
+          return;
+        }
+        if (!esito.ok) {
+          sendJson(res, esito.codice === 'session-not-found' ? 404 : 400, errorEnvelope(esito.codice === 'session-not-found' ? 'NOT_FOUND' : 'SCELTA_NON_VALIDA', clock), method);
+          return;
+        }
+        sendJson(res, 200, successEnvelope(esito, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     const policyMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.politicaCompattazione === 'function'
       && /^\/api\/v1\/sessions\/([^/]+)\/compaction-policy$/.exec(url.pathname);
     if (policyMatch) {
@@ -7859,6 +8656,34 @@ export function createHttpApp({
       return;
     }
 
+    /* Context Manager dal dispositivo: l'elenco e i pezzi dell'ultima richiesta e dell'esportazione. Le rotte intere qui sopra e sotto non cambiano: il PC le legge intere */
+    const pezziMatch = method === 'GET' && sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/(last-request|export)\/pieces(?:\/(\d+|data))?$/.exec(url.pathname);
+    if (pezziMatch) {
+      try {
+        let sessionId;
+        try { sessionId = decodeURIComponent(pezziMatch[1]); }
+        catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const [, , quale, pezzo] = pezziMatch;
+        const finestra = () => ({ impronta: url.searchParams.get('impronta'), daByte: Number(url.searchParams.get('daByte')), quantiByte: Number(url.searchParams.get('quantiByte')) });
+        let dati;
+        if (quale === 'last-request') {
+          if (pezzo === 'data') { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          if (pezzo === undefined) { requireNoQuery(url); dati = lettureAPezzi.elencoUltimaRichiesta(sessionId); }
+          else dati = lettureAPezzi.pezzoDellUltimaRichiesta(sessionId, { ...finestra(), indice: Number(pezzo) });
+        } else {
+          if (pezzo !== undefined && pezzo !== 'data') { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+          if (pezzo === undefined) { requireNoQuery(url); dati = await lettureAPezzi.elencoEsportazione(sessionId); }
+          else dati = await lettureAPezzi.pezzoDellEsportazione(sessionId, finestra());
+        }
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, 200, successEnvelope(dati, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     /* C1 (owner 10/10/2026, «cosa la compattazione ha tenuto»): per una conversazione LEGACY il riassunto e l'indice stanno nel
        record della compattazione (`statoCompattazione`, RAM del registro); la scheda Contesto li legge da qui. Sola lettura. */
     const statoCompattazioneMatch = method === 'GET' && sessionRegistry && typeof sessionRegistry.statoCompattazione === 'function'
@@ -7872,7 +8697,8 @@ export function createHttpApp({
         const stato = sessionRegistry.statoCompattazione(sessionId);
         if ('erroreAvvio' in stato) { throw erroreDelRegistro(stato); }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope(stato, clock), method);
+        /* condizione del Mobile (01/11/2026 sera): al dispositivo riassunto e indice escono oscurati e mai oltre il filo, come una fonte dell'archivio; al PC interi */
+        sendJson(res, 200, successEnvelope(req[ORIGINE_REMOTA] ? fonteOscurataPerIlDispositivo(stato) : stato, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -7986,6 +8812,35 @@ export function createHttpApp({
 
     const compactMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/compact$/.exec(url.pathname);
+    /* FE-010: un guscio. La logica sta nel registro, dove la CLI la chiama senza HTTP. Se chi chiede se ne va, la chiamata al modello si ferma. */
+    const aLatoMatch = method === 'POST' && sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/a-lato(\/trasforma)?$/.exec(url.pathname);
+    if (aLatoMatch) {
+      try {
+        requireNoQuery(url);
+        let sessionId;
+        try { sessionId = decodeURIComponent(aLatoMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        const corpo = await leggiCorpoJson(req);
+        if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)) throw Object.assign(new Error('The body must be an object.'), { code: 'QUERY_INVALID' });
+        if (aLatoMatch[2]) {
+          const esito = sessionRegistry.forka(sessionId, { filoALato: corpo.filo ?? [] });
+          if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+          sendJson(res, 200, successEnvelope({ sessionId: esito.sessionId }, clock), method);
+          return;
+        }
+        const fermo = new AbortController();
+        res.once('close', () => { if (!res.writableEnded) fermo.abort(); });
+        const esito = await sessionRegistry.chiediALato(sessionId, { domanda: corpo.domanda, filo: corpo.filo }, { segnale: fermo.signal });
+        if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+        if (req.aborted || res.destroyed) return;
+        /* decisioni 57 e 144: `costo` in dollari della risposta, `null` se il prezzo non è noto (campo nuovo: chi non lo legge resta giusto) */
+        sendJson(res, 200, successEnvelope({ risposta: esito.risposta, tagliata: esito.tagliata, filoTagliato: esito.filoTagliato, usage: esito.usage, costo: esito.costo ?? null }, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        if (req.aborted || res.destroyed) return;
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
     if (compactMatch) {
       try {
         requireNoQuery(url);
@@ -8449,14 +9304,21 @@ export function createHttpApp({
       && /^\/api\/v1\/sessions\/([^/]+)\/pending$/.exec(url.pathname);
     if (pendingMatch) {
       try {
-        requireNoQuery(url);
+        /* R-34 parte 2 (Mobile a, 30/10/2026): `pending` prende la STESSA capacità della sottoscrizione degli eventi; una carta
+           `semprePersona` (una chiamata che un modello locale ha scritto come testo) non arriva a un client che non l'ha dichiarata:
+           per lui la domanda non c'è (niente carta cieca). Nessun'altra chiave. */
+        const chiaviPending = [...url.searchParams.keys()];
+        if (chiaviPending.some((chiave) => chiave !== 'capacita') || chiaviPending.length > 1) throw Object.assign(new Error('Pending query'), { code: 'QUERY_INVALID' });
         let sessionId;
         try { sessionId = decodeURIComponent(pendingMatch[1]); }
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
-        const esito = sessionRegistry.domandaInAttesa(sessionId);
+        const esito = sessionRegistry.domandaInAttesa(sessionId, { capacita: url.searchParams.get('capacita') });
         if (esito && typeof esito === 'object' && 'erroreAvvio' in esito) { throw erroreDelRegistro(esito); }
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ pending: esito ?? null }, clock), method, { 'Cache-Control': 'private, no-store' });
+        /* il filtro della carta `semprePersona` sta nel registro (`domandaInAttesa`), lo stesso per l'HTTP e per chi legge in processo;
+           qui una seconda guardia, nel caso un registro vecchio non lo facesse */
+        const visibile = esito?.azione?.semprePersona === true && !capacitaDichiarate(url.searchParams.get('capacita')).has('chiamata-dal-testo') ? null : esito;
+        sendJson(res, 200, successEnvelope({ pending: visibile ?? null }, clock), method, { 'Cache-Control': 'private, no-store' });
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -8477,12 +9339,18 @@ export function createHttpApp({
           return;
         }
         const corpo = await leggiCorpoJson(req);
-        const { requestId, approvato, ambito, rispostoDa, automazioneModificata, obiettivoModificato } = requireApprovaBody(corpo);
+        const { requestId, approvato, ambito, rispostoDa, automazioneModificata, obiettivoModificato, domandaModificata } = requireApprovaBody(corpo);
+        /* Fase 8, cura 2 (forma `FORMA-FASE-8-TRE-CURE-2026-11-01.md` §2; condizione (b) della CLI) — CHI ha detto sì lo stampa la
+           ROTTA, dall'origine della richiesta e mai dal corpo (che non lo ammette: `requireApprovaBody`): la finestra del PC (nessuna
+           `ORIGINE_REMOTA`) o il dispositivo che ha passato il ponte (`req[ORIGINE_REMOTA].dispositivoId`, un simbolo che non viaggia
+           in rete). Chi chiama il registro in processo senza questa rotta (una regola, un'automazione, la CLI) non lo passa ⇒ `null`.
+           Il registro lo usa solo per la carta di `app_settings`. */
+        const confermatoDa = req[ORIGINE_REMOTA]
+          ? { tipo: 'dispositivo', dispositivoId: typeof req[ORIGINE_REMOTA].dispositivoId === 'string' ? req[ORIGINE_REMOTA].dispositivoId : null }
+          : { tipo: 'finestra-pc' };
         const opzioni = { ...(ambito === undefined ? {} : { ambito }), ...(rispostoDa === undefined ? {} : { rispostoDa }),
-          ...(automazioneModificata === undefined ? {} : { automazioneModificata }), ...(obiettivoModificato === undefined ? {} : { obiettivoModificato }) };
-        const esito = Object.keys(opzioni).length === 0
-          ? sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato)
-          : sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato, opzioni);
+          ...(automazioneModificata === undefined ? {} : { automazioneModificata }), ...(obiettivoModificato === undefined ? {} : { obiettivoModificato }), ...(domandaModificata === undefined ? {} : { domandaModificata }), confermatoDa };
+        const esito = sessionRegistry.rispondiApprovazione(sessionId, requestId, approvato, opzioni);
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -8693,10 +9561,13 @@ export function createHttpApp({
            aspetta che il giro sia chiuso, poi il registro decide come sempre (conclusa ⇒ «usa resume»). */
         if (sessionRegistry.staChiudendoIlGiro?.(sessionId)) await sessionRegistry.attendiFuoriDallaFinestra(sessionId);
         const bolla = bollaConOrigine(bollaDelClient, origine, messaggio);
-        const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio, immagini, { ...(bolla ? { bolla } : {}), ...(body?.allegaSeTroppoGrande === true ? { allegaSeTroppoGrande: true } : {}), dispositivoDelGiro: typeof req[ORIGINE_REMOTA]?.dispositivoId === 'string' ? req[ORIGINE_REMOTA].dispositivoId : null });
+        const allegatiDellInvio = await allegatiLegabili(sessionRegistry, sessionId, bollaDelClient);
+        const paginaBrowser = requirePaginaBrowser(body, req); // decisione 201
+        const esito = sessionRegistry.accodaMessaggio(sessionId, messaggio, immagini, { ...(bolla ? { bolla } : {}), ...(body?.allegaSeTroppoGrande === true ? { allegaSeTroppoGrande: true } : {}), dispositivoDelGiro: typeof req[ORIGINE_REMOTA]?.dispositivoId === 'string' ? req[ORIGINE_REMOTA].dispositivoId : null, ...(paginaBrowser !== undefined ? { paginaBrowser } : {}) });
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
+        await sessionRegistry.legaAllegati?.(sessionId, allegatiDellInvio);
         if (req.aborted || res.destroyed) return;
         sendJson(res, 200, successEnvelope({ ok: true, posizione: esito.posizione, ...(esito.coda ? { coda: esito.coda } : {}) }, clock), method);
       } catch (error) {
@@ -8967,6 +9838,8 @@ export function createHttpApp({
           'Cache-Control': 'public, max-age=604800',
           'X-Content-Type-Options': 'nosniff',
           'Referrer-Policy': 'no-referrer',
+          /* ⛔ 03/11/2026, stessa classe di R1: un SVG di un sito qualunque, aperto da solo nel browser, girerebbe sulla nostra origine col cookie. Un'immagine in un <img> non ne risente */
+          'Content-Security-Policy': "default-src 'none'; sandbox",
         });
         res.end(method === 'HEAD' ? undefined : icona.byte);
         return;
@@ -9021,12 +9894,17 @@ export function createHttpApp({
         requireNoQuery(url);
         data = { items: automationStore ? await automationStore.daGuardare() : [] };
       } else if (automationStore && /^\/api\/v1\/automations\/([^/]+)\/runs$/.test(url.pathname)) {
-        requireNoQuery(url);
+        /* D-22 (31/10/2026): `?runId=<id>` cerca UN giro in tutto lo storico. L'elenco di serie si ferma ai 50 più recenti, e una notifica resta
+           fino a 30 giorni: un'automazione oraria supera il tetto in due giorni e la riga perdeva la sua conversazione. Solo aggiunta: senza
+           parametri la rotta risponde come prima, ogni altro parametro resta un errore. */
+        const chiavi = [...url.searchParams.keys()];
+        if (chiavi.length > 1 || chiavi.some((c) => c !== 'runId') || url.searchParams.get('runId') === '') throw Object.assign(new Error('Invalid query'), { code: 'QUERY_INVALID' });
+        const runId = url.searchParams.get('runId');
         let automationId;
         try { automationId = decodeURIComponent(/^\/api\/v1\/automations\/([^/]+)\/runs$/.exec(url.pathname)[1]); } catch { automationId = null; }
         const voce = automationId ? await automationStore.leggi(automationId) : null;
         if (!voce) { const error = new Error('Automation not found'); error.code = 'NOT_FOUND'; throw error; }
-        data = { items: await automationStore.giri(automationId) };
+        data = { items: runId === null ? await automationStore.giri(automationId) : (await automationStore.giri(automationId, { limite: Infinity })).filter((g) => g.runId === runId) };
       } else if (url.pathname === '/api/v1/runtime') {
         requireNoQuery(url);
         const items = [];
@@ -9040,6 +9918,10 @@ export function createHttpApp({
           items.push(item);
         }
         data = { items };
+      } else if (url.pathname === '/api/v1/runtime/caricamento') {
+        /* 01/11/2026 (`FORMA-STOP-E-CARICAMENTO`): the live row reads this every 500 ms while a model opens. State in memory only, no probe */
+        requireNoQuery(url);
+        data = localRuntimes?.['llama.cpp']?.caricamento?.() ?? { caricamento: null, observedAt: new Date().toISOString() };
       } else if (url.pathname === '/api/v1/runtime/bootstrap') {
         requireNoQuery(url);
         const observedAt = clock().toISOString();
@@ -9177,6 +10059,26 @@ export function createHttpApp({
         requireNoQuery(url);
         if (!preferenzeModelli) { const error = new Error('Model preferences not configured'); error.code = 'MODEL_PREFERENCES_UNAVAILABLE'; throw error; }
         data = await preferenzeModelli.leggi();
+      } else if (url.pathname === '/api/v1/conversation-memory-settings') {
+        /* 01/11/2026 — Impostazioni → Modelli, «Memoria delle conversazioni»: GB e il massimo che il disco permette */
+        requireNoQuery(url);
+        if (!impostazioniMemoriaConversazioni) { const error = new Error('Conversation memory settings not configured'); error.code = 'CONVERSATION_MEMORY_SETTINGS_UNAVAILABLE'; throw error; }
+        data = await impostazioniMemoriaConversazioni.leggi();
+      } else if (url.pathname === '/api/v1/keep-awake-settings') {
+        /* 01/11/2026 — Impostazioni → Strumenti agente e permessi, «Tieni sveglio il PC». `nellApp`: fuori dall'app la riga è spenta. */
+        requireNoQuery(url);
+        if (!impostazioniPcSveglio) { const error = new Error('Keep-awake settings not configured'); error.code = 'KEEP_AWAKE_SETTINGS_UNAVAILABLE'; throw error; }
+        data = { ...(await impostazioniPcSveglio.leggi()), nellApp: nellAppInstallata() === true };
+      } else if (url.pathname === '/api/v1/computer-use/settings') {
+        /* Decisione 310 (06/11/2026) — Impostazioni → Strumenti, «Uso del computer (Anteprima)». */
+        requireNoQuery(url);
+        if (!impostazioneComputerUse) { const error = new Error('Computer use settings not configured'); error.code = 'COMPUTER_USE_SETTINGS_UNAVAILABLE'; throw error; }
+        data = await impostazioneComputerUse.leggi();
+      } else if (url.pathname === '/api/v1/chat-settings') {
+        /* Decisione 140 — Impostazioni → Chat, «Blocchi vivi nelle risposte». */
+        requireNoQuery(url);
+        if (!impostazioniChat) { const error = new Error('Chat settings not configured'); error.code = 'CHAT_SETTINGS_UNAVAILABLE'; throw error; }
+        data = await impostazioniChat.leggi();
       } else if (url.pathname === '/api/v1/command-settings') {
         /* Owner 27/10 — Impostazioni → Strumenti e permessi, «Dove girano i comandi»: la scelta di serie. */
         requireNoQuery(url);
@@ -9186,7 +10088,7 @@ export function createHttpApp({
         /* C1 — l'interruttore del motore del contesto (Impostazioni → Contesto). */
         requireNoQuery(url);
         if (!impostazioniContesto) { const error = new Error('Context settings not configured'); error.code = 'CONTEXT_SETTINGS_UNAVAILABLE'; throw error; }
-        data = await impostazioniContesto.leggi();
+        data = { ...await impostazioniContesto.leggi(), catena: sessionRegistry?.catenaDelleImpostazioni?.() ?? [] }; // FE-053, solo memoria
       } else if (url.pathname === '/api/v1/search-source') {
         requireNoQuery(url);
         if (!searchSourceStore) { const error = new Error('Search source not configured'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
@@ -9336,6 +10238,15 @@ export function createHttpApp({
         if (browserProxyMatch) {
           const indirizzo = url.searchParams.get('url');
           if (typeof indirizzo !== 'string' || indirizzo.length === 0 || indirizzo.length > 2048) { const error = new Error('Address missing'); error.code = 'QUERY_INVALID'; throw error; }
+          if (token) { // revisione R1: vedi `ROTTA_PAGINA_LOCALE` nel cancello
+            const altroNome = aliasDiLoopback(req.headers.host);
+            const destino = new URL(`http://${altroNome}${ROTTA_PAGINA_LOCALE}`);
+            destino.searchParams.set('url', indirizzo);
+            destino.searchParams.set('pass', firmaPaginaLocale(token, altroNome, indirizzo));
+            res.writeHead(302, { Location: destino.href, 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' });
+            res.end();
+            return;
+          }
           const esito = await proxyPagina(indirizzo, { fetchFn, origineNostra: `http://${req.headers.host || '127.0.0.1'}` });
           if (!esito.ok) { const error = new Error(esito.motivo); error.code = esito.codice; throw error; }
           sendHtmlProxato(res, esito.html, method);
@@ -9840,7 +10751,7 @@ export function createHttpApp({
              il flusso dei Workflow (`runStreamCursor`, workflow/run-stream.mjs:32-41); `Last-Event-ID` vince alla riconnessione. */
           const chiaviEventi = [...url.searchParams.keys()];
           // review del desktop: `after=` vuoto non è «da capo» in silenzio (`runStreamCursor` lo leggerebbe 0) — è una query sbagliata
-          if (chiaviEventi.some((chiave) => chiave !== 'after') || chiaviEventi.length > 1 || url.searchParams.get('after') === '') throw Object.assign(new Error('Session stream query'), { code: 'QUERY_INVALID' });
+          if (chiaviEventi.some((chiave) => chiave !== 'after' && chiave !== 'capacita') || new Set(chiaviEventi).size !== chiaviEventi.length || url.searchParams.get('after') === '') throw Object.assign(new Error('Session stream query'), { code: 'QUERY_INVALID' });
           const dopoRichiesto = url.searchParams.has('after') ? runStreamCursor({ after: url.searchParams.get('after') }) : 0;
           let sessionId;
           try {
@@ -9978,7 +10889,7 @@ export function createHttpApp({
                dopo lo riceve qui, anche `null`: la fascia di una finestra che ricordava un obiettivo tolto altrove si spegne. */
             /* 18/10/2026: la sequenza (rigiocata coalescente, fine della storia, coda, obiettivo) sta in `iscrizione-sessione.mjs`,
                condivisa col controllo remoto: il telefono vede la storia esattamente come questa finestra. */
-            const disiscrivi = iscriviConRigiocata({ sessionRegistry, sessionId, daSequenza, manda: (evento) => { sseSession.send(evento); } });
+            const disiscrivi = iscriviConRigiocata({ sessionRegistry, sessionId, daSequenza, capacita: url.searchParams.get('capacita'), manda: (evento) => { sseSession.send(evento); } }); // R-34 parte 2
             /*
              * ⛔⛔⛔ 28/8 — SECONDA metà della stessa cura (setNoDelay sopra
              * è la prima): senza scritture nuove, una connessione può
@@ -10075,7 +10986,7 @@ export function createHttpApp({
           if (typeof asset.contentType === 'string' && asset.contentType.startsWith('text/html')) {
             const nonce = creaNonceCsp();
             const documento = iniettaNonceNelDocumento(asset.body.toString('utf8'), nonce);
-            send(res, asset.statusCode, asset.contentType, documento, method, intestazioniDocumentoConNonce(nonce));
+            send(res, asset.statusCode, asset.contentType, documento, method, intestazioniDocumentoConNonce(nonce, req.headers.host));
             return;
           }
           send(res, asset.statusCode, asset.contentType, asset.body, method);

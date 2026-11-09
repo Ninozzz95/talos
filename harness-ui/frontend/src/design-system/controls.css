@@ -153,6 +153,9 @@ input.talos-checkbox:disabled,input[type="checkbox"]:not(.talos-switch):disabled
 .talos-field__input:focus{outline:none}
 .talos-field__input:disabled{opacity:.45; cursor:not-allowed}
 .talos-field__input[aria-invalid="true"]{border-color:var(--talos-danger)}
+/* Owner 01/11 sera via Frontend, variante «A · Bordo più forte» (bozzetto-campi-puntatore): OGNI campo si accende sotto il puntatore
+   come il pulsante secondario; fuoco e spento invariati, il non valido tiene il rosso. Una regola sola: un campo nuovo si aggiunge qui. */
+:is(.talos-field__input, .talos-textarea, .talos-input, select, .talos-select, .search-field input, .provider-field input, .lato-campo input, .talos-agenti-filtri input, .talos-agenti-filtri select):hover:not(:disabled):not([aria-invalid="true"]) { border-color: var(--talos-border-strong); }
 .talos-field__icon{position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--talos-muted); width:16px; height:16px}
 .talos-field--sm .talos-field__input{padding-left:34px}
 /* ⛔ 07/9 — la regola vale per OGNI `select`, non solo per quelli che ricordano la classe. Nel

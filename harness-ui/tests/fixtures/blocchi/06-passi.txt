@@ -1,0 +1,6 @@
+// piano della migrazione
+root = Passi("migrazione", "Migrazione", [
+  {titolo: "Copia dei dati", stato: "fatto", quando: "lunedì"},  # già fatto
+  {titolo: "Verifica", stato: "ora"},
+  {titolo: "Spegnimento del vecchio", stato: "da-fare"},
+])

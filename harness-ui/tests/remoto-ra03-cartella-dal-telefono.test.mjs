@@ -13,7 +13,7 @@ import { creaOperazioni } from '../src/remoto/operazioni.mjs';
 function banco() {
   const avviate = [];
   const sessionRegistry = { elenca: () => [], esiste: () => false, avviaLibero: (richiesta) => { avviate.push(richiesta); return { sessionId: `s${avviate.length}` }; } };
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   const operazioni = creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata });
   const contesto = { dispositivo: { id: 'd', nome: 'Pad' }, iscrizioni: new Map(), iscrivi: () => async () => {} };

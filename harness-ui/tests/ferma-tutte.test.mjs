@@ -185,7 +185,7 @@ test('FT-11 la rotta: `figlie:\'tutte\'` chiama fermaTutto e risponde col numero
         ferma: (id, opzioni) => { chiamate.push(['ferma', id, opzioni]); return id === 's-1' },
         fermaTutto: (id, opzioni) => { chiamate.push(['fermaTutto', id, opzioni]); return id === 's-1' ? { fermata: true, figlieFermate: 3, ids: ['a', 'b', 'c'] } : { fermata: false, figlieFermate: 0, ids: [] } },
     }
-    const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry })
+    const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry })
     const chiamaInterna = creaChiamataInterna({ httpApp, porta: 4999 })
     // creaChiamataInterna risolve { stato, dati } e rifiuta gli errori con `stato`
     const chiama = (opzioni) => chiamaInterna(opzioni).catch((e) => ({ stato: e.stato, dati: null }))

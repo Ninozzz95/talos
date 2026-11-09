@@ -38,7 +38,12 @@ async function apriApp(page, { larghezza, altezza }) {
     try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode: 'dark' }, chat: { model: 'qwen/qwen3.8-flash' } })); }
     catch { /* finestra privata: la app parte lo stesso */ }
   });
-  await page.route('**/api/v1/sessions/f1-*/events*', (r) => r.fulfill({ contentType: 'text/event-stream', body: '' }));
+  /* ⛔ Decisione 106 (03/11/2026, prove del browser più veloci) — VELO-SPEC (08/10/2026), come `azioni-risposta.spec.mjs:34-45`:
+     stream APERTO E MUTO e il confine della storia che il server manda SEMPRE. Prima qui lo stream si chiudeva vuoto e il confine non
+     arrivava mai: la chat restava sotto il velo (`#conversation.is-restoring`, `visibility:hidden`) finché la rete di sicurezza del
+     custode non la scopriva da sola dopo 8 s (`app.js`, `setTimeout(reteDiSicurezza, 8_000)`), e il clic sul «⋯» aspettava quegli
+     8 s in ognuna delle otto prove (~10,5 s l'una nel treno G del 03/11). Le misure del menu restano le stesse, sulla chat scoperta. */
+  await page.route('**/api/v1/sessions/f1-*/events*', () => { /* aperto e muto */ });
   await page.goto('/');
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
@@ -46,6 +51,7 @@ async function apriApp(page, { larghezza, altezza }) {
     const r = window.__talosHarnessUiRuntime;
     r.passaASessione('f1-uno', 'workspace', 'F1', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
     const g = r.realSessionState.generation;
+    r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, g); // VELO-SPEC: il confine, prima degli eventi vivi
     r.handleRealEvent({ type: 'RunStarted', _sequenza: 1, input: { consegna: 'Scrivi le note del progetto' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'qwen/qwen3.8-flash' } }, g);
     r.handleRealEvent({ type: 'TextMessageStart', messageId: 'm1' }, g);
     r.handleRealEvent({ type: 'TextMessageContent', messageId: 'm1', delta: 'Ho scritto le note.' }, g);

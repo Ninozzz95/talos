@@ -35,9 +35,10 @@ const iniziPerChiave = new Map();
  * Mette in `contenitore` l'etichetta di caricamento e la fa diventare viva se dopo la soglia è ancora lì. Torna l'etichetta.
  * @param {Element} contenitore dove stava il «Caricamento…» (il suo contenuto viene sostituito)
  * @param {string} testo l'etichetta, già tradotta
- * @param {{ chiave?: string, soglia?: number, timer?: { setTimeout: Function, clearTimeout: Function, setInterval: Function, clearInterval: Function } }} [opzioni]
+ * @param {{ chiave?: string, soglia?: number, inizio?: number, timer?: { setTimeout: Function, clearTimeout: Function, setInterval: Function, clearInterval: Function } }} [opzioni]
+ *   `inizio`: quando il lavoro è partito davvero, se è partito prima di questa etichetta
  */
-export function mostraCaricamentoVivo(contenitore, testo, { chiave = null, soglia = SOGLIA_CARICAMENTO_VIVO_MS, timer = globalThis } = {}) {
+export function mostraCaricamentoVivo(contenitore, testo, { chiave = null, soglia = SOGLIA_CARICAMENTO_VIVO_MS, inizio: partito = null, timer = globalThis } = {}) {
   if (!contenitore) return null;
   // un ridisegno che chiede lo stesso caricamento lo lascia com'è: ricrearlo farebbe ripartire lo shimmer a ogni aggiornamento
   const giaQui = contenitore._caricamentoVivo;
@@ -51,7 +52,7 @@ export function mostraCaricamentoVivo(contenitore, testo, { chiave = null, sogli
   contenitore._caricamentoVivo = etichetta;
   const ora = adessoCaricamento();
   const voce = chiave === null ? null : iniziPerChiave.get(chiave);
-  const inizio = voce ? voce.inizio : ora;
+  const inizio = voce ? voce.inizio : (Number.isFinite(partito) ? Math.min(partito, ora) : ora);
   if (chiave !== null) iniziPerChiave.set(chiave, { inizio, etichetta });
   // ancora al suo posto? Se chi chiama ha scritto il contenuto vero, l'etichetta non è più figlia del contenitore
   const alSuoPosto = () => etichetta.isConnected && etichetta.parentNode === contenitore;

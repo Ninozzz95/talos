@@ -56,7 +56,7 @@ async function dueArchivi(t, { conAltro = true } = {}) {
     rimuoviCartellaDiProva(rootAltro); rimuoviCartellaDiProva(rootProprio);
   });
   const registry = { leggiSessioneContesto: (id) => (sessioni.has(id) ? { sessionId: id } : null) };
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registry, workflowStore: proprio, workflowStoreAltro: lettore }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registry, workflowStore: proprio, workflowStoreAltro: lettore }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return { base: `http://127.0.0.1:${server.address().port}`, rootAltro };

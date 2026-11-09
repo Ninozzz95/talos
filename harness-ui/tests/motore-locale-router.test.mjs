@@ -204,6 +204,21 @@ test('RT-06 decision 2: the router cannot load the model ⇒ today\'s engine tak
   assert.equal(p.banco.standalone.length, 2);
 });
 
+test('RT-06b the row says «trying the other engine» only while it is happening; a model simply remembered announces nothing', async (t) => {
+  const p = prepara(t, { esito: (nome) => (nome === 'mod-a' ? 'fallisce' : 'ok') });
+  let duranteIlRipiego;
+  p.router.subscribeLogs((voce) => { if (voce.ripiegoRouter) duranteIlRipiego = p.router.status().router.ripiegoInCorso; });
+  const prima = await p.router.start({ modelId: 'mod-a', modelPath: p.a, contextLength: 8_192 });
+  assert.equal(duranteIlRipiego, 'mod-a', 'said while today\'s engine takes it');
+  assert.ok(prima.ripiegoRouter, 'one line for the chat');
+  assert.equal(p.router.status().router.ripiegoInCorso, undefined, 'over when it is ready');
+  await p.router.stop();
+  duranteIlRipiego = 'non visto';
+  const dopo = await p.router.start({ modelId: 'mod-a', modelPath: p.a, contextLength: 8_192 });
+  assert.equal(duranteIlRipiego, undefined, 'a remembered model is not trying again');
+  assert.equal(dopo.ripiegoRouter, undefined, 'and the chat hears it once');
+});
+
 test('RT-07 decision 2, the other way: today\'s engine fails too ⇒ its error goes up, and the model is NOT remembered', async (t) => {
   let fallisce = true;
   const p = prepara(t, { esito: () => (fallisce ? 'fallisce' : 'ok'), esitoStandalone: () => (fallisce ? 'fallisce' : 'ok') });
@@ -265,6 +280,18 @@ test('RT-09 a stop during the load cancels it as today: RUNTIME_START_CANCELLED,
   await assert.rejects(avvio, (e) => e.code === 'RUNTIME_START_CANCELLED');
   assert.equal(p.banco.standalone.length, 0);
   assert.equal(p.router.status().state, 'unavailable');
+});
+
+test('RT-09b owner 01/11: a cancelled load leaves the memory: the child is unloaded, and the next load waits for it', async (t) => {
+  const p = prepara(t, { ritardoMs: 200, scaricoMs: 40 });
+  const stop = new AbortController();
+  const avvio = p.router.start({ modelId: 'mod-a', modelPath: p.a, contextLength: 8_192, signal: stop.signal });
+  await finche(() => p.banco.routers[0] && caricatiDi(p.banco.routers[0], 'mod-a').length === 1);
+  stop.abort();
+  await assert.rejects(avvio, (e) => e.code === 'RUNTIME_START_CANCELLED');
+  assert.deepEqual(p.banco.routers[0].scaricati.filter((s) => s.nome === 'mod-a').map((s) => s.motivo), ['unload'], 'the router was told to let it go');
+  assert.equal(p.router.status().state, 'unavailable');
+  assert.equal(p.banco.standalone.length, 0, 'a stop is never a reason for today\'s engine');
 });
 
 test('RT-10 A-6/A-7: stop() does not wait for the model to leave; the next load waits for it; A-R4: a stop during that wait does not wait', async (t) => {

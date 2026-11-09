@@ -50,7 +50,10 @@ test.before(async () => {
   const monolite = await readFile(resolve(frontend, 'src/styles/foglio-monolite.css'), 'utf8').catch(() => '');
   browser = await chromium.launch({ channel: 'chrome', headless: true });
   pagina = async (t) => {
-    const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, reducedMotion: 'reduce' });
+    /* CI #91 (09/11/2026): l'ora di «torna alle …» la scrive `provider-retry.js` con `toLocaleTimeString(undefined)`, cioè nella
+       lingua del BROWSER; senza `locale` Playwright prende quella del sistema («Defaults to the system default locale») e sul runner
+       inglese usciva «11:31 AM». La pagina è italiana (`lang="it"`): la lingua del browser si fissa con lo stesso meccanismo. */
+    const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, reducedMotion: 'reduce', locale: 'it-IT' });
     t.after(() => page.close());
     const errori = []; page.on('pageerror', (e) => errori.push(e.message));
     t.after(() => assert.deepEqual(errori, []));
@@ -178,4 +181,92 @@ test('PIANO-UI-04: la carta del limite del piano — parole delle linee guida, �
     return { carta: Boolean(conv.querySelector('[data-provider-retry]')), azione: Boolean(conv.querySelector('[data-provider-retry-azione]')) };
   });
   assert.deepEqual(comune, { carta: true, azione: false });
+});
+
+/*
+ * «Continua adesso con…» (owner 27/10/2026 notte, «Sì, un clic per continuare»; bozzetto approvato il 28/10). Sulla carta del limite del
+ *   piano, in più: i modelli già configurati (le proposte le dà chi monta la carta) e «Altro modello…», che apre il selettore della chat.
+ *   Un clic riuscito lascia «Continuo con …» come nota anche quando il giro fermato finisce; uno fallito riaccende i pulsanti.
+ */
+test('PIANO-UI-05: «Continua adesso con…» — proposte e «Altro modello…»; riuscito resta «Continuo con …»; fallito riaccende; AL CONTRARIO un 503 o l invio non li offrono', async (t) => {
+  const page = await pagina(t);
+  const m = await page.evaluate(async () => {
+    const conv = document.getElementById('conversation');
+    const scelte = [];
+    const durante = [];
+    let esito = false;
+    const attesa = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+    const carta = pc.montaProviderRetry({ contenitore: () => conv, continuaAdesso: {
+      proposte: async ({ bloccato }) => (bloccato === 'chatgpt:gpt-6-luna'
+        ? [{ valore: 'z-ai/glm-5.3-flash', testo: 'glm-5.3-flash', fornitore: 'OpenRouter' }, { valore: 'local:qwen', testo: 'Qwen3.5 9B', fornitore: 'locale' }] : []),
+      onScelto: async (valore) => {
+        scelte.push(valore);
+        if (esito) carta.evento({ type: 'RunError', message: '⛔ stopped on request.', code: 'fermato' }, attivo); // lo stop chiude il giro mentre il cambio è in corso
+        else { carta.evento(piano('attesa', { seq: 4 }), attivo); durante.push(conv.querySelectorAll('[data-provider-retry]').length); } // un aggiornamento dell'attesa mentre il cambio è in corso: nessuna seconda carta
+        return esito;
+      },
+      montaAltro: (contenitore, alScelto) => {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = 'gemini-3.5-flash'; b.dataset.pickerFinto = '';
+        b.addEventListener('click', () => alScelto('gemini:gemini-3.5-flash')); contenitore.replaceChildren(b);
+      },
+    } });
+    const attivo = { inReplay: false, attivo: true };
+    const piano = (fase, extra = {}) => ({ type: 'CUSTOM', name: 'talos.provider-retry', _sequenza: extra.seq ?? 2, value: { schema: 'talos.provider-retry.v1', runId: 'run1', threadId: 'thread1', requestId: 'r1',
+      fase, tentativo: 2, tentativiMassimi: 11, httpStatus: 429, motivo: 'limite-del-piano', modello: 'chatgpt:gpt-6-luna', retryAt: Date.now() + 1_800_000, attesaMs: 1_800_000, ...extra.value } });
+    carta.evento({ type: 'RunStarted', runId: 'run1', threadId: 'thread1' }, attivo);
+    carta.evento(piano('attesa'), attivo);
+    await attesa();
+    const riga = conv.querySelector('[data-provider-retry-continua]');
+    const prima = {
+      etichetta: riga?.querySelector('.talos-provider-retry__continua-etichetta')?.textContent ?? null,
+      pulsanti: [...(riga?.querySelectorAll('[data-continua-con]') ?? [])].map((b) => b.textContent),
+      altro: riga?.querySelector('[data-continua-altro]')?.textContent ?? null,
+      nelloStato: Boolean(conv.querySelector('[role="status"] [data-provider-retry-continua]')),
+    };
+    // un clic che non riesce: il giro aspetta ancora, la carta torna (una sola) coi pulsanti accesi
+    riga.querySelector('[data-continua-con]').click();
+    await attesa();
+    const nuova = conv.querySelector('[data-provider-retry-continua]');
+    const fallito = { carte: conv.querySelectorAll('[data-provider-retry]').length, spenti: [...nuova.querySelectorAll('button')].filter((b) => b.disabled).length,
+      pulsanti: nuova.querySelectorAll('[data-continua-con]').length, titolo: conv.querySelector('.talos-provider-retry__titolo').textContent };
+    // «Altro modello…» apre il selettore della chat; il modello scelto lì segue la stessa strada, e questa volta riesce
+    esito = true;
+    nuova.querySelector('[data-continua-altro]').click();
+    const apertoAltro = nuova.querySelector('[data-continua-altro]').getAttribute('aria-expanded');
+    conv.querySelector('[data-picker-finto]').click();
+    await attesa();
+    const dopo = {
+      titolo: conv.querySelector('.talos-provider-retry__titolo')?.textContent ?? null,
+      motivo: conv.querySelector('.talos-provider-retry__motivo')?.textContent ?? null,
+      righe: conv.querySelectorAll('[data-provider-retry-continua]').length,
+      azione: Boolean(conv.querySelector('[data-provider-retry-azione]')),
+      tempo: Boolean(conv.querySelector('.talos-provider-retry__tempo')),
+    };
+    // il giro fermato finisce: la nota resta nella chat (anche quando la fine del giro arriva MENTRE il cambio è in corso: sotto)
+    carta.evento({ type: 'RunError', message: '⛔ stopped on request.', code: 'fermato' }, attivo);
+    const resta = conv.querySelectorAll('[data-provider-retry-continuato]').length;
+    // AL CONTRARIO: un giro nuovo con un'attesa comune (503) o col piano in fase d'invio non offre niente
+    carta.evento({ type: 'RunStarted', runId: 'run2', threadId: 'thread1' }, attivo);
+    carta.evento({ type: 'CUSTOM', name: 'talos.provider-retry', _sequenza: 2, value: { schema: 'talos.provider-retry.v1', runId: 'run2', threadId: 'thread1', requestId: 'r2',
+      fase: 'attesa', tentativo: 2, tentativiMassimi: 4, httpStatus: 503, modello: 'x/y', retryAt: Date.now() + 2000, attesaMs: 2000 } }, attivo);
+    await attesa();
+    const comune = conv.querySelectorAll('[data-provider-retry] [data-provider-retry-continua]').length;
+    carta.evento({ type: 'RunStarted', runId: 'run3', threadId: 'thread1' }, attivo);
+    carta.evento({ ...piano('invio'), value: { ...piano('invio').value, runId: 'run3' } }, attivo);
+    await attesa();
+    const invio = conv.querySelectorAll('[data-provider-retry] [data-provider-retry-continua]').length;
+    return { prima, fallito, scelte, apertoAltro, dopo, resta, comune, invio, durante };
+  });
+  assert.deepEqual(m.prima, { etichetta: 'Continua adesso con', pulsanti: ['glm-5.3-flash · OpenRouter', 'Qwen3.5 9B · locale'], altro: 'Altro modello…', nelloStato: false },
+    'la riga sta fuori dalla regione che si annuncia: i pulsanti non si rileggono a ogni cambio');
+  assert.deepEqual(m.fallito, { carte: 1, spenti: 0, pulsanti: 2, titolo: 'Limite d’uso raggiunto' });
+  assert.deepEqual(m.scelte, ['z-ai/glm-5.3-flash', 'gemini:gemini-3.5-flash']);
+  assert.deepEqual(m.durante, [1], 'mentre il cambio è in corso c’è una carta sola');
+  assert.equal(m.apertoAltro, 'true');
+  assert.equal(m.dopo.titolo, 'Continuo con gemini-3.5-flash');
+  assert.match(m.dopo.motivo, /^Il piano ChatGPT torna alle \d{2}[:.]\d{2}: lo riprendi dal menu del modello quando vuoi\.$/u);
+  assert.deepEqual({ righe: m.dopo.righe, azione: m.dopo.azione, tempo: m.dopo.tempo }, { righe: 0, azione: false, tempo: false });
+  assert.equal(m.resta, 1, '«Continuo con …» resta nella chat quando il giro fermato finisce');
+  assert.equal(m.comune, 0, 'un\'attesa comune non offre altri modelli');
+  assert.equal(m.invio, 0, 'mentre riprova col piano non si offre niente');
 });

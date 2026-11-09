@@ -55,7 +55,7 @@ test('C1-CIT-COMMIT: a summary whose only quote is loose is committed, not rejec
   t.after(async () => { await store.close(); await rm(dir, { recursive: true, force: true }); });
   const model = { resolveModel: async ({ sessionModel }) => sessionModel, summarize: async () => ({ ...sintesiCon('usare «SQLite» come database'), usage: { inputTokens: 1, outputTokens: 1 } }) };
   const tokenCounter = { async countPreparedContext({ messages, tools, model: m }) { return { schema: 'talos.context.tokens.v1', inputTokens: Math.ceil(JSON.stringify({ messages, tools }).length / 4), windowTokens: m.windowTokens, responseReserve: m.responseReserve, method: 'heuristic', exact: false, requestHash: sha({ messages, tools }), provider: m.provider, model: m.model }; } };
-  const engine = createContextEngine({ store, model, tokenCounter, clock: () => now });
+  const engine = createContextEngine({ store, model, tokenCounter, clock: () => now, guadagnoMinimoChiesto: 0 }); // conversazioni minuscole: il controllo «niente da compattare» (31/10) qui si spegne
   await store.initSession({ sessionId: 'chat', settings: parseContextSettings({}) });
   const lungo = ' ' + 'dettaglio '.repeat(300);
   const messaggi = [

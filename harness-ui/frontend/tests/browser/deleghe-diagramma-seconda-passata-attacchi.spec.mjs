@@ -259,7 +259,7 @@ test('SECONDA-ESECUZIONE-02 [REGGE] — AL CONTRARIO, nel diagramma delle DELEGH
 /* ——— bc7a4591a: il nome corto del modello sulla scheda ——— */
 test('SECONDA-MODELLO-01 [REGGE] — il modello sulla scheda: nome corto per `fornitore/…`, `chatgpt:…`, due barre, un modello locale e uno sconosciuto; quello intero resta nel suggerimento e nel dettaglio; mai vuoto', async ({ page }) => {
   const casi = [
-    ['a', 'z-ai/glm-5.3-flash', 'glm-5.3-flash'],
+    ['a', 'z-ai/glm-5.3-flash', 'GLM 5.3 Flash'], // 68ebab480 (revisione d'uso 04/11, reperto 11): un id del catalogo prende il suo nome
     ['b', 'chatgpt:gpt-5.2-codex', 'gpt-5.2-codex'],
     ['c', 'openrouter/meta-llama/llama-4-maverick:free', 'llama-4-maverick:free'],
     ['d', 'modello-mai-visto', 'modello-mai-visto'],
@@ -292,7 +292,7 @@ test('SECONDA-MODELLO-03 [DIFETTO?] — in italiano, accanto a «In esecuzione»
   const finito = await misura('b');
   expect(finito.serve, `il controllo: accanto a «Concluso» «${finito.testo}» entra (${finito.serve} px su ${finito.ha})`).toBeLessThanOrEqual(finito.ha);
   const alLavoro = await misura('a');
-  expect(alLavoro.testo).toBe('glm-5.3-flash');
+  expect(alLavoro.testo).toBe('GLM 5.3 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   expect(alLavoro.serve, `accanto a «In esecuzione» «${alLavoro.testo}» vuole ${alLavoro.serve} px e ne ha ${alLavoro.ha}: a schermo esce tagliato coi puntini`).toBeLessThanOrEqual(alLavoro.ha);
 });
 

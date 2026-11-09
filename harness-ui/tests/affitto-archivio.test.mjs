@@ -425,7 +425,7 @@ test('HTTP-AFF-01: at the door, a write on a session held by another live proces
     avviaSessioneFn: async () => ({ ok: true }), guardaWorkspaceFn: () => () => {}, modello: 'm', chiave: 'k' });
   t.after(() => registro.chiudi({ attesaMassimaMs: 1_000 }));
   await registro.ripristina();
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro }));
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
   t.after(() => new Promise((ok) => server.close(ok)));
   const base = `http://127.0.0.1:${server.address().port}`;

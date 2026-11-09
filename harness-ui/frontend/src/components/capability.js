@@ -3,6 +3,7 @@ import { t, tn, linguaCorrenteDiT } from './lingua.js';
 const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 /** ToolList nel mockup. WAI Listbox + ricerca sui cataloghi degli strumenti, 05/09/2026. */
 import {nomeUmanoAttrezzo,corrispondeARicerca,descrizioneAttrezzo} from './nomi-attrezzi.js';
+import { iconaAttrezzo } from './conversazione.js'; // una tabella sola degli attrezzi, 31/10/2026
 import { testoDelCampo } from './testo-server.js'; // K4b: i testi del server nella lingua dell'interfaccia
 const PERMESSI={get ''(){return t('modelli.permission.inherit');},get sempre(){return t('modelli.permission.alwaysAllow');},get chiedi(){return t('modelli.permission.alwaysAsk');},get nega(){return t('modelli.permission.deny');}};
 export function permessoAttrezzo(a){return a.permessoConfigurabile?PERMESSI[a.permesso??'']||t('modelli.permission.unknown'):t('modelli.permission.sessionPolicy');}
@@ -11,7 +12,7 @@ export function filtraAttrezzi(attrezzi,{query='',filtro='tutti'}={}){const q=St
 function el(doc,tag,classe,testo){const n=doc.createElement(tag);if(classe)n.className=classe;if(testo!==undefined)n.textContent=testo;return n;}
 function titolo(a){return nomeUmanoAttrezzo(a.nome)||t('modelli.tools.unnamed');}
 function stima(a){return Number.isFinite(a.tokenSchemaStimati)&&a.tokenSchemaStimati>=0?tn('modelli.tools.oneToken','modelli.tools.tokens',a.tokenSchemaStimati,{n:a.tokenSchemaStimati.toLocaleString(localeUI())}):t('modelli.tools.estimateUnavailable');}
-function icona(doc,a){const c=el(doc,'span','talos-list-row__icon'),s=doc.createElementNS('http://www.w3.org/2000/svg','svg'),u=doc.createElementNS('http://www.w3.org/2000/svg','use');s.setAttribute('class','i');s.setAttribute('aria-hidden','true');u.setAttribute('href','#'+({shell:'i-terminal',cerca:'i-search',leggi:'i-eye',scrivi:'i-code',web_search:'i-globe',document_create:'i-files'}[a.nome]||'i-code'));s.append(u);c.append(s);return c;}
+function icona(doc,a){const c=el(doc,'span','talos-list-row__icon'),s=doc.createElementNS('http://www.w3.org/2000/svg','svg'),u=doc.createElementNS('http://www.w3.org/2000/svg','use');s.setAttribute('class','i');s.setAttribute('aria-hidden','true');u.setAttribute('href','#'+iconaAttrezzo(a.nome));s.append(u);c.append(s);return c;}
 export function creaToolListRow(a,{document:doc=globalThis.document,selezionata=false,selezionabile=true,onSeleziona,uso=null}={}){
  const r=el(doc,selezionabile?'button':'div','talos-list-row');r.dataset.toolName=a.nome;if(selezionabile){r.type='button';r.setAttribute('role','option');r.setAttribute('aria-selected',String(selezionata));r.setAttribute('aria-controls','capabilityDettaglio');r.tabIndex=selezionata?0:-1;r.addEventListener('click',()=>onSeleziona?.(a.nome));}else r.setAttribute('role','group');
  /* C10 (06/09): la riga porta la descrizione NOSTRA, in italiano. Prima mostrava
@@ -71,7 +72,11 @@ function render(schermo,p){
   * si scrive il totale e basta.
   */
  const sum=stimaSchemaAttrezzi(attrezzi);
- const quota=Number.isFinite(o.finestraContesto)&&o.finestraContesto>0?t('modelli.tools.contextShare',{percent:new Intl.NumberFormat(localeUI(),{maximumFractionDigits:1}).format((sum.totale/o.finestraContesto)*100),window:o.finestraContesto.toLocaleString(localeUI())}):'';
+ /* Decisione 174 (04/11/2026): la base viene dal conto unico (`contesto-scheda.js::contoDellaFinestra`), lo stesso della scheda Contesto
+    e di «Memoria e contesto». Con una sessione è il limite che agisce e la frase lo dice; senza, il catalogo come prima. Prima qui c'era
+    sempre il catalogo (1.048.576) mentre la scheda divideva per 165.999. */
+ const base=o.conto&&Object.hasOwn(o.conto,'base')?o.conto.base:o.finestraContesto, sulLimite=Boolean(o.conto?.limite);
+ const quota=Number.isFinite(base)&&base>0?t(sulLimite?'modelli.tools.contextShareLimit':'modelli.tools.contextShare',{percent:new Intl.NumberFormat(localeUI(),{maximumFractionDigits:1}).format((sum.totale/base)*100),window:base.toLocaleString(localeUI())}):'';
  schermo.querySelector('[data-cap-token]').textContent=o.errore||o.caricamento?t('modelli.tools.schemaUnobserved'):!attrezzi.length?t('modelli.tools.noSchema'):sum.mancanti?t('modelli.tools.partialEstimate',{tokens:sum.totale.toLocaleString(localeUI()),missing:sum.mancanti,quota}):t('modelli.tools.schemaEstimate',{tokens:sum.totale.toLocaleString(localeUI()),quota});
  schermo.querySelector('[data-cap-ambito]').textContent=o.ambito?t('modelli.tools.sessionPermissions'):t('modelli.tools.noSessionPermissions');
  schermo.querySelector('[data-cap-uso]').textContent=o.ambito?(o.uso?.registrato?t('modelli.tools.recordedUsage',{calls:o.uso.chiamate,repeats:o.uso.ripetute}):t('modelli.tools.sessionUsageUnrecorded')):t('modelli.tools.noSessionUsage');

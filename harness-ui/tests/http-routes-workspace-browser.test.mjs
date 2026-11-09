@@ -5,7 +5,7 @@ import test from 'node:test';
 import { createHttpApp } from '../src/http-app.mjs';
 
 async function listen(t, extra = {}) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, ...extra }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, ...extra }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;
@@ -41,6 +41,15 @@ test('WORKSPACE-CHOOSER-PERMISSION-05 — errore adapter viene normalizzato senz
   const body = await response.json();
   assert.equal(body.error.code, 'WORKSPACE_NOT_AVAILABLE');
   assert.equal(JSON.stringify(body).includes('EACCES'), false);
+  assert.equal(JSON.stringify(body).includes('secret'), false);
+});
+
+test('WORKSPACE-CHOOSER-MOTIVO-27 — il motivo arriva alla pagina, il testo tecnico no', async (t) => {
+  const base = await listen(t, { workspaceBrowser: { browse: async () => { const error = new Error('ENOENT C:\\secret'); error.code = 'WORKSPACE_NOT_AVAILABLE'; error.reason = 'folder-missing'; throw error; } } });
+  const response = await fetch(`${base}/api/v1/workspace-browser`);
+  assert.equal(response.status, 422);
+  const body = await response.json();
+  assert.equal(body.error.reason, 'folder-missing');
   assert.equal(JSON.stringify(body).includes('secret'), false);
 });
 

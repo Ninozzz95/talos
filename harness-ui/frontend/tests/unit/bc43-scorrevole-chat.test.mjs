@@ -219,7 +219,7 @@ for (const [sistema, applicazione, comportamento] of [[true, false, 'instant'], 
 }
 
 for (const collegato of [true, false]) {
-  test(`BC43-07 — la nota attrezzo scorre nella chat soltanto se ancora collegata: ${collegato}`, () => {
+  test(`BC43-07 — la nota strumento scorre nella chat soltanto se ancora collegata: ${collegato}`, () => {
     const b = banco({ ridotto: true });
     const article = {
       isConnected: collegato, hidden: false,
@@ -236,20 +236,20 @@ for (const collegato of [true, false]) {
      *   leggendo più in su portami giù»). Resta qui come trappola: se qualcuno la rimettesse, la
      *   chiamata farebbe fallire questa prova invece di passare in silenzio.
      */
-    contesto.fondoConversazioneInVista = () => { throw new Error('la riga attrezzo non deve più decidere da sé dove sta la vista'); };
+    contesto.fondoConversazioneInVista = () => { throw new Error('la riga strumento non deve più decidere da sé dove sta la vista'); };
     funzione('appendToolNote', contesto)('Nota di prova', { contenitore: { append() {} } });
     assert.equal(b.scorrevole.scrollTop, collegato ? 1050 : 0);
     assert.equal(b.colonna.scrollTop, 0);
   });
 }
 
-test('BC43-08 — una riga attrezzo NON riporta giù chi si è spostato (la guardia non è più capovolta)', () => {
+test('BC43-08 — una riga strumento NON riporta giù chi si è spostato (la guardia non è più capovolta)', () => {
   const b = banco({ ridotto: true });
   const article = { isConnected: true, hidden: false, getBoundingClientRect: () => ({ bottom: 1400 }), classList: { add() {} } };
   const contesto = contestoScrollReale(b, { autoFollow: false });
   contesto.creaRigaAttrezzo = () => ({ riga: article, corpo: { classList: { add() {} } } });
   contesto.markMotionEnter = () => {};
-  contesto.fondoConversazioneInVista = () => { throw new Error('la riga attrezzo non deve più decidere da sé dove sta la vista'); };
+  contesto.fondoConversazioneInVista = () => { throw new Error('la riga strumento non deve più decidere da sé dove sta la vista'); };
   funzione('appendToolNote', contesto)('Nota di prova', { contenitore: { append() {} } });
   assert.equal(b.scorrevole.scrollTop, 0, 'la persona sta leggendo più in alto: una riga nuova non la sposta');
 });

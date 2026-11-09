@@ -199,7 +199,10 @@ for (const scenario of ['SETTLED-UNKNOWN', 'CRASH-BACKOFF', 'CRASH-PARTIAL', 'CR
         assert.equal(newWait.value.retryAt, oldWait.value.retryAt, 'nessun nuovo conto alla rovescia al riavvio');
       }
       if (scenario !== 'SETTLED-UNKNOWN') {
-        assert.equal((await second.request('resume', { sessionId })).code, 'SESSION_NOT_READY');
+        /* Decision 198 (owner 04/11, REGISTRO-DECISIONI-OWNER.md:345) and commit 82db48a2f («an interrupted session with history
+           resumes with the interruption note instead of being refused»): the empty resume is no longer refused. The restart still
+           sends nothing on its own: the row only lights the Resume button, and the person's explicit act is what sends. */
+        assert.equal((await second.request('row', { sessionId }))?.daRiprendere, 'interrotta');
         assert.equal(requests.length, beforeCrashRequests);
       }
       if (scenario === 'CRASH-DELETE') {

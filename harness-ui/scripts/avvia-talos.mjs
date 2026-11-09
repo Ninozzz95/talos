@@ -26,7 +26,10 @@ import { readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { indirizzoDelServer } from '../src/config.mjs';
+import { chiaveDeiBiglietti } from '../src/gettone.mjs';
 import { cartellaScratch } from '../src/scratch.mjs';
+import { linkDiIngresso, preparaAvvioColGettone } from './biglietto-talos.mjs';
 
 const QUI = dirname(fileURLToPath(import.meta.url));
 const RADICE_HARNESS_UI = join(QUI, '..');
@@ -57,11 +60,11 @@ async function attendiHandshake(percorsoFile, scadenzaMs) {
 }
 
 /** Un GET reale su /api/v1/health: l'handshake dice che il socket è legato, questo conferma che il server risponde alle richieste. */
-async function attendiSalute(base, scadenzaMs) {
+async function attendiSalute(base, scadenzaMs, cookie) {
   const inizio = Date.now();
   for (;;) {
     try {
-      const risposta = await fetch(`${base}/api/v1/health`);
+      const risposta = await fetch(`${base}/api/v1/health`, { headers: { cookie } });
       if (risposta.ok) return;
     } catch {
       // non ancora pronto
@@ -94,7 +97,9 @@ async function main() {
   // Corsia SCRATCH, 24/09/2026: l'handshake vive sotto la radice dei temporanei di TALOS (src/scratch.mjs), non in %TEMP%.
   const cartellaHandshake = cartellaScratch('talos-avvio-');
   const fileHandshake = join(cartellaHandshake, 'report.json');
-  const envFiglio = { ...process.env, TALOS_HARNESS_UI_REPORT_FILE: fileHandshake };
+  /* ⛔ «Gettone sempre» (owner 02/11/2026): il gettone nasce qui, va dallo stdin e il browser riceve un biglietto monouso, mai il gettone */
+  const avvio = preparaAvvioColGettone({ ...process.env, TALOS_HARNESS_UI_REPORT_FILE: fileHandshake });
+  const envFiglio = avvio.ambiente;
   /*
    * Black-box hotfix 15/09/2026: double-click desktop launch uses the
    * desktop adapter by default. An explicitly configured owner runtime is
@@ -106,9 +111,11 @@ async function main() {
   const figlio = spawn(process.execPath, ['server.mjs'], {
     cwd: RADICE_HARNESS_UI,
     env: envFiglio,
-    stdio: ['ignore', 'inherit', 'inherit'],
+    stdio: ['pipe', 'inherit', 'inherit'],
     windowsHide: true,
   });
+  figlio.stdin.on('error', () => {}); // il figlio morto all'avvio lo dice `exit`, qui sotto
+  figlio.stdin.end(avvio.stdin);
 
   figlio.once('error', (errore) => {
     console.error('Impossibile avviare server.mjs:', errore.message);
@@ -120,8 +127,8 @@ async function main() {
 
   try {
     const { host, port } = await attendiHandshake(fileHandshake, ATTESA_MASSIMA_MS);
-    const base = `http://${host}:${port}`;
-    await attendiSalute(base, ATTESA_MASSIMA_MS);
+    const base = indirizzoDelServer(host, port); // S8 della PR 20: un host IPv6 va fra parentesi quadre
+    await attendiSalute(base, ATTESA_MASSIMA_MS, avvio.cookie);
     /*
      * ⭐ 04/9, R-02 — la decisione «Doctor o no» si chiede al server, non
      * alla variabile d'ambiente: una chiave può stare nel portachiavi senza
@@ -131,9 +138,9 @@ async function main() {
      * lo stato non è leggibile (server vecchio) si torna al controllo di R-01.
      */
     let stato = null;
-    try { stato = (await (await fetch(`${base}/api/v1/setup/stato`)).json())?.data ?? null; } catch { stato = null; }
+    try { stato = (await (await fetch(`${base}/api/v1/setup/stato`, { headers: { cookie: avvio.cookie } })).json())?.data ?? null; } catch { stato = null; }
     const apriDoctor = stato ? (stato.introDisattivato === true && stato.provider?.pronto !== true) : chiaveApiMancante();
-    const url = apriDoctor ? `${base}/#avvia-doctor=1` : `${base}/`;
+    const url = linkDiIngresso(base, chiaveDeiBiglietti(avvio.gettone), { dopo: apriDoctor ? '#avvia-doctor=1' : '' });
     console.log(`Harness UI pronto su ${base} — apro il browser${apriDoctor ? ' sulla schermata Doctor (nessun accesso a un modello configurato)' : ''}.`);
     apriBrowser(url);
   } catch (errore) {

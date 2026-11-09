@@ -95,7 +95,7 @@ export function creaDettaglioAgente(figlia, { document: documento, sezione: sezi
   const indietro = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-agente__indietro');
   indietro.type = 'button';
   indietro.dataset.azione = 'tutti-gli-agenti';
-  indietro.append(icona(d, 'i-arrow-left'), d.createTextNode(tr('agenti.agent.backToAll')));
+  indietro.append(icona(d, 'i-chevron-left'), d.createTextNode(tr('agenti.agent.backToAll')));
   indietro.addEventListener('click', () => azioni.indietro?.());
   cima.appendChild(indietro);
   if (typeof azioni.apriGrafo === 'function') {

@@ -41,7 +41,7 @@ test('REV-GOAL-06 (S2) — when the goal row cannot be SAVED the person reads a 
     },
   });
   const sessionId = await conversazioneFerma(banco);
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: banco.registro }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: banco.registro }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const originale = console.error;

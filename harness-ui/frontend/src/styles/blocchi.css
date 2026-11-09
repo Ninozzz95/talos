@@ -1,0 +1,217 @@
+/*
+ * I blocchi dell'interfaccia generativa sul PC (catalogo v1, 02/11/2026): `components/blocchi/`.
+ * Copiato dal bozzetto approvato `frontend/in-corso/bozzetto-ui-generativa/` (`stile-pc.css` 1-66, `stile-pc3.css` 40-65,
+ * `stile-pc6.css` 9-14), sui token del tema `--talos-*`: nessun colore scritto a mano, quindi chiaro e scuro (e ogni tema di
+ * `temi.css`) vengono da soli. Le differenze dal bozzetto sono dette dove stanno.
+ * ⛔ L'aggancio (l'`@import` in `main.css`) arriva con l'aggancio a `components/markdown.js`, dopo la fusione dei blocchi 25/26 e
+ *   della fase 8: fino ad allora questo foglio non è nel prodotto.
+ */
+
+/* ── il guscio: A (consigliato) un solo guscio, fondo morbido, raggio 12, nessun bordo, azioni FUORI sotto; B bordo tenue con la testata ── */
+.gu{margin:14px 0 6px;max-width:100%}
+.gu__corpo{border-radius:12px;background:var(--talos-panel-soft);padding:14px 16px;min-width:0}
+.gu--b .gu__corpo{background:transparent;border:1px solid var(--talos-border-subtle);padding:0}
+.gu__testa{display:flex;align-items:center;gap:10px;margin:0 0 10px}
+.gu--b .gu__testa{margin:0;padding:10px 14px;border-bottom:1px solid var(--talos-border-subtle)}
+.gu--b .gu__dentro{padding:12px 14px}
+.gu__titolo{margin:0;font-size:13.5px;font-weight:600;color:var(--talos-text);flex:1;min-width:0}
+.gu__sotto{display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:6px}
+.gu__azioni{display:flex;gap:2px}
+/* ── scena 8 (FE-080, 05/11/2026, variante A dell'owner): le azioni nel menu «⋯» in testata e col tasto destro; sotto la conferma in riga.
+   Bozzetto `in-corso/BOZZETTO-UI-GENERATIVA-DEFINITIVO-2026-11-05.html:269-272`. Cura del 05/11 (review G-A, HIGH 3): il menu NON sta più
+   dentro il blocco ma nel corpo della pagina (`#menuDelBlocco`, `.talos-context-menu` fisso, `index.css:3401`), creato da
+   `creaMenuContestuale` di `schede.js`: un turno chiuso ha `content-visibility:auto` (`streaming-fluido.css:93-95`) e tagliava la lista. ── */
+.gu__menu{margin-left:auto;flex:none}
+/* la regione di stato resta nel DOM e visibile anche vuota (larga zero): nascosta, chi legge lo schermo potrebbe non sentire la conferma */
+.gu-fatto{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--talos-success)}
+.gu__fonte{margin-left:auto;font-size:12px;color:var(--talos-muted)}
+.gu__fonte button{all:unset;cursor:pointer;text-decoration:underline;text-decoration-color:var(--talos-border-strong);text-underline-offset:3px}
+.gu__fonte button:hover{color:var(--talos-text);text-decoration-color:currentColor}
+.gu__fonte button:focus-visible{outline:var(--talos-focus-width) solid var(--talos-ring);outline-offset:2px;border-radius:2px}
+.gu .talos-button--ghost.talos-button--sm{color:var(--talos-muted)}
+.gu .talos-button--ghost.talos-button--sm:hover{color:var(--talos-text)}
+.gu button:disabled{opacity:.55;cursor:default}
+/* G-G2 (06/11/2026), UIG-5.6: un'opzione già usata è spenta con `aria-disabled`, non `disabled` — Chrome non garantisce `contextmenu` su
+   un controllo disabilitato (chromestatus 6128674512830464; HTML §4.10.19.5 vieta solo i clic) e il tasto destro deve aprire il menu del
+   blocco. Stesso aspetto di `:disabled`, e nessun cambio al passaggio: il clic lo ferma il blocco (`stato.azione`) */
+.gu button[aria-disabled="true"]{opacity:.55;cursor:default}
+.gu .talos-button--secondary[aria-disabled="true"]:hover{border-color:var(--talos-border);background:var(--talos-panel-soft)}
+.gu .talos-button--ghost[aria-disabled="true"]:hover{border-color:transparent;background:transparent;color:var(--talos-muted)}
+.gu .talos-button--primary[aria-disabled="true"],.gu .talos-button--primary[aria-disabled="true"]:hover{background:var(--talos-panel-soft);border-color:var(--talos-border);color:var(--talos-muted);opacity:.75}
+@media (forced-colors:active){.gu button[aria-disabled="true"]{color:GrayText;border-color:GrayText;opacity:1}}
+
+/* ── in arrivo: l'altezza tenuta (niente salti sotto), la riga viva di casa (`caricamento-vivo.js`) al posto delle barre grigie del bozzetto ── */
+.gu[aria-busy="true"] .gu__corpo{min-height:96px}
+.gu-in-arrivo{margin:8px 0 0;font-size:12.5px;color:var(--talos-muted)}
+
+/* ── rotto: frase onesta e il testo a richiesta ── */
+.gu-rotto{margin:0;font-size:13px;color:var(--talos-text)}
+.gu-rotto__azioni{margin:8px 0 0}
+.gu-rotto__testo[hidden]{display:none}
+.gu-rotto__testo .code-block-nudo{margin:8px 0 0;max-height:320px;overflow:auto;font:12px/1.55 var(--talos-font-mono);white-space:pre-wrap;overflow-wrap:anywhere}
+
+/* ── tabella viva: barra con filtro e conteggio, intestazioni che ordinano ── */
+.gu-barra{display:flex;align-items:center;gap:10px;margin:0 0 8px}
+.gu-barra .talos-field__input{height:30px;max-width:220px;font-size:12.5px}
+.gu-conta{font-size:12px;color:var(--talos-muted)}
+.gu .md-table-wrap{margin:0}
+.gu .md-table th button{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:4px;border-radius:4px}
+.gu .md-table th button:hover{color:var(--talos-text)}
+.gu .md-table th button:focus-visible{outline:var(--talos-focus-width) solid var(--talos-ring);outline-offset:2px}
+.gu .md-table th .gu-freccia{font-size:10px}
+.gu .md-table td.num,.gu .md-table th.num{text-align:right}
+.gu .md-table th.num button{flex-direction:row-reverse}
+
+/* ── grafico: i colori delle serie. Una serie è l'accento; dalla seconda l'informazione e il secondario del tema, poi le stesse tinte
+   mescolate col testo. Mai i colori di stato (successo, attenzione, pericolo): dicono altro. La legenda e i valori scritti portano il nome. ── */
+.gu{--gu-s1:var(--talos-accent);--gu-s2:var(--talos-info);--gu-s3:var(--talos-secondary);--gu-s4:color-mix(in oklab,var(--talos-accent) 55%,var(--talos-text));--gu-s5:color-mix(in oklab,var(--talos-info) 55%,var(--talos-text));--gu-s6:color-mix(in oklab,var(--talos-secondary) 50%,var(--talos-text));--gu-s7:color-mix(in oklab,var(--talos-accent) 45%,var(--talos-panel-soft));--gu-s8:color-mix(in oklab,var(--talos-info) 45%,var(--talos-panel-soft))}
+.gu-s1{--gu-c:var(--gu-s1)}.gu-s2{--gu-c:var(--gu-s2)}.gu-s3{--gu-c:var(--gu-s3)}.gu-s4{--gu-c:var(--gu-s4)}
+.gu-s5{--gu-c:var(--gu-s5)}.gu-s6{--gu-c:var(--gu-s6)}.gu-s7{--gu-c:var(--gu-s7)}.gu-s8{--gu-c:var(--gu-s8)}
+/* barre: una serie sola, colore d'accento, etichette nell'inchiostro del testo, valore diretto */
+.gr{display:grid;grid-template-columns:auto 1fr auto;gap:8px 12px;align-items:center;font-size:12.5px}
+.gr__riga{display:contents}
+.gr__n{color:var(--talos-text);white-space:nowrap;max-width:24ch;overflow:hidden;text-overflow:ellipsis}
+.gr__v{color:var(--talos-muted);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.gr__pista{height:14px;border-radius:0 4px 4px 0;background:transparent;position:relative}
+.gr__barra{position:absolute;left:0;top:0;bottom:0;border-radius:0 4px 4px 0;background:var(--gu-c,var(--talos-accent));transition:width .5s ease}
+.gr__barra--meno{background:transparent;border:1.5px solid var(--gu-c,var(--talos-accent));box-sizing:border-box}
+.gr__riga:hover .gr__barra.gu-s1{background:var(--talos-accent-hover,var(--talos-accent))}
+.gr__nota{grid-column:1/-1;margin:8px 0 0;font-size:12px;color:var(--talos-muted);white-space:pre-line}
+/* linee e torta: l'SVG del bozzetto */
+.gu .gc-svg{width:100%;height:auto;display:block;overflow:visible}
+.gu-linee{max-width:640px}
+.gu .gc-svg text{font-size:9px;fill:var(--talos-text)}
+.gu .gc-svg .gu-etic--x{fill:var(--talos-muted)}
+.gu .gc-svg .gu-etic--fine-x{text-anchor:end}
+.gu .gc-svg .gc-asse{stroke:var(--talos-border-subtle);fill:none;stroke-width:1}
+.gu .gc-serie{stroke:var(--gu-c,var(--talos-accent));fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.gu .gc-serie.gu-tratteggio{stroke-dasharray:5 3}
+.gu .gc-punto{fill:var(--gu-c,var(--talos-accent));stroke:var(--talos-panel-soft);stroke-width:1.5}
+.gu--b .gc-punto{stroke:var(--talos-background)}
+.gu-torta{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.gu .gc-svg--q{width:90px;flex:none}
+.gu .gc-torta-sfondo{fill:none;stroke:var(--talos-border-subtle);stroke-width:14}
+.gu .gc-torta{fill:none;stroke:var(--gu-c,var(--talos-accent));stroke-width:14;transform:rotate(-90deg);transform-origin:center}
+.gu-legenda{display:flex;flex-wrap:wrap;gap:4px 14px;margin:8px 0 0;font-size:11.5px;color:var(--talos-muted)}
+.gu-torta .gu-legenda{flex-direction:column;margin:0}
+.gu-legenda__voce{display:inline-flex;align-items:center;gap:6px;min-width:0}
+.gu-legenda__segno{display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--gu-c,var(--talos-accent));flex:none}
+
+/* ── scelte che diventano un tuo messaggio ── */
+.gu-scelte__domanda{margin:0 0 8px;font-size:13px;color:var(--talos-text);white-space:pre-line}
+.gu-scelte{display:flex;flex-wrap:wrap;gap:8px}
+.gu-scelte .talos-button[aria-pressed="true"]{opacity:1;border-color:var(--talos-accent-border);background:var(--talos-accent-soft);color:var(--talos-text)}
+.gu-scelte__nota{margin:8px 0 0;font-size:12px;color:var(--talos-muted)}
+
+/* ── modulo: la «domanda generata» del bozzetto (`pc2.js`) ── */
+.gq{display:flex;flex-direction:column;gap:12px}
+.gq-campo{border:0;margin:0;padding:0;min-width:0}
+.gq-campo legend,.gq-etichetta{display:block;font-size:12px;color:var(--talos-muted);margin:0 0 6px;padding:0}
+.gq-voci{display:flex;flex-wrap:wrap;gap:6px}
+.gq-campo--testo .talos-field__input{max-width:320px}
+.gu .talos-chip[aria-checked]{cursor:pointer}
+.gu .talos-chip[aria-checked="true"]{background:var(--talos-accent-soft);border-color:var(--talos-accent-border);color:var(--talos-accent-text,var(--talos-text))}
+.gu .talos-chip[aria-checked]:hover:not(:disabled):not([aria-disabled="true"]){border-color:var(--talos-border-strong)}
+.gu .talos-chip[aria-checked]:focus-visible{outline:var(--talos-focus-width) solid var(--talos-ring);outline-offset:2px}
+.gu .talos-chip:disabled{opacity:.55;cursor:default}
+.gu .talos-chip[aria-checked="true"]:disabled{opacity:.85}
+.gu .talos-chip[aria-checked][aria-disabled="true"]{opacity:.55;cursor:default}
+.gu .talos-chip[aria-checked="true"][aria-disabled="true"]{opacity:.85}
+
+/* ── chiave e valore: le righe `talos-kv` di casa; il pallino dello stato è quello d'attenzione di casa, sugli altri due token ── */
+.gu-kv .talos-kv__v{color:var(--talos-text)}
+.gu-kv .talos-kv__v--avviso.gu-kv--ok::before{background:var(--talos-success)}
+.gu-kv .talos-kv__v--avviso.gu-kv--errore::before{background:var(--talos-danger)}
+.gu-kv .gu-kv__frase{font-family:inherit;font-size:12.5px;font-weight:400}
+
+/* ── passi: la linea del tempo del bozzetto (`stile-pc3.css:40-45`) ── */
+.gu .gc-linea{list-style:none;margin:0;padding:0 0 0 12px;border-left:2px solid var(--talos-border-subtle);font-size:12.5px}
+.gu .gc-linea li{position:relative;display:flex;gap:10px;padding:3px 0;color:var(--talos-text)}
+.gu .gc-linea li::before{content:"";position:absolute;left:-17px;top:9px;width:8px;height:8px;border-radius:50%;background:var(--talos-border-strong)}
+.gu .gc-linea li[data-stato="fatto"]::before{background:var(--talos-success,var(--talos-accent))}
+.gu .gc-linea li[data-stato="ora"]::before{background:var(--talos-accent);box-shadow:0 0 0 3px var(--talos-accent-soft)}
+.gu .gc-linea li[data-stato="dopo"]{color:var(--talos-muted)}
+.gu .gc-linea__ora{font-variant-numeric:tabular-nums;color:var(--talos-muted);min-width:40px;flex:none}
+.gu .gc-linea__ora:empty{display:none}
+
+/* ── avviso: il `talos-callout` di casa; `info` sugli stessi gradini dell'informazione ── */
+.gu .gu-avviso{margin-top:0}
+.gu .gu-avviso--info{border-color:var(--talos-info-border);background:var(--talos-info-soft)}
+.gu-avviso__testo{margin:0;white-space:pre-line}
+
+/* ── versione spinta (`stile-pc6.css:9-14`): densità da strumento, cifre in colonna ── */
+.gu[data-versione="spinta"] .gu__corpo{padding:10px 12px}
+.gu[data-versione="spinta"] .gu__titolo{font-size:13px}
+.gu[data-versione="spinta"] .md-table td,.gu[data-versione="spinta"] .md-table th{padding-block:3px;font-size:12.5px}
+.gu[data-versione="spinta"] .md-table td.num,.gu[data-versione="spinta"] .gr__v{font-family:var(--talos-font-mono);font-variant-numeric:tabular-nums}
+.gu[data-versione="spinta"] .gr{row-gap:4px}
+
+/* ── movimento: la barra che cresce si ferma con «riduci movimento» (del sistema e dell'app) ── */
+@media (prefers-reduced-motion:reduce){.gr__barra{transition:none}}
+body.reduce-motion .gr__barra{transition:none}
+
+/* ── colori forzati: i segni prendono il colore del testo, la legenda resta leggibile ── */
+@media (forced-colors:active){.gr__barra,.gu-legenda__segno{background:CanvasText}.gu .gc-serie{stroke:CanvasText}.gu .gc-torta{stroke:CanvasText}}
+
+/* FE-003: le due viste di un blocco, dal bozzetto (`stile-pc.css:53-65`). A lato copre le schede della colonna, che restano sotto */
+.gu-lato{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;min-height:0;background:var(--talos-background)}
+.gu-lato__testa{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--talos-border-subtle)}
+.gu-lato__testa h2{margin:0;font-size:14px;font-weight:600;flex:1;min-width:0}
+.gu-lato__corpo{flex:1;padding:14px;overflow:auto;min-height:0}
+.gu-qui{flex-basis:100%;font-size:12px;color:var(--talos-muted);margin:6px 0 0}
+.gu-schermo{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;background:var(--talos-background)}
+.gu-schermo__testa{display:flex;align-items:center;gap:10px;padding:14px 28px;border-bottom:1px solid var(--talos-border-subtle)}
+.gu-schermo__testa h2{margin:0;font-size:16px;font-weight:600;flex:1;min-width:0}
+.gu-schermo__corpo{flex:1;overflow:auto;padding:28px;max-width:1200px;width:100%;margin:0 auto}
+.gu-schermo .md-table{font-size:14px}
+.gu-schermo .gr{font-size:14px}
+.gu-schermo .gr__pista{height:20px}
+
+/* ---- catalogo v2 (ledger G-C, scene 7 e 9, 05/11/2026): cursore, metriche, confronto, diagramma — classi del bozzetto approvato.
+   ⛔ Il testo usa solo i token di testo (--talos-text, --talos-muted), mai il colore di una serie; il colore sta su forme e bordi. */
+.gu-cursore{display:flex;flex-direction:column;gap:10px;min-width:0}
+.gu-cursore__testa{display:flex;align-items:baseline;gap:10px;font-size:13px;color:var(--talos-text)}
+.gu-cursore__etichetta{flex:1;min-width:0;overflow-wrap:anywhere}
+.gu-qui{font-variant-numeric:tabular-nums;font-weight:600;color:var(--talos-text);white-space:nowrap}
+.gu-cursore__input{width:100%;accent-color:var(--talos-accent);margin:0}
+.gu-cursore__input:focus-visible{outline:var(--talos-focus-width) solid var(--talos-ring);outline-offset:3px}
+.gu-cursore__risultato{font-weight:600}
+.gu-totale{margin:0;text-align:right;font-size:13px;font-weight:600;color:var(--talos-text);font-variant-numeric:tabular-nums}
+.gu-metriche{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.gu-metrica{border:1px solid var(--talos-border-subtle);border-radius:10px;padding:10px 12px;min-width:0}
+.gu-metrica__k{font-size:12px;color:var(--talos-muted);overflow-wrap:anywhere}
+.gu-metrica__v{margin-top:2px;font-size:20px;font-weight:600;color:var(--talos-text);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.gu-metrica__d{margin-top:4px;display:flex;gap:4px;font-size:12px;color:var(--talos-muted);overflow-wrap:anywhere}
+.gu-metrica__d[data-verso="su"] .gu-metrica__segno{color:var(--talos-success)}
+.gu-metrica__d[data-verso="giu"] .gu-metrica__segno{color:var(--talos-danger)}
+.gu-confronto{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.gu-confronto[data-colonne="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}
+.gu-confronto[data-colonne="4"]{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media (max-width:1100px){.gu-confronto[data-colonne="4"]{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.gu-confronto__colonna{border:1px solid var(--talos-border-subtle);border-radius:10px;padding:10px 12px;min-width:0}
+.gu-confronto__nome{margin:0 0 6px;font-size:13.5px;font-weight:600;color:var(--talos-text);overflow-wrap:anywhere}
+.gu-confronto__titolo{font-size:11.5px;color:var(--talos-muted);text-transform:uppercase;letter-spacing:.04em}
+.gu-confronto__lista{margin:2px 0 8px;padding-left:18px;font-size:13px;color:var(--talos-text)}
+.gu-confronto__lista li{overflow-wrap:anywhere}
+.gu-confronto__pro .gu-confronto__lista li::marker{color:var(--talos-success)}
+.gu-confronto__contro .gu-confronto__lista li::marker{color:var(--talos-muted)}
+@media (max-width:640px){.gu-confronto{grid-template-columns:minmax(0,1fr)}}
+.gu-diagramma{overflow-x:auto}
+.gu-diagramma__svg{display:block;max-width:100%;height:auto}
+.gu-diagramma__nodo rect{fill:var(--talos-panel);stroke:var(--talos-border-strong);stroke-width:1}
+.gu-diagramma__nodo text{fill:var(--talos-text);font-size:12px}
+.gu-diagramma__freccia polyline{fill:none;stroke:var(--talos-muted);stroke-width:1.4}
+.gu-diagramma__freccia--indietro polyline{stroke-dasharray:4 3}
+.gu-diagramma__punta{fill:var(--talos-muted)}
+.gu-diagramma__etichetta{fill:var(--talos-muted);font-size:11px}
+
+/* G-B3 (FE-081, scenes 1+4): the version label, the «Versions» list and the source text open under the block. Same tokens as the shared
+   block menu (`.talos-context-menu`): panel, subtle border, small type, accent for the version on screen; both themes come from tokens */
+.gu__versione{margin:var(--talos-space-xs) 0 0;font-size:var(--talos-font-size-xs);color:var(--talos-muted)}
+.gu__versioni{list-style:none;margin:var(--talos-space-sm) 0 0;padding:var(--talos-space-xs);display:flex;flex-direction:column;gap:2px;background:var(--talos-panel);border:1px solid var(--talos-border-subtle);border-radius:var(--talos-radius-control)}
+.gu__versione-tasto{display:block;width:100%;text-align:left;padding:var(--talos-space-xs) var(--talos-space-sm);border:0;border-radius:calc(var(--talos-radius-control) - 4px);background:transparent;color:inherit;font:inherit;font-size:var(--talos-font-size-sm);cursor:pointer}
+.gu__versione-tasto:hover{background:var(--talos-panel-soft)}
+.gu__versione-tasto:focus-visible{outline:2px solid var(--talos-accent);outline-offset:-2px}
+.gu__versione-tasto[aria-current]{color:var(--talos-accent-text);font-weight:600}
+.gu__sorgente{margin:var(--talos-space-sm) 0 0;padding:var(--talos-space-sm);max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:var(--talos-font-size-xs);background:var(--talos-panel);border:1px solid var(--talos-border-subtle);border-radius:var(--talos-radius-control)}
+@media (forced-colors:active){.gu__versione-tasto[aria-current]{color:Highlight}}

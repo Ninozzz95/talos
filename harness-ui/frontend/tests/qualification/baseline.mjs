@@ -12,7 +12,7 @@ const port = Number(process.env.TALOS_TEST_PORT || 5191);
 const base = `http://127.0.0.1:${port}`;
 await mkdir(out, { recursive: true });
 let logs = '';
-const server = spawn(process.execPath, [join(root, 'harness-ui/server.mjs')], {
+const server = spawn(process.execPath, [join(root, 'harness-ui/server.mjs'), '--senza-gettone=prove'], {
   cwd: root,
   env: { ...process.env, TALOS_HARNESS_UI_HOST: '127.0.0.1', TALOS_HARNESS_UI_PORT: String(port), TALOS_DESKTOP_DATA_DIR: data, TALOS_HARNESS_UI_SESSIONS_DIR: join(data, 'sessions'), TALOS_HARNESS_UI_PUBLIC_DIR: join(root, 'harness-ui/frontend/dist'), TALOS_INTRO: process.env.TALOS_EXPECT_REFACTOR ? '1' : '0' },
   stdio: ['ignore', 'pipe', 'pipe'],

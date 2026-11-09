@@ -22,8 +22,8 @@ const COPPIE = [
   ['quota', 'Credit not available at the provider.', 'Credito non disponibile presso il fornitore.', 'PROVIDER_REQUEST_ERROR'],
   ['risposta-vuota', 'SSE stream with neither content nor tool_calls', 'flusso SSE senza contenuto ne tool_calls', 'internal-error'],
   ['risposta-vuota', '⛔ generation stopped without an answer and without exhausting the turns.', '⛔ la generazione si e fermata senza risposta e senza esaurire i giri.', 'fermato'],
-  ['risposta-vuota-dopo-tentativi', 'The model answered with neither text nor tools (4 times in a row; provider reason: MALFORMED_FUNCTION_CALL).', 'Il modello ha risposto senza testo né attrezzi (4 volte di fila; motivo del fornitore: MALFORMED_FUNCTION_CALL).', 'PROVIDER_EMPTY_RESPONSE'],
-  ['senza-canale-approvazione', 'the tool "scrivi" requires approval (per-tool permission: ask), but this session has no active approval channel.', 'l\'attrezzo "scrivi" richiede approvazione (permesso per-attrezzo: chiedi), ma questa sessione non ha un canale di approvazione attivo.', ''],
+  ['risposta-vuota-dopo-tentativi', 'The model answered with neither text nor tools (4 times in a row; provider reason: MALFORMED_FUNCTION_CALL).', 'Il modello ha risposto senza testo né strumenti (4 volte di fila; motivo del fornitore: MALFORMED_FUNCTION_CALL).', 'PROVIDER_EMPTY_RESPONSE'],
+  ['senza-canale-approvazione', 'the tool "scrivi" requires approval (per-tool permission: ask), but this session has no active approval channel.', 'lo strumento "scrivi" richiede approvazione (permesso per strumento: chiedi), ma questa sessione non ha un canale di approvazione attivo.', ''],
   ['chiave-fornitore-mancante', 'The key for OpenRouter is missing.', 'Manca la chiave per OpenRouter.', 'PROVIDER_KEY_MISSING'],
   ['contesto-sintesi-invalida', 'The summary does not declare text and final state.', 'La sintesi non dichiara testo e stato finale.', 'CTX_SUMMARY_RESPONSE_INVALID'],
   ['contesto-sintesi-troncata', 'The model spent 2048 tokens on reasoning and left no room for the summary.', 'Il modello ha speso 2048 token nel ragionamento e non ha lasciato spazio alla sintesi.', 'CTX_TRUNCATED_SUMMARY'],
@@ -64,8 +64,8 @@ test('K3-PUNTO — il punto di fermata scritto dal kernel in inglese si dice nel
     ['while the model was answering, at round 3', 'mentre il modello stava rispondendo, al giro 3', 'while the model was answering, at round 3'],
     ['while waiting to ask again after an empty answer, at round 2', 'mentre aspettavo di richiedere una risposta arrivata vuota, al giro 2', 'while waiting to ask again after an empty answer, at round 2'],
     ['during compaction, at round 7', 'durante la compattazione, al giro 7', 'during compaction, at round 7'],
-    ['while working with the tools of round 5', 'mentre lavoravo con gli attrezzi del giro 5', 'while working with the tools of round 5'],
-    ['while working with the tools of round 5; 2 not run (leggi, cerca)', 'mentre lavoravo con gli attrezzi del giro 5; 2 non eseguiti (leggi, cerca)', 'while working with the tools of round 5; 2 not run (leggi, cerca)'],
+    ['while working with the tools of round 5', 'mentre lavoravo con gli strumenti del giro 5', 'while working with the tools of round 5'],
+    ['while working with the tools of round 5; 2 not run (leggi, cerca)', 'mentre lavoravo con gli strumenti del giro 5; 2 non eseguiti (leggi, cerca)', 'while working with the tools of round 5; 2 not run (leggi, cerca)'],
   ];
   try {
     for (const [grezzo, italiano, inglese] of casi) {

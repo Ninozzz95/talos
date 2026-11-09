@@ -166,6 +166,34 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
 
+      # ⛔ 09/11/2026 (PR 91 rossa): `ubuntu-latest` è passata a Ubuntu 26.04 e
+      # l'immagine non porta più il CMake 3.31.6 nell'SDK. `app/build.gradle`
+      # lo fissa (`externalNativeBuild.cmake.version`) e la CI deve installarlo,
+      # come l'NDK qui sotto: la versione si legge dal build, mai scritta qui.
+      - name: il CMake che il motore locale pretende
+        run: |
+          set -euo pipefail
+          atteso=$(grep -oE "^[[:space:]]*version '[0-9.]+'" \
+            "${{ steps.dove.outputs.dir }}/android/app/build.gradle" | head -1 | cut -d"'" -f2 || true)
+          if [ -z "$atteso" ]; then
+            echo "::error::versione di CMake non trovata in app/build.gradle"
+            exit 1
+          fi
+          echo "il build pretende CMake $atteso"
+          if [ -x "$ANDROID_HOME/cmake/$atteso/bin/cmake" ]; then
+            echo "gia' presente"
+          else
+            gestore=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f 2>/dev/null | head -1)
+            if [ -z "$gestore" ]; then
+              echo "::error::sdkmanager non trovato sotto $ANDROID_HOME/cmdline-tools"
+              exit 1
+            fi
+            yes | "$gestore" --licenses > /dev/null 2>&1 || true
+            "$gestore" "cmake;$atteso"
+          fi
+          test -x "$ANDROID_HOME/cmake/$atteso/bin/cmake" \
+            || { echo "::error::CMake $atteso non installabile su questo runner"; exit 1; }
+
       # ⛔⛔ L'NDK ESATTO, INSTALLATO A MANO — e non è pedanteria.
       #
       # `app/build.gradle` fissa `ndkVersion = "27.0.12077973"` e dice perché:
@@ -629,6 +657,16 @@ jobs:
         run: |
           node harness-ui/scripts/scarica-binding-iroh.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Binding iroh non pronto.' }
+
+      # 09/11/2026 (owner, strada A): l'aiutante del PC precostruito dalla release interna nominata in harness-ui/native/aiutante-pc.json;
+      # sha256 controllato contro IMPRONTA_AIUTANTE_PC prima di qualunque copia, poi TALOS_AIUTANTE_PC_SORGENTE/AVVISI in GITHUB_ENV.
+      - id: aiutante_pc
+        name: aiutante del PC dalla release interna, con impronta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node harness-ui/scripts/scarica-aiutante-pc.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Aiutante del PC non pronto.' }
 
       - id: cancelli
         name: server, kernel, frontend e guscio Electron reale

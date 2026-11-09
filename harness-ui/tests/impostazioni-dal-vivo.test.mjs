@@ -56,7 +56,7 @@ function banco(opzioni = {}) {
   const giri = giriFinti();
   const registro = createSessionRegistry({ avviaSessioneFn: giri.avviaSessioneFn, ...opzioni });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: opzioni.permessi ?? 'Workspace write', ...(opzioni.piano ? { modalitaOperativaScelta: 'piano' } : {}) });
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry: registro });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   return { giri, registro, sessionId, chiama };
 }

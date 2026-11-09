@@ -117,7 +117,7 @@ test('NAV-SAVE-03: al contrario, un altro file nella stessa cartella nascosta fu
     writeFileSync(altro, 'non è una pagina salvata\n')
     const { esiti, chieste } = await giro({ workspace, pagine, corpo: PAGINA_A_RIGHE, prossima: (n) => (n === 0 ? ['leggi', { percorso: altro }] : null) })
     assert.equal(chieste.length, 1)
-    assert.match(esiti[0], /^REFUSED\./u)
+    assert.match(esiti[0], /^DECLINED\. The person said no/u)
 })
 
 test('NAV-SAVE-04: una pagina corta resta com era, e non si salva niente', async (t) => {

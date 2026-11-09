@@ -92,7 +92,7 @@ test('PF-MD-04 — rotta HTTP senza server: 200 con riserva, poi catalogo; senza
   let collegato = true, disponibile = false;
   const { catalogo } = await banco(t, { retryMs: 0, fetchFn: async () => disponibile ? risposta() : senzaRete() });
   const rotta = createProviderModelCatalog({ catalogo, chiaveConfigurata: () => collegato });
-  const app = createHttpApp({ staticHandler: async () => null, catalogoFornitoriFn: rotta.ottieni });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, catalogoFornitoriFn: rotta.ottieni });
   const richiesta = () => new Promise(resolve => {
     let status;
     app({ method: 'GET', url: '/api/v1/providers/deepseek/models', headers: {} }, {
@@ -411,7 +411,7 @@ test('PE-21 — rotta HTTP reale in memoria: 422 senza chiave, 200 coi prezzi, 5
   let collegato = false;
   const { catalogo } = await banco(t, { fetchFn: async () => risposta({ deepseek: FIXTURE.deepseek }) });
   const rotta = createProviderModelCatalog({ catalogo, chiaveConfigurata: () => collegato });
-  const app = createHttpApp({ staticHandler: async () => null, providerProbe: { elencaModelli: rotta.ottieni } });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerProbe: { elencaModelli: rotta.ottieni } });
   const richiesta = provider => new Promise(resolve => {
     let status;
     app({ method: 'GET', url: `/api/v1/providers/${provider}/models`, headers: {} }, {

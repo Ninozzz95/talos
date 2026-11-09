@@ -71,9 +71,9 @@ test('PO30-AGENTE-01 — si apre sulla Panoramica: compito intero, fatti veri in
   const fatti = await d.locator('[data-pannello="panoramica"] .talos-kv').evaluateAll((righe) => Object.fromEntries(righe.map((r) => [r.querySelector('.talos-kv__k').textContent, r.querySelector('.talos-kv__v').textContent])));
   expect(fatti.Modello).toBe('z-ai/glm-5.3-flash');
   expect(fatti.Permessi).toBe('Scrive nel progetto');
-  expect(fatti['Attrezzi usati']).toBe('3');
+  expect(fatti['Strumenti usati']).toBe('3');
   expect(fatti.Partito).toMatch(/min fa$/);
-  expect(fatti['Sta usando'], 'il nome dell’attrezzo è quello UMANO, mai quello tecnico').not.toBe('leggi');
+  expect(fatti['Sta usando'], 'il nome dello strumento è quello UMANO, mai quello tecnico').not.toBe('leggi');
   expect(Object.values(fatti).every((v) => v && v.trim() !== '' && v.trim() !== '—'), `una riga senza dato non si disegna: ${JSON.stringify(fatti)}`).toBe(true);
   await expect(d.getByText(/dimostrativ|demo|fixture/i), 'niente stati «demo» nel prodotto').toHaveCount(0);
 });
@@ -159,7 +159,7 @@ test('PO30-AGENTE-03 — le sezioni: File ed Eventi dai dati veri, la Conversazi
   const frasi = await d.locator('[data-pannello="eventi"] .talos-agente__frase').allTextContents();
   expect(frasi[0]).toBe('Compito assegnato');
   expect(frasi[1]).toMatch(/· src\/registro\.mjs$/);
-  expect(frasi.join(' '), 'nessun nome tecnico di attrezzo a schermo').not.toMatch(/\b(leggi|shell|delega_sottotask)\b/);
+  expect(frasi.join(' '), 'nessun nome tecnico di strumento a schermo').not.toMatch(/\b(leggi|shell|delega_sottotask)\b/);
   await d.locator('[data-sezione="file"]').click();
   await expect(d.locator('[data-pannello="file"] .talos-agente__file')).toHaveCount(2);
   await d.locator('[data-sezione="conversazione"]').click();
@@ -290,7 +290,7 @@ for (const larghezza of [1024, 1440]) for (const tema of ['dark', 'light']) {
   { const r=rows.filter({hasText:'Verifica 0'}); if((await r.getAttribute('aria-expanded'))!=='true') await r.click(); await r.locator('[data-controllo="apri-conversazione"]').click(); } await expect(dettaglio(page).locator('.talos-agente__nome')).toHaveText('Verifica 0');
   nipoti[0]={...nipoti[0],attivita:{...nipoti[0].attivita,chiamate:42}};
   await page.evaluate(()=>window.__talosHarnessUiRuntime.realSessionState.eventSource.onopen());
-  await expect(dettaglio(page).locator('.talos-kv').filter({hasText:'Attrezzi usati'})).toContainText('42');
+  await expect(dettaglio(page).locator('.talos-kv').filter({hasText:'Strumenti usati'})).toContainText('42');
   await page.screenshot({path:info.outputPath('sidebar-nipote.png'),fullPage:true});
   await dettaglio(page).getByRole('button',{name:'Tutti gli agenti',exact:true}).click();
   await rail.locator('[data-controllo="apri-diagramma"]').click();

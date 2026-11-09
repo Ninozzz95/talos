@@ -1,0 +1,24 @@
+/*
+ * Revisione d'uso della candidata, 04/11/2026, reperto 15 — la fascia della finestra che ha perso l'accesso (`components/accesso-perso.js`).
+ * Fissa in alto al centro, sopra tutto, perché vale per ogni pagina e niente di ciò che c'è sotto funziona più; sotto la testata (60 px),
+ * così il titolo e le schede restano leggibili. Colori dell'avvertimento, gli stessi gettoni degli altri avvisi; un solo pulsante.
+ */
+.talos-accesso-perso{
+  position:fixed; top:72px; left:50%; transform:translateX(-50%); z-index:1000;
+  display:flex; align-items:center; gap:var(--talos-space-inline, 12px);
+  width:min(720px, calc(100vw - 32px)); box-sizing:border-box;
+  padding:10px 10px 10px 16px;
+  border:1px solid var(--talos-warning-border); border-radius:12px;
+  background:linear-gradient(var(--talos-warning-soft), var(--talos-warning-soft)), var(--talos-panel);
+  color:var(--talos-text); box-shadow:var(--talos-shadow-card);
+}
+/* Tester 04/11 20:15, S4: fissa copriva il titolo della pagina. Dentro la colonna centrale sta nel flusso, in testa, e spinge giù la
+   pagina: non copre né il titolo né la testata. Fissa (la regola sopra) solo dove la colonna non c'è. */
+#centro > .talos-accesso-perso{
+  position:static; transform:none; flex:none; z-index:auto;
+  width:auto; margin:var(--talos-space-sm) var(--talos-space-md) 0;
+  box-shadow:none;
+}
+.talos-accesso-perso__testo{margin:0; flex:1 1 auto; min-width:0; font-size:13px; line-height:1.45}
+.talos-accesso-perso__testo strong{display:block; font-weight:600}
+.talos-accesso-perso .talos-button{flex:none}

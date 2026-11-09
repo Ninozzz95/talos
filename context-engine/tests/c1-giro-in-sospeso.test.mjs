@@ -32,7 +32,7 @@ function storia({ vecchie = 5, parallele = 3 } = {}) {
   for (let i = 0; i < parallele; i++) m.push({ role: 'tool', content: grande(`in sospeso ${i}`), tool_call_id: `p${i}` });
   return m;
 }
-const intera = (m) => !/characters omitted/u.test(m.content);
+const intera = (m) => !/characters trimmed by TALOS/u.test(m.content);
 const uscite = (messaggi, prefisso) => messaggi.filter((m) => m.role === 'tool' && m.tool_call_id.startsWith(prefisso));
 
 test('C1-GIRO-01: the pending round of parallel reads stays whole under pressure; older outputs give way', () => {
@@ -75,7 +75,7 @@ async function motore(t, messaggi, ratio) {
   const engine = createContextEngine({ store, model, tokenCounter, clock: () => now, clearedToolPointer: 'Recover it with conversation_search.' });
   await store.initSession({ sessionId: 'chat', settings: parseContextSettings({}) });
   for (const [i, message] of messaggi.entries()) await engine.appendOriginal({ sessionId: 'chat', record: { id: `r${i}`, message, createdAt: now } });
-  const profilo = { provider: 'local', model: 'fixture', windowTokens: finestra(pieno, ratio), responseReserve: 2048, local: true };
+  const profilo = { provider: 'local', model: 'fixture', windowTokens: finestra(pieno, ratio), responseReserve: 2048, local: true, singleSlot: true };
   const preparata = await engine.prepareForRequest({ sessionId: 'chat', messages: messaggi, tools: [], sessionModel: profilo });
   return { preparata, richieste, profilo };
 }
@@ -101,7 +101,7 @@ test('C1-GIRO-ENGINE: just over the trigger, the engine shortens the oldest outp
   const engine = createContextEngine({ store, model, tokenCounter, clock: () => now, clearedToolPointer: 'Recover it with conversation_search.' });
   await store.initSession({ sessionId: 'chat', settings: parseContextSettings({}) });
   for (const [i, message] of messaggi.entries()) await engine.appendOriginal({ sessionId: 'chat', record: { id: `r${i}`, message, createdAt: now } });
-  const profilo = { provider: 'local', model: 'fixture', windowTokens: finestra(pieno, 0.78), responseReserve: 2048, local: true };
+  const profilo = { provider: 'local', model: 'fixture', windowTokens: finestra(pieno, 0.78), responseReserve: 2048, local: true, singleSlot: true };
   const preparata = await engine.prepareForRequest({ sessionId: 'chat', messages: messaggi, tools: [], sessionModel: profilo });
   assert.equal(richieste.length, 0, 'no summary: shortening is enough');
   assert.ok(uscite(preparata.messages, 'p').every(intera), 'the pending round reaches the model whole');

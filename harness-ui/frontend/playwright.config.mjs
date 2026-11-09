@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import { defineConfig, devices } from '@playwright/test';
 
+import { cookieDellaCorsa } from './tests/browser/fixtures/cookie-della-corsa.mjs';
 import { ignoraSonde4174 } from './tests/browser/sonde-4174.mjs'; // L3-11: le sonde del 4174 fuori dalla suite di serie
 
 /*
@@ -75,15 +76,50 @@ export function verificaBuildBrowser({ buildDir }) {
 const PORTA_TEST = Number(process.env.TALOS_HARNESS_UI_TEST_PORT || 4176);
 
 /*
+ * ⭐ Decisione 106 dell'owner (03/11/2026, «lente + due server»): con `TALOS_PW_SERVER=2` (lo mette `run-browser-tests.mjs
+ * --server=2`) la suite gira su DUE server di prova, ognuno col suo store isolato, e ogni server serve metà dei lavoratori.
+ * Senza l'opzione tutto resta com'era: un server, `webServer` oggetto, nessuna variabile nuova.
+ *
+ * Come si divide il lavoro: per LAVORATORE, non per file. Playwright dà a ogni lavoratore un `parallelIndex` stabile fra 0 e
+ * workers-1 («workers running at the same time have a different parallelIndex; when a worker is restarted… the new worker
+ * process has the same parallelIndex», doc `class-workerinfo`), e lo mette in `process.env.TEST_PARALLEL_INDEX` PRIMA di caricare
+ * questo file nel lavoratore (`playwright/lib/worker/workerProcessEntry.js`, costruttore di WorkerMain, poi `deserializeConfig`
+ * che ricarica la configurazione). Gli indici pari vanno al server 1, i dispari al server 2: con 8 lavoratori 4 e 4, e ogni
+ * lavoratore libero prende il file dopo dalla stessa fila (niente squilibrio fra due metà fisse). Le alternative misurate a
+ * parole: due corse con `--shard` dividono per FILE quando `fullyParallel` è spento (doc `test-sharding`: «tests are split at the
+ * file level… certain shards may end up running significantly more»), e `remoto-invio-file` da solo terrebbe ferma una metà;
+ * due progetti con `workers` ciascuno (doc `class-testproject`, v1.52) cambiano il nome del progetto nel resoconto e lasciano
+ * fermi i lavoratori del progetto che finisce prima.
+ */
+const DUE_SERVER = process.env.TALOS_PW_SERVER === '2';
+/** Porte di altri (owner, laboratorio, sessioni): un secondo server non ci si siede mai sopra. */
+export const PORTE_DI_ALTRI = Object.freeze([4174, 4175, 4177, 4179]);
+const PORTA_TEST_2 = Number(process.env.TALOS_HARNESS_UI_TEST_PORT_2 || PORTA_TEST + 1);
+if (DUE_SERVER && !process.env.TALOS_HARNESS_UI_BASE_URL) {
+  for (const p of [PORTA_TEST, PORTA_TEST_2]) {
+    if (!Number.isInteger(p) || p < 1024 || p > 65535) throw new Error(`porta di prova non valida: ${p}`);
+    if (PORTE_DI_ALTRI.includes(p)) throw new Error(`porta di prova ${p} riservata (${PORTE_DI_ALTRI.join(', ')}): scegline un'altra con TALOS_HARNESS_UI_TEST_PORT/_2`);
+  }
+  if (PORTA_TEST === PORTA_TEST_2) throw new Error(`i due server di prova vogliono due porte diverse (entrambe ${PORTA_TEST})`);
+}
+/** Il server di questo processo: 1 nel principale e nei lavoratori pari, 2 nei lavoratori dispari (solo coi due server). */
+const indiceParallelo = process.env.TEST_PARALLEL_INDEX;
+const SERVER_DEL_LAVORATORE = DUE_SERVER && indiceParallelo !== undefined && Number(indiceParallelo) % 2 === 1 ? 2 : 1;
+
+/*
  * ⛔ `TALOS_HARNESS_UI_BASE_URL` continua a vincere: serve a puntare la
  * suite a un server già acceso (debug, o il 4174 vero quando lo si vuole
  * DAVVERO). In quel caso `webServer` non deve partire, altrimenti si
  * avvierebbe un server che nessuno usa.
  */
 const baseUrlEsterno = process.env.TALOS_HARNESS_UI_BASE_URL;
-const baseURL = baseUrlEsterno || `http://127.0.0.1:${PORTA_TEST}/`;
+const baseURL = baseUrlEsterno || `http://127.0.0.1:${SERVER_DEL_LAVORATORE === 2 ? PORTA_TEST_2 : PORTA_TEST}/`;
+/* ⛔ «Gettone sempre» (owner 02/11/2026): la suite gira col gettone, come l'app vera. Uno solo per corsa: Playwright carica questo file anche in ogni worker, che eredita
+   l'ambiente del principale (la stessa lezione di `TALOS_PW_STORE_ISOLATO`, qui sotto). Vale solo per il server usa e getta della corsa. */
+if (!baseUrlEsterno) process.env.TALOS_PW_GETTONE ??= randomBytes(32).toString('hex');
 let publicDirLocale;
 let STORE_ISOLATO;
+let STORE_ISOLATO_2;
 if (!baseUrlEsterno) {
   const override = process.env.TALOS_HARNESS_UI_PUBLIC_DIR;
   if (override && resolve(override) !== DIST_CORRENTE) {
@@ -119,10 +155,18 @@ if (!baseUrlEsterno) {
   }
   STORE_ISOLATO = ereditato || mkdtempSync(join(tmpdir(), 'talos-harness-test-store-'));
   process.env.TALOS_PW_STORE_ISOLATO = STORE_ISOLATO;
-  if (proprietario) process.once('exit', () => {
+  /* Decisione 106: il secondo server ha il SUO store, nato anche lui una volta sola nel principale e ereditato dai lavoratori;
+     stesso prefisso (lo pulisce anche la spazzata delle corse vecchie qui sopra) e stessa pulizia controllata all'uscita. */
+  if (DUE_SERVER) {
+    const ereditato2 = process.env.TALOS_PW_STORE_ISOLATO_2;
+    if (!proprietario && !ereditato2) throw new Error('lavoratore coi due server senza lo store del secondo (TALOS_PW_STORE_ISOLATO_2)');
+    STORE_ISOLATO_2 = ereditato2 || mkdtempSync(join(tmpdir(), 'talos-harness-test-store-'));
+    process.env.TALOS_PW_STORE_ISOLATO_2 = STORE_ISOLATO_2;
+  }
+  const pulisci = (store) => {
     try {
-      if (!existsSync(STORE_ISOLATO)) return;
-      const owned = realpathSync(STORE_ISOLATO);
+      if (!existsSync(store)) return;
+      const owned = realpathSync(store);
       if (dirname(owned) !== realpathSync(tmpdir())
         || !basename(owned).startsWith('talos-harness-test-store-')) {
         throw new Error('store browser fuori dalla directory temporanea prevista');
@@ -132,7 +176,49 @@ if (!baseUrlEsterno) {
       process.stderr.write(`Cleanup dello store browser fallito: ${error.message}\n`);
       process.exitCode = 1;
     }
-  });
+  };
+  if (proprietario) process.once('exit', () => { pulisci(STORE_ISOLATO); if (STORE_ISOLATO_2) pulisci(STORE_ISOLATO_2); });
+  /* Nel lavoratore del server 2 le prove che leggono lo store sul disco (`artefatti-versioni.spec.mjs`, `semina`) devono
+     trovare quello del LORO server: la variabile si riscrive solo nel processo di questo lavoratore. */
+  if (SERVER_DEL_LAVORATORE === 2) process.env.TALOS_PW_STORE_ISOLATO = STORE_ISOLATO_2;
+}
+
+/** L'ambiente di un server di prova: lo stesso per i due, cambiano porta e store. */
+const ambienteServer = (porta, store) => ({
+  // Playwright eredita gia process.env nel processo server. Copiarlo qui
+  // serializza le chiavi nel report JSON (config.webServer.env).
+  TALOS_HARNESS_UI_PORT: String(porta),
+  TALOS_HARNESS_UI_SESSIONS_DIR: store,
+  // Isolate every desktop store, including process output, not only journals.
+  TALOS_DESKTOP_DATA_DIR: store,
+  // ⛔ 23/09/2026: custodia delle chiavi in memoria. Senza, una prova che salva una chiave finta
+  // (BC-62) cancellava la chiave OpenRouter VERA dell'owner nel Credential Manager. Vedi
+  // `src/adattatore-keyring.mjs`, `creaAdattatorePortachiaviInMemoria`.
+  TALOS_HARNESS_UI_KEYRING: 'memoria',
+  TALOS_SCRATCH_DIR: join(store, 'scratch'), // 24/09/2026: mai la radice vera %LOCALAPPDATA%TALOS,
+  TALOS_HARNESS_UI_PUBLIC_DIR: publicDirLocale,
+});
+/** Un server di prova. ⛔ Si aspetta `/api/v1/health`, non la porta aperta: il server ascolta PRIMA di aver finito di
+    ripristinare le sessioni, e un test che parte in quella finestra vede uno stato a metà (stesso difetto già pagato
+    sull'avvio a freddo di `avviaServerHarness`). `reuseExistingServer: false`: una porta già occupata ferma la corsa
+    («is already used», Playwright), mai un server di altri preso per buono. */
+const serverDiProva = (porta, store, nome) => ({
+  // «Gettone sempre» (owner 02/11/2026): lo script passa il gettone al server dallo stdin e stampa la riga di pronto solo quando
+  // `/api/v1/health` risponde 200 COL cookie (col gettone un 401 per Playwright sarebbe già «risponde»). Vale per ognuno dei due server.
+  command: 'node frontend/scripts/server-di-prova-col-gettone.mjs',
+  cwd: HARNESS_UI,
+  wait: { stdout: /TALOS-SERVER-DI-PROVA-PRONTO/u },
+  reuseExistingServer: false,
+  timeout: 60_000,
+  stdout: 'pipe',
+  stderr: 'pipe',
+  ...(nome ? { name: nome } : {}),
+  env: ambienteServer(porta, store),
+});
+function webServerDiProva() {
+  if (baseUrlEsterno) return undefined;
+  if (!DUE_SERVER) return serverDiProva(PORTA_TEST, STORE_ISOLATO);
+  return [serverDiProva(PORTA_TEST, STORE_ISOLATO, 'server-1'), serverDiProva(PORTA_TEST_2, STORE_ISOLATO_2, 'server-2')];
 }
 
 export default defineConfig({
@@ -153,39 +239,23 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: [['list'], ['json', { outputFile: 'artifacts/playwright.json' }]],
-  webServer: baseUrlEsterno ? undefined : {
-    command: 'node server.mjs',
-    cwd: HARNESS_UI,
-    // ⛔ Si aspetta `/api/v1/health`, non la porta aperta: il server ascolta
-    // PRIMA di aver finito di ripristinare le sessioni, e un test che parte
-    // in quella finestra vede uno stato a metà (stesso difetto già pagato
-    // sull'avvio a freddo di `avviaServerHarness`).
-    url: `http://127.0.0.1:${PORTA_TEST}/api/v1/health`,
-    reuseExistingServer: false,
-    timeout: 60_000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: {
-      // Playwright eredita gia process.env nel processo server. Copiarlo qui
-      // serializza le chiavi nel report JSON (config.webServer.env).
-      TALOS_HARNESS_UI_PORT: String(PORTA_TEST),
-      TALOS_HARNESS_UI_SESSIONS_DIR: STORE_ISOLATO,
-      // Isolate every desktop store, including process output, not only journals.
-      TALOS_DESKTOP_DATA_DIR: STORE_ISOLATO,
-      // ⛔ 23/09/2026: custodia delle chiavi in memoria. Senza, una prova che salva una chiave finta
-      // (BC-62) cancellava la chiave OpenRouter VERA dell'owner nel Credential Manager. Vedi
-      // `src/adattatore-keyring.mjs`, `creaAdattatorePortachiaviInMemoria`.
-      TALOS_HARNESS_UI_KEYRING: 'memoria',
-      TALOS_SCRATCH_DIR: join(STORE_ISOLATO, 'scratch'), // 24/09/2026: mai la radice vera %LOCALAPPDATA%TALOS,
-      TALOS_HARNESS_UI_PUBLIC_DIR: publicDirLocale,
-    },
-  },
+  webServer: webServerDiProva(),
   use: {
     baseURL,
     /* ⛔ 03/10/2026 (fase della lingua): le prove sono scritte sull'interfaccia ITALIANA. Con la preferenza «sistema» la lingua
        la decide il browser, e Chromium in prova parte in en-US: appena i componenti hanno seguito davvero la lingua, ogni
        asserzione sul testo italiano è diventata rossa. La lingua si fissa qui; l'inglese lo provano le prove che lo chiedono. */
     locale: 'it-IT',
+    /* ⛔ 31/10/2026 (barra di sinistra, variante D dell'owner): «Spazi di lavoro» nasce CHIUSO. Le prove sono scritte con quel gruppo
+       aperto (cliccano Note, Libreria, Bacheca… dalla barra): come per la lingua, la scelta si fissa qui, salvata come la salverebbe
+       la persona. Il valore di serie (chiuso) lo prova `barra-variante-d.spec.mjs`, che riparte da una memoria vuota.
+       ⛔ 02/11/2026 (treno, 126 rosse in tre minuti): le prove condividono UN server, e la fase 8 tiene lì una copia delle preferenze che ogni
+       finestra nuova applica se è più nuova dell'ultima vista (`copia-sul-server.js`). Così lingua e tema di una prova finivano nella prova dopo.
+       Ogni finestra di prova parte dicendo di averla già vista: resta sua. */
+    storageState: { cookies: cookieDellaCorsa(baseURL), origins: [{ origin: new URL(baseURL).origin, localStorage: [
+      { name: 'talos.harness.desktop.barra.gruppi.v1', value: '{"lavoro":true}' },
+      { name: 'talos.harness.desktop.settings.copy.v1', value: String(Number.MAX_SAFE_INTEGER) },
+    ] }] },
     trace: 'on-first-retry',
     // Le catture esplicite dei test visivi impostano prima un viewport >= 1920x1080.
     // Un fallimento su viewport funzionali più piccoli non deve produrre un PNG automatico.

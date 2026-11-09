@@ -90,6 +90,16 @@ export function misuraFascia({ altoTurno, altoCorpo, altezzaCorpo, rigaPx, bordo
 }
 
 /**
+ * FE-065 (owner 02/11/2026, versione B): miniature e schede dei file stanno SOPRA la bolla, dentro il messaggio. Ferma in cima, la
+ * domanda sale di quanto sono alti testata e allegati (meno 6 px di respiro): escono dall'alto e resta ferma la bolla, come in Hermes,
+ * dove gli allegati scorrono via fuori dalla parte appiccicata (`user-message.tsx:478-483`). Mai negativo, mai oltre la bolla.
+ */
+export function saltoAllegatiSopra({ altoTurno, altoCorpo, respiro = 6 }) {
+  const salto = Math.floor(altoCorpo - altoTurno - respiro);
+  return Number.isFinite(salto) && salto > 0 ? salto : 0;
+}
+
+/**
  * Collega la domanda appiccicata alla colonna della conversazione. Idempotente.
  * @param {HTMLElement} colonna `#conversation`
  * @returns {{ scollega: () => void, ricalcola: () => void, corrente: () => (HTMLElement|null), conteggi: () => object }}
@@ -163,18 +173,35 @@ export function collegaDomandaAppiccicata(colonna, opzioni = {}) {
     /* una domanda di sole immagini nasconde la bolla (`disegnaChipAllegati`): la fascia prende la galleria, tagliata uguale */
     const corpo = (bolla && !bolla.hidden) ? bolla : (turno.querySelector('.talos-image-gallery, .talos-allegati-chip') || bolla);
     if (!corpo) return;
+    /*
+     * ⛔ R-41 (31/10/2026, traccia a 300 giri con Performance): PRIMA tutte le letture, POI tutte le scritture. Prima il messaggio e le
+     *   azioni si rileggevano DOPO aver scritto le variabili e `scroll-padding-top`, e ogni rilettura forzava ricalcolo dello stile e
+     *   layout (510 layout, 897 ricalcoli dentro `misura` nella traccia: ~1,5 ms a passaggio di domanda). Le variabili scritte qui
+     *   cambiano solo la PITTURA (clip, maschera, `::after` assoluto, barre ferme del codice: domanda-appiccicata.css), mai il riquadro
+     *   del messaggio o delle azioni ⇒ leggerli prima dà gli stessi numeri.
+     */
     const rTurno = turno.getBoundingClientRect();
     const rCorpo = corpo.getBoundingClientRect();
     const stile = finestra.getComputedStyle(corpo);
     const riga = corpo.querySelector('p, pre') || corpo;
     const stileRiga = finestra.getComputedStyle(riga);
     const rigaPx = parseFloat(stileRiga.lineHeight) || 1.6 * (parseFloat(stileRiga.fontSize) || 16);
+    const rMessaggio = messaggio?.getBoundingClientRect() ?? null;
+    const azioni = messaggio?.querySelector(':scope > .talos-message__actions') ?? null;
+    const rAzioni = azioni?.getBoundingClientRect() ?? null;
+    const altezzaVista = scorrevole.clientHeight;
+    const sopra = spostamentoFermo(); // legge lo stile calcolato la prima volta: va fra le letture
     const n = (v) => parseFloat(v) || 0;
     const { vista, corpo: altoCorpo, lunga } = misuraFascia({
       altoTurno: rTurno.top, altoCorpo: rCorpo.top, altezzaCorpo: rCorpo.height, rigaPx,
       bordoAlto: n(stile.borderTopWidth), bordoBasso: n(stile.borderBottomWidth), paddingAlto: n(stile.paddingTop), paddingBasso: n(stile.paddingBottom),
     });
+    /* FE-065: con miniature o schede SOPRA la bolla, la domanda ferma sale fino alla bolla (`saltoAllegatiSopra`); la fascia visibile
+       è quindi alta `vista - salto`. Senza allegati sopra (o con la bolla nascosta) il salto è 0 e tutto resta com'era. */
+    const allegatiSopra = corpo === bolla && messaggio?.querySelector(':scope > .talos-image-gallery, :scope > .talos-allegati-chip');
+    const salto = allegatiSopra ? saltoAllegatiSopra({ altoTurno: rTurno.top, altoCorpo: rCorpo.top }) : 0;
     turno.style.setProperty('--talos-domanda-vista', `${vista}px`);
+    if (salto) turno.style.setProperty('--talos-domanda-salto', `${salto}px`); else turno.style.removeProperty('--talos-domanda-salto');
     segnaRisposta(turno, vista);
     /*
      * WCAG 2.2 SC 2.4.11 «Focus Not Obscured» e i salti nella chat (cronologia, «scrollIntoView»): lo scorrevole riserva in alto
@@ -186,18 +213,15 @@ export function collegaDomandaAppiccicata(colonna, opzioni = {}) {
      *   variabile: non si eredita (una variabile sullo scorrevole ricalcolava lo stile di tutta la chat, BOLLE-12).
      * Esiste solo mentre c'è una domanda corrente; senza, lo scorrevole è com'era.
      */
-    scorrevole.style.scrollPaddingTop = `${Math.max(0, vista + spostamentoFermo())}px`;
-    osservaSopra(Math.max(0, vista + spostamentoFermo()));
+    scorrevole.style.scrollPaddingTop = `${Math.max(0, vista - salto + sopra)}px`;
+    osservaSopra(Math.max(0, vista - salto + sopra), altezzaVista);
     turno.style.setProperty('--talos-domanda-corpo', `${altoCorpo}px`);
-    if (messaggio) {
-      const rMessaggio = messaggio.getBoundingClientRect();
+    if (messaggio && rMessaggio) {
       turno.style.setProperty('--talos-domanda-larghezza', `${Math.round(rMessaggio.width)}px`);
       /* dove va «Domanda intera» quando la domanda si legge intera (foto della candidata sul 4174, 28/10/2026: restava sulla quarta
          riga e copriva due parole): il bordo sinistro della bolla e il centro della riga delle azioni, misurati nel messaggio. Lo
          stile li usa solo col taglio alzato (`domanda-appiccicata.css`) */
       turno.style.setProperty('--talos-domanda-bolla-sinistra', `${Math.max(0, Math.round(rCorpo.left - rMessaggio.left))}px`);
-      const azioni = messaggio.querySelector(':scope > .talos-message__actions');
-      const rAzioni = azioni?.getBoundingClientRect();
       if (rAzioni && rAzioni.height > 0) turno.style.setProperty('--talos-domanda-azioni-centro', `${Math.round(rAzioni.top - rMessaggio.top + rAzioni.height / 2)}px`);
       else turno.style.removeProperty('--talos-domanda-azioni-centro');
     }
@@ -251,24 +275,48 @@ export function collegaDomandaAppiccicata(colonna, opzioni = {}) {
   let osservatoreSopra = null;
   let fasciaSopra = -1;
   let altezzaSopra = -1;
-  function osservaSopra(fascia) {
+  /* `altezza`: l'altezza della vista già letta da chi chiama (R-41: `misura` la legge PRIMA delle sue scritture, così qui non si forza
+     un layout); senza, la si legge qui, come prima. Un IntersectionObserver non cambia il margine dopo la nascita: si rifà solo se
+     cambiano fascia o vista, altrimenti si riusa. */
+  function osservaSopra(fascia, altezza = null) {
     if (!corrente || !successiva || fascia <= 0) {
       osservatoreSopra?.disconnect();
       if (successiva) delete successiva.dataset.domandaSopra;
+      if (corrente) delete corrente.dataset.domandaUscita;
       return;
     }
     const intera = Math.round(fascia);
-    if (!osservatoreSopra || intera !== fasciaSopra || scorrevole.clientHeight !== altezzaSopra) {
+    const altezzaOra = altezza ?? scorrevole.clientHeight;
+    if (!osservatoreSopra || intera !== fasciaSopra || altezzaOra !== altezzaSopra) {
       osservatoreSopra?.disconnect();
-      fasciaSopra = intera; altezzaSopra = scorrevole.clientHeight;
+      fasciaSopra = intera; altezzaSopra = altezzaOra;
       osservatoreSopra = new finestra.IntersectionObserver((voci) => {
         for (const voce of voci) {
           if (voce.target !== successiva) continue;
           if (voce.isIntersecting) successiva.dataset.domandaSopra = 'si'; else delete successiva.dataset.domandaSopra;
+          /*
+           * ⛔ Revisione UX della candidata, 04/11/2026, riga 38 (foto 92): in fondo alla chat, con due domande corte, la successiva non
+           *   arriva mai in cima (non c'è altro da scorrere) e restava per sempre a metà SOPRA la ferma, la cui risposta era già passata
+           *   tutta: due domande, una che copre a metà l'altra. In Hermes non succede: la domanda ferma vive nel gruppo del suo turno
+           *   (`list.tsx:279-281`, `user-message.tsx:48-51`) e se ne va quando il turno finisce. Qui il turno finisce dove comincia la
+           *   domanda dopo: quando la sua testa è nella fascia E la chat è in fondo (la dopo non può più salire), la ferma la lascia
+           *   (`data-domanda-uscita` toglie solo la posizione appiccicata: l'impaginazione non cambia) e torna al suo posto, sopra la vista.
+           *   A metà chat no: lì la dopo sale e prende la cima, il passaggio di consegne resta quello di sempre (BOLLE-R41-02).
+           */
+          aggiornaUscita();
         }
       }, { root: scorrevole, rootMargin: `0px 0px ${-Math.max(0, altezzaSopra - fasciaSopra)}px 0px`, threshold: 0 });
     } else osservatoreSopra.disconnect();
     osservatoreSopra.observe(successiva);
+  }
+
+  /* Riga 38: la ferma lascia la cima solo in fondo alla chat, con la testa della dopo nella fascia (si rilegge all'arrivo nella fascia e
+     a fine scorrimento, `scrollend`: lì la vista è ferma). */
+  function aggiornaUscita() {
+    if (!corrente) return;
+    const inFondo = successiva?.dataset.domandaSopra === 'si'
+      && scorrevole.scrollTop + scorrevole.clientHeight >= scorrevole.scrollHeight - 2;
+    if (inFondo) corrente.dataset.domandaUscita = 'si'; else delete corrente.dataset.domandaUscita;
   }
 
   function lascia(turno) {
@@ -276,7 +324,7 @@ export function collegaDomandaAppiccicata(colonna, opzioni = {}) {
     for (const n of segnati) n.style.removeProperty('--talos-domanda-fascia');
     segnati = [];
     scorrevole.style.removeProperty('scroll-padding-top');
-    delete turno.dataset.domandaCorrente; delete turno.dataset.domandaLunga;
+    delete turno.dataset.domandaCorrente; delete turno.dataset.domandaLunga; delete turno.dataset.domandaUscita;
     turno.style.removeProperty('--talos-domanda-vista'); turno.style.removeProperty('--talos-domanda-corpo'); turno.style.removeProperty('--talos-domanda-larghezza');
     turno.style.removeProperty('--talos-domanda-bolla-sinistra'); turno.style.removeProperty('--talos-domanda-azioni-centro');
     for (const c of turno.querySelectorAll('.talos-domanda-corpo')) c.classList.remove('talos-domanda-corpo');
@@ -325,7 +373,8 @@ export function collegaDomandaAppiccicata(colonna, opzioni = {}) {
     if (colonna.classList.contains('is-restoring')) return;
     /* l'altezza della vista è cambiata (finestra, compositore, pannelli): la radice dell'osservatore si rifà, e va RI-OSSERVATA —
        un osservatore nuovo non guarda niente, e senza questa riga la domanda corrente restava ferma per sempre (BOLLE-02) */
-    if (scorrevole.clientHeight !== altezzaRadice) { creaOsservatore(); daOsservare = true; }
+    const altezzaOra = scorrevole.clientHeight;
+    if (altezzaOra !== altezzaRadice) { creaOsservatore(); daOsservare = true; }
     conteggi.ricalcoli += 1;
     const domande = [];
     for (const figlio of colonna.children) if (eDomanda(figlio)) domande.push(figlio);
@@ -346,6 +395,9 @@ export function collegaDomandaAppiccicata(colonna, opzioni = {}) {
     attesaCoda(codaPendente && codaPendente.getBoundingClientRect().bottom > riga ? codaPendente : null);
     if (codaPendente && codaPendente.getBoundingClientRect().bottom > riga) i -= 1;
     imposta(i >= 0 ? domande[i] : null);
+    /* Buco R2 della revisione del blocco 13 (31/10/2026): se cambia solo l'altezza della vista la domanda non cambia misura e `misura` non
+       parte, e il margine dell'osservatore della fascia restava quello vecchio: la domanda dopo prendeva il fondo troppo presto o mai */
+    if (corrente && fasciaSopra > 0 && altezzaOra !== altezzaSopra) osservaSopra(fasciaSopra, altezzaOra);
     if (daOsservare) osserva();
   }
 
@@ -386,6 +438,8 @@ export function collegaDomandaAppiccicata(colonna, opzioni = {}) {
     if (!fotogramma) fotogramma = finestra.requestAnimationFrame(ricalcola);
   };
   scorrevole.addEventListener('scrollend', allaFine);
+  const uscitaAllaFine = () => { if (collegata) aggiornaUscita(); };
+  scorrevole.addEventListener('scrollend', uscitaAllaFine);
 
 
   const mutazioni = new finestra.MutationObserver((lotto) => {
@@ -415,6 +469,7 @@ export function collegaDomandaAppiccicata(colonna, opzioni = {}) {
       finestra.cancelAnimationFrame(fotogramma);
       if (rinvio) { finestra.clearTimeout(rinvio); rinvio = 0; }
       scorrevole.removeEventListener('scrollend', allaFine);
+      scorrevole.removeEventListener('scrollend', uscitaAllaFine);
       osservatore?.disconnect(); osservatoreCoda?.disconnect(); osservatoreSopra?.disconnect(); mutazioni.disconnect(); dimensioni?.disconnect(); misuratore?.disconnect();
       lascia(corrente); if (successiva) { delete successiva.dataset.domandaSuccessiva; delete successiva.dataset.domandaSopra; }
       corrente = null; successiva = null; pulsante.remove();

@@ -8,11 +8,10 @@
  *
  * ⛔⭐ 05/10/2026 — BUG-16 evoluce RETRY-02 (owner: auto-retry NON negoziabile): quando il giro perso
  * NON ha prodotto NESSUN effetto — nessun testo consegnato, nessuna lettura partita nell'acceleratore
- * E nessuna chiamata ANNUNCIATA nello stream — il kernel ritenta da solo (max 10, attesa svegliabile
- * dallo stop, G02-10). NOTHING-VISIBLE passa al NUOVO contratto; TOOL-CALL-HALF RESTA sul vecchio:
- * una tool_call annunciata (anche a metà, mai partita) è già il modello in territorio d'azione, con la
- * sua card annullata a schermo ⇒ niente reinvio automatico, ripresa manuale (lo pinna anche STREAM-TOOL-ABORT
- * in tests/provider-outcome-unknown.test.mjs, che la cura BUG-16 del 05/10 aveva rotto e resta LA VERITÀ).
+ * il kernel ritenta da solo (max 10, attesa svegliabile dallo stop, G02-10). NOTHING-VISIBLE passa al NUOVO contratto.
+ * ⛔ R-44 (31/10/2026): anche TOOL-CALL-HALF. Una tool_call annunciata e mai partita non è un effetto, sul fornitore in
+ * rete: la carta resta annullata e il giro si rifà. Un errore DICHIARATO dal fornitore resta fuori (STREAM-TOOL-ABORT
+ * in tests/provider-outcome-unknown.test.mjs), e sui motori locali la ripresa resta manuale.
  * Il contratto completo del reinvio sicuro: `tests/bug16-auto-retry.test.mjs`;
  * dossier: `scratchpad/piano-bug16-auto-retry-2026-10-05.md` §9-§10.
  */
@@ -99,17 +98,18 @@ test('STREAM-BREAK-NOTHING-VISIBLE-RESENT (BUG-16): solo ragionamento, nessun ef
   assert.equal(retry[0].fase, 'attesa');
 });
 
-test('STREAM-BREAK-TOOL-CALL-HALF-NOT-RESENT (BUG-16): una chiamata annunciata blocca il reinvio, la ripresa resta manuale', async () => {
+test('STREAM-BREAK-TOOL-CALL-HALF-RESENT (R-44): la chiamata a metà si annulla a schermo e il giro si rifà da solo', async () => {
   const eventi = [];
   const r = rete(
     () => flussoRotto([{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'scrivi', arguments: '{"percorso":"a.t' } }] } }] }], traffico()),
-    () => flussoIntero([testo('mai'), fine]),
+    () => flussoIntero([testo('Risposta intera.'), fine]),
   );
-  await assert.rejects(talosLavora(base({ fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1, onDelta: (e) => eventi.push(e) })), { code: 'PROVIDER_OUTCOME_UNKNOWN' });
+  const esito = await talosLavora(base({ fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1, onDelta: (e) => eventi.push(e) }));
   const annullata = eventi.find((e) => e.tipo === 'tool-annullato');
   assert.equal(annullata?.toolCallId, 'call_1');
   assert.match(annullata.motivo, /it was not run/u);
-  assert.equal(r.corpi.length, 1, 'BUG-16: la chiamata annunciata (anche a metà, mai partita) non è zero-effetti: NESSUN reinvio automatico');
+  assert.equal(esito.comeFinita, 'concluso');
+  assert.equal(r.corpi.length, 2);
 });
 
 test('STREAM-BREAK-CEILING: nessuna ripresa automatica anche se esistono altre risposte disponibili', async () => {

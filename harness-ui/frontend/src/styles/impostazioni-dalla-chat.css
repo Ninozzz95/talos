@@ -1,0 +1,65 @@
+/*
+ * Fase 8 «Impostazioni dalla chat» (02/11/2026) — i soli pezzi nuovi del PC, dal bozzetto chiuso (FE-055,
+ * `bozzetto-impostazioni-dalla-chat/stile-pc.css`), coi token del guscio. Tutto il resto viene dagli stili veri: la carta
+ * (`talos-approval`), le righe (`talos-kv`), il riquadro (`talos-callout`), la riga dell'attrezzo, l'elenco dei comandi.
+ * In coda a `main.css`: alcune regole devono vincere su quelle di `#schermoImpostazioni` (foto della Frontend del 01/11 21:55).
+ */
+
+/* la riga di un cambio: il nome e, sotto, dove vale (la `talos-kv__k` di casa è su una riga sola con l'ellissi) */
+[data-carta-impostazioni] .talos-kv[data-cambio] .talos-kv__k,
+[data-impostazioni-senza-carta] .talos-kv[data-cambio] .talos-kv__k { display: flex; flex-direction: column; gap: 1px; white-space: normal; overflow: visible; }
+[data-carta-impostazioni] .talos-kv[data-cambio] .talos-impostazione__nome,
+[data-impostazioni-senza-carta] .talos-kv[data-cambio] .talos-impostazione__nome { color: var(--talos-text); font-size: 13px; }
+.talos-impostazione__ambito { font-size: 11.5px; color: var(--talos-muted); }
+
+/* il prezzo come nel selettore dei modelli (`.model-picker-option-price`): «<b>$in</b> → $out» */
+.talos-impostazione__prezzo { color: var(--talos-muted); font: 12px var(--talos-font-mono); white-space: nowrap; }
+.talos-impostazione__prezzo b { color: var(--talos-text); font-weight: 400; }
+/* le righe sotto un cambio (prezzo al milione, sforzo senza numeri): rientrate, col carattere dell'interfaccia */
+.talos-impostazione__nota .talos-kv__k { padding-left: 12px; }
+.talos-impostazione__nota .talos-kv__v { font-family: var(--talos-font-ui); color: var(--talos-muted); }
+
+/* decisione 5: «Non ora» col colore del testo, come le carte del remoto (`remoto.css`) */
+.talos-approval[data-carta-impostazioni] .talos-approval__foot .talos-button--danger { color: var(--talos-text); }
+
+/* la riga dell'attrezzo con «Annulla» a vista (decisione 1) */
+.talos-tool-row > [data-annulla-impostazioni] { flex: none; min-height: 0; padding-block: 2px; }
+.talos-tool-row[data-impostazioni-ricevuta] .talos-tool-row__name { white-space: normal; }
+/* il corpo della riga ha `max-height: 240px; overflow: auto`: con le righe dei cambi l'«Annulla» del blocco dell'Accesso pieno finiva sotto
+   lo scorrimento. Qui il corpo cresce (ritocco del bozzetto) */
+.talos-tool-row__body:has(> [data-impostazioni-senza-carta]) { max-height: none; overflow: visible; }
+.talos-tool-row > [data-annulla-impostazioni]:disabled,
+.talos-impostazione__annulla:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* «Annulla» rifiutato: la riga del perché, col tono d'attenzione (vince su `.talos-tool-row__body > .talos-tool-row__nota-sospetto`) */
+.talos-impostazione__non-annullato { color: var(--talos-warning); }
+.talos-tool-row__body > .talos-impostazione__non-annullato { margin: 0 0 8px; color: var(--talos-warning); }
+
+/* il segno «Cambiata da TALOS · Annulla» (decisione 2, forma A: una riga d'aiuto sotto le scelte) */
+.talos-impostazione__segno { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 10px 0 0; color: var(--talos-accent-text, var(--talos-accent)); }
+.talos-impostazione__punto { background: var(--talos-accent); }
+.talos-impostazione__segno .talos-impostazione__annulla { min-height: 0; padding: 2px 6px; margin-left: -4px; font-size: 12.5px; }
+#schermoImpostazioni .talos-setting__help.talos-impostazione__segno { max-width: none; }
+#schermoImpostazioni .talos-impostazione__non-annullato,
+#schermoImpostazioni p.talos-impostazione__non-annullato { color: var(--talos-warning); max-width: none; margin: 4px 0 0; }
+
+/* giro 4 (02/11/2026): con la ragione sospetta E la sicurezza, un riquadro solo (regola 17); «Approva solo se…» in fondo, dopo i due
+   gruppi, con la misura delle voci dell'elenco (0,2,1: batte `.talos-message p`) */
+.talos-approval__avvisi-corpo > p.talos-approval__avvisi-fine { margin: 2px 0 0; font-size: inherit; line-height: 1.5; overflow-wrap: anywhere; }
+/* Accesso pieno: la riga della pressione nel blocco «Fatto senza chiedere…», col tono d'attenzione della riga «Non annullato» qui sopra
+   (0,3,1: batte `.talos-tool-row__body > .talos-tool-row__senza-carta-blocco > p`, che è muta) */
+.talos-tool-row__body > .talos-tool-row__senza-carta-blocco > p[data-impostazioni-pressione] { color: var(--talos-warning); overflow-wrap: anywhere; }
+
+/* /settings: la riga del valore non valido nell'elenco dei comandi (decisione 7), non sceglibile */
+.talos-suggerimento-comandi__voce.talos-suggerimento-impostazioni__errore { grid-template-columns: minmax(0, 1fr); cursor: default; }
+.talos-suggerimento-comandi__voce.talos-suggerimento-impostazioni__errore .talos-suggerimento-comandi__aiuto { color: var(--talos-warning); }
+
+/* Ritocchi del bozzetto per la regola del puntatore (owner 31/10: ogni elemento cliccabile si accende sotto il puntatore) */
+.talos-suggerimento-comandi__voce:not([aria-disabled="true"]):hover { background: var(--talos-accent-soft); }
+.talos-suggerimento-comandi__voce[aria-selected="true"]:not([aria-disabled="true"]):hover { box-shadow: inset 0 0 0 1px var(--talos-accent-border); }
+.talos-choice:not([disabled]) { cursor: pointer; }
+.talos-choice:not([disabled]):hover { border-color: var(--talos-accent-border); background: var(--talos-accent-soft); }
+.talos-choice[aria-checked="true"]:not([disabled]):hover { box-shadow: inset 0 0 0 1px var(--talos-accent-border); }
+#userQuestionDock .talos-question-card__option-row { cursor: pointer; }
+#userQuestionDock .talos-question-card__option-row:hover { background: var(--talos-accent-soft); box-shadow: inset 0 0 0 1px var(--talos-accent-border); }
+.talos-notification-panel .talos-tabs__tab[aria-selected="true"]:hover { background: var(--talos-accent-soft); border-radius: 6px; }

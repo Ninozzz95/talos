@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { impostaLingua } from '../../src/components/lingua.js';
 import { descriviRigaViva, stimaBreveRigaViva, durataBreveRigaViva, aggiornaAvanzamentoLegacy, ridisegnaRigaVivaNellaLingua, impostaOrologioRigaViva } from '../../src/components/context-progress.js';
 import { interpretaEventoCompattazione, testoRigaCompattazione, percheRipiego, formattaTokenBreve, saltaRiassuntoLegacy } from '../../src/components/compattazione-legacy.js';
-import { aggiornaSeparatoreLegacy, leggiVoceLegacy } from '../../src/components/context-separator.js';
+import { aggiornaSeparatoreLegacy, aggiornaSeparatoreContesto, leggiVoceLegacy, rapidoNonArriva, legaRapidoAlLavoro } from '../../src/components/context-separator.js';
 import { creaContestoTrascrizione, trascriviEventoInterno } from '../../src/components/trascrizione-eventi-interni.js';
 
 /* ------------------------------------------------------------------ un DOM finto, quanto basta */
@@ -57,7 +57,7 @@ const vuoti = /undefined|NaN|null|Infinity|\[object/u;
 test('RIGA-VIVA-01 — con letti/inCache/totale e la stima, la riga dice «62% · ~1 min» e il filo ha due tratti; il tooltip i dettagli', () => {
   impostaLingua('en');
   const v = descriviRigaViva({ fase: 'lettura', letti: 15_375, inCache: 5_952, totale: 24_798, stimaRestanteSec: 62, trascorsoMs: 192_400, tentativo: 1, tentativi: 2 });
-  assert.equal(v.etichetta, 'Summarizing context');
+  assert.equal(v.etichetta, 'Compacting the context');
   assert.equal(v.dettaglio, '62% · ~1 min');
   assert.equal(v.determinato, true);
   assert.equal(v.valoreTesto, '62% · ~1 min');
@@ -66,7 +66,7 @@ test('RIGA-VIVA-01 — con letti/inCache/totale e la stima, la riga dice «62% �
   assert.equal(v.titolo, '24,798 tokens to read, 5,952 already cached · 3m 12s elapsed · attempt 1 of 2');
   impostaLingua('it');
   const it = descriviRigaViva({ fase: 'lettura', letti: 15_375, inCache: 5_952, totale: 24_798, stimaRestanteSec: 62, trascorsoMs: 192_400, tentativo: 1, tentativi: 2 });
-  assert.equal(it.etichetta, 'Riassumo il contesto');
+  assert.equal(it.etichetta, 'Compattazione del contesto');
   assert.equal(it.dettaglio, '62% · ~1 min');
   assert.equal(it.titolo, '24.798 token da leggere, 5952 già in cache · 3m 12s trascorsi · tentativo 1 di 2', 'in italiano le cifre a quattro non si raggruppano (CLDR, come formattaToken)');
 });
@@ -165,7 +165,7 @@ test('RIGA-VIVA-07 — dopo: «Compacted without the model (time limit) · 31.2k
   const riga = (ragione, prima = 31_200, dopo = 9_900) => testoRigaCompattazione({ stato: 'riassunta', tokenPrima: prima, tokenDopo: dopo, ripiego: true, ragione });
   assert.equal(riga('tempo'), 'Compacted without the model (time limit) · 31.2k → 9.9k');
   assert.deepEqual(['saltato', 'rifiutato', 'stima', 'esaurito'].map((r) => riga(r).replace(/ · .*$/u, '')), [
-    'Compacted without the model (skipped)', 'Compacted without the model (summary rejected)', 'Compacted without the model (too slow to wait)', 'Compacted without the model (repeated failures)',
+    'Compacted without the model (skipped)', 'Compacted without the model (compaction rejected)', 'Compacted without the model (too slow to wait)', 'Compacted without the model (repeated failures)',
   ]);
   assert.equal(riga(null), 'Compacted without the model · 31.2k → 9.9k', 'ragione ignota: niente parentesi, niente codice grezzo');
   assert.equal(riga('boh'), 'Compacted without the model · 31.2k → 9.9k');
@@ -225,14 +225,14 @@ test('RIGA-VIVA-10 — la riga viva: stato in role=status, i numeri fuori dalla 
   const status = row.querySelector('[data-context-chat-status]'), dettaglio = row.querySelector('[data-context-chat-eta]');
   assert.equal(status.getAttribute('role'), 'status');
   assert.equal(dettaglio.getAttribute('aria-live'), 'off');
-  assert.equal(status.textContent, 'Summarizing context');
+  assert.equal(status.textContent, 'Compacting the context');
   assert.equal(dettaglio.textContent, '');
   const bar = row.querySelector('progress'), filo = row.querySelector('[data-riga-viva-filo]');
   assert.equal(bar.hasAttribute('value'), false, 'all\'inizio indeterminata');
   assert.equal(filo.hidden, true);
   const salta = row.querySelector('[data-riga-viva="salta"]'), ferma = row.querySelector('[data-riga-viva="ferma"]');
   assert.deepEqual([salta.textContent, salta.getAttribute('aria-label'), ferma.textContent, ferma.getAttribute('aria-label')],
-    ['Skip', 'Skip the summary and continue with one made without the model', 'Stop', 'Stop the run']);
+    ['Skip', 'Skip the compaction and continue with one made without the model', 'Stop', 'Stop the run']);
   assert.equal(salta.hidden || ferma.hidden, false);
   // un passo con i numeri
   aggiornaAvanzamentoLegacy(colonna, { fase: 'lettura', motivo: 'soglia', letti: 62, inCache: 24, totale: 100, stimaRestanteSec: 62, trascorsoMs: 5000, tentativo: 1, tentativi: 2 }, opzioni);
@@ -296,13 +296,13 @@ test('RIGA-VIVA-13 — al cambio di lingua la riga viva si ridice subito, con l\
   impostaLingua('en');
   const doc = creaDocumento(), colonna = doc.createElement('div');
   const row = aggiornaAvanzamentoLegacy(colonna, { fase: 'riassunto', tokenScritti: 412, trascorsoMs: 61_000 }, { sessionId: 's', document: doc, onSalta: async () => ({}), onFerma: () => {} });
-  assert.equal(row.querySelector('[data-context-chat-status]').textContent, 'Summarizing context');
+  assert.equal(row.querySelector('[data-context-chat-status]').textContent, 'Compacting the context');
   impostaLingua('it');
   assert.equal(ridisegnaRigaVivaNellaLingua(colonna), true);
   assert.deepEqual([
     row.querySelector('[data-context-chat-status]').textContent, row.querySelector('[data-context-chat-eta]').textContent, row.title,
     row.querySelector('[data-riga-viva="salta"]').textContent, row.querySelector('[data-riga-viva="ferma"]').getAttribute('aria-label'),
-  ], ['Riassumo il contesto', 'scrivo · 412 token', '1m 1s trascorsi', 'Salta', 'Ferma il giro']);
+  ], ['Compattazione del contesto', 'scrivo · 412 token', '1m 1s trascorsi', 'Salta', 'Ferma il giro']);
   assert.equal(ridisegnaRigaVivaNellaLingua(doc.createElement('div')), false, 'senza riga, niente da fare');
 });
 
@@ -318,6 +318,304 @@ test('RIGA-VIVA-14 — Skip è POST /api/v1/sessions/:id/compaction/skip; saltat
   assert.deepEqual(await saltaRiassuntoLegacy({ fetchFn: fetchFn({ ok: true }), sessionId: 's' }), { saltato: false }, 'un campo assente non è un sì');
   await assert.rejects(saltaRiassuntoLegacy({ fetchFn: fetchFn({ ok: false, error: { code: 'X', message: 'no' } }), sessionId: 's' }), { code: 'X', message: 'no' });
   await assert.rejects(saltaRiassuntoLegacy({ fetchFn: fetchFn({ ok: true }), sessionId: '' }), { code: 'SESSIONE' });
+});
+
+/*
+ * «Mai aspettare» (owner 27/10/2026 notte, contratto C1/C5, bozzetto approvato il 28/10): il giro non aspetta il riassunto del modello.
+ * La richiesta parte col riassunto RAPIDO senza il modello (`ripiego:true`, ragione 'in-arrivo'); quando quello del modello arriva, prende
+ * il suo posto alla richiesta dopo, e la riga è la STESSA: l'evento porta `migliora: { at }` del rapido, e la riga si aggiorna invece di
+ * raddoppiare. Parole del bozzetto: «Quick compaction without the model · …», «Compaction improved by the model · …».
+ */
+test('RIGA-VIVA-15 — l\'evento: la ragione «in-arrivo» si legge; `migliora` è l\'`at` del rapido, solo se è un testo; assente o storto non c\'è', () => {
+  const fine = (extra) => interpretaEventoCompattazione({ type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', compattato: true, tokenPrima: 245_100, tokenDopo: 36_900, at: 'B', ...extra } });
+  assert.equal(fine({ ripiego: true, ragione: 'in-arrivo' }).ragione, 'in-arrivo');
+  assert.equal(fine({ migliora: { at: 'A' } }).migliora, 'A');
+  for (const storto of [undefined, null, 'A', {}, { at: '' }, { at: 5 }]) assert.equal('migliora' in fine({ migliora: storto }), false, JSON.stringify(storto));
+  const fallita = interpretaEventoCompattazione({ type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', compattato: false, motivo: 'vuoto', migliora: { at: 'A' } } });
+  assert.equal('migliora' in fallita, false, 'un riassunto non riuscito non migliora niente');
+});
+
+test('RIGA-VIVA-16 — le parole: «Quick compaction without the model» col suo perché, poi «Compaction improved by the model»; in italiano come il bozzetto', () => {
+  impostaLingua('en');
+  const rapido = (prima = 245_100, dopo = 36_900) => testoRigaCompattazione({ stato: 'riassunta', tokenPrima: prima, tokenDopo: dopo, ripiego: true, ragione: 'in-arrivo' });
+  assert.equal(rapido(), 'Quick compaction without the model · 245.1k → 36.9k');
+  assert.equal(rapido(null), 'Quick compaction without the model', 'senza un numero, niente freccia');
+  assert.equal(percheRipiego('in-arrivo'), 'The model\'s compaction is on its way: it will take this one\'s place at your next message. Nothing to do.');
+  const migliorato = (prima = 245_100, dopo = 31_200) => testoRigaCompattazione({ stato: 'riassunta', tokenPrima: prima, tokenDopo: dopo, migliorata: true });
+  assert.equal(migliorato(), 'Compaction improved by the model · 245.1k → 31.2k');
+  assert.equal(migliorato(null, null), 'Compaction improved by the model');
+  for (const r of [rapido(), rapido(null), migliorato(), percheRipiego('in-arrivo')]) assert.doesNotMatch(r, vuoti);
+  // AL CONTRARIO: le altre ragioni e il riassunto di sempre non cambiano
+  assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: 31_200, tokenDopo: 9_900, ripiego: true, ragione: 'tempo' }), 'Compacted without the model (time limit) · 31.2k → 9.9k');
+  assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: 31_200, tokenDopo: 9_900 }), 'Conversation compacted · 21,300 tokens saved');
+  impostaLingua('it');
+  assert.equal(rapido(), 'Compattazione rapida senza il modello · 245,1k → 36,9k');
+  assert.equal(percheRipiego('in-arrivo'), 'La compattazione del modello sta arrivando: prenderà il posto di questa al prossimo messaggio. Non devi fare niente.');
+  assert.equal(migliorato(), 'Compattazione migliorata dal modello · 245,1k → 31,2k');
+  // il trascritto esportato racconta la storia: prima il rapido, poi il migliorato
+  const evento = (value) => ({ type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', compattato: true, ...value } });
+  assert.deepEqual(trascriviEventoInterno(evento({ tokenPrima: 245_100, tokenDopo: 36_900, at: 'A', ripiego: true, ragione: 'in-arrivo' }), creaContestoTrascrizione()), { testo: 'Compattazione rapida senza il modello · 245,1k → 36,9k' });
+  assert.deepEqual(trascriviEventoInterno(evento({ tokenPrima: 245_100, tokenDopo: 31_200, at: 'B', migliora: { at: 'A' } }), creaContestoTrascrizione()), { testo: 'Compattazione migliorata dal modello · 245,1k → 31,2k' });
+});
+
+test('RIGA-VIVA-17 — la riga del rapido diventa quella migliorata: stessa riga, chiave nuova, niente perché del ripiego; rigiocata e annullo la ridicono uguale', () => {
+  impostaLingua('en');
+  const doc = creaDocumento(), colonna = doc.createElement('div');
+  const opzioni = (testo) => ({ sessionId: 's', document: doc, onMenu: () => {}, testo });
+  const voceRapida = { at: 'A', stato: 'riassunta', tokenPrima: 245_100, tokenDopo: 36_900, ripiego: true, ragione: 'in-arrivo' };
+  const row = aggiornaSeparatoreLegacy(colonna, voceRapida, opzioni(testoRigaCompattazione(voceRapida)));
+  const span = row.querySelector('[data-compattazione-testo]');
+  assert.equal(span.textContent, 'Quick compaction without the model · 245.1k → 36.9k');
+  assert.equal(span.title, percheRipiego('in-arrivo'));
+  const voceMigliorata = { at: 'B', migliora: 'A', stato: 'riassunta', tokenPrima: 245_100, tokenDopo: 31_200, ripiego: false };
+  const stessa = aggiornaSeparatoreLegacy(colonna, voceMigliorata, opzioni(testoRigaCompattazione({ ...voceMigliorata, migliorata: true })));
+  assert.equal(stessa, row, 'la STESSA riga, non una seconda');
+  assert.equal(colonna.querySelectorAll('[data-compattazione-riga]').length, 1);
+  assert.equal(row.dataset.compattazioneAt, 'B', 'l\'annullo ora riguarda il riassunto del modello');
+  assert.equal(span.textContent, 'Compaction improved by the model · 245.1k → 31.2k');
+  assert.equal(span.title, '', 'migliorato: niente perché del ripiego');
+  const letta = leggiVoceLegacy(row);
+  assert.equal(letta.migliorata, true); assert.equal(letta.ripiego, false);
+  // l'annullo ridisegna con la voce letta dal DOM: le parole restano quelle del migliorato
+  aggiornaSeparatoreLegacy(colonna, { ...letta, inVolo: true }, opzioni(testoRigaCompattazione({ stato: 'riassunta', ...letta })));
+  assert.equal(span.textContent, 'Compaction improved by the model · 245.1k → 31.2k');
+  // la rigiocata manda di nuovo i due eventi: resta UNA riga, migliorata
+  aggiornaSeparatoreLegacy(colonna, voceRapida, opzioni(testoRigaCompattazione(voceRapida)));
+  aggiornaSeparatoreLegacy(colonna, voceMigliorata, opzioni(testoRigaCompattazione({ ...voceMigliorata, migliorata: true })));
+  assert.equal(colonna.querySelectorAll('[data-compattazione-riga]').length, 1, 'rigiocata: niente doppione del rapido');
+  assert.equal(colonna.querySelector('[data-compattazione-riga]').querySelector('[data-compattazione-testo]').textContent, 'Compaction improved by the model · 245.1k → 31.2k');
+  // AL CONTRARIO: un `migliora` che non trova la sua riga ne disegna una nuova (non tocca le altre)
+  const altra = aggiornaSeparatoreLegacy(colonna, { at: 'D', migliora: 'Z', stato: 'riassunta', tokenPrima: 1_000, tokenDopo: 500, ripiego: false }, opzioni('y'));
+  assert.notEqual(altra, row);
+  assert.equal(colonna.querySelectorAll('[data-compattazione-riga]').length, 2);
+  assert.equal(row.dataset.compattazioneAt, 'B');
+  impostaLingua('it');
+});
+
+/*
+ * «Non arriva» (contratto con la CLI, 28/10/2026): il riassunto del modello nato per sostituire il rapido non arriverà (fallito, inutile,
+ * non serve, non vale più, Stop). Il kernel lo dice una volta: `talos.compattazione-preparata` con `fase:'non-arriva'` e `perIlRapido:{at}`.
+ * La riga del rapido smette di promettere: torna «Compacted without the model · …», col perché generico, parole che esistono già.
+ */
+test('RIGA-VIVA-18 — «non-arriva»: l\'evento si legge solo nella sua forma; la riga del rapido smette di promettere; quella migliorata o di un\'altra ragione non si tocca', () => {
+  impostaLingua('en');
+  const evento = (value) => interpretaEventoCompattazione({ type: 'CUSTOM', name: 'talos.compattazione-preparata', value });
+  assert.deepEqual(evento({ fase: 'non-arriva', perIlRapido: { at: 'A' }, motivo: 'fallita' }), { tipo: 'non-arriva', at: 'A', motivo: 'fallita' });
+  assert.deepEqual(evento({ fase: 'non-arriva', perIlRapido: { at: 'A' }, motivo: 'HTTP 500 dal fornitore' }), { tipo: 'non-arriva', at: 'A', motivo: null }, 'un motivo fuori elenco non passa');
+  for (const storto of [{ fase: 'pronta', at: 'A' }, { fase: 'non-arriva' }, { fase: 'non-arriva', perIlRapido: { at: '' } }, { fase: 'non-arriva', perIlRapido: 'A' }, null]) {
+    assert.equal(evento(storto), null, JSON.stringify(storto));
+  }
+  const doc = creaDocumento(), colonna = doc.createElement('div');
+  const opzioni = (testo) => ({ sessionId: 's', document: doc, onMenu: () => {}, testo });
+  const voceRapida = { at: 'A', stato: 'riassunta', tokenPrima: 245_100, tokenDopo: 36_900, ripiego: true, ragione: 'in-arrivo' };
+  const row = aggiornaSeparatoreLegacy(colonna, voceRapida, opzioni(testoRigaCompattazione(voceRapida)));
+  const span = row.querySelector('[data-compattazione-testo]');
+  const toccata = rapidoNonArriva(colonna, 'A', { sessionId: 's', document: doc, onMenu: () => {} });
+  assert.equal(toccata, row, 'la stessa riga');
+  assert.equal(span.textContent, 'Compacted without the model · 245.1k → 36.9k');
+  assert.equal(span.title, percheRipiego(null), 'il perché generico, non più «sta arrivando»');
+  assert.equal(leggiVoceLegacy(row).ragione, null);
+  assert.equal(rapidoNonArriva(colonna, 'A', { sessionId: 's', document: doc, onMenu: () => {} }), null, 'una seconda volta non c\'è più niente da cambiare');
+  // AL CONTRARIO: una riga già migliorata, una ragione diversa, un at che non c'è — niente si tocca
+  const migliorata = aggiornaSeparatoreLegacy(colonna, { at: 'B', migliora: 'X', stato: 'riassunta', tokenPrima: 1_000, tokenDopo: 500, ripiego: false }, opzioni('m'));
+  assert.equal(rapidoNonArriva(colonna, 'B', { sessionId: 's', document: doc, onMenu: () => {} }), null);
+  assert.equal(migliorata.querySelector('[data-compattazione-testo]').textContent, 'm');
+  const tempo = aggiornaSeparatoreLegacy(colonna, { at: 'C', stato: 'riassunta', ripiego: true, ragione: 'tempo' }, opzioni('t'));
+  assert.equal(rapidoNonArriva(colonna, 'C', { sessionId: 's', document: doc, onMenu: () => {} }), null);
+  assert.equal(tempo.querySelector('[data-compattazione-testo]').textContent, 't');
+  assert.equal(rapidoNonArriva(colonna, 'Z', { sessionId: 's', document: doc, onMenu: () => {} }), null);
+  impostaLingua('it');
+});
+
+test('RIGA-VIVA-19 — il trascritto esportato tiene fuori gli eventi «preparata» del sottofondo (in chat non hanno una riga): niente JSON grezzo', () => {
+  for (const value of [{ fase: 'non-arriva', perIlRapido: { at: 'A' }, motivo: 'fallita' }, { fase: 'pronta', at: 'A', tokenPrima: 1, tokenDopo: 1 }, { fase: 'inizio', motivo: 'precalcolo' }, { compattato: false, motivo: 'inefficace' }]) {
+    assert.deepEqual(trascriviEventoInterno({ type: 'CUSTOM', name: 'talos.compattazione-preparata', value }, creaContestoTrascrizione()), { omesso: true }, JSON.stringify(value));
+  }
+});
+
+/*
+ * Contratto C5 («one line per compaction… the same separator updates») sulla strada del MOTORE del contesto, quella di serie delle
+ * conversazioni nuove, con la correlazione per LAVORO concordata con la CLI il 28/10/2026: il rapido nato da un «non pronto» ricorda il
+ * lavoro che scrive il riassunto (`lavoroDelMotore`), e solo la versione di QUEL lavoro lo migliora. La pausa di quel lavoro, o un
+ * lavoro diverso chiuso dopo la riga, lo fanno smettere di promettere. L'ordine è quello del giornale, lo stesso dal vivo e alla rigiocata.
+ */
+const ORA = (minuto) => `2026-10-28T09:${String(minuto).padStart(2, '0')}:00.000Z`;
+const versione = (versionId, { kind = 'context.version.committed', jobId = `j-${versionId}`, createdAt = ORA(30), sessionId = 's' } = {}) => ({ schema: 'talos.context.event.v1', id: `e-${versionId}-${kind}`, sessionId, jobId, versionId, kind, createdAt, payload: { coveredThrough: 40 } });
+const pausa = (jobId, createdAt = ORA(30)) => ({ schema: 'talos.context.event.v1', id: `c-${jobId}`, sessionId: 's', jobId, kind: 'context.compaction.cooling', state: 'failed', createdAt, payload: {} });
+const voceDelRapido = ({ at = ORA(10), lavoro = 'j-v1', ragione = 'in-arrivo' } = {}) => ({ at, stato: 'riassunta', tokenPrima: 245_100, tokenDopo: 36_900, ripiego: true, ragione, ...(lavoro ? { lavoroDelMotore: lavoro } : {}) });
+const rapido = (colonna, doc, opzioni = {}) => { const voce = voceDelRapido(opzioni); return aggiornaSeparatoreLegacy(colonna, voce, { sessionId: 's', document: doc, onMenu: () => {}, testo: testoRigaCompattazione(voce) }); };
+const testoDi = (row) => row.querySelector('[data-compattazione-testo]').textContent;
+const NON_ARRIVA = 'Compacted without the model · 245.1k → 36.9k';
+const inArrivo = () => testoRigaCompattazione(voceDelRapido()); // nella lingua del momento
+
+test('RIGA-VIVA-20 — strada del motore: la versione del lavoro che il rapido aspetta diventa quella riga, «migliorato dal modello» col «Vedi» del motore; l\'evento porta il lavoro; rigiocata e riconnessione non la raddoppiano né la riportano indietro', () => {
+  impostaLingua('en');
+  // l'evento del rapido porta il lavoro solo se è un testo corto e il riassunto è riuscito
+  const fine = (value) => interpretaEventoCompattazione({ type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'fine', at: 'A', tokenPrima: 10, tokenDopo: 5, ripiego: true, ragione: 'in-arrivo', ...value } });
+  assert.equal(fine({ compattato: true, lavoroDelMotore: 'job-1' }).lavoroDelMotore, 'job-1');
+  for (const storto of [{ compattato: true, lavoroDelMotore: 'x'.repeat(257) }, { compattato: true, lavoroDelMotore: '' }, { compattato: true, lavoroDelMotore: 7 }, { compattato: false, lavoroDelMotore: 'job-1' }, { compattato: true }]) {
+    assert.equal('lavoroDelMotore' in fine(storto), false, JSON.stringify(storto).slice(0, 80));
+  }
+  const doc = creaDocumento(), colonna = doc.createElement('div');
+  const aperte = [];
+  const row = rapido(colonna, doc);
+  assert.equal(row.dataset.compattazioneLavoro, 'j-v1', 'la riga ricorda il lavoro');
+  const delMotore = (eventi) => aggiornaSeparatoreContesto(colonna, eventi, { sessionId: 's', document: doc, onOpen: (e) => aperte.push(e.versionId) });
+  const [nodo] = delMotore([versione('v1')]);
+  assert.equal(nodo, row, 'la STESSA riga del rapido, non un secondo separatore');
+  assert.equal(colonna.querySelectorAll('[data-context-separator]').length, 1);
+  assert.equal(colonna.querySelectorAll('[data-compattazione-riga]').length, 1);
+  const span = row.querySelector('[data-compattazione-testo]');
+  assert.equal(span.textContent, 'Compaction improved by the model', 'il motore non dà i numeri: senza numeri, niente freccia');
+  assert.equal(span.title, '', 'niente più «sta arrivando»');
+  assert.equal(row.querySelector('[data-compattazione-menu]'), null, 'l\'annullo della compattazione semplice qui non vale: niente menu suo');
+  const vedi = row.querySelector('[data-context-apri]');
+  assert.ok(vedi, 'il «Vedi» del motore');
+  vedi.click();
+  assert.deepEqual(aperte, ['v1']);
+  // riconnessione: lo stesso rapido e la stessa versione di nuovo — una riga, migliorata
+  rapido(colonna, doc);
+  delMotore([versione('v1')]);
+  assert.equal(colonna.querySelectorAll('[data-compattazione-riga]').length, 1);
+  assert.equal(colonna.querySelectorAll('[data-context-separator]').length, 1);
+  assert.equal(span.textContent, 'Compaction improved by the model');
+  // AL CONTRARIO: la versione di un altro lavoro, senza un rapido che la aspetti, è il separatore di sempre
+  const [altro] = delMotore([versione('v2')]);
+  assert.notEqual(altro, row);
+  assert.equal(colonna.querySelectorAll('[data-context-separator]').length, 2);
+  assert.equal(span.textContent, 'Compaction improved by the model', 'la riga già migliorata non si tocca');
+  impostaLingua('it');
+});
+
+test('RIGA-VIVA-21 (verso contrario) — non si unisce né si chiude: un ripristino, un rapido senza lavoro (la compattazione semplice da sola), un lavoro diverso più VECCHIO della riga o senza ora, un rapido che non arriva più, un\'altra ragione, un\'altra conversazione', () => {
+  impostaLingua('en');
+  const doc = creaDocumento();
+  const prova = (preparaRiga, evento) => {
+    const colonna = doc.createElement('div');
+    const row = preparaRiga(colonna);
+    const nodi = aggiornaSeparatoreContesto(colonna, [evento], { sessionId: 's', document: doc, onOpen: () => {} });
+    return { unita: nodi.includes(row), testo: testoDi(row), attende: row.dataset.compattazioneRipiego === 'in-arrivo' };
+  };
+  const inAttesa = { unita: false, testo: inArrivo(), attende: true };
+  const conLavoro = (colonna) => rapido(colonna, doc);
+  assert.deepEqual(prova(conLavoro, versione('v1', { kind: 'context.version.restored' })), inAttesa, 'un ripristino non è il riassunto atteso');
+  assert.deepEqual(prova((colonna) => rapido(colonna, doc, { lavoro: null }), versione('v1')), inAttesa, 'senza lavoro la riga aspetta il suo `migliora`, non il motore');
+  assert.deepEqual(prova(conLavoro, versione('v9', { createdAt: ORA(5) })), inAttesa, 'un lavoro diverso chiuso PRIMA della riga (consegnato in ritardo) non la chiude');
+  assert.deepEqual(prova(conLavoro, versione('v9', { createdAt: ORA(10) })), inAttesa, 'alla stessa ora nemmeno');
+  assert.deepEqual(prova(conLavoro, versione('v9', { createdAt: 'non è un\'ora' })), inAttesa, 'senza un\'ora leggibile nemmeno');
+  assert.deepEqual(prova(conLavoro, pausa('j-v9', ORA(5))), inAttesa, 'la pausa più vecchia di un altro lavoro nemmeno');
+  const nonArrivato = (colonna) => { const r = rapido(colonna, doc); rapidoNonArriva(colonna, ORA(10), { sessionId: 's', document: doc, onMenu: () => {} }); return r; };
+  assert.deepEqual(prova(nonArrivato, versione('v1')), { unita: false, testo: NON_ARRIVA, attende: false }, 'il rapido che non aspetta più niente resta com\'è');
+  const tempo = (colonna) => aggiornaSeparatoreLegacy(colonna, voceDelRapido({ ragione: 'tempo' }), { sessionId: 's', document: doc, onMenu: () => {}, testo: 'tempo' });
+  assert.deepEqual(prova(tempo, versione('v1')), { unita: false, testo: 'tempo', attende: false });
+  assert.deepEqual(prova(conLavoro, versione('v1', { sessionId: 'altra' })), inAttesa);
+  impostaLingua('it');
+});
+
+test('RIGA-VIVA-22 — chi smette di promettere: due righe sullo stesso lavoro (si migliora l\'ultima), la pausa di quel lavoro, un lavoro diverso chiuso dopo la riga, la riga staccata con un turno vecchio; il menu resta; la riconnessione ridice lo stesso', () => {
+  impostaLingua('en');
+  const doc = creaDocumento();
+  const opzioni = (extra = {}) => ({ sessionId: 's', document: doc, onOpen: () => {}, legacy: { onMenu: () => {} }, ...extra });
+  // (1) due rapidi sullo stesso lavoro: la versione migliora l'ULTIMO, il primo smette di promettere e tiene il suo menu (le opzioni della riga)
+  let colonna = doc.createElement('div');
+  const primo = rapido(colonna, doc, { at: ORA(10) }), secondo = rapido(colonna, doc, { at: ORA(20) });
+  assert.ok(primo.querySelector('[data-compattazione-menu]'), 'il rapido ha il suo menu (annulla)');
+  let nodi = aggiornaSeparatoreContesto(colonna, [versione('v1')], opzioni());
+  assert.deepEqual(nodi, [secondo]);
+  assert.equal(testoDi(secondo), 'Compaction improved by the model');
+  assert.equal(testoDi(primo), NON_ARRIVA);
+  assert.equal(primo.dataset.compattazioneRipiego, '', 'non aspetta più');
+  assert.ok(primo.querySelector('[data-compattazione-menu]'), 'chiusa con le opzioni della riga: l\'annullo resta');
+  assert.equal(colonna.querySelectorAll('[data-compattazione-riga]').length, 2);
+  // riconnessione: i due rapidi e la versione di nuovo — stesse due righe, stesse parole
+  rapido(colonna, doc, { at: ORA(10) }); rapido(colonna, doc, { at: ORA(20) });
+  assert.equal(testoDi(primo), inArrivo(), '(la rigiocata del rapido lo riarma…)');
+  aggiornaSeparatoreContesto(colonna, [versione('v1')], opzioni());
+  assert.equal(testoDi(primo), NON_ARRIVA, '…e la versione lo richiude');
+  assert.equal(testoDi(secondo), 'Compaction improved by the model');
+  assert.equal(colonna.querySelectorAll('[data-compattazione-riga]').length, 2);
+  assert.equal(colonna.querySelectorAll('[data-context-separator]').length, 1);
+  // (2) la pausa di quel lavoro: non arriverà; la riga della pausa c'è come sempre. Anche con un'ora PRIMA della riga: il lavoro può
+  //     fallire mentre il rapido si sta ancora scrivendo, e conta il lavoro, non l'ora
+  colonna = doc.createElement('div');
+  const inPausa = rapido(colonna, doc);
+  nodi = aggiornaSeparatoreContesto(colonna, [pausa('j-v1', ORA(9))], opzioni());
+  assert.equal(testoDi(inPausa), NON_ARRIVA);
+  assert.equal(nodi.length, 1); assert.notEqual(nodi[0], inPausa, 'la riga «riassunto non riuscito» resta la sua');
+  // (3) un lavoro diverso chiuso DOPO la riga: quello atteso non arriverà più (il motore non tiene due lavori in volo)
+  colonna = doc.createElement('div');
+  const superata = rapido(colonna, doc);
+  nodi = aggiornaSeparatoreContesto(colonna, [versione('v2', { createdAt: ORA(12) })], opzioni());
+  assert.equal(testoDi(superata), NON_ARRIVA);
+  assert.equal(nodi.length, 1); assert.notEqual(nodi[0], superata, 'la versione dell\'altro lavoro ha il suo separatore');
+  // ⛔ AL CONTRARIO (CLI 28/10, condizione 1 dell'aggancio): la PAUSA di un altro lavoro, anche dopo la riga, no — la riga può essere
+  //    passata a un lavoro nuovo, e il fallimento di quello vecchio non la riguarda
+  colonna = doc.createElement('div');
+  const dopoPausa = rapido(colonna, doc);
+  aggiornaSeparatoreContesto(colonna, [pausa('j-v2', ORA(12))], opzioni());
+  assert.equal(testoDi(dopoPausa), inArrivo());
+  assert.equal(dopoPausa.dataset.compattazioneRipiego, 'in-arrivo', 'aspetta ancora il suo lavoro');
+  // (4) le righe STACCATE con un turno vecchio: si decidono dove sono, senza un doppione in fondo alla colonna
+  colonna = doc.createElement('div');
+  const turno = doc.createElement('div');
+  const vecchia = rapido(turno, doc, { at: ORA(10) }), staccata = rapido(turno, doc, { at: ORA(20) });
+  vecchia.remove(); staccata.remove();
+  nodi = aggiornaSeparatoreContesto(colonna, [versione('v1')], opzioni({ staccati: () => [vecchia, staccata] }));
+  assert.deepEqual(nodi, [staccata]);
+  assert.equal(testoDi(staccata), 'Compaction improved by the model');
+  assert.equal(testoDi(vecchia), NON_ARRIVA);
+  assert.equal(colonna.querySelectorAll('[data-compattazione-riga]').length, 0, 'nessuna riga riappesa né raddoppiata');
+  assert.equal(colonna.querySelectorAll('[data-context-separator]').length, 0);
+  impostaLingua('it');
+});
+
+/*
+ * P4 (owner 28/10/2026, «Rapido subito, il modello dopo»; forma approvata dalla CLI): il rapido del posto unico nasce SENZA lavoro (nel
+ * giro il motore non ne avvia nessuno); a fine giro il registro lega la riga al lavoro del motore con un evento durevole
+ * (`talos.compattazione-preparata`, `fase:'lavoro-del-motore'`, `perIlRapido:{at}`, `jobId`), prima di aspettarlo. Le condizioni della
+ * CLI: vince l'ultimo legame (il primo tentativo ha ceduto, il secondo ha un altro id); una riga già chiusa resta chiusa; senza la riga
+ * in pagina, niente.
+ */
+test('RIGA-VIVA-23 — il legame del rapido al lavoro del motore: vince l\'ultimo, una riga chiusa resta chiusa, senza riga niente; legata, la versione di quel lavoro la migliora', () => {
+  impostaLingua('en');
+  const legame = (value) => interpretaEventoCompattazione({ type: 'CUSTOM', name: 'talos.compattazione-preparata', value: { fase: 'lavoro-del-motore', perIlRapido: { at: ORA(10) }, ...value } });
+  assert.deepEqual(legame({ jobId: 'job-1' }), { tipo: 'lavoro-del-motore', at: ORA(10), jobId: 'job-1' });
+  assert.equal(legame({ jobId: 'x'.repeat(257) }), null, 'un id storto non lega');
+  assert.equal(legame({ jobId: '' }), null);
+  assert.equal(legame({ jobId: 'job-1', perIlRapido: {} }), null, 'senza il rapido, niente');
+  const doc = creaDocumento();
+  const opzioni = (extra = {}) => ({ sessionId: 's', document: doc, onOpen: () => {}, legacy: { onMenu: () => {} }, ...extra });
+  // nato senza lavoro: la versione di un lavoro qualunque non lo tocca (e non lo chiude: niente da confrontare)
+  let colonna = doc.createElement('div');
+  const riga = rapido(colonna, doc, { lavoro: null });
+  assert.equal(riga.dataset.compattazioneLavoro, undefined);
+  // vince l'ultimo legame
+  assert.equal(legaRapidoAlLavoro(colonna, ORA(10), 'j-v1', { sessionId: 's' }), riga);
+  assert.equal(legaRapidoAlLavoro(colonna, ORA(10), 'j-v2', { sessionId: 's' }), riga);
+  assert.equal(riga.dataset.compattazioneLavoro, 'j-v2');
+  // la versione del lavoro legato la migliora (quella del primo, ceduto, non arriva mai: non c'è)
+  const nodi = aggiornaSeparatoreContesto(colonna, [versione('v2', { createdAt: ORA(9) })], opzioni());
+  assert.deepEqual(nodi, [riga]);
+  assert.equal(testoDi(riga), 'Compaction improved by the model');
+  assert.equal(legaRapidoAlLavoro(colonna, ORA(10), 'j-v9', { sessionId: 's' }), null, 'una riga migliorata non si rilega');
+  assert.equal(riga.dataset.compattazioneLavoro, 'j-v2');
+  // ⛔ AL CONTRARIO: una riga già chiusa («non arriva») resta chiusa — un legame tardivo non la riapre
+  colonna = doc.createElement('div');
+  const chiusa = rapido(colonna, doc, { lavoro: null });
+  rapidoNonArriva(colonna, ORA(10), { sessionId: 's', document: doc, onMenu: () => {} });
+  assert.equal(testoDi(chiusa), NON_ARRIVA);
+  assert.equal(legaRapidoAlLavoro(colonna, ORA(10), 'j-v3', { sessionId: 's' }), null);
+  assert.equal(chiusa.dataset.compattazioneLavoro, undefined);
+  aggiornaSeparatoreContesto(colonna, [versione('v3', { createdAt: ORA(9) })], opzioni());
+  assert.equal(testoDi(chiusa), NON_ARRIVA, 'e la versione di quel lavoro non la promuove');
+  assert.equal(legaRapidoAlLavoro(doc.createElement('div'), ORA(10), 'j-v4', { sessionId: 's' }), null, 'senza riga in pagina: niente');
+  assert.equal(legaRapidoAlLavoro(colonna, ORA(10), 'j-v4', { sessionId: 'altra' }), null, 'la riga di un\'altra conversazione: niente');
+  // la riga staccata con un turno vecchio si lega dov'è
+  colonna = doc.createElement('div');
+  const staccata = rapido(doc.createElement('div'), doc, { lavoro: null });
+  assert.equal(legaRapidoAlLavoro(colonna, ORA(10), 'j-v5', { sessionId: 's', staccato: (chiave) => (chiave === staccata.dataset.compattazioneRiga ? staccata : null) }), staccata);
+  assert.equal(staccata.dataset.compattazioneLavoro, 'j-v5');
+  impostaLingua('it');
 });
 
 /* ------------------------------------------------------------------ owner 27/10/2026: il contatore dei secondi nella riga */

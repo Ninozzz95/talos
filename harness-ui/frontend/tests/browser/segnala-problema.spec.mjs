@@ -25,7 +25,7 @@ for (const modo of ['dark', 'light']) {
         window.open = (url) => { window.__aperti.push(String(url)); return null; };
         try { Object.defineProperty(navigator, 'clipboard', { value: { writeText: async (t) => { window.__copiato = t; } }, configurable: true }); } catch { /* sola lettura */ }
       }, modo);
-      await page.route('**/api/v1/sessions/segnala-proof-*/events', () => { /* aperto e muto */ });
+      await page.route('**/api/v1/sessions/segnala-proof-*/events*', () => { /* aperto e muto */ });
       await page.route('**/api/v1/diagnostica-segnalazione**', async (route) => {
         diagnostiche.push(new URL(route.request().url()).search);
         return route.fulfill({ contentType: 'application/json', body: INVOLUCRO(DIAGNOSTICA) });

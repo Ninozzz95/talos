@@ -68,16 +68,18 @@ export function validaDecisionePiano(body) {
  * cambiato (modo e permesso) e che cosa fare adesso. Per «procedi» il piano approvato è già nella conversazione (è l'argomento
  * della chiamata): l'esito non lo ripete, lo nomina con revisione e impronta (decisione 38).
  */
-export function esitoPianoPerIlModello(scelta) {
+export function esitoPianoPerIlModello(scelta, { conPassi = false } = {}) {
+  /* FE-008: i Passi nascono dal Piano, ma li scrive il modello: il Markdown del piano non si legge */
+  const passi = conPassi ? " Then call steps_update with the plan's steps." : '';
   const rev = Number.isSafeInteger(scelta?.revision) ? ` revision ${scelta.revision}` : '';
   const impronta = typeof scelta?.hash === 'string' ? ` (${scelta.hash.slice(0, 19)}…)` : '';
   switch (scelta?.decisione) {
     case 'procedi-con-conferma':
       return `The user approved plan${rev}${impronta}. You are now in Normal mode: every write will ask the user for confirmation. `
-        + 'Implement the approved plan now, step by step, and say which step you are on.';
+        + `Implement the approved plan now, step by step, and say which step you are on.${passi}`;
     case 'procedi-accetta-modifiche':
       return `The user approved plan${rev}${impronta}. You are now in Normal mode and may write in the project without asking. `
-        + 'Implement the approved plan now, step by step, and say which step you are on.';
+        + `Implement the approved plan now, step by step, and say which step you are on.${passi}`;
     case 'conversazione-pulita':
       return `The user approved plan${rev}${impronta} and moved its implementation to a new, clean conversation. `
         + 'Do not implement it here: reply with one short sentence and stop.';

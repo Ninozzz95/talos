@@ -76,7 +76,7 @@ test('CHI-03 la rotta chiude anche i terminali di QUELLA sessione; dal telefono 
     elenca: (sid) => ({ items: [...terminali].filter(([, s]) => s === sid).map(([terminalId]) => ({ terminalId, sessionId: sid })) }),
     chiudi: ({ sessionId, terminalId }) => (terminali.get(terminalId) === sessionId ? (terminali.delete(terminalId), { ok: true }) : { erroreAvvio: 'x', code: 'NOT_FOUND' }),
   };
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry, terminalRegistry });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry, terminalRegistry });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   const operazioni = creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata });
   const contesto = { dispositivo: { id: 'd-1', nome: 'Pad di Nino' }, iscrizioni: new Map(), iscrivi: () => async () => {} };

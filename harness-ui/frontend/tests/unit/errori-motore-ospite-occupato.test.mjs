@@ -9,8 +9,11 @@ import { messaggioDelKernelNellaLingua } from '../../src/components/errori.js';
 import { impostaLingua } from '../../src/components/lingua.js';
 
 const inInglese = (f) => { impostaLingua('en'); try { return f(); } finally { impostaLingua('it'); } };
+/* ⛔ L'inglese è la frase ESATTA del nucleo (`src/accesso-locale-ospite.mjs:161`, LOCAL_ENGINE_BUSY): la pagina la riconosce
+   confrontandola, quindi resta quella finché il nucleo (condiviso con CLI e telefono) non la cambia. «Compattazione» (owner 31/10)
+   tocca solo l'italiano a schermo. */
 const NUOVA_EN = 'The on-device model is busy with another job (a chat reply or a context summary); try again when it has finished.';
-const NUOVA_IT = 'Il modello sul dispositivo è occupato con un altro lavoro (una risposta nella chat o un riassunto del contesto); riprova quando ha finito.';
+const NUOVA_IT = 'Il modello sul dispositivo è occupato con un altro lavoro (una risposta nella chat o una compattazione del contesto); riprova quando ha finito.';
 
 test('OSPITE-OCCUPATO-01 la frase neutra del motore occupato si legge nelle due lingue', () => {
   impostaLingua('it');

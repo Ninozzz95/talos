@@ -31,6 +31,14 @@ async function aspetta(condizione, cosa) {
   while (Date.now() < fino) { if (condizione()) return; await new Promise((r) => setTimeout(r, 5)); }
   assert.fail(`mai successo: ${cosa}`);
 }
+/* Decisione 198 (owner 04/11): come `conversazioneFerma`, ma il primo giro lo ferma la persona (Stop): dopo, la ripresa SENZA messaggio
+   nuovo (il ▶) parte; dopo un giro finito bene è rifiutata (`nothing-to-resume`). */
+async function conversazioneFermataDallaPersona({ registro, giri }) {
+  const { sessionId } = registro.avvia('task-vero');
+  giri.at(-1).fallisci('fermato', [{ role: 'system', content: 's' }, { role: 'user', content: 'c' }, { role: 'assistant', content: 'r1' }]);
+  await passo();
+  return sessionId;
+}
 const riposa = async () => { for (let i = 0; i < 20; i += 1) { await passo(); await new Promise((r) => setTimeout(r, 10)); } };
 function scrive(giro, cartella, nome, testo) {
   writeFileSync(join(cartella, nome), testo);
@@ -69,9 +77,12 @@ test('G6-RIV-01 CONTROLLO — in Piano: goal_update e goal_create non offerti, e
 
 test('G6-REV-02 (S3) — durante un giro non aperto dalla persona, la persona scrive «pause the goal» (coda, dallaPersona): il modello la riceve, ma la pausa è rifiutata', async (t) => conStore(t, async (cartellaStore) => {
   const b = registroAGiri(cartellaStore, { modello: 'z-ai/glm-5.3-flash' });
-  const sessionId = await conversazioneFerma(b);
+  const sessionId = await conversazioneFermataDallaPersona(b);
   await b.registro.impostaObiettivo(sessionId, 'make the tests pass');
-  b.registro.resume(sessionId, null, []); // un giro che riparte senza un messaggio della persona (come un avviso del ciclo)
+  /* decisione 198 (owner 04/11, 82db48a2f): dopo un giro FINITO la ripresa senza messaggio nuovo è rifiutata (`nothing-to-resume`);
+     il giro non aperto dalla persona riparte dopo uno Stop, l'unico modo (con errore e interruzione) in cui oggi riparte senza testo */
+  const ripresa = b.registro.resume(sessionId, null, []); // un giro che riparte senza un messaggio della persona (come un avviso del ciclo)
+  assert.ok(!ripresa?.erroreAvvio, `premessa: la ripresa senza messaggio nuovo parte (${JSON.stringify(ripresa)?.slice(0, 160)})`);
   await passo();
   const input = b.giri.at(-1).input;
   assert.equal(typeof input.onObiettivoFn, 'function', 'premessa: la conversazione principale ha la porta');
@@ -316,9 +327,12 @@ test('G6-REV-05 (S5) — «complete» detto, poi l\'obiettivo va in pausa: alla 
 
 test('G6-RIV-10 CONTROLLO — una voce di coda NON della persona (il risultato di una figlia) consegnata a metà giro non apre il giro della persona', async (t) => conStore(t, async (cartellaStore) => {
   const b = registroAGiri(cartellaStore, { modello: 'z-ai/glm-5.3-flash', preparaEsecuzioneFn: () => ({ cartella: cartellaStore, comandoProva: 'npm test', task: { id: 'task-vero', consegna: 'c' } }) });
-  const sessionId = await conversazioneFerma(b);
+  const sessionId = await conversazioneFermataDallaPersona(b);
   await b.registro.impostaObiettivo(sessionId, 'make the tests pass');
-  b.registro.resume(sessionId, null, []); // un giro non aperto dalla persona
+  /* decisione 198 (owner 04/11, 82db48a2f): dopo un giro FINITO la ripresa senza messaggio nuovo è rifiutata (`nothing-to-resume`);
+     il giro non aperto dalla persona riparte dopo uno Stop, l'unico modo (con errore e interruzione) in cui oggi riparte senza testo */
+  const ripresa = b.registro.resume(sessionId, null, []); // un giro non aperto dalla persona
+  assert.ok(!ripresa?.erroreAvvio, `premessa: la ripresa senza messaggio nuovo parte (${JSON.stringify(ripresa)?.slice(0, 160)})`);
   await passo();
   const madre = b.giri.at(-1);
   const figlia = await madre.input.onDelega('Read the files and summarise them.', undefined, { modalita: 'lettura' });

@@ -17,6 +17,15 @@ import { stimaTokenConversazione as stima } from '../src/kernel/talosHarness.mjs
 import * as compattazione from '../src/kernel/compattazione-desktop.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+import { attendiFigliSullaCartella } from './aiuto/attendi-figli-sulla-cartella.mjs';
+
+/*
+ * S2-2-CONTA-01 rossa SOLO sotto carico (suite del blocco 30/10/2026: EPERM nella pulizia, verde 3/3 da sola). Misurato con una sonda:
+ * appena finito il giro c'è ancora un `git -C <cartella di prova>` vivo, lanciato dalla preparazione del riassunto IN SOTTOFONDO
+ * (talosHarness.desktop-hotfix.mjs, `bloccoFattiPer` → `costruisciBloccoFatti`), che per scelta non ferma il giro; 1,5 s dopo non
+ * c'è più. Su Windows una cartella che è la directory corrente di un processo non si cancella. ⇒ Prima di pulire si aspetta
+ * l'EVENTO vero (aiuto/attendi-figli-sulla-cartella.mjs, comune dal 03/11/2026) — nessun processo figlio che lavora su quella cartella — non un tempo (regola dell'owner del 30/10).
+ */
 
 const storia = (coppie, lunghezza = 420) => Array.from({ length: coppie }, (_, i) => [
   { role: 'user', content: `Domanda ${i}: ${'parola '.repeat(lunghezza / 7)}` },
@@ -54,16 +63,25 @@ async function giroInEmergenza(t, { testoRiassunto, istantanea }) {
   return { r, eventi, conti, primaStimata: stima(messaggiIniziali) };
 }
 
+/* ⛔ 28/10/2026 (C-4, contratto C1 «mai aspettare»): trasformate. All'emergenza il riassunto pagato non si fa più DENTRO il giro: la
+   richiesta parte subito col riassunto senza modello (una riga, compattata, ragione 'in-arrivo') e quello del modello si prepara in
+   sottofondo. La guardia S2-2 vale lì, al suo arrivo: un riassunto che fa CRESCERE il contesto non diventa `pronta`, si dice «inefficace»
+   (`compattazione-preparata`, compattato:false) e non sostituisce il rapido (nessuna riga `migliora`). Restano: un riassunto solo, e la
+   richiesta non porta il riassunto gonfio. Prima la riga della richiesta ERA l'«inefficace», e nessun record si applicava. */
 for (const istantanea of [false, true]) {
   test(`S2-2-GIRO-01${istantanea ? 'b' : 'a'} — emergenza nel giro${istantanea ? ' (istantanea accesa)' : ''}: un riassunto che fa CRESCERE il contesto non si applica, si dice «inefficace» e la richiesta parte com'era`, async (t) => {
     const { r, eventi, conti, primaStimata } = await giroInEmergenza(t, { testoRiassunto: `## Riassunto\n${'dettaglio '.repeat(9000)}`, istantanea });
     assert.ok(r, 'il giro finisce');
+    assert.equal(await r.compattazioneInPreparazione, null, 'il riassunto cresciuto non arriva come riassunto pronto');
+    assert.equal(r.compattazionePronta, null);
     assert.equal(conti.riassunti, 1, 'un riassunto solo: dopo un tentativo inefficace non si ripaga nel giro');
     const fine = eventi.filter((e) => e.tipo === 'compattazione-fine');
-    assert.equal(fine.length, 1, JSON.stringify(eventi.map((e) => [e.tipo, e.motivo])));
-    assert.equal(fine[0].compattato, false);
-    assert.equal(fine[0].motivo, 'inefficace');
-    assert.ok(!eventi.some((e) => e.tipo === 'compattazione-fine' && e.record), 'nessun record applicato');
+    assert.equal(fine.length, 1, JSON.stringify(eventi.map((e) => [e.tipo, e.motivo, e.fase])));
+    assert.deepEqual([fine[0].compattato, fine[0].ripiego, fine[0].ragione], [true, true, 'in-arrivo'], 'la richiesta parte subito col riassunto senza modello');
+    const inefficace = eventi.filter((e) => e.tipo === 'compattazione-preparata' && e.compattato === false && e.motivo === 'inefficace');
+    assert.equal(inefficace.length, 1, `il riassunto cresciuto si dice «inefficace» al suo arrivo (${JSON.stringify(eventi.map((e) => [e.tipo, e.motivo, e.fase]))})`);
+    assert.ok(!eventi.some((e) => e.tipo === 'compattazione-preparata' && e.fase === 'pronta'), 'e non si annuncia pronto');
+    assert.ok(!eventi.some((e) => e.migliora), 'e non sostituisce il rapido');
     assert.ok(conti.richieste[0] <= primaStimata + 1_000, `la richiesta non porta il riassunto gonfio (${conti.richieste[0]} contro ${primaStimata})`);
   });
 }
@@ -150,7 +168,7 @@ test('S2-2-CONTA-01 — emergenza con riassunti che non riducono, cinque richies
   process.env[compattazione.VARIABILE_TETTO_TOKEN] = '4000';
   t.after(() => { if (vecchio === undefined) delete process.env[compattazione.VARIABILE_TETTO_TOKEN]; else process.env[compattazione.VARIABILE_TETTO_TOKEN] = vecchio; });
   const cartella = cartellaDiProva('talos-s2-2-conta-');
-  t.after(() => rimuoviCartellaDiProva(cartella));
+  t.after(async () => { await attendiFigliSullaCartella(cartella); rimuoviCartellaDiProva(cartella); });
   for (let i = 1; i <= 4; i += 1) writeFileSync(join(cartella, `f${i}.txt`), 'x\n');
   const conti = { riassunti: 0, modello: 0 };
   const fetchDiRete = async (_u, o) => {
@@ -218,11 +236,16 @@ test('S2-2-UNA-IMMAGINE-01 — una sola immagine piccola nella sessione NON speg
   };
   const img = { role: 'user', content: [{ type: 'text', text: 'logo' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } }] };
   const iniziali = [img, { role: 'assistant', content: 'ok' }, ...storia(coppiePer(6500)), { role: 'user', content: 'Adesso continua' }];
+  /* ⛔ 28/10/2026 (C-4, contratto C1): come S2-2-GIRO-01, il riassunto pagato arriva in sottofondo e la guardia vale al suo arrivo —
+     prima la riga della richiesta era l'«inefficace»; ora è il rapido 'in-arrivo', e l'«inefficace» lo dice la preparazione */
   const eventi = [];
-  await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: iniziali,
-    contestoDelProgetto: 'Project files:\n', fetchDiRete, onGiro: (e) => { if (e?.tipo === 'compattazione-fine') eventi.push(e); } });
-  assert.equal(eventi[0]?.compattato, false, JSON.stringify(eventi.map((e) => [e.compattato, e.motivo])));
-  assert.equal(eventi[0]?.motivo, 'inefficace');
+  const r = await talosLavora({ cartella, modello: 'z-ai/glm-5.3-flash', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: iniziali,
+    contestoDelProgetto: 'Project files:\n', fetchDiRete, onGiro: (e) => { if (e?.tipo === 'compattazione-fine' || e?.tipo === 'compattazione-preparata') eventi.push(e); } });
+  assert.equal(await r.compattazioneInPreparazione, null, 'il riassunto cresciuto non arriva come riassunto pronto');
+  const racconto = JSON.stringify(eventi.map((e) => [e.tipo, e.compattato, e.motivo, e.fase, e.ragione]));
+  assert.equal(eventi.find((e) => e.tipo === 'compattazione-fine')?.ragione, 'in-arrivo', racconto);
+  assert.ok(eventi.some((e) => e.tipo === 'compattazione-preparata' && e.compattato === false && e.motivo === 'inefficace'), racconto);
+  assert.ok(!eventi.some((e) => e.fase === 'pronta' || e.migliora), racconto);
   assert.ok(conti.richieste[0] <= stima(iniziali) + 1_000, `la richiesta non porta il riassunto gonfio (${conti.richieste[0]})`);
 });
 
@@ -256,11 +279,18 @@ test('S2-2-FIRMA-PREPARAZIONE-01 — all\'emergenza il giro non aspetta la SUA p
   assert.ok(pronta, 'premessa: un riassunto pronto più vecchio');
   let riassunti = 0;
   let modello = 0;
+  let preparazioneArrivata = false;
+  /* la preparazione lenta aspetta un CANCELLO che la prova apre appena il giro torna (revisione della CLI, 03/11); la riserva di 10 s
+     la lascia andare se il giro la aspetta: allora arriva lei per prima e la prova è rossa */
+  let apriCancello;
+  const cancello = new Promise((ok) => { apriCancello = ok; });
+  const riserva = setTimeout(() => apriCancello(), 10_000);
+  t.after(() => { clearTimeout(riserva); apriCancello(); });
   const r1 = async (_u, o) => {
     const corpo = JSON.parse(o.body);
     if (!corpo.tools?.length) {
       riassunti += 1;
-      if (riassunti === 1) await new Promise((ok) => { setTimeout(ok, 3_000); });
+      if (riassunti === 1) { await cancello; preparazioneArrivata = true; }
       return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: '## Riassunto\nbreve.' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
     }
     modello += 1;
@@ -275,20 +305,35 @@ test('S2-2-FIRMA-PREPARAZIONE-01 — all\'emergenza il giro non aspetta la SUA p
     /* 28/10: 45 e non 60 — la scena sta su un confine di token (base: buona fino a 70, cade da 75; con la riga di lingua fra 57 e 63) */
     messaggiIniziali: [...uno.messaggiFinali, { role: 'user', content: `Leggi f1 e f2. ${'contesto '.repeat(45)}` }],
     compattazioneIstantanea: true, compattazionePronta: pronta, contestoDelProgetto: 'Project files:\n', fetchDiRete: r1, permessi: 'Full access' });
+  const arrivataPrimaDelGiro = preparazioneArrivata;
+  apriCancello();
   assert.ok(riassunti >= 1, 'premessa: la preparazione è partita');
-  assert.ok(Date.now() - inizio < 1_500, `il giro non ha aspettato la preparazione che non vale più (${Date.now() - inizio} ms; prima ~3.051)`);
+  /* 03/11/2026, regola 6 della velocità: «< 1.500 ms» misurava la macchina; sotto il carico della coda il giro sano ci stava stretto.
+     Si guarda l'ORDINE, non l'orologio (come Hermes, tests/agent/test_periodic_scheduler.py:25, che confronta i conteggi invece dei
+     tempi): il giro deve finire PRIMA che arrivi la preparazione lenta. Se la aspettasse, arriverebbe sempre prima lei, a ogni carico. */
+  assert.equal(arrivataPrimaDelGiro, false, `il giro non ha aspettato la preparazione che non vale più (${Date.now() - inizio} ms; prima ~3.051)`);
 });
 
 /* Terza passata avversaria (22/10/2026), R1 e R2: dopo una base adottata all'emergenza, il resto (a) riesce, (b) è «inefficace»,
    (c) fallisce con un 500. In tutti e tre: UNA riga per la richiesta, nessun «non compattato» accanto a un «compattato», e la riga
    parte dal numero della richiesta (sopra l'emergenza), non da quello della base. Sonda `p3-n3` del revisore, diventata prova. */
+/* ⛔ 28/10/2026 — contratto C1, owner 27/10/2026, «Sì, mai aspettare». Due cose cambiano qui, e le altre restano:
+   - il riassunto ereditato arrivava DOPO 300 ms e il giro lo aspettava: ora non lo aspetta più (e senza attesa la base non c'è). La base
+     all'emergenza si adotta ancora quando il riassunto è già ARRIVATO, ed è quella la strada che porta oggi l'intento: l'ereditato arriva
+     subito (promessa già risolta) — la scena è la stessa, senza l'attesa;
+   - il RESTO dopo la base non è più un riassunto pagato dentro il giro: è il riassunto senza modello (`in-arrivo`), e quello del modello
+     va in sottofondo. Le tre varianti del riassuntore (riuscito, «inefficace», 500) non toccano più la riga della richiesta: per tutte e
+     tre la riga copre anche il resto (`conResto`), non porta un perché del resto (la parte «resto non riuscito sulla riga della base» è
+     SUPERATA dal contratto C1), e conta una compattazione.
+   Restano uguali: UNA riga per la richiesta, compattata, che parte dal numero della richiesta, con l'`at` e l'origine del record adottato,
+   e il conto del risultato uguale alle righe. */
 for (const caso of ['resto-riuscito', 'resto-inefficace', 'resto-500']) {
   test(`S2-2-BASE-RIGA-01 ${caso} — base adottata all'emergenza: una riga sola per la richiesta, che parte dal suo numero`, async (t) => {
     const vecchio = process.env[compattazione.VARIABILE_TETTO_TOKEN];
     process.env[compattazione.VARIABILE_TETTO_TOKEN] = '4000';
     t.after(() => { if (vecchio === undefined) delete process.env[compattazione.VARIABILE_TETTO_TOKEN]; else process.env[compattazione.VARIABILE_TETTO_TOKEN] = vecchio; });
     const cartella = cartellaDiProva('talos-s2-2-base-riga-');
-    t.after(() => rimuoviCartellaDiProva(cartella));
+    t.after(async () => { await attendiFigliSullaCartella(cartella); rimuoviCartellaDiProva(cartella); });
     for (let i = 1; i <= 4; i += 1) writeFileSync(join(cartella, `g${i}.txt`), `${'riga lunga del file '.repeat(400)}\n`);
     const testo = (contenuto) => Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: contenuto }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 10 } });
     const r0 = async (_u, o) => { const corpo = JSON.parse(o.body); if (!corpo.tools?.length) return testo(`## Riassunto\n${'Dettaglio. '.repeat(20)}`); return Response.json({ choices: [{ index: 0, message: { role: 'assistant', content: 'fatto' }, finish_reason: 'stop' }], usage: { prompt_tokens: stima(corpo.messages), completion_tokens: 1 } }); };
@@ -302,7 +347,8 @@ for (const caso of ['resto-riuscito', 'resto-inefficace', 'resto-500']) {
     /* come lo consegna il registro (`perIlGiro`): già annunciato da lui — col resto riuscito (conta 1) e col resto in errore (conta 0);
        l'«inefficace» riceve quello preparato da un giro */
     const daFineGiro = caso !== 'resto-inefficace';
-    const inArrivo = Object.assign(new Promise((ok) => { setTimeout(() => ok(daFineGiro ? { ...pronta, origine: 'fine-giro' } : pronta), 300).unref(); }),
+    /* 28/10/2026 (contratto C1): già arrivato quando il giro parte — prima arrivava dopo 300 ms e il giro lo aspettava */
+    const inArrivo = Object.assign(Promise.resolve(daFineGiro ? { ...pronta, origine: 'fine-giro' } : pronta),
       { firma: { coveredThrough: pronta.record.coveredThrough, impronta: pronta.impronta, base: pronta.base } });
     let modello = 0;
     const r1 = async (_u, o) => {
@@ -324,7 +370,7 @@ for (const caso of ['resto-riuscito', 'resto-inefficace', 'resto-500']) {
          fra la base e la richiesta ne fanno un tratto vecchio vero. */
       messaggiIniziali: [...uno.messaggiFinali, ...storia(4, 2_800), { role: 'user', content: `Leggi g1-g4. ${'contesto '.repeat(350)}` }],
       compattazioneInArrivo: inArrivo, contestoDelProgetto: 'Project files:\n', fetchDiRete: r1, permessi: 'Full access',
-      onGiro: (e) => { if (e?.tipo === 'compattazione-fine') fini.push({ giro: e.giro, compattato: e.compattato, motivo: e.motivo ?? null, prima: e.record?.tokenPrima ?? null, resto: e.restoNonRiuscito ?? null, adottato: e.adottato ?? null, soloCoda: e.soloCoda === true }); } });
+      onGiro: (e) => { if (e?.tipo === 'compattazione-fine') fini.push({ giro: e.giro, compattato: e.compattato, motivo: e.motivo ?? null, prima: e.record?.tokenPrima ?? null, resto: e.restoNonRiuscito ?? null, adottato: e.adottato ?? null, soloCoda: e.soloCoda === true, ragione: e.ragione ?? null }); } });
     const giroEmergenza = fini.find((f) => f.compattato === true)?.giro;
     assert.ok(giroEmergenza !== undefined, `premessa: c'è una compattazione (${JSON.stringify(fini)})`);
     /* Pezzo D (23/10): la riga del FRENO che tira non è una compattazione — la si dice una volta per armamento, a parte. Qui tira solo
@@ -340,7 +386,9 @@ for (const caso of ['resto-riuscito', 'resto-inefficace', 'resto-500']) {
     const segno = dellaRichiesta[0].adottato;
     assert.equal(segno?.at, pronta.record.at, `la riga porta l'at del record adottato (${JSON.stringify(dellaRichiesta[0])})`);
     assert.equal(segno.origine, daFineGiro ? 'fine-giro' : 'giro', 'e da dove viene');
-    assert.equal(segno.conResto, caso === 'resto-riuscito', 'e se la riga copre anche il resto');
+    /* 28/10/2026 (contratto C1): il resto è il riassunto senza modello in tutte e tre le varianti, quindi la riga copre sempre anche lui */
+    assert.equal(segno.conResto, true, 'e se la riga copre anche il resto: sì, col riassunto senza modello');
+    assert.equal(dellaRichiesta[0].ragione, 'in-arrivo', 'il resto è il riassunto senza modello: quello del modello va in sottofondo');
     /* CLI, revisione 4: il conto del risultato conta le righe — base più resto è UNA compattazione per chi la legge; lo scambio del
        riassunto di fine giro senza resto non si conta (l'ha già annunciato il registro); F1 della revisione 9: nemmeno la «sola coda»,
        che non è un riassunto */
@@ -349,19 +397,13 @@ for (const caso of ['resto-riuscito', 'resto-inefficace', 'resto-500']) {
     /* 22/10/2026 notte: con i quattro scambi del resto, le letture che arrivano DOPO la base possono riportare il giro sopra la soglia e
        fare una seconda compattazione legittima più avanti; il conto della richiesta della base è quello che si guarda qui */
     const piuAvanti = fini.filter((f) => f.giro !== giroEmergenza && f.compattato === true && !f.soloCoda && !(f.adottato?.origine === 'fine-giro' && f.adottato.conResto !== true)).length;
-    if (caso === 'resto-500') assert.equal(esitoDue.compattazioni - piuAvanti, 0, 'la base di fine giro senza resto non si conta due volte');
-    else assert.equal(esitoDue.compattazioni - piuAvanti, 1, 'una riga, una compattazione');
+    /* 28/10/2026 (contratto C1): base più resto senza modello è sempre UNA compattazione, anche con la base del riassunto di fine giro */
+    assert.equal(esitoDue.compattazioni - piuAvanti, 1, 'una riga, una compattazione');
     assert.ok(Number.isSafeInteger(segno.tokenDopo) && segno.tokenDopo < dellaRichiesta[0].prima, `col conto dopo la base (${JSON.stringify(segno)})`);
-    /* Quarta passata avversaria (Q3): il fallimento del resto non disegna una riga sua, ma il suo PERCHÉ viaggia sulla riga della base
-       (il giornale e il Doctor lo vedono; l'interfaccia no). */
-    const resto = dellaRichiesta[0].resto;
-    if (caso === 'resto-riuscito') assert.equal(resto, null, 'il resto è riuscito: nessun perché da portare');
-    else if (caso === 'resto-inefficace') assert.equal(resto?.motivo, 'inefficace', `il perché del resto viaggia sulla riga della base (${JSON.stringify(dellaRichiesta[0])})`);
-    else {
-      assert.ok(resto && typeof resto.motivo === 'string', `il perché del resto viaggia sulla riga della base (${JSON.stringify(dellaRichiesta[0])})`);
-      assert.notEqual(resto.motivo, 'inefficace', 'e dice il guasto, non «inefficace»');
-      assert.ok(Number.isSafeInteger(resto.fallimentiConsecutivi) && resto.fallimentiConsecutivi >= 1, `con il conto dei fallimenti (${JSON.stringify(resto)})`);
-    }
+    /* Quarta passata avversaria (Q3): il fallimento del resto viaggiava sulla riga della base. ⛔ 28/10/2026: SUPERATO dal contratto C1 —
+       il resto dentro il giro non chiama più il modello e non può fallire; il riassunto del modello del resto è in sottofondo, e la riga
+       della richiesta non porta un perché del resto in nessuna delle tre varianti. */
+    assert.equal(dellaRichiesta[0].resto, null, `nessun perché del resto sulla riga della base (${JSON.stringify(dellaRichiesta[0])})`);
   });
 }
 
@@ -369,8 +411,15 @@ for (const caso of ['resto-riuscito', 'resto-inefficace', 'resto-500']) {
    restava senza «fine» e il record della base (quello che il registro salva) non aveva una riga — niente Annulla. Sonda `p4-stop` del
    revisore, diventata prova. Due casi: il riassunto ereditato arriva dopo 300 ms (base all'emergenza) o subito (scambio alla soglia,
    che per costruzione non ha «inizio»: la regola è «ogni richiesta con un inizio ha UNA fine»). */
+/* ⛔ 28/10/2026 — SUPERATA dal contratto C1, owner 27/10/2026, «Sì, mai aspettare»: il riassunto del RESTO non si paga più dentro il
+   giro (è il riassunto senza modello, ragione 'in-arrivo', e quello del modello va in sottofondo), e l'ereditato che arriva dopo 300 ms non
+   si aspetta: lo Stop non trova un riassunto del resto da interrompere, e la riga della base non dice più «resto interrotto». L'ID resta
+   e la scena pure (lo Stop parte 50 ms dopo una richiesta di riassunto, se c'è); restano le invarianti di prima — ogni inizio ha UNA fine,
+   il record che il registro salva ha la sua riga, la base dall'ereditato già arrivato porta il suo `at` — e si aggiunge il contratto:
+   nessuna attesa, nessun secondo riassunto pagato mentre l'ereditato è in volo. Sul codice di prima (8fde46abf) è rossa: la riga diceva
+   «resto interrotto». */
 for (const attesaEreditato of [300, 0]) {
-  test(`S2-2-BASE-STOP-01 ereditato dopo ${attesaEreditato} ms — Stop durante il riassunto del resto: ogni inizio ha la sua fine, il record ha la sua riga`, async (t) => {
+  test(`S2-2-BASE-STOP-01 ereditato dopo ${attesaEreditato} ms — superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): il resto non si riassume più col modello dentro il giro, quindi niente da interrompere — ogni inizio ha la sua fine, il record ha la sua riga`, async (t) => {
     const vecchio = process.env[compattazione.VARIABILE_TETTO_TOKEN];
     process.env[compattazione.VARIABILE_TETTO_TOKEN] = '4000';
     t.after(() => { if (vecchio === undefined) delete process.env[compattazione.VARIABILE_TETTO_TOKEN]; else process.env[compattazione.VARIABILE_TETTO_TOKEN] = vecchio; });
@@ -407,9 +456,8 @@ for (const attesaEreditato of [300, 0]) {
          fra la base e la richiesta ne fanno un tratto vecchio vero. */
       messaggiIniziali: [...uno.messaggiFinali, ...storia(4, 2_800), { role: 'user', content: `Leggi g1-g4. ${'contesto '.repeat(350)}` }],
       compattazioneInArrivo: inArrivo, contestoDelProgetto: 'Project files:\n', fetchDiRete: r1, permessi: 'Full access', segnaleStop: stop.signal,
-      onGiro: (e) => { if (e?.tipo === 'compattazione-inizio' || e?.tipo === 'compattazione-fine') eventi.push({ giro: e.giro, tipo: e.tipo, compattato: e.compattato ?? null, at: e.record?.at ?? null, resto: e.restoNonRiuscito ?? null, adottato: e.adottato ?? null }); } });
-    assert.equal(ris.comeFinita, 'fermato', 'premessa: lo Stop ha fermato il giro');
-    assert.ok(riassunti >= 1, 'premessa: lo Stop è arrivato durante un riassunto');
+      onGiro: (e) => { if (e?.tipo === 'compattazione-inizio' || e?.tipo === 'compattazione-fine') eventi.push({ giro: e.giro, tipo: e.tipo, compattato: e.compattato ?? null, at: e.record?.at ?? null, resto: e.restoNonRiuscito ?? null, adottato: e.adottato ?? null, ragione: e.ragione ?? null }); } });
+    assert.ok(['concluso', 'fermato'].includes(ris.comeFinita), `il giro finisce (${ris.comeFinita})`);
     const conInizio = [...new Set(eventi.filter((e) => e.tipo === 'compattazione-inizio').map((e) => e.giro))];
     assert.ok(conInizio.length >= 1, `premessa: una compattazione è cominciata (${JSON.stringify(eventi)})`);
     for (const giro of conInizio) {
@@ -419,9 +467,16 @@ for (const attesaEreditato of [300, 0]) {
     assert.ok(record.length >= 1, 'premessa: c\'è un record da salvare');
     const rigaDelRecord = eventi.find((e) => e.tipo === 'compattazione-fine' && e.compattato === true && e.at === record.at(-1).at);
     assert.ok(rigaDelRecord, `il record che il registro salva ha la sua riga (${JSON.stringify(eventi)})`);
-    if (attesaEreditato) assert.equal(rigaDelRecord.resto?.motivo, 'interrotta', `la riga della base dice che il resto è stato interrotto (${JSON.stringify(rigaDelRecord)})`);
-    /* Revisione 4 della CLI (S3-2): lo scambio o la base nascono dal riassunto ereditato, e la riga lo dice con il suo at */
-    assert.equal(eventi.find((e) => e.tipo === 'compattazione-fine' && e.compattato === true)?.adottato?.at, pronta.record.at, `la prima riga porta l'at del record ereditato (${JSON.stringify(eventi)})`);
+    /* 28/10/2026 (contratto C1): il resto è il riassunto senza modello, subito — niente «resto interrotto» sulla riga */
+    const prima = eventi.find((e) => e.tipo === 'compattazione-fine' && e.compattato === true);
+    assert.equal(prima?.ragione, 'in-arrivo', `la riga della richiesta è il riassunto senza modello, senza attesa (${JSON.stringify(eventi)})`);
+    assert.equal(prima.resto, null, `nessun resto interrotto: non c'è un riassunto del resto dentro il giro (${JSON.stringify(prima)})`);
+    /* Revisione 4 della CLI (S3-2): la base nasce dal riassunto ereditato, e la riga lo dice con il suo at. 28/10/2026: solo quando è già
+       arrivato — quello che arriva dopo 300 ms non si aspetta più, e non si paga un secondo riassunto mentre è in volo */
+    if (attesaEreditato) {
+      assert.equal(prima.adottato, null, 'l\'ereditato ancora in volo non è una base: non si è aspettato');
+      assert.equal(riassunti, 0, 'nessun secondo riassunto pagato mentre l\'ereditato è in volo');
+    } else assert.equal(prima.adottato?.at, pronta.record.at, `la prima riga porta l'at del record ereditato (${JSON.stringify(eventi)})`);
   });
 }
 
@@ -642,12 +697,17 @@ async function overflowConRiassuntoInArrivo(t, { stopDopoMs = null, tettoMs = un
   return { ris, errore, durata: Date.now() - inizio, conti };
 }
 
-test('S2-2-OVERFLOW-ATTESA-01 — sull’overflow lo Stop ferma subito l’attesa del riassunto ereditato', async (t) => {
+/* ⛔ 28/10/2026 — S2-2-OVERFLOW-ATTESA-01 è SUPERATA dal contratto C1, owner 27/10/2026, «Sì, mai aspettare»: dopo il «contesto pieno»
+   del fornitore il giro non aspetta più il riassunto ereditato (arriva dopo 5 s), quindi non c'è un'attesa che lo Stop debba fermare: il
+   ritento parte subito col riassunto senza modello e il giro finisce da sé, prima dello Stop (300 ms). Nessun secondo riassunto si paga
+   mentre l'ereditato è in volo. Sul codice di prima (8fde46abf) è rossa: il giro aspettava e finiva «fermato» dallo Stop. */
+test('S2-2-OVERFLOW-ATTESA-01 — superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): sull’overflow il giro non aspetta il riassunto ereditato — ritenta subito senza modello e finisce prima dello Stop', async (t) => {
   const { ris, errore, durata, conti } = await overflowConRiassuntoInArrivo(t, { stopDopoMs: 300 });
-  assert.ok(conti.modello >= 1, 'premessa: il fornitore ha detto «context full»');
-  assert.ok(durata < 2_500, `lo Stop ferma l'attesa (${durata} ms; il riassunto arrivava dopo 5 s)`);
+  assert.ok(conti.modello >= 2, 'premessa: il fornitore ha detto «context full», e il giro ha ritentato');
+  assert.ok(durata < 2_500, `nessuna attesa (${durata} ms; il riassunto arrivava dopo 5 s)`);
   assert.equal(errore, null, `nessun errore (${errore?.message})`);
-  assert.equal(ris.comeFinita, 'fermato', 'il giro finisce come fermato dalla persona');
+  assert.equal(ris.comeFinita, 'concluso', 'il giro finisce da sé: non c\'era un\'attesa da fermare');
+  assert.equal(conti.riassunti, 0, 'nessun secondo riassunto pagato mentre l\'ereditato è in volo');
 });
 
 test('S2-2-OVERFLOW-ATTESA-02 — sull’overflow l’attesa ha il suo tetto: allo scadere il riassunto senza modello, e il giro finisce', async (t) => {

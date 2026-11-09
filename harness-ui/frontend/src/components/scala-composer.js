@@ -37,26 +37,39 @@ const MARGINE_SOTTOPIXEL = 1 / 64;
  *   quella frazione per i puntini. ⇒ Si confronta la larghezza VERA del testo (un Range, al sottopixel) col riquadro del contenuto.
  *   Nessuna tolleranza sul tetto: la tolleranza vale solo in salita.
  */
-export function etichettaTagliata(el, win = globalThis) {
+export function etichettaTagliata(el, win = globalThis, tolleranza = 0) {
   if (!el || !el.isConnected || el.getClientRects().length === 0) return false;
   const st = win.getComputedStyle(el);
   if (st.position === 'absolute') return false;
-  if (el.scrollWidth > el.clientWidth) return true;
+  if (el.scrollWidth > el.clientWidth + tolleranza) return true;
   const range = el.ownerDocument?.createRange?.();
   if (!range || typeof range.getBoundingClientRect !== 'function') return false;
   range.selectNodeContents(el);
   const testo = range.getBoundingClientRect().width;
   const px = (v) => Number.parseFloat(v) || 0;
   const riquadro = el.getBoundingClientRect().width - px(st.paddingLeft) - px(st.paddingRight) - px(st.borderLeftWidth) - px(st.borderRightWidth);
-  return testo > riquadro + MARGINE_SOTTOPIXEL;
+  return testo > riquadro + MARGINE_SOTTOPIXEL + tolleranza;
+}
+
+/**
+ * FE-047 (Frontend, 01/11/2026): lo spazio del fulmine lo paga il nome del modello, non il permesso. Il nome del permesso dice
+ * cosa può fare l'agente, e non deve sparire perché si è acceso un'altra cosa. ⇒ Da accesa il nome può perdere al massimo la
+ * larghezza del fulmine senza far salire la scala: sopra quella, si cede come sempre.
+ */
+function spazioDelFulmine(barra, win) {
+  const fulmine = barra.querySelector?.('.talos-chip__veloce');
+  if (!fulmine || fulmine.hidden) return 0;
+  const chip = fulmine.parentElement;
+  return fulmine.getBoundingClientRect().width + (chip ? Number.parseFloat(win.getComputedStyle(chip).columnGap) || 0 : 0);
 }
 
 /** Porta la barra al primo stadio in cui nessuna etichetta è tagliata; torna lo stadio scelto. */
 export function adattaScala(barra, win = globalThis) {
   if (!barra) return 0;
+  const fulmine = spazioDelFulmine(barra, win);
   for (let stadio = 0; stadio <= STADIO_MASSIMO; stadio += 1) {
     if (stadio === 0) delete barra.dataset.scala; else barra.dataset.scala = String(stadio);
-    const tagliata = ETICHETTE_MISURATE.some((sel) => etichettaTagliata(barra.querySelector(sel), win));
+    const tagliata = ETICHETTE_MISURATE.some((sel, i) => etichettaTagliata(barra.querySelector(sel), win, i === 0 ? fulmine : 0));
     if (!tagliata) return stadio;
   }
   return STADIO_MASSIMO;
@@ -75,7 +88,9 @@ export function collegaScalaComposer(barra, { win = globalThis, contenitore = ba
   let larghezza = null;
   const firmaAttuale = () => {
     const nascosti = [...barra.children].map((c) => (c.hidden ? '0' : '1')).join('');
-    return `${larghezza ?? '?'}|${nascosti}|${barra.textContent}`;
+    /* FE-047: il fulmine della modalità veloce non è un figlio della barra e non ha testo, ma toglie spazio al nome del modello */
+    const veloce = barra.querySelector('.talos-chip__veloce')?.hidden === false ? '1' : '0';
+    return `${larghezza ?? '?'}|${nascosti}|${veloce}|${barra.textContent}`;
   };
   /* ⛔ 26/09 — trovato dalla suite intera (RESIZE-COMPOSER): mentre la persona TRASCINA la maniglia del composer, misurare
      a ogni fotogramma leggeva il layout 7,4 volte per movimento contro un tetto di 2 — il «layout thrashing» che quella

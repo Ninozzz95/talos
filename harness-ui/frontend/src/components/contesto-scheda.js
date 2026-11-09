@@ -27,6 +27,29 @@ export function limiteCheAgisce({ budget = null, politica = null } = {}) {
   return null;
 }
 
+/**
+ * Decisione 174 dell'owner (04/11/2026, reperto 6): la BASE su cui ogni schermata misura la finestra, calcolata in un posto solo.
+ * Prima la scheda Contesto divideva per il limite che agisce (165.999), «Memoria e contesto» per la finestra del profilo (266.667) e
+ * Capability per quella del catalogo (1.048.576): tre percentuali della stessa conversazione. Ora le tre leggono questo conto:
+ *  · con una sessione aperta, il limite che agisce (`limiteCheAgisce`, sui dati della scheda Contesto): `fonte` 'motore' o della politica;
+ *  · senza, la finestra del catalogo, detta per quello che è (`fonte: 'catalogo'`); senza nessuna delle due, `base: null`.
+ * ⛔ Il limite si legge, non si ferma qui: che il motore lo sposti col metodo della misura è un fatto del nucleo (forma 174).
+ * @returns {{ base:number|null, fonte:string|null, soglia:number|null, finestra:number|null, limite:object|null, ripartizione:object|null }}
+ */
+export function contoDellaFinestra({ scheda = null, finestraCatalogo = null } = {}) {
+  const limite = limiteCheAgisce({ budget: scheda?.budget ?? null, politica: scheda?.politica ?? null });
+  const ripartizione = Array.isArray(scheda?.ripartizione?.categorie) ? scheda.ripartizione : null;
+  if (limite) return { base: limite.soglia, fonte: limite.fonte, soglia: limite.soglia, finestra: limite.finestra, limite, ripartizione };
+  const catalogo = Number.isSafeInteger(finestraCatalogo) && finestraCatalogo > 0 ? finestraCatalogo : null;
+  return { base: catalogo, fonte: catalogo ? 'catalogo' : null, soglia: null, finestra: catalogo, limite: null, ripartizione };
+}
+
+/** I token di una categoria della richiesta SPEDITA, o `null` se la richiesta non c'è o non la nomina. */
+export function tokenDellaCategoria(ripartizione, id) {
+  const c = Array.isArray(ripartizione?.categorie) ? ripartizione.categorie.find((x) => x?.id === id) : null;
+  return Number.isFinite(c?.tokens) && c.tokens >= 0 ? c.tokens : null;
+}
+
 /** La chiave i18n della riga del perché e i suoi parametri (i numeri li formatta chi disegna). */
 export function percheDelLimite(limite) {
   if (!limite) return null;
@@ -41,7 +64,19 @@ export const CATEGORIE = Object.freeze(['system', 'rules', 'memory', 'tools', 'm
 export const CHIAVI_CATEGORIA = Object.freeze({
   system: 'processi.inspector.catSystem', rules: 'processi.inspector.catRules', memory: 'processi.inspector.catMemory',
   tools: 'processi.inspector.catTools', mcp: 'processi.inspector.catMcp', conversation: 'processi.inspector.catConversation',
+  altro: 'processi.inspector.catOther',
 });
+
+/*
+ * Decisione 174 (04/11/2026): la misura del fornitore conta più delle categorie stimate (33,4k contro ~18,5k, dal vivo con DeepSeek V4.1
+ * Flash): i ragionamenti rispediti, i riassunti, la cornice dei messaggi. Quella parte non aveva un nome e non si vedeva da nessuna parte;
+ * ora è la riga «Riassunti e altro», ultima, e le righe sommano la misura. Hermes lo scrive: sui modelli che ragionano `prompt_tokens`
+ * cresce col ragionamento rigiocato (`agent/context_breakdown.py:194-199`). Solo se la misura supera le stime: mai un resto negativo.
+ */
+function restoSenzaNome(categorie, usati) {
+  if (!Number.isFinite(usati) || usati <= 0 || !categorie.length) return 0;
+  return Math.max(0, usati - categorie.reduce((s, c) => s + c.tokens, 0));
+}
 
 /**
  * Le fette della barra e le righe, sul limite che agisce. Le categorie sono stime della richiesta spedita; `usati` è la misura
@@ -51,9 +86,10 @@ export const CHIAVI_CATEGORIA = Object.freeze({
 export function ripartizioneSulLimite({ ripartizione = null, usati = null, limite = null } = {}) {
   const soglia = limite?.soglia ?? null;
   const categorie = Array.isArray(ripartizione?.categorie) ? ripartizione.categorie.filter((c) => CATEGORIE.includes(c?.id) && Number.isFinite(c.tokens) && c.tokens >= 0) : [];
-  const voci = categorie.sort((a, b) => CATEGORIE.indexOf(a.id) - CATEGORIE.indexOf(b.id))
-    .map((c) => ({ id: c.id, tokens: c.tokens, percentuale: soglia ? Math.min(100, (c.tokens / soglia) * 100) : null }));
   const misurati = Number.isFinite(usati) && usati > 0 ? usati : null;
+  const resto = restoSenzaNome(categorie, misurati);
+  const voci = [...categorie.sort((a, b) => CATEGORIE.indexOf(a.id) - CATEGORIE.indexOf(b.id)), ...(resto > 0 ? [{ id: 'altro', tokens: resto }] : [])]
+    .map((c) => ({ id: c.id, tokens: c.tokens, percentuale: soglia ? Math.min(100, (c.tokens / soglia) * 100) : null }));
   return { voci, usati: misurati, restanti: soglia && misurati !== null ? soglia - misurati : null, oltre: Boolean(soglia && misurati !== null && misurati > soglia) };
 }
 
@@ -81,9 +117,12 @@ export function misuraDellaPanoramica({ usati = null, limite = null, ripartizion
     ? ripartizione.categorie.filter((c) => CATEGORIE.includes(c?.id) && Number.isFinite(c.tokens) && c.tokens > 0).sort((a, b) => CATEGORIE.indexOf(a.id) - CATEGORIE.indexOf(b.id))
     : [];
   const somma = categorie.reduce((s, c) => s + c.tokens, 0);
-  // le stime si riportano alla misura vera; senza misura valgono le stime (e lo dice la «~» di chi disegna)
-  const fattore = u !== null && somma > 0 ? u / somma : 1;
-  const segmenti = categorie.map((c) => ({ id: c.id, tokens: c.tokens, pct: pct(c.tokens * fattore) }));
+  /* Decisione 174: quando la misura supera le stime, la differenza è la fetta «Riassunti e altro» e le categorie valgono quello che
+     pesano (prima si gonfiavano tutte di 33,4/18,5, e «Strumenti» sembrava quasi il doppio). Quando le stime superano la misura si
+     riportano giù alla misura, come prima: la barra non dice mai più di quanto il fornitore ha contato. */
+  const resto = restoSenzaNome(categorie, u);
+  const fattore = u !== null && somma > u ? u / somma : 1;
+  const segmenti = [...categorie, ...(resto > 0 ? [{ id: 'altro', tokens: resto }] : [])].map((c) => ({ id: c.id, tokens: c.tokens, pct: pct(c.tokens * fattore) }));
   const occupati = u ?? (somma || null);
   const oltre = occupati !== null && occupati > soglia;
   const liberi = occupati === null ? null : Math.max(0, soglia - occupati);

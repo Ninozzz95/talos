@@ -135,5 +135,5 @@ export function testoDelPasso(passo, { tr, nomeAttrezzo, verbo, iconaAttrezzo })
   if (passo.kind === 'tool') return { icona: iconaAttrezzo(passo.tool), che: passo.target ? verbo(passo.tool)[0] : maiuscola(nomeAttrezzo(passo.tool)), dove: passo.target ?? null };
   if (passo.kind === 'started') return { icona: 'i-play', che: tr('agenti.delegations.eventStarted'), dove: null };
   if (passo.kind === 'failed') return { icona: 'i-alert', che: tr('agenti.delegations.eventError'), dove: null };
-  return { icona: 'i-check', che: tr('agenti.delegations.eventFinished'), dove: null };
+  return { icona: 'i-circle-check', che: tr('agenti.delegations.eventFinished'), dove: null };
 }

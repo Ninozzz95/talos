@@ -77,7 +77,7 @@ export default defineConfig({
     {
       /* Il banco: si RICOSTRUISCE prima di servire, cosi' i cancelli guardano il codice di adesso
          e non l'uscita di un build di ieri — «il build non arriva al telefono», stessa lezione. */
-      command: 'node scripts/build.mjs && node ../server.mjs',
+      command: 'node scripts/build.mjs && node ../server.mjs --senza-gettone=prove',
       url: BASE_ASPETTO,
       env: {
         TALOS_HARNESS_UI_PORT: PORTA_ASPETTO,

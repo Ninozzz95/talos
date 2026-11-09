@@ -43,6 +43,9 @@ const erroreNelFlusso = {
 const vuotaGemini = () => flussoIntero([ragionamento('Developing Tokenization Visualizations'), erroreNelFlusso, uso(100, 7)]);
 // RETRY04: a successful empty answer is distinct from finish_reason:error.
 const vuotaRagionata = () => flussoIntero([ragionamento('Sto pensando'), fine, uso(100, 7)]);
+/* Decisione 324 (06/11/2026): una vuota CON ragionamento prende prima due continuazioni (`vuota-solo-ragionamento.test.mjs`). La scala di
+   oggi si prova qui con una vuota che ha token in uscita ma nessun ragionamento visibile: non deterministica, e senza continuazioni. */
+const vuotaConUscita = () => flussoIntero([{ choices: [{ index: 0, delta: { content: '' }, finish_reason: 'stop' }] }, uso(100, 7)]);
 /** Il vuoto muto: nessun ragionamento, nessuna uscita (i due «continua» della sessione vera, 4-6 s e niente). */
 const vuotaMuta = () => flussoIntero([{ choices: [{ index: 0, delta: { content: '' }, finish_reason: 'stop' }] }, uso(100, 0)]);
 
@@ -85,24 +88,37 @@ test('EMPTY-OPT-IN: senza `accettaVuota` una risposta vuota lancia come prima; c
 });
 
 test('EMPTY-AFTER-TOOLS-NUDGE: vuota dopo gli attrezzi ⇒ una spinta a continuare, e il giro si chiude col testo', async () => {
+  // decisione 324: le prime due vuote col ragionamento prendono le continuazioni, la terza la spinta
   const r = rete(
     () => flussoIntero([chiamaElenca, fineAttrezzi, uso(90, 5)]),
-    vuotaRagionata,
+    vuotaRagionata, vuotaRagionata, vuotaRagionata,
     () => flussoIntero([testo('Ecco la cartella.'), fine, uso(110, 4)]),
   );
   const esito = await talosLavora(base({ fetchDiRete: r.fetch }));
   assert.equal(esito.comeFinita, 'concluso');
-  assert.equal(r.corpi.length, 3);
-  const terza = r.corpi[2].messages;
-  assert.equal(terza.at(-3).role, 'tool', 'l\'esito dell\'attrezzo è ancora lì');
-  assert.deepEqual(terza.at(-2), { role: 'assistant', content: kernel.SEGNAPOSTO_RISPOSTA_VUOTA });
+  assert.equal(r.corpi.length, 5);
+  const terza = r.corpi[4].messages;
+  assert.equal(terza.at(-3).role, 'tool', 'l\'esito dell\'attrezzo è ancora lì, subito prima della spinta: le continuazioni non lasciano impalcatura (decisione 326)');
+  assert.equal(terza.at(-2).role, 'assistant');
+  assert.equal(terza.at(-2).content, kernel.SEGNAPOSTO_RISPOSTA_VUOTA);
+  assert.ok(terza.at(-2).reasoning_content, 'il ragionamento della risposta vuota resta: un fornitore che lo esige rifiuta la richiesta senza (Hermes `turn_empty_response.py:213`, 400 vero di beam il 01/11)');
   assert.deepEqual(terza.at(-1), { role: 'user', content: kernel.NOTA_RISPOSTA_VUOTA });
-  assert.equal(esito.usage.prompt_tokens, 300, 'anche la chiamata vuota è nel conto (90 + 100 + 110)');
-  assert.equal(esito.usage.completion_tokens, 16);
+  assert.equal(esito.usage.prompt_tokens, 500, 'anche le chiamate vuote sono nel conto (90 + 3 × 100 + 110)');
+  assert.equal(esito.usage.completion_tokens, 30);
+});
+
+test('EMPTY-AFTER-TOOLS-NUDGE-2 — AL CONTRARIO: una risposta vuota senza ragionamento: il segnaposto non inventa niente', async () => {
+  const r = rete(
+    () => flussoIntero([chiamaElenca, fineAttrezzi, uso(90, 5)]),
+    () => flussoIntero([{ choices: [{ delta: { content: '' } }] }, fine, uso(100, 1)]),
+    () => flussoIntero([testo('Ecco.'), fine, uso(110, 4)]),
+  );
+  await talosLavora(base({ fetchDiRete: r.fetch }));
+  assert.deepEqual(r.corpi[2].messages.at(-2), { role: 'assistant', content: kernel.SEGNAPOSTO_RISPOSTA_VUOTA });
 });
 
 test('EMPTY-CEILING: veri vuoti conclusi, spinta più due ritentativi, poi errore e lavoro preservato', async () => {
-  const r = rete(() => flussoIntero([chiamaElenca, fineAttrezzi]), vuotaRagionata, vuotaRagionata, vuotaRagionata, vuotaRagionata, () => flussoIntero([testo('mai'), fine]));
+  const r = rete(() => flussoIntero([chiamaElenca, fineAttrezzi]), vuotaConUscita, vuotaConUscita, vuotaConUscita, vuotaConUscita, () => flussoIntero([testo('mai'), fine]));
   const t0 = Date.now();
   const errore = await rifiuto(talosLavora(base({ fetchDiRete: r.fetch })));
   assert.equal(r.corpi.length, 5, 'attrezzo, vuota, dopo la spinta, due ritentativi');
@@ -131,7 +147,7 @@ test('EMPTY-DETERMINISTIC: due vuoti identici e senza uscita ⇒ il terzo non si
 });
 
 test('EMPTY-THEN-TEXT: un vuoto isolato si ritenta, e se la seconda va bene nessuno se ne accorge', async () => {
-  const r = rete(vuotaRagionata, () => flussoIntero([testo('Risposta.'), fine, uso(100, 3)]));
+  const r = rete(vuotaConUscita, () => flussoIntero([testo('Risposta.'), fine, uso(100, 3)]));
   const esito = await talosLavora(base({ fetchDiRete: r.fetch }));
   assert.equal(esito.comeFinita, 'concluso');
   assert.equal(esito.detto, 'Risposta.');

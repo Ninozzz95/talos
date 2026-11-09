@@ -61,8 +61,11 @@ for (const ordine of ['C', 'pre-C']) {
     assert.match(misura.preamboli[1], /(?:1 unsaved files|1 file non salvati)/);
     const dopo = JSON.parse(misura.corpi[1]);
     assert.equal(dopo.messages.length, 7); // L1: +1, la nota «dove sei» (vedi sopra)
-    assert.match(dopo.messages.at(-1).content, /^(?:Project context update|Aggiornamento del contesto del progetto):/);
-    assert.ok(dopo.messages.at(-1).content.endsWith(misura.preamboli[1]));
+    /* decisione 194 (owner 04/11/2026): verso OpenRouter l'aggiornamento parte come testo `user` al suo posto, in un blocco `<talos-note>`
+       (mai `system` sparso: il template di DeepSeek V4 lo porterebbe in testa) */
+    assert.equal(dopo.messages.at(-1).role, 'user');
+    assert.match(dopo.messages.at(-1).content, /^<talos-note>\n(?:Project context update|Aggiornamento del contesto del progetto):/);
+    assert.ok(dopo.messages.at(-1).content.endsWith(`${misura.preamboli[1]}\n</talos-note>`));
     misure.push(misura);
   });
 }
@@ -90,7 +93,7 @@ test('BC48-CBIS-MARCATORE: watcher vero, 18 KB e almeno 19533 byte dopo la cura'
   verificaPrefisso(misura, MINIMO_PREFISSO_LUNGO);
   assert.ok(misura.invalidazioni > 0);
   assert.notEqual(misura.preamboli[0], misura.preamboli[1]);
-  assert.match(JSON.parse(misura.corpi[1]).messages.at(-1).content, /^(?:Project context update|Aggiornamento del contesto del progetto):/);
+  assert.match(JSON.parse(misura.corpi[1]).messages.at(-1).content, /^<talos-note>\n(?:Project context update|Aggiornamento del contesto del progetto):/); // decisione 194
   assert.equal(typeof misura.messaggiFinali[1].content, 'string', 'storia canonica integra');
   misure.push(misura);
 });
@@ -100,7 +103,7 @@ test('BC48-CBIS-WATCHER: 11,5 KiB, modifica rilevata e preambolo iniziale intatt
   verificaPrefisso(misura);
   assert.ok(misura.invalidazioni > 0);
   assert.notEqual(misura.preamboli[0], misura.preamboli[1]);
-  assert.match(JSON.parse(misura.corpi[1]).messages.at(-1).content, /^(?:Project context update|Aggiornamento del contesto del progetto):/);
+  assert.match(JSON.parse(misura.corpi[1]).messages.at(-1).content, /^<talos-note>\n(?:Project context update|Aggiornamento del contesto del progetto):/); // decisione 194
   misure.push(misura);
 });
 

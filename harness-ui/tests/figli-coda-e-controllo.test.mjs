@@ -323,7 +323,7 @@ test('C3-K3-PAUSA (the other way): «deny» refuses with nothing paused; a missi
     const senzaCanale = await giroKernel(t, 'child_control', { childId: 'c1', action: 'resume' }, { strumentiEstesi: ['child_control'] })
     assert.match(senzaCanale.esito, /^REFUSED\. child_control resume requires a parent channel\./u)
     const sbagliata = await giroKernel(t, 'child_control', { childId: 'c1', action: 'kill' })
-    assert.match(sbagliata.esito, /^REFUSED\. child_control needs action "stop", "pause" or "resume" \(got "kill"\)/u)
+    assert.match(sbagliata.esito, /^REFUSED\. child_control needs action "stop", "pause", "resume" or "retry" \(got "kill"\)/u) // decisione 198: retry
     assert.deepEqual(sbagliata.chiamati, [])
 })
 
@@ -350,5 +350,5 @@ test('C5: «chiedi» on an action shows the approval card with its usual type (p
     })
     assert.deepEqual(carte, ['pause_child'], 'the card keeps the type the interface already knows')
     assert.equal(pause, 0)
-    assert.match(r.esito, /^REFUSED\./u)
+    assert.match(r.esito, /^DECLINED\. The person said no/u)
 })

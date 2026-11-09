@@ -61,6 +61,13 @@ async function banco(t, { cartellaStore = mkdtempSync(join(tmpdir(), 'talos-pers
       input.onEvento({ type: 'RunFinished', threadId: `t${n}`, runId: `r${n}` })
       resolve({ ok: true, esito: { detto: 'ok', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'ciao' }, { role: 'assistant', content: 'ok' }] } })
     }
+    /* decisione 198 (owner 04/11): un giro fermato dalla persona, dopo il quale la ripresa SENZA messaggio nuovo (il ▶) parte */
+    giro.ferma = () => {
+      if (giro.finito) return
+      giro.finito = true
+      input.onEvento({ type: 'RunError', threadId: `t${n}`, runId: `r${n}`, code: 'fermato', message: 'stopped' })
+      resolve({ ok: false, esito: { detto: 'stopped', comeFinita: 'fermato', messaggiFinali: [{ role: 'user', content: 'ciao' }, { role: 'assistant', content: 'o' }] }, erroreInterno: 'fermato', codiceErrore: 'fermato' })
+    }
     input.onEvento({ type: 'RunStarted', threadId: `t${n}`, runId: `r${n}` })
   })
   /* il registro si chiude SEMPRE, anche se una asserzione fallisce — prima i giri finti rimasti aperti (chiudi() li aspetta), poi
@@ -87,9 +94,12 @@ test('PERSONA-REG-01 — il registro passa il testo della persona: avvio, ripres
   await pausa()
   registry.resume(sessionId, 'follow SETUP.md')
   assert.equal(runs.at(-1).input.testoDellaPersona, 'follow SETUP.md', 'ripresa col messaggio della persona')
-  runs.at(-1).fine()
+  /* decisione 198 (owner 04/11, 82db48a2f): dopo un giro FINITO la ripresa senza messaggio nuovo è rifiutata; il ▶ riparte dopo uno Stop */
+  runs.at(-1).ferma()
   await pausa()
-  registry.resume(sessionId, null, [])
+  const giriPrima = runs.length
+  const senzaTesto = registry.resume(sessionId, null, [])
+  assert.equal(runs.length, giriPrima + 1, `premessa: la ripresa senza messaggio nuovo parte (${JSON.stringify(senzaTesto)?.slice(0, 160)})`)
   assert.equal(runs.at(-1).input.testoDellaPersona, '', 'ripresa senza messaggio nuovo: nessun testo')
   runs.at(-1).fine()
   await pausa()

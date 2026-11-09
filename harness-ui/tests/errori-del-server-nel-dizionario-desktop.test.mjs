@@ -71,15 +71,15 @@ test('ERRORI-DIZ-03 — il server non dice più una parola italiana nelle sue ta
   assert.equal(eFraseItaliana('Questa cartella non è un repository git'), true);
 });
 
-test('ERRORI-DIZ-04 — l’italiano del dizionario è quello che il server mandava prima: frasi campione, comprese le due con gli accenti mancanti', () => {
+test('ERRORI-DIZ-04 — l’italiano del dizionario è quello che il server mandava prima: frasi campione; le due di SESSION_NOT_READY con gli accenti rimessi (revisione d’uso della candidata, 04/11/2026)', () => {
   const campione = {
     'QUERY_INVALID.message': 'Query non valida',
     'GIT_NOT_A_REPOSITORY.message': 'Questa cartella non è un repository git',
     'FILE_TOO_LARGE.message': 'File troppo grande per l\'anteprima',
     'CATALOG_CONFIGURATION_REQUIRED.message': 'Configura i modelli o l\'agente esterno in Fornitori e accessi',
     'OAUTH_ATTESA_IGNOTA.message': 'Questa richiesta di collegamento non vale più: ricomincia da «Accedi con OpenRouter»',
-    'SESSION_NOT_READY.explanation': 'Questa sessione non puo accettare l’azione richiesta nello stato in cui si trova.',
-    'SESSION_NOT_READY.action': 'Se e stata interrotta da un riavvio, avvia una sessione nuova: la conversazione resta leggibile qui.',
+    'SESSION_NOT_READY.explanation': 'Questa sessione non può accettare l’azione richiesta nello stato in cui si trova.',
+    'SESSION_NOT_READY.action': 'Se è stata interrotta da un riavvio, avvia una sessione nuova: la conversazione resta leggibile qui.',
     'INTERNAL_ERROR.title': 'Operazione non riuscita',
     'contesto.INTERNAL_ERROR.title': 'Contesto non riuscito',
     'CTX_NOT_ENABLED.title': 'Contesto non attivo qui',

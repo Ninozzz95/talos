@@ -5,9 +5,17 @@ import { erroreDiUnaPaginaTerza } from '../../src/components/browser.js'; // OSS
 
 // D21/BOOT-03 starts on Home. Tests exercising the composer must navigate through
 // the real sidebar, not force hidden controls or measure a hidden conversation.
+// Sidebar variant D (owner 31/10): «Spazi di lavoro» starts CLOSED and this config has no saved choice, unlike
+// playwright.config.mjs. Open the group the way a person does before clicking Chat or Library inside it.
+async function apriSpaziDiLavoro(page) {
+  if (await page.locator('#gruppoLavoro').isHidden()) await page.locator('#testataGruppoLavoro').click();
+  await expect(page.locator('#gruppoLavoro')).toBeVisible();
+}
+
 async function apriConversazioneVisibile(page) {
   await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
   await page.locator('#talosAvvio').waitFor({ state: 'hidden' });
+  await apriSpaziDiLavoro(page);
   await page.locator('.talos-sidebar [data-vaia="chat"]').first().click();
   await expect(page.locator('#schermoChat')).toBeVisible();
 }
@@ -15,7 +23,7 @@ async function apriConversazioneVisibile(page) {
 test('RELEASE-018-PROMPT-ENHANCE: composer through real route and session provider', async ({ page }) => {
   const improved = 'Scrivi un resoconto chiaro con obiettivo, vincoli e risultato atteso.';
   let providerRequest;
-  const server = createServer(createHttpApp({
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     sessionRegistry: { leggiSessioneContesto: () => ({ sessionId: 'release-018', modello: 'deepseek:deepseek-chat', provider: 'cloud' }) },
     providerStore: {
@@ -101,6 +109,7 @@ test('FASE3-MULTISELECT-UNA-POST — conferma unica ed esito parziale restano vi
   await page.goto(process.env.TALOS_URL_CANCELLO);
   await page.waitForFunction(() => Boolean(window.__talosHarnessUiRuntime));
   await page.evaluate(() => { window.__talosHarnessUiRuntime.realSessionState.id = 'fase-3-ui'; });
+  await apriSpaziDiLavoro(page);
   await page.locator('.talos-sidebar [data-vaia="libreria"]').first().click();
   await expect(page.locator('#schermoLibreria .td-card-select')).toHaveCount(3);
   /* 17/10/2026 (bugfixer): dall'08/10 (`ea460896e`) anche le Automazioni usano lo stesso elenco con «Seleziona visibili», nel loro
@@ -111,7 +120,7 @@ test('FASE3-MULTISELECT-UNA-POST — conferma unica ed esito parziale restano vi
   await expect(page.locator('#schermoLibreria .td-bulk-count')).toHaveText('2 selezionate');
 
   page.once('dialog', (dialog) => dialog.accept());
-  await page.getByRole('button', { name: 'Elimina selezionati', exact: true }).click();
+  await page.getByRole('button', { name: 'Elimina selezionate', exact: true }).click();
   await expect.poll(() => richieste.length).toBe(1);
   expect(richieste[0]).toEqual({ azione: 'elimina', ids: ['lib-1', 'lib-2'] });
   await expect(libreria.getByLabel('Seleziona Primo.md', { exact: true })).not.toBeChecked();

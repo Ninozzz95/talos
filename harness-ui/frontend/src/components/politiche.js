@@ -16,7 +16,7 @@
  * l'etichetta è dell'interfaccia, il valore è del contratto.
  */
 
-/** @typedef {{valore:string, nome:string, descrizione:string, nota:string, rischio:'basso'|'medio'|'alto'|'massimo'}} Politica */
+/** @typedef {{valore:string, nome:string, descrizione:string, nota:string, consigliata:boolean, rischio:'basso'|'medio'|'alto'|'massimo'}} Politica */
 
 /** Le quattro, nell'ordine in cui si presentano: dal più prudente al più libero. */
 /*
@@ -26,14 +26,26 @@
  */
 import { t } from './lingua.js';
 
-const politicaDa = (valore, chiave, rischio) => Object.freeze(Object.defineProperties({ valore, rischio }, {
+/*
+ * ⛔ Decisione owner 162 (04/11/2026, bozzetto `variante-scheda-permessi.html`, A): la stessa scelta aveva DUE serie di parole — la
+ *   Nuova sessione diceva «Minimo rischio / Consigliato / Controllato / Alto rischio» (`varie.policy.*.note`), la pagina Permessi
+ *   «rischio basso / rischio medio / rischio molto alto» (`modello.permissions.*`), e «Chiede prima» era «Controllato» di qua e
+ *   «rischio medio» di là. Ora una serie sola, quella dei Permessi, ovunque; «Consigliato» è una pillola a parte, non un livello.
+ *   Il tono è quello dei badge della pagina Permessi (success / warning / danger).
+ */
+const PAROLA_DEL_RISCHIO = Object.freeze({
+  basso: { chiave: 'modello.permissions.lowRisk', tono: 'success' },
+  medio: { chiave: 'modello.permissions.mediumRisk', tono: 'warning' },
+  massimo: { chiave: 'modello.permissions.veryHighRisk', tono: 'danger' },
+});
+const politicaDa = (valore, chiave, rischio, { consigliata = false } = {}) => Object.freeze(Object.defineProperties({ valore, rischio, consigliata, tono: PAROLA_DEL_RISCHIO[rischio].tono }, {
   nome: { enumerable: true, get: () => t(`chat.foot.permission.${chiave}`) },
   descrizione: { enumerable: true, get: () => t(`varie.policy.${chiave}.description`) },
-  nota: { enumerable: true, get: () => t(`varie.policy.${chiave}.note`) },
+  nota: { enumerable: true, get: () => t(PAROLA_DEL_RISCHIO[rischio].chiave) },
 }));
 export const POLITICHE = Object.freeze([
   politicaDa('Read only', 'readOnly', 'basso'),
-  politicaDa('Workspace write', 'workspaceWrite', 'medio'),
+  politicaDa('Workspace write', 'workspaceWrite', 'medio', { consigliata: true }),
   politicaDa('On request', 'onRequest', 'medio'),
   politicaDa('Full access', 'fullAccess', 'massimo'),
 ]);
@@ -58,9 +70,23 @@ export function descrizionePolitica(valore) {
   return politica(valore)?.descrizione || '';
 }
 
-/** La nota di rischio a destra («Consigliato», «Alto rischio»…). */
+/** La parola del rischio («rischio basso», «rischio medio», «rischio molto alto»): la stessa della pagina Permessi (decisione 162). */
 export function notaPolitica(valore) {
   return politica(valore)?.nota || '';
+}
+
+/** Le pillole del livello, nell'ordine in cui si mostrano: il rischio, poi «Consigliato» se lo è. Vuote per un valore sconosciuto. */
+export function pillolePolitica(valore) {
+  const p = politica(valore);
+  if (!p) return [];
+  return [{ testo: p.nota, tono: p.tono }, ...(p.consigliata ? [{ testo: t('modello.permissions.recommended'), tono: 'accent' }] : [])];
+}
+
+const testoSicuro = (s) => String(s).replace(/[&<>"]/gu, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+/** Le stesse pillole come badge piccoli del sistema di disegno, per i disegni a modello di `legacy/app.js`. */
+export function pillolePoliticaHtml(valore) {
+  return pillolePolitica(valore).map(({ testo, tono }) => `<span class="talos-badge talos-badge--${tono} talos-badge--sm">${testoSicuro(testo)}</span>`).join(' ');
 }
 
 /** I quattro valori nell'ordine di presentazione — per chi deve ciclare senza conoscere la forma. */

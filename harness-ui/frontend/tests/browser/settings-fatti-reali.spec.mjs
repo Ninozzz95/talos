@@ -82,7 +82,7 @@ test('SETTINGS-FATTI-44 — le sezioni Settings mostrano provider dal server, pr
   expect(esito.provider[2]).toContain('Chiave mancante');      // ← `requiresKey:true` e nessuna chiave
   expect(Object.fromEntries(esito.chat)['Testo chat']).toBe('Predefinito');
   expect(Object.fromEntries(esito.chat)['Chat a tutta larghezza']).toBe('Sì');
-  expect(esito.privacy.some((v) => v.includes('talos.harness.desktop.settings.v1'))).toBe(true);
+  expect(esito.privacy.some((v) => v.startsWith('Impostazioni · '))).toBe(true); expect(esito.privacy.some((v) => v.includes('talos.harness'))).toBe(false); // 0e6cdf514 (revisione d'uso 04/11, reperto 7): la chiave si legge col suo nome umano, mai la chiave interna
   /* ⛔ 18/09/2026 — qui si pretendeva «Workspace write», il nome INTERNO della politica. Il prodotto
      non lo dice più: la stessa politica aveva tre nomi («Workspace write» a schermo, «Scrive nel
      progetto» sul chip, «Accesso pieno» nella testata) e sono stati unificati sul nome umano

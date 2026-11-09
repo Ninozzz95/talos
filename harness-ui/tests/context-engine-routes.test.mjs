@@ -11,7 +11,7 @@ test('CTX-HTTP-ROUTES actual loopback routes preserve authorization, revisions a
   const engine = createContextEngine({ store, model: { resolveModel: async () => {}, summarize: async () => {} }, tokenCounter: { countPreparedContext: async () => {} } });
   const service = createDesktopContextService({ store, engine, readSession: id => id === 's' ? { sessionId: id } : null, isSessionEnabled: () => true, resolveSessionModel: async () => {} });
   const token = 'test-context-owner-token-0123456789';
-  const server = createServer(createHttpApp({ contextService: service, token }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', contextService: service, token }));
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => { await new Promise(resolve => server.close(resolve)); await service.close(); await store.close(); });
   const url = `http://127.0.0.1:${server.address().port}/api/v1/sessions/s/context`;

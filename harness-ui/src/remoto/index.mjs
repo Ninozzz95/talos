@@ -98,8 +98,12 @@ export function creaRemoto({
   /* R5.12 (owner 23/10/2026 sera): le cartelle dei dispositivi col consenso del PC. Senza i due file (chi crea il remoto senza dati,
      le prove vecchie) resta l'elenco di prima, `/api/v1/projects`. */
   fileConsensi = null, fileSegretoCartelle = null, cartelleAmmesse = [], cartelleEscluse = [],
+  notifiche = null, // contratto «notifiche» 31/10/2026: il registro del PC, per notifications.* dal dispositivo
+  luoghi = null, // 03/11/2026: i luoghi di «Consenti sempre», per computer-use.places.* dal dispositivo
+  luoghiAccesiFn = null, // decisione 310 (06/11/2026): la scelta della persona dal vivo; spenta, computer-use.places.* non c'è
   cartellaChat = null, // Parte 4 (24/10/2026): la cartella di serie della Chat dei dispositivi, nei dati di TALOS
   chatImageStore = null, // D-5 (25/10/2026): l'archivio delle immagini della chat, lo stesso della finestra
+  archivioAllegati = null, // decisione 47: gli allegati nei dati di TALOS, lo stesso della finestra
   /* 26/10/2026 (CLI 0.6.15, T2): chi ospita il remoto dice il SUO nome al telefono («TALOS CLI»), e le capacità che dichiara
      (`servizio.mjs`). Di serie come prima: «TALOS desktop», nessuna capacità. */
   programma = 'TALOS desktop', capacita = [],
@@ -128,6 +132,7 @@ export function creaRemoto({
       // revisione blocco 11 (A-R2): le cartelle bloccate di quel dispositivo, dalla stessa fonte di `remote_phone_folders`
       bloccateDi: async (dispositivoId) => (await cartelle.consensiDi(dispositivoId)).filter((c) => c.bloccata).map((c) => c.percorso),
       salvaImmagine: chatImageStore ? (x) => chatImageStore.upload(x) : null,
+      archivioAllegati,
       eventiDellaSessione: (sessionId) => {
         const eventi = [];
         const togli = sessionRegistry?.iscriviti?.(sessionId, (evento) => { eventi.push(evento); }, 0);
@@ -136,7 +141,8 @@ export function creaRemoto({
       },
     })
     : null;
-  const operazioniBase = creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, cartelle, file });
+  const bloccateDi = cartelle ? async (dispositivoId) => (await cartelle.consensiDi(dispositivoId)).filter((c) => c.bloccata).map((c) => c.percorso) : null;
+  const operazioniBase = creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, cartelle, file, notifiche, luoghi, luoghiAccesiFn, bloccateDi });
   /* D-3 del Mobile (25/10/2026, contratto Parte 2 «Revision 2»): un'offerta appena registrata sveglia il suo dispositivo (`f: 1`, poi
      il dispositivo chiede `file.offers`); collegato o no (B-2, revisione a blocco 7), finché non manda `device.seen` per quella sessione */
   file?.ascoltaOfferte((o) => { svegliaPerOfferta(o, { svegliatore }); });

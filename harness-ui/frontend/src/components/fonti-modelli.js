@@ -131,7 +131,41 @@ export function senzaChiave(fonte) {
 export function fornitoriConCatalogo(elenco = [], { pianoChatgpt = null } = {}) {
   const ids = new Set((Array.isArray(elenco) ? elenco : []).filter((p) => p?.keyConfigured || senzaChiave(p?.id)).map((p) => p.id));
   if (pianoChatgpt?.collegato === true && pianoChatgpt.pianoAbilitato === true) ids.add('chatgpt'); else ids.delete('chatgpt');
+  /* D18 del collaudo del 02/11: l'agente esterno non ha chiave ma va configurato; finché non lo è, chiederne il catalogo dava un 422 a ogni apertura del
+     selettore. L'elenco lo dice (`execution`, `provider-credential-store.mjs`, `listPublic`): uno stato non detto vale «non configurato», come il piano. */
+  const esterno = (Array.isArray(elenco) ? elenco : []).find((p) => p?.id === 'esterno');
+  if (esterno?.execution !== 'configurato') ids.delete('esterno');
   return ids;
+}
+
+/**
+ * I cataloghi dei fornitori diretti, uno per fornitore: la stessa lettura per il selettore della chat (`caricaDiretti`, app.js) e per la carta delle compattazioni. Revisione del
+ * Blocco 22, F1: la carta diceva «lo stesso elenco del selettore» e leggeva solo OpenRouter, il piano e i locali, quindi chi aveva solo chiavi dirette non trovava i suoi modelli.
+ * Un descrittore solo per ogni superficie, come Hermes: «One provider, as seen by every surface» (`hermes_cli/provider_catalog.py:29`, clone del 22/10).
+ * ⛔ Ogni fornitore ha la sua casella: `null` = chiave non collegata · `[]` = letto, zero modelli · `[…]` = i suoi modelli. Uno che fallisce non porta giù gli altri.
+ *
+ * @param {(url:string)=>Promise<any>} leggi legge una rotta e torna i suoi dati. Se lancia, l'errore di `/api/v1/providers` arriva a chi chiama e quello di un catalogo finisce
+ *   in `errori`; se torna `null`, quella lettura vale vuota.
+ * @returns {Promise<{perFornitore: Record<string, Array|null>, errori: Record<string, string>}>}
+ */
+export async function leggiCataloghiDiretti(leggi) {
+  const dati = await leggi('/api/v1/providers');
+  /* ⛔ 12/09, P-C: LM Studio gira su questo computer e non chiede nessuna chiave. */
+  /* 11/10/2026: il piano ChatGPT non sta fra le chiavi; il suo stato si legge a parte (un guasto qui non porta giù gli altri) */
+  const pianoChatgpt = await leggi('/api/v1/auth/chatgpt/stato').catch(() => null);
+  const conChiave = fornitoriConCatalogo(dati?.items || dati?.providers || [], { pianoChatgpt });
+  const perFornitore = {}; const errori = {};
+  await Promise.all(PROVIDER_DIRETTI.map(async ({ id, etichetta }) => {
+    if (!conChiave.has(id)) { perFornitore[id] = null; return; } // niente chiave ≠ zero modelli
+    try {
+      const risposta = await leggi(`/api/v1/providers/${id}/models`);
+      perFornitore[id] = risposta?.modelli || [];
+      /* Decisione 63 (03/11/2026): un motore locale spento arriva come dato; si disegna come prima, «non acceso», mai «zero modelli» */
+      if (risposta?.raggiungibile === false) errori[id] = t('modelli.fonti.nonAcceso', { nome: etichetta });
+    }
+    catch (e) { perFornitore[id] = []; errori[id] = `${etichetta}: ${e.message}`; }
+  }));
+  return { perFornitore, errori };
 }
 
 /*

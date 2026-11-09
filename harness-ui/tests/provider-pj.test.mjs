@@ -281,7 +281,7 @@ test('PJ-14 — HTTP reale: credenziali, cataloghi e sonda ordinaria senza gener
   const { createHttpApp } = await import('../src/http-app.mjs');
   const b = await banco(t, (_r, res) => json(res, { data: [{ id: 'MiniMax-M2.5', display_name: 'MiniMax M2.5' }], has_more: false }));
   const providerProbe = createProviderProbe({ ...dipendenze(b.store), fetchImpl: b.rete });
-  const app = createServer(createHttpApp({ providerStore: b.store, providerProbe, staticHandler: async () => null }));
+  const app = createServer(createHttpApp({ senzaGettone: 'prove', providerStore: b.store, providerProbe, staticHandler: async () => null }));
   await new Promise((resolve, reject) => { app.once('error', reject); app.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise(resolve => { app.close(resolve); app.closeAllConnections(); }));
   assert.notEqual(app.address().port, 4174);
@@ -336,8 +336,8 @@ test('PJ-16 — fallback nel kernel nei due versi OpenAI e Anthropic, storia str
 });
 
 test('PJ-17 — risposta incompleta del terzo usa il nome umano, senza ID tecnico', async t => {
-  /* 21/10/2026: `max_tokens` ora passa come `length` (NATIVE-FINE-01); l'incompleta resta per gli altri motivi, qui un rifiuto */
-  const b = await banco(t, (r, res) => json(res, { ...risposta(r.body.model), stop_reason: 'refusal' }));
+  /* 21/10/2026: `max_tokens` ora passa come `length` (NATIVE-FINE-01); l'incompleta resta per gli altri motivi; il rifiuto del modello dal 01/11 è una fine (`rifiuto-del-modello-nel-giro.test.mjs`), qui un motivo sconosciuto */
+  const b = await banco(t, (r, res) => json(res, { ...risposta(r.body.model), stop_reason: 'motivo_nuovo' }));
   await assert.rejects(() => b.invia('zai-anthropic'), e => e.code === 'NATIVE_RESPONSE_INCOMPLETE' && e.message.includes('Z.AI (porta Anthropic)') && !e.message.includes('zai-anthropic'));
 });
 

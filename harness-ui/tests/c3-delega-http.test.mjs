@@ -32,7 +32,7 @@ function registroFinto() {
 
 async function banco(t) {
   const registro = registroFinto();
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro, token: 'secret' }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro, token: 'secret' }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;

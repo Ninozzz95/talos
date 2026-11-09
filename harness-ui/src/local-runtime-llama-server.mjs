@@ -106,8 +106,8 @@ export function createLlamaServerRuntime({ supervisor, fetchImpl = fetch, now = 
     return supervisor.start(options);
   }
 
-  async function unload() {
-    return supervisor.stop();
+  async function unload(opzioni) {
+    return supervisor.stop(opzioni);
   }
 
   async function health() {

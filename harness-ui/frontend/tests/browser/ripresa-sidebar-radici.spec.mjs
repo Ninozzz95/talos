@@ -48,8 +48,8 @@ test('RIPRESA-SIDEBAR-PENDENTE — ricerca conservata con zero sessioni salvate'
   await page.route(u=>u.pathname==='/api/v1/sessions',r=>r.fulfill({json:{ok:true,data:{items:[]}}}));
   await page.route(`**/api/v1/workspace-launches/${launchId}`,r=>r.fulfill({json:{ok:true,data:{id:launchId,nome:'Progetto filtro',scadeAlle:'2026-09-19T23:59:59Z'}}}));
   await page.goto(`/#open-workspace=${launchId}`);
-  await page.getByRole('button',{name:'Continua nella chat — Progetto filtro',exact:true}).click();
-  await expect(page.getByRole('button',{name:'Continua nella chat — Progetto filtro',exact:true})).toBeHidden();
+  await page.getByRole('button',{name:'Continua su Progetto filtro',exact:true}).click();
+  await expect(page.getByRole('button',{name:'Continua su Progetto filtro',exact:true})).toBeHidden();
   await page.locator('#talosAvvio').waitFor({state:'detached'});
   const pending=page.locator('.real-session-item.is-pending');
   await expect(pending).toBeVisible();

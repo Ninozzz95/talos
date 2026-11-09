@@ -41,7 +41,7 @@ function automationStoreFinto() {
 const finestra = (base) => ({ 'Content-Type': 'application/json', Origin: base, 'Sec-Fetch-Site': 'same-origin' });
 
 async function listen(t, { automationStore = automationStoreFinto() } = {}) {
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     automationStore,
   });

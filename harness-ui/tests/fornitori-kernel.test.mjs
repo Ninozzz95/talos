@@ -90,7 +90,7 @@ test('FORN-K-05 — chatgpt_account (11/10/2026): passa dall\'ospite; scollegare
   assert.equal(stato.esito('a'), 'chatgpt_account status ok')
   assert.deepEqual(stato.domande, [])
   const esci = await giro(c, [chiama('b', 'chatgpt_account', { action: 'disconnect' })], { ospite, risposta: true, extra: estesi })
-  assert.deepEqual(esci.domande, [{ fornitore: 'chatgpt', email: 'nino@example.com', tipo: 'chatgpt_account', toolCallId: 'b' }])
+  assert.deepEqual(esci.domande, [{ fornitore: 'chatgpt', email: 'nino@example.com', tipo: 'chatgpt_account', toolCallId: 'b', [Symbol.for('talos.cartaSempre')]: true }]) // REV8-01: la carta sempre porta il suo segno
   assert.equal(esci.esito('b'), 'chatgpt_account disconnect ok')
   const figlia = await giro(c, [], { ospite, extra: { ...estesi, agentRole: 'child' } })
   assert.equal(figlia.offerti[0].includes('chatgpt_account'), false)

@@ -115,6 +115,8 @@ export function eUnRiprova(testoOriginale, testoDelRamo) {
  *   rifiuta `/retry` con gli allegati: «Media cannot be replayed by /retry, so fail closed», `cli_session_mixin.py:796-797`).
  */
 const nomeDalPercorso = (percorso) => String(percorso).split(/[\\/]/u).pop() || String(percorso);
+/* BD7: il testo porta il nome corto di un allegato nei dati (decisioni 43 e 47), e dentro c'è il suo riferimento: senza, il chip puntava a un file del progetto */
+const idDelRiferimento = (percorso) => { const id = /^attachments\/([0-9a-f]{24})\//u.exec(String(percorso ?? ''))?.[1]; return id ? { allegatoId: id } : {}; };
 
 export function pezziDegliAllegati(consegna, testoDellaBolla, { intestazioni = [], prefissiFile = [] } = {}) {
   if (typeof consegna !== 'string' || typeof testoDellaBolla !== 'string') return null;
@@ -131,9 +133,9 @@ export function pezziDegliAllegati(consegna, testoDellaBolla, { intestazioni = [
     const file = righe.map((riga) => {
       const corpo = riga.slice(2);
       const prefisso = prefissiFile.find((p) => p && corpo.startsWith(p));
-      if (prefisso) { const percorso = corpo.slice(prefisso.length); return { tipo: 'file', nome: nomeDalPercorso(percorso), percorso, riga, blocco: null }; }
+      if (prefisso) { const percorso = corpo.slice(prefisso.length); return { tipo: 'file', nome: nomeDalPercorso(percorso), percorso, ...idDelRiferimento(percorso), riga, blocco: null }; }
       const conPercorso = /^(.*) \(([^()]*)\)$/u.exec(corpo);
-      return { tipo: 'file', nome: conPercorso ? conPercorso[1] : corpo, percorso: conPercorso ? conPercorso[2] : '', riga, blocco: null };
+      return { tipo: 'file', nome: conPercorso ? conPercorso[1] : corpo, percorso: conPercorso ? conPercorso[2] : '', ...idDelRiferimento(conPercorso?.[2]), riga, blocco: null };
     });
     let cursore = 0;
     for (let i = 0; i < file.length && cursore < blocchi.length; i++) {

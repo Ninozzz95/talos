@@ -10,7 +10,9 @@ import { normalizzaSottocartella, WorkspaceFileError } from './workspace-files.m
 import { FRASI_DEI_MOTIVI_DEI_FILE } from './motivi-dei-file.mjs';
 import { ambienteSenzaVariabiliDelServer } from './ambiente-solo-server.mjs';
 
-export const MAX_CHAT_FILE_BYTES = 25 * 1024 * 1024;
+export const MAX_CHAT_FILE_BYTES = 100 * 1024 * 1024; // decision 298 (owner 06/11): chat attachments up to 100 MiB
+/** Phone and PC transfers keep the 25 MiB contract the phone app was built for (decision 298). */
+export const MAX_DEVICE_FILE_BYTES = 25 * 1024 * 1024;
 const HELPER = fileURLToPath(new URL('../native/talos-chat-upload.exe', import.meta.url));
 /* ⭐ BUG-20 (06/10/2026): la verifica runtime legge il lock `<exe>.sha256` accanto all'exe e, se serve
  * ricompilare, invoca COSTRUISCI_HELPER (scripts/build-chat-upload-helper.mjs). */

@@ -327,7 +327,7 @@ export function montaRailWorkflow(contenitore, {
     totali.replaceChildren(...(p.total <= SOGLIA_AGENTI
       ? [cella(tr('agenti.rail.totalAgents'), p.total, { icona: 'i-robot' }), cella(tr('agenti.family.running'), conti.inCorso, { tono: 'corso' }),
         cella(tr('agenti.rail.completed'), conti.conclusi, { tono: 'ok' }), cella(tr('agenti.family.waiting'), conti.inAttesa, { tono: 'attesa' })]
-      : [cella(tr('agenti.rail.totalLogicalAgents'), p.total, { icona: 'i-robot' }), cella(tr('agenti.rail.visibleGroups'), p.groups.length, { icona: 'i-layers' })]));
+      : [cella(tr('agenti.rail.totalLogicalAgents'), p.total, { icona: 'i-robot' }), cella(tr('agenti.rail.visibleGroups'), p.groups.length, { icona: 'i-group' })]));
   }
   function disegna() {
     if (morto) return;

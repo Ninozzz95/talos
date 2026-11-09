@@ -32,6 +32,7 @@ process.on('message', async ({ command, id, sessionId, message, riferimento }) =
     switch (command) {
       case 'start': data = registro.avvia('retry07'); break;
       case 'state': data = { session: registro.esporta(sessionId), invocazioni }; break;
+      case 'row': data = registro.elenca().find(r => r.sessionId === sessionId) ?? null; break;
       case 'flush': data = await attendiScritture({ cartellaStore, sessionId }); break;
       case 'settle': data = await registro.attendiAssestamento(sessionId); await attendiScritture({ cartellaStore, sessionId }); break;
       case 'resume': data = registro.resume(sessionId, message ?? null); break;

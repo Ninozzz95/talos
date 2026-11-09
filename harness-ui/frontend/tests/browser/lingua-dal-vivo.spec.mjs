@@ -6,7 +6,8 @@ import { expect, test } from '@playwright/test';
  *   conversazione si rilegge quando finisce. Prima si aggiornavano solo Terminale, Browser e Impostazioni.
  * La lingua si cambia dal controllo vero (`#setting-uiLanguageSelect`, evento `change`). La riga della prova NOT RUN è
  *   scritta da `app.js` col dizionario (`kernel.prova.nessunTestRiga`): è il testimone della conversazione.
- * ⛔ Sul 4174 solo letture: ogni richiesta non-GET si FERMA e si conta.
+ * ⛔ Sul 4174 solo letture: ogni richiesta non-GET si FERMA e si conta. L'unica ammessa è la copia delle preferenze della fase 8 (D2), che parte
+ *   una volta dopo il cambio della lingua: si conta a parte e risponde come il server. Prima la prima prova passava perché leggeva il conto PRIMA del suo invio.
  */
 const NON_ESEGUITA = 'NOT RUN: NO_TESTS_RAN — the test command ran and exited 0, but no tests ran: this is not a pass. Create the suite or point the command at the folder that has one.\nThe runner said: ℹ tests 0';
 const INIZIO = [
@@ -24,14 +25,15 @@ const FINE = [
 const numera = (lista) => lista.map((e, i) => ({ ...e, _sequenza: 1 + i }));
 
 async function apri(page, sessione, storie, { conclusa }) {
-  const conti = { nonGet: 0, letture: 0 };
+  const conti = { nonGet: 0, letture: 0, copie: 0 };
   await page.addInitScript(() => {
     localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { uiLanguage: 'it' } }));
   });
   await page.route('**/api/v1/**', async (route) => {
     const req = route.request();
-    if (req.method() !== 'GET') { conti.nonGet += 1; return route.abort(); }
     const url = new URL(req.url());
+    if (req.method() === 'POST' && url.pathname === '/api/v1/app-settings/window') { conti.copie += 1; return route.fulfill({ json: { ok: true, data: { revisione: Number.MAX_SAFE_INTEGER } } }); }
+    if (req.method() !== 'GET') { conti.nonGet += 1; return route.abort(); }
     if (url.pathname === `/api/v1/sessions/${sessione}/events`) {
       const storia = storie[Math.min(conti.letture, storie.length - 1)];
       conti.letture += 1;
@@ -42,7 +44,10 @@ async function apri(page, sessione, storie, { conclusa }) {
        vuoto («Sessions 0») e non c'era nessun «done» da tradurre. L'elenco vero si legge e ci si aggiunge la sessione della
        prova col SUO stato, nella forma di una riga di `GET /api/v1/sessions` (letta dal 4174 il 09/10). */
     if (url.pathname === '/api/v1/sessions') {
-      const vera = await (await route.fetch()).json();
+      /* ⛔ 31/10/2026: una lettura ancora in viaggio quando la prova finisce trova la risposta già chiusa («Response has been disposed»), e il
+         gestore che lancia fa rossa una prova finita bene (1 volta su 2.359 sotto carico). A prova finita non c'è più nessuno da servire. */
+      let vera;
+      try { vera = await (await route.fetch()).json(); } catch (errore) { if (/disposed/u.test(String(errore?.message))) return undefined; throw errore; }
       const righe = Array.isArray(vera?.data?.items) ? vera.data.items : [];
       if (!righe.some((r) => r.sessionId === sessione)) {
         righe.unshift({ sessionId: sessione, taskId: 'lingua-dal-vivo', progetto: null, nome: 'Lingua dal vivo', avviataAlle: '2026-10-03T09:00:00.000Z',
@@ -81,6 +86,7 @@ test('LINGUA-DAL-VIVO — una conversazione ferma si rilegge subito nella lingua
      («Lingua dal vivodone · …»), e il confine di parola non c'è. In italiano sarebbe «conclusa ·». */
   await expect(page.locator('#sessionList')).toContainText('done ·');
   await expect(page.locator('#sessionList')).not.toContainText('conclusa ·');
+  await expect.poll(() => conti.copie).toBe(1);
   expect(conti.nonGet).toBe(0);
 });
 
@@ -97,5 +103,6 @@ test('LINGUA-DAL-VIVO — un giro che lavora non si interrompe: la conversazione
   await expect.poll(() => conti.letture).toBe(2);
   await expect(riga(page)).toContainText('Tests not run');
   expect(await page.evaluate(() => window.__nessunaRicarica)).toBe(true);
+  await expect.poll(() => conti.copie).toBe(1);
   expect(conti.nonGet).toBe(0);
 });

@@ -26,7 +26,7 @@ const NUMERO = new Intl.NumberFormat('it-IT');
  */
 export const FORME = Object.freeze({
   ricordo: ['ricordo', 'ricordi'],
-  attrezzo: ['attrezzo', 'attrezzi'],
+  attrezzo: ['strumento', 'strumenti'],
   file: ['file', 'file'],
   nota: ['nota', 'note'],
   attività: ['attività', 'attività'],

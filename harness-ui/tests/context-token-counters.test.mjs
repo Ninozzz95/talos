@@ -237,3 +237,41 @@ test('CTX-DESKTOP-VIEW-IMAGE il corpo contato traduce l’immagine di view_image
   assert.ok(!JSON.stringify(riassunto.body).includes('talos_immagini'), 'nemmeno nel corpo di un riassunto');
   assert.equal(storia[2].talos_immagini.length, 1, 'la storia non si tocca');
 });
+
+/*
+ * Performance, 31/10/2026: il ragionamento cifrato pesa 12 byte a token sul piano (`strumenti/misura-peso-cifrato.mjs`: 51.640 byte, 4.157 token, a metà giro e dopo la persona), non 3,5.
+ * Contato come testo, la pulitura scattava a 60 mila token veri su 272 mila.
+ */
+const stimaDelPiano = async (input, ambiente = {}) => {
+  const salvata = process.env.TALOS_PIANO_SENZA_COLLEGAMENTO;
+  if (ambiente.senzaCollegamento) process.env.TALOS_PIANO_SENZA_COLLEGAMENTO = '1'; else delete process.env.TALOS_PIANO_SENZA_COLLEGAMENTO;
+  try {
+    const counter = createContextTokenCounter({ resolveProfile: async () => ({ nativeRequestBuilder: async () => ({ body: { model: 'gpt-6-luna', input } }) }), fetchFn: async () => { throw new Error('il piano non chiama nessun contatore'); } });
+    return await counter.countPreparedContext({ messages: [{ role: 'user', content: 'x' }], model: { provider: 'chatgpt', model: 'gpt-6-luna', windowTokens: 272_000, responseReserve: 32_000 } });
+  } finally { if (salvata === undefined) delete process.env.TALOS_PIANO_SENZA_COLLEGAMENTO; else process.env.TALOS_PIANO_SENZA_COLLEGAMENTO = salvata; }
+};
+
+test('CTX-COUNTER-CIFRATO il ragionamento cifrato pesa 12 byte a token, tutto il resto come sempre', async () => {
+  const conCifrato = await stimaDelPiano([{ type: 'reasoning', id: 'r1', encrypted_content: 'c'.repeat(120_000) }]);
+  assert.equal(conCifrato.method, 'heuristic');
+  const atteso = 10_000 + Math.ceil(JSON.stringify({ model: 'gpt-6-luna', input: [{ type: 'reasoning', id: 'r1', encrypted_content: '' }] }).length / 3.5) + 4;
+  assert.ok(Math.abs(conCifrato.inputTokens - atteso) <= 1, `${conCifrato.inputTokens} contro ${atteso}`);
+  const testo = await stimaDelPiano([{ type: 'message', role: 'user', encrypted_content: 'c'.repeat(120_000) }]);
+  assert.ok(testo.inputTokens > 34_000, 'il campo conta solo sugli elementi di ragionamento');
+});
+
+test('CTX-COUNTER-CIFRATO-SPENTO a collegamento spento il cifrato si conta come prima: il Codice col piano del telefono resta alla soglia di oggi', async () => {
+  const stima = await stimaDelPiano([{ type: 'reasoning', id: 'r1', encrypted_content: 'c'.repeat(120_000) }], { senzaCollegamento: true });
+  assert.ok(stima.inputTokens > 34_000, String(stima.inputTokens));
+});
+
+test('CTX-COUNTER-ANCHOR-FIRMATO il delta dopo l’àncora non conta il blocco firmato', async () => {
+  const { conAncoraDelFornitore } = await import('../src/context-token-counters.mjs');
+  const contatore = conAncoraDelFornitore({ countPreparedContext: async () => { throw new Error('non deve delegare'); } });
+  const selected = model('openrouter');
+  const storia = [{ role: 'user', content: 'Leggi il file' }];
+  contatore.registraAncora({ provider: selected.provider, model: selected.model, messages: storia, usage: { prompt_tokens: 500, completion_tokens: 7 } });
+  const blocco = { version: 1, provider: 'chatgpt', model: 'gpt-6-luna', content: [{ type: 'reasoning', text: 'c'.repeat(70_000) }] };
+  const misura = await contatore.countPreparedContext({ messages: [...storia, { role: 'assistant', content: 'Ecco' }, { role: 'tool', tool_call_id: 'c1', content: 'ok' }, { role: 'assistant', content: 'Altro', talos_provider_state: blocco }], tools: [], model: selected });
+  assert.ok(misura.inputTokens < 600, String(misura.inputTokens));
+});

@@ -100,7 +100,7 @@ test('RAMI-K1-GRAMMATICA il punto è un id di giro e nient\'altro', () => {
 function rottaFinta(forka) {
   const chiamate = [];
   const sessionRegistry = { forka: (...args) => { chiamate.push(args); return forka(...args); }, esiste: () => true };
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   const pc = (corpo) => chiama({ metodo: 'POST', percorso: '/api/v1/sessions/s-1/fork', corpo, origine: 'pc' });
   return { chiamate, pc };
@@ -145,7 +145,7 @@ test('RAMI-R1 dal dispositivo: un punto storto si ferma prima del consenso; col 
   };
   const cartelle = creaCartelleDeiDispositivi({ fileConsensi: join(dati, 'remoto', 'consensi.json'), fileSegreto: join(dati, 'remoto', 'segreto'),
     sessionRegistry, cartelleAmmesse: [], cartelleEscluse: [dati] });
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry, remotoFn: () => ({ cartelle }) });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry, remotoFn: () => ({ cartelle }) });
   const chiama = creaChiamataInterna({ httpApp, porta: 4999 });
   const operazioni = creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, cartelle });
   const contesto = { dispositivo: { id: 'dispositivo-A1', nome: 'Pad' }, iscrizioni: new Map(), iscrivi: () => async () => {} };

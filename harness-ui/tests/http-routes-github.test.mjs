@@ -16,7 +16,7 @@ function servizioFinto(risposte = {}) {
 }
 
 async function servi(t, ghService) {
-  const app = createHttpApp({ staticHandler: async () => null, sessionRegistry: { cartellaDi: () => null }, ghService });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: { cartellaDi: () => null }, ghService });
   const server = createServer(app);
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok); });
   t.after(() => new Promise((ok) => server.close(ok)));

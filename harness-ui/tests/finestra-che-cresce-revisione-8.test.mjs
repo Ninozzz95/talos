@@ -232,15 +232,15 @@ async function scenaGuastoVero(t, { stopDopoMs = null } = {}) {
   const grande = [...storiaTesto(30), { role: 'user', content: 'Continua.' }];
   const cartella = tmp(t, 'rev-b8-giro-');
   writeFileSync(join(cartella, 'uno.txt'), 'x');
-  const eventi = []; let errore = null;
+  const eventi = []; let errore = null; let risultato = null;
   const hooks = await runtime.service.createKernelHooks({ sessionId: 'chat', runId: 'g1' });
   try {
-    await talosLavora({ cartella, modello: 'local:m1', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: grande, scartoMisurato: 0,
+    risultato = await talosLavora({ cartella, modello: 'local:m1', chiave: 'finta', task: { consegna: 'x' }, messaggiIniziali: grande, scartoMisurato: 0,
       contestoDelProgetto: 'Project files:\n', fetchDiRete: motore.fetchDiRete, permessi: 'Full access', finestraToken: live.nCtx, contextHooks: hooks,
       finestraLocale: fl, segnaleStop: stop.signal,
       onGiro: (e) => { if (String(e?.tipo).startsWith('compattazione-') && e.tipo !== 'compattazione-progresso') eventi.push(`${e.tipo}:${e.motivo ?? e.fase ?? ''}${e.codice ? `(${e.codice})` : ''}`); } });
   } catch (e) { errore = e; }
-  return { msDopoLaCrescita: Date.now() - quandoCresciuta, eventi, errore, richieste: motore.stato.chiamate.length };
+  return { msDopoLaCrescita: Date.now() - quandoCresciuta, eventi, errore, risultato, richieste: motore.stato.chiamate.length };
 }
 
 test('REV-B8-A3 (misura) un guasto VERO dopo la crescita: quanto aspetta la richiesta prima del ripiego, e che cosa dice la chat', async (t) => {
@@ -253,8 +253,12 @@ test('REV-B8-A3 (misura) un guasto VERO dopo la crescita: quanto aspetta la rich
 test('REV-B8-A4 lo Stop durante i tentativi dopo la crescita ferma il giro subito (entro 600 ms), senza la riga del ripiego', async (t) => {
   const s = await scenaGuastoVero(t, { stopDopoMs: 700 });
   const dopoLoStop = s.msDopoLaCrescita - 700;
-  t.diagnostic(`fermo ${dopoLoStop} ms dopo lo Stop; errore ${s.errore?.name ?? "-"} ${s.errore?.code ?? ""} ${s.errore?.message ?? ""} STACK ${String(s.errore?.stack).split(String.fromCharCode(10)).slice(0, 8).join(" | ")}; eventi ${JSON.stringify(s.eventi)}; richieste partite ${s.richieste}`);
-  assert.notEqual(s.errore, null, 'lo Stop non ha fermato il giro: la richiesta è partita col ripiego');
+  t.diagnostic(`fermo ${dopoLoStop} ms dopo lo Stop; esito ${s.risultato?.comeFinita ?? '-'}; errore ${s.errore?.name ?? '-'} ${s.errore?.message ?? ''}; eventi ${JSON.stringify(s.eventi)}; richieste partite ${s.richieste}`);
+  /* Blocco 21 (01/11/2026): l'AbortError di prima veniva dalla divergenza della cattura, curata con `originaliArchiviati`. Ora il giro finisce col suo esito `fermato`:
+     conta che nessuna richiesta parta dopo lo Stop, non da quale strada esca. Senza lo Stop la stessa scena fa partire una richiesta (A3). */
+  assert.equal(s.errore, null, s.errore?.message);
+  assert.equal(s.risultato?.comeFinita, 'fermato', 'lo Stop non ha fermato il giro');
+  assert.equal(s.richieste, 0, 'la richiesta è partita col ripiego dopo lo Stop');
   assert.ok(dopoLoStop < 600, `fermo dopo ${dopoLoStop} ms`);
   assert.deepEqual(s.eventi.filter((e) => /ripiego/u.test(e)), []);
 });

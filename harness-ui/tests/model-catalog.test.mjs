@@ -138,7 +138,7 @@ test('PF-OR-05 — rotta HTTP reale in memoria: riserva e recupero senza aprire 
     if (!disponibile) throw new Error('rete');
     return Response.json({ data: [MODELLO_GREZZO_1] });
   } });
-  const app = createHttpApp({ staticHandler: async () => null, catalogoModelliFn: modelCatalog.ottieni });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, catalogoModelliFn: modelCatalog.ottieni });
   const richiesta = () => new Promise(resolve => {
     let status;
     app({ method: 'GET', url: '/api/v1/models', headers: {} }, {

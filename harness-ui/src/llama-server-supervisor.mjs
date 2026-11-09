@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { setTimeout as wait } from 'node:timers/promises';
 import { createLlamaBinaryProbe } from './llama-binary-probe.mjs';
@@ -7,6 +7,7 @@ import { basename, dirname, isAbsolute, join } from 'node:path';
 import { createProcessPolicy, DEFAULT_ENV_ALLOWLIST } from './process-policy.mjs';
 import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { leggiArchitetturaGguf, readGgufHeader } from './gguf-header.mjs';
+import { memoriaDelProiettoreMiB } from './proiettore-visione.mjs';
 import { RIGA_ARCHITETTURA_SCONOSCIUTA, buildDelMotore, libreriaDelMotorePresente, motoreConosceArchitettura, testoArchitetturaSconosciuta } from './motore-architetture.mjs';
 
 const LOOPBACK = '127.0.0.1';
@@ -232,6 +233,13 @@ export function supportaSpeculativaNgram(testoAiuto) {
  */
 export const AMBIENTE_OFFLINE = Object.freeze({ LLAMA_ARG_OFFLINE: '1' });
 
+/**
+ * 02/11/2026, forma «proiettore nel conto» (OK di CLI, Mobile, Performance, Desktop). Il margine di serie di `--fit` è 1024 MiB per
+ * scheda (`common/common.h:490`, b11960); la memoria del proiettore la dice `memoriaDelProiettoreMiB` (`proiettore-visione.mjs`).
+ */
+export const MARGINE_FIT_DI_SERIE_MIB = 1024;
+export { memoriaDelProiettoreMiB };
+
 /** `llama-fit-params` sta nella stessa cartella di `llama-server`, con la stessa estensione. */
 export function percorsoFitter(binaryPath) {
   if (typeof binaryPath !== 'string' || binaryPath.trim() === '') return null;
@@ -283,8 +291,43 @@ export function finestraDelMotoreLocale(statoFn, modello, { notaFn } = {}) {
   return valida(nota) ? nota : FINESTRA_PRUDENTE;
 }
 
+/*
+ * The card that slows down by itself (#26663, form `FORMA-PC-SVEGLIO-E-SCHEDA-LENTA-2026-11-01.md`): the speed of each answer as the engine
+ * prints it after every request (`server-context.cpp:765`, «       eval time = %10.2f ms / %5d tokens (%8.2f ms per token, %8.2f tokens per
+ * second)»). Generation only, never the prompt line (Performance). Read from the log the supervisor already reads: nothing on the answer's road.
+ */
+export function tempiDellaRisposta(riga) {
+  if (typeof riga !== 'string' || /prompt eval time/u.test(riga)) return null;
+  const m = /(?:^|\s)eval time =\s*([\d.]+) ms \/\s*(\d+) tokens \(\s*[\d.]+ ms per token,\s*([\d.]+) tokens per second\)/u.exec(riga);
+  if (!m) return null;
+  const generati = Number(m[2]);
+  const tokenPerSecondo = Number(m[3]);
+  const ms = Number(m[1]);
+  return Number.isFinite(generati) && Number.isFinite(tokenPerSecondo) ? { generati, tokenPerSecondo, ms } : null;
+}
+
+/*
+ * Sixth review, B3: with speculative decoding on (ngram-mod, on by default) tokens per second follow the TEXT (123 on new text, 353 when
+ * the answer copies the context, measured by the repo bench), so a healthy card could look slow. The engine says how many drafted tokens
+ * it accepted (`server-context.cpp:799`, «draft acceptance = %0.5f (%5d accepted / %5d generated), mean len = %5.2f»): each step makes one
+ * token plus the accepted ones, so steps per second = (generated − accepted) / time. That follows the card, not the text.
+ */
+export function bozzeDellaRisposta(riga) {
+  const m = typeof riga === 'string' ? /draft acceptance = [\d.]+ \(\s*(\d+) accepted \/\s*(\d+) generated\)/u.exec(riga) : null;
+  return m ? { accettate: Number(m[1]) } : null;
+}
+
+/** The speed the slow card compares: steps per second when the engine drafted, tokens per second otherwise. */
+export function passiAlSecondo({ generati, tokenPerSecondo, ms }, bozze = null) {
+  if (!bozze || !(Number.isFinite(ms) && ms > 0)) return tokenPerSecondo;
+  const passi = generati - bozze.accettate;
+  return passi > 0 ? passi / (ms / 1000) : tokenPerSecondo;
+}
+
 export function createLlamaServerSupervisor({
   binaryPath,
+  /** 01/11/2026: called with `{ generati, tokenPerSecondo, modelId, finestra }` after every answer of the engine (the slow card). */
+  onTempiRisposta = null,
   // R-03: il binario CPU di riserva e la descrizione del motore scelto dal guscio.
   fallbackBinaryPath = null,
   motore: motoreDichiarato = null,
@@ -325,12 +368,23 @@ export function createLlamaServerSupervisor({
    * `'auto'` = si accende se il binario la offre; `'off'` = mai.
    */
   speculativaNgram = 'auto',
+  caricamento = null,
   /**
    * Revisione blocco 4 (A-7, 26/10/2026): quanto aspettare che il processo fermato sia DAVVERO uscito prima di dire «fermo» — sennò il
    * motore nuovo (la finestra che cresce, il cambio di modello) parte mentre il vecchio tiene ancora la sua memoria sulla scheda.
    * Oltre, si prosegue e lo si dice nel registro.
    */
   attesaChiusuraMs = 5_000,
+  scheda = null, // A2-1: `creaMemoriaScheda`; senza, nessuna lettura e l'ordine dell'avvio resta quello di sempre
+  /**
+   * 01/11/2026, «Memoria delle conversazioni» (forma `FORMA-FOTO-E-RIORDINO`, punto 1): la cartella data a llama-server come
+   * `--slot-save-path`, dove scrive le foto della scheda (`POST /slots/0?action=save`). Si crea prima dell'avvio: llama.cpp LANCIA se il
+   * percorso non è una cartella (Jan, `slots.rs:283-286`, `common/arg.cpp`) e l'avvio intero cadrebbe per una funzione sola.
+   * null = nessuna foto, l'avvio di sempre.
+   */
+  cartellaFoto = null,
+  /* il registro del server: `emitLog` non ha lettori lì (revisione 2, M9) */
+  registro = (testo) => { try { process.stderr.write(testo); } catch { /* no log, the opening goes on */ } },
 } = {}) {
   if (typeof binaryPath !== 'string' || binaryPath.trim() === '') throw new LlamaServerSupervisorError('binaryPath is required', 'RUNTIME_MISCONFIGURED');
   if (fallbackBinaryPath !== null && (typeof fallbackBinaryPath !== 'string' || fallbackBinaryPath.trim() === '')) throw new LlamaServerSupervisorError('fallbackBinaryPath must be a non-empty string', 'RUNTIME_MISCONFIGURED');
@@ -341,6 +395,7 @@ export function createLlamaServerSupervisor({
   let pendingStart = null;
   let stopPromise = null;
   let current = null;
+  let processiAvviati = 0; // 01/11/2026: every spawn starts with an empty slot; the snapshot driver compares this number
   let state = 'unavailable';
   const listeners = new Set();
   /* Le risposte del binario non cambiano fra un avvio e l'altro: si pagano
@@ -454,12 +509,18 @@ export function createLlamaServerSupervisor({
    * build senza backend la domanda «ci sta nella scheda?» non ha oggetto, e
    * nessuno dei due argomenti verrebbe passato comunque.
    */
-  async function leveVelocita(binario, modelPath, contextLength, operation) {
+  async function leveVelocita(binario, modelPath, contextLength, operation, margineProiettoreMiB = 0) {
     checkStart(operation);
-    const chiave = `${binario}|${modelPath}|${contextLength ?? ''}`;
+    const chiave = `${binario}|${modelPath}|${contextLength ?? ''}|${margineProiettoreMiB}`;
     if (leveMemorizzate.has(chiave)) return leveMemorizzate.get(chiave);
     const fitter = percorsoFitter(binario);
-    const contesto = Number.isInteger(contextLength) && contextLength > 0 ? ['-c', String(contextLength)] : [];
+    /* 02/11/2026, forma «proiettore nel conto»: il server aggiunge la memoria del proiettore al margine di --fit
+       (`tools/server/server-context.cpp:1271-1286`, b11960), la sonda non lo conosce (`tools/fit-params/fit-params.cpp:34-35`): le si dà
+       lo stesso margine. Senza proiettore gli argomenti restano quelli di prima. */
+    const contesto = [
+      ...(Number.isInteger(contextLength) && contextLength > 0 ? ['-c', String(contextLength)] : []),
+      ...(margineProiettoreMiB > 0 ? ['--fit-target', String(MARGINE_FIT_DI_SERIE_MIB + margineProiettoreMiB)] : []),
+    ];
     let kv = { tipo: 'q8_0', perche: 'the binary fitter was not found: staying on the previous quantized KV' };
     if (fitter) {
       const conF16 = leggiNglDalFitter(await probeBinary(fitter, ['-m', modelPath, ...contesto, '-fa', '1'], 30_000, { signal: operation.controller.signal }) ?? '');
@@ -476,11 +537,17 @@ export function createLlamaServerSupervisor({
     return leve;
   }
 
+  /** A2-1: mentre si aspetta la scheda il processo non c'è ancora: lo stato dice lo stesso quale modello sta arrivando. */
+  function fotoLiberazione() {
+    if (!scheda?.liberando()) return {};
+    return { fase: 'freeing', modelId: pendingStart?.modelId ?? null, ...(pendingStart?.startedAt ? { startedAt: pendingStart.startedAt } : {}) };
+  }
+
   function status() {
     // R-03: `motore` esce sempre (anche a riposo o dopo un guasto): variante, dispositivi,
     // l'eventuale ripiego avvenuto in questo caricamento e la proposta per la persona.
     const fotoMotore = { variante: motore.variante, dispositivi: [...motore.dispositivi], ripiego: motore.ripiego ? { ...motore.ripiego } : null, proposta: motore.proposta ? { ...motore.proposta } : null };
-    if (!current) return { state, runtimeId: 'llama.cpp', motore: fotoMotore, observedAt: now().toISOString() };
+    if (!current) return { state, runtimeId: 'llama.cpp', motore: fotoMotore, ...fotoLiberazione(), observedAt: now().toISOString() };
     return {
       state: current.state,
       runtimeId: 'llama.cpp',
@@ -496,7 +563,16 @@ export function createLlamaServerSupervisor({
        * del modello caricato attribuito a QUALUNQUE modello ispezionato.
        */
       modelId: current.modelId ?? null,
+      ...(current.state === 'loading' ? { startedAt: current.startedAt } : {}), // 01/11/2026: the seconds of a load survive a page reload
       ...(Number.isSafeInteger(current.windowTokens) ? { windowTokens: current.windowTokens } : {}), // L1-c: la finestra vera, se letta
+      /* 01/11/2026, «Memoria delle conversazioni»: se questo processo salva foto, e quale processo è (ogni avvio ha una scheda vuota) */
+      fotoAttive: Boolean(current.cartellaFoto),
+      processo: current.numeroProcesso ?? null,
+      firmaScheda: current.firmaScheda ?? null, // l'impronta di come questo processo tiene la scheda (identità delle foto)
+      ...(typeof current.vede === 'boolean' ? { vede: current.vede } : {}), // vista locale: letto da `/props`, solo se il motore lo dice
+      /* 02/11/2026: il proiettore passato a questo processo, e perché un proiettore del modello NON è stato passato (mai di nascosto) */
+      ...(current.proiettore ? { proiettore: current.proiettore } : {}),
+      ...(current.operation?.vistaSenza ? { vistaSenza: current.operation.vistaSenza } : {}),
       observedAt: now().toISOString(),
     };
   }
@@ -529,7 +605,40 @@ export function createLlamaServerSupervisor({
     };
     entry.child.once('close', onClose);
     entry.child.once('error', onError);
-    entry.child.stdout?.on('data', (chunk) => emitLog('stdout', chunk));
+    /* the slow card: the engine's timing line, whichever stream carries it; a broken listener never touches the engine */
+    /* the timing line is held until the engine says whether it drafted (the draft line comes after it, in the same block) or 300 ms pass */
+    const consegna = () => {
+      const t = entry.tempiInAttesa;
+      entry.tempiInAttesa = null;
+      if (entry.timerTempi) { clearTimeout(entry.timerTempi); entry.timerTempi = null; }
+      if (!t) return;
+      try {
+        onTempiRisposta({ generati: t.generati, tokenPerSecondo: passiAlSecondo(t, t.bozze), passi: Boolean(t.bozze), modelId: entry.modelId ?? null,
+          finestra: entry.windowTokens ?? null, scheda: entry.memoriaDispositivo?.nome ?? null });
+      } catch { /* a help, never a stop */ }
+    };
+    const tempiDiRiga = (riga) => {
+      if (typeof onTempiRisposta !== 'function') return;
+      const tempi = tempiDellaRisposta(riga);
+      if (tempi) {
+        consegna(); // a previous answer still waiting goes first
+        entry.tempiInAttesa = tempi;
+        entry.timerTempi = setTimeout(consegna, 300);
+        entry.timerTempi.unref?.();
+        return;
+      }
+      const bozze = bozzeDellaRisposta(riga);
+      if (bozze && entry.tempiInAttesa) { entry.tempiInAttesa.bozze = bozze; consegna(); }
+    };
+    entry.child.stdout?.on('data', (chunk) => {
+      if (typeof onTempiRisposta === 'function') {
+        entry.residuoStdout = (entry.residuoStdout ?? '') + (Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk));
+        const righe = entry.residuoStdout.split('\n');
+        entry.residuoStdout = righe.pop().slice(-4096);
+        for (const riga of righe) tempiDiRiga(riga);
+      }
+      emitLog('stdout', chunk);
+    });
     entry.child.stderr?.on('data', (chunk) => {
       /*
        * ⛔ BC-13 — le ultime righe si TENGONO, non solo si trasmettono. Sono
@@ -552,6 +661,7 @@ export function createLlamaServerSupervisor({
         if (riga.trim() === '') continue;
         // 25/09/2026 sera: la memoria della scheda come la misura il motore all'avvio, per dirla se il modello non ci sta
         if (!entry.memoriaDispositivo) entry.memoriaDispositivo = memoriaDelDispositivo(riga);
+        tempiDiRiga(riga);
         entry.ultimeRighe.push(riga.trim());
         if (entry.ultimeRighe.length > 12) entry.ultimeRighe.shift();
       }
@@ -587,7 +697,12 @@ export function createLlamaServerSupervisor({
         signal: AbortSignal.any([operation.controller.signal, AbortSignal.timeout(3_000)]),
       });
       if (!risposta?.ok || typeof risposta.json !== 'function') return null;
-      const nCtx = (await risposta.json())?.default_generation_settings?.n_ctx;
+      const props = await risposta.json();
+      /* 01/11/2026, vista locale (forma, punto 5; Performance e Mobile): dalla stessa lettura, se questo processo VEDE le immagini
+         (`modalities.vision`, misurato su b11960: true col proiettore). Un campo che manca resta ignoto (null), mai false. */
+      const vista = props?.modalities?.vision;
+      entry.vede = typeof vista === 'boolean' ? vista : null;
+      const nCtx = props?.default_generation_settings?.n_ctx;
       return Number.isSafeInteger(nCtx) && nCtx > 0 ? nCtx : null;
     } catch {
       return null;
@@ -658,7 +773,7 @@ export function createLlamaServerSupervisor({
    * supervisor (`llama-router-supervisor.mjs`) uses the very same function for the model's section of the preset — the brief's «the
    * same functions reused». Nothing changed in the choices: this is the body that sat inline in `lanciaProcesso` until today.
    */
-  async function sceltePerIlModello({ modelPath, contextLength, finestraDiRiserva, binario, ngl, operation }) {
+  async function sceltePerIlModello({ modelPath, contextLength, finestraDiRiserva, binario, ngl, operation, margineProiettoreMiB = 0 }) {
     const conOffload = Number.isInteger(ngl) && ngl > 0;
     /*
      * ⛔ Le domande al binario si fanno PRIMA di accenderlo, e il loro esito
@@ -677,7 +792,7 @@ export function createLlamaServerSupervisor({
     // Revisione del 20/10 (T1): sulla scheda il caricatore non decide più la finestra, la dà come RISERVA (la sua banda di sempre)
     let finestra = finestraScelta?.finestra ?? contextLength ?? finestraDiRiserva;
     let leve = conOffload
-      ? await leveVelocita(binario, modelPath, finestra, operation)
+      ? await leveVelocita(binario, modelPath, finestra, operation, margineProiettoreMiB)
       : { kv: { tipo: 'q8_0', perche: 'no offload to the device: the KV cache is not part of the choice' }, speculativa: await speculativaDisponibile(binario, operation) };
     checkStart(operation);
     /*
@@ -696,7 +811,7 @@ export function createLlamaServerSupervisor({
       } else {
         finestraScelta = null;
         finestra = contextLength ?? finestraDiRiserva;
-        leve = await leveVelocita(binario, modelPath, finestra, operation);
+        leve = await leveVelocita(binario, modelPath, finestra, operation, margineProiettoreMiB);
         checkStart(operation);
       }
     }
@@ -747,6 +862,13 @@ export function createLlamaServerSupervisor({
        */
       ...(conOffload ? (ngl99 ? ['-ngl', String(ngl)] : []) : (m.ripiego ? ['-ngl', '0', '--device', 'none'] : [])),
       /*
+       * Owner 01/11/2026, «Riparto senza la copia in RAM»: il banco del 01/11 si è fermato con 17,7 GB del modello nella memoria del PC e 2,1 GB liberi. Di serie il motore
+       * mappa il file: con `-ngl` esplicito tutti gli strati sono chiesti alla scheda e quella copia non serve a generare, anche se il fitter dice che qualcuno non ci sta. Non vale
+       * con `--fit`, dove una parte lavora sul processore e la usa. La condizione non si stringe: il modello che ha fatto nascere questa cura è proprio uno di quelli (quarta revisione, M11).
+       * Ollama la toglie da solo su Windows con CUDA e sotto pressione di memoria (`server/sched.go:1181`, `:1251`). Spenta finché il banco non la promuove.
+       */
+      ...(conOffload && ngl99 && caricamento ? ['--load-mode', caricamento] : []),
+      /*
        * ⭐⭐⭐ 3/9 + BC-13 12/09 — KV cache quantizzata SIMMETRICA con `-fa 1`
        * solo con offload (+15 % generazione, +408 % prompt, misurati); il tipo
        * lo decide il fitter del binario (vedi `decidiTipoKvCache`).
@@ -773,7 +895,7 @@ export function createLlamaServerSupervisor({
     ];
   }
 
-  async function lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, finestraDiRiserva, binario, ngl, apiKey, operation }) {
+  async function lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, finestraDiRiserva, binario, ngl, apiKey, operation, proiettore = null }) {
     checkStart(operation);
     const entry = {
       child: null,
@@ -784,30 +906,57 @@ export function createLlamaServerSupervisor({
       port: selectedPort,
       baseUrl: `http://${LOOPBACK}:${selectedPort}`,
       state: 'loading',
-      startedAt: now().toISOString(),
+      startedAt: operation.startedAt ?? now().toISOString(), // the retry on a smaller window or on the processor is the same opening
       failure: null,
       closed: false,
       ultimeRighe: [],
       residuoStderr: '',
       binario,
+      proiettore: proiettore?.path ?? null,
     };
     current = entry;
     operation.entry = entry;
     state = 'loading';
-    const scelte = await sceltePerIlModello({ modelPath, contextLength, finestraDiRiserva, binario, ngl, operation });
+    const scelte = await sceltePerIlModello({ modelPath, contextLength, finestraDiRiserva, binario, ngl, operation,
+      margineProiettoreMiB: proiettore ? memoriaDelProiettoreMiB(proiettore) : 0 });
+    if (proiettore) emitLog('stderr', `[talos] image projector: ${proiettore.path} (${memoriaDelProiettoreMiB(proiettore)} MiB ${Number.isFinite(proiettore.memoriaMiB) && proiettore.memoriaMiB > 0 ? 'measured by the engine' : 'estimated, 2x the file'})\n`);
     operation.finestraNostra = scelte.finestraScelta ? scelte.finestraScelta.finestra : null; // T4: solo una finestra scelta da noi si ritenta
     for (const riga of righeDelleScelte(scelte, binario)) emitLog('stderr', riga);
     checkStart(operation); // Log subscribers may have requested stop synchronously.
+    let fotoQui = null;
+    if (typeof cartellaFoto === 'string' && cartellaFoto) {
+      try { mkdirSync(cartellaFoto, { recursive: true }); fotoQui = cartellaFoto; } catch (e) { registro(`[llama-server] snapshots off for this opening: ${cartellaFoto} cannot be created (${e?.code ?? e?.message})\n`); }
+    }
+    entry.cartellaFoto = fotoQui;
+    processiAvviati += 1;
+    entry.numeroProcesso = processiAvviati;
+    const argomentiScelti = argomentiDelModello(scelte, ngl);
+    /*
+     * 01/11/2026, «Memoria delle conversazioni»: l'impronta di COME questo processo tiene la scheda, come lo `spec` di Jan (`slots.rs:13-16`,
+     * :47-58): il binario (percorso, peso, data: una build nuova cambia la disposizione della cache senza dirlo), gli argomenti del modello
+     * (finestra, tipo di cache, livelli, speculativa) e il file del modello (peso e data). Una foto torna solo sulla stessa impronta. Mai la
+     * porta né la chiave: cambiano a ogni avvio e non cambiano la scheda.
+     */
+    let firmaBinario = [binario, null, null];
+    try { const st = statSync(binario); firmaBinario = [binario, st.size, Math.trunc(st.mtimeMs)]; } catch { /* resta il percorso */ }
+    let firmaModello = [null, null];
+    try { const st = statSync(modelPath); firmaModello = [st.size, Math.trunc(st.mtimeMs)]; } catch { /* ignoto */ }
+    /* 02/11/2026: il proiettore cambia la scheda (memoria e dispositivo): entra nella firma solo quando c'è, così le firme di prima restano */
+    let firmaProiettore = null;
+    if (proiettore) { firmaProiettore = [proiettore.path, null, null]; try { const st = statSync(proiettore.path); firmaProiettore = [proiettore.path, st.size, Math.trunc(st.mtimeMs)]; } catch { /* resta il percorso */ } }
+    entry.firmaScheda = createHash('sha256').update(JSON.stringify(firmaProiettore ? [firmaBinario, firmaModello, argomentiScelti, firmaProiettore] : [firmaBinario, firmaModello, argomentiScelti])).digest('hex');
     entry.child = processPolicy.spawn(binario, [
       '-m', modelPath,
+      ...(proiettore ? ['--mmproj', proiettore.path] : []), // 02/11/2026: la vista locale, solo col proiettore controllato in `start`
       ...(modelId ? ['--alias', modelId] : []),
       '--host', LOOPBACK,
       '--port', String(selectedPort),
       '--api-key', apiKey,
-      ...argomentiDelModello(scelte, ngl),
+      ...argomentiScelti,
       '--jinja',
       '--metrics',
       '--props',
+      ...(fotoQui ? ['--slot-save-path', fotoQui] : []),
     ], { cwd: isAbsolute(binario) ? dirname(binario) : process.cwd(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
       env: { ...AMBIENTE_OFFLINE } });
     if (!entry.child || typeof entry.child.once !== 'function') throw new LlamaServerSupervisorError('spawn did not return a child process', 'RUNTIME_PROCESS_FAILED');
@@ -854,6 +1003,8 @@ export function createLlamaServerSupervisor({
         if (Number.isSafeInteger(entry.windowTokens) && entry.modelId) ricordaFinestra(entry.modelId, entry.windowTokens); // T3, D3
         entry.state = 'ready';
         state = 'ready';
+        if (motore.variante === 'vulkan') scheda?.aperto(); // in sottofondo: non aspetta e non può far fallire questa apertura
+        else scheda?.dimentica(); // sul processore la scheda non ha dato niente: non c'è memoria da aspettare
         return status();
       }
       await wait(pollIntervalMs, undefined, { signal: operation.controller.signal });
@@ -867,14 +1018,38 @@ export function createLlamaServerSupervisor({
 
   // Reserve the operation before the first await (port allocation/lock included).
   // A stop drains this owner before a subsequent start may acquire the model lock.
-  async function start({ modelId, modelPath, port, contextLength, finestraDiRiserva, signal } = {}) {
+  /**
+   * 02/11/2026: il proiettore che chi apre ha trovato nel manifesto, `{ path, bytes?, memoriaMiB? }`, si passa al motore solo se il file
+   * c'è ed è un file, e se il suo peso è quello dello scarico (condizione del Mobile: mancante o rovinato ⇒ si apre senza vista e lo si
+   * scrive). L'impronta non si ricalcola a ogni apertura (lo scarico l'ha già controllata): un file rovinato con lo stesso peso fa
+   * fallire l'avvio, e lì l'apertura si rifà senza.
+   */
+  function proiettoreUsabile(proiettore, operation) {
+    if (!proiettore || typeof proiettore.path !== 'string') return null;
+    /* revisione CLI 02/11, (a): un chiamante nuovo con un percorso relativo non spegne la vista in silenzio */
+    const assoluto = isAbsolute(proiettore.path);
+    let st = null;
+    if (assoluto) { try { st = statSync(proiettore.path); } catch { st = null; } }
+    const motivo = !assoluto ? 'its path is not absolute'
+      : !st?.isFile() ? 'the file is missing'
+      : (Number.isSafeInteger(proiettore.bytes) && proiettore.bytes > 0 && st.size !== proiettore.bytes) ? `its size is ${st.size} bytes, the download had ${proiettore.bytes}`
+        : null;
+    if (motivo) {
+      operation.vistaSenza = `image projector not used, ${motivo}: images are not read`;
+      emitLog('stderr', `[talos] ${operation.vistaSenza} (${proiettore.path})\n`);
+      return null;
+    }
+    return { path: proiettore.path, bytes: st.size, ...(Number.isFinite(proiettore.memoriaMiB) && proiettore.memoriaMiB > 0 ? { memoriaMiB: proiettore.memoriaMiB } : {}) };
+  }
+
+  async function start({ modelId, modelPath, port, contextLength, finestraDiRiserva, signal, proiettore = null } = {}) {
     if (pendingStart || stopPromise || (current && ['loading', 'ready', 'stopping'].includes(current.state))) {
       throw new LlamaServerSupervisorError('runtime is already active', 'RUNTIME_ALREADY_RUNNING');
     }
     if (typeof modelPath !== 'string' || !isAbsolute(modelPath)) throw invalid('modelPath must be absolute');
     if (signal?.aborted) throw cancelled();
     let complete;
-    const operation = { controller: new AbortController(), modelId, locked: false, entry: null,
+    const operation = { controller: new AbortController(), modelId, locked: false, entry: null, startedAt: now().toISOString(),
       done: new Promise(resolve => { complete = resolve; }) };
     const onAbort = () => operation.controller.abort(cancelled());
     signal?.addEventListener('abort', onAbort, { once: true });
@@ -899,6 +1074,12 @@ export function createLlamaServerSupervisor({
         await Promise.race([aspettaChiusura(vecchio), annullato]);
         if (vecchio.closed && fermatoNonUscito === vecchio) fermatoNonUscito = null;
       }
+      if (scheda) {
+        checkStart(operation);
+        /* A2-1: una riga solo se si è aspettato davvero, col tempo, così non si confonde col caricamento */
+        const esito = await scheda.primaDiAprire({ signal: operation.controller.signal });
+        if (esito && ['tornata', 'scaduta'].includes(esito.esito)) registro(`[talos] graphics card: ${esito.esito} after ${esito.ms} ms\n`);
+      }
       checkStart(operation);
       const selectedPort = port ?? await portAllocator();
       checkStart(operation);
@@ -917,9 +1098,40 @@ export function createLlamaServerSupervisor({
         if (motoreConosceArchitettura(binaryPath, architettura) === false) throw erroreArchitettura(architettura, binaryPath);
       }
       const apiKey = randomBytes(32).toString('hex');
+      /*
+       * 02/11/2026, forma «proiettore nel conto», condizioni di CLI, Mobile e Desktop: la vista non rompe MAI la chat. Un proiettore che
+       * manca o non ha il peso dello scarico non si passa; un avvio col proiettore che fallisce (proiettore incompatibile, memoria che non
+       * basta nemmeno con --fit) si rifà UNA volta senza, e lo si dice. La rete `LOCAL_MODEL_NO_VISION` resta a dirlo alla persona.
+       */
+      const vista = proiettoreUsabile(proiettore, operation);
+      try {
+        return await apriIlMotore(vista);
+      } catch (conVista) {
+        /* revisione CLI 02/11, R1: anche un motore che col proiettore resta muto (tempo scaduto) si riapre senza */
+        if (!vista || !['RUNTIME_PROCESS_FAILED', 'RUNTIME_OUT_OF_MEMORY', 'RUNTIME_HEALTH_TIMEOUT'].includes(conVista?.code)) throw conVista;
+        checkStart(operation); // a stop is never a reason to open again
+        const primaEntry = current;
+        chiudi(primaEntry);
+        if (primaEntry) await aspettaChiusura(primaEntry);
+        if (current === primaEntry) current = null;
+        /* R2: la prima riga dice che si RIPROVA; «aperto senza» si scrive solo se si apre, e se fallisce anche senza la colpa non è della vista */
+        emitLog('stderr', `[talos] the engine did not open with the image projector (${conVista.code}): trying again without it\n`);
+        checkStart(operation);
+        try {
+          const aperto = await apriIlMotore(null);
+          operation.vistaSenza = `the engine did not open with the image projector (${conVista.code}): opened without it, images are not read`;
+          emitLog('stderr', `[talos] ${operation.vistaSenza}\n`);
+          return aperto;
+        } catch (ancheSenza) {
+          emitLog('stderr', `[talos] it fails without the image projector too (${ancheSenza?.code ?? 'error'}): the failure is not from the image projector\n`);
+          throw ancheSenza;
+        }
+      }
+      /* the opening of every day (first attempt, our window refused, the processor fallback), with or without the projector */
+      async function apriIlMotore(proiettoreQui) {
       motore = nuovoMotore(motoreIniziale.variante);
       try {
-        return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, finestraDiRiserva, binario: binaryPath, ngl: gpuLayers, apiKey, operation });
+        return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength, finestraDiRiserva, binario: binaryPath, ngl: gpuLayers, apiKey, operation, proiettore: proiettoreQui });
       } catch (primo) {
         checkStart(operation); // Stop is never a reason to start a CPU fallback.
         const guasto = motore.variante === 'vulkan' && primo.code === 'RUNTIME_PROCESS_FAILED' ? classificaGuastoVulkan(primo.righeMotore ?? []) : null;
@@ -935,7 +1147,7 @@ export function createLlamaServerSupervisor({
           }
           operation.finestraNostra = null;
           try {
-            return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength: finestraDiRiserva, binario: binaryPath, ngl: gpuLayers, apiKey, operation });
+            return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength: finestraDiRiserva, binario: binaryPath, ngl: gpuLayers, apiKey, operation, proiettore: proiettoreQui });
           } catch (riprova) {
             checkStart(operation);
             const ancora = motore.variante === 'vulkan' && riprova.code === 'RUNTIME_PROCESS_FAILED' ? classificaGuastoVulkan(riprova.righeMotore ?? []) : null;
@@ -951,6 +1163,9 @@ export function createLlamaServerSupervisor({
           throw erroreMemoriaPiena(primo, modelPath); // 25/09 sera: la carta vera, coi numeri (vedi `erroreMemoriaPiena`)
         }
         if (!guasto || !fallbackBinaryPath) throw primo;
+        /* revisione CLI 02/11, R3: se c'era la vista e la scheda c'è (classe diversa da «driver»), prima del processore si riprova la
+           SCHEDA senza proiettore (il chiamante lo fa): la vista non deve portare tutta la chat sul processore */
+        if (proiettoreQui && guasto.classe !== 'driver') throw primo;
         const primaEntry = current;
         chiudi(primaEntry);
         if (current === primaEntry) current = null;
@@ -961,7 +1176,7 @@ export function createLlamaServerSupervisor({
         }
         try {
           // L1-d: sul processore la finestra di serie non vale (è una scelta per la scheda): resta quella del caricatore
-          return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength: contextLength ?? finestraDiRiserva, binario: fallbackBinaryPath, ngl: 0, apiKey, operation });
+          return await lanciaProcesso({ modelId, modelPath, selectedPort, contextLength: contextLength ?? finestraDiRiserva, binario: fallbackBinaryPath, ngl: 0, apiKey, operation, proiettore: proiettoreQui });
         } catch (secondo) {
           checkStart(operation);
           const codaGpu = ripiego.righe.join(' | ');
@@ -970,7 +1185,10 @@ export function createLlamaServerSupervisor({
           throw errore;
         }
       }
+      }
     } catch (error) {
+      /* revisione del 01/11, B2: il Ferma della chat arriva qui col processo ancora vivo; il prossimo avvio deve aspettarne l'uscita (A-7) */
+      if (operation.entry?.child) fermatoNonUscito = operation.entry;
       chiudi(operation.entry);
       if (current === operation.entry) current = null;
       await unlock(operation);
@@ -1027,15 +1245,21 @@ export function createLlamaServerSupervisor({
    *   · `attendiUscita`: the A-7 wait for the process `stop()` did not wait for, so a router load never starts beside it (A-R4: a stop
    *     during the wait does not wait).
    */
-  async function sceltePerIlRouter({ modelPath, contextLength, finestraDiRiserva, signal, check } = {}) {
+  async function sceltePerIlRouter({ modelPath, contextLength, finestraDiRiserva, signal, check, proiettore = null } = {}) {
     const operation = { controller: { signal: signal ?? new AbortController().signal }, check: typeof check === 'function' ? check : () => {} };
-    const scelte = await sceltePerIlModello({ modelPath, contextLength, finestraDiRiserva, binario: binaryPath, ngl: gpuLayers, operation });
+    /* 02/11/2026, form «proiettore nel conto», point 3 for the router: the same check of the file and the same margin as the direct road */
+    const vista = proiettoreUsabile(proiettore, operation);
+    const margineProiettoreMiB = memoriaDelProiettoreMiB(vista);
+    const scelte = await sceltePerIlModello({ modelPath, contextLength, finestraDiRiserva, binario: binaryPath, ngl: gpuLayers, operation, margineProiettoreMiB });
     const primario = { variante: motoreIniziale.variante, ripiego: null };
     return {
       argomenti: argomentiDelModello(scelte, gpuLayers, primario),
       finestra: Number.isInteger(scelte.finestra) && scelte.finestra > 0 ? scelte.finestra : null,
       finestraNostra: scelte.finestraScelta ? scelte.finestraScelta.finestra : null,
       righe: righeDelleScelte(scelte, binaryPath, primario),
+      proiettore: vista?.path ?? null,
+      memoriaVistaByte: margineProiettoreMiB * 1024 * 1024,
+      ...(operation.vistaSenza ? { vistaSenza: operation.vistaSenza } : {}),
     };
   }
 

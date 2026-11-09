@@ -47,14 +47,15 @@ for (const withChannel of [false, true]) test(`FULL-ACCESS-01 trifecta osservabi
 
 test('FULL-ACCESS-02 deny, chiedi e livelli limitati mantengono il proprio effetto', async t => {
   const {root,workspace} = fixture(t); const target=join(root,'outside.txt');
-  for (const options of [
-    {permessiPerAttrezzo:{scrivi:'nega'}},
-    {permessiPerAttrezzo:{scrivi:'chiedi'},chiediApprovazioneFn:async()=>false},
-    {livelloAccesso:'lettura'},
-    {livelloAccesso:'scrittura-area'},
+  /* 03/11/2026 (no della persona, forma della decisione 44): un no sulla carta arriva come DECLINED; i divieti per regola restano REFUSED */
+  for (const [options, testa] of [
+    [{permessiPerAttrezzo:{scrivi:'nega'}}, /^REFUSED\./u],
+    [{permessiPerAttrezzo:{scrivi:'chiedi'},chiediApprovazioneFn:async()=>false}, /^DECLINED\. The person said no/u],
+    [{livelloAccesso:'lettura'}, /^REFUSED\./u],
+    [{livelloAccesso:'scrittura-area'}, /^REFUSED\./u],
   ]) {
     const {result}=await run(workspace,[call('write','scrivi',{percorso:target,contenuto:'vietato'})],options);
-    assert.match(result.messaggiFinali.find(m=>m.tool_call_id==='write').content,/REFUSED/);
+    assert.match(result.messaggiFinali.find(m=>m.tool_call_id==='write').content,testa);
     assert.equal(existsSync(target),false);
   }
 });

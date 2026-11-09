@@ -426,7 +426,7 @@ test('CLI-REQ-06-16 — il CONSENSO non si prende dal client: né dal corpo, né
   const vera = createProviderProbe({ ...deps(store), fetchImpl: fetch });
   const providerProbe = { prova: async (provider, opzioni) => { visti.push(opzioni); return vera.prova(provider, opzioni); } };
 
-  const server = createServer(createHttpApp({ staticHandler: async () => null, providerStore: store, providerProbe }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore: store, providerProbe }));
   await new Promise((risolvi, rifiuta) => { server.once('error', rifiuta); server.listen(0, '127.0.0.1', risolvi); });
   t.after(() => new Promise((risolvi) => server.close(risolvi)));
   const porta = server.address().port;
@@ -551,7 +551,7 @@ test('CLI-REQ-06-09 — il catalogo dei quattro resta quello vero del fornitore'
 test('CLI-REQ-06-10 — la rotta HTTP del pannello non chiede MAI il consenso a generare', async (t) => {
   const opzioniViste = [];
   const providerProbe = { prova: async (provider, opzioni) => { opzioniViste.push({ provider, opzioni }); return { provider, esito: 'collegato', motivo: 'finto', modelli: 1, millisecondi: 1 }; } };
-  const server = createServer(createHttpApp({ staticHandler: async () => null, providerStore: createProviderCredentialStore({ env: {} }), providerProbe }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore: createProviderCredentialStore({ env: {} }), providerProbe }));
   await new Promise((risolvi, rifiuta) => { server.once('error', rifiuta); server.listen(0, '127.0.0.1', risolvi); });
   t.after(() => new Promise((risolvi) => server.close(risolvi)));
   const porta = server.address().port;

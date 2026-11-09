@@ -32,9 +32,12 @@ async function fixture(t) {
   let rifiuta = true;
   // `aggancio`: qualcosa che succede DURANTE il prossimo riassunto (una volta sola) — per le corse del motore
   let aggancio = null;
+  // `guasto`: l'errore che lancia la porta vera del modello, al posto di una risposta
+  let guasto = null;
   const model = { resolveModel: async ({ sessionModel }) => sessionModel, summarize: async request => {
     calls.push(request);
     if (aggancio) { const fai = aggancio; aggancio = null; await fai(); }
+    if (guasto) throw guasto();
     if (rifiuta) return { text: 'Non posso riassumere questa conversazione.', finishReason: 'stop', usage: { inputTokens: 50, outputTokens: 8 } };
     const sourceId = JSON.parse(request.messages.at(-1).content).sourceIds?.[0] ?? 'u0';
     const quote = sourceId === 'u0' ? 'Database SQLite' : sourceId.startsWith('a') ? 'risposta' : `richiesta ${sourceId.slice(1)}`;
@@ -65,7 +68,7 @@ async function fixture(t) {
     throw new Error('nessuna finestra');
   };
   return { store, engine, calls, clock, passoDelGiro, avvisi, jobs, finestra, avvisiMuti, rifiuta: value => { rifiuta = value; },
-    aggancia: fai => { aggancio = fai; } };
+    aggancia: fai => { aggancio = fai; }, guasto: fai => { guasto = fai; } };
 }
 
 async function passoCompleto(engine, profile) {
@@ -96,6 +99,28 @@ test('CTX-AUTO-COOLING-CAP: a refused summary is not requested again at every st
     id: `cooling-${falliti[0].id}`, jobId: falliti[0].id,
     payload: { code: 'CTX_INVALID_SUMMARY', attempts: 1, waitSeconds: 60, retryAfter: new Date(Date.parse(falliti[0].updatedAt) + 60_000).toISOString() },
   });
+});
+
+/* D5 (revisione di fine fase, 01/11/2026): i codici che la porta vera lancia per una risposta arrivata e inservibile, con l'uso pagato */
+for (const code of ['CTX_SUMMARY_RESPONSE_INVALID', 'CTX_SUMMARY_TOOLS', 'CTX_SUMMARY_REFUSED']) {
+  test(`CTX-AUTO-COOLING-PAID-${code}: an unusable answer that was paid for is not asked again at every step`, async t => {
+    const f = await fixture(t);
+    f.guasto(() => Object.assign(new Error('unusable answer'), { code, usage: { prompt_tokens: 1000, completion_tokens: 100 } }));
+    const profile = f.finestra(0.8);
+    for (let i = 0; i < 6; i++) { await f.passoDelGiro(); await passoCompleto(f.engine, profile); }
+    assert.equal(f.calls.length, 1, `paid ${f.calls.length} times`);
+    assert.deepEqual((await f.jobs()).filter(job => job.state === 'failed').map(job => job.error.code), [code]);
+    assert.equal((await f.avvisi()).length, 1, 'the pause is said once');
+  });
+}
+
+test('CTX-AUTO-COOLING-HTTP-STAYS-OUT: AL CONTRARIO: a 4xx or 5xx of the summary is not a paid answer and opens no pause (the summary chain remembers the block)', async t => {
+  const f = await fixture(t);
+  f.guasto(() => Object.assign(new Error('The summary model answered with HTTP 500.'), { code: 'CTX_SUMMARY_HTTP', httpStatus: 500 }));
+  const profile = f.finestra(0.8);
+  for (let i = 0; i < 3; i++) { await f.passoDelGiro(); await passoCompleto(f.engine, profile); }
+  assert.equal(f.calls.length, 3);
+  assert.deepEqual(await f.avvisi(), []);
 });
 
 test('CTX-AUTO-COOLING-LADDER: the wait grows 60 → 300 → 900 s, stays at 900, and a committed summary clears it', async t => {

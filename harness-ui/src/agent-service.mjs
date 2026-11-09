@@ -25,18 +25,23 @@
  * è deliberata: talosLavora resta provabile senza sapere di HTTP/SSE, e
  * agui-events.mjs resta provabile senza sapere di talosLavora.
  */
+import { testoDellaRispostaALato } from './chat-a-lato.mjs'; // FE-010
 import { createHash, randomUUID } from 'node:crypto';
 import { createToolOutputPreview } from './kernel/tool-output-preview.mjs';
 import { NOME_EVENTO_PROGRESSO_COMPATTAZIONE, creaContatoreRiassunto } from './kernel/compattazione-desktop.mjs'; // lane CLI, 03/10/2026: compaction.progress
 import { CODICE_RICHIESTA_TROPPO_GRANDE } from './kernel/richiesta-troppo-grande.mjs'; // §4.2, regola N: la richiesta nuova che non entra
+import { idRiassuntoValido } from './kernel/consumo-di-servizio.mjs'; // spesa dei riassunti nella scheda Contesto (owner 30/10 sera)
 import { delegaLimitata } from './delegation-contract.mjs';
 import { join as joinPercorso, relative as percorsoRelativo, sep as separatorePercorso } from 'node:path';
-import { motivoDaChiedere as motivoDelSegreto } from './path-policy.mjs';
-import { livelloLetto, percorsoFileSfondo, registroDellAvvio } from './kernel/talosHarness.mjs'; // BUG-14: il file di output dei comandi in sfondo (solo il percorso, nessun ciclo); C1: ciò che l'esecutore dice al lancio
+import { ePercorsoDiControllo, motivoDaChiedere as motivoDelSegreto } from './path-policy.mjs';
+import { livelloLetto, nomeMostratoFileSfondo, percorsoFileSfondo, percorsoFileSfondoNeiDati, registroDellAvvio, testoSfondoPerGliEventi } from './kernel/talosHarness.mjs'; // BUG-14: il file di output dei comandi in sfondo (solo il percorso, nessun ciclo); C1: ciò che l'esecutore dice al lancio
 
 import { createOwnerRuntimeAdapter } from './runtime-owner-adapter.mjs';
 import { salvaArtefatto as salvaArtefattoReale } from './artifact-store.mjs';
 import { salvaVoce as salvaVoceLibreriaReale } from './library-store.mjs'; // 06/9: un artefatto e' lavoro, e il lavoro si ritrova
+import { creaOspiteDeiBlocchi } from './blocchi/aggiorna.mjs'; // G-B2 (05/11): nomi e versioni dei blocchi vivi, salvati col messaggio
+import { EVENTO_VERSIONE_DEL_BLOCCO } from './blocchi/versioni.mjs';
+import { bloccoDaSalvare, creaVoceDiBlocco, sembraUnBlocco } from './blocchi/in-libreria.mjs'; // decisione 142 (04/11): la seconda porta dei blocchi in Libreria
 import { generateTalosDocument as generateTalosDocumentReale, TALOS_SOURCE_TEXT_FORMATS, verifyTalosDocument as verifyTalosDocumentReale } from './document-generator.mjs';
 import { generaImmagineOpenRouter as generaImmagineOpenRouterReale } from './image-generator.mjs';
 import { leggiContestoWorkspace as leggiContestoWorkspaceReale } from './workspace-context.mjs';
@@ -119,6 +124,8 @@ const FRASI_RIVERIFICA = Object.freeze({
 });
 import { preparaToolPluginPerSessione as preparaToolPluginPerSessioneReale } from './plugin-session.mjs';
 import { eseguiHook as eseguiHookReale } from './hook-registry.mjs';
+import { oscuraFormeDiSegreto } from './forme-di-segreto.mjs'; // PERF R-34: il frammento della chiamata nel testo, prima del giornale
+import { creaBattitoDelRagionamento } from './kernel/riga-del-ragionamento.mjs'; // revisione D R1 (30/10): il battito col titolo, calcolato qui una volta
 import {
   artifactCreated,
   eventiPerRisposta,
@@ -206,7 +213,9 @@ function esitoInEventoFinale({ threadId, runId, esito }) {
       result: { detto: esito.detto, compattazioni: esito.compattazioni, premesseNegate: esito.premesseNegate, usage: esito.usage ?? null },
     });
   }
-  return runError({ message: esito.detto, code: esito.comeFinita });
+  /* Blocco 20 (Mobile, 01/11/2026): col rifiuto dopo il testo sotto la frase ci sarebbe tutta la risposta, che sta già nella bolla sopra */
+  const frase = esito.comeFinita === 'rifiuto-del-modello' ? String(esito.detto ?? '').split('\n')[0] : esito.detto;
+  return runError({ message: frase, code: esito.comeFinita });
 }
 
 /**
@@ -272,8 +281,14 @@ export async function avviaSessione({
   /* OB-REV-03 (owner 15/10 sera): «nessuno davanti» al kernel, che toglie la guida «the tool pauses for an answer». Il registro lo
      metteva già nelle opzioni del giro (`session-registry.mjs`, `nessunoDavanti(voce)`), ma qui si perdeva: trovato nella revisione 5. */
   nessunoDavanti = false,
+  /* R-34 parte 2 (30/10/2026): la porta della presenza del registro, al nucleo. Questa funzione inoltra i campi uno per uno: senza questa
+     riga la porta si sarebbe persa qui, e il nucleo non avrebbe mai promosso una chiamata scritta come testo. Assente ⇒ come prima. */
+  personaPresenteFn = null,
+  /* Decisione 44: la promozione del testo libero, spenta di serie; il campo va al nucleo qui sotto */
+  promuoviDalTesto = false,
   /* Owner 28/10/2026 (cache, punto 2): lo stato della cache del giro prima, dal registro. Additivo. */
   statoCachePrecedente = null,
+  fasciaDiServizioFn = null, // modalità veloce: dal registro alla fetch del piano
   /* Revisione 6 della CLI (S2-2): lo scarto misurato nel giro prima, dal registro, sullo stesso filo. Additivo: assente ⇒ gli attrezzi. */
   scartoMisurato = null,
   /* Revisione 8 della CLI (N1): la stima degli schemi del giro che ha misurato lo scarto, dal registro, sullo stesso filo. Additivo. */
@@ -305,6 +320,12 @@ export async function avviaSessione({
   /* 21/10/2026 (CLI): il modello che scrive i riassunti e la sua finestra, sullo stesso filo. Additivi: assenti ⇒ la conversazione. */
   modelloRiassunto = null,
   finestraRiassuntoToken = null,
+  /* C6-bis (owner 28/10/2026): la riserva dei riassunti (id già risolto), la sua finestra, chi ha scelto il modello dei riassunti e la
+     memoria della conversazione (`Map`). Additivi: assenti ⇒ il modello scelto e le regole di sempre. */
+  riservaRiassunto = null,
+  finestraRiservaToken = null,
+  origineRiassunto = null,
+  statoModelliRiassunto = null,
   /* 21/10/2026 (A1 + B1 dell'owner, contratto riga viva §4-§5): lo Skip della persona (un segnale per giro, dal registro) e i due
      orologi del riassunto atteso (l'ospite li cambia; assenti ⇒ quelli di serie dell'adattatore). Additivi. */
   segnaleSaltaRiassunto = null,
@@ -352,7 +373,16 @@ export async function avviaSessione({
    *   passa (i test, il banco).
    */
   cartellaDatiProgettoFn = null,
-  onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, onStoriaIniziale, ricostruisciContestoIniziale = false, mobile = false,
+  /*
+   * ⛔⛔ Blocco 26 (PO-26 per i registri dello sfondo, forma chiusa il 01/11/2026) — la radice dei dati del progetto sotto cui vanno i
+   *   registri dei comandi in sottofondo (`<radice>/background/`), e i registri già scritti dalla SESSIONE (`registriSfondoFn`, dal
+   *   giornale). Inoltrati al nucleo come `cartellaSfondo`/`registriSfondoFn` solo se ci sono: ⛔ NON si deducono da
+   *   `cartellaDatiProgettoFn`, che nei test e nel banco è il progetto stesso (i registri finirebbero in `<progetto>/background/`).
+   */
+  cartellaSfondoFn = null,
+  registriSfondoFn = null,
+  allegatiConversazioneFn = null, // decisioni 43 e 47: gli allegati di questa conversazione (`allegatiDaEventi`), inoltrati al nucleo solo se ci sono
+  onEvento, segnaleStop, messaggiIniziali, reasoning, contextHooks, onStoriaIniziale, ricostruisciContestoIniziale = false, mobile = false, senzaIstruzioniDelProgetto = false,
   /* ⛔ IST-REV-00/00b (bugfixer, 15/10/2026 notte): il registro mette questi campi (session-registry.mjs, `conCompattazione`) e qui
      in mezzo l'elenco esplicito li perdeva — lo stesso «cavo che mancava» di BUG-5 per `finestraToken`. Dal vivo sul 4176:
      l'istantanea mai accesa, e dal 24/09 (5ca876475) ogni giro dopo una compattazione ripartiva dalla storia INTERA
@@ -363,6 +393,9 @@ export async function avviaSessione({
   /* C3 tappa 4 (owner 09/10): la PAUSA di una delega — l'attrezzo in volo finisce, il giro dopo non parte. Passata al motore
      solo se c'è (la CLI non la passa e non vede niente di diverso). */
   segnalePausa = null,
+  /* Decisione 166, seconda forma (revisione del blocco UI R1): `() => boolean`, chi ha fermato. Passata al motore solo se c'è: senza, il
+     motore non scrive la nota di fermata (la CLI che non la passa non vede niente di diverso). */
+  fermataDallaPersona = null,
   /* L3-6 (13/10/2026) — C1, la scheda Contesto: `({ messages, tools, model }) => void`, il corpo che parte DAVVERO verso il
      fornitore. Il registro lo passava dal 10/10 e l'adattatore lo chiama se lo trova nell'input del motore, ma QUI in mezzo si
      perdeva: in produzione «l'ultima richiesta» non arrivava mai. Passato così com'è, solo se c'è (chi non lo passa non vede
@@ -384,6 +417,14 @@ export async function avviaSessione({
   linguaDelleRisposte = null,
   /* owner 28/10/2026: la lingua dell'ultimo messaggio (codice), quando chi lo manda la sa — il nucleo ne fa una nota in coda in Automatica. */
   linguaDelMessaggio = null,
+  /* FE-003 (03/11/2026): il catalogo dei blocchi per il primo messaggio di sistema; lo decide chi ospita. */
+  catalogoBlocchi = null,
+  /* G-B2 (05/11/2026): `statoDeiBlocchi` della conversazione (+ `conversazione`), ricostruito da chi ospita dagli eventi salvati. */
+  blocchiDellaConversazione = null,
+  /* FE-008 (03/11/2026): i Passi; li decide chi ospita. */
+  listaPassi = false,
+  passiIniziali = null,
+  onPassi = null,
   /*
    * ⛔⛔⛔ 02/09 — LEDGER-STREAMING-SCROLL-TERMINALE-2026-09-02.md, §6/§7.
    * L'etichetta del permesso della sessione ("Read only"/"Workspace
@@ -410,6 +451,10 @@ export async function avviaSessione({
   strumentiEstesi, ricercaWeb,
   // C5 attrezzi differiti (17/10/2026): inoltrato al kernel com'è; assente ⇒ spento, come prima
   attrezziDifferiti,
+  /* Ricerca a due porte (01/11/2026): `research_start` davanti (opzione dell'ospite) e la chiamata della persona al primo passo.
+     Inoltrati com'è (lezione del 17/10: un'opzione nuova si porta lungo tutto il filo); assenti ⇒ come prima. */
+  ricercaDavanti = false,
+  chiamataIniziale = null,
   // L1 (20/10/2026): la finestra del motore locale del PC per gli attrezzi davanti; inoltrata com'è, assente ⇒ come prima
   finestraPerGliAttrezzi = null,
   // ⭐ 04/9, R-03 — trasporto iniettato per la ricerca SENZA chiave (DuckDuckGo, `duckduckgo-search.mjs`): inoltrato al kernel com'è (parametro `richiediRicercaFn` di talosLavora), undefined per le fonti con chiave.
@@ -443,8 +488,16 @@ export async function avviaSessione({
   /* Owner 27/10/2026, `view_image`: inoltrati com'è al nucleo (`onGuardaImmagine`, `vedeImmaginiFn`) — vedi `guarda-immagine-ospite.mjs` */
   guardaImmagineFn = null,
   vedeImmaginiFn = null,
+  /* 01/11/2026: inoltrata com'è al nucleo (`motoreInCaricamentoFn`), il punto della carta dell'arresto durante un'apertura */
+  motoreInCaricamentoFn = null,
+  /* Decisioni 57 e 144 (04/11/2026): inoltrata com'è al nucleo (`prezzoDelModelloFn`), il prezzo pubblicato per i dollari sulla carta della ricerca */
+  prezzoDelModelloFn = null,
   /* Owner 27/10/2026, `local_page`: inoltrata com'è al nucleo; la conversazione l'ha già legata il registro */
   apriPaginaLocaleFn = null,
+  /* Decisione 201 (04/11/2026), `browser_page`: inoltrata com'è al nucleo, già legata alla conversazione dal registro; e la pagina che il
+     messaggio del giro riporta (`undefined` = il messaggio non porta il campo: telefono, CLI, un giro partito altrove). */
+  leggiPaginaBrowserFn = null,
+  paginaBrowser = undefined,
   /*
    * ⭐⭐⭐ 29/8 — FASE D, firma Ed25519 delle ricevute. Stesso principio di
    * `ricercaWeb` appena sopra: inoltrato SENZA logica propria a
@@ -502,7 +555,7 @@ export async function avviaSessione({
   // 24/09/2026, decisioni owner 36-39: il canale della scelta sul piano, inoltrato SENZA logica come `chiediDomandaFn`.
   presentaPianoFn,
   agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn,
-  pauseChildFn = null, resumeChildFn = null, // C3 tappa 4: pausa e ripresa dei figli, inoltrate al motore
+  pauseChildFn = null, resumeChildFn = null, retryChildFn = null, // C3 tappa 4 (retry: decisione 198): pausa e ripresa dei figli, inoltrate al motore
   // D1 «Come Claude» (24/09/2026): inoltrati SENZA logica, come gli altri: il modo del padre letto a ogni chiamata e le figlie vive all'avvio.
   modalitaOperativaCorrenteFn, figliViviAllAvvio,
   permessiCorrentiFn, // C2-a (07/10/2026): i permessi della catena letti a ogni chiamata, inoltrati senza logica come il modo
@@ -550,6 +603,8 @@ export async function avviaSessione({
   onAutomazioneFn,
   /* 0.1.25 (owner 09/10/2026): il canale degli attrezzi `provider_*` (fornitori esclusi), inoltrato com'è (lo lega il registro). */
   onFornitoriFn,
+  // Fase 8 «Impostazioni dalla chat» (owner 01/11/2026): il canale di `app_settings`, inoltrato com'è (lo lega il registro)
+  onImpostazioniFn,
   // /goal G6 (owner 15/10/2026): la seconda porta dell'obiettivo, inoltrata com'è (src/obiettivo/per-il-modello.mjs)
   onObiettivoFn,
   // R5.11 (owner 18/10/2026): annullare le modifiche ai file dalla chat, inoltrato com'è (lo lega il registro)
@@ -558,8 +613,14 @@ export async function avviaSessione({
   lavoroDellAgenteFn,
   // «Segnala un problema» (owner 29/10/2026): la bozza di `report_problem`, inoltrata com'è (lo lega il registro)
   onSegnalazioneFn,
+  // Centro assistenza (owner 01/11/2026): la guida di TALOS per `talos_help`, inoltrata com'è (la passa il registro)
+  aiutoTalos,
   // R5.12 (owner 18/10/2026): i telefoni collegati dalla chat, inoltrato com'è (lo lega il registro)
   onTelefoniFn,
+  /* 04/11/2026 (decisione 129, passo 5 del computer use): i luoghi di «Consenti sempre» e l'attrezzo `computer_use`, inoltrati com'è
+     (li lega il registro, solo alla radice con qualcuno davanti e l'interruttore acceso) */
+  onLuoghiFn,
+  onComputerUseFn,
   /*
    * ⛔⛔ Rilievo 3 (piano 0.1.19 §1.7, 28/09) — il canale di `request_plan_mode`: inoltrato così
    *   com'è (il registro lo costruisce: accoda il cambio del modo, la patch va a fine giro).
@@ -778,6 +839,36 @@ export async function avviaSessione({
    *   a questa funzione. Senza il parametro è `cartella`: il comportamento di prima, invariato.
    */
   const cartellaPerCreare = cartellaCreazioni || cartella;
+  /*
+   * Il Full access di ADESSO, per document_create e library_export (file di controllo e segreti), o quello dell'ospite (la CLI,
+   *   16/10 notte). Viene dal livello VIVO della catena, `permessiCorrentiFn`, lo stesso che il kernel rilegge a ogni chiamata di
+   *   attrezzo (C16) e che il cancello di `scrivi` legge con `catenaInAccessoPieno` (session-registry): per una figlia è già il
+   *   livello di tutti gli antenati, per la radice quello salvato adesso nella cartella.
+   * ⛔ Revisori del giro 2 della cura alias (08/11/2026, ALTO, tutti e tre): qui si leggeva `livelloAccesso`, la stringa FISSATA
+   *   all'avvio del giro, e il commento diceva «letto a ogni chiamata». Misurato sul filo vero: partita in Accesso pieno e abbassata
+   *   a Workspace write a giro vivo, document_create scriveva CLAUDE.md e accodava ad AGENTS.md con 0 carte, library_export copiava
+   *   CLAUDE.md, e il rifiuto dei segreti lasciava accodare credentials.json (buco già nelle versioni uscite, giudice 00:37, E);
+   *   una figlia nata in Accesso pieno sotto un padre abbassato faceva lo stesso.
+   * ⛔ Un lettore vivo che lancia o non dà una parola NON apre (come il `catch` del kernel e «un anello illeggibile non apre niente»
+   *   di `catenaInAccessoPieno`). Senza `permessiCorrentiFn` (livello d'avvio assente, chiamanti diretti) vale la stringa d'avvio,
+   *   come prima. Nei due versi: un rialzo a Accesso pieno a giro vivo apre da subito, come per `scrivi`.
+   *   Hermes rilegge il modo delle approvazioni a ogni passaggio del cancello (`hermes-agent-2026-11-01/tools/approval.py:998`) e
+   *   l'elenco permanente a ogni controllo (`:359`).
+   */
+  const inAccessoPieno = () => {
+    let livello = livelloAccesso;
+    if (typeof permessiCorrentiFn === 'function') {
+      try {
+        const correnti = permessiCorrentiFn();
+        livello = typeof correnti?.livelloAccesso === 'string' ? correnti.livelloAccesso : null;
+      } catch {
+        livello = null;
+      }
+    }
+    if (typeof livello === 'string' && livelloLetto(livello) === 'accesso-pieno') return true;
+    if (typeof accessoPienoDellOspite !== 'function') return false;
+    try { return accessoPienoDellOspite() === true; } catch { return false; }
+  };
   const solaLetturaDelega = delegaLimitata(task);
   /** PO-26 — la radice di Libreria e Ricerca del progetto (vedi `cartellaDatiProgettoFn` in testa). */
   const cartellaDatiDelProgetto = typeof cartellaDatiProgettoFn === 'function'
@@ -801,6 +892,7 @@ export async function avviaSessione({
     modello,
     reasoning: reasoning ?? null,
     permessi: permessi ?? null,
+    ...(senzaIstruzioniDelProgetto === true ? { senzaIstruzioniDelProgetto: true } : {}), // si vede nella traccia del giro (Frontend, 02/11)
     modalitaOperativa,
     /* 26/10/2026 (allegati apribili, revisione A-F1): la cartella di PARTENZA, dove stanno i file della chat (`cartellaPerChatFile`), quando
        non è la radice dei permessi (Accesso pieno da un progetto: radice = il disco). Assente quando coincide: la finestra usa `cartella`. */
@@ -863,6 +955,7 @@ export async function avviaSessione({
          (`doveNelPrompt`, qui sotto), perché la casa Linux si decide a ogni giro; «Piattaforma: win32» mentiva con gli attrezzi in
          Linux. La sessione mobile tiene la riga di prima. */
       piattaforma: mobile ? process.platform : null,
+      ...(senzaIstruzioniDelProgetto === true ? { senzaIstruzioni: true } : {}),
     });
     testoContestoProgetto = preambolo?.testo;
     /* F-027, estensione (owner 03/10/2026): il sospetto della mappa o della scheda va al kernel SOLO se il preambolo arriva al
@@ -933,7 +1026,8 @@ export async function avviaSessione({
    */
   let skillsDisponibili;
   let caricaSkillFn;
-  try {
+  /* 208 bis (MEDIA-6, decisione 196): in una cartella a cui la persona ha detto «No» le skill del progetto non si leggono né si offrono */
+  if (senzaIstruzioniDelProgetto !== true) try {
     const { skills } = await caricaSkillDisponibiliFn({ cartella });
     if (skills.length > 0) {
       skillsDisponibili = skills.map((s) => ({ name: s.name, description: s.description }));
@@ -1209,6 +1303,9 @@ export async function avviaSessione({
     ? (consensiSessione.avvisiFornitoreGiaDetti ??= new Set())
     : new Set();
   const messaggiRagionamentoPerGiro = new Map();
+  /* Revisione D R1 (30/10/2026, OK di CLI e Mobile): `talos.ragionamento-in-corso { giro, at, titolo }` mentre il modello ragiona, al più
+     uno ogni 5 s per giro, NON durevole (effimero nel registro), titolo coi segreti oscurati (`riga-del-ragionamento.mjs`). */
+  const battitoDelRagionamento = creaBattitoDelRagionamento({ emetti: evento => { Promise.resolve(onEvento(evento)).catch(() => {}); } });
   /*
    * ⭐⭐⭐ Piano procedi-col-generare-un-snoopy-neumann.md, Fase 4 — un
    * `Set` di toolCallId PER GIRO (non una Map messageId-per-giro come
@@ -1263,7 +1360,8 @@ export async function avviaSessione({
          * ⛔ `evento.avviatoA` ha comunque la precedenza: il giorno in cui un kernel lo misurera'
          *   piu' vicino alla fonte, quel valore vince senza toccare questa riga.
          */
-        onEvento(toolCallStart({ toolCallId: evento.toolCallId, toolCallName: evento.nome, avviatoA: evento.avviatoA ?? Date.now() }));
+        battitoDelRagionamento.chiudi(evento.giro); // il modello è passato oltre: il ragionamento del giro non è più in corso
+        onEvento(toolCallStart({ toolCallId: evento.toolCallId, toolCallName: evento.nome, avviatoA: evento.avviatoA ?? Date.now(), ...(evento.daTesto === true ? { daTesto: true } : {}) }));
         return;
       }
       onEvento(toolCallArgs({ toolCallId: evento.toolCallId, delta: evento.delta }));
@@ -1292,7 +1390,7 @@ export async function avviaSessione({
      * è mai partito, non un buco.
      */
     if (evento.tipo === 'tool-annullato') {
-      onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.motivo, isError: true, outcome: 'cancelled', ...(evento.causa === 'copia' ? { duplicate: true } : {}) }));
+      onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId: evento.toolCallId, content: evento.motivo, isError: true, ...(evento.partita === true ? { interrotta: true } : { outcome: 'cancelled' }), ...(evento.causa === 'copia' ? { duplicate: true } : {}) }));
       return;
     }
     /*
@@ -1317,6 +1415,8 @@ export async function avviaSessione({
     onEvento(evento.tipo === 'testo'
       ? textMessageContent({ messageId, delta: evento.delta })
       : reasoningMessageContent({ messageId, delta: evento.delta }));
+    /* dopo il pezzo, così chi legge vede il ragionamento aperto prima del suo battito */
+    if (evento.tipo === 'testo') battitoDelRagionamento.chiudi(evento.giro); else battitoDelRagionamento.ragionamento(evento.giro, evento.delta);
   };
 
   /* F3 (24/09/2026): il motivo dell'inizio (`soglia`/`emergenza`/`overflow`) si ricorda per giro, per riportarlo nella fine. */
@@ -1365,12 +1465,57 @@ export async function avviaSessione({
     }
     /* Decisione 14 (owner 08/10/2026 sera): chi ha servito il giro. Un evento persistito, così la testata della risposta lo dice
        anche dopo una ricarica; il nome è quello di OpenRouter, mai riscritto. */
+    if (evento.tipo === 'riassunto-modello-inutilizzabile') {
+      /* C6-bis (owner 28/10/2026, contratto «mai aspettare»): il modello dei riassunti non si può usare (tolto, senza chiave, accesso
+         negato, fornitore non configurato). DUREVOLE (non è fra gli effimeri): le Impostazioni e la riga della compattazione lo dicono,
+         con «Scegli un altro» solo se l'aveva scelto la persona (`scelto`). Additivo: chi non lo conosce lo ignora. */
+      return onEvento({ type: 'CUSTOM', name: 'talos.riassunto-modello-inutilizzabile', value: {
+        schema: 'talos.riassunto-modello-inutilizzabile.v1', threadId, runId, giro: evento.giro, at: evento.at, modello: evento.modello,
+        motivo: evento.motivo, scelto: evento.scelto, ruolo: evento.ruolo ?? null,
+      } });
+    }
     if (evento.tipo === 'cache-ricominciata') {
       /* Owner 28/10/2026 (cache, punto 2): la cache del fornitore è ripartita da capo, col motivo. Additivo: chi non lo conosce lo ignora. */
       return onEvento({ type: 'CUSTOM', name: 'talos.cache-ricominciata', value: {
         schema: 'talos.cache-ricominciata.v1', threadId, runId, giro: evento.giro, motivo: evento.motivo,
         tokenDaRileggere: evento.tokenDaRileggere ?? null, at: evento.at,
       } });
+    }
+    if (evento.tipo === 'fornitore-evitato') {
+      /* Decisione 193 (owner 04/11/2026): un fornitore a valle che ha perso la cache due volte, e se la sessione lo evita (`escluso`), o perché
+         no (`motivo`: unico-fornitore | slug-sconosciuto | nessun-fornitore-rimasto, quest'ultimo dopo un 404 di OpenRouter: non si evita più).
+         Stesso `runId` e `giro` di `talos.cache-ricominciata`. Additivo: chi non lo conosce lo ignora. */
+      return onEvento({ type: 'CUSTOM', name: 'talos.fornitore-evitato', value: {
+        schema: 'talos.fornitore-evitato.v1', threadId, runId, giro: evento.giro, modello: evento.modello ?? null,
+        fornitore: typeof evento.fornitore === 'string' ? evento.fornitore : null, slug: typeof evento.slug === 'string' ? evento.slug : null,
+        escluso: evento.escluso === true, ...(typeof evento.motivo === 'string' ? { motivo: evento.motivo } : {}),
+        ...(Number.isSafeInteger(evento.volte) ? { volte: evento.volte } : {}), at: evento.at ?? null,
+      } });
+    }
+    if (evento.tipo === 'continuazione' && evento.motivo === 'fermata-contesto') {
+      /* Decisione 245 (owner 05/11/2026): il modello ha detto di fermarsi per il contesto e il nucleo l'ha richiamato una volta. Solo il
+         giornale su disco (durevole) porta la riga; la chat non la disegna (`EVENTI_CONTABILI`): zero carte, zero avvisi. Le altre
+         continuazioni (tetto-uscita, comando-rosso) restano come prima. */
+      return onEvento({ type: 'CUSTOM', name: 'talos.continuazione', value: {
+        schema: 'talos.continuazione.v1', threadId, runId, giro: evento.giro, motivo: 'fermata-contesto', riga: 'ripreso dopo una fermata per il contesto',
+      } }, { durable: true });
+    }
+    if (evento.tipo === 'chiamata-nel-testo') {
+      /* PERF R-34 (owner 30/10/2026): una chiamata arrivata come testo in coda alla risposta. Durevole (giornale grezzo, col frammento
+         tolto dalla storia del modello: Desktop 30/10); additivo — chi non lo conosce lo ignora. `esito`: 'ripresa' (chiesto di rifarla),
+         'lasciata' (seconda di fila: il giro finisce come prima), 'interrotta' (R1-R, 30/10: Stop o errore a metà di una chiamata scritta come
+         testo — mai a schermo, il frammento solo qui). Elenco chiuso: ripresa | lasciata | interrotta (| promossa, parte 2). */
+      return onEvento({ type: 'CUSTOM', name: 'talos.chiamata-nel-testo', value: {
+        schema: 'talos.chiamata-nel-testo.v1', threadId, runId, giro: evento.giro, esito: evento.esito, nome: evento.nome, forma: evento.forma,
+        /* R-34 parte 2: 'promossa' dice se la persona ha detto sì; una ripresa di un modello locale dice perché non si è promosso */
+        ...(typeof evento.approvata === 'boolean' ? { approvata: evento.approvata } : {}),
+        ...(['argomenti', 'nessuna-persona', 'nessun-client', 'gia-rifiutata'].includes(evento.motivo) ? { motivo: evento.motivo } : {}),
+        ...(typeof evento.modello === 'string' && evento.modello ? { modello: evento.modello } : {}),
+        ...(typeof evento.fornitore === 'string' && evento.fornitore ? { fornitore: evento.fornitore } : {}),
+        /* CLI 30/10: il frammento può essere uno script intero, un segreto o il comando iniettato ⇒ segreti oscurati (`forme-di-segreto`,
+           come i giornali) e al più 2.000 caratteri, col conto di quanto è stato tagliato */
+        frammento: ((t) => (t.length > 2_000 ? `${t.slice(0, 2_000)}… (+${t.length - 2_000})` : t))(oscuraFormeDiSegreto(typeof evento.frammento === 'string' ? evento.frammento : '')),
+      } }, { durable: true }); // revisione del Desktop S2-1 (30/10): senza, non arrivava al giornale
     }
     if (evento.tipo === 'fornitore-a-valle') {
       if (typeof evento.fornitore !== 'string' || !evento.fornitore) return undefined;
@@ -1381,6 +1526,7 @@ export async function avviaSessione({
     }
     if (evento.tipo === 'compattazione-inizio' && evento.motivo) motivoCompattazionePerGiro.set(evento.giro, evento.motivo);
     if (evento.tipo === 'risposta') {
+      battitoDelRagionamento.chiudi(evento.giro);
       /*
        * ⛔ Chiude PRIMA di tradurre la risposta finale: un consumer che
        * legge gli eventi in ordine deve vedere End prima del prossimo
@@ -1439,13 +1585,15 @@ export async function avviaSessione({
         ...(evento.senzaCarta ? { unasked: evento.senzaCarta } : {}),
         // R-03 (17/10/2026): il rifiuto della delega come dati, per chi lo traduce per la persona (la CLI) senza regex sul testo
         ...(evento.rifiuto ? { refusal: { code: evento.rifiuto.codice, retryable: evento.rifiuto.ritentabile, reason: evento.rifiuto.motivo } } : {}),
+        // Decisione 116 C (Desktop 15:31): la scheda «Accedi e riprendi» messa dall'ospite di chatgpt_account sign_in; solo `true`
+        ...(evento.schedaChatgpt === true ? { schedaChatgpt: true } : {}),
         // view_image (27/10/2026): l'immagine guardata, coi nomi del contratto pubblicato (`images`); `toolCallResult` decide cosa entra
         ...(Array.isArray(evento.immagini) && evento.immagini.length
           ? { images: evento.immagini.map((i) => ({ id: i?.riferimento, mimeType: i?.mime, width: i?.larghezza, height: i?.altezza })) } : {}),
         /* ⛔ BUG-14: il kernel sparge `processoPerEvento` direttamente sull'evento `tool-esito`
            (talosHarness.mjs `...(processoPerEvento ?? {})`) — inoltra i campi sfondo per la riga dei Processi. */
         ...(evento.inSfondo === true
-          ? { inSfondo: true, ...(evento.fileSfondo ? { fileSfondo: evento.fileSfondo } : {}), ...(evento.sfondoDa ? { sfondoDa: evento.sfondoDa } : {}) }
+          ? { inSfondo: true, ...(evento.fileSfondo ? { fileSfondo: evento.fileSfondo } : {}), ...(evento.fileSfondoMostrato ? { fileSfondoMostrato: evento.fileSfondoMostrato } : {}), ...(evento.sfondoDa ? { sfondoDa: evento.sfondoDa } : {}) }
           : {}),
       }));
       return;
@@ -1463,7 +1611,21 @@ export async function avviaSessione({
     if (evento.tipo === 'compattazione-inizio') {
       onEvento({ type: 'CUSTOM', name: 'talos.compattazione', value: {
         fase: 'inizio', giro: evento.giro, tokenPrima: evento.tokenMisurati ?? null, soglia: evento.soglia ?? null, motivo: evento.motivo ?? null,
+        /* spesa di servizio, parte 2 B: l'attesa di un riassunto del MOTORE dice quale lavoro e da quando (resta NON durevole) */
+        ...(typeof evento.jobId === 'string' && evento.jobId ? { jobId: evento.jobId } : {}), ...(typeof evento.at === 'string' ? { at: evento.at } : {}),
       } });
+      return;
+    }
+    /* Spesa di servizio, parte 2 B (30/10/2026; Performance, CLI, Mobile): UNA riga durevole per attesa del giro su un riassunto del motore,
+       coi due orari dentro. Nessuna riga = attesa non finita o processo morto in mezzo, MAI «attesa zero» (Mobile). Nome suo: nessun
+       lettore di talos.compattazione la confonde con una compattazione fallita. */
+    if (evento.tipo === 'attesa-del-motore') {
+      Promise.resolve(onEvento({ type: 'CUSTOM', name: 'talos.attesa-del-motore', value: {
+        schema: 'talos.attesa-del-motore.v1', threadId, runId,
+        /* N1 di Performance: l'indice della richiesta nel giro (da 0) col nome della riga di servizio, mai `giro` (che lì è il giro della conversazione) */
+        ...(Number.isSafeInteger(evento.giro) ? { richiestaDelGiro: evento.giro } : {}), inizioAt: evento.inizioAt, at: evento.at, esito: evento.esito,
+        ...(typeof evento.jobId === 'string' && evento.jobId ? { jobId: evento.jobId } : {}),
+      } }, { durable: true })).catch(() => {});
       return;
     }
     /* R13-1 (revisione 13 della CLI, 23/10/2026): un riassunto gratuito annunciato in un giro che poi è fallito non si tiene — lo stesso
@@ -1472,13 +1634,17 @@ export async function avviaSessione({
     if (evento.tipo === 'compattazione-annullata') {
       if (typeof evento.at !== 'string' || !/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u.test(evento.at)) return;
       Promise.resolve(onEvento({ type: 'CUSTOM', name: 'talos.compattazione', value: { fase: 'annullata', at: evento.at,
-        ...(Number.isSafeInteger(evento.coveredThrough) ? { coveredThrough: evento.coveredThrough } : {}), motivo: 'giro-fallito' } }, { durable: true })).catch(() => {});
+        ...(Number.isSafeInteger(evento.coveredThrough) ? { coveredThrough: evento.coveredThrough } : {}), motivo: 'giro-fallito',
+        ...(idRiassuntoValido(evento.idRiassunto) ? { idRiassunto: evento.idRiassunto } : {}) } }, { durable: true })).catch(() => {}); // spesa dei riassunti (CLI 1)
       return;
     }
     if (evento.tipo === 'compattazione-fine') {
       const record = evento.compattato ? evento.record : null;
-      onEvento({ type: 'CUSTOM', name: 'talos.compattazione', value: record
+      /* Spesa dei riassunti (contratto del 30/10 sera, condizione 4 del Mobile): la fine si rilegge dal giornale alla riapertura — durevole,
+         come annullata e preparata; prima andava al giornale senza attesa né fsync. Porta l'id del suo riassunto. */
+      Promise.resolve(onEvento({ type: 'CUSTOM', name: 'talos.compattazione', value: record
         ? { fase: 'fine', giro: evento.giro, compattato: true, tokenPrima: record.tokenPrima ?? null, tokenDopo: record.tokenDopo ?? null, misura: record.misura ?? null, coveredThrough: record.coveredThrough, at: record.at, modello: record.modello ?? null,
+          ...(idRiassuntoValido(record.idRiassunto) ? { idRiassunto: record.idRiassunto } : {}),
           /* 15/10/2026: lo scambio istantaneo non ha un `compattazione-inizio` — il motivo lo porta lui, e il giornale dice che è stato
              istantaneo (nessuna attesa). Solo se lo è: il contratto delle compattazioni di prima non cambia. */
           /* §4.2, regola K (contratto con la CLI, c): una riduzione SOLO gratuita che ha accorciato richieste vecchie della persona ha il
@@ -1486,16 +1652,33 @@ export async function avviaSessione({
           motivo: evento.soloCoda === true && evento.accorciati > 0 ? 'accorciati'
             : motivoCompattazionePerGiro.get(evento.giro) ?? (evento.istantanea === true ? evento.motivo ?? null : null),
           ...(Number.isSafeInteger(evento.accorciati) && evento.accorciati > 0 ? { messaggi: evento.accorciati } : {}),
+          /* riga dei risultati accorciati (owner 01/11/2026): quante uscite della richiesta in corso; il registro tiene il massimo del giro */
+          ...(Number.isSafeInteger(evento.accorciateRichiesta) && evento.accorciateRichiesta > 0 ? { accorciateRichiesta: evento.accorciateRichiesta } : {}),
           /* F1 della revisione 9 della CLI (23/10/2026): la riga senza riassunto lo dice (`soloCoda`) con quanto ha accorciato — esiti
              d'attrezzo (`ridotti`) e immagini vecchie in segnaposto (`immagini`). Senza, qui si perdevano (la lista è a campi ammessi). */
           ...(evento.soloCoda === true ? { soloCoda: true } : {}),
           ...(Number.isSafeInteger(evento.ridotti) && evento.ridotti > 0 ? { ridotti: evento.ridotti } : {}),
           ...(Number.isSafeInteger(evento.immagini) && evento.immagini > 0 ? { immagini: evento.immagini } : {}),
           ...(evento.istantanea === true ? { istantanea: true } : {}),
+          /* «Mai aspettare» (owner 27/10/2026 notte, contratto C5): il riassunto del modello che prende il posto del rapido porta l'`at` del
+             rapido, così la riga si aggiorna invece di raddoppiare e il conto delle compattazioni non sale. Solo un istante ISO. */
+          ...(evento.migliora && typeof evento.migliora === 'object' && typeof evento.migliora.at === 'string'
+            && /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u.test(evento.migliora.at) ? { migliora: { at: evento.migliora.at } } : {}),
           /* 21/10/2026 (contratto riga viva §3, e D5 b della CLI): il riassunto SENZA modello si dice — `ripiego`, la `ragione` in una
              parola (tempo · saltato · esaurito · rifiutato) e la `classe` dell'adattatore. Prima si perdevano qui. Solo se ci sono. */
           ...(evento.ripiego === true ? { ripiego: true } : {}),
+          /* Contratto con la CLI (28/10/2026): il lavoro del motore del contesto che scrive il riassunto che sostituirà questo rapido. Solo un id
+             (stringa, ≤256): la riga lo usa per unirsi alla versione pubblicata da quel lavoro, e da nessun'altra. */
+          ...(typeof record.lavoroDelMotore === 'string' && record.lavoroDelMotore && record.lavoroDelMotore.length <= 256 ? { lavoroDelMotore: record.lavoroDelMotore } : {}),
+          /* Contratto P1 con la CLI (28/10/2026): sul motore a posto unico il riassunto del modello lo scrive il fine giro — la TUI lo può dire */
+          ...(record.aFineGiro === true ? { aFineGiro: true } : {}),
           ...(typeof evento.ragione === 'string' ? { ragione: evento.ragione } : {}),
+          /* C6-bis (owner 28/10, CLI 30/10): il ripiego perché il modello del riassunto non era disponibile (quale, bloccato o inutilizzabile,
+             il perché), e il modello che ha scritto il riassunto quando non è quello della conversazione (la riserva lo dice). Additivi. */
+          ...(evento.nonDisponibile && typeof evento.nonDisponibile === 'object' && typeof evento.nonDisponibile.modello === 'string'
+            ? { nonDisponibile: { modello: evento.nonDisponibile.modello, stato: evento.nonDisponibile.stato ?? null, motivo: evento.nonDisponibile.motivo ?? null,
+              ...(Number.isFinite(evento.nonDisponibile.finoAlle) ? { finoAlle: evento.nonDisponibile.finoAlle } : {}), ...(evento.nonDisponibile.diAccount === true ? { diAccount: true } : {}) } } : {}),
+          ...(typeof evento.riassuntoDi === 'string' && evento.riassuntoDi ? { riassuntoDi: evento.riassuntoDi, ...(evento.dallaRiserva === true ? { dallaRiserva: true } : {}) } : {}),
           ...(typeof evento.classe === 'string' ? { classe: evento.classe } : {}),
           /* 22/10/2026 (revisione 4 della CLI, S3-2): la riga del giro nata da un record preparato altrove lo dice — `at` di quel
              record (solo un istante ISO), `origine` ('giro' · 'fine-giro'), `tokenDopo` dopo di lui, `conResto`. Chi disegna anche la
@@ -1514,6 +1697,7 @@ export async function avviaSessione({
             ...(Number.isSafeInteger(evento.restoNonRiuscito.fallimentiConsecutivi) ? { fallimentiConsecutivi: evento.restoNonRiuscito.fallimentiConsecutivi } : {}),
           } } : {}) }
         : { fase: 'fine', giro: evento.giro, compattato: false, motivo: evento.motivo ?? null, ...(evento.interrottaIn ? { interrottaIn: evento.interrottaIn } : {}),
+          ...(idRiassuntoValido(evento.idRiassunto) ? { idRiassunto: evento.idRiassunto } : {}), // spesa dei riassunti: pagato, non applicato
           ...(typeof evento.classe === 'string' ? { classe: evento.classe } : {}), // D5 b della CLI (21/10): la classe del fallimento
           ...(Number.isSafeInteger(evento.fallimentiConsecutivi) ? { fallimentiConsecutivi: evento.fallimentiConsecutivi } : {}),
           /* Revisione 7 della CLI (F6), contratto con la CLI: «non entra» porta la finestra e il pavimento che la supera */
@@ -1529,7 +1713,8 @@ export async function avviaSessione({
           ...(evento.motivo === 'freno' && evento.freno && typeof evento.freno === 'object' && typeof evento.freno.at === 'string'
             ? { freno: { colpi: Number.isSafeInteger(evento.freno.colpi) ? evento.freno.colpi : 0,
               mezzoAlVerdetto: Number.isFinite(evento.freno.mezzoAlVerdetto) ? evento.freno.mezzoAlVerdetto : null, at: evento.freno.at } }
-            : {}) } });
+            : {}) } }, { durable: true }))
+        .catch((errore) => console.error('[agent-service] compaction end not saved:', errore instanceof Error ? errore.message : errore));
       motivoCompattazionePerGiro.delete(evento.giro);
     }
     /*
@@ -1592,6 +1777,42 @@ export async function avviaSessione({
     if (Buffer.byteLength(html, 'utf8') > ARTEFATTO_MAX_BYTE) {
       throw Object.assign(new RangeError(`ARTIFACT_TOO_LARGE: HTML is ${Buffer.byteLength(html, 'utf8')} bytes; the maximum is ${ARTEFATTO_MAX_BYTE}. Nothing was saved.`), { code: 'ARTIFACT_TOO_LARGE' });
     }
+    /*
+     * ⭐ Decisione 142 (owner 04/11/2026), la SECONDA PORTA di «Salva in Libreria» per i blocchi vivi: il modello passa a
+     *   `artifact_create` il sorgente di un blocco (`root = …`, o il recinto ```talos-blocco) invece di una pagina HTML. Nessun
+     *   attrezzo nuovo e nessuna riga nel nucleo: la voce si salva come quella del pulsante sotto il blocco (`src/blocchi/in-libreria.mjs`:
+     *   testo, `<titolo>.txt`, legame `blocco` nel meta.json), e il PC la riapre viva nel lettore della Libreria.
+     *   ⛔ Sempre una voce NUOVA (il nucleo risponde «version 1»): la versione dopo la dà `artifact_update` con l'id, o la persona col
+     *   pulsante, che trova la voce dal legame. ⛔ Niente carta di pagina in chat (`ArtifactCreated`): la carta disegna HTML, e un blocco
+     *   ci finirebbe come testo. ⛔ Un sorgente di blocco rotto non diventa una pagina né una voce: errore al modello, niente salvato.
+     *   ⛔ Revisione J (04/11), D2: la voce di quel blocco c'è già (la persona l'ha salvata, o il modello prima) ⇒ BLOCK_EXISTS con l'id e
+     *   «call artifact_update», mai una seconda voce; la stessa fila del pulsante (`creaVoceDiBlocco`), quindi anche un clic nello
+     *   stesso istante fa una voce sola. Hermes chiave (sessione, slug) come identità sola (`store/artifacts.ts:14-17, :274-297`).
+     *   D3: in sola lettura un blocco non si vede in chat e non si salva ⇒ READ_ONLY, mai «created».
+     *   Nota della revisione: il nome della voce è il `titolo` dell'attrezzo, lo stesso che il nucleo ripete nel «created: "<titolo>"».
+     */
+    if (sembraUnBlocco(html)) {
+      let letto;
+      try { letto = bloccoDaSalvare(html); } catch (errore) {
+        throw erroreArtefatto('BLOCK_INVALID', `INVALID. ${errore.message}. Nothing was created. Fix the block, or send a full HTML page.`);
+      }
+      if (copiaInLibreria === false) throw erroreArtefatto('READ_ONLY', BLOCCO_IN_SOLA_LETTURA('created'));
+      const sessione = typeof sessionePerLibreria === 'function' ? (sessionePerLibreria() ?? {}) : {};
+      let voceBlocco;
+      try {
+        ({ id: voceBlocco } = await creaVoceDiBlocco({
+          cartella: await cartellaDatiDelProgetto(), testo: letto.sorgente, titolo, modello,
+          sessionId: sessione.sessionId, sessionNome: sessione.sessionNome,
+        }, { salvaVoceFn: salvaVoceLibreriaFn }));
+      } catch (errore) {
+        if (errore?.code === 'BLOCK_EXISTS') throw erroreArtefatto('BLOCK_EXISTS', errore.message);
+        throw errore;
+      }
+      if (typeof voceBlocco !== 'string' || !/^lib-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(voceBlocco)) {
+        throw new Error('The Library did not return a valid reference to the saved block');
+      }
+      return { id: voceBlocco, voceLibreriaId: voceBlocco };
+    }
     const id = randomUUID();
     await salvaArtefattoFn(id, html);
     let voceLibreriaId;
@@ -1632,6 +1853,8 @@ export async function avviaSessione({
    * ⛔ Sola lettura (F-015, «Artefatto sì, Libreria no»): la versione nuova si mostra e non si salva; la voce resta com'era.
    */
   const erroreArtefatto = (code, message) => Object.assign(new Error(message), { code });
+  /* Revisione J, D3 (04/11): la frase di un blocco in sola lettura, per `artifact_create` («created») e `artifact_update` («changed»). */
+  const BLOCCO_IN_SOLA_LETTURA = (fatto) => `Not saved: this conversation is read-only, and a live block is kept only in the Library. Nothing was ${fatto}.`;
   const applicaModifica = (testo, { html, edits }) => {
     if (typeof html === 'string') return html;
     let corrente = testo;
@@ -1649,12 +1872,32 @@ export async function avviaSessione({
     const cartella = await cartellaDatiDelProgetto();
     const voce = await leggiVoceFn({ cartella, id });
     if (!voce) throw erroreArtefatto('NOT_FOUND', `no saved artifact with id "${id}"`);
-    if (voce.origine !== 'generated' || !/^text\/html\b/u.test(voce.mediaType ?? '')) throw erroreArtefatto('NOT_AN_ARTIFACT', `"${id}" is not an artifact`);
+    /* Decisione 142: una voce salvata da un blocco vivo (generata, di testo, col sorgente di un blocco completo) si aggiorna come un
+       artefatto; la versione nuova deve restare un blocco valido, altrimenti niente cambia. */
+    const eBlocco = voce.origine === 'generated' && /^text\/plain\b/u.test(voce.mediaType ?? '') && (() => { try { bloccoDaSalvare(voce.testo); return true; } catch { return false; } })();
+    if (!eBlocco && (voce.origine !== 'generated' || !/^text\/html\b/u.test(voce.mediaType ?? ''))) throw erroreArtefatto('NOT_AN_ARTIFACT', `"${id}" is not an artifact`);
     const controllaPeso = (testo) => {
       const byte = Buffer.byteLength(testo, 'utf8');
       if (byte > ARTEFATTO_MAX_BYTE) throw erroreArtefatto('ARTIFACT_TOO_LARGE', `The new version is ${byte} bytes; the maximum is ${ARTEFATTO_MAX_BYTE}. Nothing was changed.`);
-      return testo;
+      if (!eBlocco) return testo;
+      try { return bloccoDaSalvare(testo).sorgente; } catch (errore) {
+        throw erroreArtefatto('BLOCK_INVALID', `INVALID. The new version: ${errore.message}. Nothing was changed.`);
+      }
     };
+    if (eBlocco) {
+      const titoloBlocco = titolo || String(voce.nome).replace(/\.txt$/iu, '');
+      /* Revisione J, D3: un blocco in sola lettura non si mostra in chat e non si salva ⇒ READ_ONLY, mai «shown» */
+      if (copiaInLibreria === false) throw erroreArtefatto('READ_ONLY', BLOCCO_IN_SOLA_LETTURA('changed'));
+      const sessione = typeof sessionePerLibreria === 'function' ? (sessionePerLibreria() ?? {}) : {};
+      const esito = await aggiungiVersioneFn({
+        cartella, id, modello,
+        sessionId: sessione.sessionId, sessionNome: sessione.sessionNome,
+        ...(titolo ? { nome: `${titolo.replace(/[\\/:*?"<>|]/g, '-').slice(0, 80)}.txt` } : {}),
+        trasforma: (ultimo) => controllaPeso(applicaModifica(ultimo, modifica)),
+      });
+      if (!esito) throw erroreArtefatto('NOT_FOUND', `no saved artifact with id "${id}"`);
+      return { versione: esito.versione, totale: esito.totale, titolo: titoloBlocco };
+    }
     const titoloFinale = titolo || String(voce.nome).replace(/\.html?$/iu, '');
     if (copiaInLibreria === false) {
       const nuovo = controllaPeso(applicaModifica(voce.testo, modifica));
@@ -1830,8 +2073,24 @@ export async function avviaSessione({
      *   le credenziali della casa mai). Una domanda sola, sempre la stessa. In Full access si scrive, come ogni altra scrittura.
      */
     const relativoDelDocumento = sottocartella ? `${sottocartella}/${documento.fileName}` : documento.fileName;
-    const accessoPienoAdesso = livelloLetto(livelloAccesso) === 'accesso-pieno'
-      || (typeof accessoPienoDellOspite === 'function' && accessoPienoDellOspite() === true); // la CLI: il suo Full access (16/10 notte)
+    const accessoPienoAdesso = inAccessoPieno();
+    /*
+     * ⛔ Revisore lettori della cura alias, 07/11/2026 (ALTO): il titolo sceglie il nome, quindi `{title:"AGENTS", mode:"append"}`
+     *   accodava alle regole dell'agente, e `.harness-ui-hooks`, `.talos/hooks`, `.claude/settings` si creavano, con 0 carte in
+     *   Workspace write: il cancello dei file di controllo (session-registry, `costruisciCancelloFileDiControllo`) copre `scrivi` e
+     *   `file_edit`, e la carta del kernel per document_create vede solo `{tipo, formato}`. Il nome finale si sa QUI ⇒ stesso rifiuto
+     *   dei segreti: il modello usa `scrivi` sullo stesso percorso, che mostra la carta del file di controllo. Come Hermes, che fa la
+     *   stessa domanda per OGNI attrezzo che scrive un file di istruzioni (`tools/file_tools.py:875` write_file e `:788` patch,
+     *   `_check_protected_instruction_write`, `tools/file_tools_write_guards.py:346`, clone 01/11). Accesso pieno: si scrive
+     *   (decisione 372). Un documento ordinario non cambia (decisione 375).
+     */
+    if (!accessoPienoAdesso && ePercorsoDiControllo(cartellaPerCreare, relativoDelDocumento)) {
+      return {
+        ok: false,
+        esito: `"${relativoDelDocumento}" is a TALOS control file (the agent's rules, not a project file), so document_create does not write it and nothing was written. `
+          + 'Use scrivi with the same path instead: it asks the person first.',
+      };
+    }
     if (!accessoPienoAdesso
       && motivoDelSegreto({ tipo: 'scrivi', percorso: relativoDelDocumento, cartella: cartellaPerCreare })) {
       return {
@@ -2200,6 +2459,25 @@ export async function avviaSessione({
       return { ok: false, esito: `"${trovata.nome}" is no longer available. No copy was saved.` };
     }
     const { bytes } = letta;
+    /* ⛔ 07/11/2026 (stesso ALTO di document_create): una voce della Libreria che si chiama CLAUDE.md o AGENTS.md si esportava alla
+       radice del progetto senza carta, cioè diventava le regole dell'agente. Fuori dall'Accesso pieno non si copia: `scrivi` chiede. */
+    if (!inAccessoPieno() && ePercorsoDiControllo(cartellaPerCreare, letta.nome)) {
+      return {
+        ok: false,
+        esito: `"${letta.nome}" is a TALOS control file (the agent's rules, not a project file), so library_export does not copy it there and nothing was written. `
+          + `If the person wants this content there, read it with library_read and use scrivi with the path "${letta.nome}": it asks the person first.`,
+      };
+    }
+    /* ⛔ Revisori del giro 2 (08/11/2026, BASSO): document_create rifiutava un nome che può tenere chiavi o password (`.env`,
+       `credentials.json`…), library_export no: una voce della Libreria con quel nome si copiava nel progetto senza carta. Stesso
+       rifiuto, stessa via d'uscita (`scrivi` chiede alla persona). Accesso pieno: si copia. Un nome ordinario non cambia (375). */
+    if (!inAccessoPieno() && motivoDelSegreto({ tipo: 'scrivi', percorso: letta.nome, cartella: cartellaPerCreare })) {
+      return {
+        ok: false,
+        esito: `"${letta.nome}" may hold keys or passwords, so library_export does not copy it there and nothing was written. `
+          + `If the person wants this content there, read it with library_read and use scrivi with the path "${letta.nome}": it asks the person first.`,
+      };
+    }
     let salvato;
     try {
       salvato = await creaFileWorkspaceFn({ cartella: cartellaPerCreare, nome: letta.nome, bytes });
@@ -2516,6 +2794,7 @@ export async function avviaSessione({
     const esito = await talosLavoraFn({
       cartella, task, modello, chiave, comandoProva, segnaleStop, messaggiIniziali, mobile,
       ...(segnalePausa ? { segnalePausa } : {}), // C3 tappa 4: la pausa di una delega
+      ...(typeof fermataDallaPersona === 'function' ? { fermataDallaPersona } : {}), // decisione 166 (R1): chi ha fermato
       finestraToken, /* ⛔ BUG-5 (05/10/2026): inoltrata al kernel — la soglia diventa 0,75 della finestra VERA del modello */
       ...(limiteUscitaToken ? { limiteUscitaToken } : {}), // 21/10: il tetto d'uscita del riassunto (`tettoUscitaRiassunto`)
       ...(limiteUscitaToken ? { limiteUscitaDelModello: limiteUscitaToken } : {}), // CONTRATTO-R30-R31: e quello del giro
@@ -2523,9 +2802,20 @@ export async function avviaSessione({
       ...(finestraLocale && typeof finestraLocale === 'object' ? { finestraLocale } : {}), // L1 1.3 (A-3, A-4): la finestra viva del modello locale
       ...(senzaPersona === true ? { senzaPersona: true } : {}), // revisione blocco 5 (A-4): all'adattatore, sul rifiuto si riassume
       ...(nessunoDavanti === true ? { nessunoDavanti: true } : {}), // OB-REV-03: al kernel, il filo che mancava
+      /* forma A (revisione del blocco permessi 04/11/2026, A1 e A2): il Full access dell'ospite arriva anche al cancello del nucleo */
+      ...(typeof accessoPienoDellOspite === 'function' ? { accessoPienoDellOspite } : {}),
+      /* K (forma permessi 2, 04/11/2026): con la cartella allargata (Accesso pieno da una cartella dell'elenco) il cancello critico riceve il progetto vero */
+      ...(typeof cartellaCreazioni === 'string' && cartellaCreazioni !== '' && cartellaCreazioni !== cartella ? { progettiCritici: [cartellaCreazioni] } : {}),
+      ...(typeof personaPresenteFn === 'function' ? { personaPresenteFn } : {}), // R-34 parte 2: la porta della presenza
+      ...(promuoviDalTesto === true ? { promuoviDalTesto: true } : {}), // decisione 44: solo se l'ospite la chiede
       ...(statoCachePrecedente && typeof statoCachePrecedente === 'object' ? { statoCachePrecedente } : {}), // cache, punto 2
+      ...(typeof fasciaDiServizioFn === 'function' ? { fasciaDiServizioFn } : {}),
       ...(typeof modelloRiassunto === 'string' && modelloRiassunto ? { modelloRiassunto } : {}), // 21/10 (CLI): il modello dei riassunti
       ...(Number.isFinite(finestraRiassuntoToken) && finestraRiassuntoToken > 0 ? { finestraRiassuntoToken } : {}),
+      ...(typeof riservaRiassunto === 'string' && riservaRiassunto ? { riservaRiassunto } : {}), // C6-bis
+      ...(Number.isFinite(finestraRiservaToken) && finestraRiservaToken > 0 ? { finestraRiservaToken } : {}),
+      ...(origineRiassunto === 'persona' || origineRiassunto === 'ospite' ? { origineRiassunto } : {}),
+      ...(statoModelliRiassunto instanceof Map ? { statoModelliRiassunto } : {}),
       ...(Number.isFinite(scartoMisurato) && scartoMisurato >= 0 ? { scartoMisurato } : {}), // revisione 6 della CLI (S2-2)
       ...(Number.isFinite(stimaAttrezziMisurati) && stimaAttrezziMisurati > 0 ? { stimaAttrezziMisurati } : {}), // revisione 8 della CLI (N1)
       ...(Number.isSafeInteger(nonEntraDetto) ? { nonEntraDetto } : {}), // revisione 7 della CLI (F6)
@@ -2568,12 +2858,47 @@ export async function avviaSessione({
       ...(linguaInterfaccia ? { linguaInterfaccia } : {}),
       ...(linguaDelleRisposte ? { linguaDelleRisposte } : {}), // owner 28/10
       ...(linguaDelMessaggio ? { linguaDelMessaggio } : {}), // owner 28/10
+      ...(catalogoBlocchi ? { catalogoBlocchi } : {}), // FE-003
+      /* G-B2: con il catalogo e lo stato dei blocchi, `blocco_aggiorna` ha chi lo ospita; ogni versione è un evento durevole */
+      ...(catalogoBlocchi && blocchiDellaConversazione ? creaOspiteDeiBlocchi({
+        stato: blocchiDellaConversazione, conversazione: String(blocchiDellaConversazione.conversazione ?? ''),
+        emetti: (valore) => onEvento({ type: 'CUSTOM', name: EVENTO_VERSIONE_DEL_BLOCCO, value: valore }, { durable: true }),
+      }) : {}),
+      ...(listaPassi === true ? { listaPassi: true, passiIniziali, onPassi } : {}), // FE-008
       onAvviso: async (messaggio, { ripetibile = false, nota = false, riga = null, dati = null } = {}) => {
         /* ⭐ L1 1.3 (owner 26/10/2026, bozzetto approvato): la finestra del modello locale allargata da sola è UNA RIGA di stato nella
            conversazione (come «Context compacted»), non una bolla del modello: evento durevole che il frontend disegna come separatore,
            coi dettagli a richiesta. `messaggio` resta la frase completa per chi non conosce l'evento (registro, esportazioni). */
         if (riga === 'finestra-locale' && dati && typeof dati === 'object') {
           await onEvento({ type: 'CUSTOM', name: 'talos.finestra-locale', value: { ...dati, testo: typeof messaggio === 'string' ? messaggio : String(messaggio?.testo ?? ''), at: new Date().toISOString() } }, { durable: true });
+          return;
+        }
+        /*
+         * ⭐ Decisione 116 C (owner 04/11/2026; forma §2-§4) — il rinnovo dell'accesso col piano ChatGPT a metà giro. Mai una bolla:
+         *   - la riga VIVA «Rinnovo l'accesso a ChatGPT…» va sul canale dei ritentativi (`talos.provider-retry`, canale `rinnovo-accesso`),
+         *     effimera come gli altri ritentativi, senza stato HTTP; sul telefono porta `chiedeTokenAllApp` e l'impronta del token rifiutato;
+         *   - la riga QUIETA («rinnovato», «ripreso») è durevole (`talos.accesso-chatgpt`), una per giro, rileggibile dopo un reload.
+         * Additivi: chi non li conosce li ignora (contratto dei CUSTOM). Mai un token, un codice o uno stato.
+         */
+        if (riga === 'rinnovo-accesso' && dati && typeof dati === 'object') {
+          await onEvento({ type: 'CUSTOM', name: 'talos.provider-retry', value: {
+            schema: 'talos.provider-retry.v1', threadId, runId, requestId: dati.requestId, fase: dati.fase,
+            tentativo: dati.tentativo, tentativiMassimi: dati.tentativiMassimi, at: dati.at, canale: 'rinnovo-accesso',
+            ...(dati.chiedeTokenAllApp === true ? { chiedeTokenAllApp: true } : {}),
+            ...(typeof dati.impronta === 'string' && /^[0-9a-f]{16}$/u.test(dati.impronta) ? { impronta: dati.impronta } : {}),
+          } });
+          return;
+        }
+        if (riga === 'accesso-chatgpt' && dati && typeof dati === 'object') {
+          await onEvento({ type: 'CUSTOM', name: 'talos.accesso-chatgpt', value: {
+            schema: 'talos.accesso-chatgpt.v1', threadId, runId, esito: dati.esito, allInvio: dati.allInvio === true,
+            testo: typeof messaggio === 'string' ? messaggio : String(messaggio?.testo ?? ''), at: new Date().toISOString(),
+          } }, { durable: true });
+          return;
+        }
+        /* FE-050 (disegno approvato dall'owner, 01/11/2026): «Aperto con l'altro motore» è un separatore che resta, come la finestra allargata */
+        if (riga === 'ripiego-locale' && dati && typeof dati === 'object') {
+          await onEvento({ type: 'CUSTOM', name: 'talos.ripiego-locale', value: { ...dati, testo: typeof messaggio === 'string' ? messaggio : String(messaggio?.testo ?? ''), ...(messaggio?.testoChiave ? { testoChiave: messaggio.testoChiave } : {}), at: new Date().toISOString() } }, { durable: true }); // la chiave: il telefono lo dice nella sua lingua (Mobile, 01/11)
           return;
         }
         /* ⛔ BUG-7 (04/10, owner): stesso messaggio = una bolla sola per sessione (Set sopra).
@@ -2610,7 +2935,7 @@ export async function avviaSessione({
         for (const messageId of messaggiTestoPerGiro.values()) await onEvento(textMessageEnd({ messageId }), { durable: true });
         for (const messageId of messaggiRagionamentoPerGiro.values()) await onEvento(reasoningMessageEnd({ messageId }), { durable: true });
         for (const ids of toolCallIdStreamatiPerGiro.values()) for (const toolCallId of ids) await onEvento(eventoPerEsitoTool({ messageId: randomUUID(), toolCallId, content: 'Request interrupted before execution.', isError: true }), { durable: true });
-        messaggiTestoPerGiro.clear(); messaggiRagionamentoPerGiro.clear(); toolCallIdStreamatiPerGiro.clear();
+        messaggiTestoPerGiro.clear(); messaggiRagionamentoPerGiro.clear(); toolCallIdStreamatiPerGiro.clear(); battitoDelRagionamento.chiudiTutti();
         const messageId = randomUUID();
         await onEvento(textMessageStart({ messageId, role: 'assistant' }), { durable: true });
         const deltaCambio = textMessageContent({ messageId, delta: evento.messaggio });
@@ -2621,10 +2946,21 @@ export async function avviaSessione({
         await depositaCambioFornitore(evento);
       },
       onConsumoFornitore: async evento => onEvento({ type: 'CUSTOM', name: 'consumo-fornitore', value: evento }, { durable: true }),
+      /* Spesa di servizio (owner 30/10/2026, parte 2 A): i riassunti DENTRO il giro (segnati dal kernel) — riga col costruttore unico */
+      /* Performance (30/10): col runId del giro, così il banco allinea la riga del riassunto alla talos.compattazione dello stesso giro */
+      onConsumoDiServizio: async valore => onEvento({ type: 'CUSTOM', name: 'consumo-di-servizio', value: { ...valore, runId } }, { durable: true }),
       strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onAggiornaArtefatto, onDocumento, onImmagine, modelloPlanner,
       ...(typeof guardaImmagineFn === 'function' ? { onGuardaImmagine: guardaImmagineFn, vedeImmaginiFn } : {}), // owner 27/10/2026, view_image
       ...(typeof apriPaginaLocaleFn === 'function' ? { apriPaginaLocaleFn, vedeImmaginiFn } : {}), // owner 27/10/2026, local_page
+      ...(typeof leggiPaginaBrowserFn === 'function' ? { leggiPaginaBrowserFn } : {}), // decisione 201, browser_page
+      ...(paginaBrowser !== undefined ? { paginaBrowser } : {}), // decisione 201: la nota della pagina, solo se il messaggio la porta
+      ...(typeof motoreInCaricamentoFn === 'function' ? { motoreInCaricamentoFn } : {}), // 01/11/2026: «while the model was still loading»
+      ...(typeof prezzoDelModelloFn === 'function' ? { prezzoDelModelloFn } : {}), // decisioni 57 e 144: i dollari sulla carta della ricerca
+      /* computer use (04/11/2026): il nucleo lo offre solo se il modello vede le immagini, quindi `vedeImmaginiFn` va con l'ospite */
+      ...(typeof onComputerUseFn === 'function' ? { onComputerUseFn, vedeImmaginiFn } : {}),
       ...(ponteAcceso ? { attrezziDifferiti } : {}), // 19/10: `true` o `'essenziali'` (il modello locale del telefono), inoltrato com'è
+      ...(ricercaDavanti === true ? { ricercaDavanti: true } : {}), // ricerca a due porte, 01/11/2026
+      ...(chiamataIniziale ? { chiamataIniziale } : {}), // ricerca a due porte: la chiamata della persona, solo il primo passo
       ...(ponteAcceso && Number.isSafeInteger(finestraPerGliAttrezzi) && finestraPerGliAttrezzi > 0 ? { finestraPerGliAttrezzi } : {}), // L1, 20/10
       // ⭐ L9 (12/09/2026) — inoltrati SENZA logica propria, come tutto il resto in questo file:
       // la cache della corsa e la finestra della pagina le costruisce `research-orchestrator.mjs`
@@ -2632,8 +2968,9 @@ export async function avviaSessione({
       cacheWeb, onPaginaLetta,
       livelloAccesso, modalitaOperativa, chiediApprovazioneFn, chiediDomandaFn, figliaChiedeAllaPersona, fileAdottatiDallaPersona, presentaPianoFn,
       ...(typeof testoDellaPersona === 'string' ? { testoDellaPersona } : {}),
+      ...(senzaIstruzioniDelProgetto === true ? { senzaIstruzioniDelProgetto: true } : {}), // le sezioni: `runtime-owner-adapter.mjs`
       ...(Number.isSafeInteger(giriMassimi) && giriMassimi > 0 ? { _giriMassimiInterno: giriMassimi } : {}), // /goal G5
-      agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn, pauseChildFn, resumeChildFn,
+      agentRole, askParentFn, answerChildQuestionFn, askChildFn, answerParentQuestionFn, onWorkflowPlanPropose, listChildrenFn, stopChildFn, pauseChildFn, resumeChildFn, retryChildFn,
       modalitaOperativaCorrenteFn, figliViviAllAvvio, permessiCorrentiFn,
       hookFn: hookFnConPlugin, permessiPerAttrezzo, onDelega, coordinazioneFn, codaMessaggiFn,
       /* A13 (owner 10/10/2026, «Sì, come nella CLI»): i GIRI IN TONDO anche sul desktop — la stessa chiamata con lo stesso risultato
@@ -2650,16 +2987,23 @@ export async function avviaSessione({
       onWorkflowFn, // F-012 (piano 0.1.19 §1.5): i tre attrezzi dei run, inoltrato com'è
       onAutomazioneFn, // automazioni a due porte (08/10/2026): inoltrato com'è
       onFornitoriFn, // 0.1.25: i fornitori esclusi, inoltrato com'è
+      onImpostazioniFn, // Fase 8 (01/11/2026): `app_settings`, inoltrato com'è (lezione del 17/10: un'opzione nuova lungo tutto il filo)
       onObiettivoFn, // /goal G6: l'obiettivo, inoltrato com'è
       onAnnullaFileFn, // R5.11: annullare le modifiche ai file, inoltrato com'è
       lavoroDellAgenteFn, // R-26 B: inoltrato com'è (lezione del 17/10: un'opzione nuova si porta lungo tutto il filo)
       onSegnalazioneFn, // «Segnala un problema» (29/10/2026): inoltrato com'è
+      aiutoTalos, // Centro assistenza (01/11/2026): inoltrato com'è (lezione del 17/10: un'opzione nuova lungo tutto il filo)
       onTelefoniFn, // R5.12: i telefoni collegati, inoltrato com'è
+      onLuoghiFn, // computer use (04/11/2026): i luoghi ricordati, inoltrato com'è
       onRichiestaPianoFn, // Rilievo 3 (§1.7): la richiesta del modo Piano, inoltrata com'è
       onRicercaLista, onRicercaAvvia, onRicercaLeggi, onRicercaRinomina,
       onRicercaPausa, onRicercaRiprendi, onRicercaAnnulla, onRicercaElimina,
       componiRapportoRicercaFn,
       cartellaRicerche: cartellaDatiDelProgetto,
+      /* Blocco 26: i registri dello sfondo nella cartella dati, e quelli già scritti dalla sessione (lezione del 17/10: lungo tutto il filo) */
+      ...(typeof cartellaSfondoFn === 'function' ? { cartellaSfondo: () => Promise.resolve().then(() => cartellaSfondoFn()) } : {}),
+      ...(typeof registriSfondoFn === 'function' ? { registriSfondoFn } : {}),
+      ...(typeof allegatiConversazioneFn === 'function' ? { allegatiConversazioneFn } : {}),
       onForgeCrea, toolForge, eseguiToolForgeFn,
       registroLetture,
       cartellaPagineWeb,
@@ -2696,11 +3040,16 @@ export async function avviaSessione({
      *   uno di quelli che descrivono un esito del task — un errore interno non deve poter fingersi
      *   'fermato' o 'giri-esauriti' passando per il `.code` di un'eccezione qualunque.
      */
-    const ESITI_DEL_TASK = new Set(['fermato', 'giri-esauriti', 'premesse-negate', 'concluso']);
+    const ESITI_DEL_TASK = new Set(['fermato', 'giri-esauriti', 'premesse-negate', 'concluso', 'rifiuto-del-modello']);
     const codiceGrezzo = typeof errore?.code === 'string' ? errore.code.trim() : '';
-    const code = codiceGrezzo && !/\s/.test(codiceGrezzo) && !ESITI_DEL_TASK.has(codiceGrezzo)
-      ? codiceGrezzo
-      : 'internal-error';
+    /* Reperto (1) dello stress test del telefono 0.1.47 (30/10/2026; forma approvata da CLI, Mobile, Performance): lo Stop che arriva
+       mentre il nucleo salva la storia del giro esce come eccezione COL segno che mette solo il nucleo (`fermatoSuRichiesta`,
+       talosHarness `catturaSenzaFermare`) — è uno Stop, non un guasto: `fermato` come uno Stop normale. Il solo `.code` o il solo nome
+       AbortError non bastano (un errore qualunque non deve potersi fingere uno Stop). */
+    const code = errore?.fermatoSuRichiesta === true ? 'fermato'
+      : codiceGrezzo && !/\s/.test(codiceGrezzo) && !ESITI_DEL_TASK.has(codiceGrezzo)
+        ? codiceGrezzo
+        : 'internal-error';
     /*
      * ⭐ F3-41a (25/09/2026) — anche la CLASSE del guasto, quando il kernel l'ha già decisa (`erroreFornitorePubblico`,
      *   runtime-owner-adapter.mjs:896-905: `traffico`, `rete`, `guasto-fornitore`…). Il messaggio pubblico è in italiano
@@ -2765,8 +3114,14 @@ export async function avviaSessione({
     const statoDelGiro = errore?.statoDelGiro && typeof errore.statoDelGiro === 'object' && !Array.isArray(errore.statoDelGiro) ? errore.statoDelGiro : null;
     return { threadId, runId, ok: false, esito: null, erroreInterno: messaggio, codiceErrore: code, ...(messaggiDelGiro ? { messaggiDelGiro } : {}),
       ...(recordDiCompattazione ? { recordDiCompattazione } : {}), ...(statoDelGiro ? { statoDelGiro } : {}),
+      /* Seguito della revisione C-9 (28/10/2026): il riassunto già pronto e quello ancora in preparazione che il kernel attacca all'errore
+         (`talosHarness.desktop-hotfix.mjs`, C-9) tornano al registro come da un giro riuscito: senza, il giro dopo lo ripagava. Additivi;
+         quello in preparazione solo se è una promessa vera. */
+      ...(errore?.compattazionePronta && typeof errore.compattazionePronta === 'object' ? { compattazionePronta: errore.compattazionePronta } : {}),
+      ...(typeof errore?.compattazioneInPreparazione?.then === 'function' ? { compattazioneInPreparazione: errore.compattazioneInPreparazione } : {}),
       ...(errore?.archiviataDalMotore === true ? { archiviataDalMotore: true } : {}) }; // R13-2: la richiesta non inviata è già nell'archivio del motore
   } finally {
+    battitoDelRagionamento.chiudiTutti(); // nessun battito dopo la fine del lavoro
     /*
      * ⭐⭐⭐ 29/8 — FASE E: un server MCP è un processo figlio VERO
      * (a differenza di ogni altra risorsa di questo file) — lasciarlo
@@ -2863,6 +3218,22 @@ export async function riassumiPerCompattazione({ modello, chiave, messaggi, maxO
   return { scelta: esito?.scelta ?? null, finishReason: esito?.finishReason ?? null, usage: esito?.usage ?? null };
 }
 
+/**
+ * FE-010: la chat a lato. Stessa porta di ogni giro, nessun ritentativo oltre quelli della rete, nessun ripiego su un altro fornitore.
+ * ⛔ `talosSenzaCollegamento`: sul piano va su HTTP. La chiave del collegamento è quella della cache: una domanda a parte sostituirebbe lo stato del
+ *   filo del giro, che perderebbe la continuazione (Performance, 03/11). Fuori dal piano il campo non fa niente: `fetch` lo ignora.
+ */
+export async function rispondiALato({ modello, chiave, messaggi, attrezzi, reasoning, maxOutputTokens, fetchDiRete = fetch, segnaleStop }) {
+  const senzaCollegamento = (url, opzioni) => fetchDiRete(url, { ...opzioni, talosSenzaCollegamento: true });
+  const esito = await chiamaConRitenta({
+    modello, chiave, messaggi, attrezzi: Array.isArray(attrezzi) ? attrezzi : [], fetchDiRete: senzaCollegamento,
+    ...(reasoning ? { reasoning } : {}),
+    ...(Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 ? { maxOutputTokens } : {}),
+    ...(segnaleStop ? { segnaleStop } : {}),
+  });
+  return { ...testoDellaRispostaALato(esito?.scelta), usage: esito?.usage ?? null };
+}
+
 /** Il permesso detto al modello dall'ospite: una riga sola, entro 200 caratteri; vuoto o non stringa ⇒ `null` (vale `permessi`). */
 export function rigaDelPermessoPerIlModello(valore) {
   if (typeof valore !== 'string') return null;
@@ -2897,17 +3268,34 @@ export function rigaDelPermessoPerIlModello(valore) {
  * @param {string} input.modello
  * @param {string} input.chiave
  * @param {string} input.prompt
+ * @param {Array<object>} [input.contenuto] — computer use (04/11/2026): le parti del messaggio (testo + UNA immagine `image_url`)
+ *   al posto di `prompt`; il formato è quello dei messaggi del nucleo, tradotto per fornitore come gli allegati della chat
  * @param {AbortSignal} [input.segnaleStop]
  * @param {typeof fetch} [input.fetchDiRete] — SOLO per test
  * @param {(usage: object|null) => void} [input.onConsumo] — /goal G5d (owner 15/10/2026, «giudice e confutatore nel tetto»): chi deve
  *   contare la spesa riceve l'`usage` del fornitore; un osservatore che lancia non cambia l'esito
  * @returns {Promise<string>}
  */
-export async function chiediAlModelloUnaVolta({ modello, chiave, prompt, segnaleStop, fetchDiRete = fetch, onConsumo }) {
-  const { scelta, usage } = await chiamaConRitenta({
-    modello, chiave, messaggi: [{ role: 'user', content: String(prompt ?? '') }], attrezzi: [],
-    fetchDiRete, ...(segnaleStop ? { segnaleStop } : {}),
-  });
+export async function chiediAlModelloUnaVolta({ modello, chiave, prompt, contenuto, segnaleStop, fetchDiRete = fetch, onConsumo, onSpesa }) {
+  /* Spesa di servizio, parte 2 C (30/10/2026; CLI: «la porta più in basso», così il giudice della ricerca, quello di /goal e la domanda
+     della persona si contano tutti): UNA chiamata a `onSpesa` per chiamata, col suo uso, l'esito, la durata e i tentativi. Chi la passa
+     sa la sessione e lo scopo. Un guasto della porta non tocca mai la risposta. */
+  let tentativi = 1;
+  const t0 = Date.now();
+  const spesa = (valore) => { if (typeof onSpesa === 'function') { try { onSpesa({ ...valore, durataMs: Date.now() - t0, tentativi }); } catch { /* osservatore isolato */ } } };
+  let risultato;
+  try {
+    risultato = await chiamaConRitenta({
+      modello, chiave, messaggi: [{ role: 'user', content: Array.isArray(contenuto) && contenuto.length ? contenuto : String(prompt ?? '') }], attrezzi: [],
+      fetchDiRete, ...(segnaleStop ? { segnaleStop } : {}),
+      ...(typeof onSpesa === 'function' ? { onRitenta: (e) => { if (e?.fase === 'invio' && Number.isSafeInteger(e.tentativo)) tentativi = Math.max(tentativi, e.tentativo); } } : {}),
+    });
+  } catch (errore) {
+    spesa({ usage: errore?.usage ?? null, esito: segnaleStop?.aborted ? 'fermato' : 'interrotto' });
+    throw errore;
+  }
+  const { scelta, usage } = risultato;
+  spesa({ usage: usage ?? null, esito: 'completato' });
   if (typeof onConsumo === 'function') { try { onConsumo(usage ?? null); } catch { /* osservatore isolato */ } }
   return String(scelta?.content ?? '').trim();
 }
@@ -2945,6 +3333,8 @@ export async function eseguiComandoDiretto({
   registraComandoFermabile = null,
   /* A6-bis (08/10/2026): quando il comando finisce in sfondo, la sua uscita vera va al registro (`talos.processo-sfondo`). */
   segnalaUscitaSfondo = null,
+  /* Blocco 26: la radice dei dati del progetto per il registro dello sfondo (`<radice>/background/<id>.log`); assente = come prima. */
+  cartellaSfondoFn = null,
 }) {
   /*
    * ⛔⛔⛔ D-10D — questo NON è più un giro del modello: ha il suo vocabolario.
@@ -2979,7 +3369,15 @@ export async function eseguiComandoDiretto({
      ⛔ `sfonda` NON uccide: l'esecutore stacca la cattura, apre il file di output e conclude l'attesa — il processo vive. */
   const fermaQuesto = new AbortController();
   const sfondoQuesto = new AbortController();
-  const sfondoFile = percorsoFileSfondo(cartella, toolCallId);
+  /* Blocco 26: con la cartella dati il registro va lì (col nome da mostrare); una radice che non si risolve non ricade nel progetto */
+  let sfondoFile = percorsoFileSfondo(cartella, toolCallId);
+  if (typeof cartellaSfondoFn === 'function') {
+    let radice = null;
+    try { radice = await cartellaSfondoFn(); } catch { radice = null; }
+    sfondoFile = typeof radice === 'string' && radice !== ''
+      ? { percorso: percorsoFileSfondoNeiDati(radice, toolCallId), mostrato: nomeMostratoFileSfondo(toolCallId) }
+      : null;
+  }
   const avvio = registroDellAvvio(); // C1 (10/10/2026): lo dice l'esecutore appena lancia la shell, per CPU e memoria nei Processi
   const sgancia = typeof registraComandoFermabile === 'function'
     ? registraComandoFermabile({ toolCallId, ferma: () => fermaQuesto.abort('stop-della-riga'), sfonda: () => sfondoQuesto.abort('sfondo-della-riga'), pid: avvio.pid, wsl: avvio.wsl }) // = MOTIVO_STOP_DELLA_RIGA / MOTIVO_SFONDO_DELLA_RIGA del kernel
@@ -3010,7 +3408,7 @@ export async function eseguiComandoDiretto({
   if (typeof sgancia === 'function' && risultato?.messoInSfondo && risultato.uscita) risultato.uscita.finally(() => sgancia()).catch(() => {});
   anteprima.flush(); // Anche l'ultimo pezzo ammesso deve essere consegnato.
   if (risultato?.messoInSfondo && risultato.uscita && typeof segnalaUscitaSfondo === 'function') {
-    risultato.uscita.then((u) => segnalaUscitaSfondo({ toolCallId, ...u, comando, file: risultato.fileSfondo ?? null, dellaPersona: true })).catch(() => {}); // A6-bis (G2); C06: comando e file per la nota al modello
+    risultato.uscita.then((u) => segnalaUscitaSfondo({ toolCallId, ...u, comando, file: risultato.fileSfondoMostrato ?? risultato.fileSfondo ?? null, dellaPersona: true })).catch(() => {}); // A6-bis (G2); C06: comando e file per la nota al modello; blocco 26: il nome corto
   }
   /* ⛔ BLOCCO 6 (B3) — era `[sandbox: ${risultato.enforcement}]`, cioè `[sandbox: none]`: un valore
      che non dice a chi legge che il comando è partito con gli stessi privilegi di TALOS. Qui il
@@ -3028,11 +3426,12 @@ export async function eseguiComandoDiretto({
      suggerimenti, e senza i due campi un avviso e un errore si leggevano uguali. Il `content` resta
      quello di sempre — il modello non cambia di un byte. */
   onEvento(eventoPerEsitoTool({
-    messageId: randomUUID(), toolCallId, content,
+    /* Blocco 26, ritocco D1: l'evento (che può andare al ponte) col nome corto del registro; `testo`, più sotto, resta pieno per il modello */
+    messageId: randomUUID(), toolCallId, content: testoSfondoPerGliEventi(content, risultato.fileSfondo, risultato.fileSfondoMostrato),
     stdout: risultato.fuori, stderr: risultato.errori, exitCode: risultato.codice,
     ...(processOutputFn && !risultato.messoInSfondo ? {isError: risultato.codice !== 0 || risultato.outputStorageFailed === true} : {}),
     /* ⛔ BUG-14: la riga dei Processi deve dire «in sfondo» + file + chi lo ha sfondato (additivi). */
-    ...(risultato.messoInSfondo ? { inSfondo: true, ...(risultato.fileSfondo ? { fileSfondo: risultato.fileSfondo } : {}), ...(risultato.daSfondo ? { sfondoDa: risultato.daSfondo } : {}) } : {}),
+    ...(risultato.messoInSfondo ? { inSfondo: true, ...(risultato.fileSfondo ? { fileSfondo: risultato.fileSfondo } : {}), ...(risultato.fileSfondo && risultato.fileSfondoMostrato ? { fileSfondoMostrato: risultato.fileSfondoMostrato } : {}), ...(risultato.daSfondo ? { sfondoDa: risultato.daSfondo } : {}) } : {}),
   }));
   onEvento(comandoUtenteFinito({ comandoId, codice: risultato.codice, enforcement: risultato.enforcement }));
   /*

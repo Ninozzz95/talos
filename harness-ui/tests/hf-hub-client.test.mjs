@@ -11,6 +11,20 @@ test('RIPRESA-HF-PARAMETRI-API — totale dichiarato, mai nome o byte', async ()
   const client = createHfHubClient({ fetchImpl: async () => response(values.map((total, i) => ({ id: `org/8B-${i}`, gguf: { total } }))) });
   assert.deepEqual((await client.searchModels()).items.map(x => x.parameterCount), [30532122624, null, null, null, null, null]);
 });
+/* Mobile UI-139, 02/11/2026: per alcuni repository il blocco `gguf` dell'Hub descrive il proiettore (446 milioni di parametri su un modello da 35 miliardi). */
+test('HF-HUB-PROIETTORE-01 i numeri del proiettore non sono quelli del modello', async () => {
+  const client = createHfHubClient({ fetchImpl: async () => response([
+    { id: 'org/visione', gguf: { architecture: 'clip', total: 446000000 } },
+    { id: 'org/visione-con-pesi', gguf: { architecture: 'clip', total: 446000000 }, safetensors: { total: 35000000000 } },
+    { id: 'org/testo', gguf: { architecture: 'qwen3', total: 35000000000 } },
+  ]) });
+  assert.deepEqual((await client.searchModels()).items.map(x => x.parameterCount), [null, 35000000000, 35000000000]);
+});
+test('HF-HUB-PROIETTORE-02 il proiettore non passa per l\'architettura del modello', async () => {
+  const dettaglio = (gguf) => createHfHubClient({ fetchImpl: async (url) => response(String(url).includes('README') ? '' : { sha: 'a'.repeat(40), gguf }) }).describeModel('org/model');
+  assert.equal((await dettaglio({ architecture: 'clip', total: 446000000 })).architettura, null);
+  assert.equal((await dettaglio({ architecture: 'qwen3', total: 35000000000 })).architettura, 'qwen3');
+});
 test('RIPRESA-HF-ACCESSO-ENUM — manual e auto richiedono accesso, assenza ignota', async () => {
   let url;
   const client = createHfHubClient({ fetchImpl: async u => { url = u; return response([false, true, 'manual', 'auto', undefined].map((gated, i) => ({ id: `org/model-${i}`, gated }))); } });

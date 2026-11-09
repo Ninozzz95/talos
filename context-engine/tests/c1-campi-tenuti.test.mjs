@@ -16,7 +16,7 @@ import { personRequestsKept, personRequestRegister } from '../src/summary.mjs';
 import { CLEARING_STEP, KEEP_RECENT_TOOL_OUTPUTS } from '../src/tool-output-clearing.mjs';
 
 const now = '2026-10-10T00:00:00.000Z';
-const profilo = { provider: 'local', model: 'fixture', windowTokens: 131072, responseReserve: 2048, local: true };
+const profilo = { provider: 'local', model: 'fixture', windowTokens: 131072, responseReserve: 2048, local: true, singleSlot: true };
 const sha = (v) => createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const valido = (request) => {
   const sourceId = JSON.parse(request.messages.at(-1).content).sourceIds?.[0] ?? 'u0';
@@ -30,7 +30,7 @@ async function motore(t, messaggi, { anchorIndex } = {}) {
   const store = createSqliteContextStore({ databasePath: join(dir, 'context.sqlite') });
   t.after(async () => { await store.close(); await rm(dir, { recursive: true, force: true }); });
   const model = { resolveModel: async ({ sessionModel }) => sessionModel, summarize: async (request) => valido(request) };
-  const engine = createContextEngine({ store, model, tokenCounter: contatore, clock: () => now, ...(anchorIndex ? { anchorIndex } : {}) });
+  const engine = createContextEngine({ store, model, tokenCounter: contatore, clock: () => now, guadagnoMinimoChiesto: 0, /* conversazioni minuscole per provare altro: il controllo «niente da compattare» (31/10) qui si spegne */ ...(anchorIndex ? { anchorIndex } : {}) });
   await store.initSession({ sessionId: 'chat', settings: parseContextSettings({}) });
   for (const [i, message] of messaggi.entries()) await engine.appendOriginal({ sessionId: 'chat', record: { id: `${i % 2 ? 'a' : 'u'}${i}`, message, createdAt: now } });
   return { engine, store };

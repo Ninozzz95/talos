@@ -1,6 +1,6 @@
 {
   "name": "talos-desktop",
-  "version": "0.1.38",
+  "version": "0.2.0",
   "private": true,
   "description": "Il guscio desktop di TALOS, con il runtime Node incluso in Electron.",
   "license": "AGPL-3.0-only",
@@ -58,6 +58,9 @@
       "aggiornamenti.mjs",
       "canale-aggiornamenti.mjs",
       "segnalazione.mjs",
+      "bolla-finestra.mjs",
+      "segno-finestra.mjs",
+      "pc-sveglio.mjs",
       "fonte-aggiornamenti.mjs",
       "package.json",
       "assets/talos.png",
@@ -90,8 +93,8 @@
         "to": "casa-linux"
       },
       {
-        "from": ".staging/docs",
-        "to": "docs"
+        "from": ".staging/aiutante-pc",
+        "to": "aiutante-pc"
       },
       {
         "from": ".staging/MANIFEST.json",

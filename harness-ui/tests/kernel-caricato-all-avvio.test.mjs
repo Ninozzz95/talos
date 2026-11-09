@@ -76,7 +76,7 @@ async function avvia(t, variabile) {
   };
   delete env.TALOS_OWNER_RUNTIME_MODULE;
   if (variabile) env.TALOS_OWNER_RUNTIME_MODULE = variabile;
-  const figlio = spawn(process.execPath, ['server.mjs'], { cwd: RADICE, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env });
+  const figlio = spawn(process.execPath, ['server.mjs', '--senza-gettone=prove'], { cwd: RADICE, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env });
   t.after(() => { figlio.kill(); });
   const scritto = { out: '', err: '' };
   figlio.stdout.on('data', (c) => { scritto.out += c; });

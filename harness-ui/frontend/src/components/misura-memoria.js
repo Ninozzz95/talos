@@ -11,11 +11,25 @@ export function datiMemoria(capacita,runtimes=[],{erroreRuntime=''}={}) {
  const c=normalizzaCapacita(capacita),ll=runtimes.find(r=>r.runtimeId==='llama.cpp');
  return {totale:c.memory.totalBytes,libera:c.memory.freeBytes,usata:c.memory.totalBytes-c.memory.freeBytes,percentuale:(1-c.memory.freeBytes/c.memory.totalBytes)*100,discoDisponibile:c.storage.availableBytes,discoRiserva:c.storage.reserveBytes,discoAllocabile:c.storage.allocatableBytes,caricato:erroreRuntime?null:ll?.runtimeState==='ready'};
 }
-const byte=n=>new Intl.NumberFormat(localeUI(),{maximumFractionDigits:1}).format(n/1024**3)+' GiB';
-/** ⛔ Il NUMERO senza l'unità serve solo all'eroe della card, dove «GiB» è un `<small>` suo:
-    `#machineFreeMemoryMetric` resta la MISURA INTERA («12 GiB»), perché è il nodo che le prove
-    già scritte leggono (`tests/parity/misura-memoria-vivo.spec.mjs`, `toHaveText('12 GiB')`). */
-const giga=n=>new Intl.NumberFormat(localeUI(),{maximumFractionDigits:1}).format(n/1024**3);
+/*
+ * ⛔ Decisione owner 163 (04/11/2026, bozzetto `variante-13-budget-ram.html`, A): la RAM si scrive COME IL TELEFONO —
+ *   `mobile/src/lib/models/presentation.ts:95`, `talosFormatBytes`, copiata riga per riga: unità binarie (/1024) scritte
+ *   B / KB / MB / GB / TB, una cifra sotto 10 e nessuna da 10 in su («7,5 GB», «32 GB»), MB sotto 1 GB, il separatore dei
+ *   decimali della lingua (Intl.NumberFormat, senza separatore delle migliaia). Prima il PC scriveva «31,6 GiB» e il telefono
+ *   «32 GB» per la stessa macchina: due numeri per un fatto solo.
+ *   ⛔ Il numero e l'unità restano separati (`misuraLeggibile`) perché l'eroe della card e la banda del Laboratorio mettono
+ *   l'unità in un nodo suo, più piccolo; `testoMisura` li rimette insieme per la tabella e le frasi.
+ */
+const UNITA_MISURA=['KB','MB','GB','TB'];
+export function misuraLeggibile(bytes){
+ if(!(bytes>=1024))return {numero:String(Math.max(0,Math.round(Number(bytes)||0))),unita:'B'};
+ let valore=bytes/1024,unita=0;
+ while(valore>=1024&&unita<UNITA_MISURA.length-1){valore/=1024;unita+=1;}
+ const arrotondato=valore<10?Math.round(valore*10)/10:Math.round(valore);
+ return {numero:new Intl.NumberFormat(localeUI(),{maximumFractionDigits:1,useGrouping:false}).format(arrotondato),unita:UNITA_MISURA[unita]};
+}
+export function testoMisura(bytes){const {numero,unita}=misuraLeggibile(bytes);return `${numero} ${unita}`;}
+const byte=testoMisura;
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!=null)n.textContent=txt;return n;}
 /*
  * ⛔ LA TENUTA DI UNA MISURA, E PERCHÉ NON SI MOSTRA UNO ZERO.
@@ -121,12 +135,15 @@ export function creaMisuraMemoria(dati={}){
  const valoreEroe=el('span','',null);valoreEroe.dataset.memoryValue=EROE;
  const numeroEroe=el('span','',null);numeroEroe.dataset.memoryHero='';
  const unita=el('small','',null);unita.dataset.memoryUnit='';
+ /* decisione owner 163 (bozzetto A): il numero grande ha la sua parola, «liberi», FUORI dal contenitore misurato — così
+    `#machineFreeMemoryMetric` resta la misura intera («7,5 GB») e la parola si nasconde quando la misura non c'è. */
+ const parolaEroe=el('small','system-value__parola',t('modelli.memory.freeLabel'));parolaEroe.dataset.memoryFreeLabel='';parolaEroe.hidden=true;
  /* ⛔ LO SPAZIO È DELL'UNITÀ, non un nodo a sé: quando la misura non c'è l'unità si svuota E lo
     spazio se ne va con lei, altrimenti `#machineFreeMemoryMetric` leggerebbe «Non misurata »
     con un finale che non si vede — e un testo che finisce con uno spazio è un testo che due
     misure diverse descrivono in due modi diversi. (Trovato dalla prova SIS-03 il 19/09/2026,
     che leggeva `"Non misurata "` dove ne aspettava una senza.) */
- valoreEroe.append(numeroEroe,unita);eroe.append(valoreEroe);card.append(eroe);
+ valoreEroe.append(numeroEroe,unita);eroe.append(valoreEroe,parolaEroe);card.append(eroe);
  const meter=el('meter','talos-lab__meter budget-track large-track');meter.id='memoriaModello';meter.min=0;meter.max=100;meter.low=75;meter.high=90;meter.optimum=0;meter.dataset.memoryBar='';card.append(meter);
  const label=el('p','talos-muted');label.dataset.memoryLabel='';card.append(label);
  /* I fatti veri in tabella, con la forma di `.model-facts` del mockup (`dl > div > dt/dd`: è la
@@ -147,6 +164,17 @@ export function creaMisuraMemoria(dati={}){
  card.append(el('p','talos-muted inline-notice',t('modelli.memory.notice')));
  aggiornaMisuraMemoria(card,dati);return card;
 }
+/* Tester 04/11 20:15, S3 (voce 21): «Memory and disk space», «Total RAM»… restavano in inglese dopo il passaggio dal vivo all'italiano.
+   `creaMisuraMemoria` le scrive una volta sola; il ridisegno della lingua (`app.js`, `ridisegnaNellaLinguaNuova` →
+   `aggiornaPannelloMemoria`) passa da qui, quindi qui si riscrivono, solo sulla card col vestito del mockup e solo se cambiano. */
+function ritraduciEtichette(card){
+ if(card.dataset?.sistemaCard!=='memoria')return;
+ const scrivi=(n,v)=>{if(n&&n.textContent!==v)n.textContent=v;};
+ scrivi(card.querySelector('.talos-lab__heading'),t('modelli.memory.heading'));
+ for(const [key,title] of CAMPI()){const dd=card.querySelector('[data-memory-value="'+key+'"]');if(dd?.tagName==='DD')scrivi(dd.previousElementSibling,title);}
+ scrivi(card.querySelector('[data-memory-action="refresh"]'),t('modelli.memory.remeasure'));
+ scrivi(card.querySelector('.inline-notice'),t('modelli.memory.notice'));
+}
 export function aggiornaMisuraMemoria(card,stato={}) {
  if(!card)return;const {capacita=null,runtimes=[],caricamento=false,errore='',erroreRuntime='',caricamentoRuntime=false,runtimeVerificato=true,scaricamento=false}=stato;
  /* ⭐ 19/09/2026 — L'ULTIMO STATO RESTA SULLA CARD, e serve a una cosa sola: quando
@@ -156,6 +184,7 @@ export function aggiornaMisuraMemoria(card,stato={}) {
     ⛔ Non è una copia del valore per tenerlo «a memoria»: è lo stato con cui la card è stata
     disegnata l'ultima volta, e si riapplica una volta sola, subito dopo la sostituzione. */
  card.__talosMemoria=stato;const set=(selector,value)=>{const n=card.querySelector(selector);if(n)n.textContent=value;};
+ ritraduciEtichette(card); // Tester 04/11 20:15, S3: al cambio di lingua dal vivo le etichette fisse della card restavano nella lingua di prima
  let d=null;if(capacita&&!errore)d=datiMemoria(capacita,runtimes,{erroreRuntime});
  /* ⛔ 18/09/2026 — ogni nodo può mancare: `querySelector` torna `null` e una dereferenza nuda
     esplode. La card del mockup ha tutti gli agganci, ma una card degradata (o un'altra forma)
@@ -167,6 +196,9 @@ export function aggiornaMisuraMemoria(card,stato={}) {
     dato vero si possono dire: **quando è stato misurato** e **quanto è vecchio**. */
  card.dataset.memoryData=errore?'errore':d?'misurata':'assente';
  if(d)card.dataset.memoryMisuratoIl=capacita.measuredAt;else delete card.dataset.memoryMisuratoIl;
+ /* decisione owner 163: i byte MISURATI stanno sulla card, e la banda del Laboratorio li legge da qui (non dal testo a schermo,
+    che cambia con la lingua e col formato): un dato, due superfici, nessuna conversione all'indietro. */
+ if(d){card.dataset.memoryLiberaByte=String(d.libera);card.dataset.memoryTotaleByte=String(d.totale);}else{delete card.dataset.memoryLiberaByte;delete card.dataset.memoryTotaleByte;}
  const freschezza=d?freschezzaMisura(capacita.measuredAt):'assente';
  card.dataset.memoryFreschezza=freschezza;
  const badge=card.querySelector('[data-memory-date]');
@@ -179,8 +211,10 @@ export function aggiornaMisuraMemoria(card,stato={}) {
     che è il testo che le prove già scritte pretendono da `#machineFreeMemoryMetric`. Quando la
     misura non c'è, l'unità si SVUOTA (non basta nasconderla: `textContent` la conterebbe lo
     stesso) e il contenitore legge esattamente «Non misurata». */
- set('[data-memory-hero]',d?giga(d[EROE]):t('modelli.memory.notMeasured'));
- set('[data-memory-unit]',d?' GiB':'');
+ const eroeLeggibile=d?misuraLeggibile(d[EROE]):null;
+ set('[data-memory-hero]',eroeLeggibile?eroeLeggibile.numero:t('modelli.memory.notMeasured'));
+ set('[data-memory-unit]',eroeLeggibile?' '+eroeLeggibile.unita:'');
+ const parola=card.querySelector('[data-memory-free-label]');if(parola){parola.hidden=!d;parola.textContent=t('modelli.memory.freeLabel');}
  for(const [key]of CAMPI()){if(key===EROE)continue;set('[data-memory-value='+key+']',d?byte(d[key]):t('modelli.memory.notMeasured'));}
  const pressione=d?.percentuale>=90?'critico':d?.percentuale>=75?'alto':'normale';card.dataset.memoryLevel=pressione;
  const avviso=pressione==='critico'?t('modelli.memory.ramAlmostExhausted'):pressione==='alto'?t('modelli.memory.highRamUsage'):'';

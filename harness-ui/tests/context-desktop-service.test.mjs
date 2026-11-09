@@ -68,6 +68,14 @@ test('CTX-DESKTOP-RAW retains full tool output with deterministic append identit
   assert.deepEqual({ ...inMezzo.dettaglio }, { archiviati: 3, attivi: 4, primoDiverso: 1, forma: 'riscritta', ruolo: 'assistant' });
   assert.doesNotMatch(JSON.stringify(inMezzo.dettaglio), /leggi il file|VALORE/u, 'mai il contenuto dei messaggi');
 });
+test('CTX-DESKTOP-JOB-STOP stopping a job does not depend on the revision, every other mutation does', async t => {
+  const { service } = await fixture(t);
+  const state = await request(service, 'GET', '/');
+  await request(service, 'POST', '/facts', { fact: { id: 'db', text: 'SQLite', sources: [] }, expectedRevision: state.revision, idempotencyKey: 'fact' });
+  await assert.rejects(request(service, 'DELETE', '/jobs/sparito', { expectedRevision: state.revision, idempotencyKey: 'stop' }), { code: 'CTX_JOB_NOT_FOUND' });
+  await assert.rejects(request(service, 'POST', '/jobs/sparito/resume', { expectedRevision: state.revision, idempotencyKey: 'resume' }), { code: 'CTX_STALE_REVISION' });
+  await assert.rejects(request(service, 'DELETE', '/facts/db', { expectedRevision: state.revision, idempotencyKey: 'remove' }), { code: 'CTX_STALE_REVISION' });
+});
 test('CTX-DESKTOP-FACTS owner changes and deletion expose real persisted state', async t => {
   const { service } = await fixture(t);
   const state = await request(service, 'GET', '/');
@@ -242,6 +250,26 @@ test('CTX-DESKTOP-NOTICE-ON-FAILED-PREPARE delivers the queued notice when the r
   await assert.rejects(service.prepare({ sessionId: 'chat', messages }), { code: 'CTX_CONTEXT_OVERFLOW' });
 });
 
+test('CTX-DESKTOP-NOTICE-DELIVERY-NOT-FATAL a failed delivery does not throw away a prepared request, and the event stays queued for the next one', async t => {
+  const store = createSqliteContextStore({ databasePath: ':memory:' });
+  t.after(() => store.close());
+  const notice = { schema: 'talos.context.event.v1', id: 'cooling-j1', sessionId: 'chat', jobId: 'j1', kind: 'context.compaction.cooling', state: 'failed', createdAt: '2026-09-25T10:00:00.000Z', payload: { code: 'CTX_INVALID_SUMMARY', attempts: 1, waitSeconds: 60, retryAfter: '2026-09-25T10:01:00.000Z' } };
+  const preparata = { messages: [{ role: 'user', content: 'preparata' }], waiting: false };
+  const engine = { prepareForRequest: async ({ sessionId }) => { await store.recordContextNotice({ sessionId, event: notice }); return preparata; } };
+  const consegnati = []; let rompi = true;
+  const service = createDesktopContextService({ store, engine, readSession: id => id === 'chat' ? { sessionId: id } : null, isSessionEnabled: id => id === 'chat', resolveSessionModel: async () => ({ provider: 'local', model: 'test', windowTokens: 200000, responseReserve: 2048 }), onEvent: async ({ event }) => {
+    if (rompi) throw Object.assign(new Error('session store write failed'), { code: 'SESSION_STORE_WRITE_FAILED' });
+    consegnati.push(event.id);
+  } });
+  t.after(() => service.close());
+  const messages = [{ role: 'user', content: 'ciao' }];
+  assert.equal(await service.prepare({ sessionId: 'chat', messages }), preparata);
+  assert.deepEqual(consegnati, []);
+  rompi = false;
+  assert.equal(await service.prepare({ sessionId: 'chat', messages }), preparata);
+  assert.deepEqual(consegnati, ['cooling-j1'], 'nothing lost: the event goes out with the next delivery');
+});
+
 /*
  * 22/10/2026 (Mobile, dal vivo su d06f6a9d3): il /compact a mano sul motore durava ~18 minuti e la riga non riceveva niente dopo la
  * lettura. Ora il servizio legge lo stato del lavoro a intervalli e lo passa come passo (`fase`, `trascorsoMs`). Motore e archivio
@@ -253,7 +281,7 @@ test('CTX-COMPACT-PROGRESS — mentre il motore lavora, il /compact a mano dice 
   const storeSpia = { ...store, readContextJob: async (opzioni) => ({ ...(await store.readContextJob(opzioni)), state: 'summarizing' }) };
   const service = createDesktopContextService({ store: storeSpia, engine: lento, readSession: id => ({ sessionId: id, modello: 'local:test' }), isSessionEnabled: id => id === 'chat', resolveSessionModel: async () => ({ provider: 'local', model: 'test', windowTokens: 16384, responseReserve: 2048 }), clock: () => '2026-09-09T00:00:00.000Z' });
   const passi = [];
-  const messages = Array.from({ length: 6 }, (_, i) => [{ role: 'user', content: `Domanda ${i}` }, { role: 'assistant', content: `Risposta ${i}` }]).flat();
+  const messages = Array.from({ length: 6 }, (_, i) => [{ role: 'user', content: `Domanda ${i} ${'parola '.repeat(300)}` }, { role: 'assistant', content: `Risposta ${i} ${'parola '.repeat(300)}` }]).flat() /* 31/10: abbastanza lunga da guadagnare il 30% (contratto «niente da compattare») */;
   const esito = await service.compact({ sessionId: 'chat', messages, onProgresso: v => passi.push(v), intervalloAvanzamentoMs: 20 });
   assert.equal(esito.ok, true);
   assert.ok(passi.length >= 3, `passi durante l'attesa: ${passi.length}`);
@@ -276,7 +304,7 @@ test('CTX-COMPACT-PROGRESS-LATE (revisione 22/10) — una lettura lenta del lavo
     try { await new Promise(r => { setTimeout(r, 120); }); return { ...(await store.readContextJob(opzioni)), state: 'summarizing' }; } finally { inVolo -= 1; }
   } };
   const service = createDesktopContextService({ store: storeSpia, engine: lento, readSession: id => ({ sessionId: id, modello: 'local:test' }), isSessionEnabled: id => id === 'chat', resolveSessionModel: async () => ({ provider: 'local', model: 'test', windowTokens: 16384, responseReserve: 2048 }), clock: () => '2026-09-09T00:00:00.000Z' });
-  const messages = Array.from({ length: 6 }, (_, i) => [{ role: 'user', content: `Domanda ${i}` }, { role: 'assistant', content: `Risposta ${i}` }]).flat();
+  const messages = Array.from({ length: 6 }, (_, i) => [{ role: 'user', content: `Domanda ${i} ${'parola '.repeat(300)}` }, { role: 'assistant', content: `Risposta ${i} ${'parola '.repeat(300)}` }]).flat() /* 31/10: abbastanza lunga da guadagnare il 30% (contratto «niente da compattare») */;
   let tornato = false; const dopo = [];
   await service.compact({ sessionId: 'chat', messages, intervalloAvanzamentoMs: 20, onProgresso: v => { if (tornato) dopo.push(v); } });
   tornato = true;
@@ -296,7 +324,7 @@ test('CTX-COMPACT-PROGRESS-HUNG (quarta passata 22/10) — una lettura che non t
     return { ...(await store.readContextJob(opzioni)), state: 'summarizing' };
   } };
   const service = createDesktopContextService({ store: storeSpia, engine: lento, readSession: id => ({ sessionId: id, modello: 'local:test' }), isSessionEnabled: id => id === 'chat', resolveSessionModel: async () => ({ provider: 'local', model: 'test', windowTokens: 16384, responseReserve: 2048 }), clock: () => '2026-09-09T00:00:00.000Z' });
-  const messages = Array.from({ length: 6 }, (_, i) => [{ role: 'user', content: `Domanda ${i}` }, { role: 'assistant', content: `Risposta ${i}` }]).flat();
+  const messages = Array.from({ length: 6 }, (_, i) => [{ role: 'user', content: `Domanda ${i} ${'parola '.repeat(300)}` }, { role: 'assistant', content: `Risposta ${i} ${'parola '.repeat(300)}` }]).flat() /* 31/10: abbastanza lunga da guadagnare il 30% (contratto «niente da compattare») */;
   const passi = [];
   await service.compact({ sessionId: 'chat', messages, intervalloAvanzamentoMs: 20, onProgresso: v => passi.push(v) });
   assert.ok(passi.length >= 2, `passi dopo la lettura appesa: ${passi.length}`);

@@ -84,7 +84,7 @@ describe('D2 — leggere ed elencare fuori dalla cartella della sessione chiede 
         assert.equal(domande.length, 1, 'una cartella fuori dal progetto non si elenca senza un sì')
         assert.equal(domande[0].tipo, 'elenca')
         assert.equal(domande[0].segreto?.classe, 'fuori-workspace')
-        assert.match(testoTool, /^REFUSED\./u, `al modello arriva un rifiuto parlante: «${testoTool}»`)
+        assert.match(testoTool, /^DECLINED\. The person said no/u, `al modello arriva un rifiuto parlante: «${testoTool}»`)
         assert.ok(!testoTool.includes('diario-privato.txt'), 'il nome del file fuori non deve arrivare al modello')
     })
 
@@ -100,7 +100,7 @@ describe('D2 — leggere ed elencare fuori dalla cartella della sessione chiede 
         const { domande, testoTool } = await giro(progetto, 'leggi', { percorso: join(fuori, 'diario-privato.txt') }, { risposta: false })
         assert.equal(domande.length, 1, 'un file fuori dal progetto non si legge senza un sì')
         assert.equal(domande[0].tipo, 'leggi')
-        assert.match(testoTool, /^REFUSED\./u)
+        assert.match(testoTool, /^DECLINED\. The person said no/u)
         assert.ok(!testoTool.includes('CONTENUTO-PRIVATO-FUORI'), 'il contenuto non deve arrivare al modello')
     })
 

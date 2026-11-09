@@ -9,7 +9,7 @@ import { lstatSync, readlinkSync, linkSync, mkdirSync, mkdtempSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { motivoDaChiedere, eUnFileSegreto } from '../src/path-policy.mjs';
+import { chiaveDelConsensoDi, motivoDaChiedere, eUnFileSegreto } from '../src/path-policy.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 function radiceDiProva(t) {
@@ -117,12 +117,13 @@ test('HL-RI-06 — la chiave del «per la sessione»: stabile per la stessa scri
   const w = motivoDaChiedere({ tipo: 'scrivi', percorso: 'appunti.md', cartella: s.progetto, home: s.casa, puntiNascosti: false });
   const sh = motivoDaChiedere({ tipo: 'shell', comando: 'type appunti.md', cartella: s.progetto, home: s.casa, puntiNascosti: false });
   const altraForma = leggi('./appunti.md', s);
-  const chiave = (x) => x?.chiaveDelConsenso ?? x?.percorso;
-  t.diagnostic(`lettura: ${chiave(l1)} · scrittura: ${chiave(w)} · shell: ${chiave(sh)} · ./: ${chiave(altraForma)}`);
+  /* decisione 107 (03/11): la chiave la compone `chiaveDelConsensoDi`, la stessa funzione del registro e del kernel */
+  const chiave = (x, tipo = 'leggi') => chiaveDelConsensoDi(x, tipo);
+  t.diagnostic(`lettura: ${chiave(l1)} · scrittura: ${chiave(w, 'scrivi')} · shell: ${chiave(sh, 'shell')} · ./: ${chiave(altraForma)}`);
   assert.equal(chiave(l1), chiave(l2), 'la stessa lettura due volte: la stessa chiave');
-  assert.equal(chiave(l1), `appunti.md = ${join(s.progetto, '.env')}`);
-  assert.equal(chiave(w), `scrittura:appunti.md = ${join(s.progetto, '.env')}`, 'la scrittura ha la sua');
-  assert.equal(chiave(sh), chiave(l1), 'la shell condivide la chiave della lettura (come per un .env nominato)');
+  assert.equal(chiave(l1), `lettura:segreto:appunti.md = ${join(s.progetto, '.env')}`);
+  assert.equal(chiave(w, 'scrivi'), `scrittura:segreto:appunti.md = ${join(s.progetto, '.env')}`, 'la scrittura ha la sua');
+  assert.equal(chiave(sh, 'shell'), chiave(l1), 'la shell condivide la chiave della lettura (come per un .env nominato)');
   assert.notEqual(chiave(altraForma), chiave(l1), 'un altra forma scritta chiede di nuovo (più prudente, non un buco)');
 });
 

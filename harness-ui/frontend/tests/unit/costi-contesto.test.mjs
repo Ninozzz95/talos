@@ -119,9 +119,9 @@ test('CONTESTO-ZERO-NON-E-IGNOTO: una voce che non so misurare NON compare come 
   assert.deepEqual(con.voci.map((v) => v.id), ['attrezzi', 'istruzioni']);
 });
 
-test('CONTESTO-CHI-MANCA: se degli attrezzi non dichiarano il peso, la frase lo dice', () => {
+test('CONTESTO-CHI-MANCA: se degli strumenti non dichiarano il peso, la frase lo dice', () => {
   const r = ripartizioneContesto({ attrezzi: [{ tokenSchemaStimati: 100 }, {}, {}], finestra: 1000 });
-  assert.match(frasiRipartizione(r), /2 attrezzi su 3 non dichiarano quanto pesano/);
+  assert.match(frasiRipartizione(r), /2 strumenti su 3 non dichiarano quanto pesano/);
 });
 
 test('CONTESTO-PROMESSA: quello che la sezione promette e non misura lo DICHIARA', () => {
@@ -144,14 +144,15 @@ test('CONTESTO-PROMESSA: quello che la sezione promette e non misura lo DICHIARA
 // 24/09/2026, decisione owner 36: 52 — `present_plan`, il piano da approvare (fetta F3-30).
 // 28/09/2026, 0.1.19: 62 — `request_plan_mode` e i tre tool di lettura/controllo workflow.
 // 08/10/2026, automazioni a due porte (owner): 72 — gli otto `automation_*` (elenca, storico, crea, modifica, pausa, riprendi, esegui, ferma).
-test('C10-DESCRIZIONI: 72 attrezzi storici e lettura output, in italiano senza markdown a schermo', async () => {
+test('C10-DESCRIZIONI: 72 strumenti storici e lettura output, in italiano senza markdown a schermo', async () => {
   const m = await import('../../src/components/nomi-attrezzi.js');
   const ids = Object.keys(m.DESCRIZIONI_ATTREZZI);
-  assert.equal(ids.filter(id => id !== 'process_output').length, 107); // 29/10/2026 server locali: + local_page · 29/10/2026 segnala un problema: + report_problem · 27/10/2026 guarda immagine: + view_image · 27/10/2026 cartelle bloccate B4: + remote_phone_folder_unblock · 26/10/2026 L1 1.3: + local_model_window · 24/10/2026 R5.13: + remote_device_send_file · 24/10/2026 artefatti con versioni: + artifact_update · 24/10/2026 R5.14: + remote_control · 23/10/2026 R5.12: + remote_phone_folders, remote_phone_folder_allow, remote_phone_folder_revoke · 18/10/2026 R5.12: + remote_phones, remote_phone_pair, remote_phone_revoke · R5.11: + file_changes_undo · 17/10/2026 C5 attrezzi differiti: + tool_search, tool_describe, tool_call · 15/10/2026 /goal G6: + goal_status, goal_create, goal_update · 11/10/2026: + chatgpt_account · C5 10/10: + research_control · + notes_find, tasks_find, memory_find, research_find, library_find, child_control, automation_control (i due vecchi restano per la storia) · 03/10/2026: + list_children, stop_child (F-020/F-014) · 08/10: + 8 automation_* · 0.1.25: + 3 provider_* · 09/10 C3 tappa 4: + pause_child, resume_child
+  assert.equal(ids.filter(id => id !== 'process_output').length, 114); // 07/11/2026 decisioni 331/335: + computer_use · 05/11/2026 FE-081: + blocco_aggiorna · 04/11/2026 decisione 201: + browser_page · 04/11/2026 computer use: + computer_use_places_list, computer_use_places_remove · 02/11/2026 modelli dalla chat: + local_model · 01/11/2026 Fase 8 impostazioni dalla chat: + app_settings · 29/10/2026 server locali: + local_page · 29/10/2026 segnala un problema: + report_problem · 27/10/2026 guarda immagine: + view_image · 27/10/2026 cartelle bloccate B4: + remote_phone_folder_unblock · 26/10/2026 L1 1.3: + local_model_window · 24/10/2026 R5.13: + remote_device_send_file · 24/10/2026 artefatti con versioni: + artifact_update · 24/10/2026 R5.14: + remote_control · 23/10/2026 R5.12: + remote_phone_folders, remote_phone_folder_allow, remote_phone_folder_revoke · 18/10/2026 R5.12: + remote_phones, remote_phone_pair, remote_phone_revoke · R5.11: + file_changes_undo · 17/10/2026 C5 attrezzi differiti: + tool_search, tool_describe, tool_call · 15/10/2026 /goal G6: + goal_status, goal_create, goal_update · 11/10/2026: + chatgpt_account · C5 10/10: + research_control · + notes_find, tasks_find, memory_find, research_find, library_find, child_control, automation_control (i due vecchi restano per la storia) · 03/10/2026: + list_children, stop_child (F-020/F-014) · 08/10: + 8 automation_* · 0.1.25: + 3 provider_* · 09/10 C3 tappa 4: + pause_child, resume_child
   for (const nuovo of ['list_children', 'stop_child', 'pause_child', 'resume_child', 'automation_list', 'automation_runs', 'automation_create', 'automation_update', 'automation_pause', 'automation_resume', 'automation_run', 'automation_stop',
     'provider_exclusions_list', 'provider_exclude', 'provider_allow', 'chatgpt_account', 'goal_status', 'goal_create', 'goal_update',
     'tool_search', 'tool_describe', 'tool_call', 'file_changes_undo', 'remote_phones', 'remote_phone_pair', 'remote_phone_revoke',
-    'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', 'remote_phone_folder_unblock', 'artifact_update', 'remote_device_send_file', 'local_model_window', 'report_problem']) {
+    'remote_phone_folders', 'remote_phone_folder_allow', 'remote_phone_folder_revoke', 'remote_phone_folder_unblock', 'artifact_update', 'remote_device_send_file', 'local_model_window', 'report_problem',
+    'computer_use_places_list', 'computer_use_places_remove', 'browser_page']) {
     assert.ok(ids.includes(nuovo), `manca la descrizione di ${nuovo}`);
     assert.ok(m.NOMI_UMANI_ATTREZZI[nuovo], `manca il nome umano di ${nuovo}`);
     assert.ok(!/_/u.test(m.nomeLeggibileAttrezzo(nuovo)), `nome tecnico a schermo per ${nuovo}`);
@@ -183,30 +184,9 @@ test('C10-DESCRIZIONI: 72 attrezzi storici e lettura output, in italiano senza m
   assert.deepEqual(m.attrezziSenzaDescrizione(['elenca', 'non_esiste']), ['non_esiste']);
 });
 
-test('G29-NOTIFICA-SISTEMA: si manda solo col permesso, solo a finestra nascosta, una volta sola', async () => {
-  const m = await import('../../src/components/notifiche.js');
-  const una = [{ sessione: { sessionId: 's1', nome: 'Pulizia store' }, stato: 'approvazione' }];
-  // ⛔ senza permesso non si manda niente, e non si chiede di nascosto
-  assert.deepEqual(m.deveAvvisareFuoriDallaFinestra({ permesso: 'default', visibile: false, notifiche: una }), []);
-  assert.deepEqual(m.deveAvvisareFuoriDallaFinestra({ permesso: 'denied', visibile: false, notifiche: una }), []);
-  // ⛔ con la finestra sotto gli occhi non si manda: quello che aspetta si vede già
-  assert.deepEqual(m.deveAvvisareFuoriDallaFinestra({ permesso: 'granted', visibile: true, notifiche: una }), []);
-  // col permesso e la finestra nascosta, si manda
-  assert.equal(m.deveAvvisareFuoriDallaFinestra({ permesso: 'granted', visibile: false, notifiche: una }).length, 1);
-  // ⛔ e una volta sola: la chiave è sessione:stato
-  assert.deepEqual(m.deveAvvisareFuoriDallaFinestra({ permesso: 'granted', visibile: false, notifiche: una, giaAvvisate: ['s1:approvazione'] }), []);
-  // ma un NUOVO stato della stessa sessione è una notifica nuova
-  const conclusa = [{ sessione: { sessionId: 's1' }, stato: 'conclusa' }];
-  assert.equal(m.deveAvvisareFuoriDallaFinestra({ permesso: 'granted', visibile: false, notifiche: conclusa, giaAvvisate: ['s1:approvazione'] }).length, 1);
-  const t = m.testoNotificaSistema(una[0]);
-  assert.equal(t.tag, 's1:approvazione');
-  assert.match(t.corpo, /Pulizia store/);
-  // lo stato del consenso dice il vero, e non offre di richiedere quando è negato
-  assert.equal(m.statoConsensoNotifiche('granted').chiedibile, false);
-  assert.equal(m.statoConsensoNotifiche('denied').chiedibile, false);
-  assert.equal(m.statoConsensoNotifiche('default').chiedibile, true);
-  assert.equal(m.statoConsensoNotifiche('default', false).chiedibile, false);
-});
+/* 31/10/2026: G29-NOTIFICA-SISTEMA e NOTIFICA-SALTATA provavano la forma vecchia (una notifica per «sessione:stato», ricalcolata
+   dall'elenco delle sessioni). Le stesse regole, sulla voce del registro del server, stanno in notifiche-registro-pc.test.mjs
+   (NOTIF-PC-01 il giro saltato ha la sua parola, NOTIF-PC-05 permesso, una volta per voce, finestra nascosta). */
 
 test('BH-12 PLURALE: «1 ricordi» non esiste più, e lo zero prende il plurale', async () => {
   const { plurale, parola } = await import('../../src/components/plurale.js');
@@ -214,7 +194,7 @@ test('BH-12 PLURALE: «1 ricordi» non esiste più, e lo zero prende il plurale'
   assert.equal(plurale(2, 'ricordo'), '2 ricordi');
   // ⛔ in italiano lo ZERO prende il plurale: non basta `n === 1`
   assert.equal(plurale(0, 'ricordo'), '0 ricordi');
-  assert.equal(plurale(1, 'attrezzo'), '1 attrezzo');
+  assert.equal(plurale(1, 'attrezzo'), '1 strumento');
   assert.equal(plurale(1, 'sessione'), '1 sessione');
   assert.equal(plurale(1, 'controllo'), '1 controllo');
   // gli invariabili restano invariabili, e sono dichiarati apposta

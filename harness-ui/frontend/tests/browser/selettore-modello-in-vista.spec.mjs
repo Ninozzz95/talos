@@ -39,7 +39,7 @@ async function apri(page, { modo, modello = IN_USO }) {
     return rotta.abort();
   });
   await page.route('**/api/v1/sessions', (route) => route.fulfill({ json: { ok: true, data: { items: [sessione] } } }));
-  await page.route(`**/api/v1/sessions/${SID}/events`, (route) => route.fulfill({ contentType: 'text/event-stream',
+  await page.route(`**/api/v1/sessions/${SID}/events*`, (route) => route.fulfill({ contentType: 'text/event-stream',
     body: `retry: 3600000\ndata: ${JSON.stringify({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null })}\n\n` }));
   await page.route('**/api/v1/models', (route) => route.fulfill({ json: { ok: true, data: { modelli: CATALOGO, daCache: true } } }));
   await page.goto('/');

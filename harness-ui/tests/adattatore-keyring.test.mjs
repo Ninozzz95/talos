@@ -73,7 +73,7 @@ test('KEYRING-SCOPE-05 â€” flusso intero: scope desktop + semi nell\'ambiente â‡
   const keyring = avvolgiAdattatoreKeyring(portachiaviNudo, scope);
   const providerStore = createProviderCredentialStore({ env, keyring, ignoraSemiAmbiente: scope === 'desktop' });
   const searchSourceStore = createSearchSourceStore({ env, keyring, file: null, ignoraSemiAmbiente: scope === 'desktop' });
-  const server = createServer(createHttpApp({ staticHandler: async () => null, providerStore, searchSourceStore }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore, searchSourceStore }));
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;

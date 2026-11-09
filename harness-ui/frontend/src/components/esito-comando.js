@@ -242,8 +242,40 @@ export function rigaDiStatoComando(esito, millisecondi = null) {
 const ALIAS_ESITO_FALLITO = Object.freeze({ web_search: ['search'], delega_sottotask: ['delegation'] });
 /* H-05 (owner 02/10/2026): NOT FOUND, AMBIGUOUS e INVALID sono un no del kernel come REFUSED — mai un pallino verde. NO CHANGE no:
    «già applicata» o «identici» non sono un guasto. */
-const INIZIO_FALLITO = /^(?:REFUSED\.|NOT FOUND\.|AMBIGUOUS\.|INVALID\.|ERROR\b|ERRORE\b|FAILED\b|FALLITO\b|NON RIUSCITO\b)/i;
+/* Decisione 99 (owner 03/11/2026 sera): anche `REFUSED [CODICE].` della delega (`rifiutoDellaDelega`, talosHarness.mjs:750) è un no
+   del kernel. Il codice ha lo stesso insieme di `conCodice` del kernel; senza il punto non è la testa. `REFUSED:` degli elenchi
+   resta fuori: è neutro (`rifiutoDiElenco` qui sotto). */
+const INIZIO_FALLITO = /^(?:REFUSED(?: \[[A-Z][A-Z0-9_]*\])?\.|NOT FOUND\.|AMBIGUOUS\.|INVALID\.|ERROR\b|ERRORE\b|FAILED\b|FALLITO\b|NON RIUSCITO\b)/i;
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Il no della PERSONA su una carta (`TESTO_DEL_NO` del nucleo, decisione 44, Tester R2-R4): non è partito per sua scelta. Né riuscito né
+ * fallito: «Non consentito», pallino neutro. Revisione del 03/11 pomeriggio, D1: un punto solo per la riga, i Processi, il pannello della
+ * figlia e il riassunto dell'attività. Il telefono fa lo stesso (Talos-Mobile `esitoAttrezzoR4.ts`, `nonEseguita`). Solo in testa.
+ * @param {string} testo l'esito grezzo
+ */
+/*
+ * Decisione 99 (owner 03/11/2026 sera): `REFUSED: ` in testa è la risposta del kernel a un elenco a pagine
+ *   (talosHarness.mjs:5526-5559): un passo del giro, non un guasto. Neutra come la copia saltata, mai verde né rossa. Hermes fa
+ *   lo stesso coi rifiuti delle chiamate ridondanti (`tool_result_classification.py:27-31`). Il kernel continua a contarla nel
+ *   freno dei giri (seconda risposta della decisione 99): qui cambia solo come si mostra.
+ * Revisione della CLI (REVISIONE-D99-2026-11-03, R1): SOLO per gli attrezzi a pagine col freno (`CAMPI_CHE_IDENTIFICANO_LA_DOMANDA`,
+ *   talosHarness.mjs:5392), più i due nomi di prima di C5 delle sessioni salvate. Un `REFUSED: ` di qualunque altro attrezzo (una
+ *   copia, una lettura, un MCP, un comando) resta com'era.
+ * R2: due teste sono «già ricevuto» (5526 il cursore già servito, 5550 l'elenco finito), due sono TETTI (5534 «N pages … already
+ *   served», 5559 «this would be page N»): lì la pagina non è mai arrivata, la frase è un'altra.
+ * @returns {'ricevuto'|'fermato'|null}
+ */
+const ATTREZZI_A_PAGINE = new Set(['library_find', 'research_find', 'elenca', 'library_list', 'library_search']);
+const TESTA_DEL_TETTO = /^\s*REFUSED: (?:\d+ pages of this same |this would be page \d)/u;
+export function rifiutoDiElenco(attrezzo, testo) {
+  if (!ATTREZZI_A_PAGINE.has(attrezzo) || typeof testo !== 'string' || !/^\s*REFUSED: /u.test(testo)) return null;
+  return TESTA_DEL_TETTO.test(testo) ? 'fermato' : 'ricevuto';
+}
+
+export function esitoDettoNo(testo) {
+  return /^\s*DECLINED\./u.test(String(testo ?? ''));
+}
 
 /**
  * Vero se l'esito testuale di un attrezzo (non `shell`, non `prova`: hanno il loro contratto) dichiara un fallimento.
@@ -253,8 +285,21 @@ const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export function esitoDichiaraFallimento(nome, testo) {
   const t = String(testo ?? '').trim();
   if (INIZIO_FALLITO.test(t)) return true;
-  const nomi = [String(nome ?? ''), ...(ALIAS_ESITO_FALLITO[nome] ?? [])].filter(Boolean);
+  const nomi = [String(nome ?? ''), ...(Object.hasOwn(ALIAS_ESITO_FALLITO, String(nome)) ? ALIAS_ESITO_FALLITO[nome] : [])].filter(Boolean); // `constructor` non è un alias
   return nomi.some((n) => new RegExp(`^${escapeRegex(n)} failed(?: \\[[A-Z0-9_]+\\])?:`, 'u').test(t));
+}
+
+/*
+ * ⛔ 03/11/2026 sera (rapporto CURE-REVISIONE-03-11-POMERIGGIO, «visto ma non curato»; fonti in FONTI-D1-D4-NO-DELLA-PERSONA):
+ *   un `shell` che il NUCLEO rifiuta risponde `REFUSED. Nothing was run: …` SENZA `exit N` (`guardie-attese-e-lavoro.mjs:316`).
+ *   La regola dello shell leggeva solo l'intestazione: niente intestazione ⇒ verde, in chat e nel pannello della figlia, mentre
+ *   lo stesso REFUSED su `scrivi` è rosso (H-05). Una regola sola per le due viste: con l'intestazione decide il contratto del
+ *   comando (fermato ≠ fallito, 02/10); senza, la regola di tutti gli attrezzi. Il no della PERSONA (DECLINED) non è un guasto.
+ */
+export function comandoShellFallito(testo) {
+  const esito = leggiEsitoComando(testo);
+  if (!esito.verdetto) return esitoDichiaraFallimento('shell', testo);
+  return !esito.riuscito && !esito.annullato && !esito.terminato;
 }
 
 /*

@@ -95,15 +95,15 @@ test('CTX-UI-LEGACY-ROW-TEXT: la riga dice i numeri quando li ha, e non li inven
   assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: null, tokenDopo: null }), 'Conversazione compattata');
   // AL CONTRARIO: un riassunto che non ha tolto niente non dichiara un risparmio
   assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: 41_000, tokenDopo: 41_000 }), 'Conversazione compattata');
-  assert.equal(testoRigaCompattazione({ stato: 'annullata', tokenPrima: 184_000, tokenDopo: 41_000 }), 'Riassunto annullato · la conversazione intera torna al modello');
-  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'vuoto' }), 'Conversazione non riassunta · il modello ha risposto vuoto');
-  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita' }), 'Conversazione non riassunta');
+  assert.equal(testoRigaCompattazione({ stato: 'annullata', tokenPrima: 184_000, tokenDopo: 41_000 }), 'Compattazione annullata · la conversazione intera torna al modello');
+  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'vuoto' }), 'Conversazione non compattata · il modello ha risposto vuoto');
+  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita' }), 'Conversazione non compattata');
   // i tre motivi del contratto fuso (session-registry.mjs:3098, :3106, :3112): frasi umane, mai un nome tecnico
-  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'superata' }), 'Conversazione non riassunta · la conversazione è andata avanti nel frattempo: il riassunto non vale più');
-  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'non-salvata' }), 'Conversazione non riassunta · il riassunto non è stato salvato su disco');
+  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'superata' }), 'Conversazione non compattata · la conversazione è andata avanti nel frattempo: la compattazione non vale più');
+  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'non-salvata' }), 'Conversazione non compattata · la compattazione non è stata salvata su disco');
   // 24/09/2026: la chiusura del ripristino per un riassunto rimasto a metà (session-registry.mjs, ripristina)
-  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'interrotta' }), 'Conversazione non riassunta · il server si è fermato mentre riassumeva: la conversazione resta intera');
-  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'errore', dettaglio: 'HTTP 500 dal fornitore' }), 'Conversazione non riassunta · il fornitore ha risposto con un errore (HTTP 500 dal fornitore)');
+  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'interrotta' }), 'Conversazione non compattata · il server si è fermato durante la compattazione: la conversazione resta intera');
+  assert.equal(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'errore', dettaglio: 'HTTP 500 dal fornitore' }), 'Conversazione non compattata · il fornitore ha risposto con un errore (HTTP 500 dal fornitore)');
   impostaLingua('en');
   assert.equal(testoRigaCompattazione({ stato: 'riassunta', tokenPrima: 184_000, tokenDopo: 41_000 }), 'Conversation compacted · 143,000 tokens saved');
   impostaLingua('it');
@@ -144,13 +144,13 @@ test('CTX-FRENO-RIGA — pezzo D del §4 (23/10): il freno che tira ha una riga 
   assert.equal(evento?.motivo, 'freno');
   impostaLingua('en');
   const en = testoRigaCompattazione({ stato: 'non-riuscita', motivo: evento.motivo, dettaglio: evento.dettaglio });
-  assert.equal(en, 'Automatic summaries paused · the last ones did not make the conversation shorter; /compact still runs one');
+  assert.equal(en, 'Automatic compactions paused · the last ones did not make the conversation shorter; /compact still runs one');
   impostaLingua('it');
   const it = testoRigaCompattazione({ stato: 'non-riuscita', motivo: evento.motivo, dettaglio: evento.dettaglio });
-  assert.equal(it, 'Riassunti automatici in pausa · gli ultimi non accorciavano la conversazione; /compact ne fa comunque uno');
+  assert.equal(it, 'Compattazioni automatiche in pausa · le ultime non accorciavano la conversazione; /compact ne fa comunque una');
   for (const testo of [en, it]) assert.doesNotMatch(testo, /non riassunta|not summarized|\bfreno\b|colpi|object Object/u);
   /* AL CONTRARIO: un motivo di fallimento vero resta «non riassunta» */
-  assert.match(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'superata' }), /^Conversazione non riassunta/u);
+  assert.match(testoRigaCompattazione({ stato: 'non-riuscita', motivo: 'superata' }), /^Conversazione non compattata/u);
 });
 
 test('CTX-COMPACT-NOTA-MOTIVO (revisione 3 della CLI, 22/10) — «al-minimo» e «inefficace» hanno la loro frase, nelle due lingue; ogni altro motivo la generica', async () => {
@@ -177,4 +177,24 @@ test('COMPACT-PERCHE-FILO (22/10, revisione del ramo dei testi) — compattaLega
     assert.deepEqual(esito, { compattato: false, motivo, codice: null });
     assert.equal(chiaveNotaCompactManuale(esito.motivo), chiave);
   }
+});
+
+/*
+ * Owner 06/11/2026 14:20, from the chat: «Il contesto ha superato la soglia (196.482 su 165.999 token).» — «this notice must not show any
+ * more: compaction is handled automatically unless the person wants to change something». With the engine and auto compaction on, the
+ * number compared is the provider's prompt of the very request that started the summary (`tests/auto-compatta-oltre-soglia.test.mjs`).
+ */
+test('CTX-AUTO-NO-NOTICE — engine with auto compaction on: no threshold notice, at any number; turned off by the person: the notice stays', () => {
+  impostaLingua('it');
+  const vista = { tokenMisurati: 196_482, soglia: 165_999, warningTokens: Math.floor(165_999 * 0.8), source: 'motore' };
+  for (const tokenMisurati of [132_800, 165_999, 196_482, 260_000]) {
+    const v = valutaSogliaContesto({ ...vista, tokenMisurati, automatica: true });
+    assert.equal(v.mostra, false, `auto on, ${tokenMisurati}`);
+    assert.equal(v.testo, '', 'no text to show either');
+  }
+  const spenta = valutaSogliaContesto({ ...vista, automatica: false });
+  assert.equal(spenta.mostra, true, 'auto turned off: compacting is the person\'s job, the notice and «Compact now» stay');
+  assert.equal(spenta.testo, 'Il contesto ha superato la soglia (196.482 su 165.999 token).');
+  // only a real `true` hides it: a missing or odd value keeps today's behaviour (the legacy kernel has no switch: its notices are untouched)
+  for (const automatica of [undefined, null, 'true', 1]) assert.equal(valutaSogliaContesto({ ...vista, automatica }).mostra, true, String(automatica));
 });

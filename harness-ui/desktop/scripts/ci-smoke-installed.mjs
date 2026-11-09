@@ -47,20 +47,15 @@ export async function provaInstallato({ executablePath, dataDir }) {
     assert.equal(misure.healthSenzaCookie, 401);
     misure.healthConCookie = await pagina.evaluate(async () => (await fetch('/api/v1/health', { signal: AbortSignal.timeout(5000) })).status);
     assert.equal(misure.healthConCookie, 200);
-    const assistenza = await pagina.evaluate(async () => {
-      const risposta = await fetch('/api/v1/assistenza', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domanda: 'Cosa fa Accesso pieno?' }),
-        signal: AbortSignal.timeout(5000),
-      });
-      return { status: risposta.status, corpo: await risposta.json() };
-    });
-    assert.equal(assistenza.status, 200);
-    assert.match(assistenza.corpo?.data?.risposta ?? '', /Accesso pieno/i);
-    const fonteAssistenza = 'docs/assistenza/permessi-di-sessione.md#accesso-pieno-per-esteso';
-    assert.ok(assistenza.corpo?.data?.fonti?.some((fonte) => fonte.percorso === fonteAssistenza));
-    misure.assistenza = { status: assistenza.status, fonte: fonteAssistenza };
+    /* Centro assistenza (owner 01/11/2026): la guida del sito nell'app installata, letta col modulo VERO dell'installato (lo stesso
+       che usa `talos_help`), con una domanda vera. Prende il posto della prova di `POST /api/v1/assistenza`, uscita col suo corpus. */
+    const backendInstallato = join(percorsi.risorse, 'harness-ui');
+    const { creaAiutoTalos } = await import(pathToFileURL(join(backendInstallato, 'src', 'kernel', 'aiuto-talos.mjs')).href);
+    const guida = creaAiutoTalos({ cartella: join(backendInstallato, 'aiuto'), prodotto: 'desktop' });
+    const aiuto = await guida.rispondi({ query: 'full access permission' });
+    assert.equal(aiuto.errore, false, aiuto.testo);
+    assert.match(aiuto.testo, /page "desktop\/concepts\/permissions"/u, aiuto.testo);
+    misure.assistenza = { guida: true, pagina: 'desktop/concepts/permissions' };
     await pagina.reload();
     misure.healthDopoReload = await pagina.evaluate(async () => (await fetch('/api/v1/health', { signal: AbortSignal.timeout(5000) })).status);
     assert.equal(misure.healthDopoReload, 200);

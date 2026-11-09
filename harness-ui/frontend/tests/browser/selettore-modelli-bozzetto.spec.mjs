@@ -52,7 +52,7 @@ async function apri(page, { modo = 'dark', lingua = 'en', preferiti = [], recent
     return rotta.abort();
   });
   await page.route('**/api/v1/sessions', (route) => route.fulfill({ json: { ok: true, data: { items: [sessione] } } }));
-  await page.route(`**/api/v1/sessions/${SID}/events`, (route) => route.fulfill({ contentType: 'text/event-stream',
+  await page.route(`**/api/v1/sessions/${SID}/events*`, (route) => route.fulfill({ contentType: 'text/event-stream',
     body: `retry: 3600000\ndata: ${JSON.stringify({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null })}\n\n` }));
   await page.route('**/api/v1/models', (route) => route.fulfill({ json: { ok: true, data: { modelli: CATALOGO, daCache: true } } }));
   await page.route('**/api/v1/local-models', (route) => route.fulfill({ json: { ok: true, data: { items: locali } } }));
@@ -360,7 +360,9 @@ test('SEL-BOZZ-14 — la tendina di «New session» è lo stesso selettore: font
   await picker.locator('.model-picker-search input').fill('llama');
   await picker.locator('.model-picker-option[data-model-value="meta-llama/llama-5-8b"]').click();
   await expect(picker.locator('.model-picker-panel')).toBeHidden();
-  await expect(picker.locator('.model-picker-trigger-label')).toHaveText('meta-llama/llama-5-8b');
+  // Tester 04/11 20:16, S4: il pulsante dice il nome del catalogo, non l'id grezzo (che resta il valore scelto, `data-model-value`)
+  await expect(picker.locator('.model-picker-trigger-label')).toHaveText(/Llama 5 8B/u);
+  await expect(picker.locator('.model-picker-trigger-label')).not.toHaveText('meta-llama/llama-5-8b');
   expect(s.impostazioni).toEqual([]);
   expect(s.scritture).toEqual([]);
 });

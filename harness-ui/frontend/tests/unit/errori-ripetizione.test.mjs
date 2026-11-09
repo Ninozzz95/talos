@@ -20,7 +20,7 @@ const INGLESE = '⛔ the model asked 3 times for the very same thing'
 const ITALIANO = '⛔ il modello ha chiesto 3 volte la stessa identica cosa'
   + ' nella stessa risposta ("shell" con gli stessi argomenti),'
   + ' e continuava: la risposta è stata chiusa lì. Le prime copie sono state eseguite, le altre no.'
-  + ' Non è un limite sul numero di attrezzi — richieste DIVERSE nello stesso giro passano tutte.';
+  + ' Non è un limite sul numero di strumenti — richieste DIVERSE nello stesso giro passano tutte.';
 
 test('BUG-E: la ripetizione del kernel NON cade più nel sacco sconosciuto (forma inglese attuale)', () => {
   const s = spiegaErrore(INGLESE, 'fermato');
@@ -28,7 +28,7 @@ test('BUG-E: la ripetizione del kernel NON cade più nel sacco sconosciuto (form
   assert.equal(s.id, 'ripetizione-identica');
   assert.ok(!/non è ancora tradotta/u.test(s.perche), 'niente più «non è ancora tradotta»');
   assert.match(s.perche, /3/u, 'il numero di volte arriva nella frase tradotta');
-  assert.match(s.perche, /shell/u, 'il nome dell’attrezzo arriva nella frase tradotta');
+  assert.match(s.perche, /shell/u, 'il nome dello strumento arriva nella frase tradotta');
 });
 
 test('BUG-E: anche la forma ITALIANA delle storie salvate viene riconosciuta', () => {

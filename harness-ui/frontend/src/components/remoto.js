@@ -153,9 +153,18 @@ export function disegnaTelefoni(contenitore, stato, {
  * ospita). `copia(testo)`: gli appunti. `orologio`: per le prove.
  */
 export function creaRemotoUi({ api, copia = null, document: doc = globalThis.document, orologio = () => Date.now(), timer = globalThis } = {}) {
-  let poll = null;
-  let conto = null;
-  const ferma = () => { if (poll) timer.clearInterval(poll); if (conto) timer.clearInterval(conto); poll = null; conto = null; };
+  /*
+   * ⛔ 04/11/2026 (owner sul 4174, 19:57: «appare questa finestra e non riesco a chiuderla») — OGNI QR HA I SUOI OROLOGI. Prima
+   *   `poll`/`conto` erano due variabili sole: due `avvia` di fila (doppio clic sull'icona) davano due `qr()`, il secondo sovrascriveva
+   *   le maniglie del primo, e il `close` della prima finestra (che il `<dialog>` lancia DOPO, in un compito a parte: WHATWG HTML,
+   *   «close the dialog») fermava gli orologi del SECONDO. Restava vivo quello del primo: a QR scaduto riapriva «QR scaduto» ogni
+   *   secondo, per sempre (prova `remoto-qr-scaduto.test.mjs`). Come Hermes (`apps/desktop/src/app/messaging/telegram-qr-setup.tsx:
+   *   100-155` e `:159-168`: ogni giro ha il suo `timer` e il suo `cancelled`, e la pulizia ferma solo i suoi): `giro` è il QR in vista,
+   *   `fermaGiro(g)` ferma solo quello, e un `qr()` scavalcato chiude la sua offerta senza aprire niente.
+   */
+  let giro = null; // { vivo, conto, poll } del QR in vista
+  const fermaGiro = (g) => { if (!g) return; g.vivo = false; if (g.poll) timer.clearInterval(g.poll); if (g.conto) timer.clearInterval(g.conto); g.poll = null; g.conto = null; };
+  const ferma = () => { fermaGiro(giro); giro = null; };
 
   const sopratitolo = (chiave) => { const e = nodo(doc, 'p', 'talos-remoto__sopratitolo', t(chiave)); e.dataset.remotoSopratitolo = ''; return e; };
 
@@ -269,13 +278,22 @@ export function creaRemotoUi({ api, copia = null, document: doc = globalThis.doc
 
   /* 2 — Collega il tuo telefono */
   async function qr() {
+    ferma();
+    const mio = { vivo: true, conto: null, poll: null };
+    giro = mio;
+    const fine = () => { fermaGiro(mio); if (giro === mio) giro = null; };
+    /* scavalcato da un altro `qr()` mentre aspettava il server: chiude la sua offerta e non apre niente */
+    const scavalcato = (o) => { if (mio.vivo) return false; if (o) api.chiudi(o.gettone)?.catch?.(() => {}); return true; };
     let offerta;
     try { offerta = await api.apri(); }
     catch (e) {
+      if (scavalcato(null)) return null;
       if (e?.code === 'PAIR_LOCKED') return bloccato(e.retryAfterMs);
       return scaduto(e?.messaggio ?? e?.message);
     }
+    if (scavalcato(offerta)) return null;
     const visti = new Set((await api.stato().catch(() => null))?.attese?.map((a) => a.id) ?? []);
+    if (scavalcato(offerta)) return null;
     const riquadro = nodo(doc, 'div', 'talos-remoto-qr');
     const immagine = nodo(doc, 'div', 'talos-remoto-qr__immagine');
     immagine.append(svgDelQr(doc, offerta.moduli, t('remoto.pair.qrLabel')));
@@ -299,19 +317,22 @@ export function creaRemotoUi({ api, copia = null, document: doc = globalThis.doc
     let chiusoDaNoi = false;
     apriModale(t('remoto.pair.title'), [sopratitolo('remoto.eyebrow'), riquadro, chips, piede], {
       document: doc,
-      suChiusura: () => { ferma(); if (!chiusoDaNoi) api.chiudi(offerta.gettone).catch?.(() => {}); },
+      suChiusura: () => { fine(); if (!chiusoDaNoi) api.chiudi(offerta.gettone).catch?.(() => {}); },
     });
     const segna = () => {
+      if (!mio.vivo) return;
       const resta = offerta.scadeAlle - orologio();
       scade.textContent = resta > 0 ? t('remoto.pair.expiresIn', { time: mmss(resta) }) : t('remoto.pair.expired');
-      if (resta <= 0) { chiusoDaNoi = true; ferma(); scaduto(); }
+      if (resta <= 0) { chiusoDaNoi = true; fine(); scaduto(); }
     };
     segna();
-    conto = timer.setInterval(segna, 1000);
-    poll = timer.setInterval(async () => {
+    if (!mio.vivo) return null; // già scaduto all'arrivo: nessun orologio parte
+    mio.conto = timer.setInterval(segna, 1000);
+    mio.poll = timer.setInterval(async () => {
       const s = await api.stato().catch(() => null);
+      if (!mio.vivo) return;
       const nuova = s?.attese?.find((a) => !visti.has(a.id));
-      if (nuova) { chiusoDaNoi = true; ferma(); conferma(nuova); }
+      if (nuova) { chiusoDaNoi = true; fine(); conferma(nuova); }
     }, ATTESA_POLL_MS);
     return null;
   }
@@ -487,7 +508,7 @@ export function creaCartaConsenso(doc, r, { onConsenti, onNonOra, onPiuTardi = n
   carta.tabIndex = -1;
   const testa = nodo(doc, 'div', 'talos-approval__head');
   const badge = nodo(doc, 'span', 'talos-badge talos-badge--accent');
-  badge.append(icona(doc, 'i-shield', 'i i--sm'), doc.createTextNode(t('remoto.consent.badge')));
+  badge.append(icona(doc, 'i-shield-question', 'i i--sm'), doc.createTextNode(t('remoto.consent.badge')));
   const bersaglio = nodo(doc, 'span', 'talos-mono talos-measure talos-grow talos-truncate', nome);
   badge.id = `remotoConsenso-${r.richiestaId}-a`;
   bersaglio.id = `remotoConsenso-${r.richiestaId}-b`;

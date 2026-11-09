@@ -38,7 +38,7 @@
  *   ordine e larghezza del dettaglio vivono in `localStorage`. La SELEZIONE no — è di sessione, e
  *   ricordare quale nota era aperta tre giorni fa non aiuta nessuno.
  */
-import { t as traduci, tn } from './lingua.js';
+import { t as traduci, tn, EVENTO_LINGUA } from './lingua.js';
 import { plurale } from './plurale.js';
 
 export const CHIAVE_PREFERENZE = 'talos-harness-sezioni-v1';
@@ -233,8 +233,40 @@ export function montaSezione(schermo, config) {
     costruisciScheletro(schermo, doc, stato);
   }
   stato.config = config;
+  scriviTestiDellaBarra(stato);
   disegna(schermo, doc, stato);
   return stato.ultimeVisibili ?? 0;
+}
+
+/*
+ * Revisione UX del 04/11/2026, riga 21: cambiata la lingua senza ricaricare, la barra (ricerca, ordine, vista, «Aggiorna», la scelta in
+ *   blocco) restava nella lingua di quando la sezione era nata — lo scheletro si costruisce UNA volta e `disegna` non lo riscrive.
+ *   Hermes fa ridisegnare chi legge le parole col contesto React (`apps/desktop/src/i18n/context.tsx:283-300`, `useI18n`); qui non c'è
+ *   un framework, quindi i testi fissi dello scheletro si scrivono in un posto solo, a ogni montaggio e a ogni `talos:lingua`
+ *   (lo stesso ascolto della chat e delle Impostazioni, `lingua.js` `applicaLingua`). Idempotente: riscrive solo parole.
+ */
+function scriviTestiDellaBarra(stato) {
+  const n = stato.nodi;
+  if (!n) return;
+  const nome = stato.config?.nome;
+  n.cerca.placeholder = traduci('sezioni.list.searchPlaceholder');
+  n.cerca.setAttribute('aria-label', traduci('sezioni.list.searchLabel', { name: nome }));
+  n.ordine.setAttribute('aria-label', traduci('sezioni.list.sortLabel', { name: nome }));
+  for (const op of n.ordine.querySelectorAll('option')) op.textContent = traduci(op.value === 'titolo' ? 'sezioni.list.sortTitle' : 'sezioni.list.sortRecent');
+  n.segmento.setAttribute('aria-label', traduci('sezioni.list.viewLabel', { name: nome }));
+  for (const b of n.segmento.querySelectorAll('[data-vista]')) b.setAttribute('aria-label', traduci(b.dataset.vista === 'elenco' ? 'sezioni.list.viewList' : 'sezioni.list.viewCards'));
+  n.aggiorna.textContent = traduci('sezioni.common.refresh');
+  n.tendinaFiltri?.setAttribute('aria-label', traduci('sezioni.list.filtersLabel', { name: nome }));
+  if (n.testoTutte) n.testoTutte.textContent = traduci('sezioni.list.selectVisible');
+  n.eliminaBlocco.textContent = traduci('sezioni.list.bulk.deleteSelected');
+  n.filtri.setAttribute('aria-label', traduci('sezioni.list.filtersLabel', { name: nome }));
+  n.divisorio.setAttribute('aria-label', traduci('sezioni.list.dividerLabel'));
+  n.dettaglio.setAttribute('aria-label', traduci('sezioni.list.detailLabel', { name: nome }));
+  if (n.azioneTestaTesto && stato.config?.azioneTesta) {
+    n.azioneTestaTesto.textContent = stato.config.azioneTesta.etichetta || '';
+    /* riga 22: un'azione che ora non può partire (senza server) resta al suo posto, spenta */
+    n.azioneTestaTesto.parentElement.disabled = Boolean(stato.config.azioneTesta.spento);
+  }
 }
 
 /** Solo per i test e per il laboratorio: rilegge lo stato vivo di una sezione già montata. */
@@ -269,6 +301,20 @@ function costruisciScheletro(schermo, doc, stato) {
   if (!statoRiga.getAttribute('role')) statoRiga.setAttribute('role', 'status');
   testi.append(h2, spiegazione, statoRiga);
   intro.append(marchio, testi);
+  /* Owner 29/10/2026 («A · come Note», bozzetto delle testate): l'azione principale a destra del titolo anche per una sezione che non
+     crea voci sue — Progetti: «Apri un progetto», LA STESSA porta della Home (`config.azioneTesta = { etichetta, icona, esegui }`).
+     Stesso pulsante di «Nuova nota» (`data-nuova`, primario piccolo): il cancello delle testate lo riconosce nello stesso modo. */
+  let azioneTestaTesto = null;
+  if (typeof config.azioneTesta?.esegui === 'function') {
+    const azione = nodo(doc, 'button', 'talos-button talos-button--primary talos-button--sm');
+    azione.type = 'button';
+    azione.dataset.nuova = '';
+    azioneTestaTesto = nodo(doc, 'span', '', config.azioneTesta.etichetta || '');
+    azione.append(icona(doc, config.azioneTesta.icona || 'plus'), azioneTestaTesto);
+    /* la config di OGGI (`stato.config`), non quella della nascita: `montaSezione` la rinnova a ogni giro */
+    azione.addEventListener('click', () => (stato.config.azioneTesta?.esegui ?? config.azioneTesta.esegui)());
+    intro.append(azione);
+  }
 
   const barra = nodo(doc, 'div', 'td-toolbar');
   const campo = nodo(doc, 'div', 'talos-field talos-field--sm td-search');
@@ -360,12 +406,14 @@ function costruisciScheletro(schermo, doc, stato) {
   if (pagina) pagina.replaceWith(sezione); else schermo.append(sezione);
 
   stato.nodi = {
-    sezione, spazio, master, intro, cerca, ordine, segmento, aggiorna,
+    sezione, spazio, master, intro, barra, cerca, ordine, segmento, aggiorna,
     blocco, selezionaTutte, conteggioBlocco, eliminaBlocco, esitoBlocco,
-    filtri, tendinaFiltri, risultati, divisorio, dettaglio, statoRiga,
+    filtri, tendinaFiltri, risultati, divisorio, dettaglio, statoRiga, testoTutte, azioneTestaTesto,
   };
   collegaBarra(schermo, doc, stato);
   collegaDivisorio(doc, stato);
+  /* riga 21: al cambio di lingua anche una sezione NASCOSTA si ridice subito (le parole della config si rinnovano al prossimo montaggio) */
+  doc.documentElement?.addEventListener?.(EVENTO_LINGUA, () => { scriviTestiDellaBarra(stato); disegna(schermo, doc, stato); });
 }
 
 function collegaBarra(schermo, doc, stato) {
@@ -603,16 +651,23 @@ function disegnaCrudo(schermo, doc, stato) {
   const visibili = ordinaVoci(filtrate, stato.ordine, { titoloDi: config.titoloDi, quandoDi: config.quandoDi });
   stato.ultimeVisibili = visibili.length;
   const {
-    risultati, filtri: barraFiltri, segmento, statoRiga, aggiorna,
+    risultati, filtri: barraFiltri, barra, segmento, statoRiga, aggiorna,
     blocco, selezionaTutte, conteggioBlocco, eliminaBlocco, esitoBlocco,
   } = stato.nodi;
   const errore = config.stato?.errore || null;
   const caricamento = Boolean(config.stato?.caricamento);
+  /* Revisione UX del 04/11/2026, riga 22: «apri una sessione» non è un errore, è uno stato normale con una cosa da fare. Lo dice UNA
+     frase, quella dello stato vuoto: niente «non disponibile» in carattere da codice in testa, niente seconda copia sotto il titolo. */
+  const avviso = !errore && !caricamento ? (config.stato?.avviso || null) : null;
 
   /* ⛔ «Aggiorna» esiste solo dove qualcuno ricarica davvero: Note e Progetti non passano
      `onAggiorna`, e un bottone che non fa niente è la stessa promessa vuota dei contatori che
      puntavano a una pagina inesistente. */
   aggiorna.hidden = typeof config.onAggiorna !== 'function';
+  /* Decisione 177 dell'owner (04/11/2026, reperto N9c): senza sessione (Libreria e Ricerca, `avviso`) l'elenco non si può usare, e
+     ricerca, ordine, viste e «Aggiorna» su un elenco che non c'è sono controlli che non fanno niente. La barra sparisce, come la riga
+     dei filtri con l'elenco vuoto (riga 23): resta la frase dello stato vuoto, che dice cosa fare. Prova: UX177-C. */
+  if (barra) barra.hidden = Boolean(avviso) && tutte.length === 0;
   aggiorna.disabled = caricamento;
   for (const b of segmento.querySelectorAll('[data-vista]')) b.setAttribute('aria-pressed', String(b.dataset.vista === stato.vista));
 
@@ -631,6 +686,9 @@ function disegnaCrudo(schermo, doc, stato) {
   selezionaTutte.indeterminate = visibiliSelezionati > 0 && visibiliSelezionati < stato.idsVisibili.length;
   selezionaTutte.disabled = stato.batchInCorso || stato.idsVisibili.length === 0;
   conteggioBlocco.textContent = tn('sezioni.list.selection.one', 'sezioni.list.selection.many', stato.selezionateInBlocco.size);
+  /* Tester 04/11/2026 (S4): «0 selezionate» accanto a un pulsante spento ripeteva due volte «niente scelto». Con la selezione vuota
+     il conteggio tace (lo dice già il pulsante spento), in ogni sezione: Memoria, Note, Libreria, Automazioni. */
+  conteggioBlocco.hidden = stato.selezionateInBlocco.size === 0;
   eliminaBlocco.disabled = stato.batchInCorso || stato.selezionateInBlocco.size === 0;
   /* Revisione Codex 27/09, rilievo 12: «fisso su tutte le card appena una è scelta» si legge dallo STATO, non dalle caselle
      a schermo — un filtro che nasconde la card scelta lasciava la selezione viva e i cerchi spenti. */
@@ -642,22 +700,27 @@ function disegnaCrudo(schermo, doc, stato) {
     /* ⛔ `sommarioStato` esiste perché la stessa quantità non può avere due nomi nella stessa
        schermata: le Note in alto dicono «nessuna nota» (`sommarioNote`), e qui sotto un generico
        «0 note» sarebbe una seconda parola per la stessa cosa — visto nella foto dello stato vuoto. */
+    /* Revisione UX del 04/11/2026, riga 23: il conteggio sta UNA volta, qui sotto il titolo (la testa in alto sparisce sotto i 900 px,
+       `index.css:409`, e questa riga è quella che il lettore di schermo annuncia). Con l'elenco vuoto lo dice già lo stato vuoto
+       («Nessuna nota»): la riga resta muta invece di dire «0 note» una seconda volta. */
     statoRiga.textContent = errore || (caricamento ? config.caricando || traduci("sezioni.list.loading")
-      : typeof config.sommarioStato === 'function' ? config.sommarioStato(visibili.length, tutte.length)
-        : sommarioSezione(visibili.length, tutte.length, config.contaVoci || config.sostantivo, config.pluraleEsplicito));
+      : avviso || tutte.length === 0 ? ''
+        : typeof config.sommarioStato === 'function' ? config.sommarioStato(visibili.length, tutte.length)
+          : sommarioSezione(visibili.length, tutte.length, config.contaVoci || config.sostantivo, config.pluraleEsplicito));
     statoRiga.setAttribute('role', errore ? 'alert' : 'status');
   }
   const percorso = schermo.querySelector('.talos-topbar__path');
-  if (percorso && config.sommarioBarra) percorso.textContent = config.sommarioBarra(tutte.length, { errore, caricamento });
+  if (percorso && config.sommarioBarra) percorso.textContent = avviso ? '' : config.sommarioBarra(tutte.length, { errore, caricamento });
 
   // I filtri, coi conteggi veri sull'elenco intero.
   /* ⛔ Un filtro solo non è un filtro: la riga sparisce invece di mostrare un bottone che non
      sceglie niente. (Il mockup ne disegna sempre almeno uno, «Tutte», anche quando è inutile.) */
   const { tendinaFiltri } = stato.nodi;
-  barraFiltri.hidden = config.filtri.length <= 1 || Boolean(tendinaFiltri);
+  /* riga 23: filtri che contano tutti zero ripetono lo stato vuoto: con l'elenco vuoto la riga dei filtri non c'è */
+  barraFiltri.hidden = config.filtri.length <= 1 || Boolean(tendinaFiltri) || tutte.length === 0;
   const conteggi = contaPerFiltro(tutte, config.filtri);
   if (tendinaFiltri) {
-    tendinaFiltri.hidden = config.filtri.length <= 1;
+    tendinaFiltri.hidden = config.filtri.length <= 1 || tutte.length === 0;
     tendinaFiltri.replaceChildren(...config.filtri.map((f, i) => {
       const op = nodo(doc, 'option', '', `${f.etichetta} (${conteggi[i]})`);
       op.value = f.id;
@@ -710,7 +773,7 @@ function disegnaVuoto(doc, stato, quanteInTutto) {
   const titolo = nodo(doc, 'h3', '', filtrando ? traduci('sezioni.list.empty.noResults') : (config.vuoto?.titolo || traduci('sezioni.list.empty.nothingHere')));
   const testo = nodo(doc, 'p', '', filtrando
     ? traduci('sezioni.list.empty.tryAgain')
-    : (config.stato?.errore || config.vuoto?.testo || ''));
+    : (config.stato?.errore || config.stato?.avviso || config.vuoto?.testo || ''));
   box.append(arte, titolo, testo);
   if (filtrando) {
     const pulisci = nodo(doc, 'button', 'talos-button talos-button--secondary talos-button--sm', traduci('sezioni.list.empty.clearFilters'));
@@ -790,7 +853,7 @@ function disegnaDettaglio(schermo, doc, stato, voce) {
   espandi.type = 'button';
   espandi.setAttribute('aria-label', stato.espanso ? traduci("sezioni.list.detail.showBeside") : traduci("sezioni.list.detail.expand"));
   espandi.setAttribute('aria-pressed', String(stato.espanso));
-  espandi.append(icona(doc, stato.espanso ? 'layout' : 'grid'));
+  espandi.append(icona(doc, stato.espanso ? 'minimize' : 'maximize'));
   espandi.addEventListener('click', () => { stato.espanso = !stato.espanso; disegna(schermo, doc, stato); });
 
   const chiudi = nodo(doc, 'button', 'talos-button talos-button--secondary talos-icon-button');

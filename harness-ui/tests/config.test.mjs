@@ -35,6 +35,12 @@ test('R03-CONFIG — fallback esplicito normalizzato, assente resta assente', ()
  * caso base: zero variabili, un config valido.
  */
 
+test('MOTORE-VERSIONE: a path counts as set by hand unless the desktop shell chose a packaged engine', () => {
+  assert.equal(loadConfig({ TALOS_LLAMA_SERVER_PATH: 'gpu.exe' }, import.meta.url).llamaServerManuale, true);
+  assert.equal(loadConfig({ TALOS_LLAMA_SERVER_PATH: 'gpu.exe', TALOS_LLAMA_SERVER_DAL_PACCHETTO: '1' }, import.meta.url).llamaServerManuale, false);
+  assert.equal(loadConfig({}, import.meta.url).llamaServerManuale, false);
+});
+
 test('config rejects non-loopback host', () => {
   for (const host of ['0.0.0.0', '192.168.1.2', 'example.test']) {
     assert.throws(

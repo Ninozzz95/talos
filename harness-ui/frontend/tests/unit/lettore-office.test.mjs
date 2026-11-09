@@ -96,3 +96,7 @@ test('LETTORE-PPTX-IMMAGINI: le immagini arrivano dai BYTE (data:), mai dal blob
   assert.equal(await immagineDati(gestore, 'ppt/media/disegno.wmf'), 'data:image/png;base64,AAAA', 'un EMF/WMF convertito in data: sì');
   assert.deepEqual(chiesti, ['ppt/media/image1.png', 'ppt/media/manca.jpeg']);
 });
+
+test('D-17: un file che si chiama come una proprietà di Object non è un\'immagine', async () => {
+  assert.equal(await immagineDati({ getImageData: async () => null }, 'ppt/media/a.constructor'), null);
+});

@@ -68,3 +68,15 @@ test('C3-GRAFO-PAUSA — paused is its own state, never error or done', () => {
   assert.equal(g.nodi.find((n) => n.id === 'a').stato, 'paused');
   assert.equal(g.nodi.find((n) => n.id === 'b').stato, 'error');
 });
+
+/* M15 della revisione del Blocco 21: dal contratto dell'elenco (31/10/2026) `cartella` è un oggetto nuovo a ogni riga: `===` non trova mai niente, e il filtro «cartella» svuotava il pannello */
+test('RIPRESA-GRAFO-CARTELLA-OGGETTO — ambito cartella con le righe dell\'elenco: stesso `cartellaId` è la stessa cartella, un oggetto diverso per riga non conta', () => {
+  const avm = () => ({ cartellaId: 'id-avm', nome: 'AVM' });
+  const dati = { corrente: { sessionId: 'madre', cartella: avm(), conclusa: false }, sessioni: [
+    { sessionId: 'vicina', cartella: avm(), conclusa: true },
+    { sessionId: 'lontana', cartella: { cartellaId: 'id-altra', nome: 'AVM' }, conclusa: true },
+    { sessionId: 'senza', cartella: null, conclusa: true },
+  ] };
+  assert.deepEqual(modelloGrafoAgenti(dati, { ambito: 'workspace' }).nodi.map(n => n.id).sort(), ['madre', 'vicina'], 'lo stesso nome non basta: conta l\'id');
+  assert.deepEqual(modelloGrafoAgenti({ ...dati, corrente: { ...dati.corrente, cartella: null } }, { ambito: 'workspace' }).nodi.map(n => n.id), ['madre'], 'senza cartella: non si allarga a chi non ne ha una');
+});

@@ -25,7 +25,7 @@ async function listen(t) {
     async eseguiOra(id, opzioni) { chiamate.push(['esegui', id, opzioni]); return this.stato === 'occupato' ? { ok: false, code: 'AUTOMATION_RUN_IN_PROGRESS' } : { ok: true, runId: 'r1', sessionId: 's1' } },
     async fermaGiro(id) { chiamate.push(['ferma', id]); return { ok: true, sessionId: 's1' } },
   }
-  const server = createServer(createHttpApp({ staticHandler: async () => null, automationStore: store, automationScheduler: scheduler }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, automationStore: store, automationScheduler: scheduler }))
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
   t.after(() => new Promise((ok) => server.close(ok)))
   const base = `http://127.0.0.1:${server.address().port}`
@@ -106,6 +106,10 @@ test('HTTP2-04 — lo storico, «Da guardare» e «letto»', async (t) => {
   assert.equal(giri.status, 200)
   assert.equal(giri.corpo.data.items[0].riassunto, 'Due pacchetti vecchi.')
   assert.equal((await get('/api/v1/automations/nessuna/runs')).status, 404)
+  // D-22: `?runId=` trova un giro in tutto lo storico; ogni altro parametro resta rifiutato
+  assert.equal((await get(`/api/v1/automations/${v.id}/runs?altro=1`)).status, 400)
+  assert.equal((await get(`/api/v1/automations/${v.id}/runs?runId=`)).status, 400)
+  assert.deepEqual((await get(`/api/v1/automations/${v.id}/runs?runId=nessuno`)).corpo.data.items, [])
   const inbox = await get('/api/v1/automations/inbox')
   assert.deepEqual(inbox.corpo.data.items.map((g) => [g.automazioneId, g.runId, g.nome]), [[v.id, 'g1', 'Dipendenze']])
   assert.equal((await post(`/api/v1/automations/${v.id}/runs/g1/letta`, {})).status, 200)
@@ -127,4 +131,19 @@ test('HTTP2-05 — eliminare un\'automazione col giro in corso FERMA il giro; se
   const { corpo: { data: ferma2 } } = await post('/api/v1/automations', voce(lavoro))
   assert.equal((await post(`/api/v1/automations/${ferma2.id}/elimina`, {})).status, 200)
   assert.deepEqual(chiamate, [['ferma', ferma.id]], 'senza giro lo scheduler non si tocca')
+})
+
+test('HTTP2-D22 — un giro oltre i 50 più recenti si trova col suo id, e la sua conversazione con lui', async (t) => {
+  const { post, get, lavoro, store } = await listen(t)
+  const { corpo: { data: v } } = await post('/api/v1/automations', voce(lavoro))
+  for (let i = 0; i < 60; i += 1) {
+    await store.apriGiro(v.id, { runId: `r${i}`, previstaAlle: null, sessionId: `s${i}` })
+    await store.chiudiGiro(v.id, `r${i}`, { esito: 'finita', riassunto: null, daGuardare: false })
+  }
+  const elenco = (await get(`/api/v1/automations/${v.id}/runs`)).corpo.data.items
+  assert.equal(elenco.length, 50, 'senza parametri la rotta resta com\'era')
+  assert.equal(elenco.some((g) => g.runId === 'r0'), false, 'la premessa: r0 è oltre il tetto')
+  const { status, corpo } = await get(`/api/v1/automations/${v.id}/runs?runId=r0`)
+  assert.equal(status, 200)
+  assert.deepEqual(corpo.data.items.map((g) => [g.runId, g.sessionId]), [['r0', 's0']])
 })

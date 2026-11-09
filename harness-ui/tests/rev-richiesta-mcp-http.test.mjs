@@ -26,7 +26,7 @@ async function impianto(t) {
     preparaEsecuzioneFn: () => ({ cartella: cartellaStore, task: { id: 'task', consegna: 'Apri la PR' } }),
     avviaSessioneFn(input) { return new Promise((resolve) => { runs.push({ input, resolve }); input.onEvento({ type: 'RunStarted' }) }) },
   })
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro }))
   await new Promise((r) => server.listen(0, '127.0.0.1', r))
   t.after(async () => {
     for (const r of runs) { r.input.onEvento({ type: 'RunFinished' }); r.resolve({ ok: true, esito: { messaggiFinali: [], detto: 'Fine', comeFinita: 'concluso' } }) }

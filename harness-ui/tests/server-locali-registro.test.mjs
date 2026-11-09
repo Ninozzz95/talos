@@ -35,7 +35,7 @@ function banco({ conLettore = true } = {}) {
     } : {}),
   });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' });
-  const chiama = creaChiamataInterna({ httpApp: createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }), porta: 4999 });
+  const chiama = creaChiamataInterna({ httpApp: createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro }), porta: 4999 });
   return { registro, sessionId, giri, porte, rispondono, chiama };
 }
 const eventi = (b) => b.registro.esporta(b.sessionId).eventi.filter((e) => e.name === 'talos.server-locale').map((e) => e.value);

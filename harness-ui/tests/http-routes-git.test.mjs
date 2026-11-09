@@ -31,7 +31,7 @@ function repo(t, prefisso = 'talos-git-http-') {
 }
 
 async function servi(t, cartellaDi, { senzaServizio = false, chiediAllaSessione = null, cartellaUtenteFn = undefined } = {}) {
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     sessionRegistry: { cartellaDi, ...(chiediAllaSessione ? { chiediAllaSessione } : {}) }, // F6-1 ✨: il modello della sessione, finto
     gitService: senzaServizio ? null : creaServizioGit({ cartellaDiSessione: cartellaDi, ...(cartellaUtenteFn ? { cartellaUtenteFn } : {}) }),
@@ -235,7 +235,7 @@ test('⛔⛔⛔ PIN — le rotte del remoto (F6-2, 27/09) sono QUATTRO POST e DU
   assert.ok(sorgente.includes('\\/git\\/status$'), 'la GET status non è più dichiarata come previsto');
   assert.ok(sorgente.includes('\\/git\\/branch$'), 'la GET branch non è più dichiarata come previsto');
   assert.ok(sorgente.includes('\\/git\\/diff$'), 'la GET diff non è più dichiarata come previsto');
-  assert.ok(sorgente.includes("push: ['remoto'],"), 'la POST push accetta il solo remoto');
+  assert.ok(sorgente.includes("push: ['remoto', 'visto'],"), 'la POST push accetta il remoto e ciò che la carta del dispositivo ha mostrato');
   assert.equal(/forz[a-z]*: \[|'force'|--force/u.test(sorgente.replace(/\/\*[\s\S]*?\*\//gu, '')), false, 'una forma forzata è comparsa nelle rotte');
 });
 

@@ -184,7 +184,7 @@ test('RAMI-B6 il punto finito in un riassunto: la frase giusta, nessun cambio di
   await apri(page, A);
   await risposte(page).nth(1).click({ button: 'right' });
   await page.locator('#menuRispostaMessaggio [role="menuitem"]').first().click();
-  await expect(page.locator('body')).toContainText('è stato riassunto');
+  await expect(page.locator('body')).toContainText('è stato compattato'); // parola unica, owner 31/10/2026
   expect(viste.resume).toEqual([]);
   expect(await page.evaluate(() => window.__talosHarnessUiRuntime.realSessionState.id)).toBe(A);
 });
@@ -359,7 +359,7 @@ test('REV4-R4 «Modifica e rimanda» con un FILE: il file riparte come chip, e u
   const seconda = domande(page).nth(1);
   await seconda.hover();
   await seconda.locator('[data-message-action="modifica"]').click();
-  await expect(seconda.locator('.talos-rami-modifica__file')).toHaveText(['note.txt']);
+  await expect(seconda.locator('.talos-rami-modifica__file .talos-allegati-chip__nome')).toHaveText(['note.txt']);
   await expect(seconda.locator('.talos-rami-modifica__nota')).toContainText('Gli allegati ripartono');
   await seconda.locator('textarea').fill('riassumi in tre righe');
   await seconda.getByRole('button', { name: 'Invia' }).click();
@@ -382,7 +382,7 @@ test('REV4-R4b il file tolto prima di inviare non riparte', async ({ page }) => 
   await expect(seconda.locator('.talos-rami-modifica__file')).toHaveCount(0);
   await seconda.getByRole('button', { name: 'Invia' }).click();
   await expect.poll(() => viste.resume.length).toBe(1);
-  expect(viste.resume[0]).toEqual({ messaggio: FRASE });
+  expect(viste.resume[0]).toEqual({ messaggio: FRASE, paginaBrowser: null }); // 4e0dae315 (decisione 201, 04/11): /resume manda sempre paginaBrowser, null senza pagina
 });
 
 test('REV4-R5 «Riprova» su un messaggio con un FILE: la bolla del ramo è frase + chip, e il server riceve la bolla', async ({ page }) => {
@@ -398,6 +398,18 @@ test('REV4-R5 «Riprova» su un messaggio con un FILE: la bolla del ramo è fras
   await expect(ultima.locator('.message-bubble')).toHaveText(FRASE);
   await expect(page.locator('#conversation')).not.toContainText('contenuto segreto del file');
   await expect(page.locator('#conversation .talos-allegati-chip__nome').last()).toHaveText('note.txt');
+});
+
+test('REV4-R5-PRIMO (FE-051, Frontend 01/11): lo stesso sul PRIMO messaggio della chat: «Riprova» e «Modifica e rimanda» portano frase e chip', async ({ page }) => {
+  const viste = await bancoLibero(page, { A: { riga: rigaDi('A'), eventi: giroConBolla('r1', CONSEGNA_FILE, 1, BOLLA_FILE) } });
+  await apri(page, 'A');
+  await risposte(page).first().click({ button: 'right' });
+  await page.locator('#menuRispostaMessaggio [role="menuitem"]').first().click();
+  await expect.poll(() => viste.resume.length).toBe(1);
+  expect(viste.resume[0].messaggio).toBe(CONSEGNA_FILE);
+  expect(viste.resume[0].bolla).toEqual({ testo: FRASE, allegati: [{ tipo: 'file', nome: 'note.txt', percorso: 'C:/progetti/AVM/note.txt', caratteri: 26 }] });
+  await expect(domande(page).last().locator('.message-bubble')).toHaveText(FRASE);
+  await expect(page.locator('#conversation')).not.toContainText('contenuto segreto del file');
 });
 
 test('REV4-R6 nella storia EREDITATA «Elimina la risposta», «Annulla le modifiche ai file» ed «Elimina il messaggio» sono spente e dicono perché', async ({ page }) => {

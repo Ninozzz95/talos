@@ -212,7 +212,7 @@ test('R6-07 HA RISPOSTO LA PERSONA: anche se il sì del padre copre la cartella,
 test('R6-08 SEGRETO: «questo percorso per la sessione» del padre copre `cat .env` della figlia ⇒ traccia «percorso»; con l\'Accesso pieno sulla shell no', async (t) => {
   const { progetto } = cartelle(t)
   const { sessionId, inputPadre, inputFiglia } = await scena(t)
-  inputPadre.consensiSessione.segretiConsentiti = ['.env'] // lo stesso stato che scrive `rispondiApprovazione` con `ambito: 'percorso'`
+  inputPadre.consensiSessione.segretiConsentiti = ['lettura:segreto:.env'] // decisione 107: azione + motivo + percorso; lo stesso stato che scrive `rispondiApprovazione` con `ambito: 'percorso'`
   const traccia = { consentitoDa: null }
   const esito = await verificaPermessoScrittura({ tipo: 'shell', comando: 'cat .env' }, {
     livelloAccesso: 'scrittura-progetto', cartella: progetto, consensiSessione: inputFiglia.consensiSessione, tracciaConsenso: traccia })

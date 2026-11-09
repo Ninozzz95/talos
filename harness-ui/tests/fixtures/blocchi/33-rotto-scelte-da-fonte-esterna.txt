@@ -1,0 +1,1 @@
+root = Scelte("s", null, "Quale?", [{testo: "A"}], {tipo: "pagina", nome: "esempio.com", quando: "oggi"})

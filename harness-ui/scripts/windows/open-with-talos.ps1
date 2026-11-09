@@ -58,6 +58,15 @@ try {
         throw [InvalidOperationException]::new('L’integrazione locale di TALOS non è pronta. Reinstalla questa integrazione e riprova.')
     }
 
+    # «Gettone sempre» (owner 02/11/2026): il server vuole il cookie anche qui. Si entra con un biglietto monouso e il cookie resta in questa sessione di PowerShell.
+    # Senza chiave dei biglietti (l'app installata non la scrive) si entra col solo segreto del lanciatore: il server esenta questa rotta dal cookie (S4 della PR 20).
+    $sessione = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+    try {
+        $link = & node (Join-Path $PSScriptRoot '..\biglietto-talos.mjs') --porta ([Uri]$localBaseUrl).Port 2>$null
+        if ($link) { $null = Invoke-WebRequest -Uri $link -WebSession $sessione -UseBasicParsing }
+    }
+    catch { }
+
     $body = @{ percorso = $resolvedPath } | ConvertTo-Json -Compress
     try {
         $response = Invoke-RestMethod `
@@ -65,6 +74,7 @@ try {
             -Method Post `
             -ContentType 'application/json; charset=utf-8' `
             -Headers @{ 'X-TALOS-Launcher-Token' = $token } `
+            -WebSession $sessione `
             -Body $body
     }
     catch {

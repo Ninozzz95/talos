@@ -1,0 +1,1 @@
+{"stato":"completo","blocco":{"tipo":"diagramma","id":"giro","nodi":[{"id":"m","testo":"Messaggio"},{"id":"k","testo":"Kernel"},{"id":"t","testo":"Attrezzi"},{"id":"r","testo":"Risposta"}],"frecce":[{"da":"m","a":"k"},{"da":"k","a":"t","testo":"chiama"},{"da":"k","a":"r"}]}}

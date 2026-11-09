@@ -64,7 +64,7 @@ function registroFinto() {
 
 async function listen(t, { senzaRegistro = false, token = null } = {}) {
   const sessionRegistry = senzaRegistro ? null : registroFinto();
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     listaTaskDisponibili: () => [],
     elencaCartelleProgetto: () => [],

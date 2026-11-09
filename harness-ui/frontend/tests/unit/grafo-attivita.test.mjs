@@ -13,7 +13,7 @@ const passo = (s, attrezzo = 'leggi', percorso = 'src/a.js') => ({ tipo: 'attrez
 const parole = { tr: (chiave, p = {}) => `${chiave}${Object.keys(p).length ? JSON.stringify(p) : ''}`, nomeAttrezzo: (id) => `nome di ${id}`, verbo: (id) => [`Fatto-${id}`, `Fa-${id}`],
   iconaAttrezzo: (id) => `i-${id}`, ora: (iso) => iso.slice(11, 16) };
 
-test('ATTIVITA-GRAFO-01 — chi lavora dice che cosa fa: ragiona, risponde, usa un attrezzo (col bersaglio della chiamata IN VOLO), o sta fra due operazioni', () => {
+test('ATTIVITA-GRAFO-01 — chi lavora dice che cosa fa: ragiona, risponde, usa uno strumento (col bersaglio della chiamata IN VOLO), o sta fra due operazioni', () => {
   assert.deepEqual(attivitaDellAgente({ operazioneCorrente: { status: 'running', kind: 'reasoning' } }, 'running'), { kind: 'reasoning' });
   assert.deepEqual(attivitaDellAgente({ operazioneCorrente: { status: 'running', kind: 'response' } }, 'running'), { kind: 'responding' });
   const conAttrezzo = { attivita: { attrezzoCorrente: 'scrivi', bersaglioCorrente: 'test/nuovo.test.js', passi: [passo(10, 'leggi', 'src/vecchio.js')] } };
@@ -89,7 +89,7 @@ test('ATTIVITA-GRAFO-06 — l’attività recente di tutti: dal più nuovo, otto
   assert.deepEqual(attivitaRecente([]), []);
 });
 
-test('ATTIVITA-GRAFO-07 — le parole: il verbo al presente col NOME del file sulla scheda, il nome dell’attrezzo (con la maiuscola) quando un file non c’è, e chi lavora si legge «vivo»', () => {
+test('ATTIVITA-GRAFO-07 — le parole: il verbo al presente col NOME del file sulla scheda, il nome dello strumento (con la maiuscola) quando un file non c’è, e chi lavora si legge «vivo»', () => {
   assert.deepEqual(testoAttivita({ kind: 'tool', tool: 'scrivi', target: 'test/unit/prezzi.test.js' }, parole), { testo: 'Fa-scrivi prezzi.test.js', vivo: true });
   assert.deepEqual(testoAttivita({ kind: 'tool', tool: 'esegui', target: null }, parole), { testo: 'Nome di esegui', vivo: true });
   assert.deepEqual(testoAttivita({ kind: 'reasoning' }, parole), { testo: 'agenti.delegations.opReasoning', vivo: true });

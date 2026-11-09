@@ -101,7 +101,7 @@ test('BOLLA-05 (review N1) a display copy is kept only if the model text starts 
 })
 
 async function server(t, registro) {
-    const app = createHttpApp({ staticHandler: async () => null, sessionRegistry: registro, listaTaskDisponibili: () => [] })
+    const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro, listaTaskDisponibili: () => [] })
     const srv = createServer(app)
     await new Promise((r) => srv.listen(0, '127.0.0.1', r))
     t.after(() => new Promise((r) => srv.close(r)))

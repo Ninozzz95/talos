@@ -208,7 +208,8 @@ export function apriMenuContestuale(menu, { titolo = '', voci = [], x = 0, y = 0
   const larghezza = menu.offsetWidth || 240; const altezza = menu.offsetHeight || 160;
   menu.style.left = `${Math.max(8, Math.min(x, (finestra.innerWidth ?? 0) - larghezza - 8))}px`;
   menu.style.top = `${Math.max(8, Math.min(y, (finestra.innerHeight ?? 0) - altezza - 8))}px`;
-  menu.querySelector('[role=menuitem]:not([disabled])')?.focus();
+  /* 05/11/2026 (cure di G-A): aprire il menu non fa scorrere la pagina sotto (HTMLElement.focus, opzione `preventScroll`) */
+  menu.querySelector('[role=menuitem]:not([disabled])')?.focus({ preventScroll: true });
   return menu;
 }
 

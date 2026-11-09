@@ -12,7 +12,7 @@ test('FORGE-CAPACITA: le otto capacità usano nomi umani, mancanti e sconosciute
 test('FORGE-METADATI: descrizione intera, data e rischio solo se disponibili',()=>{
  const v={titolo:'Riepilogo',descrizione:'Descrizione completa e leggibile.',installatoAlle:'2026-09-04T16:00:00Z',rischio:'R2'};
  assert.equal(testiToolForgiato(v).descrizione,v.descrizione);assert.equal(testiToolForgiato(v).installato,new Date(v.installatoAlle).toLocaleString('it-IT'));assert.equal(testiToolForgiato(v).rischio,'R2');
- assert.deepEqual(testiToolForgiato({}),{titolo:'Attrezzo senza titolo',descrizione:'Descrizione non disponibile',installato:'Data non registrata',rischio:'Rischio non registrato'});
+ assert.deepEqual(testiToolForgiato({}),{titolo:'Strumento senza titolo',descrizione:'Descrizione non disponibile',installato:'Data non registrata',rischio:'Rischio non registrato'});
 });
 test('FORGE-FILTRO: cerca anche id e capacità tecniche senza usarle come titolo',()=>{
  const a={id:'riepilogo-attivita',titolo:'Riepilogo',descrizione:'Elenca quello che resta da fare',capacita:['tasks.list'],abilitato:true},b={id:'salva-nota',titolo:'Annota',descrizione:'Aggiunge un promemoria',capacita:['notes.create'],abilitato:false};

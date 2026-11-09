@@ -57,7 +57,7 @@ test('ARCHIVI-PERSONALI-01 — con la cartella dati impostata, ciò che scrive l
   const primaNelCodice = Object.fromEntries(ARCHIVI.map(([, cartella]) => [cartella, fileJson(join(RADICE, cartella))]));
   const porta = await portaLibera();
   const motore = await motoreFinto(t);
-  const figlio = spawn(process.execPath, ['server.mjs'], {
+  const figlio = spawn(process.execPath, ['server.mjs', '--senza-gettone=prove'], {
     cwd: RADICE, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
     env: {
       ...process.env,

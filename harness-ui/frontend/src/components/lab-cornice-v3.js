@@ -1,4 +1,5 @@
-import { t, tn, linguaCorrenteDiT } from './lingua.js';
+import { t, tn, linguaCorrenteDiT, EVENTO_LINGUA } from './lingua.js';
+import { misuraLeggibile, testoMisura } from './misura-memoria.js'; // decisione owner 163: la RAM nel formato del telefono
 /* Numeri e date nella lingua dell'interfaccia (come fanno gli altri componenti): italiano → it-IT, inglese → en-US. */
 const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
 /*
@@ -195,12 +196,12 @@ export const SCHEDE_LAB = Object.freeze([
    *   · «Download» e «Sistema» come il mockup.
    * ⛔ L'ORDINE conta: aprendo una scheda l'app accende la sua PRIMA sezione.
    */
-  Object.freeze({ id: 'models', etichetta: 'Hugging Face', icona: 'i-brain', sezioni: Object.freeze(['huggingface', 'installed']) }),
-  Object.freeze({ id: 'providers', get etichetta() { return t('modelli.lab.providerTab'); }, icona: 'i-link', sezioni: Object.freeze(['providers', 'catalog']),
+  Object.freeze({ id: 'models', etichetta: 'Hugging Face', icona: 'i-cpu', sezioni: Object.freeze(['huggingface', 'installed']) }),
+  Object.freeze({ id: 'providers', get etichetta() { return t('modelli.lab.providerTab'); }, icona: 'i-key', sezioni: Object.freeze(['providers', 'catalog']),
     frase: Object.freeze({ get titolo() { return t('modelli.lab.providersHeading'); }, get nota() { return t('modelli.lab.providersNote'); } }) }),
   Object.freeze({ id: 'downloads', get etichetta() { return t('modelli.lab.downloadTab'); }, icona: 'i-download', sezioni: Object.freeze(['downloads']),
     frase: Object.freeze({ get titolo() { return t('modelli.lab.downloadsHeading'); }, get nota() { return t('modelli.lab.downloadsNote'); } }) }),
-  Object.freeze({ id: 'system', get etichetta() { return t('modelli.lab.systemTab'); }, icona: 'i-command', sezioni: Object.freeze(['overview']),
+  Object.freeze({ id: 'system', get etichetta() { return t('modelli.lab.systemTab'); }, icona: 'i-monitor', sezioni: Object.freeze(['overview']),
     frase: Object.freeze({ get titolo() { return t('modelli.lab.systemHeading'); }, get nota() { return t('modelli.lab.systemNote'); } }) }),
 ]);
 
@@ -288,54 +289,17 @@ export function aggiornaConteggiScheda(card, conteggi = {}) {
 }
 
 /*
- * I DUE nodi veri da cui la banda legge. `#modelLabActiveModel` lo
- * SPOSTIAMO dentro la banda, conservandolo (e `app.js:8395` continua a
- * scriverci); l'altro lo LEGGIAMO soltanto — sta nel pannello Sistema e
- * `montaMisuraMemoria` lo ricrea, quindi va rispecchiato, non spostato.
- * ⛔ Fino al 19/09 qui c'era anche `#machineFreeMemoryMetric`, e la banda
- * mostrava la RAM libera: era la grandezza SBAGLIATA per una cella che dichiara
- * un budget (vedi `BUDGET_DEMO_GIB` qui sotto).
- * ⛔ `#machineAllocatableMetric` NON si usa: è l'allocabile sul DISCO, non la
- * RAM (lezione del 18/09 «una conclusione tratta da un nome, non da una
- * misura»; `local-runtime-probe.mjs:251`).
+ * Il nodo vero che la banda tiene. `#modelLabActiveModel` lo SPOSTIAMO dentro la banda, conservandolo (e `app.js` continua a
+ * scriverci).
+ * ⛔ Fino al 04/11 la banda leggeva anche `#machineMemoryMetric` (il TESTO della RAM totale) per una soglia fissa del catalogo,
+ *   «Budget RAM · scenario demo 18,6 GiB»: la decisione owner 163 l'ha tolta. Ora la banda legge la RAM libera misurata dai dati
+ *   della card della memoria (vedi la sezione 2 di `aggiornaBandaLaboratorio`), e la soglia resta solo dove è nata, nel catalogo.
+ * ⛔ `#machineAllocatableMetric` NON si usa: è l'allocabile sul DISCO, non la RAM (lezione del 18/09 «una conclusione tratta da
+ *   un nome, non da una misura»; `local-runtime-probe.mjs:251`).
  */
 const NODO = Object.freeze({
   modello: '#modelLabActiveModel',
-  totale: '#machineMemoryMetric',
 });
-
-/*
- * ⛔⛔ IL BUDGET DELLA BANDA NON È LA RAM LIBERA, E QUESTA RIGA È IL MOTIVO.
- * Il mockup dice «BUDGET RAM · SCENARIO DEMO» (`TALOS-Calm-Lab-04.html`, banda
- * `.setup-band`): un budget, non una misura di consumo. La prima versione di
- * questa banda mostrava la RAM LIBERA (`#machineFreeMemoryMetric`) con la barra
- * su `libera/totale` — una grandezza vera, ma **non quella che la cella
- * dichiara**, e «RAM libera» non è un budget: è ciò che avanza.
- *
- * La grandezza che in TALOS si chiama DAVVERO «budget» è un'altra, e una sola:
- * la soglia con cui il catalogo giudica se un modello ci sta —
- * `catalog-engine.ts:346` (`a.required <= 18.6 ? 'fits' : 'exceeds'`), che il
- * prodotto stesso nomina «Oltre il **budget demo**» e «Entro **18,6 GiB** ·
- * stima» (`catalog-engine.ts:172`). Il mockup e il prodotto dicono la stessa
- * parola: **scenario demo**.
- * ⇒ Il numeratore è quella soglia dichiarata; il DENOMINATORE è la RAM totale
- *   VERA della macchina, letta dal nodo che la misura
- *   (`#machineMemoryMetric`, nel pannello Sistema), e la barra è il loro
- *   rapporto — che è esattamente il conto del mockup: misurato sul suo DOM
- *   vivo, la sua barra sta al **58,117%**, cioè `18,6 / 32`.
- *
- * ⛔ Il numero è UNA COSTANTE, e si dichiara invece di nasconderla: non esiste
- * un'API che misuri «il budget del motore» — verificato il 19/09/2026 leggendo
- * `src/machine-capacity.mjs` e `local-runtime-probe.mjs` (espongono
- * `memory.totalBytes` e `memory.freeBytes`, non un limite). Il denominatore
- * però è misurato, e la prova lo dimostra muovendolo.
- * ⛔ `18.6` vive in DUE righe di `catalog-engine.ts` (172 e 346) e non è
- * esportato: qui se ne dichiara una terza copia, con un test di parità
- * (`tests/unit/banda-laboratorio.test.mjs`) che legge quel sorgente e fallisce
- * se i tre divergono — è lo stesso contratto di
- * `tests/provider-registry-parita.test.mjs`.
- */
-export const BUDGET_DEMO_GIB = 18.6;
 
 /*
  * LA POLITICA — e perché la frase del mockup NON si copia.
@@ -369,47 +333,6 @@ export const POLITICA_CLOUD = Object.freeze({
   get frase() { return t('modelli.lab.cloudApproval'); },
   icona: 'i-shield',
 });
-
-function testoDi(radice, selettore) {
-  const nodo = radice?.querySelector(selettore);
-  const testo = nodo?.textContent?.trim() ?? '';
-  return testo.length > 0 ? testo : null;
-}
-
-/*
- * Solo GiB — una misura in MiB non è un rapporto con una in GiB — **e solo nella
- * NOSTRA forma**, che dipende dalla lingua: in italiano virgola per i decimali e punto per le
- * migliaia, in inglese il contrario (la stessa forma con cui `misura-memoria.js` scrive il numero).
- *
- * ⛔ LA CURA DEL 19/09/2026, e la ragione per cui la forma si pretende invece di
- *   indovinarla. La versione precedente toglieva i punti PRIMA di convertire la
- *   virgola: `'31.6 GiB'.replace(/\./g,'')` → `'316'`, quindi il denominatore
- *   diventava **316** e la barra mostrava il **5,9%** — un numero sbagliato con
- *   l'aria di un numero giusto, e in silenzio. La fonte di oggi scrive all'italiana
- *   (`misura-memoria.js:11`, `Intl.NumberFormat('it-IT')`), quindi il caso non si
- *   presenta; ma qui si legge il **testo** di un'altra superficie, e un formato è
- *   una cosa che cambia senza chiedere permesso.
- *   ⇒ Chi non è nella nostra forma **non è una misura**: `null`, come per «—» e per
- *     i MiB. La frazione sparisce e la barra pure, che è ciò che questa banda fa
- *     quando non sa — meglio di un rapporto inventato.
- *   ⛔ La prova sta in `_fase3-banda.spec.mjs` (BANDA-03) ed è stata vista **rossa
- *     col codice vecchio** prima che questa cura esistesse.
- */
-function gib(testo) {
-  const inglese = linguaCorrenteDiT() === 'en';
-  const forma = inglese
-    ? /^(\d{1,3}(?:,\d{3})*|\d+)(?:\.(\d+))?\s*GiB$/i
-    : /^(\d{1,3}(?:\.\d{3})*|\d+)(?:,(\d+))?\s*GiB$/i;
-  const trovato = forma.exec(String(testo ?? '').trim());
-  if (!trovato) return null;
-  const numero = Number(`${trovato[1].replace(inglese ? /,/g : /\./g, '')}${trovato[2] ? `.${trovato[2]}` : ''}`);
-  return Number.isFinite(numero) && numero > 0 ? numero : null;
-}
-
-/** Il numero del budget, scritto come lo scrive il resto dell'app (`it-IT`, una cifra). */
-function numeroBudget(gib) {
-  return new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1, minimumFractionDigits: 1 }).format(gib);
-}
 
 /*
  * LA PASTIGLIA DELLA DESTINAZIONE — «Locale» o «Cloud» — e da dove viene.
@@ -472,38 +395,53 @@ export function aggiornaBandaLaboratorio(card) {
     ? t('modelli.lab.existingChatsUnchanged')
     : t('modelli.lab.exploreWithoutProvider'));
 
-  /* --- 2. IL BUDGET, E IL DENOMINATORE VERO ------------------------------ */
-  const totale = testoDi(card, NODO.totale);
-  const valore = banda.querySelector('[data-lab-banda-valore]');
-  scrivi(valore, numeroBudget(BUDGET_DEMO_GIB));
-  /*
-   * ⛔ LA FRAZIONE VIVE SOLO SE IL DENOMINATORE È UN NUMERO. Il nodo del
-   * totale dice «Non misurata» finché il server non ha misurato (e la copia
-   * statica nello spezzone legacy dice «—»): in quello stato «18,6 GiB su —»
-   * sarebbe una frazione con un buco dentro, cioè peggio di nessuna frazione.
-   * ⇒ Non si riconosce la parola «non misurata» — fragile e localizzata — si
-   *   chiede alla MISURA se è una misura: `gib()` risponde `null` per tutto ciò
-   *   che non è un numero in GiB. Stessa condizione della barra, quindi le due
-   *   non possono divergere.
+  /* --- 2. LA RAM LIBERA MISURATA (decisione owner 163) -------------------
+   * ⛔ Fino al 04/11 questa cella diceva «Budget RAM · scenario demo 18,6 GiB su 31,6 GiB»: una soglia FISSA del catalogo, ferma
+   *   mentre la RAM vera saliva e scendeva, in un'unità che il telefono non usa. L'owner ha scelto la variante A del bozzetto
+   *   `variante-13-budget-ram.html`: la RAM libera MISURATA, con l'ora della misura, nel formato del telefono («7,5 GB su 32 GB»),
+   *   e la barra che si riempie con la RAM IN USO (la stessa grandezza della barra della card qui sotto).
+   * ⛔ I numeri si leggono dai BYTE che la card della memoria tiene sui suoi dati (`data-memory-libera-byte`,
+   *   `data-memory-totale-byte`, `data-memory-misurato-il`, scritti da `aggiornaMisuraMemoria`), mai dal testo a schermo: il testo
+   *   cambia con la lingua e col formato, e rileggerlo era la radice del guasto del 19/09 («31.6» letto come 316).
+   * ⛔ Senza misura la banda non inventa: «RAM libera», un trattino, niente frazione, niente barra.
    */
-  const massimo = gib(totale);
-  const frazione = banda.querySelector('[data-lab-banda-frazione]');
-  scrivi(frazione, massimo === null ? '' : t('modelli.lab.budgetOutOf', { total: totale }));
+  const memoria = card.querySelector('[data-memory-meter]');
+  const comeByte = (nome) => {
+    const n = Number(memoria?.getAttribute(nome) ?? Number.NaN);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+  const libera = comeByte('data-memory-libera-byte');
+  const totaleByte = comeByte('data-memory-totale-byte');
+  const misurata = libera !== null && totaleByte !== null && totaleByte > 0 && libera <= totaleByte;
+  const misuratoIl = memoria?.getAttribute('data-memory-misurato-il') ?? '';
+  const ora = misurata && !Number.isNaN(Date.parse(misuratoIl))
+    ? new Date(misuratoIl).toLocaleTimeString(localeUI(), { timeZone: 'Europe/Rome' })
+    : null;
+  scrivi(banda.querySelector('[data-lab-banda-sopra-ram]'), ora ? t('modelli.lab.freeRamMeasuredAt', { time: ora }) : t('modelli.lab.freeRam'));
+  const leggibile = misurata ? misuraLeggibile(libera) : null;
+  scrivi(banda.querySelector('[data-lab-banda-valore]'), leggibile ? leggibile.numero : '—');
+  scrivi(banda.querySelector('[data-lab-banda-unita]'), leggibile ? leggibile.unita : '');
+  scrivi(banda.querySelector('[data-lab-banda-frazione]'), misurata ? t('modelli.lab.budgetOutOf', { total: testoMisura(totaleByte) }) : '');
   const barra = banda.querySelector('[data-lab-banda-track]');
   if (barra) {
     const riempimento = barra.querySelector('[data-lab-banda-fill]');
-    const misurabile = massimo !== null;
-    if (barra.hidden === misurabile) { barra.hidden = !misurabile; scritto = true; }
-    if (misurabile && riempimento) {
-      // La tolleranza dello 0,1% non è pignoleria: `style.width` torna una
-      // stringa con sei decimali, e senza la soglia ogni passaggio
-      // dell'osservatore riscriverebbe lo stesso valore — un giro che non si
-      // ferma mai. (Lezione: una scrittura identica non è una mutazione.)
-      const dovuto = Math.min(100, Math.max(0, (BUDGET_DEMO_GIB / massimo) * 100));
-      const attuale = Number.parseFloat(riempimento.style.width) || 0;
-      if (Math.abs(attuale - dovuto) > 0.1) {
-        riempimento.style.width = `${dovuto.toFixed(3)}%`;
-        scritto = true;
+    if (barra.hidden === misurata) { barra.hidden = !misurata; scritto = true; }
+    if (misurata) {
+      const inUso = (1 - libera / totaleByte) * 100;
+      // la stessa soglia della card della memoria (`aggiornaMisuraMemoria`): oltre il 75 % in uso la barra si scalda
+      const livello = inUso >= 90 ? 'critico' : inUso >= 75 ? 'alto' : 'normale';
+      if (barra.getAttribute('data-livello') !== livello) { barra.setAttribute('data-livello', livello); scritto = true; }
+      if (riempimento) {
+        // La tolleranza dello 0,1% non è pignoleria: `style.width` torna una
+        // stringa con sei decimali, e senza la soglia ogni passaggio
+        // dell'osservatore riscriverebbe lo stesso valore — un giro che non si
+        // ferma mai. (Lezione: una scrittura identica non è una mutazione.)
+        const dovuto = Math.min(100, Math.max(0, inUso));
+        const attuale = Number.parseFloat(riempimento.style.width) || 0;
+        if (Math.abs(attuale - dovuto) > 0.1) {
+          riempimento.style.width = `${dovuto.toFixed(3)}%`;
+          scritto = true;
+        }
       }
     }
   }
@@ -742,6 +680,9 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
   comandi.append(...vecchie);
 
   const schede = new Map();
+  /* Tester 04/11 20:15, S3: le scritte del guscio si scrivevano una volta sola, al montaggio; passando dal vivo all'italiano restavano
+     in inglese fino alla ricarica. Ogni scritta tiene qui la sua chiave (una funzione che la rilegge), e al cambio di lingua si riscrive. */
+  const scritte = [];
   for (const scheda of SCHEDE_LAB) {
     const tab = doc.createElement('button');
     tab.type = 'button';
@@ -762,7 +703,9 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
     tab.setAttribute('aria-selected', String(scheda.id === iniziale));
     tab.tabIndex = scheda.id === iniziale ? 0 : -1;
     tab.classList.toggle('active', scheda.id === iniziale);
-    tab.append(icona(doc, scheda.icona), doc.createTextNode(scheda.etichetta));
+    const nome = doc.createTextNode(scheda.etichetta);
+    scritte.push([nome, () => scheda.etichetta]);
+    tab.append(icona(doc, scheda.icona), nome);
     list.append(tab);
     schede.set(scheda.id, tab);
   }
@@ -816,6 +759,7 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
       nota.className = 'talos-muted';
       nota.textContent = scheda.frase.nota;
       testa.append(titolo, nota);
+      scritte.push([titolo, () => scheda.frase.titolo], [nota, () => scheda.frase.nota]);
       gruppo.prepend(testa);
     }
   }
@@ -829,8 +773,9 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
    *    della destinazione + nota. Il NOME è il nodo vero `#modelLabActiveModel`:
    *    non lo si ricrea, lo si SPOSTA, quindi `app.js:8395` continua a
    *    scriverci e non esistono due nodi con lo stesso id.
-   * 2. **Budget RAM** — la soglia dichiarata del catalogo sul totale VERO della
-   *    macchina (vedi `BUDGET_DEMO_GIB`).
+   * 2. **RAM libera** — misurata, con l'ora, nel formato del telefono, sul
+   *    totale vero della macchina (decisione owner 163, sezione 2 di
+   *    `aggiornaBandaLaboratorio`).
    * 3. **La politica** — la frase vera, non quella del mockup (vedi
    *    `POLITICA_CLOUD`).
    *
@@ -855,12 +800,13 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
   const glifo = doc.createElement('span');
   glifo.className = 'talos-lab__banda-glifo';
   glifo.setAttribute('aria-hidden', 'true');
-  glifo.append(icona(doc, 'i-brain'));
+  glifo.append(icona(doc, 'i-cpu'));
   const testoCorrente = doc.createElement('div');
   testoCorrente.className = 'talos-lab__banda-testo';
   const soprattitolo = doc.createElement('span');
   soprattitolo.className = 'talos-lab__banda-sopra';
   soprattitolo.textContent = t('modelli.lab.newChatModel');
+  scritte.push([soprattitolo, () => t('modelli.lab.newChatModel')]);
   const rigaNome = doc.createElement('div');
   rigaNome.className = 'talos-lab__banda-nome';
   const modello = doc.createElement('strong');
@@ -898,26 +844,26 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
   corrente.append(glifo, testoCorrente);
   banda.append(corrente);
 
-  // 2 — il budget
+  // 2 — la RAM libera misurata (decisione owner 163; i testi li scrive `aggiornaBandaLaboratorio`)
   const budget = doc.createElement('div');
   budget.className = 'talos-lab__banda-budget';
   const sopraBudget = doc.createElement('span');
   sopraBudget.className = 'talos-lab__banda-sopra';
-  sopraBudget.textContent = t('modelli.lab.demoRamBudget');
+  sopraBudget.dataset.labBandaSopraRam = '';
   const numero = doc.createElement('div');
   numero.className = 'talos-lab__banda-numero';
   const valore = doc.createElement('span');
   valore.dataset.labBandaValore = '';
   const unita = doc.createElement('span');
   unita.className = 'talos-lab__banda-unita';
-  unita.textContent = t('modelli.lab.gibUnit');
+  unita.dataset.labBandaUnita = '';
   const frazione = doc.createElement('small');
   frazione.className = 'talos-lab__banda-frazione';
   frazione.dataset.labBandaFrazione = '';
   const barra = doc.createElement('div');
   barra.className = 'talos-lab__banda-track';
   barra.dataset.labBandaTrack = '';
-  // Il rapporto è già scritto per esteso nel testo accanto («18,6 GiB su …»):
+  // Il rapporto è già scritto per esteso nel testo accanto («7,5 GB su 32 GB»):
   // la barra non porta informazione che il testo non dica, quindi non si
   // annuncia due volte. È la decisione della prima versione, e resta.
   barra.setAttribute('aria-hidden', 'true');
@@ -935,6 +881,7 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
   politica.dataset.labBandaPolitica = '';
   const testoPolitica = doc.createElement('span');
   testoPolitica.textContent = POLITICA_CLOUD.frase;
+  scritte.push([testoPolitica, () => POLITICA_CLOUD.frase]);
   politica.append(icona(doc, POLITICA_CLOUD.icona), testoPolitica);
   banda.append(politica);
 
@@ -963,10 +910,18 @@ export function montaGuscioLaboratorio(card, { onCambio = null } = {}) {
    * ⛔ Ogni scrittura di `rinfresca` è condizionata al cambiamento, quindi il
    * giro si ferma dopo un passaggio: una scrittura identica non è una mutazione.
    */
+  /* S3: come gli altri pannelli (`finestra-piena.js`, `carta-compattazione.js`: `documentElement` ascolta `EVENTO_LINGUA`), il cambio di
+     lingua riscrive le scritte del guscio e i valori della banda nella lingua nuova. */
+  doc.documentElement?.addEventListener?.(EVENTO_LINGUA, () => {
+    for (const [nodo, testo] of scritte) { const dovuto = testo(); if (nodo.textContent !== dovuto) nodo.textContent = dovuto; }
+    banda.setAttribute('aria-label', t('modelli.lab.configurationLabel'));
+    rinfresca();
+  });
   const osservatore = new MutationObserver(rinfresca);
   osservatore.observe(card, {
     childList: true, subtree: true, characterData: true,
-    attributes: true, attributeFilter: ['hidden', 'class', 'aria-selected'],
+    // decisione owner 163: anche i tre dati della misura che la banda legge dalla card della memoria
+    attributes: true, attributeFilter: ['hidden', 'class', 'aria-selected', 'data-memory-libera-byte', 'data-memory-totale-byte', 'data-memory-misurato-il'],
   });
   OSSERVATORI.set(card, osservatore);
 

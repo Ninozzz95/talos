@@ -37,6 +37,14 @@ const STATIC_ASSETS = Object.freeze({
    *   (vedi la nota qui sotto su DEC-053), e una voce in più è il solo modo di aggiungere un asset.
    */
   '/avvio.js': { file: 'avvio.js', contentType: 'text/javascript; charset=utf-8' },
+  /* FE-066: la pagina della bolla del computer use, per la seconda finestra del guscio. Entra col cookie della principale, come ogni pagina: senza, le API rispondono 401 */
+  '/bolla.html': { file: 'bolla.html', contentType: 'text/html; charset=utf-8' },
+  '/bolla.js': { file: 'bolla.js', contentType: 'text/javascript; charset=utf-8' },
+  '/bolla-stile.css': { file: 'bolla-stile.css', contentType: 'text/css; charset=utf-8' },
+  /* FE-070: la pagina del segno del computer use (cursore, anello, bordo), una finestra trasparente per schermo aperta dal guscio */
+  '/segno.html': { file: 'segno.html', contentType: 'text/html; charset=utf-8' },
+  '/segno.js': { file: 'segno.js', contentType: 'text/javascript; charset=utf-8' },
+  '/segno-stile.css': { file: 'segno-stile.css', contentType: 'text/css; charset=utf-8' },
   /*
    * ⭐⭐⭐ 26/8, DEC-053 — MAI PIÙ una copia locale sincronizzata a mano
    * (harness-ui-due-copie-divergenti.md era esattamente questo difetto).

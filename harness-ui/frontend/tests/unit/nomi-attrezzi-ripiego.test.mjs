@@ -8,13 +8,13 @@ import { nomeDiRipiegoAttrezzo, nomeUmanoAttrezzo } from '../../src/components/n
  * la prima, «attrezzo senza nome» la seconda (e nascondeva il nome che la PERSONA ha dato a un attrezzo suo).
  * Il ripiego è il nome stesso, reso leggibile e niente di più.
  */
-test('RIPIEGO-01 — un attrezzo creato dalla persona mostra il SUO nome, leggibile', () => {
+test('RIPIEGO-01 — uno strumento creato dalla persona mostra il SUO nome, leggibile', () => {
   assert.equal(nomeDiRipiegoAttrezzo('converti_pdf'), 'converti pdf');
   assert.equal(nomeDiRipiegoAttrezzo('attrezzo_inventato_dall_owner'), 'attrezzo inventato dall owner');
   assert.equal(nomeDiRipiegoAttrezzo('riassumi-fattura'), 'riassumi fattura');
 });
 
-test('RIPIEGO-02 — un attrezzo MCP dice cosa fa e da chi viene, senza i doppi trattini bassi', () => {
+test('RIPIEGO-02 — uno strumento MCP dice cosa fa e da chi viene, senza i doppi trattini bassi', () => {
   assert.equal(nomeDiRipiegoAttrezzo('mcp__github__create_issue'), 'create issue (github)');
   assert.equal(nomeDiRipiegoAttrezzo('mcp__claude_ai_Docs__read'), 'read (claude ai Docs)');
 });

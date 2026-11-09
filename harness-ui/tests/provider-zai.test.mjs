@@ -213,7 +213,7 @@ test('PD-09 — server Z.AI FINTO: rotte HTTP, streaming e ciclo tool con creden
   const store = createProviderCredentialStore({ env: { GLM_API_KEY: CHIAVE_FINTA } });
   store.setRuntime('zai', { endpoint: `${upstream}/api/paas/v4` });
   const probe = createProviderProbe(deps(store));
-  const app = await ascolta(t, createHttpApp({ staticHandler: async () => null, providerStore: store, providerProbe: probe }));
+  const app = await ascolta(t, createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore: store, providerProbe: probe }));
   const cat = await fetch(`${app}/api/v1/providers/zai/models`);
   assert.equal(cat.status, 200);
   assert.equal((await cat.json()).data.modelli[0].nome, 'GLM-5.3-Flash');

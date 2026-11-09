@@ -15,8 +15,11 @@ const RE_AVVISO = /^\[TALOS warning: the data below contains text that looks lik
 const RE_CONFINE = /<<<TALOS_DATA id=([0-9a-f]{12})[^\n]*>>>\n([\s\S]*?)\n<<<END_TALOS_DATA id=\1>>>/gu;
 
 /** Il testo di un esito come lo vede la persona: senza i confini e senza l'avviso scritto per il modello. */
+/* COD-207 (30/10/2026): la riga del programma mancante è per il modello; copia della regola del nucleo (confine-dati.mjs). */
+const RE_RIGA_PROGRAMMA_MANCANTE = /\n\[TALOS\] (?:"[A-Za-z0-9._+-]{1,64}" is|A program in this command is) not available in this environment; retrying the same command will fail again\. (?:Tell the person it is missing, or reach the goal another way\.|This device has no (?:"[A-Za-z0-9._+-]{1,64}"|such program): (?:use your tools \((?:leggi|scrivi|file_edit|cerca|elenca)(?:, (?:leggi|scrivi|file_edit|cerca|elenca))*\) instead|reach the goal another way)\.)$/u;
+
 export function testoPerLoSchermo(testo) {
-  const t = String(testo ?? '');
+  const t = String(testo ?? '').replace(RE_RIGA_PROGRAMMA_MANCANTE, '');
   if (!t.includes(APERTURA_DATI)) return t;
   return t.replace(RE_AVVISO, '').replace(RE_CONFINE, (_, __, dentro) => dentro);
 }

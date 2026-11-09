@@ -242,6 +242,21 @@ export const CAMPI_IMPOSTAZIONI = conTesti([
     ]
   },
   {
+    "id": "newSessionViewSelect",
+    "chiave": "newSessionView",
+    "tipo": "select",
+    "sezione": "chat",
+    "gruppo": "design",
+    "opzioni": [
+      [
+        "window"
+      ],
+      [
+        "sky"
+      ]
+    ]
+  },
+  {
     "id": "composerPlusSelect",
     "chiave": "composerPlus",
     "tipo": "select",

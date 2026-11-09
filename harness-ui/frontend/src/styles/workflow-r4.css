@@ -138,6 +138,10 @@
 .talos-question-card__option-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
 .talos-question-card__option-label { font-weight: 600; color: var(--talos-text); overflow-wrap: anywhere; }
 .talos-question-card__option-description { color: var(--talos-muted); font-size: 11.5px; line-height: 1.45; overflow-wrap: anywhere; }
+/* Blocco 26: copiate dal bozzetto approvato della fase 8 (bozzetto-impostazioni-dalla-chat/stile-pc.css:31, 36, 49): ogni riga
+   dell'opzione, anche la consigliata e quella sotto la tastiera, si accende sotto il puntatore. */
+#userQuestionDock .talos-question-card__option-row { cursor: pointer; }
+#userQuestionDock .talos-question-card__option-row:hover { background: var(--talos-accent-soft); box-shadow: inset 0 0 0 1px var(--talos-accent-border); }
 /* 24/09/2026 — Ask completa (decisioni owner 10, 11, 32): «perché conta», consigliata, tasti 1-9, ricevuta «Decisione».
    Solo token esistenti: la famiglia visiva la ridisegna il refactor ATLAS insieme alla scheda di approvazione. */
 .talos-question-card__why { margin: 0 0 8px; color: var(--talos-muted); font-size: .75rem; line-height: 1.45; overflow-wrap: anywhere; }

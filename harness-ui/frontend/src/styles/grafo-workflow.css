@@ -94,7 +94,7 @@
   border: 1px solid color-mix(in srgb, var(--wfg-tono) 26%, transparent);
 }
 .talos-wfg__pill[data-tono="attesa"], .talos-wfg__pill[data-tono="neutro"] { color: var(--talos-muted); background: var(--talos-panel-soft); border-color: var(--talos-border); }
-.talos-wfg__pill-icona { width: 11px !important; height: 11px !important; stroke-width: 2; }
+.talos-wfg__pill-icona { width: 12px !important; height: 12px !important; stroke-width: 2; }
 
 /* livello 14: la sessione principale in alto, le fasi in colonne sotto, i passi in fila con la loro staffa */
 .talos-wfg__albero { display: grid; justify-items: center; gap: 0; padding-bottom: 8px; }

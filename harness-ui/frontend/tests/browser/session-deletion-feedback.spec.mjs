@@ -38,10 +38,16 @@ async function fixture({failure = true, journalFailure = false} = {}) {
   expect(db.prepare('SELECT count(*) AS n FROM output_chunks').get().n).toBeGreaterThan(0);
   if (failure) db.exec("CREATE TRIGGER deny19 BEFORE DELETE ON output_captures BEGIN SELECT RAISE(ABORT,'fixture19'); END;");
   let deletes = 0;
-  const app = createHttpApp({staticHandler: () => {}, token: 'test19', sessionRegistry: registry});
+  /* 04/11/2026, settima suite della candidata: i cinque OUTPUT19 che passano dalla fixture scadevano a 30 s su `window.__talosHarnessUiRuntime`.
+     Causa misurata: un cookie non guarda la porta (RFC 6265, 8.5), quindi `talos_token=test19` scritto per la fixture prendeva il posto del
+     cookie della corsa anche sul server di prova (stesso nome, stesso 127.0.0.1, stesso percorso); da «gettone sempre» (36e6e5838) quel server
+     risponde 401 a ogni /api/ senza il SUO gettone e la pagina non parte. La fixture parla col gettone della corsa, così un cookie solo vale
+     per tutti e due i server, come in `process-output.spec.mjs`. */
+  const gettone = process.env.TALOS_PW_GETTONE || 'test19';
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: () => {}, token: gettone, sessionRegistry: registry});
   const server = createServer((req,res) => {if (req.url.endsWith('/delete')) deletes++; return app(req,res);});
   await new Promise(r => server.listen(0, '127.0.0.1', r));
-  return {sessionId, root, registry, store, db, journal: join(cartellaStore, `${sessionId}.jsonl`), get deletes() {return deletes;},
+  return {sessionId, root, registry, store, db, gettone, journal: join(cartellaStore, `${sessionId}.jsonl`), get deletes() {return deletes;},
     base: `http://127.0.0.1:${server.address().port}`,
     async close() {
       server.closeAllConnections(); await new Promise(r => server.close(r));
@@ -53,7 +59,7 @@ async function fixture({failure = true, journalFailure = false} = {}) {
 }
 
 async function open(page, f, {theme = 'dark', denied = false, active = true} = {}) {
-  await page.context().addCookies([{name: 'talos_token', value: 'test19', url: f.base, httpOnly: true, sameSite: 'Strict'}]);
+  await page.context().addCookies([{name: 'talos_token', value: f.gettone, url: f.base, httpOnly: true, sameSite: 'Strict'}]);
   await page.addInitScript(({theme, denied}) => {
     if (window !== window.top) return;
     localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({version: 1, appearance: {colorMode: theme, uiLanguage: 'it', interfaceMotion: false}}));

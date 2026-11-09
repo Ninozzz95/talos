@@ -232,7 +232,7 @@ describe('F15 — la shell chiede davanti a un segreto, anche con «sempre»', (
     it('⛔⛔ AL CONTRARIO su `leggi` — se la persona dice NO, il file NON viene letto', async (t) => {
         const { domande, testoTool } = await giroLeggi(t, '~/.aws/credentials', { chiediApprovazioneFn: async () => false })
         assert.equal(domande.length, 0, 'il canale usato è quello passato per ultimo (che rifiuta)')
-        assert.ok(/REFUSED/.test(testoTool), `al modello deve arrivare un rifiuto parlante: «${testoTool}»`)
+        assert.ok(/^DECLINED\. The person said no/u.test(testoTool), `al modello deve arrivare un rifiuto parlante: «${testoTool}»`)
     })
 
     // ─────────────────────────────── 5. I CONFINI CON LE REGOLE GIÀ ESISTENTI ───────────────────────────────

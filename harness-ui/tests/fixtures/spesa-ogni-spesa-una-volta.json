@@ -1,0 +1,120 @@
+{
+  "descrizione": "Prova COMUNE desktop/telefono/CLI (contratto spesa dei riassunti, correzione del punto 4, 30/10/2026 sera): il totale in fondo alla chat conta ogni spesa UNA volta. Chi legge talos.context context.usage.recorded salta le righe consumo-di-servizio di scopo motore (sono le stesse chiamate); chi non lo legge le somma. Stesso giornale, stesso numero.",
+  "chat": {
+    "prompt_tokens": 30000,
+    "completion_tokens": 729,
+    "cached_tokens": 19800,
+    "giri": 13
+  },
+  "eventi": [
+    {
+      "type": "CUSTOM",
+      "name": "consumo-di-servizio",
+      "_sequenza": 40,
+      "value": {
+        "schema": "talos.consumo-di-servizio.v1",
+        "scopo": "riassunto",
+        "idRiassunto": "rias-000000000001-1",
+        "usage": {
+          "prompt_tokens": 1000,
+          "completion_tokens": 100
+        },
+        "esito": "completato",
+        "inPrimoPiano": true
+      }
+    },
+    {
+      "type": "CUSTOM",
+      "name": "consumo-di-servizio",
+      "_sequenza": 41,
+      "value": {
+        "schema": "talos.consumo-di-servizio.v1",
+        "scopo": "motore",
+        "jobId": "job-fixture-1",
+        "usage": {
+          "prompt_tokens": 800,
+          "completion_tokens": 80
+        },
+        "esito": "completato",
+        "inPrimoPiano": false
+      }
+    },
+    {
+      "type": "CUSTOM",
+      "name": "talos.context",
+      "_sequenza": 42,
+      "value": {
+        "schema": "talos.context.event.v1",
+        "id": "usage-fixture-1",
+        "sessionId": "sessione-fixture",
+        "jobId": "job-fixture-1",
+        "kind": "context.usage.recorded",
+        "createdAt": "2026-10-30T20:00:00.000Z",
+        "payload": {
+          "operationId": "op-fixture-1",
+          "usage": {
+            "inputTokens": 800,
+            "outputTokens": 80
+          }
+        }
+      }
+    },
+    {
+      "type": "CUSTOM",
+      "name": "consumo-di-servizio",
+      "_sequenza": 43,
+      "value": {
+        "schema": "talos.consumo-di-servizio.v1",
+        "scopo": "scopo-di-domani",
+        "usage": {
+          "prompt_tokens": 50,
+          "completion_tokens": 5
+        },
+        "esito": "completato",
+        "inPrimoPiano": false
+      }
+    },
+    {
+      "type": "CUSTOM",
+      "name": "consumo-di-servizio",
+      "_sequenza": 44,
+      "value": {
+        "schema": "talos.consumo-di-servizio.v1",
+        "scopo": "riassunto",
+        "idRiassunto": "rias-000000000001-2",
+        "usage": null,
+        "esito": "interrotto",
+        "inPrimoPiano": false
+      }
+    }
+  ],
+  "atteso": {
+    "tokenTotali": 32764,
+    "spiegazione": "chat 30.729 + riassunto 1.100 + motore 880 (UNA volta) + scopo sconosciuto 55; la riga senza uso non aggiunge niente e non è zero",
+    "testataRiassunti": {
+      "stato": "almeno",
+      "token": 1980
+    },
+    "costoPerId": {
+      "rias-000000000001-1": {
+        "stato": "misurato",
+        "token": 1100
+      },
+      "rias-000000000001-2": {
+        "stato": "non-misurato",
+        "token": null
+      },
+      "job-fixture-1": {
+        "stato": "misurato",
+        "token": 880
+      }
+    },
+    "servizioDelServer": {
+      "prompt_tokens": 1050,
+      "completion_tokens": 105,
+      "misurate": 2,
+      "nonMisurate": 1
+    },
+    "spiegazioneServizio": "campo servizio del server accanto a usageSessione: riassunto 1.100 + scopo sconosciuto 55 = 1.155; motore escluso (usageSessione lo ha gia da context.usage.recorded); la riga senza uso in nonMisurate"
+  }
+}

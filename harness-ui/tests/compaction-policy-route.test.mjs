@@ -8,7 +8,7 @@ test('CTX-WINDOW-HTTP — policy read-only della sessione con guardia token e bu
     windowTokens: 1_000_000, triggerTokens: 750_000, warningTokens: 600_000,
     emergencyTokens: 900_000, source: 'route-minimum', modelId: 'z-ai/glm-5.3-flash', inProgress: false,
   };
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     token: 'token-di-prova',
     sessionRegistry: { politicaCompattazione: (id) => id === 's1' ? expected : { erroreAvvio: 'Sessione non trovata', code: 'NOT_FOUND' } },

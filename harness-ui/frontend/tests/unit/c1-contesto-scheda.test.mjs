@@ -25,7 +25,9 @@ test('C1-SCHEDA-PERCHE: one sentence per source; the unverified one never quotes
 
 test('C1-SCHEDA-RIPARTIZIONE: categories in order, as a share of the limit; the measure decides what is left; over the limit is said', () => {
   const r = ripartizioneSulLimite({ ripartizione: { categorie: [{ id: 'conversation', tokens: 50000 }, { id: 'tools', tokens: 19000 }, { id: 'inventata', tokens: 5 }] }, usati: 178247, limite: { soglia: 200000 } });
-  assert.deepEqual(r.voci.map((v) => v.id), ['tools', 'conversation'], 'known categories only, in order');
+  // decision 174 (04/11/2026): what the measure counts beyond the named categories is the last row, «Riassunti e altro»
+  assert.deepEqual(r.voci.map((v) => v.id), ['tools', 'conversation', 'altro'], 'known categories only, in order, then the rest');
+  assert.equal(r.voci.at(-1).tokens, 178247 - 69000);
   assert.equal(r.voci[0].percentuale, 9.5);
   assert.equal(r.restanti, 21753);
   assert.equal(r.oltre, false);

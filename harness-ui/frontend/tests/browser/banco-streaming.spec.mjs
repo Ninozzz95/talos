@@ -177,7 +177,7 @@ async function misura({ modo, turniPrima }) {
 for (const [modo, turniPrima] of [['fade', 0], ['fade', 30], ['none', 30]]) {
   test(`BANCO-STREAMING (${modo}, ${turniPrima} turni prima) — costo del percorso caldo su uno stream da 13k caratteri`, async ({ page }) => {
     test.setTimeout(180000);
-    await page.route('**/api/v1/sessions/banco-stream/events', flussoConConfine);
+    await page.route('**/api/v1/sessions/banco-stream/events*', flussoConConfine);
     await apriChat(page);
     /* ⛔⛔ L'ARGOMENTO VA PASSATO COME OGGETTO, NON COME ARRAY: con l'array Playwright lo dà al
        PRIMO parametro, quindi `modo` diventava ["fade",0], la stringa risolta era "fade,0", e

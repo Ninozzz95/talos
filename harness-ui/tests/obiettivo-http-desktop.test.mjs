@@ -48,7 +48,7 @@ async function banco(t) {
       return attesa;
     },
   });
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => {
     await new Promise((resolve) => server.close(resolve));

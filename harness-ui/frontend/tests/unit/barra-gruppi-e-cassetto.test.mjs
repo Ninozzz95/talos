@@ -56,10 +56,11 @@ test('A — le due testate di gruppo esistono, sono disclosure, e il loro bersag
     assert.ok(t.controlla, `${t.gruppo}: aria-controls dichiarato`);
   }
   assert.deepEqual(testateSenzaBersaglio(TEMPLATE), [], 'nessuna testata punta a un id che non esiste');
-  /* Il default del mockup: «Spazi di lavoro» aperto, «Strumenti» chiuso. Non è un vezzo — con tutti
-     e due aperti le 13 voci schiacciano l'elenco delle sessioni (misurato: 545 px su ~790). */
-  assert.equal(testate[0].espanso, 'true');
+  /* Variante D «Ripulita» (owner 30/10/2026 sera): TUTTI E DUE chiusi di serie, così le sessioni hanno quasi tutta l'altezza (prima:
+     «Spazi di lavoro» aperto, e con tutti e due aperti le 13 voci schiacciavano l'elenco, misurato 545 px su ~790). */
+  assert.equal(testate[0].espanso, 'false');
   assert.equal(testate[1].espanso, 'false');
+  assert.match(TEMPLATE, /id="gruppoLavoro" hidden/u, 'chiuso vuol dire anche `hidden`, o il gruppo si vede lo stesso');
   assert.match(TEMPLATE, /id="gruppoStrumenti" hidden/u, 'chiuso vuol dire anche `hidden`, o il gruppo si vede lo stesso');
 });
 

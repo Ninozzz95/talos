@@ -175,7 +175,10 @@ export function statoUi(contenitore) {
  * con il cursore), righe aperte. ⛔ Sotto un menu aperto non si ridisegna (l'àncora sparirebbe): si riprova fra poco — è la
  * stessa regola della scheda Git (`programmaSchedaGithub`, C34 R2).
  */
-export function disegnaScheda(contenitore, costruisci, { interno = false } = {}) {
+/* `adatta` (31/10/2026, foto del Context Manager variante B): le pagine della finestra SCORRONO, quindi non si ripiegano le sezioni per
+   farle entrare — lì l'adattamento allo spazio chiudeva «Nel tempo» e «Compattazioni» e la pagina sembrava vuota. Il pannello di destra
+   resta com'era (di serie `true`). */
+export function disegnaScheda(contenitore, costruisci, { interno = false, adatta = true } = {}) {
   const d = contenitore.ownerDocument;
   const ui = statoUi(contenitore);
   /* ⛔ Un ridisegno NATO DENTRO la scheda (un fotogramma dopo una ricerca, l'attesa sotto un menu, lo spazio cambiato) non tocca un
@@ -207,7 +210,7 @@ export function disegnaScheda(contenitore, costruisci, { interno = false } = {})
     contenitore.replaceChildren(radice);
     ui.radice = radice;
     ui.giriUltimoDisegno = giro + 1; // quanti giri è costato (prova PNAG-GIRI: mai più di dieci, anche quando non converge)
-    if (!adattaAlloSpazio(contenitore, ui)) break;
+    if (!adatta || !adattaAlloSpazio(contenitore, ui)) break;
   }
   osservaSpazio(contenitore, ui);
   rotazione(contenitore, ui);
@@ -629,7 +632,14 @@ export function adattaAlloSpazio(contenitore, ui) {
   return false;
 }
 
-/** Al cambio d'altezza della colonna si rifà il conto (ResizeObserver), una volta per fotogramma. */
+/**
+ * Al cambio d'altezza della colonna si rifà il conto (ResizeObserver), una volta per fotogramma.
+ * ⛔ 31/10/2026 (PNCTX-GRAFICO-01 rossa nel blocco «dopo spesa»): anche al cambio di LARGHEZZA — il grafico nel tempo del Contesto
+ * prende la larghezza vera, e allargando il pannello restava disegnato stretto e stirato (3 volte su 3): niente ridisegnava a
+ * larghezza cambiata, e prima la prova passava solo grazie a un ridisegno arrivato da altrove. Soglia di 20 px: la barra di
+ * scorrimento che compare o sparisce (~15 px) dopo un
+ * ridisegno non deve farne partire un altro, all'infinito.
+ */
 function osservaSpazio(contenitore, ui) {
   const scorritore = ui.scorritore;
   const RO = contenitore.ownerDocument.defaultView?.ResizeObserver;
@@ -637,10 +647,14 @@ function osservaSpazio(contenitore, ui) {
   ui.osservatore?.disconnect();
   ui.osservato = scorritore;
   let ultima = scorritore.clientHeight;
+  let ultimaLarghezza = scorritore.clientWidth;
   ui.osservatore = new RO(() => {
     const h = scorritore.clientHeight;
-    if (Math.abs(h - ultima) < 1) return;
+    const l = scorritore.clientWidth;
+    const larga = Math.abs(l - ultimaLarghezza) >= 20;
+    if (Math.abs(h - ultima) < 1 && !larga) return;
     ultima = h;
+    if (larga) ultimaLarghezza = l;
     ui.margineExtra = 0;
     ui.compatte?.clear();
     programmaRidisegno(ui);

@@ -71,8 +71,33 @@ export function sommaUsage(a, b) {
  */
 export function usageDellaSessione(sessione) {
   if (!sessione || typeof sessione !== 'object') return null;
-  if (sessione.usageSessione && typeof sessione.usageSessione === 'object') return sessione.usageSessione;
-  return sessione.usage && typeof sessione.usage === 'object' ? sessione.usage : null;
+  if (sessione.usageSessione && typeof sessione.usageSessione === 'object') return conServizio(sessione.usageSessione, sessione.servizio);
+  return sessione.usage && typeof sessione.usage === 'object' ? conServizio(sessione.usage, sessione.servizio) : null;
+}
+
+/*
+ * Spesa dei riassunti, il totale «dove c'è già» (owner 30/10/2026 sera, consigliata; contratto CONTRATTO-SPESA-RIASSUNTI-SCHEDA-CONTESTO,
+ * forma per fonte del totale con l'OK di CLI, Mobile e Performance). Il server dichiara accanto a `usageSessione` il campo `servizio`
+ * (`servizio-della-sessione.mjs`): le chiamate di servizio pagate — riassunti, /compact, giudici — che `usageSessione` non contiene
+ * (il motore del contesto ci sta già). Si aggiunge così com'è ai token d'entrata e d'uscita: Costi, Bacheca, Progetti e l'albero
+ * leggono tutti da qui e dicono lo stesso numero. ⛔ Giri e cache restano quelli della chat; la base della percentuale di cache resta
+ * il prompt della chat (`prompt_tokens_con_cache`), così la percentuale non scende per un riassunto.
+ */
+export function conServizio(usage, servizio) {
+  if (!usage || typeof usage !== 'object') return usage ?? null;
+  if (!servizio || typeof servizio !== 'object') return usage;
+  const dentro = numero(servizio.prompt_tokens) ?? 0;
+  const fuori = numero(servizio.completion_tokens) ?? 0;
+  if (dentro === 0 && fuori === 0) return usage;
+  const prompt = numero(usage.prompt_tokens);
+  const completion = numero(usage.completion_tokens);
+  return {
+    ...usage,
+    prompt_tokens: (prompt ?? 0) + dentro,
+    completion_tokens: (completion ?? 0) + fuori,
+    prompt_tokens_con_cache: numero(usage.prompt_tokens_con_cache) ?? prompt ?? 0,
+    servizio: { prompt_tokens: dentro, completion_tokens: fuori },
+  };
 }
 
 /**

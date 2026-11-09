@@ -8,6 +8,7 @@ import { cpus, totalmem, version, release } from 'node:os';
 import { root, attendi } from './support.mjs';
 import { inventario, verificaImpronta } from '../scripts/prepara-pacchetto.mjs';
 import { nomiArtefatti } from '../scripts/release-assets.mjs';
+import { MOTORE_FISSATO } from '../../src/motore-fissato.mjs';
 
 const require = createRequire(import.meta.url);
 const attivo = process.platform === 'win32' && process.env.TALOS_R02_INSTALLER === '1';
@@ -110,7 +111,7 @@ test('R02-INSTALLER — installazione reale, cookie, PTY incluso, motori, persis
       const p = spawnSync(join(risorse, 'local-runtime', variante, 'llama-server.exe'), ['--version'], { windowsHide: true, encoding: 'utf8', timeout: 20000 });
       misure.binari[variante] = { codice: p.status, output: (p.stdout || '') + (p.stderr || '') };
       assert.equal(p.status, 0, `Binario ${variante} non eseguibile sul banco.`);
-      assert.match(misure.binari[variante].output, /10517/);
+      assert.match(misure.binari[variante].output, new RegExp(`build ${MOTORE_FISSATO.build},`));
     }
     let output = ''; const controlli = [];
     pagina.on('websocket', ws => ws.on('framereceived', ({ payload }) => {

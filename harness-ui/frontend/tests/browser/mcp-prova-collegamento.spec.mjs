@@ -47,7 +47,7 @@ for (const tema of ['dark', 'light']) {
     await page.screenshot({ path: testInfo.outputPath(`connettori-${tema}.png`) });
     const lettePrima = letture.mcp;
     await prova.click();
-    await expect(page.locator('.talos-toast').filter({ hasText: 'documentazione è collegato con 1 attrezzo' })).toBeVisible();
+    await expect(page.locator('.talos-toast').filter({ hasText: 'documentazione è collegato con 1 strumento' })).toBeVisible();
     await expect.poll(() => letture.mcp).toBeGreaterThan(lettePrima);
     await pannello.locator('[data-ext-id="archivio"]').click();
     await expect(prova).toBeHidden();

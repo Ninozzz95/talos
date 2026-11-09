@@ -1,0 +1,2 @@
+root = Avviso("disco", null, "attenzione", "Il disco è quasi pieno:
+restano 2 GB.")

@@ -20,7 +20,7 @@ import { createHttpApp } from '../src/http-app.mjs';
  *   - che un corpo malformato, una query appesa e un metodo sbagliato non arrivino MAI al registro.
  */
 async function ascolta(t, registro) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;

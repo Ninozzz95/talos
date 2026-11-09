@@ -30,6 +30,7 @@
     "eventsource-parser": "4.1.0",
     "iconv-lite": "0.7.3",
     "jszip": "3.10.1",
+    "markdown-it": "14.3.0",
     "node-pty": "1.1.0",
     "pdf-lib": "1.17.1",
     "pdfjs-dist": "6.3.289",

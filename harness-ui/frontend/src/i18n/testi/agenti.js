@@ -152,7 +152,7 @@ export default {
     'agent.started': 'Partito',
     'agent.startedAgo': '{eta} fa',
     'agent.usingNow': 'Sta usando',
-    'agent.toolsUsed': 'Attrezzi usati',
+    'agent.toolsUsed': 'Strumenti usati',
     'agent.permissions': 'Permessi',
     'agent.noChangeMade': 'Nessuna modifica fatta: questo agente poteva modificare i file ma non ne ha scritto nessuno. Controlla se una modifica serviva.',
     'agent.collisionOne': 'Ha scritto un file che anche un altro agente ha toccato: {elenco}.',
@@ -240,7 +240,7 @@ export default {
     'delegations.mainSession': 'Sessione principale',
     'delegations.startedOnItsOwn': 'da solo', // C2b
     'delegations.startedAllowed': 'consentito da te', // C2b
-    'delegations.noToolsYet': 'Nessun attrezzo usato finora.',
+    'delegations.noToolsYet': 'Nessuno strumento usato finora.',
     'delegations.betweenOperations': 'Tra due operazioni',
     'delegations.noAgentForFilters': 'Nessun agente per questi filtri.',
     'delegations.previous': 'Precedente',
@@ -427,7 +427,7 @@ export default {
     'workflow.notStartedYet': 'non ancora partito',
     'workflow.evidenceNotStarted': 'Il passo non è ancora partito.',
     'workflow.evidenceNoSession': 'La sessione del passo non è ancora nata.',
-    'workflow.evidenceReading': 'Leggo gli attrezzi usati…',
+    'workflow.evidenceReading': 'Leggo gli strumenti usati…',
     'workflow.evidenceReplayNote': 'Sono quelle di adesso: le evidenze non hanno un orario e la riproduzione non le ferma.',
     'workflow.resultsTitle': 'Risultati ({n})',
     'workflow.resultsCountOne': '{n} risultato',

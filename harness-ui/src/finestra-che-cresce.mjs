@@ -24,6 +24,7 @@
 import { readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
+import { aspettaOFerma } from './apertura-condivisa.mjs';
 import { FRAZIONE_FINESTRA } from './kernel/compattazione-desktop.mjs';
 
 /** Le tre scelte della persona (Impostazioni → Modelli locali). Di serie si allarga. */
@@ -141,7 +142,7 @@ export function creaSceltaFinestraPiena({ cartella }) {
   return { scelta, salvaScelta };
 }
 
-export function creaFinestraCheCresce({ supervisor, motore, modello, leggiIntestazione, misuraMacchina, gpuLayers = 0, cartella }) {
+export function creaFinestraCheCresce({ cambioInAttesa = () => false, supervisor, motore, modello, leggiIntestazione, misuraMacchina, gpuLayers = 0, cartella }) {
   const filePreferite = join(cartella, 'finestre-preferite.json');
   let inCorso = null; // un allargamento alla volta: chi arriva dopo aspetta questo
   const { scelta, salvaScelta } = creaSceltaFinestraPiena({ cartella });
@@ -251,7 +252,8 @@ export function creaFinestraCheCresce({ supervisor, motore, modello, leggiIntest
       const tokenAlSecondo = await velocita();
       if (tokenAlSecondo !== null && tokenAlSecondo < VELOCITA_MINIMA_TOKEN_S) return { ok: false, motivo: 'lento', velocita: tokenAlSecondo };
     }
-    if (await occupato()) return { ok: false, motivo: 'motore-occupato' };
+    /* revisione 2, D3: a fine giro, con una chat che aspetta di cambiare modello, il motore è suo */
+    if (cambioInAttesa() || await occupato()) return { ok: false, motivo: 'motore-occupato' };
     await motore.unload();
     try {
       await motore.load({ modelId, modelPath: voce.modelPath, contextLength: dopo });
@@ -261,6 +263,8 @@ export function creaFinestraCheCresce({ supervisor, motore, modello, leggiIntest
          riassunto. ⛔ Revisione blocco 4 (A-2): «com'era» è la strada dell'avvio di prima (`motore.riapri`: finestra ricordata, poi
          quella di serie col fitter), non `contextLength: prima` — su un MoE la finestra detta prendeva `-ngl 99` e non entrava più
          nemmeno lei. E un ritorno che fallisce non lancia: il motore resta spento, e la prossima richiesta lo riaccende da sé. */
+      /* il motore è passato a un'altra apertura: non è una finestra che non entra, e scaricarlo annullerebbe quella (revisione 2, D3) */
+      if (errore?.code === 'RUNTIME_ALREADY_RUNNING') return { ok: false, motivo: 'motore-occupato' };
       tettiProvati.set(modelId, Math.min(dopo, tettiProvati.get(modelId) ?? Number.POSITIVE_INFINITY));
       const motivo = errore?.code === 'RUNTIME_OUT_OF_MEMORY' ? 'memoria' : 'riapertura-fallita';
       try { await motore.unload(); } catch { /* già spento */ }
@@ -315,14 +319,16 @@ export function creaFinestraCheCresce({ supervisor, motore, modello, leggiIntest
      * per QUALUNQUE guasto — sul processore una cache che non sta più nella RAM fa morire llama-server con «failed to allocate buffer»,
      * che il supervisore chiama RUNTIME_PROCESS_FAILED (la memoria la riconosce solo su Vulkan), e la finestra restava ricordata: il
      * modello non ripartiva più, a nessun avvio. Dimenticarla costa al più una finestra più piccola; tenerla, un modello che non parte.
-     * Solo l'annullamento risale com'è. → `{ avviato: true, esito }` | `{ avviato: false, dimenticata?, errore? }`.
+     * L'annullamento risale com'è, e anche il rifiuto del motore occupato (revisione del 01/11, B1): non è una finestra che non parte, è
+     * un'altra apertura in corso, e trattarlo come guasto cancellava la finestra e faceva scaricare il motore sotto l'apertura dell'altro.
+     * → `{ avviato: true, esito }` | `{ avviato: false, dimenticata?, errore? }`.
      */
     async conLaPreferita(modelId, carica) {
       const preferita = await finestraPreferita(modelId).catch(() => null);
       if (!preferita) return { avviato: false };
       try { return { avviato: true, esito: await carica(preferita) }; }
       catch (errore) {
-        if (errore?.code === 'RUNTIME_START_CANCELLED' || errore?.name === 'AbortError') throw errore;
+        if (errore?.code === 'RUNTIME_START_CANCELLED' || errore?.code === 'RUNTIME_ALREADY_RUNNING' || errore?.name === 'AbortError') throw errore;
         await ricorda(modelId, null).catch(() => { /* resta: il prossimo guasto riprova a dimenticarla */ });
         return { avviato: false, dimenticata: preferita, errore };
       }
@@ -333,7 +339,9 @@ export function creaFinestraCheCresce({ supervisor, motore, modello, leggiIntest
       inCorso = allargaOra(richiesta);
       try { return await inCorso; } finally { inCorso = null; }
     },
-    /** Per chi deve aspettare che il motore torni pronto (`avviaLocale`). */
-    attendi: async () => { if (inCorso) { try { await inCorso; } catch { /* idem */ } } },
+    /** 01/11/2026: un allargamento è in corso? Lo stato del caricamento dice perché il motore si sta aprendo. */
+    inCorso: () => inCorso !== null,
+    /** Per chi deve aspettare che il motore torni pronto (`avviaLocale`). Il Ferma chiude il giro che aspetta, non l'allargamento: il modello finisce di aprirsi. */
+    attendi: async ({ signal } = {}) => { if (inCorso) await aspettaOFerma(inCorso.catch(() => { /* idem */ }), signal); },
   };
 }

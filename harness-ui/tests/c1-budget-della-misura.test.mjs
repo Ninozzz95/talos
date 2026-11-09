@@ -16,6 +16,7 @@ test('C1-BUDGET-01 — il budget è quello con cui il motore decide, con le impo
     const atteso = computeContextBudget({ ...MISURA, settings });
     assert.deepEqual(budgetDellaMisura({ measurement: { tokens: MISURA }, settings }), {
       windowTokens: atteso.windowTokens, inputLimit: atteso.inputLimit, triggerTokens: atteso.triggerTokens, inputTokens: 98_000, method: 'runtime',
+      marginTokens: atteso.safetyMarginTokens, // 174 (04/11/2026, condizione della CLI): il margine con cui il motore decide
     });
   }
   // il numero ricalcolato a mano (profiles.mjs: margine 5% per `runtime`; contracts.mjs: triggerRatio di serie)

@@ -146,6 +146,8 @@ export async function diagnosi({
   // ⭐ 24/09/2026 — come il negozio delle sessioni pubblica l'intestazione: `modalitaPubblicazioneIntestazione(cartellaStore)`
   //   di src/session-store.mjs ('link' | 'senza-link' | null). Debito della corsia exFAT del 23/09 («il Doctor non lo mostra»).
   negozioSessioni,
+  // R-39 (Performance 30/10, revisione del Desktop R2): lo stato del worker del cancello delle scritture (`statoCancelloWorker()`).
+  cancelloScritture,
   eseguiComandoSandboxatoFn = eseguiComandoSandboxatoLocale, spawnSyncFn,
 } = {}) {
   // ⛔ Una cartella usa-e-getta SOLO per il comando diagnostico, mai una
@@ -235,6 +237,12 @@ export async function diagnosi({
           ? frase('dettaglio', 'Sessions are saved with the safe fallback (exclusive creation and verified bytes): the disk does not support links, for example exFAT. A crash mid-write can leave a broken line, which is repaired when the session is reopened.', 'server.doctor.sessionStore.noLink')
           : frase('dettaglio', 'No session has been saved since this start: the mode is known at the first write.', 'server.doctor.sessionStore.unknown')),
     };
+  }
+  if (cancelloScritture && typeof cancelloScritture === 'object') {
+    /* Solo il dato nel JSON, come la radice dei temporanei: se il worker si è spento (due cadute) le scritture tornano a fermare il
+       processo per ~1,4 s, e qui lo si vede invece di scoprirlo dal blocco. La scheda Doctor della UI non è toccata. */
+    const { nati, giudizi, ripieghi, cadute, tempiScaduti, spento, spentoAt, vivo, ultimoErrore } = cancelloScritture;
+    risultato.cancelloScritture = { nati, giudizi, ripieghi, cadute, tempiScaduti, spento: spento === true, spentoAt: spentoAt ?? null, vivo: vivo === true, ultimoErrore: ultimoErrore ?? null };
   }
   if (Array.isArray(cartelleProgetto)) {
     /*

@@ -174,7 +174,7 @@ for (const modo of ['light', 'dark']) {
       await expect(stato(page)).toHaveText('Spenta');
     });
 
-    test('C2B-VELO-02b — l\'unione è in volo e la persona cambia subito un attrezzo: la mappa intera che segue porta Coordinazione', async ({ page }) => {
+    test('C2B-VELO-02b — l\'unione è in volo e la persona cambia subito uno strumento: la mappa intera che segue porta Coordinazione', async ({ page }) => {
       const traffico = await prepara(page, { ritardoPrimaImpostazioneMs: 800 });
       await apriVelo(page);
       await interruttore(page).click();

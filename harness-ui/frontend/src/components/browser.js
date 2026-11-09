@@ -206,8 +206,8 @@ export function etichettaStatoScheda(situazione) {
 const ICONA_PER_STATO = Object.freeze({
   loading: '#i-clock',
   retrying: '#i-clock',
-  error: '#i-ignoto',
-  unreachable: '#i-ignoto',
+  error: '#i-alert',
+  unreachable: '#i-alert',
   cancelled: '#i-x',
 });
 
@@ -280,6 +280,14 @@ export function localeAnnotabile(url) {
   try { const h = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, ''); return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h.endsWith('.localhost'); } catch { return false; }
 }
 export const PROXY_BROWSER = '/api/v1/browser/proxy?url=';
+/**
+ * N1 della seconda revisione del gettone (S1, 03/11/2026): da dove la cornice carica una scheda. Ogni pagina di loopback passa dal proxy, anche una lettura di
+ * `naviga` che nessuno ha detto «proxata»: in diretta sarebbe lo stesso sito della finestra, e il cookie partirebbe verso il server di un comando. Le altre
+ * forme di loopback (`127.0.0.2`, `0.0.0.0`) le rifiuta la CSP del documento (`http-app.mjs`, `intestazioniDocumentoConNonce`).
+ */
+export function sorgenteDellaCornice(s) {
+  return s?.proxata || localeAnnotabile(s?.url) ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s?.url;
+}
 
 /*
  * ═══════════════════════════════════════════ OSS-3 — GLI ERRORI DI UNA PAGINA CHE NON È NOSTRA ═══
@@ -947,11 +955,13 @@ export function creaBrowser(schermo, { azioni = {}, modoIniziale = 'pagina' } = 
     frame = document.createElement('iframe');
     frame.dataset.browserId = s.id;
     frame.dataset.usata = String(Date.now());
-    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups');
+    /* N15 della terza revisione del gettone (03/11): una pagina servita dal proxy (l'altro nome) non apre finestre nuove: una finestra verso lo stesso nome
+       porterebbe il cookie di quel nome. Le pagine pubbliche in diretta le aprono ancora. */
+    frame.setAttribute('sandbox', sorgenteDellaCornice(s).startsWith(PROXY_BROWSER) ? 'allow-scripts allow-same-origin allow-forms' : 'allow-scripts allow-same-origin allow-forms allow-popups');
     frame.setAttribute('referrerpolicy', 'no-referrer');
     frame.title = titoloDaLettura(s);
     frame.addEventListener('load', () => azioni.caricata?.(s.id));
-    frame.src = s.proxata ? `${PROXY_BROWSER}${encodeURIComponent(s.url)}` : s.url; // un dev server locale passa dal proxy: stessa origine, annotabile
+    frame.src = sorgenteDellaCornice(s); // un server di loopback passa SEMPRE dal proxy (N1): l'altro nome, senza cookie
     frame.dataset.proxata = String(Boolean(s.proxata));
     if (s.tipo !== 'viva') {
       frame.dataset.caricata = 'no';

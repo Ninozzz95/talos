@@ -99,7 +99,7 @@ async function banco(t, { leggiPaginaFn = async () => ({ url: '', stato: 200, co
       });
     },
   });
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     listaTaskDisponibili: () => [],
     elencaCartelleProgetto: () => [],
@@ -261,7 +261,7 @@ test('BANCO-RICERCA: gli indirizzi li compone la porta, e la rotta li accetta tu
 function rapportoRecintato() {
   return talosResearchReportDocument({
     question: DOMANDA,
-    summary: 'Convergono su controllo del computer, permessi per attrezzo e memoria persistente.',
+    summary: 'Convergono su controllo del computer, permessi per strumento e memoria persistente.',
     judge: null,
     claims: [{ claim: { text: 'Affermazione 1.', sourceIndex: 1, quote: 'q' }, passage: 'un passaggio', checks: { claimSupported: 'unchecked' } }],
     sources: [{ url: 'https://esempio.invalid/fonte-1', title: 'Fonte uno', publishedAt: null, obtained: 'page' }],

@@ -53,7 +53,7 @@ test('SET-RICERCA e SET-TASTIERA: trovo una preferenza e cambio sezione senza mo
  await q.fill('elastica');await expect(s.locator('[data-setting-row]:visible')).toHaveCount(1);await expect(s.getByRole('combobox',{name:'Curva',exact:true})).toBeVisible();await foto(page,'app-ricerca',info);
  await q.fill('zz-preferenza-assente');await expect(s.locator('[data-settings-results]')).toContainText('Nessuna preferenza');await expect(s.locator('[data-setting-row]:visible')).toHaveCount(0);await q.fill('');
  const prima=s.getByRole('tab',{name:'Aspetto e movimento',exact:true});await prima.focus();await page.keyboard.press('ArrowDown');await expect(s.getByRole('tab',{name:'Chat e composer',exact:true})).toBeFocused();await expect(s.getByRole('tabpanel',{name:'Chat e composer',exact:true})).toBeVisible();
- await page.keyboard.press('End');await expect(s.getByRole('tab',{name:'Account, Doctor e backup'})).toBeFocused();await page.keyboard.press('Home');await expect(prima).toBeFocused();await expect(prima).toHaveAttribute('aria-selected','true');
+ await page.keyboard.press('End');await expect(s.getByRole('tab',{name:'Diagnosi e configurazione',exact:true})).toBeFocused();await page.keyboard.press('Home');await expect(prima).toBeFocused();await expect(prima).toHaveAttribute('aria-selected','true');
 });
 test('SET-RIEPILOGO-INTEGRO: leggo i dati e raggiungo Doctor',async({page},info)=>{
  await pronta(page,APP);const s=page.locator('#schermoImpostazioni');

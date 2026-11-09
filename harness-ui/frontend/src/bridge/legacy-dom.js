@@ -191,7 +191,7 @@ export function montaPonteLegacy(documentObj = document) {
   battezza(uno(chat, '.talos-topbar__actions [data-azione="comandi"]'), { id: 'commandPaletteBtn' });
   battezza(uno(chat, '.talos-topbar__actions [data-azione="comprimi"]'), { id: 'compactSessionBtn' });
   battezza(uno(chat, '.talos-topbar__actions [data-azione="dettagli"]'), { classi: ['desktop-context-toggle'], dati: { 'open-panel': 'inspector' } }); // il monolite ascolta il toggle SOLO con questa classe (toggleDesktopInspector)
-  battezza(uno(chat, '.talos-topbar__actions .talos-icon-button[title="Riprendi"]'), { id: 'resumeSessionBtn' });
+  battezza(uno(chat, '.talos-topbar__actions [data-tasto-riprendi]'), { id: 'resumeSessionBtn' }); // decisione 198: il titolo cambia con lo stato, il segno no
   battezza(uno(chat, '.talos-topbar'), { classi: ['topbar'] });
   battezza(uno(chat, '.talos-topbar__actions'), { classi: ['topbar-right'] });
 
@@ -207,7 +207,7 @@ export function montaPonteLegacy(documentObj = document) {
   battezza(inspector, { id: 'inspectorPanel', classi: ['inspector-panel'] });
   battezza(uno(inspector, '.talos-resizer--inspector'), { classi: ['panel-resize-handle'], dati: { resize: 'inspector' } });
   battezza(uno(inspector, '#railTabs'), { classi: ['inspector-tabs'] });
-  const schede = { contesto: 'context', file: 'files', github: 'github', agenti: 'agents', processi: 'processes' }; // github: F6-1, 26/09
+  const schede = { contesto: 'context', file: 'files', github: 'github', agenti: 'agents', processi: 'processes', lato: 'aside' }; // github: F6-1, 26/09; lato: FE-010, la chat a lato (03/11)
   for (const [rail, nome] of Object.entries(schede)) {
     const tab = uno(inspector, `[data-rail="${rail}"]`);
     battezza(tab, { id: `inspector-tab-${nome}`, dati: { 'inspector-tab': nome } });

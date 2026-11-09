@@ -228,7 +228,7 @@ export function montaGrafoWorkflow(host, {
   const piu = bottone('', 'talos-wfg__icona-bottone', tr('agenti.workflow.zoomIn10')); piu.append(icona('i-plus'));
   const adatta = bottone('', 'talos-wfg__icona-bottone', tr('agenti.delegations.fit')); adatta.append(icona('i-fit'));
   const menuGruppi = el('div', 'talos-wfg__menu-vista');
-  const altroGruppi = bottone('', 'talos-wfg__icona-bottone', tr('agenti.workflow.groups')); altroGruppi.append(icona('i-layers'));
+  const altroGruppi = bottone('', 'talos-wfg__icona-bottone', tr('agenti.workflow.groups')); altroGruppi.append(icona('i-group'));
   altroGruppi.setAttribute('aria-haspopup', 'menu'); altroGruppi.setAttribute('aria-expanded', 'false');
   const vociGruppi = el('div', 'talos-wfg__menu talos-wfg__menu--destra'); vociGruppi.setAttribute('role', 'menu'); vociGruppi.setAttribute('aria-label', tr('agenti.workflow.groups')); vociGruppi.hidden = true;
   const voceGruppi = (testo, azione) => {

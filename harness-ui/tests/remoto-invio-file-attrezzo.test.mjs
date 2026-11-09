@@ -19,7 +19,7 @@ import { ATTREZZI_DIFFERIBILI } from '../src/kernel/ponte-attrezzi.mjs'
 import { createSessionRegistry, STRUMENTI_ESTESI_PREDEFINITI } from '../src/session-registry.mjs'
 import { creaFileDeiDispositivi } from '../src/remoto/file-dispositivi.mjs'
 import { creaRotteRemoto, ROTTE_REMOTO } from '../src/remoto/rotte.mjs'
-import { MAX_CHAT_FILE_BYTES } from '../src/chat-file-upload.mjs'
+import { MAX_DEVICE_FILE_BYTES } from '../src/chat-file-upload.mjs'
 import { rimuoviCartellaDiProva, rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs'
 
 const NOME = 'remote_device_send_file'
@@ -83,7 +83,7 @@ test('IF-K-02 — la carta si chiede; «Non inviare» ⇒ REFUSED senza esecuzio
   assert.equal(no.domande.length, 1)
   assert.equal(no.domande[0].tipo, NOME)
   assert.deepEqual(no.ospite.map(([, , f]) => f), ['anteprima'])
-  assert.match(no.esito('a'), /^REFUSED\./u)
+  assert.match(no.esito('a'), /^DECLINED\. The person said no/u)
   const si = await giro(c, [chiama('a', NOME, { path: 'report.pdf' })], { ospite: OSPITE, risposta: true })
   assert.deepEqual(si.ospite.map(([, , f]) => f), ['anteprima', 'esegui'])
   assert.equal(si.esito('a'), `${NOME} done.`)
@@ -214,7 +214,7 @@ test('IF-R-03 — fuori dalla cartella, inesistente, cartella, oltre i 25 MiB, s
     ]
     mkdirSync(join(b.progetto, 'cartella'))
     casi.push([{ path: 'cartella' }, /^"cartella" is a folder, not a file\. Nothing was sent\.$/u])
-    const grande = b.scrivi('demo-video.mp4', ''); truncateSync(grande, MAX_CHAT_FILE_BYTES + 1)
+    const grande = b.scrivi('demo-video.mp4', ''); truncateSync(grande, MAX_DEVICE_FILE_BYTES + 1)
     casi.push([{ path: 'demo-video.mp4' }, /^FILE_TOO_LARGE: "demo-video\.mp4" is 25\.0 MB \(26214401 bytes\) at "demo-video\.mp4" and a device takes files up to 25 MB\. Nothing was sent\.$/u]) // REV6-F3
     for (const [argomenti, atteso] of casi) {
       const r = await b.ospite(NOME, argomenti, { fase: 'anteprima', toolCallId: 'c' })
@@ -334,7 +334,7 @@ test('IF-H-03 — `file.offer` sullo stream della finestra quando un\'offerta ca
     registraOfferta: async (a) => { registrate.push(a); return { offertaId: 'o9' } },
   }
   const remoto = { cartelle: { ascolta: () => () => {}, inAttesa: () => [] }, file, stato: async () => ({ telefoni: [PAD] }) }
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry: { elenca: () => [], esiste: () => true }, remotoFn: () => remoto })
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: { elenca: () => [], esiste: () => true }, remotoFn: () => remoto })
   const server = createServer((req, res) => { void httpApp(req, res) })
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok))
   t.after(() => new Promise((ok) => { server.closeAllConnections?.(); server.close(() => ok()) }))
@@ -404,7 +404,7 @@ test('REV6-F3 — col percorso ASSOLUTO del modello l\'esito porta quello dentro
 test('REV6-F4 — la GET delle offerte ha la guardia d\'origine come lo stream: da un\'altra origine 403, dalla finestra 200', async (t) => {
   const file = { offerteAggiornate: async () => [{ offertaId: 'o1', percorso: 'C:/segreto/a.txt' }], ascoltaOfferte: () => () => {} }
   const remoto = { cartelle: { ascolta: () => () => {}, inAttesa: () => [] }, file, stato: async () => ({ telefoni: [PAD] }) }
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry: { elenca: () => [], esiste: () => true }, remotoFn: () => remoto })
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: { elenca: () => [], esiste: () => true }, remotoFn: () => remoto })
   const server = createServer((req, res) => { void httpApp(req, res) })
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok))
   t.after(() => new Promise((ok) => { server.closeAllConnections?.(); server.close(() => ok()) }))
@@ -473,7 +473,7 @@ test('B8-03 (revisione a blocco 8, tetto alzato in A9-1) oltre il tetto il perco
     assert.match(f.testo, /\(offer [A-Za-z0-9_-]+\)\.$/u, 'l\'offerta c\'è e l\'esito finisce come prima di REV6-F3')
     /* B8-4 (N1b): FILE_TOO_LARGE porta il percorso VERO in JSON, mai quello di `nomeFile` */
     const rel = 'sotto cartella/gr\u200cande.mp4'
-    truncateSync(b.scrivi(rel, ''), MAX_CHAT_FILE_BYTES + 1)
+    truncateSync(b.scrivi(rel, ''), MAX_DEVICE_FILE_BYTES + 1)
     const r = await b.ospite(NOME, { path: rel }, { fase: 'anteprima', toolCallId: 'L2' })
     assert.equal(r.ok, false)
     const m = / at ("(?:[^"\\]|\\.)*") and a device takes files up to 25 MB\./u.exec(r.messaggio)
@@ -501,7 +501,7 @@ test('B8-09 (debito del blocco 8) un nome che comincia con BOM o spazi si manda 
     assert.match(r.messaggio, /^There is no file at "manca\.txt" in this conversation's folder\. Nothing was sent\.$/u)
     /* A10-8 R21 (revisione a blocco 10): il ripiego vale SOLO per «non c'è». Il grezzo « big.bin» da oltre 25 MB dice FILE_TOO_LARGE,
        mai sostituito dal «big.bin» piccolo accanto */
-    truncateSync(b.scrivi(' big.bin', ''), MAX_CHAT_FILE_BYTES + 1)
+    truncateSync(b.scrivi(' big.bin', ''), MAX_DEVICE_FILE_BYTES + 1)
     b.scrivi('big.bin', 'piccolo')
     const grande = await b.ospite(NOME, { path: ' big.bin' }, { fase: 'anteprima', toolCallId: 'k5' })
     assert.equal(grande.ok, false)

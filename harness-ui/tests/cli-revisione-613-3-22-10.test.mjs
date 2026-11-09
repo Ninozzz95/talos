@@ -131,7 +131,12 @@ test('S22-FINEGIRO-IMMAGINI-01 — seconda passata, N1: il riassunto di fine gir
   await attendi(() => registro.statoCompattazione(sessionId)?.record, 'il riassunto di fine giro che toglie le immagini non ha scritto il record');
 });
 
-test('S4-STOP-01 — uno Stop durante il riassunto atteso chiude la riga: un inizio e una fine (motivo «interrotta»)', async () => {
+/* ⛔ 28/10/2026 — S4-STOP-01 è SUPERATA dal contratto C1, owner 27/10/2026, «Sì, mai aspettare»: all'emergenza un modello a chiave non
+   ha più un riassunto atteso dentro il giro, quindi lo Stop non ne trova uno da interrompere. Resta l'invariante che la prova difendeva
+   (ogni riga aperta si chiude, anche con lo Stop in arrivo mentre il riassunto del modello è per strada); la fine è ora il riassunto
+   senza modello «in-arrivo», e il riassunto del modello è uno solo, in sottofondo. Sul codice di prima (8fde46abf) è rossa: la fine era
+   «interrotta». */
+test('S4-STOP-01 — superata dal contratto C1 (owner 27/10/2026, «Sì, mai aspettare»): con lo Stop in arrivo mentre il riassunto del modello è per strada, la riga si chiude lo stesso — un inizio e una fine, il riassunto senza modello «in-arrivo»', async () => {
   const prima = process.env[VARIABILE_TETTO_TOKEN];
   process.env[VARIABILE_TETTO_TOKEN] = '4000';
   const cartella = mkdtempSync(join(tmpdir(), 'cli-613-3-s4-'));
@@ -154,9 +159,12 @@ test('S4-STOP-01 — uno Stop durante il riassunto atteso chiude la riga: un ini
       onGiro: (e) => { if (e?.tipo === 'compattazione-inizio' || e?.tipo === 'compattazione-fine') eventi.push(e); } }).catch(() => null);
     const inizi = eventi.filter((e) => e.tipo === 'compattazione-inizio');
     const fini = eventi.filter((e) => e.tipo === 'compattazione-fine');
-    assert.ok(stop.signal.aborted && inizi.length >= 1, `premessa: lo Stop è arrivato durante il riassunto — ${JSON.stringify(eventi.map((e) => e.tipo))}`);
+    /* 28/10/2026: la richiesta di riassunto è quella di sottofondo; lo Stop parte 50 ms dopo, quando il giro può essere già finito */
+    await new Promise((r) => { setTimeout(r, 100); });
+    assert.ok(stop.signal.aborted && inizi.length >= 1, `premessa: lo Stop è arrivato mentre il riassunto era per strada — ${JSON.stringify(eventi.map((e) => e.tipo))}`);
     assert.equal(fini.length, inizi.length, `ogni riga aperta si chiude: ${JSON.stringify(eventi.map((e) => [e.tipo, e.motivo]))}`);
-    assert.equal(fini.at(-1).motivo, 'interrotta');
+    assert.deepEqual([fini.at(-1).compattato, fini.at(-1).ripiego, fini.at(-1).ragione], [true, true, 'in-arrivo'],
+      `la riga è il riassunto senza modello, subito: ${JSON.stringify(eventi.map((e) => [e.tipo, e.motivo, e.ragione]))}`);
   } finally {
     if (prima === undefined) delete process.env[VARIABILE_TETTO_TOKEN]; else process.env[VARIABILE_TETTO_TOKEN] = prima;
     rimuoviCartellaDiProva(cartella);

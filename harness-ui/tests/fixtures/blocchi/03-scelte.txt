@@ -1,0 +1,1 @@
+root = Scelte("prossimo", null, "Come vuoi procedere?", [{testo: "Continua"}, {testo: "Fermati qui"}])

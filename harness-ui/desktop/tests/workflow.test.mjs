@@ -138,6 +138,33 @@ test('R04-BINDING-IROH (owner 22/10/2026, «nel repo solo l’impronta») — re
   assert.match(readFileSync(new URL('../scripts/verifica-nativi.mjs', import.meta.url), 'utf8'), /assert\.equal\(iroh\.da, 'pacchetto'/);
 });
 
+test('R04-AIUTANTE-PC (owner 09/11/2026, strada A) — release e prova prima del tag scaricano l\'aiutante del PC verificato prima di costruire, col solo gettone del job', () => {
+  const pretag = load(readFileSync(new URL('../../../.github/workflows/desktop-pretag-installer.yml', import.meta.url), 'utf8'));
+  const passiPretag = pretag.jobs['desktop-installer'].steps;
+  const aiutante = passo('aiutante_pc');
+  const aiutantePretag = passiPretag.find(p => p.name === aiutante.name);
+  assert.ok(aiutantePretag, 'Manca l\'aiutante del PC nella prova prima del tag');
+  for (const p of [aiutante, aiutantePretag]) {
+    assert.match(p.run, /^node harness-ui\/scripts\/scarica-aiutante-pc\.mjs$/m);
+    assert.match(p.run, /\$LASTEXITCODE -ne 0\) \{ throw/);
+    /* nessun segreto oltre al gettone del job (GITHUB_TOKEN): né secrets.*, né altre variabili */
+    assert.deepEqual(p.env, { GH_TOKEN: '${{ github.token }}' });
+    assert.doesNotMatch(JSON.stringify(p), /secrets\./u);
+    assert.equal(p.if, undefined);
+  }
+  /* accanto al binding iroh, e prima di ciò che prepara il pacchetto (dist nella release, NSIS e ZIP prima del tag) */
+  assert.equal(passi.indexOf(aiutante), passi.indexOf(passo('binding_iroh')) + 1);
+  assert.ok(passi.indexOf(aiutante) < passi.indexOf(passo('cancelli')));
+  assert.ok(passi.indexOf(aiutante) < passi.findIndex(p => /run dist/u.test(p.run ?? '')), 'prima del pacchetto della release');
+  assert.ok(passiPretag.indexOf(aiutantePretag) < passiPretag.findIndex(p => p.name === 'costruisci NSIS e ZIP'));
+  const script = readFileSync(new URL('../../scripts/scarica-aiutante-pc.mjs', import.meta.url), 'utf8');
+  assert.match(script, /TALOS_AIUTANTE_PC_SORGENTE=/u);
+  assert.match(script, /TALOS_AIUTANTE_PC_AVVISI=/u);
+  const prepara = readFileSync(new URL('../scripts/prepara-pacchetto.mjs', import.meta.url), 'utf8');
+  assert.match(prepara, /process\.env\.TALOS_AIUTANTE_PC_SORGENTE \|\|/u);
+  assert.match(prepara, /process\.env\.TALOS_AIUTANTE_PC_AVVISI \|\|/u);
+});
+
 test('R04-ASSET — installer R-02, ZIP completo, SHA e note esplicite', () => {
   assert.equal(pacchetto.build.nsis.artifactName, 'TALOS-Setup-${version}.${ext}');
   assert.equal(pacchetto.build.win.artifactName, 'TALOS-${version}-win.${ext}');

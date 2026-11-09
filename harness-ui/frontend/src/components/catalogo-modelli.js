@@ -36,7 +36,7 @@ export function prezzoPerMilione(value){
 }
 export function filtraModelli(modelli,query='',provider='all'){const q=String(query).trim().toLocaleLowerCase('it');return modelli.filter(m=>(provider==='all'||m.provider===provider)&&(!q||[m.nome,m.id,m.provider].some(v=>String(v||'').toLocaleLowerCase('it').includes(q))));}
 const PAROLE={get text(){return t('modelli.catalog.text');},get image(){return t('modelli.catalog.images');},get audio(){return t('modelli.catalog.audio');},get video(){return t('modelli.catalog.video');},get file(){return t('modelli.catalog.file');},get tools(){return t('modelli.catalog.tools');},get tool_choice(){return t('modelli.catalog.toolChoice');},get temperature(){return t('modelli.catalog.creativity');},get top_p(){return t('modelli.catalog.variety');},get max_tokens(){return t('modelli.catalog.responseLimit');},get response_format(){return t('modelli.catalog.responseFormat');},get reasoning(){return t('modelli.catalog.reasoning');},get include_reasoning(){return t('modelli.catalog.showReasoning');}};
-const elenco=v=>v?.length?v.map(x=>PAROLE[x]||x).join(', '):t('modelli.catalog.notDeclared');
+const elenco=v=>v?.length?v.map(x=>(Object.hasOwn(PAROLE,String(x))&&PAROLE[x])||x).join(', '):t('modelli.catalog.notDeclared');
 function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!=null)n.textContent=String(txt);return n;}
 function kv(k,v,id){const row=el('div','talos-kv'),val=el('span','talos-kv__v',v);if(id)val.id=id;row.append(el('span','talos-kv__k',k),val);return row;}
 function contesto(n){return Number.isFinite(n)&&n>0?tn('modelli.catalog.oneContextToken', 'modelli.catalog.manyContextTokens', n, { n: new Intl.NumberFormat(localeUI()).format(n) }):t('modelli.catalog.notDeclared');}

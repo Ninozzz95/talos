@@ -30,7 +30,7 @@ async function setup(t, { withStore = true, sessioni = [sessionId, altraSessione
     resultLimits: { maxItemBytes: 1_048_576, maxRunBytes: 8_388_608 } }) : null;
   const vive = new Set(sessioni);
   const registry = { leggiSessioneContesto: (id) => vive.has(id) ? { sessionId: id } : null };
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registry, workflowStore: store, token: 'secret' }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registry, workflowStore: store, token: 'secret' }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => { await new Promise((resolve) => server.close(resolve)); if (store) await store.close(); rimuoviCartellaDiProva(root); });
   return { root, store, vive, base: `http://127.0.0.1:${server.address().port}` };

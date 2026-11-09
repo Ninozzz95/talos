@@ -306,7 +306,7 @@ async function paginaNonRepository(page, { tema = 'dark', larghezza = 1440, prim
   const f = gitFinto();
   f.repo = false;
   f.init = [];
-  const contatore = { nonGet: 0 };
+  const contatore = { nonGet: 0, letture: {} };
   await page.setViewportSize({ width: larghezza, height: 900 });
   await page.emulateMedia({ colorScheme: tema, reducedMotion: 'reduce' });
   await page.addInitScript((colorMode) => {
@@ -318,6 +318,7 @@ async function paginaNonRepository(page, { tema = 'dark', larghezza = 1440, prim
     if (p.endsWith(`/sessions/${SESSIONE}/events`)) return route.fulfill({ contentType: 'text/event-stream', body: CONFINE });
     if (p.startsWith(`/api/v1/sessions/${SESSIONE}/git/`)) {
       const azione = p.split('/').pop();
+      if (req.method() === 'GET') contatore.letture[azione] = (contatore.letture[azione] ?? 0) + 1;
       if (req.method() === 'POST' && azione === 'init') {
         const corpo = JSON.parse(req.postData() || '{}');
         f.init.push(corpo);
@@ -364,6 +365,44 @@ test('GITHUB-07 — una cartella che non è un repository offre «Inizializza re
   await expect(page.locator('#railGithub .talos-github__ramo')).toContainText('main');
   await expect(page.locator('#railGithub')).toContainText('leggimi.md');
   expect(f.init).toEqual([{}]);
+  expect(contatore.nonGet).toBe(0);
+});
+
+/*
+ * S4 O1 del Tester (03/11/2026): su un progetto senza git ogni giro lasciava 2-5 risposte 409 nella console. «Non è un
+ * repository» è uno stato del progetto, non un errore: come Hermes (`apps/desktop/src/store/coding-status.ts:95-113`, la cache
+ * `$repoStatusByCwd` per cartella, e `electron/git-review-ops.ts:780-820`, che risponde `null` invece di un errore), la scheda lo
+ * ricorda per sessione e cartella. Una lettura sola dello stato, niente ramo, messi da parte e sincronizzazione; un cambio di file
+ * non rilegge (il watcher esclude `.git`, quindi un file non può farla diventare un repository); il ritorno alla finestra sì,
+ * perché un `git init` dal terminale si vede solo così.
+ */
+test('GITHUB-07c — una cartella senza git: una lettura sola dello stato, un cambio di file non rilegge, il ritorno alla finestra sì', async ({ page }) => {
+  const { contatore } = await paginaNonRepository(page);
+  await expect(page.locator('#railGithub [data-c="InizializzaRepository"]')).toBeVisible();
+  await page.waitForTimeout(600);
+  expect(contatore.letture, 'apertura: solo lo stato, una volta').toEqual({ status: 1 });
+  await page.evaluate((e) => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent(e, r.realSessionState.generation); }, { type: 'WorkspaceChanged', percorsi: ['note.txt'], _sequenza: 60_000 });
+  await page.waitForTimeout(1600); // la rilettura dopo un cambio di file parte dopo 1 s di quiete
+  expect(contatore.letture, 'un file cambiato non fa di una cartella un repository').toEqual({ status: 1 });
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await page.waitForTimeout(600);
+  expect(contatore.letture, 'tornando alla finestra si ricontrolla lo stato, e basta').toEqual({ status: 2 });
+  await expect(page.locator('#railGithub [data-c="InizializzaRepository"]')).toBeVisible();
+  expect(contatore.nonGet).toBe(0);
+});
+
+/* Revisione M del 04/11 (S4, D3): un `git init` fatto dall'agente a metà giro non manda eventi alla pagina (il watcher esclude `.git`).
+   Il clic della persona sulla scheda Git, tornando da un'altra scheda, deve ricontrollare: prima mostrava «Inizializza repository» vecchio. */
+test('GITHUB-07d — cartella diventata repository a metà giro: il clic sulla scheda Git ricontrolla lo stato', async ({ page }) => {
+  const { f, contatore } = await paginaNonRepository(page);
+  await expect(page.locator('#railGithub [data-c="InizializzaRepository"]')).toBeVisible();
+  await page.waitForTimeout(600);
+  expect(contatore.letture.status, 'apertura: una lettura').toBe(1);
+  f.repo = true; // l'agente ha fatto `git init` da un comando: nessun evento arriva alla pagina
+  await page.locator('#railTabs [data-rail="file"]').click();
+  await page.locator('#railTabs [data-rail="github"]').click();
+  await expect.poll(() => contatore.letture.status ?? 0, { message: 'il clic sulla scheda Git rilegge lo stato' }).toBe(2);
+  await expect(page.locator('#railGithub [data-c="InizializzaRepository"]')).toHaveCount(0);
   expect(contatore.nonGet).toBe(0);
 });
 

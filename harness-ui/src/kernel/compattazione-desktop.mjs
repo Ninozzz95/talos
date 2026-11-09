@@ -39,16 +39,19 @@
  *  - OpenCode `packages/core/src/session/compaction.ts:12-45`: riassunto a sezioni fisse («Keep every section, even
  *    when empty», «Preserve exact file paths… error strings»), incrementale con `<prior-summary>`.
  */
+import { NOME_PASSI } from '../passi-del-giro.mjs'; // FE-008
 import { createHash } from 'node:crypto';
-import { stimaToken, stimaTokenConversazione, INIZIO_RIGA_LINGUA, INIZIO_CAMBIO_LINGUA, INIZIO_NOTA_LINGUA_DEL_MESSAGGIO } from './talosHarness.mjs';
+import { stimaToken, stimaTokenConversazione, INIZIO_RIGA_LINGUA, INIZIO_CAMBIO_LINGUA, INIZIO_NOTA_LINGUA_DEL_MESSAGGIO, SEGNO_GIRO_FERMATO } from './talosHarness.mjs';
 import { SEGNO_NOTA_DOVE } from './dove-sei.mjs';
 // ⭐ 06/10/2026 — la ricarica della memoria post-compact (opzione A + C-b, ricerca 5×5×5×5 §6.4): il
 // recinto della sintesi entra nella proiezione accanto all'indice meccanico, NELLO STESSO messaggio.
-import { PREFISSO_SINTESI_RECINTATA } from './ricarica-post-compact.mjs';
+import { PREFISSO_SINTESI_RECINTATA, PREFISSI_SINTESI_STORICI } from './ricarica-post-compact.mjs';
 import { MARCATORE_RICHIESTA_ACCORCIATA } from './richieste-vecchie.mjs';
 import { chiamataPerChiGuarda } from './ponte-attrezzi.mjs';
 import { oscuraFormeDiSegreto } from '../forme-di-segreto.mjs';
 import { CAMPO_IMMAGINI } from './immagine-da-guardare.mjs';
+import { idRiassuntoValido } from './consumo-di-servizio.mjs'; // spesa dei riassunti (30/10 sera)
+import { INIZIO_AVVISO_ACCORCIATO, avvisoAccorciato } from './avviso-accorciato.mjs'; // M1 della cura per Luna 6 (05/11)
 
 export const SCHEMA_RECORD_COMPATTAZIONE = 'talos.compattazione.v1';
 
@@ -174,6 +177,11 @@ const PATTERN_CONTESTO_PIENO = [
   /reduce the length/i,
   // 25/09/2026 sera: il motore locale pieno sale col SUO codice (`runtime-owner-adapter.mjs`, ContestoLocalePienoError)
   /\bLOCAL_CONTEXT_EXCEEDED\b/,
+  /* Cura 324, giro 13 (BASSO del revisore dei fornitori): Z.AI (GLM) dice la finestra piena col codice 1261 e «Prompt exceeds max length»
+     (Hermes `agent/error_classifier.py:264`, prova `tests/agent/test_run_agent.py:4205-4212`); xAI con «maximum prompt length is N but the
+     request contains M» (pi `packages/ai/src/utils/overflow.ts:45`, la forma dei numeri sta già in `FORME_NUMERI_CONTESTO_PIENO`). */
+  /prompt exceeds max length/i,
+  /maximum prompt length is \d/i,
 ];
 
 function eSistema(m) { return m?.role === 'system'; }
@@ -545,14 +553,15 @@ export function eRichiestaVera(m) {
 export function eNotaDiTalos(m) {
   if (m?.role !== 'user') return false;
   const testo = testoDelContenuto(m.content);
-  return typeof testo === 'string' && (testo.startsWith('[TALOS]') || testo.startsWith('[TALOS:'));
+  /* l'ultima frase è la spinta dopo una risposta vuota (`NOTA_RISPOSTA_VUOTA`), l'unica nota senza il segno di TALOS: è la frase di Hermes */
+  return typeof testo === 'string' && (testo.startsWith('[TALOS]') || testo.startsWith('[TALOS:') || testo.startsWith('You just executed tool calls but returned an empty response.'));
 }
 
 /** Una prima richiesta che `accorciaTesto` ha già tagliato: il marcatore sta subito dopo l'inizio tenuto, e la lunghezza è quella di un taglio. */
 function giaAccorciata(testo) {
   if (testo.length > PRIMA_RICHIESTA_INIZIO + PRIMA_RICHIESTA_FINE + 1_000) return false;
   const dopo = testo.slice(PRIMA_RICHIESTA_INIZIO, PRIMA_RICHIESTA_INIZIO + 200);
-  return dopo.startsWith('\n[… ') && dopo.includes(MARCATORE_ACCORCIATO);
+  return dopo.startsWith('\n[… ') && RE_MARCATORE_ACCORCIATO.test(dopo);
 }
 
 /** La prima richiesta com'entra nella proiezione: intera, o inizio e fine col taglio detto se supera il tetto (solo le parti di testo). */
@@ -672,6 +681,9 @@ export function separaNoteDiSistema(mezzo, coda = []) {
     /* R13-A2: la nota sulla lingua dell'ULTIMO messaggio vale per il suo giro (oggi la porta solo la richiesta). Una salvata nella storia
        da una versione di prima descrive un messaggio vecchio: non si tiene, o la coda la metterebbe davanti agli ultimi scambi. */
     if (tipo === 'lingua-del-messaggio') continue;
+    /* Revisione del blocco UI (04/11/2026, R8): la nota di fermata (decisione 166) chiude il SUO giro. Se quel giro finisce nel riassunto,
+       la nota va con lui: tenuta, andrebbe in testa alla coda, staccata dal suo posto, e il modello la leggerebbe come detta adesso. */
+    if (testo.startsWith(SEGNO_GIRO_FERMATO)) continue;
     if (testiVisti.has(testo) || (tipo && tipiVisti.has(tipo))) continue;
     testiVisti.add(testo);
     if (tipo) tipiVisti.add(tipo);
@@ -859,7 +871,8 @@ function senzaImmagini(m) { return immaginiCon(m, SEGNAPOSTO_IMMAGINE); }
  *   richiesta della persona: sono quelle su cui il modello sta lavorando. Solo nella proiezione: la storia non cambia. Funzione PURA;
  *   `{ messaggi, sostituite }`.
  */
-export const SEGNAPOSTO_IMMAGINE_VECCHIA = '[Earlier image — removed to fit the context window]';
+/* Decisione 245, C1: l'immagine tolta non dice «kept» (dalla proiezione non si recupera); niente «context window», che il modello legge come un limite suo */
+export const SEGNAPOSTO_IMMAGINE_VECCHIA = '[Earlier image — trimmed by TALOS]';
 export function immaginiVecchieInSegnaposto(messaggi) {
   const lista = Array.isArray(messaggi) ? messaggi : [];
   let ultimaRichiesta = -1;
@@ -1035,8 +1048,9 @@ function riassuntoPrecedenteNel(messaggi) {
     const marcatore = MARCATORI_DEL_RIASSUNTO().find((m) => testo.startsWith(m));
     if (!marcatore) continue;
     const indice = posizioneIndiceMeccanico(testo);
-    const corpo = (indice === -1 ? testo : testo.slice(0, indice)).slice(marcatore.length)
-      .replace(RIGA_RECUPERO, '').replace(PREFISSO_SINTESI_RECINTATA, '').trim();
+    /* R4 (05/11/2026): si toglie anche il recinto spedito prima, che le sessioni salvate portano ancora */
+    const corpo = [PREFISSO_SINTESI_RECINTATA, ...PREFISSI_SINTESI_STORICI].reduce((t, recinto) => t.replace(recinto, ''),
+      (indice === -1 ? testo : testo.slice(0, indice)).slice(marcatore.length).replace(RIGA_RECUPERO, '')).trim();
     if (!corpo.startsWith(APERTURA_DEL_RIPIEGO)) return { riassunto: corpo, azioni: [] };
     const azioniTrovate = TITOLO_AZIONI.exec(corpo);
     const azioni = azioniTrovate
@@ -1112,8 +1126,12 @@ export const CARATTERI_INIZIO_ESITO = 1_200;
 export const CARATTERI_FINE_ESITO = 400;
 /** Sotto questa lunghezza un esito non si tocca: accorciarlo risparmierebbe meno del rimando che lo sostituisce. */
 export const CARATTERI_MINIMI_RIDUCIBILI = 2_000;
-export const MARCATORE_ACCORCIATO = 'characters omitted to fit the context window';
-export const ESITO_DOPPIONE = '[Duplicate tool output: identical to a more recent result below, removed to fit the context window]';
+/* Decisione 245 (owner 05/11/2026): la scritta «to fit the context window» faceva credere al modello di essere al limite (DeepSeek: «il contesto è
+   agli ultimi token»). Scritta neutra; dove il testo si recupera dice ANCHE come (P2, C1). Le copie salvate prima della cura portano la scritta
+   vecchia: `RE_MARCATORE_ACCORCIATO` riconosce le due forme in UNA passata (P4). */
+export const MARCATORE_ACCORCIATO = 'characters trimmed by TALOS; the full text is kept';
+export const RE_MARCATORE_ACCORCIATO = /characters (?:omitted to fit the context window|trimmed by TALOS; the full text is kept)/u;
+export const ESITO_DOPPIONE = '[Duplicate tool output: trimmed by TALOS; the full text is kept in the identical, more recent result below]';
 
 /** Il budget in token della coda letterale: la frazione di Hermes della soglia, mai meno di 1. */
 export function budgetCoda(soglia) {
@@ -1128,7 +1146,7 @@ export function budgetCoda(soglia) {
 export function accorciaTesto(testo, { inizio = CARATTERI_INIZIO_ESITO, fine = CARATTERI_FINE_ESITO } = {}) {
   if (typeof testo !== 'string' || testo.length < CARATTERI_MINIMI_RIDUCIBILI || testo.length <= inizio + fine) return testo;
   const tolti = testo.length - inizio - fine;
-  return `${testo.slice(0, inizio)}\n[… ${tolti.toLocaleString('en-US')} ${MARCATORE_ACCORCIATO} (TALOS context projection, not a byte range). Original message kept in session history. Use leggi (offset/limit are lines; byteOffset continues inside an over-long line), or process_output when outputId is available. Do not re-run a command to recover omitted bytes.]\n${testo.slice(-fine)}`;
+  return `${testo.slice(0, inizio)}\n[… ${tolti.toLocaleString('en-US')} ${MARCATORE_ACCORCIATO} in session history (context projection, not a byte range). Use leggi (offset/limit are lines; byteOffset continues inside an over-long line), or process_output when outputId is available. Do not re-run a command to recover omitted bytes.]\n${testo.slice(-fine)}`;
 }
 
 /** Gli argomenti di una chiamata si accorciano DENTRO il JSON (Hermes `:3009-3022`): una stringa JSON rotta farebbe 400. */
@@ -1151,9 +1169,12 @@ function accorciaArgomenti(argomenti) {
 function riduciAl(lista, i) {
   const m = lista[i];
   if (m?.role === 'tool' && typeof m.content === 'string') {
+    /* M1 (05/11/2026, cura per Luna 6): un esito accorciato comincia con la riga del sistema, FUORI dalla busta dei dati, che dice quali
+       righe mancano. Un esito che ce l'ha già è già accorciato: non si riaccorcia (l'avviso lo porterebbe sopra i 2.000 caratteri). */
+    if (m.content.startsWith(INIZIO_AVVISO_ACCORCIATO)) return false;
     const corto = accorciaTesto(m.content);
     if (corto === m.content) return false;
-    lista[i] = { ...m, content: corto };
+    lista[i] = { ...m, content: `${avvisoAccorciato(m.content, { inizio: CARATTERI_INIZIO_ESITO, fine: CARATTERI_FINE_ESITO })}\n${corto}` };
     return true;
   }
   if (m?.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
@@ -1180,6 +1201,26 @@ function riduciAl(lista, i) {
  * si comprime più, ed è l'UNICO caso in cui chi chiama può smettere di compattare.
  * ⛔ Cambia solo i `content` e gli `arguments`: nessun messaggio sparisce, nessuna coppia chiamata/esito si spezza.
  */
+/**
+ * Riga dei risultati accorciati (owner 01/11/2026, FE-049; contratto con la CLI): quante uscite DELLA RICHIESTA IN CORSO non arrivano intere al modello, sulla compattazione semplice.
+ * `prima` e `dopo` sono la stessa lista allineata; `coperti` i messaggi finiti nel riassunto, se la richiesta comincia lì dentro. Un messaggio `user` dopo un esito è un'aggiunta in
+ * coda, non una richiesta nuova: la stessa regola del motore del contesto. Le note del kernel e il riassunto non aprono una richiesta
+ * (R3 della revisione di 245, 05/11/2026; Hermes `agent/context_compressor.py:491` «synthetic continuation rows ... never mark a turn boundary»).
+ */
+export function usciteAccorciateDellaRichiesta(prima, dopo, coperti = []) {
+  const coda = Array.isArray(prima) ? prima : [];
+  let inizio = -1;
+  for (let i = coda.length - 1; i >= 0; i -= 1) if (eRichiestaVera(coda[i]) && coda[i - 1]?.role !== 'tool') { inizio = i; break; }
+  const nellaCoda = coda.filter((m, i) => i > inizio && m?.role === 'tool' && dopo?.[i] !== m).length;
+  if (inizio >= 0) return nellaCoda;
+  const tratto = Array.isArray(coperti) ? coperti : [];
+  let inizioCoperti = -1;
+  for (let i = tratto.length - 1; i >= 0; i -= 1) if (eRichiestaVera(tratto[i]) && tratto[i - 1]?.role !== 'tool') { inizioCoperti = i; break; }
+  return nellaCoda + tratto.filter((m, i) => i > inizioCoperti && m?.role === 'tool').length;
+}
+
+const ARGOMENTI_PASSI_TOLTI = '{"steps":[]}';
+
 export function riduciCodaSottoPressione(coda, { budgetToken, stima = stimaTokenConversazione } = {}) {
   const lista = Array.isArray(coda) ? coda : [];
   const tetto = Math.floor(Math.max(1, Number(budgetToken) || 1) * MOLTIPLICATORE_CODA_MORBIDA);
@@ -1187,6 +1228,23 @@ export function riduciCodaSottoPressione(coda, { budgetToken, stima = stimaToken
   const copia = [...lista];
   let ridotti = 0;
   const rientra = () => stima(copia) <= tetto;
+
+  /* FE-008, Performance 03/11: dei Passi conta solo l'ultima lista, quindi le chiamate vecchie sono le prime ad alleggerirsi. La coppia resta. */
+  let ultimaLista = false;
+  for (let i = copia.length - 1; i >= 0; i -= 1) {
+    const m = copia[i];
+    if (m?.role !== 'assistant' || !Array.isArray(m.tool_calls)) continue;
+    let cambiato = false;
+    const chiamate = [...m.tool_calls].reverse().map((c) => {
+      if (c?.function?.name !== NOME_PASSI) return c;
+      if (!ultimaLista) { ultimaLista = true; return c; }
+      if (c.function.arguments === ARGOMENTI_PASSI_TOLTI) return c;
+      cambiato = true;
+      return { ...c, function: { ...c.function, arguments: ARGOMENTI_PASSI_TOLTI } };
+    }).reverse();
+    if (cambiato) { copia[i] = { ...m, tool_calls: chiamate }; ridotti += 1; }
+  }
+  if (rientra()) return { coda: copia, ridotti, alMinimo: false, tetto };
 
   /* Doppioni: di due esiti identici resta il più recente (Hermes pass 1). */
   const visti = new Set();
@@ -1238,7 +1296,7 @@ export function improntaDelTrattoCoperto(storia, coveredThrough) {
   return { primo: improntaDiUno(storia[0]), ultimo: improntaDiUno(storia[coveredThrough - 1]) };
 }
 
-export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, misura, at, modello, indice = null, coperti = null, freno = null } = {}) {
+export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, misura, at, modello, indice = null, coperti = null, freno = null, idRiassunto = null } = {}) {
   if (!Number.isInteger(coveredThrough) || coveredThrough < 0) throw new TypeError('coveredThrough must be an integer ≥ 0');
   if (!Array.isArray(riassunto)) throw new TypeError('riassunto must be a list of messages');
   const impronta = improntaDelTrattoCoperto(coperti, coveredThrough);
@@ -1266,6 +1324,8 @@ export function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, m
     /* Pezzo D (contratto (d) con la CLI, facoltativo): lo stato del freno quando il record è nato. La fonte viva è la sessione (riga
        `freno` del giornale); questa è la copia che chi legge il record trova accanto al riassunto. */
     ...(frenoValido(freno) ? { freno: frenoValido(freno) } : {}),
+    /* Spesa dei riassunti (30/10 sera): il riassunto da cui nasce il record — le sue righe di spesa portano lo stesso id. Additivo. */
+    ...(idRiassuntoValido(idRiassunto) ? { idRiassunto } : {}),
   };
 }
 

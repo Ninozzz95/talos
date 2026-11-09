@@ -30,6 +30,6 @@
   font-size: var(--talos-font-size-sm); color: var(--talos-muted);
 }
 .talos-rami-modifica__nota .talos-dot { margin-top: 6px; flex: none; }
-.talos-rami-modifica__immagini { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.talos-rami-modifica__immagini { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; align-items: flex-start; } /* D21: la miniatura non stira la scheda del file */
 .talos-rami-modifica__immagini .talos-image-card { position: relative; }
 .talos-rami-modifica__togli { position: absolute; top: 4px; right: 4px; }

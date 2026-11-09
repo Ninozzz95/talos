@@ -64,7 +64,7 @@ test('INV-UI-03 il menu: nessun dispositivo ⇒ nessuna voce (D4); uno ⇒ «Sen
   assert.equal(vociInvio([PAD, TAB], { onInvia: () => {}, onScegli: () => {} })[0][0], 'Invia a un dispositivo…');
 });
 
-test('INV-UI-04 l\'esito dell\'attrezzo si legge (nome, dispositivo, offerta), anche in Accesso pieno; il troppo grande coi byte; il resto no', () => {
+test('INV-UI-04 l\'esito dello strumento si legge (nome, dispositivo, offerta), anche in Accesso pieno; il troppo grande coi byte; il resto no', () => {
   assert.deepEqual(datiDallEsitoInvio('Sent "report-q3.pdf" (2.4 MB) to "Pad di Nino" (id padnino0): it appears in this conversation on the device, ready to download (offer AbC_12-x).'),
     { nome: 'report-q3.pdf', dispositivo: 'Pad di Nino', offertaId: 'AbC_12-x', relativo: null });
   assert.deepEqual(datiDallEsitoInvio('Sent "a \\"b\\".md" (1 byte) to "Tab" (id t): it is offline now and gets the file in this conversation when it connects again (offer o1). Full access: done without asking the person.'),
@@ -74,12 +74,12 @@ test('INV-UI-04 l\'esito dell\'attrezzo si legge (nome, dispositivo, offerta), a
   assert.equal(datiDalTroppoGrande('REFUSED. That file is not in this conversation\'s folder.'), null);
 });
 
-test('INV-UI-05 il nome umano dell\'attrezzo e il gruppo al plurale (punto 9 del rapporto dei bozzetti), mai la sigla', () => {
+test('INV-UI-05 il nome umano dello strumento e il gruppo al plurale (punto 9 del rapporto dei bozzetti), mai la sigla', () => {
   impostaLingua('en');
   assert.equal(nomeLeggibileAttrezzo('remote_device_send_file'), 'Sending a file to a device');
   assert.equal(fraseSpecie('altro:remote_device_send_file', 1), 'Sending a file to a device');
   assert.equal(fraseSpecie('altro:remote_device_send_file', 3), 'Sending files to devices ×3');
-  assert.equal(fraseSpecie('altro:remote_phone_revoke', 2), `${nomeLeggibileAttrezzo('remote_phone_revoke')} ×2`, 'gli altri attrezzi restano come prima');
+  assert.equal(fraseSpecie('altro:remote_phone_revoke', 2), `${nomeLeggibileAttrezzo('remote_phone_revoke')} ×2`, 'gli altri strumenti restano come prima');
   impostaLingua('it');
   assert.equal(fraseSpecie('altro:remote_device_send_file', 3), 'Invio di file ai dispositivi ×3');
   assert.equal(nomeLeggibileAttrezzo('remote_device_send_file'), 'Invio di un file a un dispositivo');
@@ -94,7 +94,7 @@ test('REV6-F3 l\'esito porta il percorso DENTRO la cartella (`path "…"`), anch
     { nome: 'v.mp4', byte: 32715571, relativo: 'media/v.mp4' });
 });
 
-test('REV6-F6 (owner 25/10) ogni rifiuto noto dell\'attrezzo ha la SUA frase, il resto la frase generica; tutte in inglese e in italiano', async () => {
+test('REV6-F6 (owner 25/10) ogni rifiuto noto dello strumento ha la SUA frase, il resto la frase generica; tutte in inglese e in italiano', async () => {
   const casi = [
     ['Sending files to devices is not available on this computer.', 'unavailable'],
     ['This conversation has no folder to send from. Nothing was sent.', 'noFolder'],

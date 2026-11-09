@@ -1,0 +1,4 @@
+root = Cursore("sconto", "Sconto sui modelli in rete", {id: "sconto", etichetta: "Sconto sui modelli in rete", min: 0, max: 60, passo: 5, valore: 30}, [{id: "voce", titolo: "Voce"}, {id: "spesa", titolo: "Spesa"}], [
+  ["Modelli in rete", 412],
+  ["Elettricità", 180.5]
+], "spesa * (1 - sconto / 100)", "soldi")

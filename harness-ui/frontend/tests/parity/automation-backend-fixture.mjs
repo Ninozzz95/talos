@@ -15,7 +15,7 @@ export async function avviaAutomazioniDiProva({vuoto=false}={}){
  async function chiudi(){if(server?.listening){server.closeAllConnections();await new Promise(r=>server.close(r));}const verificata=resolve(radice);if(!verificata.startsWith(resolve(tmpdir())+sep)||!basename(verificata).startsWith('talos-automation-qa-'))throw Error('Directory fuori perimetro');await rm(verificata,{recursive:true,force:true});}
  try{
   if(!vuoto)for(const esempio of AUTOMAZIONI){const voce=await store.crea(esempio);await writeFile(join(radice,voce.id+'.json'),JSON.stringify({...esempio,id:voce.id}));}
-  server=createServer(createHttpApp({automationStore:store,listaTaskDisponibili:()=>ATTIVITA_AUTOMAZIONI,clock:()=>new Date(ADESSO),staticHandler:(_req,res)=>{res.writeHead(404);res.end();}}));
+  server=createServer(createHttpApp({ senzaGettone: 'prove', automationStore:store,listaTaskDisponibili:()=>ATTIVITA_AUTOMAZIONI,clock:()=>new Date(ADESSO),staticHandler:(_req,res)=>{res.writeHead(404);res.end();}}));
   await new Promise((r,j)=>{server.once('error',j);server.listen(0,'127.0.0.1',r);});
   porta=server.address().port;
   return {chiudi,radice,elenca:store.elenca,async inoltra(rotta){const url=new URL(rotta.request().url());if(!ROTTE_AUTOMAZIONI.test(url.pathname))throw Error('Rotta fuori perimetro');const risposta=await rotta.fetch({url:`http://127.0.0.1:${porta}${url.pathname}`});await rotta.fulfill({response:risposta});}};

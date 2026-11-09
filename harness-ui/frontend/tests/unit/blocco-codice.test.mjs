@@ -412,3 +412,12 @@ test('BLOCCO-ALTRO-A-CAPO — «A capo» solo se una riga sborda, e lo stesso co
   const css = readFileSync(path.join(QUI, '../../src/styles/index.css'), 'utf8');
   assert.match(css, /\.code-block\.code-block--a-capo pre > code\{white-space:pre-wrap; overflow-wrap:anywhere\}/u);
 });
+
+/* Revisione del blocco 13, D-17 (31/10/2026): la lingua di un blocco la scrive il modello. Il nome «constructor» leggeva una funzione di Object e finiva a schermo. */
+test('BLOCCO-LINGUA-OBJECT — un nome di Object non pesca nelle tabelle delle lingue', () => {
+  for (const nome of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    assert.equal(etichettaLinguaggio(nome), nome, nome);
+    assert.equal(chiaveLinguaggio(nome), nome.toLowerCase(), nome);
+  }
+  assert.equal(etichettaLinguaggio('py'), 'Python', 'controllo: una lingua vera ha il suo nome');
+});

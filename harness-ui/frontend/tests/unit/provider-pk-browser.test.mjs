@@ -18,7 +18,7 @@ test('PK-UI-02/03 — campi cloud reali, salvataggio HTTP, ricarica, errore e di
   t.after(() => rm(dir, { recursive: true, force: true }));
   const store = createProviderCredentialStore({ env: {}, runtimeFile: join(dir, 'runtime.json') });
   store.setRuntime('azure', { endpoint: 'https://risorsa-pk.openai.azure.com', timeoutSeconds: 30 });
-  const app = createHttpApp({ providerStore: store, staticHandler: async () => null });
+  const app = createHttpApp({ senzaGettone: 'prove', providerStore: store, staticHandler: async () => null });
   const server = createServer((req, res) => {
     if (req.url === '/') { res.setHeader('Content-Type', 'text/html'); res.end('<!doctype html><html lang="it"><head><meta charset="utf-8"></head><body><main style="padding:16px;max-width:900px;margin:auto"><h1>Fornitori e accessi</h1><p>Banco P-K · componenti isolati, nessun account cloud</p><div id="menu"></div><div id="lista"></div></main></body></html>'); return; }
     app(req, res);

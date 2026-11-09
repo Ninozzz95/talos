@@ -156,12 +156,20 @@ test('⭐⭐⭐⭐ L9 §6.8 (+1.5) — il COSTO si dice PRIMA, in lavoro; e in d
   assert.ok(esito.costoAtteso.searches > 0 && esito.costoAtteso.tokens > 0);
 
   const cartella2 = cartellaVera(t);
+  /* Decisioni 57 e 144 (04/11/2026): il prezzo è del modello della ricerca, anche asincrono, e la cifra ha la forma della carta (`formattaDollari`) */
+  const chiesti = [];
   const { orch: conPrezzo } = orchestratore(cartella2, new Map(), {
-    prezzoFn: () => ({ currency: 'USD', promptPerMillion: 0.4, completionPerMillion: 1.6 }),
+    prezzoFn: async (m) => { chiesti.push(m); return { currency: 'USD', promptPerMillion: 0.4, completionPerMillion: 1.6 }; },
   });
-  const esito2 = await conPrezzo.avvia({ cartella: cartella2, question: 'Quanto costa?', depth: 'deep' });
-  assert.match(esito2.esito, /≈ \d+\.\d{4} USD at the published price/,
+  const esito2 = await conPrezzo.avvia({ cartella: cartella2, question: 'Quanto costa?', depth: 'deep', modello: 'a/b' });
+  assert.match(esito2.esito, /~\d+ tokens, ~\$\d+\.\d{2,4} at the published price\./,
     '⛔ il denaro compare SOLO quando una tariffa è stata ottenuta — mai assemblata qui dentro');
+  assert.deepEqual(chiesti, ['a/b']);
+  const cartella3 = cartellaVera(t);
+  const { orch: inErrore } = orchestratore(cartella3, new Map(), { prezzoFn: async () => { throw new Error('catalogo giù'); } });
+  const esito3 = await inErrore.avvia({ cartella: cartella3, question: 'Quanto costa?', depth: 'deep', modello: 'a/b' });
+  assert.equal(esito3.ok, true, 'un prezzo in errore non ferma la ricerca');
+  assert.doesNotMatch(esito3.esito, /\$|USD/);
 });
 
 test('⭐⭐⭐ L9 — la CONSEGNA porta le linee del piano, numerate e in ordine (è ciò che rende onesta l\'attribuzione dei passi)', async (t) => {

@@ -255,8 +255,9 @@ test.describe('la scheda Sistema', () => {
     });
     // L'eroe legge la misura INTERA (numero + unità), che è il testo che le prove già scritte
     // pretendono da `#machineFreeMemoryMetric`; dentro stanno i due pezzi separati.
-    expect(letto.eroe).toMatch(/^[\d.,]+ GiB$/);
-    expect(letto.unita.trim()).toBe('GiB');
+    // decisione owner 163: il formato del telefono — unità binarie scritte KB/MB/GB/TB, mai «GiB»
+    expect(letto.eroe).toMatch(/^[\d.,]+ (?:KB|MB|GB|TB)$/);
+    expect(['KB', 'MB', 'GB', 'TB']).toContain(letto.unita.trim());
     expect(letto.numero).toMatch(/^[\d.,]+$/);
     // Lo spazio di separazione appartiene all'unità: il contenitore è esattamente numero + unità.
     expect(letto.numero + letto.unita).toBe(letto.eroe);
@@ -267,7 +268,8 @@ test.describe('la scheda Sistema', () => {
     expect(letto.righeTutte.filter((k) => k === 'libera')).toEqual(['libera']);
     expect(letto.righe).toEqual(['totale', 'discoDisponibile', 'discoRiserva', 'discoAllocabile']);
     expect(letto.intestazione).toBe('Memoria e spazio sul disco');
-    expect(letto.avviso).toContain('GiB = 1.024³ byte');
+    expect(letto.avviso).toContain('1 GB = 1.024³ byte');
+    expect(letto.avviso).not.toContain('GiB');
   });
 
   test('SIS-03 — il badge dichiara la verità sul dato: quando è misurato, e quanto è vecchio', async ({ page }) => {
@@ -304,7 +306,7 @@ test.describe('la scheda Sistema', () => {
     expect(esiti.vecchio.testo).toMatch(/^Misurato \d{2}:\d{2}:\d{2} · 10 minuti fa$/);
     expect(esiti.vecchio.classe).toContain('talos-badge--warning');
     expect(esiti.vecchio.freschezza).toBe('vecchia');
-    expect(esiti.vecchio.eroe).toMatch(/GiB$/);
+    expect(esiti.vecchio.eroe).toMatch(/ (?:KB|MB|GB|TB)$/);
     // Senza misura non si inventa uno zero: si dichiara, e l'unità sparisce dal testo.
     expect(esiti.caricamento.testo).toBe('Misurazione…');
     expect(esiti.errore.testo).toBe('Misura non disponibile');
@@ -462,14 +464,16 @@ test.describe('la scheda Sistema', () => {
       const metriche = document.querySelectorAll('#machineMemoryMetric').length;
       const card = document.querySelector('[data-memory-meter]');
       const dentroLaCard = Boolean(document.getElementById('machineMemoryMetric')?.closest('[data-memory-meter]'));
-      document.querySelector('#machineMemoryMetric').textContent = '42 GiB';
+      /* decisione owner 163: la banda legge i byte misurati dalla card (non più il testo di `#machineMemoryMetric`) */
+      card.setAttribute('data-memory-totale-byte', String(42 * 1024 ** 3));
+      card.setAttribute('data-memory-libera-byte', String(12 * 1024 ** 3));
       return { bande, metriche, dentroLaCard, eroe: card.querySelector('[data-memory-value=libera]')?.textContent ?? null };
     });
     // Una sola copia dell'id, dentro la card nuova: è la condizione perché la banda legga il
     // denominatore giusto.
     expect(esito.metriche).toBe(1);
     expect(esito.dentroLaCard).toBe(true);
-    expect(esito.eroe).toMatch(/GiB$/);
+    expect(esito.eroe).toMatch(/ (?:KB|MB|GB|TB)$/);
     expect(esito.bande).toBeGreaterThan(0);
     /* La banda della FASE 3 legge il denominatore da QUESTA scheda: si muove il nodo e la banda
        lo segue. Se il montaggio avesse lasciato due copie dell'id, `getElementById` avrebbe reso
@@ -477,7 +481,7 @@ test.describe('la scheda Sistema', () => {
        ⛔ Si ASPETTA, non si legge subito: la banda si aggiorna da un osservatore, e una lettura
        sincrona al `textContent` arriverebbe prima del giro — la prima stesura leggeva
        «su 31,6 GiB» e sembrava un difetto del montaggio. */
-    await expect(page.locator('[data-lab-banda-frazione]')).toHaveText('su 42 GiB');
+    await expect(page.locator('[data-lab-banda-frazione]')).toHaveText('su 42 GB');
   });
 
   test('SIS-09 — le due card viste nei due temi, a 1440 e a 1024', async ({ page }) => {

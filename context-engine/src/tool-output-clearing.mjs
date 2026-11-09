@@ -27,6 +27,14 @@
  *   (`agent/context_compressor.py:1294-1300`) e non li accorcia mai. ⛔ Non rimetterlo a 300 caratteri più «…».
  *   Solo i campi STRINGA `reasoning_content` e `reasoning`: i blocchi firmati (`talos_provider_state`, `reasoning_details`) non si
  *   toccano, il fornitore li vuole interi.
+ * ⛔ 01/11/2026 (D3, revisione di fine fase; pareri di CLI, Mobile e Performance): «un ragionamento ASSENTE va bene a tutti» è falso. R-49: `reflection/beam` su
+ *   DigitalOcean risponde 400 «missing its reasoning» su ogni turno con attrezzi senza il campo, e il riempimento vale solo per DeepSeek e Kimi. Hermes lo sa per
+ *   nome (`agent/message_sanitization.py:632-634`, clone 8237c7f8: un turno con attrezzi senza `reasoning_content` non vuoto è un 400, e lì lo riempie). Noi un
+ *   elenco non lo abbiamo: con `accorciaRagionamento` il campo RESTA, coi primi `REASONING_KEEP_CHARS` caratteri, senza «…» né altro. I byte restano fermi fra
+ *   una richiesta e l'altra. Chi decide è chi conosce il fornitore (`accorciaIlRagionamento` della porta del modello); senza, si toglie come prima: i motori
+ *   locali non rifiutano mai e non guadagnano niente dal campo. ⛔ Resta vero quanto sopra su Z.AI: un blocco modificato peggiora resa e cache. Per questo Z.AI e
+ *   Qwen diretti, che il registro segna `conservaRagionamento`, restano sul togliere: docs.z.ai «must return the complete, unmodified reasoning_content», Alibaba
+ *   «will not cause an error» senza il campo (letti da Performance il 01/11). OpenRouter accorcia anche `z-ai/*`: non si sa chi c'è dietro, e R-49 è nato lì.
  */
 export const KEEP_RECENT_TOOL_OUTPUTS = 6;
 export const CLEARING_STEP = 16;
@@ -37,6 +45,8 @@ export const DEFAULT_CLEARED_POINTER = 'The full output is kept in the conversat
 
 const text = value => typeof value === 'string' ? value : Array.isArray(value) ? value.map(part => typeof part?.text === 'string' ? part.text : '').join('') : '';
 const cut = (value, max) => value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+/* i primi caratteri del ragionamento, senza spezzare una coppia di surrogati: un testo così tagliato non si serializza uguale ovunque */
+const primiCaratteri = value => value.slice(0, /[\uD800-\uDBFF]/u.test(value[REASONING_KEEP_CHARS - 1]) ? REASONING_KEEP_CHARS - 1 : REASONING_KEEP_CHARS);
 
 function shortenArguments(raw) {
   if (typeof raw !== 'string' || raw.length <= MIN_CLEARABLE_CHARS) return raw;
@@ -121,7 +131,7 @@ export function shortenRecentLargeOutputs(messages, { pointer = DEFAULT_CLEARED_
     if (next[index] !== list[index] || !shortenable(index)) return;
     const content = list[index].content;
     const omitted = content.length - PRESSURE_HEAD_CHARS - PRESSURE_TAIL_CHARS;
-    const replacement = `${content.slice(0, PRESSURE_HEAD_CHARS)}\n[… ${omitted} characters omitted to fit the context window. ${pointer}]\n${content.slice(-PRESSURE_TAIL_CHARS)}`;
+    const replacement = `${content.slice(0, PRESSURE_HEAD_CHARS)}\n[… ${omitted} characters trimmed by TALOS; the full text is kept. ${pointer}]\n${content.slice(-PRESSURE_TAIL_CHARS)}`;
     next[index] = { ...list[index], content: replacement };
     shortened++; removed += content.length - replacement.length;
   };
@@ -139,7 +149,7 @@ export function shortenRecentLargeOutputs(messages, { pointer = DEFAULT_CLEARED_
  * `keepRecent` outputs, every person and system message, and every short output stay verbatim. Returns the SAME array
  * when nothing changes (no cache break for nothing).
  */
-export function clearOldToolOutputs(messages, { keepRecent = KEEP_RECENT_TOOL_OUTPUTS, step = CLEARING_STEP, minChars = MIN_CLEARABLE_CHARS, pointer = DEFAULT_CLEARED_POINTER } = {}) {
+export function clearOldToolOutputs(messages, { keepRecent = KEEP_RECENT_TOOL_OUTPUTS, step = CLEARING_STEP, minChars = MIN_CLEARABLE_CHARS, pointer = DEFAULT_CLEARED_POINTER, accorciaRagionamento = false } = {}) {
   const list = Array.isArray(messages) ? messages : [];
   const outputs = list.flatMap((message, index) => message?.role === 'tool' ? [index] : []);
   const blocks = Math.floor(Math.max(0, outputs.length - keepRecent) / Math.max(1, step));
@@ -151,13 +161,10 @@ export function clearOldToolOutputs(messages, { keepRecent = KEEP_RECENT_TOOL_OU
   const next = list.map((message, index) => {
     if (index > boundary) return message;
     if (message?.role === 'tool') {
-      // Y2 (review del bugfixer, 09/10): un'uscita con parti non testuali (un'immagine) resta intera, testo compreso
-      if (Array.isArray(message.content) && message.content.some(part => typeof part?.text !== 'string')) return message;
-      const content = text(message.content);
-      if (content.length <= minChars) return message;
+      const placeholder = clearedOutputPlaceholder(message, calls.get(message.tool_call_id), { minChars, pointer });
+      if (placeholder === null) return message;
       cleared++;
-      const lines = content.split('\n').length;
-      return { ...message, content: `[Old tool output cleared to save context: ${toolCallSignature(calls.get(message.tool_call_id))} returned ${content.length} characters, ${lines} lines. ${pointer}]` };
+      return { ...message, content: placeholder };
     }
     if (message?.role !== 'assistant') return message;
     let changed = false;
@@ -172,7 +179,7 @@ export function clearOldToolOutputs(messages, { keepRecent = KEEP_RECENT_TOOL_OU
       if (changed) patch.tool_calls = shortened;
     }
     for (const field of ['reasoning_content', 'reasoning']) {
-      if (typeof message[field] === 'string' && message[field].length > REASONING_KEEP_CHARS) { patch[field] = undefined; changed = true; }
+      if (typeof message[field] === 'string' && message[field].length > REASONING_KEEP_CHARS) { patch[field] = accorciaRagionamento ? primiCaratteri(message[field]) : undefined; changed = true; }
     }
     if (!changed) return message;
     const out = { ...message, ...patch };
@@ -180,4 +187,95 @@ export function clearOldToolOutputs(messages, { keepRecent = KEEP_RECENT_TOOL_OU
     return out;
   });
   return cleared || next.some((message, index) => message !== list[index]) ? { messages: next, cleared } : { messages: list, cleared: 0 };
+}
+
+/**
+ * The placeholder of one cleared output: the call's signature, the size and the pointer. `null` when the output stays whole:
+ * not a tool output, an output with non-text parts (Y2, 09/10: an image keeps its text too), or a short one.
+ */
+export function clearedOutputPlaceholder(message, call, { minChars = MIN_CLEARABLE_CHARS, pointer = DEFAULT_CLEARED_POINTER } = {}) {
+  if (message?.role !== 'tool') return null;
+  if (Array.isArray(message.content) && message.content.some(part => typeof part?.text !== 'string')) return null;
+  const content = text(message.content);
+  if (content.length <= minChars) return null;
+  return `[Old tool output cleared to save context: ${toolCallSignature(call)} returned ${content.length} characters, ${content.split('\n').length} lines. ${pointer}]`;
+}
+
+/*
+ * La coda dopo il riassunto (owner 05/11/2026 12:10, registro 224, «come mai si compatta così spesso?»). Dal pannello: dopo ogni
+ * riassunto il contesto restava a 144,4k con la soglia a 166k, e i riassunti venivano a grappolo. Il taglio cade prima delle ultime 2
+ * domande della persona e la coda restava INTERA: nessuno guardava se stava sotto l'obiettivo.
+ * ⇒ Quando il riassunto si pubblica, le uscite VECCHIE della coda diventano il segnaposto di sempre (firma, dimensione, rimando),
+ *   dalla più vecchia, finché la coda sta sotto l'obiettivo. Il punto (`through`, un numero di sequenza) si salva nella versione e
+ *   resta fermo finché la versione vive: le richieste dopo hanno lo stesso prefisso, la cache non si rompe a ogni passo.
+ * Fonti, lette alla fonte il 05/11/2026 (cloni del 01/11 in TALOS-RICERCHE/concorrenti):
+ *  - Hermes `agent/context_compressor.py:3225-3247` `_pressure_demote_tail`, «Pass 4: demote tool-result bodies inside the protected
+ *    tail when it alone exceeds the soft budget… Tool-call arguments stay byte-exact»; `:928` `TAIL_MAX_CONTEXT_FRACTION = 0.20`;
+ *    `:2232-2242` la coda ha un tetto in token (`tail_token_budget`), non solo un numero di giri; `:1132-1134` «using the full
+ *    protect_last_n would recreate the nothing-compactable large-tool-output case»; `:3286-3320` il giro in sospeso si risparmia.
+ *    `agent/context_compressor_tail.py:26-38` `lean_tail_budget`: «head + summary + tail stayed over threshold and every pre-API pass
+ *    refused» — il nostro reperto.
+ *  - Codex `codex-rs/core/src/compact.rs:714-745` `build_compacted_history_with_limit`: dopo il riassunto tiene solo i messaggi
+ *    recenti della persona entro un tetto in token (`:63`, 20.000), e nessuna uscita di strumento.
+ *  - Claude Code `CHANGELOG.md:445`: «Fixed some "Autocompact is thrashing" errors in turns that read many PDF pages, images or other
+ *    large tool results» — lo stesso grappolo.
+ *  - Anthropic, context editing `clear_tool_uses_20250919` (docs.claude.com/en/docs/build-with-claude/context-editing, letta il
+ *    05/11/2026): `clear_at_least`, «ogni riscrittura invalida il prefisso in cache» ⇒ si riscrive una volta, al riassunto, che la
+ *    cache la rompe comunque.
+ * ⇒ Adattato: invece di un tetto fisso (20% di Hermes, 20.000 di Codex) l'obiettivo è il nostro `targetTokens`; invece di togliere
+ *   le uscite, il segnaposto col rimando (il contenuto resta nell'archivio, come per il livello 1).
+ * ⛔ L'ultimo scambio chiuso (l'ultima chiamata del modello, le sue uscite e tutto ciò che viene dopo) resta intero; una chiamata
+ *   aperta non c'è (il riassunto non si pubblica con `CTX_PENDING_TOOLS`); non si toccano messaggi della persona, di sistema, del
+ *   modello, gli argomenti delle chiamate, né le uscite con immagini o corte. Non si toglie nessun messaggio.
+ */
+const ultimoScambio = entries => {
+  for (let index = entries.length - 1; index >= 0; index--) {
+    const message = entries[index]?.message;
+    if (message?.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length) return index;
+  }
+  return entries.length;
+};
+const chiamate = entries => {
+  const calls = new Map();
+  for (const entry of entries) for (const call of entry?.message?.tool_calls ?? []) calls.set(call.id, call);
+  return calls;
+};
+
+/**
+ * Where the tail clearing stops: the sequence of the newest output that must become a placeholder so that at least `removeChars`
+ * characters leave the tail, oldest first. `entries` = the tail records (`{ sequence, message }`) in order. `through: 0` = nothing.
+ * `protectFrom` = index in `entries` where the request in progress starts: from there on nothing is cleared (CLI form, 05/11/2026).
+ */
+export function tailClearingBoundary(entries, { removeChars, minChars = MIN_CLEARABLE_CHARS, pointer = DEFAULT_CLEARED_POINTER, protectFrom = Infinity } = {}) {
+  const list = Array.isArray(entries) ? entries : [];
+  const calls = chiamate(list);
+  /* ⛔ Forma della CLI (05/11/2026, bloccante): le uscite della RICHIESTA IN CORSO non diventano mai segnaposto, come nella chiusura
+     della compattazione del 31/10 (`engine.mjs`, `proteggiRichiesta`): il confine si ferma prima del suo inizio, oltre che prima
+     dell'ultimo scambio. Se la richiesta da sola supera l'obiettivo, il riassunto si pubblica senza toccarla. */
+  const protetto = Math.min(ultimoScambio(list), protectFrom);
+  let through = 0; let removed = 0; let cleared = 0;
+  for (let index = 0; index < protetto && removed < removeChars; index++) {
+    const message = list[index].message;
+    const placeholder = clearedOutputPlaceholder(message, calls.get(message.tool_call_id), { minChars, pointer });
+    if (placeholder === null) continue;
+    removed += text(message.content).length - placeholder.length;
+    cleared++;
+    through = list[index].sequence;
+  }
+  return { through, cleared, removedChars: removed };
+}
+
+/**
+ * The tail with every clearable output up to `through` as its placeholder; the same message objects where nothing changes.
+ * `through` comes from `tailClearingBoundary` at publication, so it already stops before the last closed exchange: later
+ * records have a higher sequence and are never touched.
+ */
+export function clearTailThrough(entries, through, { minChars = MIN_CLEARABLE_CHARS, pointer = DEFAULT_CLEARED_POINTER } = {}) {
+  const list = Array.isArray(entries) ? entries : [];
+  const calls = chiamate(list);
+  return list.map(entry => {
+    if (entry.sequence > through) return entry.message;
+    const placeholder = clearedOutputPlaceholder(entry.message, calls.get(entry.message.tool_call_id), { minChars, pointer });
+    return placeholder === null ? entry.message : { ...entry.message, content: placeholder };
+  });
 }

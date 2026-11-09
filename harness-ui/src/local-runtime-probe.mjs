@@ -1,3 +1,5 @@
+import { memoriaDelProiettoreMiB, proiettoreDelManifesto } from './proiettore-visione.mjs';
+
 /**
  * Unisce cartella e file del manifest. ⛔ Non usa `node:path.join`: i
  * percorsi del manifest sono relativi e sempre con `/` (validati così da
@@ -112,6 +114,7 @@ export function createLocalRuntimeProbe({
       if (error instanceof LocalRuntimeProbeError) throw error;
       throw new LocalRuntimeProbeError(`cannot read model header: ${error?.message || 'unknown error'}`, 'MODEL_HEADER_UNREADABLE');
     }
+    const memoriaVista = memoriaDelProiettoreMiB(proiettoreDelManifesto(manifest)) * 1024 * 1024; // 0 senza proiettore: il conto di prima
 
     /*
      * ⛔⛔ 02/9 (sera) — `readRuntimeProps()` LANCIA se il runtime locale
@@ -187,11 +190,15 @@ export function createLocalRuntimeProbe({
       workingMemoryBytes: {
         state: 'declared',
         // ⛔ Math.ceil come nel lettore: il consumatore a valle pretende interi.
-        value: (Number.isSafeInteger(header.kvCacheBytesPerToken) && Number.isSafeInteger(contextTokens) && contextTokens > 0)
+        /* 02/11/2026, condizione del Mobile sulla forma «proiettore nel conto»: un modello che si apre con la vista conta già la
+           memoria del proiettore, così uno che entra solo senza lo dice prima invece di fallire all'apertura */
+        value: memoriaVista + ((Number.isSafeInteger(header.kvCacheBytesPerToken) && Number.isSafeInteger(contextTokens) && contextTokens > 0)
           ? Math.ceil((header.estimatedWorkingBytes - header.kvCacheBytesPerToken * header.trainedContext)
             + header.kvCacheBytesPerToken * Math.min(contextTokens, header.trainedContext))
-          : header.estimatedWorkingBytes,
+          : header.estimatedWorkingBytes),
       },
+      /* 02/11/2026, condizione del Desktop: la memoria della vista si dice, mai spesa di nascosto (0 = il modello non ha proiettore) */
+      projectorMemoryBytes: { state: 'declared', value: memoriaVista },
       context: {
         trainedTokens: fact('declared', header.trainedContext),
         runtimeTokens: runtimeContext,

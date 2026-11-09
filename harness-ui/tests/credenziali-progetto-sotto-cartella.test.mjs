@@ -144,7 +144,9 @@ test.after(async () => { await rimuoviCartellaDiProvaAttesa(r7); await rimuoviCa
 
 test('CRED-R7-01 — in Full access a secret-named link or a junction toward the home credentials asks', async () => {
   for (const azione of [{ tipo: 'leggi', percorso: 'id_ed25519' }, { tipo: 'shell', comando: 'type id_ed25519' }, { tipo: 'leggi', percorso: '.npmrc' },
-    { tipo: 'leggi', percorso: 'ponte/id_ed25519' }, { tipo: 'leggi', percorso: 'gh-ponte/hosts.yml' }, { tipo: 'shell', comando: 'cat gh-ponte/hosts.yml' }]) {
+    { tipo: 'leggi', percorso: 'ponte/id_ed25519' }, { tipo: 'leggi', percorso: 'gh-ponte/hosts.yml' }, { tipo: 'shell', comando: 'cat gh-ponte/hosts.yml' },
+    /* blocco dopo (punto 5): la cartella si cammina una volta per comando e l'ultimo nome a parte; la giunzione come ULTIMO nome si segue lo stesso */
+    { tipo: 'shell', comando: 'tar cf x.tar ponte' }, { tipo: 'shell', comando: 'cat lib/x.txt ponte/id_ed25519 lib/x.txt' }]) {
     const { esito, chieste } = await pieno(azione, r7);
     assert.equal(chieste.length, 1, JSON.stringify(azione));
     assert.equal(chieste[0].segreto?.credenzialeDellaCasa, true, JSON.stringify(azione));

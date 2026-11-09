@@ -18,7 +18,7 @@ test('AVVIO-CHIAVE-01: un avvio senza chiave del fornitore risponde PROVIDER_KEY
     avviaLibero: () => ({ erroreAvvio: 'No API key for OpenAI. Set OPENAI_API_KEY or run `talos provider set-key openai`.', code: 'PROVIDER_KEY_MISSING' }),
     elenca: () => [],
   };
-  const server = http.createServer(createHttpApp({ sessionRegistry }));
+  const server = http.createServer(createHttpApp({ senzaGettone: 'prove', sessionRegistry }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => server.close(r)));
   const risposta = await fetch(`http://127.0.0.1:${server.address().port}/api/v1/sessions/custom`, {

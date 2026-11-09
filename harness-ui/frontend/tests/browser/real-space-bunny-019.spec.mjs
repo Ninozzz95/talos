@@ -34,7 +34,7 @@ test('REAL-SPACE-BUNNY-019 — composer → leggi → risposta → reload con mo
   expect(response?.ok()).toBe(true);
   await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 30_000 });
   await page.getByRole('button', { name: /^(?:New conversation|Nuova conversazione)$/u }).last().click();
-  const chooser = page.getByRole('dialog', { name: 'Su quale progetto lavora TALOS?' });
+  const chooser = page.getByRole('dialog', { name: 'Nuova sessione' } /* FE-040 (31/10/2026): titolo semplice */);
   await expect(chooser).toBeVisible();
   const picker = chooser.locator('.model-picker').first();
   await picker.locator('.model-picker-trigger').click();

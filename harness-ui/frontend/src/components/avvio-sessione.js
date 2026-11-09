@@ -92,21 +92,21 @@ import { t } from './lingua.js';
 
 /**
  * @typedef {object} StatoAvvio
- * @property {'pronto'|'occupato'|'senza-cartella'} situazione
+ * @property {'pronto'|'occupato'|'senza-cartella'|'modello'} situazione
  * @property {boolean} puoAvviare vero solo se il form può essere spedito adesso
  * @property {boolean} disabilitato vero SOLO mentre una cartella si sta aprendo (vedi testata)
  * @property {string} etichetta il testo del bottone: dice sempre il vero
  * @property {string} motivo la frase da mettere sotto gli occhi, accanto al bottone
- * @property {'cartella'|'permesso'|null} rimedioSu dove portare chi preme e non può ancora partire
+ * @property {'cartella'|'modello'|null} rimedioSu dove portare chi preme e non può ancora partire
  */
 
 /**
  * La decisione intera della modale, in una funzione sola.
  *
- * @param {{cartella: CartellaScelta|null, permesso: string, occupato?: boolean}} stato
+ * @param {{cartella: CartellaScelta|null, permesso: string, occupato?: boolean, avvisoModello?: {blocca?: boolean, titolo: string}|null}} stato
  * @returns {StatoAvvio}
  */
-export function statoAvvioSessione({ cartella = null, permesso = '', occupato = false } = {}) {
+export function statoAvvioSessione({ cartella = null, permesso = '', occupato = false, avvisoModello = null } = {}) {
   if (occupato) {
     return {
       situazione: 'occupato',
@@ -128,6 +128,18 @@ export function statoAvvioSessione({ cartella = null, permesso = '', occupato = 
       etichetta: t('varie.sessionStart.noFolder.label'),
       motivo: t('varie.sessionStart.noFolder.reason'),
       rimedioSu: 'cartella',
+    };
+  }
+
+  /* FE-040 (bozzetto 4, consegna del 31/10): «premuto porta al rimedio e non parte mai con un rimedio aperto». Dopo la cartella, come nel bozzetto: prima il posto, poi il modello. */
+  if (avvisoModello?.blocca) {
+    return {
+      situazione: 'modello',
+      puoAvviare: false,
+      disabilitato: false,
+      etichetta: t('varie.sessionStart.noModel.label'),
+      motivo: avvisoModello.titolo,
+      rimedioSu: 'modello',
     };
   }
 

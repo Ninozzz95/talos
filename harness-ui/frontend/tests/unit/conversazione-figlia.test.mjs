@@ -319,7 +319,7 @@ test('FIGLIA-VISTA: la testata porta il COMPITO e il MODELLO — e l’id di ses
      persona — cercarla ovunque farebbe fallire questa prova per il motivo sbagliato (visto girando). */
   const riga = unaConClasse(vista.elemento, 'talos-tool-row');
   assert.equal(unaConClasse(riga, 'talos-tool-row__name').textContent, 'lettura di un file');
-  assert.ok(!/leggi/.test(testoIntero(riga)), 'il nome tecnico dell’attrezzo non arriva a schermo');
+  assert.ok(!/leggi/.test(testoIntero(riga)), 'il nome tecnico dello strumento non arriva a schermo');
   const testo = testoIntero(vista.elemento);
   assert.ok(testo.includes('docs/ledger.md'), 'il bersaglio sì: è quello che dice cosa sta facendo');
   assert.ok(testo.includes('Ho letto il ledger.'));
@@ -347,7 +347,7 @@ test('FIGLIA-VIVA: un evento che arriva DOPO il montaggio compare senza rimontar
   assert.equal(paragrafoPrima.textContent, 'Sto leggendo…');
   assert.equal(conClasse(vista.elemento, 'talos-tool-row').length, 2);
   assert.equal(conClasse(vista.elemento, 'talos-activity').length, 1, 'due chiamate consecutive stanno in UN gruppo solo');
-  assert.equal(unaConClasse(vista.elemento, 'tool-note-summary-text').textContent, '2 attrezzi usati');
+  assert.equal(unaConClasse(vista.elemento, 'tool-note-summary-text').textContent, '2 strumenti usati');
 
   /* La riga in corso è viva, non verde: l'esito non si inventa prima del risultato. */
   assert.equal(conClasse(vista.elemento, 'talos-tool-row')[0].querySelector('.talos-dot').className, 'talos-dot talos-dot--live');
@@ -839,4 +839,14 @@ test('FIGLIA-A-B-C-A ⛔ AL CONTRARIO: gli eventi in ritardo di A non scrivono s
   assert.equal(b.spia.chiusure, 1);
   c.vista.distruggi();
   assert.equal(c.spia.chiusure, 1);
+});
+
+test('R44-FIGLIA: una chiamata annullata dal kernel è «not-run» anche nel pannello della figlia, al contrario un errore resta errore', () => {
+  const esitoDi = (extra) => riduciEventiFiglia([
+    { type: 'RunStarted', input: { consegna: 'x' } },
+    { type: 'ToolCallStart', toolCallId: 'c1', toolCallName: 'scrivi' },
+    TOOL_RESULT('c1', '⛔ The connection to the provider dropped before this call was complete: it was not run.', extra),
+  ]).turni[0].blocchi.find((b) => b.tipo === 'attrezzo').esito;
+  assert.equal(esitoDi({ outcome: 'cancelled', errore: true }), 'not-run');
+  assert.equal(esitoDi({ errore: true }), 'error');
 });

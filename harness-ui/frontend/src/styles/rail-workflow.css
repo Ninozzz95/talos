@@ -59,7 +59,7 @@
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--talos-border);
   border-radius: var(--talos-radius-pill); background: var(--talos-card); color: var(--talos-text); font-size: .6875rem; cursor: pointer;
 }
-.talos-wfr__togli .i { width: 11px; height: 11px; }
+.talos-wfr__togli .i { width: 12px; height: 12px; }
 .talos-wfr__togli:hover { border-color: var(--talos-border-strong); }
 
 /* «Richiede attenzione»: card calde, icona in un tondo (mockup 14/200/5.000) */

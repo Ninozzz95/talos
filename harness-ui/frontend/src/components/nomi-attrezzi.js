@@ -40,10 +40,15 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   web_search: 'varie.tools.name.webSearch',
   artifact_create: 'varie.tools.name.artifactCreate',
   artifact_update: 'varie.tools.name.artifactUpdate',
+  blocco_aggiorna: 'varie.tools.name.bloccoAggiorna', // FE-081 (05/11/2026)
   document_create: 'varie.tools.name.documentCreate',
   generate_image: 'varie.tools.name.generateImage',
   view_image: 'varie.tools.name.viewImage', // owner 27/10/2026
   local_page: 'varie.tools.name.localPage', // owner 27/10/2026 (server locali)
+  browser_page: 'varie.tools.name.browserPage', // decisione 201 (04/11/2026): le due frasi vanno anche al Mobile
+  computer_use: 'varie.tools.name.computerUse', // decisioni 331/335 (07/11/2026): l'attrezzo del computer use non mostra più il nome tecnico
+  computer_use_places_list: 'varie.tools.name.computerUsePlacesList', // 03/11/2026: computer use, i luoghi di «Consenti sempre»
+  computer_use_places_remove: 'varie.tools.name.computerUsePlacesRemove', // 03/11/2026: computer use, i luoghi di «Consenti sempre»
   delega_sottotask: 'varie.tools.name.delegateSubtask',
   time_now: 'varie.tools.name.timeNow',
   ask_user_question: 'varie.tools.name.askUserQuestion',
@@ -71,11 +76,13 @@ export const NOMI_UMANI_ATTREZZI = Object.freeze({
   provider_allow: 'varie.tools.name.providerAllow',
   chatgpt_account: 'varie.tools.name.chatgptAccount',
   local_model_window: 'varie.tools.name.localModelWindow', // L1 1.3 (26/10/2026)
+  local_model: 'varie.tools.name.localModel', // Modelli dalla chat (01/11/2026)
   // /goal G6 (owner 15/10/2026): la seconda porta dell'obiettivo
   goal_status: 'varie.tools.name.goalStatus',
   goal_create: 'varie.tools.name.goalCreate',
   file_changes_undo: 'varie.tools.name.fileChangesUndo', // R5.11 (18/10/2026)
   report_problem: 'varie.tools.name.reportProblem', // 29/10/2026: «Segnala un problema»
+  app_settings: 'varie.tools.name.appSettings', // Fase 8 (01/11/2026): «Impostazioni dalla chat»
   remote_phones: 'varie.tools.name.remotePhones', // R5.12 (18/10/2026)
   remote_phone_pair: 'varie.tools.name.remotePhonePair',
   remote_phone_revoke: 'varie.tools.name.remotePhoneRevoke',
@@ -235,10 +242,10 @@ export const SPECIE_ATTREZZI = Object.freeze({
   creazione: Object.freeze({ icona: 'i-code', uno: 'varie.tools.kind.creation.one', molti: 'varie.tools.kind.creation.many', breve: ['varie.tools.kind.creation.shortOne', 'varie.tools.kind.creation.shortMany'], fallitoUno: 'varie.tools.kind.creation.failedOne', fallitoMolti: 'varie.tools.kind.creation.failedMany', filtro: 'varie.tools.kind.creation.filter' }),
   scrittura: Object.freeze({ icona: 'i-code', uno: 'varie.tools.kind.writing.one', molti: 'varie.tools.kind.writing.many', breve: ['varie.tools.kind.writing.shortOne', 'varie.tools.kind.writing.shortMany'], fallitoUno: 'varie.tools.kind.writing.failedOne', fallitoMolti: 'varie.tools.kind.writing.failedMany', filtro: 'varie.tools.kind.writing.filter' }),
   comando: Object.freeze({ icona: 'i-terminal', uno: 'varie.tools.kind.command.one', molti: 'varie.tools.kind.command.many', breve: ['varie.tools.kind.command.shortOne', 'varie.tools.kind.command.shortMany'], fallitoUno: 'varie.tools.kind.command.failedOne', fallitoMolti: 'varie.tools.kind.command.failedMany', filtro: 'varie.tools.kind.command.filter' }),
-  test: Object.freeze({ icona: 'i-check-sq', uno: 'varie.tools.kind.test.one', molti: 'varie.tools.kind.test.many', breve: ['varie.tools.kind.test.shortOne', 'varie.tools.kind.test.shortMany'], fallitoUno: 'varie.tools.kind.test.failedOne', fallitoMolti: 'varie.tools.kind.test.failedMany', filtro: 'varie.tools.kind.test.filter' }),
+  test: Object.freeze({ icona: 'i-test-tube', uno: 'varie.tools.kind.test.one', molti: 'varie.tools.kind.test.many', breve: ['varie.tools.kind.test.shortOne', 'varie.tools.kind.test.shortMany'], fallitoUno: 'varie.tools.kind.test.failedOne', fallitoMolti: 'varie.tools.kind.test.failedMany', filtro: 'varie.tools.kind.test.filter' }),
   'ricerca-web': Object.freeze({ icona: 'i-globe', uno: 'varie.tools.kind.webSearch.one', molti: 'varie.tools.kind.webSearch.many', breve: ['varie.tools.kind.webSearch.shortOne', 'varie.tools.kind.webSearch.shortMany'], fallitoUno: 'varie.tools.kind.webSearch.failedOne', fallitoMolti: 'varie.tools.kind.webSearch.failedMany', filtro: 'varie.tools.kind.webSearch.filter' }),
-  pagina: Object.freeze({ icona: 'i-web', uno: 'varie.tools.kind.page.one', molti: 'varie.tools.kind.page.many', breve: ['varie.tools.kind.page.shortOne', 'varie.tools.kind.page.shortMany'], fallitoUno: 'varie.tools.kind.page.failedOne', fallitoMolti: 'varie.tools.kind.page.failedMany', filtro: 'varie.tools.kind.page.filter' }),
-  delega: Object.freeze({ icona: 'i-user', uno: 'varie.tools.kind.delegation.one', molti: 'varie.tools.kind.delegation.many', breve: ['varie.tools.kind.delegation.shortOne', 'varie.tools.kind.delegation.shortMany'], fallitoUno: 'varie.tools.kind.delegation.failedOne', fallitoMolti: 'varie.tools.kind.delegation.failedMany', filtro: 'varie.tools.kind.delegation.filter' }),
+  pagina: Object.freeze({ icona: 'i-globe', uno: 'varie.tools.kind.page.one', molti: 'varie.tools.kind.page.many', breve: ['varie.tools.kind.page.shortOne', 'varie.tools.kind.page.shortMany'], fallitoUno: 'varie.tools.kind.page.failedOne', fallitoMolti: 'varie.tools.kind.page.failedMany', filtro: 'varie.tools.kind.page.filter' }),
+  delega: Object.freeze({ icona: 'i-robot', uno: 'varie.tools.kind.delegation.one', molti: 'varie.tools.kind.delegation.many', breve: ['varie.tools.kind.delegation.shortOne', 'varie.tools.kind.delegation.shortMany'], fallitoUno: 'varie.tools.kind.delegation.failedOne', fallitoMolti: 'varie.tools.kind.delegation.failedMany', filtro: 'varie.tools.kind.delegation.filter' }),
 });
 
 /** R5.13 (24/10/2026): i nomi di gruppo al plurale, per gli attrezzi che si ripetono in fila (chiavi del dizionario, come sopra). */
@@ -314,14 +321,14 @@ export function fraseSpecie(specie, n, { fallito = false, breve = false } = {}) 
   return n > 1 ? t('varie.tools.other.many', { name: gruppo, n }) : nome;
 }
 
-/** L'icona di una specie nello sprite; `i-bolt` per ciò che non ha una specie sua. */
+/** L'icona di una specie nello sprite; `i-wrench` per ciò che non ha una specie sua. */
 export function iconaSpecie(specie) {
-  return SPECIE_ATTREZZI[specie]?.icona || 'i-bolt';
+  return SPECIE_ATTREZZI[specie]?.icona || 'i-wrench';
 }
 
 /** [passato, presente] del verbo; per un attrezzo senza verbo nostro, il suo nome umano in tutti e due i tempi. */
 export function verboAttrezzo(nome) {
-  const verbi = VERBI_ATTREZZI[nome];
+  const verbi = Object.hasOwn(VERBI_ATTREZZI, String(nome)) ? VERBI_ATTREZZI[nome] : null; // il nome lo decide il modello o un server MCP
   if (verbi) return [t(verbi[0]), t(verbi[1])];
   const leggibile = nomeLeggibileAttrezzo(nome);
   return [leggibile, leggibile];
@@ -382,6 +389,7 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   web_search: 'varie.tools.description.webSearch',
   artifact_create: 'varie.tools.description.artifactCreate',
   artifact_update: 'varie.tools.description.artifactUpdate',
+  blocco_aggiorna: 'varie.tools.description.bloccoAggiorna', // FE-081 (05/11/2026)
   document_create: 'varie.tools.description.documentCreate',
   time_now: 'varie.tools.description.timeNow',
   ask_user_question: 'varie.tools.description.askUserQuestion',
@@ -407,10 +415,12 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   provider_allow: 'varie.tools.description.providerAllow',
   chatgpt_account: 'varie.tools.description.chatgptAccount',
   local_model_window: 'varie.tools.description.localModelWindow', // L1 1.3 (26/10/2026)
+  local_model: 'varie.tools.description.localModel', // Modelli dalla chat (01/11/2026)
   goal_status: 'varie.tools.description.goalStatus',
   goal_create: 'varie.tools.description.goalCreate',
   file_changes_undo: 'varie.tools.description.fileChangesUndo', // R5.11 (18/10/2026)
   report_problem: 'varie.tools.description.reportProblem', // 29/10/2026: «Segnala un problema»
+  app_settings: 'varie.tools.description.appSettings', // Fase 8 (01/11/2026): «Impostazioni dalla chat»
   remote_phones: 'varie.tools.description.remotePhones', // R5.12 (18/10/2026)
   remote_phone_pair: 'varie.tools.description.remotePhonePair',
   remote_phone_revoke: 'varie.tools.description.remotePhoneRevoke',
@@ -434,6 +444,10 @@ export const DESCRIZIONI_ATTREZZI = Object.freeze({
   generate_image: 'varie.tools.description.generateImage',
   view_image: 'varie.tools.description.viewImage', // owner 27/10/2026
   local_page: 'varie.tools.description.localPage', // owner 27/10/2026 (server locali)
+  browser_page: 'varie.tools.description.browserPage', // decisione 201 (04/11/2026)
+  computer_use: 'varie.tools.description.computerUse', // decisioni 331/335 (07/11/2026)
+  computer_use_places_list: 'varie.tools.description.computerUsePlacesList', // 03/11/2026: computer use, i luoghi di «Consenti sempre»
+  computer_use_places_remove: 'varie.tools.description.computerUsePlacesRemove', // 03/11/2026: computer use, i luoghi di «Consenti sempre»
   library_list: 'varie.tools.description.libraryList',
   library_search: 'varie.tools.description.librarySearch',
   library_find: 'varie.tools.description.libraryFind',

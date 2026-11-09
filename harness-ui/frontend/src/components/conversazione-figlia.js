@@ -83,7 +83,7 @@ import {
 import { renderizzaMarkdown } from './markdown.js';
 import { nomeUmanoAttrezzo } from './nomi-attrezzi.js';
 /* ⛔ 20/09/2026 — lo stesso contratto che usa la chat: una regola sola per l'esito di un comando. */
-import { esitoDichiaraFallimento, leggiEsitoComando } from './esito-comando.js';
+import { comandoShellFallito, esitoDettoNo, esitoDichiaraFallimento, rifiutoDiElenco } from './esito-comando.js';
 /* C2 R6 (08/10/2026): le chiamate della figlia coperte da un permesso dato più in alto lo dicono sulla riga, come nella chat. */
 import { segnaConsentitoDa } from './consentito-da.js';
 
@@ -138,6 +138,10 @@ const pezzo = (v) => (typeof v === 'string' ? v : v === undefined || v === null 
  */
 export function esitoDaContenuto(attrezzo, contenuto) {
   const testo = pezzo(contenuto);
+  /* D1 (03/11/2026): il no della persona, come nella chat — neutro, mai verde né rosso */
+  if (esitoDettoNo(testo)) return 'declined';
+  /* decisione 99: il rifiuto di un elenco a pagine è un passo del giro, neutro come la copia saltata (solo gli attrezzi a pagine) */
+  if (rifiutoDiElenco(attrezzo, testo)) return 'duplicate';
   if (attrezzo === 'prova') return /ℹ?\s*fail\s+([1-9]\d*)/i.test(testo) ? 'error' : 'success';
   if (attrezzo === 'shell') {
     /*
@@ -150,8 +154,7 @@ export function esitoDaContenuto(attrezzo, contenuto) {
      *   che è esattamente il posto in cui una persona guarda per controllare un figlio.
      *   ⇒ Una regola sola: `leggiEsitoComando`, la stessa che usa la chat.
      */
-    const esito = leggiEsitoComando(testo);
-    return esito.verdetto && !esito.riuscito && !esito.annullato && !esito.terminato ? 'error' : 'success'; // 02/10/2026: fermato ≠ fallito
+    return comandoShellFallito(testo) ? 'error' : 'success'; // 02/10/2026: fermato ≠ fallito; 03/11: REFUSED senza intestazione è rosso
   }
   /* 26/09, difetto (11): la regola generica vive in `esito-comando.js`, la stessa della chat — anche `<attrezzo> failed …`. */
   return esitoDichiaraFallimento(attrezzo, testo) ? 'error' : 'success';
@@ -206,7 +209,7 @@ function consegnaDaInput(input) {
  *
  * Un `blocco` è una di tre forme, e l'ORDINE è quello di arrivo:
  *   { tipo:'testo',    id:messageId,  testo }
- *   { tipo:'attrezzo', id:toolCallId, attrezzo, argomenti, esito:'running'|'success'|'error', contenuto }
+ *   { tipo:'attrezzo', id:toolCallId, attrezzo, argomenti, esito:'running'|'success'|'error'|'not-run'|'declined'|'duplicate', contenuto }
  *   { tipo:'errore',   id,            codice, messaggio }
  *
  * ⛔ `giri` è il numero di `RunStarted`, cioè quante volte la figlia è stata
@@ -346,7 +349,9 @@ export function digerisciEventoFiglia(r, e) {
       const blocco = r.perAttrezzo.get(pezzo(e.toolCallId));
       if (!blocco) { r.scartati += 1; break; }
       blocco.contenuto = pezzo(e.content);
-      blocco.esito = e.errore === true ? 'error' : esitoDaContenuto(blocco.attrezzo, blocco.contenuto);
+      /* R-44 (31/10/2026): una chiamata annullata dal kernel non è partita, come nella chat. Viene prima di `errore`, che per lei è vero. */
+      /* D1 (03/11/2026): il no della persona viene prima di `errore`, come sul telefono (`nonEseguita` prima della ricevuta) */
+      blocco.esito = e.outcome === 'cancelled' ? 'not-run' : esitoDettoNo(blocco.contenuto) ? 'declined' : e.errore === true ? 'error' : esitoDaContenuto(blocco.attrezzo, blocco.contenuto);
       // C2 R6: la ricevuta dell'operazione dice se un permesso dato più in alto ha coperto la chiamata
       if (typeof e.receipt?.consentitoDa?.sessionId === 'string') blocco.consentitoDa = e.receipt.consentitoDa;
       break;
@@ -480,7 +485,7 @@ export function montaConversazioneFiglia(contenitore, {
      pulsante per nome e non lo trovava. Aveva ragione lei. */
   const indietro = el(d, 'button', 'talos-button talos-button--ghost talos-button--sm talos-figlia__indietro');
   indietro.type = 'button';
-  indietro.append(simbolo(d, 'i i--sm', 'i-arrow-left'), d.createTextNode(t('chat.common.back')));
+  indietro.append(simbolo(d, 'i i--sm', 'i-chevron-left'), d.createTextNode(t('chat.common.back')));
   indietro.setAttribute('aria-label', t('chat.child.backToList'));
   const titolo = el(d, 'b', 'talos-figlia__titolo talos-truncate', nome || t('chat.child.noTask'));
   const badge = el(d, 'span', 'talos-badge talos-badge--sm');

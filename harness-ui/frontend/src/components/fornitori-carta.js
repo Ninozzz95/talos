@@ -10,7 +10,32 @@ import { t as traduci } from './lingua.js';
 import { conToken } from './context-separator.js';
 import { nomeModelloUmano } from './chat-foot.js'; // mai l'id grezzo del modello a schermo
 
-export const ATTREZZI_FORNITORI_CON_CARTA = Object.freeze(['provider_exclude', 'provider_allow', 'chatgpt_account', 'local_model_window']);
+export const ATTREZZI_FORNITORI_CON_CARTA = Object.freeze(['provider_exclude', 'provider_allow', 'chatgpt_account', 'local_model_window', 'local_model']);
+
+/* 01/11/2026, `local_model`: i pesi nello stesso formato del Laboratorio modelli (`formattaByteModelLab`, app.js), richiesta del Frontend */
+export function pesoComeNelLaboratorio(bytes) {
+  const value = Number(bytes);
+  if (bytes === null || bytes === undefined || !Number.isFinite(value) || value < 0) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let index = 0; let scaled = value;
+  while (scaled >= 1024 && index < units.length - 1) { scaled /= 1024; index += 1; }
+  return `${Number.isInteger(scaled) || scaled >= 10 ? Math.round(scaled) : scaled.toFixed(1)} ${units[index]}`;
+}
+
+/** Le frasi della carta di `local_model` (frasi del Frontend, 01/11/2026); `dove` per chi guarda dal telefono una sessione del PC (Mobile). */
+function testiLocalModel(azione) {
+  const nome = (n) => (typeof n === 'string' && n ? (nomeModelloUmano(n.startsWith('local:') ? n : `local:${n}`) || n) : '?');
+  let perche = '';
+  if (azione.azione === 'open') {
+    perche = azione.aperto
+      ? traduci('varie.providerCard.localOpenInstead', { modello: nome(azione.modello), peso: pesoComeNelLaboratorio(azione.peso), aperto: nome(azione.aperto) })
+      : traduci('varie.providerCard.localOpen', { modello: nome(azione.modello), peso: pesoComeNelLaboratorio(azione.peso) });
+  } else if (azione.azione === 'free') {
+    perche = traduci(azione.stima ? 'varie.providerCard.localFreeAbout' : 'varie.providerCard.localFree', { modello: nome(azione.modello), memoria: pesoComeNelLaboratorio(azione.memoria) });
+  }
+  return { badge: traduci('varie.providerCard.localBadge'), bersaglio: nome(azione.modello), perche,
+    motivo: '', nota: azione.dove === 'pc' ? traduci('varie.providerCard.localOnThePc') : '' };
+}
 export const eCartaFornitori = (azione) => ATTREZZI_FORNITORI_CON_CARTA.includes(azione?.tipo);
 
 function el(doc, tag, classe, testo) { const n = doc.createElement(tag); if (classe) n.className = classe; if (testo !== undefined) n.textContent = testo; return n; }
@@ -24,6 +49,7 @@ const nomeModello = (id) => nomeModelloUmano(id) || id || '';
 const numeroDiToken = (n) => conToken(n);
 
 export function testiCartaFornitori(azione) {
+  if (azione?.tipo === 'local_model') return testiLocalModel(azione); // 01/11/2026
   // L1 1.3 (owner 26/10/2026): il modello chiede di riaprire il modello locale più grande (`local_model_window`, action enlarge)
   if (azione?.tipo === 'local_model_window') {
     return { badge: traduci('varie.providerCard.windowBadge'), bersaglio: `${azione.modello ?? ''} · ${numeroDiToken(azione.prima)} → ${numeroDiToken(azione.dopo)}`,
@@ -31,7 +57,9 @@ export function testiCartaFornitori(azione) {
   }
   // 11/10/2026: scollegare ChatGPT dalla chat (`chatgpt_account`, action disconnect)
   if (azione?.tipo === 'chatgpt_account') {
-    return { badge: traduci('varie.providerCard.chatgptBadge'), bersaglio: azione.email || 'ChatGPT', perche: traduci('varie.providerCard.chatgptDisconnect'), motivo: '', nota: '' };
+    /* decisione 116 C, §8: la stessa carta per `sign_in`, con la sua frase (mettere la scheda «Accedi e riprendi» nella conversazione) */
+    const perche = azione.azione === 'sign_in' ? 'varie.providerCard.chatgptSignIn' : 'varie.providerCard.chatgptDisconnect';
+    return { badge: traduci('varie.providerCard.chatgptBadge'), bersaglio: azione.email || 'ChatGPT', perche: traduci(perche), motivo: '', nota: '' };
   }
   const slug = typeof azione?.fornitore === 'string' ? azione.fornitore : '';
   const cambi = cambiDi(azione);
@@ -58,11 +86,13 @@ export function creaBloccoCartaFornitori(doc, azione) {
      come dato: quello è della carta, e un selettore troverebbe due elementi (lo stesso avviso di automazione-carta.js). */
   const blocco = el(doc, 'div', 'talos-approval__automazione');
   blocco.dataset.dettaglioFornitori = azione?.tipo ?? '';
+  if (azione?.tipo === 'local_model') return blocco; // 01/11/2026: la frase dice già tutto; nessun prima → dopo da aggiungere
   if (azione?.tipo === 'local_model_window') {
     blocco.append(kv(doc, traduci('varie.providerCard.before'), numeroDiToken(azione.prima)), kv(doc, traduci('varie.providerCard.after'), numeroDiToken(azione.dopo)));
     return blocco;
   }
   if (azione?.tipo === 'chatgpt_account') {
+    if (azione.azione === 'sign_in') return blocco; // 116 C: la frase dice già tutto; un «prima → dopo» dello scollegamento direbbe il falso
     blocco.append(kv(doc, traduci('varie.providerCard.before'), traduci('varie.providerCard.chatgptNow')), kv(doc, traduci('varie.providerCard.after'), traduci('varie.providerCard.chatgptAfter')));
     return blocco;
   }

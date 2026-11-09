@@ -128,6 +128,21 @@ test('BUG18-NOTA-01 — una nota non fa NESSUNA bolla in chat e arriva nel journ
 });
 
 
+test('FE-050 — «aperto con l\'altro motore» è un evento durevole col testo e la chiave, nessuna bolla in chat', async () => {
+  const eventi = [];
+  let observed;
+  await avviaSessione({ cartella: '/tmp/x', task: { consegna: 'prova' }, modello: 'm', chiave: 'k', onEvento: (e) => eventi.push(e),
+    talosLavoraFn: talosLavoraFinto({ cattura: (input) => { observed = input; } }) });
+  await observed.onAvviso({ testo: 'Opened with the other engine', testoChiave: 'server.runtime.notice.routerFallback', testoParams: { model: 'a' } }, { riga: 'ripiego-locale', dati: { modello: 'a' } });
+  assert.deepEqual(eventi.filter((e) => e.type === 'TextMessageContent'), []);
+  const riga = eventi.filter((e) => e.type === 'CUSTOM' && e.name === 'talos.ripiego-locale');
+  assert.equal(riga.length, 1);
+  assert.equal(riga[0].value.modello, 'a');
+  assert.equal(riga[0].value.testo, 'Opened with the other engine');
+  assert.equal(riga[0].value.testoChiave, 'server.runtime.notice.routerFallback', 'il telefono lo dice nella sua lingua');
+  assert.equal(Number.isFinite(Date.parse(riga[0].value.at)), true);
+});
+
 test('BUG7-AVVISO-05 — un avviso RIPETIBILE passa ogni volta, quello normale resta una bolla sola', async () => {
   const consensiSessione = {};
   const chiave = 'Una chiave di OpenRouter è stata rifiutata: controlla Fornitori e accessi.';

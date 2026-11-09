@@ -267,7 +267,7 @@ test('PG-09 — router AVM reale verso server finto: modello, corpo, tool callin
 test('PG-10 — rotte prodotto isolate: gli undici cataloghi e le sonde sono raggiungibili senza cambiare http-app', async t => {
   const store = createProviderCredentialStore({ env: Object.fromEntries(Object.values(ATTESI).map(([, , variabile]) => [variabile, CHIAVE_FINTA])) });
   const probe = createProviderProbe({ ...deps(store), fetchImpl: async () => Response.json({ data: [{ id: 'modello-finto' }] }) });
-  const base = await ascolta(t, createHttpApp({ staticHandler: async () => null, providerStore: store, providerProbe: probe }));
+  const base = await ascolta(t, createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, providerStore: store, providerProbe: probe }));
   for (const id of Object.keys(ATTESI)) {
     const catalogo = await fetch(`${base}/api/v1/providers/${id}/models`);
     assert.equal(catalogo.status, 200, id);

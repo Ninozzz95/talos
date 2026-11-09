@@ -86,7 +86,7 @@ function registroFinto({ attrezzi = null, erroreAvvio = null } = {}) {
 }
 
 async function ascolta(t, sessionRegistry) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry }));
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;

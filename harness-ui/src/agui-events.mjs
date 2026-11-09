@@ -143,10 +143,13 @@ function durataValida(valore) {
     return typeof valore === 'number' && Number.isFinite(valore) && valore >= 0
 }
 
-export function toolCallStart({ toolCallId, toolCallName, parentMessageId, avviatoA }) {
+export function toolCallStart({ toolCallId, toolCallName, parentMessageId, avviatoA, daTesto }) {
     const evento = { type: 'ToolCallStart', toolCallId, toolCallName }
     if (parentMessageId !== undefined) evento.parentMessageId = parentMessageId
     if (oraValida(avviatoA)) evento.avviatoA = Math.round(avviatoA)
+    /* R-34 parte 2 (30/10/2026): la chiamata l'ha scritta come TESTO un modello locale e l'ha promossa il nucleo, col sì della persona.
+       Additivo, solo quando è vero; a schermo niente finché l'owner non vede il bozzetto (Desktop). */
+    if (daTesto === true) evento.daTesto = true
     return evento
 }
 
@@ -216,7 +219,7 @@ export function toolCallOutput({ toolCallId, delta }) {
  *   non poteva sapere CHE COSA e' stato eseguito ne' DOVE. Per `shell` `cwd` e' la cartella
  *   EFFETTIVA (quella che il comando ha visto davvero), non quella richiesta.
  */
-export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal, images }) {
+export function toolCallResult({ messageId, toolCallId, content, role = 'tool', durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, interrotta, suspicious, inSfondo, fileSfondo, fileSfondoMostrato, sfondoDa, duplicate, unasked, refusal, images, schedaChatgpt }) {
     const evento = { type: 'ToolCallResult', messageId, toolCallId, content, role }
     // Optional TALOS extension, using MCP's boolean semantics. Never infer it from content.
     if (typeof isError === 'boolean') evento.isError = isError
@@ -253,14 +256,22 @@ export function toolCallResult({ messageId, toolCallId, content, role = 'tool', 
        intestazione `IN BACKGROUND`. Solo se c'è: senza, l'evento resta identico a prima, byte per byte. */
     if (inSfondo === true) evento.inSfondo = true
     if (typeof fileSfondo === 'string' && fileSfondo !== '') evento.fileSfondo = fileSfondo
+    /* Blocco 26 (condizione del Mobile): il nome da mostrare del registro, relativo alla cartella dati (`background/<id>.log`) — quello
+       che vede il telefono; il percorso assoluto in `fileSfondo` resta per il PC (il ponte lo sostituisce, `remoto/operazioni.mjs`). */
+    if (typeof fileSfondo === 'string' && fileSfondo !== '' && typeof fileSfondoMostrato === 'string' && fileSfondoMostrato !== '') evento.fileSfondoMostrato = fileSfondoMostrato
     if (typeof sfondoDa === 'string' && sfondoDa !== '') evento.sfondoDa = sfondoDa
     /* G02 (dalla lane CLI, a7dfe1193, M4-E): la ricevuta del kernel per QUESTO attrezzo, inoltrata senza interpretarla;
        solo un oggetto. Senza, l'evento resta identico a prima. */
     if (receipt && typeof receipt === 'object' && !Array.isArray(receipt)) evento.receipt = receipt
     /* G02 (dalla lane CLI, 6167226e9): un attrezzo annullato prima di partire lo DICE; solo il valore 'cancelled'. */
     if (outcome === 'cancelled') evento.outcome = outcome
+    if (interrotta === true) evento.interrotta = true // una lettura partita e persa nella caduta: né riuscita né annullata (revisione del blocco 17, M5)
     /* 12/10/2026: una copia identica scartata — annullata prima di partire PERCHÉ era un doppione. Solo `true`, solo se c'è. */
     if (duplicate === true) evento.duplicate = true
+    /* Decisione 116 C (Desktop 15:31, OK di Mobile, CLI e Performance): `chatgpt_account` `sign_in` ha messo DAVVERO la scheda «Accedi e
+       riprendi» (lo dice la risposta «esegui» dell'ospite, mai il nome dell'attrezzo). Solo `true`, solo se c'è: senza, l'evento resta
+       identico a prima, byte per byte. */
+    if (schedaChatgpt === true) evento.schedaChatgpt = true
     /* F-027 (owner 02/10/2026): il risultato porta testo che sembra un'istruzione per un'IA — da dove e quali pattern, per il
        segno nella scheda. Solo se c'è: senza, l'evento resta identico a prima, byte per byte. */
     if (suspicious && typeof suspicious.source === 'string' && Array.isArray(suspicious.patterns) && suspicious.patterns.length > 0) {
@@ -357,8 +368,9 @@ export function workspaceChanged({ percorsi }) {
  * `{tipo, percorso?, comando?, formato?}` — abbastanza per mostrare
  * all'owner COSA sta per succedere prima che lui decida.
  */
-export function approvalRequested({ requestId, azione }) {
-    return { type: 'ApprovalRequested', requestId, azione }
+export function approvalRequested({ requestId, azione, approvabileFuori = false }) {
+    // FE-011: additivo, e «no» è assente, come nelle Notifiche. Il campo non approva niente: dice che il dato si legge tutto
+    return { type: 'ApprovalRequested', requestId, azione, ...(approvabileFuori === true ? { approvabileFuori: true } : {}) }
 }
 
 /**
@@ -388,8 +400,19 @@ export function queuedMessageDelivered({ testo }) {
    quando nessuno poteva rispondere e il registro ha chiuso da sé. Facoltativi: senza, l'evento è quello di prima, identico. */
 /* C2 R6 (07/10/2026): `rispostoDa` quando la persona ha risposto dalla carta disegnata in un'ALTRA sessione della catena (il
    padre); facoltativo come gli altri. */
+/* COD-205 (30/10/2026, richiesta della CLI): i valori di `motivo` sono una lista CHIUSA. Chi legge la mappa una volta sola; un valore
+   fuori lista non esce (si perde il motivo, mai l'evento), e la prova `motivi-approvazione-chiusi` diventa rossa se il registro ne scrive
+   uno nuovo senza aggiungerlo qui. */
+/* Contratto «notifiche», bozza 3 (31/10/2026, richiesta della CLI): `regola`, `modalita` e `classificatore` per le decisioni prese dal
+   motore della CLI senza la persona (una regola salvata, la modalità, il classificatore). Il server del PC oggi non li scrive: stanno qui
+   perché la lista è una sola, e lo scrittore delle notifiche non fa nascere `azione-persona` da nessun motivo di questa lista. */
+export const MOTIVI_APPROVAZIONE_RISOLTA = Object.freeze(['nessuna-interfaccia', 'modificata-dalla-persona', 'contratto-obiettivo',
+    'confutatore-sola-lettura', 'fermato', 'regola', 'modalita', 'classificatore'])
+/* Blocco 20 (01/11/2026, CLI): i motivi che dicono che un sì NON l'ha dato la persona. Solo sui sì: il testo di un no può contenere ciò che la persona ha scritto al modello */
+export const MOTIVI_DEL_SI_SENZA_PERSONA = Object.freeze(['regola', 'modalita', 'classificatore'])
 export function approvalResolved({ requestId, approvato, ambito, motivo, rispostoDa }) {
-    return { type: 'ApprovalResolved', requestId, approvato, ...(ambito ? { ambito } : {}), ...(motivo ? { motivo } : {}),
+    return { type: 'ApprovalResolved', requestId, approvato, ...(ambito ? { ambito } : {}),
+        ...(MOTIVI_APPROVAZIONE_RISOLTA.includes(motivo) ? { motivo } : {}),
         ...(typeof rispostoDa === 'string' && rispostoDa ? { rispostoDa } : {}) }
 }
 
@@ -523,14 +546,14 @@ export function eventiPerRisposta(risposta, { messageId, parentMessageId, testoG
  * talosLavora mette in `messaggi.push({role:'tool', tool_call_id,
  * content})`, talosHarness.mjs riga ~836) a ToolCallResult.
  */
-export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal, images }) {
+export function eventoPerEsitoTool({ messageId, toolCallId, content, durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, interrotta, suspicious, inSfondo, fileSfondo, fileSfondoMostrato, sfondoDa, duplicate, unasked, refusal, images, schedaChatgpt }) {
     /* ⭐ OSS-1/OSS-2 — inoltro puro: la decisione su COSA entra nell'evento sta tutta in
        `toolCallResult` qui sopra, un posto solo. Chi non passa i tre campi ottiene l'oggetto
        identico di prima, byte per byte.
        ⛔ BLOCCO 7 (B4): stessa regola per i due flussi e per il codice d'uscita — l'inoltro non
          decide niente, e la guardia «solo se non vuoti» vive in `toolCallResult`.
        ⛔ BUG-14: e stessa regola per i tre campi dello sfondo (`inSfondo`/`fileSfondo`/`sfondoDa`). */
-    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, suspicious, inSfondo, fileSfondo, sfondoDa, duplicate, unasked, refusal, images })
+    return toolCallResult({ messageId, toolCallId, content: String(content), durataMs, comando, cwd, stdout, stderr, exitCode, isError, receipt, outcome, interrotta, suspicious, inSfondo, fileSfondo, fileSfondoMostrato, sfondoDa, duplicate, unasked, refusal, images, schedaChatgpt })
 }
 
 /**

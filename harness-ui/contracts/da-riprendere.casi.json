@@ -1,0 +1,22 @@
+{
+  "schema": "talos.da-riprendere.casi.v1",
+  "nota": "Decisions 198-199 (owner 04/11/2026). Event sequence of one session -> the value of `daRiprendere` after the last event. The server (src/da-riprendere.mjs), the PC and the phone apply the same rule; `interrotta` (a session that a restart cut off) comes only from the session row, never from events. Keep this file stable: the phone copies it byte for byte.",
+  "casi": [
+    { "nome": "nessun giro", "eventi": [], "atteso": null },
+    { "nome": "giro in corso", "eventi": [{ "type": "RunStarted" }], "atteso": null },
+    { "nome": "risposta finita bene", "eventi": [{ "type": "RunStarted" }, { "type": "RunFinished" }], "atteso": null },
+    { "nome": "fermato dalla persona", "eventi": [{ "type": "RunStarted" }, { "type": "RunError", "code": "fermato" }], "atteso": "fermata" },
+    { "nome": "errore del fornitore", "eventi": [{ "type": "RunStarted" }, { "type": "RunError", "code": "PROVIDER_HTTP_ERROR" }], "atteso": "errore" },
+    { "nome": "errore senza codice", "eventi": [{ "type": "RunStarted" }, { "type": "RunError" }], "atteso": "errore" },
+    { "nome": "giri finiti", "eventi": [{ "type": "RunStarted" }, { "type": "RunError", "code": "giri-esauriti" }], "atteso": "giri-finiti" },
+    { "nome": "figlia in pausa", "eventi": [{ "type": "RunStarted" }, { "type": "RunError", "code": "in-pausa" }], "atteso": null },
+    { "nome": "rifiuto del modello dopo un po' di testo", "eventi": [{ "type": "RunStarted" }, { "type": "RunError", "code": "rifiuto-del-modello" }], "atteso": null },
+    { "nome": "rifiuto del modello completo", "eventi": [{ "type": "RunStarted" }, { "type": "RunError", "code": "PROVIDER_EMPTY_RESPONSE", "classe": "rifiuto-del-modello" }], "atteso": null },
+    { "nome": "risposta vuota che non e un rifiuto", "eventi": [{ "type": "RunStarted" }, { "type": "RunError", "code": "PROVIDER_EMPTY_RESPONSE" }], "atteso": "errore" },
+    { "nome": "richiesta non inviata (tornata nel compositore)", "eventi": [{ "type": "RunStarted" }, { "type": "CUSTOM", "name": "talos.richiesta-non-inviata" }, { "type": "RunError", "code": "REQUEST_TOO_LARGE" }], "atteso": null },
+    { "nome": "richiesta non inviata in un giro di prima", "eventi": [{ "type": "RunStarted" }, { "type": "CUSTOM", "name": "talos.richiesta-non-inviata" }, { "type": "RunError", "code": "REQUEST_TOO_LARGE" }, { "type": "RunStarted" }, { "type": "RunError", "code": "fermato" }], "atteso": "fermata" },
+    { "nome": "fermato e poi ripreso", "eventi": [{ "type": "RunStarted" }, { "type": "RunError", "code": "fermato" }, { "type": "RunStarted" }], "atteso": null },
+    { "nome": "errore e poi finito bene", "eventi": [{ "type": "RunStarted" }, { "type": "RunError", "code": "PROVIDER_HTTP_ERROR" }, { "type": "RunStarted" }, { "type": "RunFinished" }], "atteso": null },
+    { "nome": "eventi dopo la fine non cambiano niente", "eventi": [{ "type": "RunStarted" }, { "type": "RunError", "code": "fermato" }, { "type": "StateDelta" }, { "type": "CUSTOM", "name": "talos.compattazione" }], "atteso": "fermata" }
+  ]
+}

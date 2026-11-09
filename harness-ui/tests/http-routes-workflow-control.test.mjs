@@ -26,7 +26,7 @@ async function setup(t, withStore = true) {
   const store = withStore ? await createWorkflowStore({ workflowDataRoot: root, workspaceRoots: [],
     resultLimits: { maxItemBytes: 1_048_576, maxRunBytes: 8_388_608 } }) : null;
   const registry = { leggiSessioneContesto: (id) => id === sessionId ? { sessionId: id } : null };
-  const server = createServer(createHttpApp({ staticHandler: async () => null,
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null,
     sessionRegistry: registry, workflowStore: store, token: 'secret' }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(async () => { await new Promise((resolve) => server.close(resolve));

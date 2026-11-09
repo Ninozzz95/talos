@@ -32,7 +32,7 @@ async function apri(page, { modo }) {
   });
   await page.route('**/api/v1/sessions', (route) => route.fulfill({ json: { ok: true, data: { items: SESSIONI } } }));
   for (const s of SESSIONI) {
-    await page.route(`**/api/v1/sessions/${s.sessionId}/events`, (route) => route.fulfill({ contentType: 'text/event-stream',
+    await page.route(`**/api/v1/sessions/${s.sessionId}/events*`, (route) => route.fulfill({ contentType: 'text/event-stream',
       body: `retry: 3600000\ndata: ${JSON.stringify({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null })}\n\n` }));
   }
   await page.goto('/');
@@ -49,7 +49,7 @@ for (const modo of ['light', 'dark']) {
     test('PILLOLA-LOGO-WEB-01 — glm via OpenRouter: logo di OpenRouter e solo «glm-5.3-flash»; DeepSeek diretto: il logo di DeepSeek; l\'id intero nel suggerimento', async ({ page }) => {
       const scritture = await apri(page, { modo });
       await page.locator('[data-real-session-id="sessione-or"]').click();
-      await expect(pillola(page).locator('.talos-chip__label')).toHaveText('glm-5.3-flash');
+      await expect(pillola(page).locator('.talos-chip__label')).toHaveText('GLM 5.3 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
       await expect(pillola(page).locator(':scope > svg[data-via-del-modello="openrouter"]')).toHaveAttribute('data-marchio', /openrouter/iu);
       await expect(pillola(page)).toHaveAttribute('title', /z-ai\/glm-5\.3-flash/u);
       await expect(pillola(page).locator(':scope > [data-via-del-modello], :scope > svg')).toHaveCount(1);

@@ -1,0 +1,1 @@
+root = Modulo("m", null, [{id: "a", etichetta: "A", tipo: "testo"}], "Invia", {tipo: "attrezzo", nome: "web_fetch", quando: "ora"})

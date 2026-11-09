@@ -45,12 +45,23 @@ function neutralizzaContenuto(contenuto) {
     return contenuto
 }
 
-function conNoteInCoda(contenuto, note) {
+function conNoteInCoda(contenuto, note, { aBlocchi = false } = {}) {
     const blocchi = note.map((n) => `<${SEGNO_NOTA}>\n${n}\n</${SEGNO_NOTA}>`)
     if (Array.isArray(contenuto)) return [...contenuto, ...blocchi.map((text) => ({ type: 'text', text }))]
     const base = typeof contenuto === 'string' ? contenuto : ''
+    if (aBlocchi) return [base, ...blocchi].filter((t) => t !== '').map((text) => ({ type: 'text', text }))
     return [base, ...blocchi].filter((t) => t !== '').join('\n\n')
 }
+
+/* Revisione avversaria del 05/11/2026 (cache 194, difetto medio, sonda `revisione-cache-174-sonde.test.mjs`): il nucleo mette i segni
+   della cache PRIMA di questa piega, e un messaggio col segno è già a blocchi ([testo] + segno) mentre uno senza è una stringa. La nota
+   in coda dava così due forme allo stesso messaggio: [testo, nota] col segno, «testo\n\nnota» senza. Quando la finestra dei segni
+   scorre il messaggio li perde, cambia forma, e il prefisso scritto al giro prima non combacia più da lì (Anthropic e OpenRouter-Claude
+   leggono la cache solo su un prefisso identico fino al blocco col segno). Come Hermes (`agent/agent_runtime_helpers.py:3715-3735`:
+   una storia che diverge dai byte inviati «break the provider prompt cache») la forma di un messaggio già inviato non cambia più:
+   se la richiesta porta segni di cache, la nota va SEMPRE in un blocco suo, col segno o senza. Senza segni nella richiesta nessun
+   prefisso è in gioco e i byte restano quelli di prima (stringa unica). */
+const portaSegniDiCache = (messaggi) => messaggi.some((m) => Array.isArray(m?.content) && m.content.some((p) => p != null && typeof p === 'object' && p.cache_control != null))
 
 /**
  * La copia piegata: nuova lista, l'ingresso non cambia. Deterministica (stessa storia ⇒ stessi byte).
@@ -76,6 +87,52 @@ export function piegaMessaggiDiSistema(messaggi) {
     }
     if (note.length) piegati.push({ role: 'user', content: conNoteInCoda('', note) })
     return [{ role: 'system', content: testa }, ...piegati]
+}
+
+/*
+ * ⭐ Decisione owner 166, seconda forma (`FORMA-NOTA-STOP-166-BIS-2026-11-04.md`, OK di Performance, CLI e Mobile il 04/11 sera) — il segno
+ *   della nota che il nucleo scrive dopo uno Stop della persona. Sta QUI e non in `talosHarness.mjs` (che lo riesporta) perché lo leggono
+ *   anche gli adattatori dei fornitori, che non devono tirarsi dentro il nucleo intero.
+ */
+export const SEGNO_GIRO_FERMATO = '[TALOS: turn stopped by the person]'
+/** Vero per il testo della nota di fermata (riconosciuta dal suo segno, sempre in testa). */
+export const eNotaDiFermata = (testo) => typeof testo === 'string' && testo.startsWith(SEGNO_GIRO_FERMATO)
+
+/**
+ * ⭐ LA PIEGA IN CODA, PER I FORNITORI IN CLOUD (decisione 166, condizione 1 di Performance; decisione 194 dell'owner, 04/11 19:41: prima del
+ *   rilascio TUTTE le note che TALOS aggiunge in coda vanno così, e quella cura passa di qui con un altro `daPiegare`).
+ * Misurato dalla revisione del blocco UI (R2): con Anthropic e Gemini l'adattatore nativo raccoglieva ogni `system` sparso nel campo di
+ *   sistema IN TESTA (`instructions`), e una nota nuova cambiava la testa: la cache si rompeva dall'inizio (116 byte di prefisso comune su
+ *   224). Qui ogni `system` DOPO i system di testa per cui `daPiegare(testo, messaggio)` è vero diventa un blocco `<talos-note>` IN CODA al
+ *   messaggio della persona o dell'attrezzo che lo segue (saltando i system che restano come sono), oppure un `user` suo AL SUO POSTO se
+ *   prima arriva una risposta del modello o la fine. Stessa regola di `piegaMessaggiDiSistema`, ma solo per le note scelte, e la testa
+ *   non si tocca mai: niente riga di spiegazione nuova (cambierebbe la testa), la nota si presenta da sola col suo segno.
+ * ⛔ In coda e MAI davanti: la CLI riconosce i messaggi da come INIZIANO (`provider-attempts.ts:176-210`, contratto del 26/10).
+ * ⛔ Nel messaggio che riceve una nota, un `<talos-note` scritto dalla persona o da un file si neutralizza: nessuno si finge TALOS.
+ * Pura e deterministica (stessa storia ⇒ stessi byte); senza niente da piegare torna LA STESSA lista. La storia salvata non si tocca mai.
+ * @param {Array<object>} messaggi
+ * @param {{ daPiegare?: (testo: string, messaggio: object) => boolean }} [opzioni] di serie: tutte le note dopo la testa
+ * @returns {Array<object>}
+ */
+export function piegaNoteInCoda(messaggi, { daPiegare = () => true } = {}) {
+    if (!Array.isArray(messaggi)) return messaggi
+    let inizio = 0
+    while (inizio < messaggi.length && eSistema(messaggi[inizio])) inizio += 1
+    /* il predicato si chiede UNA volta per messaggio (chi lo passa può contare, o costare) */
+    const scelti = messaggi.map((m, i) => i >= inizio && eSistema(m) && daPiegare(testoDi(m.content), m) === true)
+    if (!scelti.includes(true)) return messaggi
+    const fuori = messaggi.slice(0, inizio)
+    const forma = { aBlocchi: portaSegniDiCache(messaggi) }
+    let note = []
+    for (let i = inizio; i < messaggi.length; i += 1) {
+        const m = messaggi[i]
+        if (scelti[i]) { const testo = testoDi(m.content); if (testo !== '') note.push(testo); continue }
+        if (note.length && eAppoggio(m)) { fuori.push({ ...m, content: conNoteInCoda(neutralizzaContenuto(m.content), note, forma) }); note = []; continue }
+        if (note.length && !eSistema(m)) { fuori.push({ role: 'user', content: conNoteInCoda('', note, forma) }); note = [] }
+        fuori.push(m)
+    }
+    if (note.length) fuori.push({ role: 'user', content: conNoteInCoda('', note, forma) })
+    return fuori
 }
 
 /* Le parole sentinella della sonda: uniche, così un template che le perde si vede. */

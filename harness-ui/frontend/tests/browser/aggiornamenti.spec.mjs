@@ -104,7 +104,7 @@ test('AGG-UI-04: la sezione «Aggiornamenti» a sé — versione, ultimo control
   expect(forma.length).toBe(2);
   /* Prima foto del 01/10: la descrizione di questa carta mostrava quella della sorella (`static-copy.ts` prendeva «la prima carta»). */
   await expect(scheda.locator(':scope > p')).toHaveText('Controlla all’avvio e ogni 4 ore; installa quando chiudi l’app.');
-  await expect(page.locator('[data-settings-card="account-controls"] > p')).toHaveText('Controlli e configurazione dell’agente. Il backup non è disponibile da questa pagina.');
+  await expect(page.locator('[data-settings-card="account-controls"] > p')).toHaveText('Controlli e configurazione dell’agente.');
   expect(forma[0]).not.toBeNull();
   expect(forma[0]).toEqual(forma[1]);
   await expect(scheda.locator('[data-aggiornamenti-versione]')).toHaveText('TALOS 0.1.20');

@@ -29,7 +29,7 @@ test('WF-RUN-CONTROLS-UI: Pause at once, Retry after its count, Cancel after its
   await expect(conferma).toBeVisible();
   await expect(conferma.getByRole('heading')).toHaveText('Riprovo 1 passo?');
   await expect(conferma).toContainText('Il passo non riuscito riparte coi tentativi da capo. Il tetto dell’esecuzione sale di:');
-  await expect(conferma.locator('.talos-wfg-conferma__riga')).toHaveText([/Tempo massimo\s*\+ 20 min/u, /Richieste al modello\s*\+ 8/u, /Token letti\s*\+ 12\.000/u, /Attrezzi usati\s*\+ 30/u]);
+  await expect(conferma.locator('.talos-wfg-conferma__riga')).toHaveText([/Tempo massimo\s*\+ 20 min/u, /Richieste al modello\s*\+ 8/u, /Token letti\s*\+ 12\.000/u, /Strumenti usati\s*\+ 30/u]);
   await expect(conferma.getByRole('button', { name: 'Non ora' })).toBeFocused();
   await conferma.getByRole('button', { name: 'Riprova', exact: true }).click();
   await expect(conferma).toHaveCount(0);

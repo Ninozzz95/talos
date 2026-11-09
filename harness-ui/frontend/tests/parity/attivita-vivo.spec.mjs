@@ -13,9 +13,9 @@ async function foto(page,nome,info){await mkdir(FOTO,{recursive:true});await pag
 const payload=attivita=>({ok:true,data:{attivita,errore:null}});
 test('ATTIVITA-REALE: vuoto onesto, stessa API originale, ricarico senza fixture',async({page,request,browser},info)=>{
  const errori=[];page.on('pageerror',e=>errori.push(e.message));await pronta(page);await apriAttivita(page);
- await expect(page.locator('[data-task-esito]')).toHaveText('0 attività');await expect(page.locator('#schermoAttivita [data-c="TaskRow"]')).toHaveCount(0);
+ await expect(page.locator('[data-task-esito]')).toHaveText('');await expect(page.locator('#schermoAttivita [data-c="TaskRow"]')).toHaveCount(0);
  await expect(page.locator('[data-task-list]')).toContainText('Nessuna attività salvata');await foto(page,'app-vuota',info);
- await page.reload();await expect(page.getByRole('button',{name:'Attività 0',exact:true})).toBeVisible();await apriAttivita(page);await expect(page.locator('[data-task-esito]')).toHaveText('0 attività');expect(errori).toEqual([]);
+ await page.reload();await expect(page.getByRole('button',{name:'Attività 0',exact:true})).toBeVisible();await apriAttivita(page);await expect(page.locator('[data-task-esito]')).toHaveText('');expect(errori).toEqual([]);
  const contesto=await browser.newContext({...info.project.use,locale:'it-IT'}),originale=await contesto.newPage();await pronta(originale,ORIGINALE);
  // Il comando visibile nel vecchio pannello e le stesse attività globali.
  if(info.project.use.viewport.width<=1040)await originale.locator('.desktop-context-toggle').click();
@@ -25,7 +25,7 @@ test('ATTIVITA-REALE: vuoto onesto, stessa API originale, ricarico senza fixture
 test('ATTIVITA-FIXTURE: stati, lettura completa, tastiera e nessuna scrittura',async({page},info)=>{
  await pronta(page);const scritture=[];page.on('request',r=>{if(!['GET','HEAD'].includes(r.method()))scritture.push(r.url());});
  await page.route('**/api/v1/sessions/*/tasks',r=>r.fulfill({json:payload(ATTIVITA)}));await apriAttivita(page);
- const righe=page.locator('#schermoAttivita [data-c="TaskRow"]');await expect(righe).toHaveCount(4);await expect(page.locator('#schermoAttivita .talos-topbar__path')).toHaveText('3 aperte · 1 fatta');
+ const righe=page.locator('#schermoAttivita [data-c="TaskRow"]');await expect(righe).toHaveCount(4);await expect(page.locator('#schermoAttivita .talos-topbar__path')).toHaveText('');
  await page.getByRole('tab',{name:'Da fare',exact:true}).click();await expect(righe).toHaveCount(2);
  await page.getByRole('tab',{name:'Da fare',exact:true}).press('End');await expect(page.getByRole('tab',{name:'Fatte',exact:true})).toBeFocused();await expect(righe).toHaveCount(1);
  await righe.getByRole('button',{name:/^Leggi l’attività/}).click();await expect(righe).toHaveCSS('opacity','1');await expect(righe.locator('.talos-list-row__sub')).toContainText(ATTIVITA[3].descrizione);
@@ -41,7 +41,7 @@ test('ATTIVITA-RECUPERO: errori, payload non valido e risposta obsoleta',async({
  await pronta(page);await page.route('**/api/v1/sessions/*/tasks',r=>r.fulfill({status:503,json:{ok:false,error:{code:'OFFLINE',message:'Servizio non disponibile'}}}));await apriAttivita(page);
  await expect(page.locator('[data-task-esito]')).toContainText('Servizio non disponibile');await expect(page.locator('[data-task-esito]')).toBeInViewport();await expect(page.locator('#schermoAttivita .talos-topbar__path')).toHaveText('Attività non disponibili');await foto(page,'app-errore',info);
  await page.unroute('**/api/v1/sessions/*/tasks');await page.route('**/api/v1/sessions/*/tasks',r=>r.fulfill({json:payload([null])}));await page.locator('[data-task-refresh]').click();await expect(page.locator('[data-task-esito]')).toContainText('Elenco delle attività non valido');
- await page.unroute('**/api/v1/sessions/*/tasks');await page.locator('[data-task-refresh]').click();await expect(page.locator('[data-task-esito]')).toHaveText('0 attività');
+ await page.unroute('**/api/v1/sessions/*/tasks');await page.locator('[data-task-refresh]').click();await expect(page.locator('[data-task-esito]')).toHaveText('');
  let libera;const attesa=new Promise(r=>{libera=r;});let richieste=0;
  await page.route('**/api/v1/sessions/*/tasks',async r=>{richieste++;if(richieste===1){await attesa;await r.fulfill({json:payload([ATTIVITA[0]])});}else await r.fulfill({json:payload([ATTIVITA[1]])});});
  try {

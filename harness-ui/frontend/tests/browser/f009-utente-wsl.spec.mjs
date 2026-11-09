@@ -105,8 +105,8 @@ test('F009-UI-07 (fase B): con la casa Linux pronta «Automatico» e «Linux (WS
   const automatico = page.locator('#veloPermessi [data-dove-choice=""]');
   const linux = page.locator('#veloPermessi [data-dove-choice="wsl2"]');
   await expect(automatico.locator('.talos-badge')).toHaveText('Linux con WSL');
-  await expect(automatico.locator('.talos-choice__sub')).toHaveText('Una casa sola: con WSL comandi e attrezzi dei file lavorano in Linux, senza WSL su Windows.');
-  await expect(linux.locator('.talos-choice__sub')).toContainText('Sempre in Linux, comandi e attrezzi dei file con gli stessi percorsi.');
+  await expect(automatico.locator('.talos-choice__sub')).toHaveText('Una casa sola: con WSL comandi e strumenti dei file lavorano in Linux, senza WSL su Windows.');
+  await expect(linux.locator('.talos-choice__sub')).toContainText('Sempre in Linux, comandi e strumenti dei file con gli stessi percorsi.');
   await expect(linux.locator('.talos-badge')).toHaveText('Consigliato');
   for (const scelta of [automatico, linux]) {
     expect(await scelta.locator('.talos-choice__sub').evaluate((n) => n.scrollHeight <= n.clientHeight + 1 && n.scrollWidth <= n.clientWidth + 1), 'il testo nuovo non è tagliato').toBe(true);
@@ -134,7 +134,7 @@ test('F009-UI-04: la carta della conferma di root vale per la sessione — due a
   const risposte = [];
   await page.route('**/api/v1/sessions/f009-*/approve', (rotta) => { risposte.push(rotta.request().postDataJSON()); return rotta.fulfill({ json: { ok: true, data: { ok: true } } }); });
   await apriApp(page);
-  const frase = 'Questo comando girerebbe in Linux (WSL, Ubuntu) come root. Con i permessi di questa sessione i comandi partono senza chiedere, ma come root può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se confermi, per il resto di questa sessione i comandi in Linux (WSL, Ubuntu) potranno girare come root senza chiederlo di nuovo.';
+  const frase = 'Questo comando girerebbe in Linux (WSL, Ubuntu) come root. Con i permessi di questa sessione i comandi partono senza chiedere, ma come root può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Un sì vale per questa chat, a meno che tu scelga solo questa volta.';
   await page.evaluate((frase) => {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.passaASessione('f009-uno', 'workspace', 'F009 conferma', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
@@ -146,12 +146,32 @@ test('F009-UI-04: la carta della conferma di root vale per la sessione — due a
   const scheda = page.locator('#conversation [data-c="ApprovalCard"]').first();
   await expect(scheda).toBeVisible();
   await expect(scheda).toContainText(frase);
-  await expect(scheda.locator('button')).toHaveText(['Consenti per questa sessione', 'Nega']);
-  await expect(scheda.locator('.talos-approval__foot-note')).toHaveText('Vale per tutta la sessione');
-  await scheda.getByRole('button', { name: 'Consenti per questa sessione' }).click();
+  await expect(scheda.locator('button')).toHaveText(['Solo questa volta', 'Per questa chat', 'Nega']);
+  await expect(scheda.locator('.talos-approval__foot-note')).toHaveCount(0);
+  await scheda.getByRole('button', { name: 'Per questa chat' }).click();
   await expect.poll(() => risposte.length).toBe(1);
   expect(risposte[0]).toEqual({ requestId: 'f009-app-1', approvato: true });
-  expect(fermate, 'nessun permesso per attrezzo scritto: il sì vive nel kernel, non in «shell: sempre»').toEqual([]);
+  expect(fermate, 'nessun permesso per strumento scritto: il sì vive nel kernel, non in «shell: sempre»').toEqual([]);
+});
+
+test('D41-UI-01: «Solo questa volta» manda `ambito: volta` e non scrive nessun «sempre»', async ({ page }) => {
+  const fermate = await guardia(page);
+  const risposte = [];
+  await page.route('**/api/v1/sessions/f009-*/approve', (rotta) => { risposte.push(rotta.request().postDataJSON()); return rotta.fulfill({ json: { ok: true, data: { ok: true } } }); });
+  await apriApp(page);
+  await page.evaluate(() => {
+    const runtime = window.__talosHarnessUiRuntime;
+    runtime.passaASessione('f009-volta', 'workspace', 'D41 volta', 'qwen/qwen3.8-flash', { conclusa: false, modello: 'qwen/qwen3.8-flash' });
+    runtime.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, runtime.realSessionState.generation);
+    const generazione = runtime.realSessionState.generation;
+    runtime.handleRealEvent({ type: 'RunStarted', input: { consegna: 'Elenca i file' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'qwen/qwen3.8-flash' }, _sequenza: 1 }, generazione);
+    runtime.handleRealEvent({ type: 'ApprovalRequested', requestId: 'd41-app-1', azione: { tipo: 'shell', toolCallId: 'c1', comando: 'ls -la', wslRoot: { distro: 'Ubuntu', utente: 'root', nessunUtenteNormale: true, frase: 'root' } }, _sequenza: 2 }, generazione);
+  });
+  const scheda = page.locator('#conversation [data-c="ApprovalCard"]').first();
+  await scheda.getByRole('button', { name: 'Solo questa volta' }).click();
+  await expect.poll(() => risposte.length).toBe(1);
+  expect(risposte[0]).toEqual({ requestId: 'd41-app-1', approvato: true, ambito: 'volta' });
+  expect(fermate).toEqual([]);
 });
 
 test('F009-UI-05: una carta di shell qualunque resta com era (tre azioni, «vale solo per questa richiesta»)', async ({ page }) => {
@@ -188,8 +208,8 @@ test('F009-UI-06: l esito di un comando dice «in Linux (WSL) come root»', asyn
 /* K4b (11/10/2026, visto sul server di prova della 0.1.26: la carta inglese diceva «Questo comando gira in Linux…») — il kernel manda
    la frase inglese con chiave e valori; la carta la dice nella lingua dell'interfaccia. */
 for (const [lingua, attesa] of [
-  ['en', "This command would run in Linux (WSL, Ubuntu) as root. With this session's permissions commands run without asking, but as root it can change the whole Linux system and write to the Windows disks. If you confirm, commands in Linux (WSL, Ubuntu) can run as root for the rest of this session without asking again."],
-  ['it', 'Questo comando girerebbe in Linux (WSL, Ubuntu) come root. Con i permessi di questa sessione i comandi partono senza chiedere, ma come root può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Se confermi, per il resto di questa sessione i comandi in Linux (WSL, Ubuntu) potranno girare come root senza chiederlo di nuovo.'],
+  ['en', "This command would run in Linux (WSL, Ubuntu) as root. With this session's permissions commands run without asking, but as root it can change the whole Linux system and write to the Windows disks. A yes applies to this chat, unless you choose only this time."],
+  ['it', 'Questo comando girerebbe in Linux (WSL, Ubuntu) come root. Con i permessi di questa sessione i comandi partono senza chiedere, ma come root può cambiare tutto il sistema Linux e scrivere sui dischi di Windows. Un sì vale per questa chat, a meno che tu scelga solo questa volta.'],
 ]) {
   test(`F009-UI-08 (${lingua}): la ragione della carta di root si dice nella lingua dell'interfaccia, dalla chiave del kernel`, async ({ page }) => {
     const fermate = await guardia(page);
@@ -202,7 +222,7 @@ for (const [lingua, attesa] of [
       runtime.handleRealEvent({ type: 'RunStarted', input: { consegna: 'List the files' }, contesto: { cartella: 'C:\\progetti\\AVM', modello: 'qwen/qwen3.8-flash' }, _sequenza: 1 }, generazione);
       // l'evento com'è col kernel nuovo: frase inglese (riserva), chiave e valori
       runtime.handleRealEvent({ type: 'ApprovalRequested', requestId: 'f009-k4b-1', azione: { tipo: 'shell', toolCallId: 'c1', comando: 'ls -la', wslRoot: { distro: 'Ubuntu', utente: 'root',
-        frase: "This command would run in Linux (WSL, Ubuntu) as root. With this session's permissions commands run without asking, but as root it can change the whole Linux system and write to the Windows disks. If you confirm, commands in Linux (WSL, Ubuntu) can run as root for the rest of this session without asking again.",
+        frase: "This command would run in Linux (WSL, Ubuntu) as root. With this session's permissions commands run without asking, but as root it can change the whole Linux system and write to the Windows disks. A yes applies to this chat, unless you choose only this time.",
         fraseChiave: 'server.approval.wslRoot.user', fraseParams: { linux: 'Linux (WSL, Ubuntu)', utente: 'root' } } }, _sequenza: 2 }, generazione);
     });
     const scheda = page.locator('#conversation [data-c="ApprovalCard"]').first();

@@ -52,6 +52,7 @@
 .td-intro-mark { display: grid; place-items: center; width: 46px; height: 46px; flex: 0 0 auto; background: var(--talos-panel); box-shadow: inset 0 0 0 1px var(--talos-border); border-radius: var(--talos-radius-card); color: var(--talos-accent-text); }
 .td-intro-mark svg { width: 22px; height: 22px; }
 .td-toolbar { display: flex; align-items: center; gap: var(--talos-space-sm); flex-wrap: wrap; margin-bottom: 14px; }
+.td-toolbar[hidden] { display: none; } /* decisione 177 (N9c): senza sessione la barra non c'è, come i filtri con l'elenco vuoto */
 /* 220 px e non 170: sotto quella misura il segnaposto si tronca («Cerca nel titolo e …»),
    e con `flex-wrap` la barra manda a capo il resto invece di strozzare la ricerca. */
 .td-search { flex: 1; min-width: 220px; max-width: 420px; }
@@ -114,7 +115,9 @@
    rientro vuoto. */
 .td-task .td-card-open { min-height: 222px; }
 .td-task[data-done="true"] .td-card-open { padding-left: 52px; }
-.td-task-toggle { position: absolute; top: 22px; left: 18px; width: 21px; height: 21px; border: 1px solid var(--talos-border-strong); background: transparent; border-radius: 6px; color: var(--talos-text-on-accent); display: grid; place-items: center; }
+/* Decisione 177 (N3b): il segno «fatta» è tondo, come il segno a sinistra della card di Memoria, così la sola casella quadrata
+   della card resta quella della selezione (in alto a destra, come in Memoria e Note). Prova: UX177-B. */
+.td-task-toggle { position: absolute; top: 22px; left: 18px; width: 21px; height: 21px; border: 1px solid var(--talos-border-strong); background: transparent; border-radius: 999px; color: var(--talos-text-on-accent); display: grid; place-items: center; }
 .td-task-toggle svg { width: 14px; height: 14px; }
 .td-task-toggle[data-fatta="true"] { background: var(--talos-accent); border-color: var(--talos-accent); }
 .td-task[data-done="true"] h3 { text-decoration: line-through; color: var(--talos-muted); }
@@ -813,10 +816,9 @@ details.td-theme-note p { margin: 8px 0 0; }
 .td-section .td-toolbar > .talos-grow { display: none; }
 .td-section .td-select { min-height: 0; height: 36px; max-width: none; padding: 0 32px 0 11px; border-radius: 9px; background: var(--talos-panel-soft); font-size: 12px; }
 
-/* La riga della selezione — `atlas.js:148` (`row between small`, margine 12 · 16), CSS-0152/0154/0159, e la casella
-   `.checkline` CSS-0188/0189: nessuna cornice, testo 11, spazio 9 fra casella e parola. */
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-bulk { min-height: 0; margin: 12px 0 16px; padding: 0; border: 0; background: transparent; font-size: 11px; }
-.td-section:is([data-section="note"], [data-section="automazioni"]) .td-bulk-select { gap: 9px; }
+/* La riga della selezione: decisione 177 dell'owner (04/11/2026, reperto N9a della revisione UX 1-27) — la stessa cornice di
+   Attività e Memoria in ogni sezione sorella (Note, Automazioni, Libreria), la regola di base `.td-bulk` qui sopra. Prima
+   Note, Automazioni e Libreria la toglievano (`atlas.js:148`, `.checkline` CSS-0188/0189). Prova: UX177-A. */
 
 /* Le card — CSS-0235/0236/0237/0239/0241/0243 (`.file-card`, `.selected`, `h4`, `footer`, `.note-card .note-excerpt`,
    `.note-card footer`) e `.demo h4` (12 · 550). Altezza del contenuto, niente orecchio piegato, niente cambio di bordo
@@ -926,8 +928,6 @@ details.td-theme-note p { margin: 8px 0 0; }
    la tendina è larga quanto il suo contenuto e ha le misure che il `.td-select` aveva nella barra. Prova: ATLAS-F3-12. */
 .td-section[data-section="libreria"] .td-toolbar .calm-control--select { width: auto; flex: 0 0 auto; }
 .td-section[data-section="libreria"] .td-toolbar .calm-select { min-height: 0; height: 36px; gap: 10px; padding: 0 11px; border-radius: 9px; background: var(--talos-panel-soft); font-size: 12px; white-space: nowrap; }
-.td-section[data-section="libreria"] .td-bulk { min-height: 0; margin: 12px 0 16px; padding: 0; border: 0; background: transparent; font-size: 11px; }
-.td-section[data-section="libreria"] .td-bulk-select { gap: 9px; }
 
 /* La griglia del mobile (`CLASSE_GRIGLIA`): colonne da 8,5 a 13rem che riempiono la riga, spazio di sezione fra le card. */
 .td-section[data-section="libreria"] .td-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(8.5rem, 42%, 13rem)), 1fr)); align-items: start; gap: var(--lib-sezione); }

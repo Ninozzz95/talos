@@ -84,6 +84,8 @@ async function avviaHost(comando, extra = []) {
   host.stderr.on('data', (d) => { fuori += d; });
   const t0 = Date.now();
   while (!/GRUPPO \d+/u.test(fuori) && Date.now() - t0 < 10_000) await pausa(50);
+  /* il finally delle prove comincia dopo questo ritorno: un host partito senza gruppo si chiude qui */
+  if (!/GRUPPO \d+/u.test(fuori)) { try { process.kill(-host.pid, 'SIGKILL'); } catch { /* già uscito */ } rimuoviCartellaDiProva(cartella); }
   assert.match(fuori, /GRUPPO \d+/u, `il comando non è partito: ${fuori}`);
   return { host, cartella };
 }

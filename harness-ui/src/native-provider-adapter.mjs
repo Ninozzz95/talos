@@ -8,6 +8,8 @@ import { tokenDaCache, tokenScrittiInCache } from './usage-cache.mjs';
 import { argomentiVuoti } from './argomenti-vuoti.mjs';
 import { createHash } from 'node:crypto';
 import { livelloRagionamentoPiuVicino } from './openai-compatible-runtime.mjs';
+import { piegaNoteInCoda } from './kernel/sistema-piegato.mjs'; // decisione 166 (R2) e 194: le note in coda al loro posto
+import { notaDegliAccorciatiComeUtente } from './kernel/avviso-accorciato.mjs'; // REV-M2-PIEGA (05/11): su Responses la nota M2 resta la `user` di prima
 
 // Only this adapter knows the SDK message format. The kernel owns tool execution.
 export function stripNativeMetadata(messages) {
@@ -38,6 +40,22 @@ function sistemaNativo(content, { anthropic }) {
   });
   const marcatore = content.find(parte => parte && typeof parte === 'object' && parte.cache_control)?.cache_control;
   return { role: 'system', content: testi.join('\n'), ...(anthropic && marcatore ? { providerOptions: { anthropic: { cacheControl: { ...marcatore } } } } : {}) };
+}
+
+/*
+ * Decisione 326 (A): la continuazione di una risposta di solo ragionamento arriva come assistant IN CODA senza testo né attrezzi (il
+ * prefill che llama.cpp e i modelli aperti proseguono). Sui fili nativi non parte: Anthropic rifiuta un blocco di ragionamento in coda
+ * («final block cannot be thinking»), Responses un ragionamento senza l'elemento che lo segue. Come Hermes, che toglie dalla copia per la
+ * rete ogni assistant di solo ragionamento (`run_agent.py:1123-1156`, `_is_thinking_only_assistant`; `agent/turn_request_assembly.py:179-187`):
+ * qui solo quello in coda, l'unico che TALOS costruisce. Un assistant in coda CON testo (il prefill vero di Anthropic) resta.
+ */
+const haTestoVero = (content) => (typeof content === 'string' ? content.trim().length > 0
+  : Array.isArray(content) ? content.some(parte => parte && (typeof parte === 'string' ? parte.trim() : parte.type !== 'text' || String(parte.text ?? '').trim()))
+    : false);
+export function senzaPrefillDiSoloRagionamento(messages) {
+  const ultimo = Array.isArray(messages) ? messages.at(-1) : null;
+  if (ultimo?.role !== 'assistant' || ultimo.tool_calls?.length || haTestoVero(ultimo.content)) return messages;
+  return messages.slice(0, -1);
 }
 
 export function toNativeMessages(messages, { provider, model }) {
@@ -162,11 +180,16 @@ function finestraPiena(finishReason, rawFinishReason) {
   return finishReason === 'length' && rawFinishReason === 'model_context_window_exceeded';
 }
 
+/* I motivi di fine dell'SDK nella forma dei compatibili, che è quella che il kernel legge. Blocco 20 (01/11/2026, Performance): `content-filter` è il rifiuto del modello
+   sulle strade dirette (`@ai-sdk/anthropic` traduce così `refusal`, `@ai-sdk/openai` `content_filter`, Gemini `SAFETY`). Prima qui diventava «risposta incompleta, riprova»,
+   il testo parziale si perdeva e la stessa richiesta ripartiva: invece è una fine, che il kernel non ritenta (`eRifiutoDelModello`). Come Hermes, `empty_response_guard.py:4`. */
+const fineDelKernel = (motivo) => (motivo === 'tool-calls' ? 'tool_calls' : motivo === 'content-filter' ? 'content_filter' : motivo);
+
 function responseMessage(response, provider, model, finishReason, nomiVeri = new Map(), rawFinishReason = null) {
   if (finestraPiena(finishReason, rawFinishReason)) {
     throw Object.assign(new Error(FRASE_FINESTRA_PIENA), { code: 'NATIVE_CONTEXT_WINDOW_EXCEEDED', finestraPiena: true });
   }
-  if (!['stop', 'tool-calls', 'length'].includes(finishReason)) {
+  if (!['stop', 'tool-calls', 'length', 'content-filter'].includes(finishReason)) {
     // P-J — nei nuovi profili lo schermo usa il nome umano, senza codici del protocollo.
     const record = fornitore(provider);
     const error = new Error(provider !== 'anthropic' && record?.wire === 'anthropic-messages'
@@ -230,11 +253,31 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
     const prefisso = primo >= 0 ? messaggi.slice(0, primo + 1) : messaggi.slice(0, 1);
     return `talos-${createHash('sha256').update(JSON.stringify([model, body.tools ?? null, prefisso])).digest('hex')}`.slice(0, 64);
   })()) : null;
-  const providerOptions = wireResponses ? { openai: { store: false, include: ['reasoning.encrypted_content'], ...(chiaveCacheOpenAI ? { promptCacheKey: chiaveCacheOpenAI } : {}) } }
+  /*
+   * Il riassunto del ragionamento (Performance, 30/10/2026; forma chiusa coi tre e owner «solo -p e banco»): chi ospita può dire
+   *   `reasoning.summary`. Misurato sul piano (P2b, 9 corse): il tipo di riassunto non cambia il tempo, quindi il default resta quello
+   *   dell'SDK («detailed» quando c'è uno sforzo, `@ai-sdk/openai` dist/index.js:6919). «none» OMETTE il campo, come Codex
+   *   (`codex-rs/core/src/client.rs:944`: `summary` parte solo se non è None); un valore che il filo non conosce si ignora.
+   *   Lo usa la CLI in `-p`, dove nessuno legge il ragionamento (come Claude Code `thinking.display: "omitted"`).
+   */
+  const riassuntoChiesto = body.reasoning?.summary;
+  const riassunto = riassuntoChiesto === 'none' ? { reasoningSummary: null }
+    : ['auto', 'concise', 'detailed'].includes(riassuntoChiesto) ? { reasoningSummary: riassuntoChiesto } : {};
+  const providerOptions = wireResponses ? { openai: { store: false, include: ['reasoning.encrypted_content'], ...(chiaveCacheOpenAI ? { promptCacheKey: chiaveCacheOpenAI } : {}), ...riassunto } }
     : provider === 'anthropic' ? opzioniAnthropicNative(provider, model, body) : opzioniAnthropicTerzi(provider, model, body);
   /* Con le opzioni esplicite (ragionamento adattivo + livello) il livello NON passa anche dal `reasoning` comune dell'SDK, che non conosce «max». */
   const sforzoEsplicito = provider === 'anthropic' && providerOptions.anthropic?.thinking != null;
-  const nativeMessages = storiaConAlias(toNativeMessages(body.messages, { provider, model }), alias.verso);
+  /* Decisione 166, seconda forma (revisione del blocco UI R2; condizione 1 di Performance): fuori da Responses ogni system sparso finisce
+     nel campo di sistema IN TESTA (sotto), e la nota dello Stop lo cambiava a ogni fermata: cache rotta dall'inizio. La nota va come testo
+     `user` al suo posto (`piegaNoteInCoda`). Responses resta com'era: lì i `developer` stanno già al loro posto e `instructions` non cambia. */
+  /* Decisione 194 (owner 04/11/2026 19:41): non più solo la nota dello Stop, ma OGNI nota di sistema dopo la testa (confine F-027, preambolo, Ask,
+     lingua, «dove sei», Piano…) va così: la testa resta byte per byte, la nota è un blocco `<talos-note>` IN CODA al messaggio dopo. */
+  /* REV-M2-PIEGA (revisione avversaria del 05/11/2026): la nota M2 dei risultati accorciati ora nasce `system` come le altre note. Fuori da
+     Responses la piega qui sopra la avvolge col segno intatto; su Responses (Luna, piano ChatGPT) non si piega niente, e la nota torna la
+     `user` <talos-note> in coda di prima: stesso posto, stessi byte. */
+  const messaggiSenzaPrefill = senzaPrefillDiSoloRagionamento(body.messages); // decisione 326 (A): qui la continuazione è la stessa domanda
+  const messaggiDelFilo = wireResponses ? notaDegliAccorciatiComeUtente(messaggiSenzaPrefill) : piegaNoteInCoda(messaggiSenzaPrefill);
+  const nativeMessages = storiaConAlias(toNativeMessages(messaggiDelFilo, { provider, model }), alias.verso);
   /*
    * ⛔ Cache del piano fra un giro e l'altro (CLI, 15/10/2026: 91% in cache dentro un giro, 0 fra due giri). Sul filo Responses un
    *   messaggio di sistema arrivato DOPO la storia (l'aggiornamento del preambolo che l'agent-service APPENDE apposta per non toccare il
@@ -283,7 +326,7 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
     if (finestraPiena(result.finishReason, result.rawFinishReason)) {
       return Response.json({ error: { message: FRASE_FINESTRA_PIENA, code: 'context_length_exceeded', type: 'invalid_request_error' } }, { status: 400 });
     }
-    return Response.json({ choices: [{ index: 0, message: responseMessage(result.response, provider, model, result.finishReason, alias.indietro, result.rawFinishReason), finish_reason: result.finishReason === 'tool-calls' ? 'tool_calls' : result.finishReason }], usage: canonicalUsage(usage, provider) });
+    return Response.json({ choices: [{ index: 0, message: responseMessage(result.response, provider, model, result.finishReason, alias.indietro, result.rawFinishReason), finish_reason: fineDelKernel(result.finishReason) }], usage: canonicalUsage(usage, provider) });
   }
   const abort = new AbortController();
   const combinedSignal = signal ? AbortSignal.any([signal, abort.signal]) : abort.signal;
@@ -319,7 +362,7 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
   let usageDelloStep; // P-J — conserva raw senza consumare due volte il flusso SDK.
   const stream = new ReadableStream({
     async pull(controller) {
-      const emit = (delta, extra = {}, finishReason) => controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ index: 0, delta, ...(finishReason ? { finish_reason: finishReason === 'tool-calls' ? 'tool_calls' : finishReason } : {}) }], ...extra })}\n\n`));
+      const emit = (delta, extra = {}, finishReason) => controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ index: 0, delta, ...(finishReason ? { finish_reason: fineDelKernel(finishReason) } : {}) }], ...extra })}\n\n`));
       try {
         while (!completed) {
           const { value: part, done } = await iterator.next();

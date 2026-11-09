@@ -685,7 +685,7 @@ test('FILE-EXPLORER-REFRESH-06 — sessione reale abilita crea, aggiorna e compr
       modello: 'qwen/qwen3.8-flash', provider: 'cloud',
     }] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
-  await page.route('**/api/v1/sessions/session-tree-tools/events', async (route) => route.fulfill({
+  await page.route('**/api/v1/sessions/session-tree-tools/events*', async (route) => route.fulfill({
     status: 200, contentType: 'text/event-stream', body: '',
   }));
   await page.route('**/api/v1/sessions/session-tree-tools/tree**', async (route) => {
@@ -943,7 +943,7 @@ test('LAG-LIVE-TEXT-37 — il resume disattiva il differimento e mostra lo strea
     contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: { sessionId: 'lag-live-text' }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
-  await page.route('**/api/v1/sessions/lag-live-text/events', async (route) => route.fulfill({
+  await page.route('**/api/v1/sessions/lag-live-text/events*', async (route) => route.fulfill({
     status: 200,
     contentType: 'text/event-stream',
     body: '',
@@ -1038,7 +1038,7 @@ test('LAG-GENERATION-CANCEL-34 — il cambio sessione annulla il tree differito 
 test('cold start does not expose invented runtime telemetry', async ({ page }) => {
   await apriChat(page);
   const text = await page.locator('body').innerText();
-  for (const value of ['wt/auth', 'feat/mobile', '18.7k / 128k', '142 tok/s', 'cache 78%', 'Attrezzi\n7', 'Browser\nScoped']) {
+  for (const value of ['wt/auth', 'feat/mobile', '18.7k / 128k', '142 tok/s', 'cache 78%', 'Strumenti\n7', 'Browser\nScoped']) {
     expect(text).not.toContain(value);
   }
   const finestra = page.locator('#railContesto');
@@ -1072,7 +1072,7 @@ test('Nuova sessione usa la workspace desktop senza configurazione manuale', asy
   await page.goto('/');
   await page.locator('#newSessionBtn').click();
   await expect(page.locator('#sheetDialog')).toBeVisible();
-  await expect(page.locator('#sheetTitle')).toHaveText('Su quale progetto lavora TALOS?');
+  await expect(page.locator('#sheetTitle')).toHaveText('Nuova sessione') /* FE-040 (31/10/2026): titolo semplice */;
   await expect(page.locator('[data-workspace-selected-path]')).toHaveText(project);
   await expect(page.locator('#workspaceChooserSubmit')).toBeEnabled();
   await expect(page.locator('#workspaceChooserSubmit')).toContainText('AVM-harness-desktop');
@@ -1096,11 +1096,11 @@ test('OPEN-WITH-TALOS-BROWSER-01 — il fragment apre la scelta esplicita senza 
     corpoAvvio = route.request().postDataJSON();
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, data: { sessionId: 'session-open-with' } }) });
   });
-  await page.route('**/api/v1/sessions/session-open-with/events', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/session-open-with/events*', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
 
   await page.goto(`/#open-workspace=${launchId}`);
   await expect(page.locator('#sheetDialog')).toBeVisible();
-  await expect(page.locator('#sheetTitle')).toHaveText('Su quale progetto lavora TALOS?');
+  await expect(page.locator('#sheetTitle')).toHaveText('Nuova sessione') /* FE-040 (31/10/2026): titolo semplice */;
   await expect(page.locator('[data-workspace-selected-path]')).toHaveText('Progetto Ω · scelta da Windows');
   await expect(page.locator('#workspaceChooserSubmit')).toContainText('Progetto Ω');
   await page.locator('#workspaceChooserSubmit').click();
@@ -1147,7 +1147,7 @@ test('selezionare una sessione sincronizza la pillola con il suo modello reale',
       provider: 'cloud',
     }] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
-  await page.route('**/api/v1/sessions/session-model-sync/events', async (route) => route.fulfill({
+  await page.route('**/api/v1/sessions/session-model-sync/events*', async (route) => route.fulfill({
     status: 200,
     contentType: 'text/event-stream',
     body: '',
@@ -1156,7 +1156,7 @@ test('selezionare una sessione sincronizza la pillola con il suo modello reale',
   const session = page.locator('[data-real-session-id="session-model-sync"]');
   await expect(session).toBeVisible();
   await session.click();
-  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('qwen3.8-flash');
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('Qwen3.8 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11): la pillola dice il nome del catalogo
   await page.locator('[data-real-session-id="session-without-model"]').click();
   await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('Scegli il modello');
 });
@@ -1171,16 +1171,16 @@ test('il modello della sessione resta identico dopo un reload', async ({ page })
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: { items: [sessione] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
-  await page.route('**/api/v1/sessions/session-gemini-reload/events', async (route) => route.fulfill({
+  await page.route('**/api/v1/sessions/session-gemini-reload/events*', async (route) => route.fulfill({
     status: 200, contentType: 'text/event-stream', body: '',
   }));
   await apriChat(page);
   await page.locator('[data-real-session-id="session-gemini-reload"]').click();
-  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('gemini-3.7-flash');
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('Gemini 3.7 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   await page.reload();
   await page.locator('[data-real-session-id="session-gemini-reload"]').click({ button: 'right' });
   await page.locator('.session-actions-menu').getByRole('menuitem', { name: 'Apri' }).click();
-  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('gemini-3.7-flash');
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('Gemini 3.7 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
 });
 
 test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvataggio e resta corretta al reload', async ({ page }) => {
@@ -1198,7 +1198,7 @@ test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvatag
   /* VELO-SPEC-2 (08/10/2026, bugfixer): il confine che il server manda sempre (anche a storia vuota). Con `body: ''` la foto in fondo
      prendeva il foglio del modello sopra una chat velata. Il `retry` lungo non serve a farla passare oggi (misurato): tiene chiuso il
      flusso, perché ogni riapertura (~3 s) rimette il velo per ~400 ms, e la guardia prima della foto lo renderebbe un rosso a caso. */
-  await page.route('**/api/v1/sessions/session-model-change/events', async (route) => route.fulfill({
+  await page.route('**/api/v1/sessions/session-model-change/events*', async (route) => route.fulfill({
     status: 200, contentType: 'text/event-stream',
     body: `retry: 3600000\ndata: ${JSON.stringify({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null })}\n\n`,
   }));
@@ -1221,7 +1221,7 @@ test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvatag
   await apriChat(page);
   await page.locator('[data-real-session-id="session-model-change"]').click();
   const pillola = page.locator('[data-open-sheet="model"] .talos-chip__label').first();
-  await expect(pillola).toHaveText('glm-4.7-flash');
+  await expect(pillola).toHaveText('GLM 4.7 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   await page.locator('[data-open-sheet="model"]').click();
   await page.locator('.talos-dialog input.sheet-input').fill('gemini-3.7-flash');
   await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).dblclick(); // 29/10/2026: nel velo un clic segna, il doppio clic sceglie (bozzetto approvato)
@@ -1237,17 +1237,17 @@ test('SESSION-MODEL-CHANGE-RELOAD-02 — la pillola cambia solo dopo il salvatag
    * pillola diventa «gemini-3.7-flash». `getByRole('dialog', { name: … })` risolve a **1**.
    */
   await expect(page.getByRole('dialog', { name: 'Modello', exact: true })).toBeVisible(); // 24/10/2026: il riquadro è solo «Modello»
-  await expect(pillola).toHaveText('glm-4.7-flash');
+  await expect(pillola).toHaveText('GLM 4.7 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   await expect.poll(() => aggiornamenti).toEqual([{
     modello: 'google/gemini-3.7-flash',
     reasoning: { effort: 'medium' },
   }]);
   await expect(page.locator('#sheetDialog')).not.toBeVisible();
-  await expect(pillola).toHaveText('gemini-3.7-flash');
+  await expect(pillola).toHaveText('Gemini 3.7 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
 
   await page.reload();
   await page.locator('[data-real-session-id="session-model-change"]').click();
-  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label').first()).toHaveText('gemini-3.7-flash');
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label').first()).toHaveText('Gemini 3.7 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   await page.locator('[data-open-sheet="model"]').click();
   await expect(livelloPillola(page)).toHaveText('Medio');
   const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
@@ -1277,7 +1277,7 @@ async function scenaC05(page, { sessionId, effortIniziale, filoGemini }) {
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: { items: [sessione] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
-  await page.route(`**/api/v1/sessions/${sessionId}/events`, async (route) => route.fulfill({
+  await page.route(`**/api/v1/sessions/${sessionId}/events*`, async (route) => route.fulfill({
     status: 200, contentType: 'text/event-stream',
     body: `retry: 3600000\ndata: ${JSON.stringify({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null })}\n\n`,
   }));
@@ -1298,12 +1298,12 @@ async function scenaC05(page, { sessionId, effortIniziale, filoGemini }) {
   await apriChat(page);
   await page.locator(`[data-real-session-id="${sessionId}"]`).click();
   const pillola = page.locator('[data-open-sheet="model"] .talos-chip__label').first();
-  await expect(pillola).toHaveText('glm-4.7-flash');
+  await expect(pillola).toHaveText('GLM 4.7 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   await page.locator('[data-open-sheet="model"]').click();
   await page.locator('.talos-dialog input.sheet-input').fill('gemini-3.7-flash');
   await page.getByRole('option').filter({ hasText: 'google/gemini-3.7-flash' }).dblclick(); // 29/10/2026: nel velo un clic segna, il doppio clic sceglie (bozzetto approvato)
   await expect.poll(() => aggiornamenti.length).toBe(1);
-  await expect(pillola).toHaveText('gemini-3.7-flash');
+  await expect(pillola).toHaveText('Gemini 3.7 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   await page.locator('[data-open-sheet="model"]').click();
   return aggiornamenti;
 }
@@ -1363,7 +1363,7 @@ test('SESSION-MODEL-UPDATE-FAIL-01 — un server incompatibile non produce una p
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: { items: [sessione] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
-  await page.route('**/api/v1/sessions/session-model-failure/events', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/session-model-failure/events*', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
   await page.route('**/api/v1/models', async (route) => route.fulfill({
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: { modelli: [
@@ -1416,7 +1416,7 @@ test('RUN-MODEL-RESUME-RACE-10 — il RunStarted visto durante la POST conserva 
       body: JSON.stringify({ ok: true, data: { sessionId: 'model-resume-race' } }),
     });
   });
-  await page.route('**/api/v1/sessions/model-resume-race/events', async (route) => route.fulfill({
+  await page.route('**/api/v1/sessions/model-resume-race/events*', async (route) => route.fulfill({
     status: 200,
     contentType: 'text/event-stream',
     body: '',
@@ -1447,7 +1447,7 @@ test('RUN-MODEL-RESUME-RACE-10 — il RunStarted visto durante la POST conserva 
    * «**qwen3.8-flash** · 16:08» (la bolla del giro nuovo) e quella precedente resta
    * «modello-precedente».
    */
-  await expect(page.locator('.talos-message__meta').last()).toContainText('qwen3.8-flash');
+  await expect(page.locator('.talos-message__meta').last()).toContainText('Qwen3.8 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11): la meta del giro dice il nome del catalogo
 });
 
 test('RUN-MODEL-TRACE-UI-07 — ogni risposta e l’export conservano il modello del proprio giro', async ({ page }) => {
@@ -1501,8 +1501,8 @@ test('RUN-MODEL-TRACE-UI-07 — ogni risposta e l’export conservano il modello
 
   /* Il modello è la PRIMA parte della meta; l'ora che segue è quella del giro e non si asserisce. */
   expect(prova.meta.map((testo) => testo.split(' · ')[0])).toEqual([
-    'qwen3.8-flash',
-    'gemini-3.7-flash',
+    'Qwen3.8 Flash', // 68ebab480 (revisione d'uso 04/11, reperto 11); l'export qui sotto tiene l'id intero
+    'Gemini 3.7 Flash', // 68ebab480 (revisione d'uso 04/11, reperto 11)
   ]);
   expect(prova.tool).toContain('README.md');
   expect(prova.exportMd).toContain('**Modello del giro:** qwen/qwen3.8-flash');
@@ -1534,7 +1534,7 @@ test('la sidebar consente selezione massiva e cancellazione esplicita delle sess
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: { items: sessioni }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
-  await page.route('**/api/v1/sessions/*/events', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
+  await page.route('**/api/v1/sessions/*/events*', async (route) => route.fulfill({ status: 200, contentType: 'text/event-stream', body: '' }));
   await page.route('**/api/v1/sessions/*/delete', async (route) => {
     const id = route.request().url().split('/sessions/')[1].split('/delete')[0];
     eliminati.push(id);
@@ -1594,7 +1594,7 @@ test('Doctor mostra la prontezza reale del runtime agente', async ({ page }) => 
   await apriChat(page);
   await page.locator('[data-vaia="impostazioni"]').click();
   await page.locator('#setting-tab-account').click();
-  await page.getByRole('button', { name: 'Agents', exact: true }).click();
+  await page.getByRole('button', { name: 'Agenti', exact: true }).click();
   await page.locator('#sheetBody [data-control-action="doctor"]').click();
   await expect(page.locator('#sheetBody [data-doctor-status]')).not.toHaveText('Healthy');
 });
@@ -1829,7 +1829,7 @@ test('RAGIONAMENTO-COMPRESSO — riga chiusa di serie che si apre col clic; «Mo
   await eventi([{ type: 'ReasoningMessageContent', messageId: 'reasoning-toggle', delta: 'Dettaglio interno', _sequenza: 90002 }]);
   await expect(nota, 'al primo testo la riga compare, anche con l’interruttore spento').toBeVisible();
   await expect(testa, 'di serie resta compressa').toHaveAttribute('aria-expanded', 'false');
-  await expect(testa).toContainText('Sta ragionando…');
+  await expect(testa.locator('.tool-note-summary-text'), 'R-36 A: viva, senza i puntini').toHaveText('Sta ragionando');
   await eventi([{ type: 'ReasoningMessageEnd', messageId: 'reasoning-toggle', _sequenza: 90003 }]);
   await expect(testa).toContainText('Ha ragionato');
   await expect(testa, 'un ragionamento finito non dice più che sta ragionando').not.toContainText('Sta ragionando');
@@ -1868,9 +1868,19 @@ test('RAGIONAMENTO-COMPRESSO — riga chiusa di serie che si apre col clic; «Mo
     { type: 'ReasoningMessageStart', messageId: 'reasoning-live', _sequenza: 90011 },
     { type: 'ReasoningMessageContent', messageId: 'reasoning-live', delta: 'Leggo i file', _sequenza: 90012 },
   ]);
-  await expect(testa, 'spento, mentre ragiona dice solo che sta ragionando').toContainText('Sta ragionando…');
+  await expect(testa, 'spento, mentre ragiona dice che sta ragionando').toContainText('Sta ragionando');
+  /* R-36 variante A (owner 30/10/2026 notte): spento, l'argomento si vede lo stesso, col punto davanti; il testo intero no (A14) */
+  await eventi([{ type: 'ReasoningMessageContent', messageId: 'reasoning-live', delta: '. Poi controllo le prove del selettore. ', _sequenza: 90013 }]);
+  const argomentoSpento = testa.locator('.talos-ragionamento__argomento');
+  await expect(argomentoSpento, 'spento, l’argomento resta a schermo').toBeVisible();
+  await expect(argomentoSpento).toHaveText('Poi controllo le prove del selettore.');
+  /* 31/10/2026, prova dal vivo: lo spazio dentro il contenuto si leggeva «·Tracing»; il respiro dopo il punto è un margine */
+  const punto = await argomentoSpento.evaluate((n) => { const c = getComputedStyle(n, '::before'); return { content: c.content, margine: parseFloat(c.marginInlineEnd) }; });
+  expect(punto.content, 'il punto lo mette il CSS').toBe('"·"');
+  expect(punto.margine, 'dopo il punto c’è respiro, non una lettera di spazio').toBeGreaterThanOrEqual(5);
+  await expect(testa.locator('.talos-measure'), 'spento, i secondi restano').toBeVisible();
   await expect(testa).toHaveAttribute('aria-expanded', 'false');
-  await eventi([{ type: 'ReasoningMessageEnd', messageId: 'reasoning-live', _sequenza: 90013 }]);
+  await eventi([{ type: 'ReasoningMessageEnd', messageId: 'reasoning-live', _sequenza: 90014 }]);
   await expect(page.locator('#conversation'), 'spento, il testo del ragionamento non è a schermo').not.toContainText('Leggo i file', { useInnerText: true });
 
   await page.locator('[data-open-sheet="model"]').click();
@@ -1974,7 +1984,7 @@ test('REASONING-INDICATOR-01 — il ragionamento nascosto mantiene un indicatore
   const indicator = page.locator('.talos-waiting');
   await expect(indicator).toBeVisible();
   await expect(indicator).toHaveAttribute('role', 'status');
-  await expect(indicator).toContainText('Ragionamento in corso');
+  await expect(indicator).toContainText('Sta ragionando');
   await expect(page.locator('.real-reasoning-note')).toBeHidden();
   const visualDir = resolve(process.cwd(), 'artifacts', 'visual-audit-2026-09-01');
   await mkdir(visualDir, { recursive: true });
@@ -1999,7 +2009,7 @@ test('REDUCED-MOTION-02 — l’indicatore resta leggibile e CALMO con movimento
     const runtime = window.__talosHarnessUiRuntime;
     runtime.handleRealEvent({ type: 'ReasoningMessageStart', messageId: 'reasoning-reduced', _sequenza: 90021 }, runtime.realSessionState.generation);
   });
-  await expect(page.locator('.talos-waiting')).toContainText('Ragionamento in corso'); // ⛔ 13/09 sera: era `.real-waiting-note`, selettore morto, rossa anche col pacchetto di prima
+  await expect(page.locator('.talos-waiting')).toContainText('Sta ragionando'); // R-36 (31/10/2026): la parola dell'attesa è quella della riga viva. ⛔ 13/09 sera: era `.real-waiting-note`, selettore morto, rossa anche col pacchetto di prima
   /*
    * ⛔ 13/09 sera — RESTA ROSSA, per una seconda ragione che non è del ragionamento, e la si scrive invece di
    *   inseguirla. Riparato il selettore, la prova arriva qui e trova 0 nodi `.talos-line-loader-node`: il
@@ -2071,7 +2081,7 @@ test('RUN-PRIMARY-STOP-03/RUN-QUEUE-04 — durante il run il primario ferma, Ent
   await expect(page.locator('.talos-bivio [data-bivio="accoda"]')).toBeFocused();
   expect(queued, 'Enter non deve scegliere al posto della persona').toBeNull();
   await page.locator('.talos-bivio [data-bivio="accoda"]').click();
-  await expect.poll(() => queued).toEqual({ messaggio: 'prima attendi il confine sicuro' });
+  await expect.poll(() => queued).toEqual({ messaggio: 'prima attendi il confine sicuro', paginaBrowser: null }); // 4e0dae315 (decisione 201, 04/11): /queue manda sempre paginaBrowser, null senza pagina
   const toast = page.locator('#regioneToast .talos-toast').last();
   await expect(toast).toBeVisible();
   await toast.locator('[data-toast-chiudi]').focus(); // il timer si ferma mentre la notifica e letta
@@ -2508,7 +2518,7 @@ async function orbInAttesa(page) {
     const runtime = window.__talosHarnessUiRuntime;
     runtime.handleRealEvent({ type: 'ReasoningMessageStart', messageId: 'attesa-orb', _sequenza: 90031 }, runtime.realSessionState.generation);
   });
-  await expect(page.locator('.talos-waiting')).toContainText('Ragionamento in corso');
+  await expect(page.locator('.talos-waiting')).toContainText('Sta ragionando');
   const orb = page.locator('#conversation .talos-orb.working');
   await expect(orb, 'un solo orb che lavora: quello della testata (24/09, due orb = doppione)').toHaveCount(1);
   await expect(page.locator('#conversation .talos-message__head .talos-orb.working')).toHaveCount(1);
@@ -2605,7 +2615,7 @@ test('SESSION-SETTINGS-RELOAD-01 — permessi e override della sessione restano 
     status: 200, contentType: 'application/json',
     body: JSON.stringify({ ok: true, data: { items: [sessione] }, meta: { schema: 'talos.harness-ui.api.v1' } }),
   }));
-  await page.route('**/api/v1/sessions/session-settings-reload/events', async (route) => route.fulfill({
+  await page.route('**/api/v1/sessions/session-settings-reload/events*', async (route) => route.fulfill({
     status: 200, contentType: 'text/event-stream', body: '',
   }));
   await page.route('**/api/v1/sessions/session-settings-reload/settings', async (route) => {
@@ -2616,7 +2626,7 @@ test('SESSION-SETTINGS-RELOAD-01 — permessi e override della sessione restano 
   });
   await apriChat(page);
   await page.locator('[data-real-session-id="session-settings-reload"]').click();
-  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('gemini-3.7-flash');
+  await expect(page.locator('[data-open-sheet="model"] .talos-chip__label')).toHaveText('Gemini 3.7 Flash'); // 68ebab480 (revisione d'uso 04/11, reperto 11)
   await page.locator('[data-open-sheet="permissions"]').first().click();
   /*
    * ⛔ 18/09/2026 — il foglio dei permessi del mockup NON usa la classe `active` del prototipo
@@ -3047,7 +3057,7 @@ test('DESKTOP-SETTINGS-PERSISTENCE-01 — i controlli di aspetto producono stato
  */
 test('LAG-LIVE-INCREMENTAL-40 — i blocchi già chiusi non vengono ricreati a ogni delta, la coda sì e il testo finale è completo', async ({ page }) => {
   // VELO-SPEC (08/10/2026): stream aperto e muto — un corpo che si chiude fa riaprire lo stream, e ogni onopen rimette la chat nella storia
-  await page.route('**/api/v1/sessions/lag-live-incremental/events', () => { /* resta pending */ });
+  await page.route('**/api/v1/sessions/lag-live-incremental/events*', () => { /* resta pending */ });
   await apriChat(page);
   const result = await page.evaluate(async () => {
     const runtime = window.__talosHarnessUiRuntime;

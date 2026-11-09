@@ -102,7 +102,7 @@ test('PREF-MOD-08: GET and POST /api/v1/model-preferences — the contract, erro
   const { createHttpApp } = await import('../src/http-app.mjs');
   const http = await import('node:http');
   const { store } = archivio(t);
-  const server = http.createServer(createHttpApp({ preferenzeModelli: store }));
+  const server = http.createServer(createHttpApp({ senzaGettone: 'prove', preferenzeModelli: store }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => server.close(r)));
   const base = `http://127.0.0.1:${server.address().port}/api/v1/model-preferences`;
@@ -124,12 +124,21 @@ test('PREF-MOD-08: GET and POST /api/v1/model-preferences — the contract, erro
     body: JSON.stringify({ azione: 'usato', modello: 'evil/x' }) });
   assert.equal(estranea.status, 403);
   assert.deepEqual((await store.leggi()).recenti, []);
-  const senza = http.createServer(createHttpApp({}));
+  const senza = http.createServer(createHttpApp({ senzaGettone: 'prove' }));
   await new Promise((r) => senza.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => senza.close(r)));
   const giu = await fetch(`http://127.0.0.1:${senza.address().port}/api/v1/model-preferences`);
   assert.equal(giu.status, 503);
   assert.equal((await giu.json()).error?.code, 'MODEL_PREFERENCES_UNAVAILABLE');
+});
+
+test('PONTE-IMPOSTAZIONI-CONTESTO: from the device the context settings of the PC read and write like on the PC (owner 27/10: every setting)', () => {
+  const leggi = OPERAZIONI_HTTP['context.settings'];
+  assert.deepEqual({ metodo: leggi.metodo, percorso: leggi.percorso({}) }, { metodo: 'GET', percorso: '/api/v1/context-settings' });
+  const scrivi = OPERAZIONI_HTTP['context.settings.update'];
+  assert.equal(scrivi.metodo, 'POST');
+  assert.equal(scrivi.percorso({}), '/api/v1/context-settings');
+  assert.deepEqual(scrivi.corpo({ corpo: { modelloDelRiassunto: 'a/b' } }), { modelloDelRiassunto: 'a/b' }); // il corpo lo controlla la rotta, come le altre
 });
 
 test('PREF-MOD-09: the connected device reaches the same lists through two closed remote operations', () => {

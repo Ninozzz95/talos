@@ -19,6 +19,7 @@ import { statSync } from 'node:fs';
 import { WebSocketServer } from 'ws';
 
 import { hostAmmesso } from './guardia-origine.mjs';
+import { cookieValido, NOME_COOKIE } from './gettone.mjs';
 import { codificaFrame, decodificaFrame, TIPO_FRAME_CONTROLLO, TIPO_FRAME_DATI } from './pty-terminal.mjs';
 
 const PERCORSO_WS = '/api/v1/terminal/ws';
@@ -88,7 +89,7 @@ export function creaGestoreTerminaleWs({ registro, originiConsentite, risolviSch
       return;
     }
     // ⭐ 04/9, W1-10 — stesso cancello a token di /api/*: senza il cookie talos_token l'upgrade è 401, la PTY non nasce nemmeno.
-    if (token && leggiCookieGrezzo(req.headers.cookie, 'talos_token') !== token) {
+    if (token && !cookieValido(leggiCookieGrezzo(req.headers.cookie, NOME_COOKIE), token)) { // a tempo costante, come /api/ (`src/gettone.mjs`)
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;

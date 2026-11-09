@@ -48,7 +48,7 @@ test('W1-12 — nomeUnicoSessione: suffisso -2/-3 contro ogni sessione IN ELENCO
   assert.deepEqual(nomeUnicoSessione('   ', 'x'), { nome: '', cambiato: false });
 });
 
-test('W1-12 — formattaEta e stimaTokenRipresa: numeri veri o «non registrato», mai uno zero inventato', () => {
+test('W1-12 — formattaEta: numeri veri, mai uno zero inventato; l\'avviso di ripresa non c\'è più (owner 01/11 «Mai»)', async () => {
   const adesso = Date.parse('2026-09-04T10:00:00Z');
   class DateFinto extends Date { static now() { return adesso; } static parse(s) { return Date.parse(s); } }
   const formattaEta = funzioneDalMonolite('formattaEta', { Date: DateFinto });
@@ -57,10 +57,23 @@ test('W1-12 — formattaEta e stimaTokenRipresa: numeri veri o «non registrato�
   assert.equal(formattaEta('2026-09-04T07:00:00Z'), '3 h');
   assert.equal(formattaEta('2026-08-30T10:00:00Z'), '5 g');
   assert.equal(formattaEta(undefined), null, 'AL CONTRARIO: senza data niente età');
-  const stimaTokenRipresa = funzioneDalMonolite('stimaTokenRipresa');
-  assert.equal(stimaTokenRipresa(null), 'consumo non registrato');
-  assert.equal(stimaTokenRipresa({ prompt_tokens: 0, completion_tokens: 0 }), 'consumo non registrato');
-  assert.equal(stimaTokenRipresa({ prompt_tokens: 8000, completion_tokens: 400 }), 'circa 8.4k token (stima)');
-  assert.equal(stimaTokenRipresa({ prompt_tokens: 512 }), 'circa 512 token (stima)');
+  /* owner 01/11/2026 «Mai»: l'avviso «Ripresa della sessione · riprendere costa…» usciva a ogni messaggio dopo una risposta. Né il
+     codice né le parole devono tornare (le due lingue). */
+  assert.doesNotMatch(app, /app\.run\.resuming|stimaTokenRipresa/u)
+  const testi = await readFile(join(root, 'frontend/src/i18n/testi/app.js'), 'utf8')
+  assert.doesNotMatch(testi, /'run\.resuming|'run\.startedAgo'|'run\.ageUnrecorded'|'usage\.approxTokens'/u)
 });
 
+
+/* Frontend 01/11/2026 (foto dal vivo del Motore locale): dopo lo Stop l'avviso «Fermata · La sessione si è fermata» ripeteva la carta
+   «Hai fermato il giro». Resta solo quando ci sono agenti che continuano (una cosa che la carta non dice). */
+test('STOP-AVVISO — dopo lo Stop niente avviso che ripete la carta; con agenti che continuano sì', async () => {
+  const inizio = app.indexOf('  async function stopRealSession(');
+  const corpo = app.slice(inizio, app.indexOf('\n  }\n', inizio));
+  assert.ok(inizio > 0 && corpo.length > 100, 'stopRealSession trovata');
+  assert.match(corpo, /if \(vivi > 0\) toast\(tr\('app\.run\.stopped'\)/u)
+  assert.doesNotMatch(corpo, /run\.stoppedBody/u)
+  const testi = await readFile(join(root, 'frontend/src/i18n/testi/app.js'), 'utf8')
+  assert.doesNotMatch(testi, /'run\.stoppedBody'/u)
+  assert.match(testi, /'run\.stopped': /u, 'il titolo resta per il caso degli agenti')
+});

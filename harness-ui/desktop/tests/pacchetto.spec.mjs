@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { root, attendi } from './support.mjs';
-import { risolviPercorsi, scegliMotoreLocale, creaAvvioFiglio, scegliPortaEffimera, validaHandshake, urlIngresso } from '../runtime.mjs';
+import { risolviPercorsi, scegliMotoreLocale, consegnaSegreti, creaAvvioFiglio, scegliPortaEffimera, validaHandshake, urlIngresso } from '../runtime.mjs';
 import { inventario, verificaImpronta } from '../scripts/prepara-pacchetto.mjs';
 import { creaRegistro } from '../log.mjs';
 
@@ -30,6 +30,7 @@ test('R02-BACKEND-PACCHETTO — Electron distribuito, produzione, cookie, PTY e 
   env.TALOS_LLAMA_SERVER_PATH = scegliMotoreLocale({ percorsi, env });
   const avvio = creaAvvioFiglio({ execPath: join(dist, 'TALOS.exe'), percorsi, port, token, reportFile, dataDir, env });
   const p = spawn(avvio.command, avvio.args, avvio.options);
+  consegnaSegreti(p, avvio);
   const log = creaRegistro(join(dataDir, 'registro.log'), [token]).canale();
   p.stdout.on('data', d => log.scrivi(d)); p.stderr.on('data', d => log.scrivi(d)); p.on('close', () => log.fine());
   async function chiudi() {

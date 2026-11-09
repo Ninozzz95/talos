@@ -131,6 +131,9 @@ export function statoSessione(sessione) {
   else if (classe === 'attesa' && sessione.inAttesaRichiestaMcp) aiuto = tr('processi.session.helpMcp');
   else if (classe === 'fermata') aiuto = tr('processi.session.helpStopped');
   else if (classe === 'in-pausa') aiuto = tr('processi.session.helpPaused');
+  /* S4 O2 (03/11/2026): il modello ha rifiutato (`motivoChiusura: 'rifiuto'` dal server) — non è un guasto, e l'unico rimedio è un altro
+     modello (FE-051); la parola della riga resta «da riprendere» */
+  else if (classe === 'errore' && sessione.motivoChiusura === 'rifiuto') aiuto = tr('processi.session.helpRefused');
   else if (classe === 'errore' && sessione.motivoChiusura !== 'giri-finiti') aiuto = tr('processi.session.helpError');
   return { classe, testo, tono: TONI[classe] ?? null, aiuto };
 }

@@ -7,7 +7,7 @@
  * Guarda il TESTO a schermo del modello (commenti e script tolti) e le stringhe delle sezioni.
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
 const CARTELLE_DATI = /\.(?:notes|tasks|memory|sessions|tool-forge|research)-store\b|\.harness-ui-(?:library|research)\b/u;
@@ -30,8 +30,18 @@ test('UI-NO-DATA-FOLDER-02 — le stringhe delle sezioni (piede e stato vuoto) n
   assert.deepEqual(cattive, []);
 });
 
+test('UI-NO-DATA-FOLDER-04 — nemmeno il dizionario: la Bacheca diceva «.notes-store/» da lì, dove la guardia non guardava', () => {
+  const cartella = new URL('../../src/i18n/testi/', import.meta.url);
+  const cattive = [];
+  for (const nome of readdirSync(cartella).filter((n) => n !== 'errori.js')) { // gli errori ripetono l'inglese del server (registro dei rifiuti, tabella data alla CLI)
+    const sorgente = readFileSync(new URL(nome, cartella), 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '');
+    for (const riga of sorgente.split('\n')) if (!/^\s*\/\//u.test(riga) && CARTELLE_DATI.test(riga)) cattive.push(`${nome}: ${riga.trim().slice(0, 90)}`);
+  }
+  assert.deepEqual(cattive, []);
+});
+
 test('UI-NO-DATA-FOLDER-03 — AL CONTRARIO: la guardia riconosce la frase di prima', () => {
   assert.equal(CARTELLE_DATI.test('Le note vivono in .notes-store/'), true);
-  assert.equal(CARTELLE_DATI.test('Gli attrezzi forgiati vivono in .tool-forge-store/.'), true);
+  assert.equal(CARTELLE_DATI.test('Gli strumenti forgiati vivono in .tool-forge-store/.'), true);
   assert.equal(CARTELLE_DATI.test('Server dichiarati in .harness-ui-mcp.json'), false, 'un file di configurazione resta nominabile');
 });

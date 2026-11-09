@@ -57,6 +57,9 @@ const TROPPE_RIGHE = 400;
 const tonoDi = (stato) => STATI_PASSO[stato]?.tono ?? 'neutro';
 const ora = (istante) => new Date(istante).toLocaleTimeString(localeOra(), { hour: '2-digit', minute: '2-digit' });
 const INTERVALLI_MIN = [1, 2, 5, 10, 15, 30, 60, 120, 240];
+/* Tetto di riserva sulle tacche (ognuna porta anche la sua riga di griglia): web.dev, «Avoid an excessive DOM size», avvisa
+   oltre ~1.400 nodi nella pagina. Misurato il 04/11/2026: senza tetto, 32.718 tacche + 32.718 righe e ogni lettura 7-15 s. */
+const TETTO_TACCHE = 300;
 
 export function creaTempo(host, { icona, onSeleziona, onZoom, deleghe = false }) {
   const parolaDi = (stato) => parolaDelPasso(stato, { deleghe });
@@ -97,6 +100,18 @@ export function creaTempo(host, { icona, onSeleziona, onZoom, deleghe = false })
     onZoom?.(1);
     ridisegna();
   }
+  /* 04/11/2026: la storia arriva spesso DOPO il primo disegno e allunga l'asse da pochi secondi a giorni. La scala adattata
+     all'asse corto restava, con una tacca al minuto su tutto l'asse. Come il grafo del tempo di Hermes, che sceglie la grana
+     «più fine che entra» dallo span vero a ogni disegno (agent/learning_graph_render.py:226-250), quando l'asse cambia molto
+     si riadatta, TENENDO lo zoom scelto. Dal vivo l'asse cresce di un secondo al secondo: sotto il 25% la scala non trema. */
+  function riadattaSeServe() {
+    const nuovo = larghezzaAsse() / Math.max(1, dati.asse().lunghezza);
+    const r = nuovo / pxMsAdatta;
+    if (r > 0.8 && r < 1.25) return;
+    const k = pxMs / pxMsAdatta;
+    pxMsAdatta = nuovo;
+    pxMs = pxMsAdatta * k;
+  }
   const x = (t) => LARGHEZZA_NOMI + dati.asse().versoAsse(t) * pxMs;
 
   function costruisciRighe() {
@@ -116,7 +131,9 @@ export function creaTempo(host, { icona, onSeleziona, onZoom, deleghe = false })
     spazio.style.width = `${LARGHEZZA_NOMI + larghezza + 28}px`;
     asse.style.width = `${larghezza + 28}px`;
     const minuti = INTERVALLI_MIN.find((m) => m * 60_000 * pxMs >= 72) ?? 240;
-    const passo = minuti * 60_000;
+    let passo = minuti * 60_000;
+    const coperto = a.segmenti.reduce((n, s) => n + (s.compresso ? 0 : s.a - s.da), 0);
+    while (coperto / passo > TETTO_TACCHE) passo *= 2;
     for (const s of a.segmenti) {
       if (s.compresso) {
         const x0 = s.asseDa * pxMs, x1 = s.asseA * pxMs;
@@ -292,7 +309,7 @@ export function creaTempo(host, { icona, onSeleziona, onZoom, deleghe = false })
           for (const g of dati.panoramica.groups) if (g.phaseId !== piena?.phaseId) chiuse.add(g.phaseId);
         }
       }
-      if (!pxMsAdatta) adatta(); else ridisegna();
+      if (!pxMsAdatta) adatta(); else { riadattaSeServe(); ridisegna(); }
     },
     aggiorna() { if (dati) { disegnaAsse(); disegnaRighe(true); } },
     adatta,

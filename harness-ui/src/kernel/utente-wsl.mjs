@@ -53,6 +53,73 @@ export function sceltaUtenteWsl(fatti, { usaUtenteNormale = true } = {}) {
     return { utente: fatti.utente, root: fatti.uid === 0, passaUtente: false }
 }
 
+/*
+ * Revisione del blocco dati, BD3 (decisione 41, «carta solo per root»): il comando può chiedere root da solo, con `wsl -u root` o `wsl --system`,
+ * dalla shell di Windows o dentro Linux grazie all'interop. Come Codex, che guarda dentro `sudo` (`codex-rs/shell-command/src/command_safety/
+ * is_dangerous_command.rs:147`), e Hermes, che salta gli involucri (`tools/approval_detection.py:609`). Si legge la riga, pezzo per pezzo, e conta
+ * solo `wsl` in posizione di comando. ⛔ Ferma le forme scritte: una variabile non si vede.
+ */
+const INVOLUCRI = new Set(['sudo', 'env', 'exec', 'nohup', 'time', 'start', 'call', 'command']);
+const GUSCI = new Set(['cmd', 'powershell', 'pwsh', 'bash', 'sh', 'zsh', 'dash']);
+const OPZIONI_DEL_GUSCIO = new Set(['/c', '/k', '-c', '-command', '-commandwithargs']);
+const OPZIONI_WSL_CON_VALORE = new Set(['-d', '--distribution', '--distribution-id', '--cd', '--shell-type']);
+const FINE_OPZIONI_WSL = new Set(['--', '-e', '--exec']);
+const nomeProgramma = (parola) => parola.split(/[\\/]/u).pop().toLowerCase().replace(/\.exe$/u, '');
+const eRoot = (utente) => /^(?:root|0)$/iu.test(utente ?? '');
+
+/** La riga in pezzi fra i separatori, ognuno in parole; le virgolette tengono insieme una parola e non si contano. */
+function pezziDellaRiga(riga) {
+  const pezzi = [[]];
+  let parola = null, virgoletta = null;
+  const chiudi = () => { if (parola !== null) pezzi.at(-1).push(parola); parola = null; };
+  for (const ch of riga) {
+    if (virgoletta) { if (ch === virgoletta) virgoletta = null; else parola += ch; continue; }
+    if (ch === '"' || ch === "'") { virgoletta = ch; parola ??= ''; continue; }
+    if (/\s/u.test(ch) && ch !== '\n') { chiudi(); continue; }
+    if (';&|()\n`'.includes(ch)) { chiudi(); pezzi.push([]); continue; }
+    parola = (parola ?? '') + ch;
+  }
+  chiudi();
+  return pezzi;
+}
+
+function wslChiedeRoot(parole) {
+  for (let i = 0; i < parole.length; i += 1) {
+    const a = parole[i];
+    if (FINE_OPZIONI_WSL.has(a)) return false;
+    if (a === '--system') return true;
+    if (a === '-u' || a === '--user') { if (eRoot(parole[i + 1])) return true; i += 1; continue; }
+    if (a.startsWith('--user=')) { if (eRoot(a.slice('--user='.length))) return true; continue; }
+    if (OPZIONI_WSL_CON_VALORE.has(a)) { i += 1; continue; }
+    if (a === '~' || a.startsWith('-')) continue;
+    return false; // il primo pezzo che non è un'opzione è il comando di Linux: il resto è suo
+  }
+  return false;
+}
+
+export function comandoChiedeRootWsl(comando) {
+  if (typeof comando !== 'string' || !/wsl/iu.test(comando)) return false;
+  return pezziDellaRiga(comando).some((parole) => {
+    let i = 0;
+    for (; i < parole.length; i += 1) {
+      const p = parole[i];
+      if (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(p) || INVOLUCRI.has(nomeProgramma(p))) continue;
+      if (i > 0 && /^[-/]/u.test(p) && INVOLUCRI.has(nomeProgramma(parole[i - 1]))) continue;
+      break;
+    }
+    const programma = nomeProgramma(parole[i] ?? '');
+    if (programma === 'wsl') return wslChiedeRoot(parole.slice(i + 1));
+    if (!GUSCI.has(programma)) return false;
+    const opzione = parole.findIndex((p, j) => j > i && OPZIONI_DEL_GUSCIO.has(p.toLowerCase()));
+    return opzione !== -1 && comandoChiedeRootWsl(parole.slice(opzione + 1).map((p) => (/\s/u.test(p) && parole.length - opzione > 2 ? `"${p}"` : p)).join(' '));
+  });
+}
+
+/** Decisione 41: la distro esegue come root e non ha un utente normale, quindi `tools.wslNormalUser` acceso non può cambiare niente. */
+export function distroSenzaUtenteNormale(fatti) {
+    return Boolean(fatti) && fatti.uid === 0 && !fatti.utenteNormale
+}
+
 /**
  * Il disco di Windows su cui sta la cartella, visto da WSL: `C:\…` o `/mnt/c/…` (la forma che la sessione tiene dopo un
  * `cd`) → `{ montaggio: '/mnt/c', metadata }`. `null` se la cartella non è su un disco di Windows (`\\wsl$\…`);

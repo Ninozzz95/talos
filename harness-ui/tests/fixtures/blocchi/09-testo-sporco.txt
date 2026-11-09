@@ -1,0 +1,1 @@
+root = Tabella("x", "Titolo\u202E rovesciato", [{id: "c", titolo: "C", tipo: "testo"}], [["\u001b]52;c;Y2lhbw==\u0007ciao"], ["a$&b$1$$"], ["riga uno\nriga due"], ["zero\u200Blarghezza\uDB40\uDC41"]])

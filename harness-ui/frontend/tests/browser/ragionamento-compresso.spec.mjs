@@ -32,7 +32,7 @@ for (const modo of ['dark', 'light']) {
        *   cura del GIRO VERO: vedi `handleRealEvent`). `retry` lungo: un flusso finito si riaprirebbe da solo, e ogni
        *   riapertura rimette la chat nella storia.
        */
-      await page.route('**/api/v1/sessions/ragionamento-*/events', (route) => route.fulfill({ contentType: 'text/event-stream', body: CONFINE_SSE }));
+      await page.route('**/api/v1/sessions/ragionamento-*/events*', (route) => route.fulfill({ contentType: 'text/event-stream', body: CONFINE_SSE }));
       await page.goto('/');
       await page.waitForFunction(() => window.__talosHarnessUiRuntime);
       await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
@@ -66,7 +66,7 @@ for (const modo of ['dark', 'light']) {
       const testa = nota.locator(':scope > .talos-activity__head');
       await expect(nota).toBeVisible();
       await expect(testa).toHaveAttribute('aria-expanded', 'false');
-      await expect(testa).toContainText('Sta ragionando…');
+      await expect(testa.locator('.tool-note-summary-text'), 'R-36 A: «Sta ragionando · argomento · secondi»').toHaveText('Sta ragionando');
       /*
        * ⭐⭐ 13/09 sera — UN SOLO SEGNALE, «fare meglio di Hermes». Hermes desktop mostra la riga «Thinking…»
        *   e una riga di stato in fondo; noi avevamo «Sta ragionando…» e «Ragionamento in corso…» insieme.
@@ -194,7 +194,7 @@ for (const modo of ['dark', 'light']) {
           contentType: 'application/json',
           body: JSON.stringify({ ok: true, data: { registrato: true, cacheSessione: null, ragionamentiMs: durate }, meta: { schema: 'talos.harness-ui.api.v1' } }),
         }));
-        await page.route(`**/api/v1/sessions/${sessione}/events`, (route) => route.fulfill({ contentType: 'text/event-stream', body: '' }));
+        await page.route(`**/api/v1/sessions/${sessione}/events*`, (route) => route.fulfill({ contentType: 'text/event-stream', body: '' }));
         await page.evaluate((id) => {
           const r = window.__talosHarnessUiRuntime;
           r.passaASessione(id, 'workspace', 'Sessione riaperta', 'z-ai/glm-5.3-flash', { conclusa: true, modello: 'z-ai/glm-5.3-flash' });
@@ -229,7 +229,7 @@ for (const modo of ['dark', 'light']) {
         contentType: 'application/json',
         body: JSON.stringify({ ok: true, data: { registrato: true, cacheSessione: null, ...metriche }, meta: { schema: 'talos.harness-ui.api.v1' } }),
       }));
-      await page.route(`**/api/v1/sessions/${sessione}/events`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
+      await page.route(`**/api/v1/sessions/${sessione}/events*`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
       await page.evaluate((id) => {
         window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'Sessione viva riaperta', 'z-ai/glm-5.3-flash', { conclusa: false, modello: 'z-ai/glm-5.3-flash' });
       }, sessione);

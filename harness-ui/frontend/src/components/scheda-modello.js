@@ -560,11 +560,17 @@ export function verdettoMemoria(fit) {
   const stato = String(fit.state || 'unknown');
   const richiesti = fit.memory?.requiredBytes;
   const liberi = fit.memory?.availableBytes;
+  /* 02/11/2026, condizione del Desktop sulla forma «proiettore nel conto»: la memoria della vista si dice dove si dice la memoria,
+     mai spesa di nascosto. Solo quando il server la conta (`inspection.projectorMemoryBytes`, local-runtime-probe.mjs) */
+  const vista = fit.inspection?.projectorMemoryBytes?.value;
+  const conVista = (testo) => (Number.isFinite(vista) && vista > 0
+    ? String(testo).replace(/\.?$/u, (punto) => ` (${t('modelli.detail.visionMemoryIncluded', { bytes: byte(vista) })})${punto}`)
+    : testo);
   const stretto = stato === 'tight'
     || (Number.isFinite(richiesti) && Number.isFinite(liberi) && liberi > 0 && richiesti / liberi >= QUOTA_STRETTA);
   if (stato === 'compatible' || stato === 'tight') {
     const cifre = Number.isFinite(richiesti) && Number.isFinite(liberi)
-      ? t('modelli.detail.memoryRequiredFree', { required: byte(richiesti), free: byte(liberi) })
+      ? conVista(t('modelli.detail.memoryRequiredFree', { required: byte(richiesti), free: byte(liberi) }))
       : t('modelli.detail.incompleteMeasurements');
     return stretto
       ? { chiave: 'stretto', etichetta: t('modelli.detail.tightFit'), tono: 'warning', dettaglio: cifre }
@@ -585,7 +591,7 @@ export function verdettoMemoria(fit) {
       return { chiave: 'non-entra', etichetta: t('modelli.detail.doesNotFit'), tono: 'danger', dettaglio: t('modelli.detail.diskRequiredRemaining', { required: byte(fit.storage?.requiredBytes), available: byte(fit.storage?.availableBytes) }) };
     }
     if (motivo === 'memory') {
-      return { chiave: 'non-entra', etichetta: t('modelli.detail.doesNotFit'), tono: 'danger', dettaglio: t('modelli.detail.memoryRequiredAvailable', { required: byte(fit.memory?.requiredBytes), available: byte(fit.memory?.availableBytes) }) };
+      return { chiave: 'non-entra', etichetta: t('modelli.detail.doesNotFit'), tono: 'danger', dettaglio: conVista(t('modelli.detail.memoryRequiredAvailable', { required: byte(fit.memory?.requiredBytes), available: byte(fit.memory?.availableBytes) })) };
     }
     if (motivo === 'context') {
       return { chiave: 'non-entra', etichetta: t('modelli.detail.doesNotFit'), tono: 'danger', dettaglio: motivoContesto(fit) };
@@ -1053,7 +1059,7 @@ export function montaSchedaModello(contenitore, {
     const b = nodo(doc, 'button', 'talos-button talos-button--ghost talos-button--sm');
     b.type = 'button';
     b.dataset.modelloIndietro = '';
-    b.append(icona(doc, 'arrow-left', 'i i--sm'), doc.createTextNode(t('modelli.detail.allModels')));
+    b.append(icona(doc, 'chevron-left', 'i i--sm'), doc.createTextNode(t('modelli.detail.allModels')));
     b.addEventListener('click', () => indietro?.());
     return b;
   }
@@ -1073,7 +1079,7 @@ export function montaSchedaModello(contenitore, {
       link.href = hu;
       link.target = '_blank';
       link.rel = 'noopener noreferrer'; // `app.js:3850` usa esattamente questa forma
-      link.append(icona(doc, 'link', 'i i--sm'), doc.createTextNode(t('modelli.detail.openHuggingFace')));
+      link.append(icona(doc, 'external-link', 'i i--sm'), doc.createTextNode(t('modelli.detail.openHuggingFace')));
       gruppo.append(link);
       gruppo.append(copia(doc, hu, { etichetta: t('modelli.detail.copyLink'), suggerimento: t('modelli.detail.copyRepositoryLink') }));
     }

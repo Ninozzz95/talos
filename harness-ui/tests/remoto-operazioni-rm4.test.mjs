@@ -31,7 +31,7 @@ function banco({ providerStore } = {}) {
     iscriviti: (_id, asc, da) => { for (const e of [{ type: 'RunStarted', runId: 'r', _sequenza: 1 }]) if (e._sequenza > da) asc(e); return () => {}; },
     statoCoda: () => ({ voci: [], inPausa: false }),
   };
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry, providerStore });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry, providerStore });
   const chiamate = [];
   const chiamaVera = creaChiamataInterna({ httpApp, porta: 4999 });
   const chiama = (richiesta) => { chiamate.push(richiesta); return chiamaVera(richiesta); };
@@ -57,7 +57,10 @@ test('RM4-01 ogni voce nuova va alla SUA rotta col suo metodo, e l\'id passa dal
    `remoto-operazioni-piccole.test.mjs`. «Esporta» resta fuori: va con lo scambio di file (R5.13), oltre il tetto di 1 MiB di un messaggio. */
 test('RM4-02 al contrario: ciò che resta solo dal PC NON è nell\'elenco (export, terminali, albero, politica, cartelle)', async () => {
   const b = banco();
-  for (const op of ['session.export', 'session.terminals', 'session.tree', 'session.compaction-policy',
+  /* Blocco 23 (CONTRATTO-REMOTO-CONTEXT-MANAGER, 31/10-01/11/2026): `session.export` (a pezzi, col consenso) e `session.compaction-policy` sono entrati
+     nell'elenco per contratto — rossa della suite del blocco 24, classificata il 01/11: la prova era rimasta indietro. Le loro prove: `letture-a-pezzi`,
+     `remoto-context-manager`. Qui restano quelle che vanno solo dal PC. */
+  for (const op of ['session.terminals', 'session.tree',
     'workspace.browse', 'session.processes.stop', 'session.hooks.trust', 'providers.key', 'providers.runtime']) {
     await assert.rejects(b.operazioni.esegui(op, { sessionId: 's-1' }, b.contesto), { code: 'UNKNOWN_OPERATION' }, op);
   }
@@ -98,7 +101,7 @@ test('RM4-06 (revisione A1) il Doctor al telefono: fornitori ridotti e nessun pe
   const righe = [{ id: 'custom', label: 'Il mio server', requiresKey: true, keyConfigured: true, endpoint: 'https://llm.example/v1?token=SEGRETO',
     pool: [{ etichetta: 'chiave 1', ultime: 'abcd' }], origineChiave: 'keyring', regione: 'eu', progetto: 'p1' }];
   const sessionRegistry = { elenca: () => [], esiste: () => false };
-  const httpApp = createHttpApp({
+  const httpApp = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null, sessionRegistry, providerStore: { listPublic: () => righe },
     diagnosiFn: async () => diagnosi({ chiaveConfigurata: true, providerRows: righe, providerStoreAvailable: true,
       cartelleProgetto: [{ id: 'p', nome: 'P', percorso: 'C:\\Users\\Mario\\Progetto' }],

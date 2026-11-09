@@ -63,7 +63,7 @@ test('CTX-REG-SHUTDOWN-FLUSHES — una scrittura in coda allo shutdown è su dis
 });
 
 async function listen(t, opzioni) {
-  const app = createHttpApp({ staticHandler: async () => null, listaTaskDisponibili: () => [], ...opzioni });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, listaTaskDisponibili: () => [], ...opzioni });
   const server = createServer(app);
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise((resolve) => server.close(() => resolve())));

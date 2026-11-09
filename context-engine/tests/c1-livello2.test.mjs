@@ -34,7 +34,7 @@ async function banco(t, { summarize, anchorIndex, isPersonRequest } = {}) {
   const richieste = [];
   const model = { resolveModel: async ({ sessionModel }) => sessionModel, summarize: async (request) => { richieste.push(request); return summarize(request, richieste.length); } };
   const tokenCounter = { async countPreparedContext({ messages, tools, model: m }) { return { schema: 'talos.context.tokens.v1', inputTokens: Math.ceil(JSON.stringify({ messages, tools }).length / 4), windowTokens: m.windowTokens, responseReserve: m.responseReserve, method: 'heuristic', exact: false, requestHash: sha({ messages, tools }), provider: m.provider, model: m.model }; } };
-  const engine = createContextEngine({ store, model, tokenCounter, clock: () => now, ...(anchorIndex ? { anchorIndex } : {}), ...(isPersonRequest ? { isPersonRequest } : {}) });
+  const engine = createContextEngine({ store, model, tokenCounter, clock: () => now, guadagnoMinimoChiesto: 0, /* conversazioni minuscole per provare altro: il controllo «niente da compattare» (31/10) qui si spegne */ ...(anchorIndex ? { anchorIndex } : {}), ...(isPersonRequest ? { isPersonRequest } : {}) });
   const sessionId = 'chat';
   await store.initSession({ sessionId, settings: parseContextSettings({}) });
   const lungo = ' ' + 'dettaglio '.repeat(400);

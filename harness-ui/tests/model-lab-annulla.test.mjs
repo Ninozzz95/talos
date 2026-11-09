@@ -30,7 +30,7 @@ test('W0-05 — annullaProvaRuntimeModelLab chiama /cancel (invariato)', async (
 test('W0-05 — POST /sessions/:id/cancel con corpo {} ferma la sessione (200); id ignoto è 404; /stop fa lo stesso', async (t) => {
   const fermate = [];
   const sessionRegistry = { ferma: (id, opzioni) => { fermate.push([id, opzioni]); return id === 'viva'; } };
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry }));
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const base = `http://127.0.0.1:${server.address().port}`;

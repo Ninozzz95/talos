@@ -132,7 +132,7 @@ test('DOVE-SERIE-07: GET and POST /api/v1/command-settings — only the expected
   const cartella = cartellaDiProva('talos-dove-serie-');
   t.after(() => rimuoviCartellaDiProva(cartella));
   const store = createImpostazioniComandi({ file: join(cartella, '.impostazioni-comandi.json'), avvisa: () => {} });
-  const server = http.createServer(createHttpApp({ impostazioniComandi: store }));
+  const server = http.createServer(createHttpApp({ senzaGettone: 'prove', impostazioniComandi: store }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => server.close(r)));
   const base = `http://127.0.0.1:${server.address().port}/api/v1/command-settings`;
@@ -146,7 +146,7 @@ test('DOVE-SERIE-07: GET and POST /api/v1/command-settings — only the expected
   }
   assert.equal(store.dovePerUnaConversazioneNuova(), 'windows', 'refused bodies changed nothing');
   assert.equal((await fetch(`${base}?x=1`)).status, 400, 'no query string');
-  const senza = http.createServer(createHttpApp({}));
+  const senza = http.createServer(createHttpApp({ senzaGettone: 'prove' }));
   await new Promise((r) => senza.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => senza.close(r)));
   const risposta = await fetch(`http://127.0.0.1:${senza.address().port}/api/v1/command-settings`);

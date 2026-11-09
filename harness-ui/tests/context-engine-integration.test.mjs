@@ -103,12 +103,14 @@ test('CTX-REGISTRY-COMPACT-FAILED-VS-NOTHING (Mobile 22/10) a failed engine job 
   assert.deepEqual(await ok.compatta(c.sessionId), { ok: true, compattato: true });
 });
 
-test('CTX-REGISTRY-PREPARE-FAILURE refuses inference after archive preparation fails', async () => {
-  let calls = 0;
-  const r = registry({ contextHooksFn: async () => { throw Object.assign(new Error('Archivio non disponibile'), { code: 'CTX_PERSIST_FAILED' }); }, avviaSessioneFn: async () => { calls++; return completed; } });
-  const started = r.avvia('test'); await tick();
-  assert.equal(calls, 0);
-  assert.equal(r.elenca().find(s => s.sessionId === started.sessionId).conclusa, true);
+/* Revisione di fine fase, D2 (01/11/2026; regola dell'owner del 12/10, «errori di compattazione non devono bloccare il flusso chat»): prima qui il giro si rifiutava, e un
+   archivio che non si apre faceva fallire ogni messaggio della conversazione. Ora il giro parte senza ganci, con la compattazione semplice (`c1-ganci-sincroni.test.mjs`). */
+test('CTX-REGISTRY-PREPARE-FAILURE: an archive that cannot be prepared no longer refuses the turn: it runs without the engine hooks', async () => {
+  const chiamate = [];
+  const r = registry({ contextHooksFn: async () => { throw Object.assign(new Error('Archivio non disponibile'), { code: 'CTX_PERSIST_FAILED' }); }, avviaSessioneFn: async (opzioni) => { chiamate.push(opzioni); return completed; } });
+  r.avvia('test'); await tick();
+  assert.equal(chiamate.length, 1);
+  assert.equal(chiamate[0].contextHooks, undefined);
 });
 
 /*

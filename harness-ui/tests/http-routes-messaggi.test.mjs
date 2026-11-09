@@ -16,7 +16,7 @@ import { createHttpApp } from '../src/http-app.mjs';
  */
 
 async function ascolta(t, sessionRegistry) {
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry }));
   await new Promise((risolvi, rifiuta) => { server.once('error', rifiuta); server.listen(0, '127.0.0.1', risolvi); });
   t.after(() => new Promise((risolvi) => server.close(risolvi)));
   return `http://127.0.0.1:${server.address().port}`;

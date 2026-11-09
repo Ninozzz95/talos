@@ -5,7 +5,7 @@ import test from 'node:test';
 import { API_SCHEMA, createHttpApp } from '../src/http-app.mjs';
 
 async function listen(t, { diagnosiFn } = {}) {
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     diagnosiFn,
   });

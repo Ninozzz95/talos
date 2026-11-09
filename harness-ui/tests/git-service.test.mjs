@@ -507,8 +507,8 @@ test('⛔⛔⛔ PIN — il remoto ha regole scritte: `push` in UN posto, sempre 
      (decisione 25): `perLaPr`, la bozza di una PR (base, rami del remoto, commit) — sola lettura, nessuna rete; GitHub sta in
      `gh-service.mjs`, mai qui. ⭐ 28/09 — `inizializza`, il `git init` del pulsante «come VS Code»: locale, nessuna rete.
      ⭐ 21/10 (C-3, revisione del lotto della sera) — `commitDellaCartella`, i commit della cartella dalla data del committer per il
-     confutatore del /goal: sola lettura, nessuna rete. */
-  assert.deepEqual(superficie, ['accantona', 'accantonati', 'annulla', 'annullaUltimoCommit', 'cambiaRamo', 'commit', 'commitDellaCartella', 'commitPreparato', 'creaRamo', 'diff', 'diffFra', 'diffPerMessaggio', 'eliminaRamo', 'fermaRecupero', 'inizializza', 'invia', 'modificaUltimoCommit', 'modificheFra', 'perLaPr', 'pezzo', 'rami', 'ramo', 'recupera', 'remoti', 'rinominaRamo', 'riprendiAccantonato', 'scarica', 'scartaAccantonato', 'sincronizzazione', 'stage', 'stato', 'storia', 'unstage']);
+     confutatore del /goal: sola lettura, nessuna rete. ⭐ 31/10 (D2) — `rinomineDelRepository`, solo per il cancello del ponte: sola lettura, nessuna rotta. */
+  assert.deepEqual(superficie, ['accantona', 'accantonati', 'annulla', 'annullaUltimoCommit', 'cambiaRamo', 'commit', 'commitDellaCartella', 'commitPreparato', 'creaRamo', 'diff', 'diffFra', 'diffPerMessaggio', 'eliminaRamo', 'fermaRecupero', 'inizializza', 'invia', 'modificaUltimoCommit', 'modificheFra', 'perLaPr', 'pezzo', 'rami', 'ramo', 'recupera', 'remoti', 'rinominaRamo', 'rinomineDelRepository', 'riprendiAccantonato', 'scarica', 'scartaAccantonato', 'sincronizzazione', 'stage', 'stato', 'storia', 'unstage']);
 });
 
 /* ═══════════════════ 11. Il perché del Buffer, e le briciole ═══════════════════ */

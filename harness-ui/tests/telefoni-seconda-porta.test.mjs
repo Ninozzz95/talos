@@ -75,7 +75,7 @@ test('TEL-K-02 — l\'elenco non chiede niente; il QR e la revoca passano dalla 
   const no = await giro(c, [chiama('c', 'remote_phone_revoke', { phone: 'abcd1234' })], { ospite: OSPITE, risposta: false })
   assert.equal(no.domande[0].tipo, 'remote_phone_revoke')
   assert.deepEqual(no.ospite.map(([, , f]) => f), ['anteprima'])
-  assert.match(no.esito('c'), /^REFUSED\./u)
+  assert.match(no.esito('c'), /^DECLINED\. The person said no/u)
 })
 
 test('TEL-K-03 — Accesso pieno (owner 18/10): la revoca senza carta, il QR CON la carta, sempre', async (t) => {
@@ -87,13 +87,13 @@ test('TEL-K-03 — Accesso pieno (owner 18/10): la revoca senza carta, il QR CON
   const qr = await giro(c, [chiama('b', 'remote_phone_pair', {})], { ospite: OSPITE, risposta: false, extra: pieno })
   assert.equal(qr.domande.length, 1, 'la carta del QR c\'è anche in Accesso pieno')
   assert.deepEqual(qr.ospite.map(([, , f]) => f), ['anteprima'])
-  assert.match(qr.esito('b'), /^REFUSED\./u)
+  assert.match(qr.esito('b'), /^DECLINED\. The person said no/u)
   /* R5.14 (owner 23/10/2026, seconda tornata): accendere e spegnere il remoto dal modello, carta SEMPRE, anche in Accesso pieno */
   for (const on of [true, false]) {
     const acc = await giro(c, [chiama('d', 'remote_control', { on })], { ospite: OSPITE, risposta: false, extra: pieno })
     assert.equal(acc.domande.length, 1, `la carta di remote_control on=${on} c'è anche in Accesso pieno`)
     assert.deepEqual(acc.ospite.map(([, , f]) => f), ['anteprima'])
-    assert.match(acc.esito('d'), /^REFUSED\./u)
+    assert.match(acc.esito('d'), /^DECLINED\. The person said no/u)
   }
 })
 
@@ -312,7 +312,7 @@ test('TEL-H-01 — la rotta della finestra: `{ soloSeAcceso: true }` arriva al r
   const remoto = {
     apriAccoppiamento: async (o) => { chiamate.push(o); if (o.soloSeAcceso) throw Object.assign(new Error('off'), { code: 'REMOTE_OFF' }); return { gettone: 'g' } },
   }
-  const server = createServer(createHttpApp({ staticHandler: async () => null, remotoFn: () => remoto }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, remotoFn: () => remoto }))
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok))
   t.after(() => new Promise((ok) => server.close(ok)))
   const base = `http://127.0.0.1:${server.address().port}`

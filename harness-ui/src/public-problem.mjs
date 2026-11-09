@@ -96,7 +96,7 @@ export const MESSAGES = Object.freeze({
   ELICITATION_NOT_PENDING: { title: 'Request already closed', explanation: 'The server no longer waits for this answer: it was given from another window, or the session stopped.', action: 'Look at the card in the chat: it says how it ended.' },
   ELICITATION_ANSWER_INVALID: { title: 'Invalid answer', explanation: 'What you wrote does not match what the server asked.', action: 'Check the fields of the card and send again.' },
   PROCESS_NOT_RUNNING: { title: 'Command already finished', explanation: 'This command is no longer running: it finished on its own, or someone already stopped it.', action: 'Look at the row in the Processes tab: it says how it ended.' },
-  PROCESS_STILL_RUNNING: { title: 'Command still running', explanation: 'Only a finished command can be removed from the list.', action: 'Stop it first, then remove it.' },
+  PROCESS_STILL_RUNNING: { title: 'Command still in progress', explanation: 'Only a finished command can be removed from the list.', action: 'Stop it first, then remove it.' },
   RESEARCH_RECHECK_UNAVAILABLE: { title: 'Source check not possible', explanation: 'To recheck the sources a report with the cited passages is needed, and this research has none.', action: 'New researches have it: this one can be redone, or left as it is.' },
   RESEARCH_INVALID: { title: 'Invalid request', explanation: 'The research identifier does not have an allowed form.', action: 'Open the research from the list instead of typing the address by hand.' },
   INTERNAL_ERROR: { title: 'Operation failed', explanation: 'An unexpected problem occurred during the operation.', action: 'Open Doctor, copy the reference and try again.' },

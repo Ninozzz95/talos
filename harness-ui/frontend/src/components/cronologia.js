@@ -269,18 +269,69 @@ export function contenitoreCheScorre(elemento) {
   return elemento.closest?.('.talos-conversation') || elemento;
 }
 
+/*
+ * ⭐ R-42 (Performance, 31/10/2026; traccia del Desktop su una chat da 300 giri, R-41): mentre si scorre, ogni volta che la voce attiva
+ *   cambia `aggiornaCronologia` ripassava TUTTE le voci (600 con due lati: etichetta, lato, tono, lente, tab-stop) e poi, per seguire,
+ *   leggeva la geometria della lista DOPO averla scritta — 1011 chiamate, 5333 ms, 5,3 ms in media e fino a 12: la voce più pesante di
+ *   tutto lo scorrimento. Ma quando cambia solo il segnavia cambiano solo le voci VICINE: la lente ha `LENTE.length` gradini attorno
+ *   al fuoco (fuori è sempre l'ultimo), e `aria-current`/tab-stop passano da una voce a un'altra. Etichette, lati e toni dipendono
+ *   dalle voci, che qui non cambiano.
+ * ⇒ La strada corta tocca solo le voci entro un raggio della lente attorno al fuoco di prima e a quello nuovo, più la voce corrente di
+ *   prima e quella nuova: O(raggio) invece di O(n). E per seguire legge la geometria PRIMA di scrivere (niente layout forzato dopo
+ *   le scritture). Se qualcosa non torna (voci e bottoni di numero diverso, o non si sa quale voce era la corrente) rinuncia e lascia
+ *   fare la strada lunga: lo stato finale è lo stesso.
+ */
+/** I toni di un segno della spina dal suo attributo `class` (quelli che `vociDaConversazione` legge), in una stringa confrontabile. */
+export function toniDelSegno(classe) {
+  const classi = new Set(String(classe ?? '').split(/\s+/u));
+  return TONI.filter((t) => classi.has(`talos-turn-spine__tick--${t}`)).join(' ');
+}
+
+function segnaviaSoltanto(nav, lista, bottoni, elenco, fuoco, segui) {
+  const prima = nav.dataset.veraDisegnata;
+  if (bottoni.length !== elenco.length || prima === undefined) return false;
+  const fuocoPrima = Number(nav.dataset.attiva || 0);
+  const attivo = Number.isFinite(fuoco) ? fuoco : fuocoPrima;
+  const attivaVera = Number(nav.dataset.attivaVera || nav.dataset.attiva || 0);
+  /* le letture prima delle scritture: con la strada lunga `offsetHeight` arrivava dopo 600 voci riscritte, cioè un layout forzato */
+  let seguito = null;
+  const b = bottoni[attivaVera];
+  if (segui && b && lista !== nav) {
+    seguito = scorrimentoPerVedere({ indice: attivaVera, altezzaVoce: b.offsetHeight, scrollTop: lista.scrollTop, clientHeight: lista.clientHeight, scrollHeight: lista.scrollHeight });
+  }
+  const raggio = LENTE.length - 2; // da questa distanza in là la lente vale già l'ultimo gradino, come tutte le voci lontane
+  const daToccare = new Set([Number(prima), attivaVera]);
+  for (const centro of [fuocoPrima, attivo]) for (let i = centro - raggio; i <= centro + raggio; i += 1) daToccare.add(i);
+  for (const i of daToccare) {
+    const voce = bottoni[i];
+    if (!voce) continue;
+    voce.classList.toggle('talos-cronologia__voce--attiva', i === attivo);
+    if (i === attivaVera) { if (voce.getAttribute('aria-current') !== 'location') voce.setAttribute('aria-current', 'location'); } else if (voce.hasAttribute('aria-current')) voce.removeAttribute('aria-current');
+    const fermata = i === attivaVera ? 0 : -1;
+    if (voce.tabIndex !== fermata || !voce.hasAttribute('tabindex')) voce.tabIndex = fermata;
+    const linea = voce.querySelector('.talos-cronologia__linea');
+    const lente = `${larghezzaLente(i, attivo)}px`;
+    if (linea && linea.style.getPropertyValue('--lente') !== lente) linea.style.setProperty('--lente', lente);
+  }
+  if (nav.getAttribute('data-attiva') !== String(attivo)) nav.setAttribute('data-attiva', String(attivo));
+  if (nav.getAttribute('data-vera-disegnata') !== String(attivaVera)) nav.setAttribute('data-vera-disegnata', String(attivaVera));
+  if (seguito !== null && seguito !== lista.scrollTop) lista.scrollTop = seguito;
+  return true;
+}
+
 /**
  * Costruisce (o aggiorna) la barra dentro `nav`, dai messaggi di `conversazione`.
  * Idempotente: si richiama a ogni messaggio nuovo senza perdere il fuoco.
  * @returns {number} quante voci ha disegnato
  */
-export function aggiornaCronologia(nav, conversazione, { fuoco = null, voci = null, segui = false } = {}) {
+export function aggiornaCronologia(nav, conversazione, { fuoco = null, voci = null, segui = false, soloSegnavia = false } = {}) {
   if (!nav || !conversazione) return 0;
   const d = nav.ownerDocument;
   const elenco = voci || vociDaConversazione(conversazione);
   const lista = nav.querySelector('.talos-cronologia__lista') || nav;
   if (nav.hidden !== (elenco.length < 2)) nav.hidden = elenco.length < 2; // con un solo messaggio non c'e' niente da navigare (B2: solo se cambia)
   const esistenti = [...lista.querySelectorAll('.talos-cronologia__voce')];
+  if (soloSegnavia && segnaviaSoltanto(nav, lista, esistenti, elenco, fuoco, segui)) return elenco.length;
   // si aggiungono/tolgono solo le differenze: il DOM stabile tiene il fuoco e le transizioni
   for (let i = esistenti.length; i < elenco.length; i += 1) {
     const b = d.createElement('button');
@@ -341,6 +392,7 @@ export function aggiornaCronologia(nav, conversazione, { fuoco = null, voci = nu
     if (linea.style.getPropertyValue('--lente') !== lente) linea.style.setProperty('--lente', lente);
   });
   metti(nav, 'data-attiva', String(attivo));
+  metti(nav, 'data-vera-disegnata', String(attivaVera)); // R-42: la strada corta sa quale voce porta oggi `aria-current`
   /*
    * ⛔ BC-08 — QUANDO LE VOCI NON CI STANNO. Con due lati le voci raddoppiano e il tetto della lista
    * (`min(70vh, 40rem)`) si riempie presto: a 900 px di altezza ci stanno 63 voci su 10 px, cioè ~31
@@ -471,7 +523,10 @@ export function collegaCronologia(nav, conversazione, { finestra = globalThis } 
   const vociCorrenti = () => vociInCache || (vociInCache = vociDaConversazione(conversazione));
   const FORMA = '.talos-turn, .talos-turn-spine, .talos-turn-spine__tick, .talos-turn-spine__n, .talos-message--user';
   const cambiaForma = (lista) => lista.some((r) => {
-    if (r.type === 'attributes') return Boolean(r.target.classList?.contains('talos-turn-spine__tick'));
+    /* R-42, revisione del Desktop (31/10): i segni della spina cambiano classe anche quando entrano o escono dalla vista
+       (`--visibile`), cioè a ogni passo di scorrimento, 3-7 volte; contarli come «forma» faceva un ridisegno lungo di tutte le voci
+       a OGNI passo, oltre al segnavia. È forma solo se cambia un TONO, cioè ciò che `vociDaConversazione` legge da un segno. */
+    if (r.type === 'attributes') return Boolean(r.target.classList?.contains('talos-turn-spine__tick')) && toniDelSegno(r.oldValue) !== toniDelSegno(r.target.getAttribute('class'));
     if (r.target === conversazione || r.target.closest?.('.talos-turn-spine')) return true;
     for (const nodi of [r.addedNodes, r.removedNodes]) {
       for (const n of nodi) if (n.nodeType === 1 && (n.matches?.(FORMA) || n.querySelector?.(FORMA))) return true;
@@ -494,7 +549,7 @@ export function collegaCronologia(nav, conversazione, { finestra = globalThis } 
       }
       if (nav.dataset.attivaVera === String(attiva)) return;
       nav.dataset.attivaVera = String(attiva);
-      if (fumetto.hidden && !inMano()) aggiornaCronologia(nav, conversazione, { fuoco: attiva, voci, segui: true });
+      if (fumetto.hidden && !inMano()) aggiornaCronologia(nav, conversazione, { fuoco: attiva, voci, segui: true, soloSegnavia: true }); // R-42: le voci sono quelle di prima
     });
   };
   scorrevole.addEventListener('scroll', seguiScorrimento, { passive: true });
@@ -522,7 +577,7 @@ export function collegaCronologia(nav, conversazione, { finestra = globalThis } 
     vociInCache = null;
     programmaAggiornamento();
   });
-  osservatore.observe(conversazione, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
+  osservatore.observe(conversazione, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'], attributeOldValue: true });
   aggiornaCronologia(nav, conversazione);
   seguiScorrimento(); // il segnavia parte dalla posizione VERA, non dalla voce 0
   return () => {

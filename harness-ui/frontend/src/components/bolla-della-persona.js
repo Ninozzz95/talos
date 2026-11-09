@@ -18,13 +18,20 @@ export function allegatiPerBolla(allegati) {
       ...(typeof a.nome === 'string' && a.nome ? { nome: a.nome } : {}),
       ...((a.assoluto || a.percorso) ? { percorso: String(a.assoluto || a.percorso) } : {}),
       ...(a.daBrowser === true ? { daBrowser: true } : {}),
+      ...(typeof a.allegatoId === 'string' && a.allegatoId ? { allegatoId: a.allegatoId } : {}), // decisioni 43 e 47: da qui nasce il legame con la chat
       ...(Number.isSafeInteger(a.caratteri) && a.caratteri >= 0 ? { caratteri: a.caratteri } : {}),
+      /* FE-065: il peso misurato, per la riga «tipo · peso · token» della scheda del file */
+      ...(Number.isSafeInteger(a.byte) && a.byte >= 0 ? { byte: a.byte } : {}),
     }))
     .filter((a) => a.nome || a.percorso);
 }
 
-/** La bolla che accompagna un invio, solo quando ciò che la persona vede è diverso da ciò che parte per il modello. */
-export function bollaDaInviare(mostra, perIlModello, allegati) {
+/**
+ * La bolla che accompagna un invio, solo quando ciò che la persona vede è diverso da ciò che parte per il modello.
+ * FE-003: un messaggio nato da un blocco la porta sempre, perché `blocco` va nel giornale.
+ */
+export function bollaDaInviare(mostra, perIlModello, allegati, blocco = null) {
+  if (blocco) return { testo: String(mostra ?? perIlModello), allegati: allegatiPerBolla(allegati), blocco };
   if (mostra === null || mostra === undefined || mostra === perIlModello) return null;
   const testo = String(mostra);
   const file = allegatiPerBolla(allegati);
@@ -70,5 +77,21 @@ export function bollaDaConsegna(consegna, { intestazioni = [], prefissiFile = []
 export function bollaPerLaRigiocata({ bolla = null, consegna = '', immagini = [], lingue } = {}) {
   const base = bolla && typeof bolla === 'object' && typeof bolla.testo === 'string' ? bolla : bollaDaConsegna(consegna, lingue);
   if (!base) return null;
-  return { testo: base.testo, allegati: [...(Array.isArray(base.allegati) ? base.allegati : []), ...(Array.isArray(immagini) ? immagini : [])], ...(base.origine?.tipo === 'telefono' ? { origine: base.origine } : {}) };
+  return { testo: base.testo, allegati: [...(Array.isArray(base.allegati) ? base.allegati : []), ...(Array.isArray(immagini) ? immagini : [])], ...(base.blocco ? { blocco: base.blocco } : {}), ...(base.origine?.tipo === 'telefono' ? { origine: base.origine } : {}) };
+}
+
+/**
+ * FE-065 (owner 02/11/2026): la bolla si toglie quando il messaggio è SOLO allegati, di qualunque tipo. Prima si toglieva
+ * solo per le immagini, e un file mandato senza testo lasciava una bolla vuota. La frase automatica «descrivi l'immagine»
+ * conta come vuota solo se c'è almeno un'immagine: senza, è testo che la persona ha davvero mandato.
+ * @param {string} testo  ciò che la bolla mostrerebbe
+ * @param {object[]} allegati
+ * @param {Set<string>} [frasiSoloImmagine]
+ */
+export function bollaSoloAllegati(testo, allegati, frasiSoloImmagine = new Set()) {
+  const lista = Array.isArray(allegati) ? allegati.filter(Boolean) : [];
+  if (!lista.length) return false;
+  const pulito = String(testo ?? '').trim();
+  if (pulito === '') return true;
+  return lista.some((a) => a.tipo === 'immagine') && frasiSoloImmagine.has(pulito);
 }

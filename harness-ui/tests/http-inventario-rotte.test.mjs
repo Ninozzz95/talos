@@ -33,7 +33,7 @@ import { createHttpApp, metodiAmmessiPerRotta } from '../src/http-app.mjs';
 const PERCORSO_HTTP_APP = fileURLToPath(new URL('../src/http-app.mjs', import.meta.url));
 
 async function listen(t, deps = {}) {
-  const app = createHttpApp({
+  const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,
     listaTaskDisponibili: () => [],
     elencaCartelleProgetto: () => [],
@@ -67,6 +67,8 @@ test('⛔⛔ AL CONTRARIO — una rotta che ESISTE, col metodo sbagliato, resta 
     { percorso: '/api/v1/sessions/x/stop', metodo: 'DELETE', allow: 'POST' },
     { percorso: '/api/v1/runtime/load', metodo: 'PATCH', allow: 'POST' },
     { percorso: '/api/v1/sessions/x/terminals', metodo: 'PUT', allow: 'GET, HEAD, POST' },
+    /* 06/11/2026: la fiducia nelle cartelle (decisioni 173/189/196) mancava nell'inventario e un verbo sbagliato tornava 404 */
+    { percorso: '/api/v1/folder-trust', metodo: 'PUT', allow: 'GET, HEAD, POST' },
   ];
   for (const caso of casi) {
     const risposta = await fetch(`${base}${caso.percorso}`, { method: caso.metodo });
@@ -204,7 +206,11 @@ test('⛔⛔ AL CONTRARIO — il guardiano MORDE: ciò che la catena non nomina 
   assert.equal(metodiAmmessiPerRotta('/api/v1/artifacts'), null);          // esiste solo /artifacts/:id
   assert.deepEqual(metodiAmmessiPerRotta('/api/v1/sessions/x/approve'), ['POST']);
   assert.deepEqual(metodiAmmessiPerRotta('/api/v1/artifacts/abc'), ['GET', 'HEAD']);
-  assert.deepEqual(metodiAmmessiPerRotta('/api/v1/assistenza'), ['POST']);
+  /* 06/11/2026 (revisione avversaria della cura dei rossi): la fiducia nelle cartelle (decisioni 173/189/196) serve GET e POST; il guardiano
+     legge solo il primo verbo della riga della catena, quindi l'elenco intero si pretende qui, o un PUT direbbe un «Allow: GET, HEAD» falso */
+  assert.deepEqual(metodiAmmessiPerRotta('/api/v1/folder-trust'), ['GET', 'HEAD', 'POST']);
+  // Centro assistenza (01/11/2026): la rotta vecchia è uscita, la guida la legge il modello con talos_help
+  assert.equal(metodiAmmessiPerRotta('/api/v1/assistenza'), null);
 });
 
 test('WF-ROUTE-INVENTORY: proposal review and approval expose only their real methods', () => {

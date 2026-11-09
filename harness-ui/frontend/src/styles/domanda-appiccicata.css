@@ -19,12 +19,22 @@
   /* sopra le barre ferme dei blocchi di codice (z-index 1) e ogni contenuto dei turni (il massimo trovato nella chat è 3,
      `.talos-chat-return__button`, che sta FUORI dallo scorrevole); sotto menu, veli e suggerimenti, che vivono nel body (z 60). */
   --talos-domanda-z: 4;
+  /* ⛔ Foto dell'owner, 04/11/2026 (chat sul PC, tema scuro): sotto la domanda ferma scorreva la ricevuta della scheda delle domande,
+     e il suo bordo dorato si vedeva come una riga che saliva ACCANTO alla fascia, dalla cima della chat fino alla carta. La fascia
+     era larga quanto il messaggio, e la carta anche: con lo schermo in scala 125% (Windows) il bordo di 1 px della carta cade a metà
+     di un pixel del monitor e la sua metà esterna resta fuori dalla fascia (misurato da DOMANDA-SOPRA-SCHEDA-01: scarto 32 a sinistra,
+     24 a destra; in tema chiaro anche l'ombra della carta). Come Hermes, il cui contenitore fermo è più largo della colonna di 1rem per
+     lato (`user-message.tsx:57`, `-mx-4 w-[calc(100%+2rem)] px-4`), la fascia sborda di lato: è pittura, l'impaginazione non cambia.
+     24 px e non i 16 di Hermes: l'ombra delle carte sfuma in 24 px (`--talos-shadow-card`, `index.css:86` e `:137`); con 16 px in tema
+     chiaro ne restava un gradino di 2 livelli al bordo dell'orlo (misurato). */
+  --talos-domanda-orlo: 24px;
 }
 
 /* La domanda corrente (una sola, la sceglie lo script) si ferma in cima finché il suo turno è a schermo. */
 #conversation > .talos-turn[data-domanda-corrente] {
   position: sticky;
-  top: var(--talos-domanda-cima);
+  /* FE-065: con miniature o schede sopra la bolla sale anche del loro ingombro (`--talos-domanda-salto`, lo scrive lo script) */
+  top: calc(var(--talos-domanda-cima) - var(--talos-domanda-salto, 0px));
   z-index: var(--talos-domanda-z);
 }
 /* ⛔ La scatola del turno fermo è alta quanto tutta la domanda, anche dove la fascia la taglia: senza questa riga, sotto la fascia
@@ -46,6 +56,13 @@
    largo quanto la colonna tagliava la scena animata anche quando la successiva scorreva al suo posto senza coprire niente. */
 #conversation > .talos-turn[data-domanda-successiva][data-domanda-sopra] > .talos-message--user {
   background: var(--talos-background);
+}
+/* Revisione UX della candidata, 04/11/2026, riga 38 (foto 92): la testa della domanda dopo è entrata nella fascia, cioè il turno della
+   ferma è finito (in Hermes il gruppo del turno la porta via, `list.tsx:279-281`). La ferma lascia il posto e torna nel flusso, sopra
+   la vista: in fondo alla chat, dove la dopo non può più salire in cima, prima restavano due domande una a metà sopra l'altra. Lo script
+   mette `data-domanda-uscita` (`osservaSopra`); `relative` si impagina come `sticky`, quindi niente si sposta nel flusso. */
+#conversation > .talos-turn[data-domanda-corrente][data-domanda-uscita] {
+  position: relative;
 }
 /* Mentre la si modifica in linea la domanda torna nel flusso: il campo cresce e non deve coprire la conversazione (Hermes lo
    tiene appiccicato e sblocca il taglio, `styles.css:1888-1891`; qui il campo è più alto della bolla e sta meglio al suo posto). */
@@ -83,13 +100,19 @@
     /* la fascia: il fondo del tema (lo stesso di testata e composer sopra la scena, `aspetto.css:211-215`) dalla testa alla bolla
        tagliata. Opaca: la bolla d'oro velato (`--talos-accent-soft`, 14% d'accento) sopra il fondo pieno si legge come al suo
        posto, e il testo che scorre sotto non trapela. */
+    /* L'orlo (`--talos-domanda-orlo`): due ombre piene del colore del fondo, spostate di lato e senza sfocatura, allargano la fascia
+       solo in orizzontale (in alto e in basso non sbordano, anche quando il taglio si toglie col fuoco); il taglio le lascia vedere
+       con i lati negativi (CSS Shapes 1, `inset()`: un lato negativo allarga il riquadro del taglio). */
     .talos-turn[data-domanda-corrente] > .talos-message--user {
       background: var(--talos-background);
-      clip-path: inset(0 0 max(0px, calc(100% - var(--talos-domanda-vista, 100%))) 0);
+      box-shadow: calc(-1 * var(--talos-domanda-orlo)) 0 0 0 var(--talos-background), var(--talos-domanda-orlo) 0 0 0 var(--talos-background);
+      clip-path: inset(0 calc(-1 * var(--talos-domanda-orlo)) max(0px, calc(100% - var(--talos-domanda-vista, 100%))) calc(-1 * var(--talos-domanda-orlo)));
     }
     /* sotto la bolla: le azioni (trasparenti finché non ci passi sopra), la galleria e i chip se ne vanno con la risposta, come gli
        allegati di Hermes che stanno FUORI dal contenitore appiccicato (`user-message.tsx:478-483`) */
-    .talos-turn[data-domanda-corrente] > :is(.talos-image-gallery, .talos-allegati-chip) {
+    .talos-turn[data-domanda-corrente] > :is(.talos-image-gallery, .talos-allegati-chip),
+    .talos-turn[data-domanda-corrente] > .talos-message--user:has(> .talos-message__body:not([hidden])) > :is(.talos-image-gallery, .talos-allegati-chip) {
+      /* FE-065: sopra la bolla (versione B) escono dall'alto col salto; nascosti, non spuntano nella fessura del bordo */
       visibility: hidden;
     }
     /* il bordo basso della fascia sfuma in 12 px invece di tagliare a metà le lettere che le scorrono sotto (foto
@@ -99,8 +122,9 @@
       content: '';
       position: absolute;
       top: var(--talos-domanda-vista, 0px);
-      left: 0;
-      width: var(--talos-domanda-larghezza, 100%); /* quanto il messaggio, cioè quanto la fascia (lo misura lo script) */
+      /* quanto la fascia: il messaggio (lo misura lo script) più l'orlo per lato */
+      left: calc(-1 * var(--talos-domanda-orlo));
+      width: calc(var(--talos-domanda-larghezza, 100%) + 2 * var(--talos-domanda-orlo));
       height: 12px;
       background: linear-gradient(to bottom, var(--talos-background), transparent);
       pointer-events: none;
@@ -136,7 +160,7 @@
     /* `inset(0)` e non `none`: da `inset(…)` a `none` non si interpola, e l'attesa non varrebbe. Il pulsante «Domanda intera» non
        sparisce (porta la domanda al suo posto): scende sotto il testo, qui sotto. */
     .talos-turn[data-domanda-corrente]:is(:hover, :focus-within) > .talos-message--user {
-      clip-path: inset(0 0 0 0);
+      clip-path: inset(0 calc(-1 * var(--talos-domanda-orlo)) 0 calc(-1 * var(--talos-domanda-orlo)));
       transition-delay: 120ms;
     }
     /* la sfumatura dell'ultima riga se ne va INSIEME al taglio: proprietà discreta, quindi `allow-discrete` (Chrome 117+) */

@@ -32,7 +32,7 @@ async function banco(t) {
   const registro = createSessionRegistry({ cartellaStore: store, avviaSessioneFn: async () => ({ ok: true }), guardaWorkspaceFn: () => () => {}, modello: 'm', chiave: 'k' });
   t.after(() => registro.chiudi({ attesaMassimaMs: 500 }));
   await registro.ripristina();
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro }));
   await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
   t.after(() => new Promise((ok) => { server.closeAllConnections?.(); server.close(ok); }));
   return `http://127.0.0.1:${server.address().port}`;

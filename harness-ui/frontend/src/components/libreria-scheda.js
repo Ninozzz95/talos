@@ -232,7 +232,8 @@ export function creaGlifoFormato(doc, voce) {
   const glifo = nodo(doc, 'span', 'td-lib-glifo');
   glifo.dataset.famiglia = famiglia;
   glifo.setAttribute('aria-hidden', 'true');
-  glifo.append(iconaSprite(doc, ICONA_DELLA_FAMIGLIA[famiglia] || 'i-lib-file'), nodo(doc, 'span', 'td-lib-estensione', estensione));
+  /* `talos-glifo-estensione`: il nome neutro per chi lo riusa fuori dalla Libreria (la scheda del file in chat): le classi `td-lib-*` restano sotto la Libreria (ATLAS-F3-08) */
+  glifo.append(iconaSprite(doc, ICONA_DELLA_FAMIGLIA[famiglia] || 'i-lib-file'), nodo(doc, 'span', 'td-lib-estensione talos-glifo-estensione', estensione));
   return glifo;
 }
 

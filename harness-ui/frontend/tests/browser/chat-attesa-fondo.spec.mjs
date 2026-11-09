@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
    *   risolto = richiesta pending); qaskills.sh «Mock a Server-Sent Events Stream in Playwright»
    *   (fulfill chiude la connessione; per tenerla aperta serve un handler che non settle).
    */
-  await page.route('**/api/v1/sessions/chat-proof-*/events', () => { /* flusso aperto e muto: resta pending */ });
+  await page.route('**/api/v1/sessions/chat-proof-*/events*', () => { /* flusso aperto e muto: resta pending */ });
   await page.goto('/');
   await page.waitForFunction(() => window.__talosHarnessUiRuntime);
 });

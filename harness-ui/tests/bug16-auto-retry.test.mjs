@@ -11,12 +11,14 @@
  * Ramo: catch di `talosLavora` in `src/kernel/talosHarness.mjs`; dossier: `scratchpad/piano-bug16-auto-retry-2026-10-05.md` §9-§10.
  * I due test che assegnavano il vecchio contratto a esito zero-effetti stanno aggiornati in
  * `flusso-rotto-a-meta.test.mjs` (NOTHING-VISIBLE-RESENT, TOOL-CALL-HALF-RESENT).
+ * ⛔ R-44 (31/10/2026): una chiamata annunciata e mai partita non è più un effetto, sul fornitore in rete. Vedi R44-*.
  * 401/400 NON ritentano (non migliorano ritentando — invariato); retry-after-ms > retry-after è già
  * ancorato in `tests/g02-lane-r-retry.test.mjs` (G02-10) e non si duplica qui.
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { talosLavora } from '../src/kernel/talosHarness.mjs';
@@ -173,22 +175,108 @@ test('BUG16-READ-IN-FLIGHT: una lettura pura partita blocca il reinvio (RETRY-02
   assert.equal(retry.length, 0);
 });
 
-test('BUG16-TOOL-ANNOUNCED-NOT-RESENT: una tool_call ANNUNCIATA (mai partita) blocca il reinvio — la card annullata è già un effetto visibile', async () => {
+/* ⛔ R-44 (31/10/2026): una chiamata annunciata e mai partita non ferma più il reinvio sul fornitore in rete. Era il contrario fino a
+   oggi; Performance ha perso così due corse del piano. Sui motori locali resta manuale. */
+const chiamata = (id, indice, nome, argomenti) => ({ choices: [{ delta: { tool_calls: [{ index: indice, id, function: { name: nome, arguments: argomenti } }] } }] });
+const ferma = { choices: [{ delta: {}, finish_reason: 'tool_calls' }] };
+
+test('R44-RESENT: una scrittura annunciata e caduta prima del finish ⇒ un reinvio, e sul disco solo quella del secondo tentativo', async () => {
+  const cartella = cartellaDiProva('talos-r44-');
   const r = rete(
-    () => flussoRotto([
-      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call_1', function: { name: 'scrivi', arguments: '{"percorso":"fuori.txt","testo":"NO"}' } }] } }] },
-    ], traffico()),
-    () => flussoIntero([testo('mai raggiunto'), fine]),
+    () => flussoRotto([chiamata('call_1', 0, 'scrivi', '{"percorso":"primo.txt","testo":"NO"}')], traffico()),
+    () => flussoIntero([chiamata('call_2', 0, 'scrivi', '{"percorso":"secondo.txt","testo":"SI"}'), ferma]),
+    () => flussoIntero([testo('Fatto.'), fine]),
   );
   const eventi = [], retry = [];
-  await assert.rejects(talosLavora(base({ fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1, onDelta: (e) => eventi.push(e), onGiro: raccogliRetry(retry) })), e => {
-    assert.equal(e.code, 'PROVIDER_OUTCOME_UNKNOWN');
-    return true;
+  const esito = await talosLavora(base({ cartella, fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1, onDelta: (e) => eventi.push(e), onGiro: raccogliRetry(retry) }));
+  assert.equal(esito.comeFinita, 'concluso');
+  assert.equal(r.corpi.length, 3, 'il primo tentativo, il reinvio e il giro dopo la scrittura');
+  assert.equal(retry.filter((e) => e.fase === 'attesa').length, 1, 'il reinvio si vede');
+  assert.equal(eventi.find((e) => e.tipo === 'tool-annullato')?.toolCallId, 'call_1', 'la carta della chiamata interrotta resta annullata');
+  assert.equal(existsSync(join(cartella, 'primo.txt')), false, 'la chiamata interrotta non è partita');
+  assert.equal(await readFile(join(cartella, 'secondo.txt'), 'utf8'), 'SI', 'quella rifatta sì, una volta');
+  assert.equal(JSON.stringify(r.corpi[1].messages).includes('call_1'), false, 'la chiamata interrotta non resta nella storia');
+});
+
+test('R44-HALF: anche una chiamata a metà argomenti si rifà', async () => {
+  const r = rete(
+    () => flussoRotto([chiamata('call_1', 0, 'scrivi', '{"percorso":"a.t')], traffico()),
+    () => flussoIntero([testo('Risposta intera.'), fine]),
+  );
+  const esito = await talosLavora(base({ fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1 }));
+  assert.equal(esito.comeFinita, 'concluso');
+  assert.equal(r.corpi.length, 2);
+});
+
+for (const modello of ['local:qwen', 'locale-ospite:qwen', 'ollama:qwen', 'lmstudio:qwen']) {
+  test(`R44-LOCALE: sul motore locale (${modello}) la chiamata annunciata ferma il reinvio, come prima`, async () => {
+    const r = rete(
+      () => flussoRotto([chiamata('call_1', 0, 'scrivi', '{"percorso":"fuori.txt","testo":"NO"}')], traffico()),
+      () => flussoIntero([testo('mai raggiunto'), fine]),
+    );
+    const eventi = [], retry = [];
+    await assert.rejects(talosLavora(base({ modello, fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1, onDelta: (e) => eventi.push(e), onGiro: raccogliRetry(retry) })),
+      { code: 'PROVIDER_OUTCOME_UNKNOWN' });
+    assert.equal(r.corpi.length, 1, 'sul locale una caduta è più spesso il motore morto: la ripresa resta manuale');
+    assert.equal(retry.length, 0);
+    assert.equal(eventi.find((e) => e.tipo === 'tool-annullato')?.toolCallId, 'call_1');
   });
-  assert.equal(r.corpi.length, 1, 'una chiamata annunciata (anche mai partita) non è zero-effetti: nessun reinvio automatico');
-  assert.equal(retry.length, 0, 'nessun evento provider-retry: la ripresa resta manuale');
-  const annullata = eventi.find((e) => e.tipo === 'tool-annullato');
-  assert.equal(annullata?.toolCallId, 'call_1', 'la card annullata esiste a schermo: il giro NON era vuoto');
+}
+
+test('R44-CAP: dieci reinvii vani con la chiamata annunciata ⇒ PROVIDER_OUTCOME_UNKNOWN_ESAURITO, come gli altri', async () => {
+  const rotta = () => flussoRotto([chiamata('call_1', 0, 'scrivi', '{"percorso":"a.txt","testo":"x"}')], traffico());
+  const r = rete(...Array.from({ length: 12 }, () => rotta));
+  await assert.rejects(talosLavora(base({ fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1 })), { code: 'PROVIDER_OUTCOME_UNKNOWN_ESAURITO' });
+  assert.equal(r.corpi.length, 11, 'il tentativo più dieci reinvii, non uno di più');
+});
+
+test('R44-STOP: lo stop durante l\'attesa del reinvio ferma il giro, e la chiamata non si rifà', async () => {
+  const stop = new AbortController();
+  const r = rete(() => {
+    setTimeout(() => stop.abort(), 150);
+    return flussoRotto([chiamata('call_1', 0, 'scrivi', '{"percorso":"a.txt","testo":"x"}')], traffico());
+  });
+  const cartella = cartellaDiProva('talos-r44-stop-');
+  const esito = await talosLavora(base({ cartella, fetchDiRete: r.fetch, segnaleStop: stop.signal }));
+  assert.equal(esito.comeFinita, 'fermato');
+  assert.equal(r.corpi.length, 1, 'dopo lo stop nessun reinvio');
+  assert.equal(existsSync(join(cartella, 'a.txt')), false);
+});
+
+test('R44-CARTA: una lettura che vuole la domanda non parte nello stream: nessuna carta aperta, il reinvio la lascia al giro buono', async () => {
+  const cartella = cartellaDiProva('talos-r44-carta-');
+  const domande = [];
+  const fuori = '../fuori-r44.txt';
+  const r = rete(
+    () => flussoRotto([
+      chiamata('call_1', 0, 'leggi', JSON.stringify({ percorso: fuori })),
+      chiamata('call_2', 1, 'leggi', '{"percorso":"a'),
+    ], traffico()),
+    () => flussoIntero([testo('Risposta intera.'), fine]),
+  );
+  const retry = [];
+  const esito = await talosLavora(base({ cartella, fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1, onGiro: raccogliRetry(retry),
+    chiediApprovazioneFn: async (a) => { domande.push(a); return false; } }));
+  assert.equal(esito.comeFinita, 'concluso');
+  assert.equal(domande.length, 0, 'la carta si apre solo dopo una risposta completa: una caduta non ne lascia una sospesa');
+  assert.equal(r.corpi.length, 2);
+  assert.equal(retry.filter((e) => e.fase === 'attesa').length, 1);
+});
+
+test('R44-READ: al contrario, una lettura DAVVERO partita prima della caduta continua a fermare il reinvio', async () => {
+  const cartella = cartellaDiProva('talos-r44-lettura-');
+  await writeFile(join(cartella, 'nota.txt'), 'contenuto', 'utf8');
+  const r = rete(
+    () => flussoRotto([chiamata('call_1', 0, 'leggi', '{"percorso":"nota.txt"}'), chiamata('call_2', 1, 'scrivi', '{"percorso":"a')], traffico()),
+    () => flussoIntero([testo('mai raggiunto'), fine]),
+  );
+  const eventi = [];
+  await assert.rejects(talosLavora(base({ cartella, fetchDiRete: r.fetch, attesaRitentaMassimaMs: 1, onDelta: (e) => eventi.push(e) })), { code: 'PROVIDER_OUTCOME_UNKNOWN' });
+  assert.equal(r.corpi.length, 1);
+  const lettura = eventi.find((e) => e.tipo === 'tool-annullato' && e.toolCallId === 'call_1');
+  assert.equal(lettura?.partita, true, 'la lettura è avvenuta: non si dice «not run»');
+  assert.doesNotMatch(lettura.motivo, /not run/u);
+  assert.equal(eventi.find((e) => e.tipo === 'tool-annullato' && e.toolCallId === 'call_2')?.partita, undefined, 'la seconda chiamata non è partita');
 });
 
 test('BUG16-TWO-BREAKS: due rotte a zero effetti ⇒ due reinvii, chiusura al 3° tentativo', async () => {

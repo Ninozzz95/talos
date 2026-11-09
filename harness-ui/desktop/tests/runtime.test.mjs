@@ -60,6 +60,7 @@ test('R03-AMBIENTE — fallback solo per Vulkan, nessuna contaminazione fra riav
       motoreLocale: { percorso: percorsiR03.localRuntime[variante], variante, dispositivi: [], motivo: 'prova' } });
     assert.equal(avvio.options.env.TALOS_LLAMA_SERVER_PATH, percorsiR03.localRuntime[variante]);
     assert.equal(avvio.options.env.TALOS_LLAMA_SERVER_FALLBACK_PATH, variante === 'vulkan' ? percorsiR03.localRuntime.cpu : undefined);
+    assert.equal(avvio.options.env.TALOS_LLAMA_SERVER_DAL_PACCHETTO, '1', 'a packaged engine chosen by the shell is not an engine set by hand');
   }
   assert.deepEqual(env, { TALOS_LLAMA_SERVER_FALLBACK_PATH: 'vecchio' });
 });
@@ -87,8 +88,15 @@ test('R01-AMBIENTE — eseguibile Electron, segreto solo in ambiente e porta esp
   assert.equal(avvio.options.env.TALOS_HARNESS_UI_KEYRING_SCOPE, 'desktop');
   assert.equal(avvio.options.env.NODE_OPTIONS, undefined);
   assert.equal(avvio.options.env.TALOS_PACKAGED_NODE, undefined);
-  assert.equal(avvio.options.env.TALOS_HARNESS_UI_TOKEN, token);
+  /* «Gettone sempre» (condizione del Mobile): il gettone non sta più nell'ambiente del figlio, va dallo stdin */
+  assert.equal(avvio.options.env.TALOS_HARNESS_UI_TOKEN, undefined);
+  assert.equal(avvio.options.env.TALOS_HARNESS_UI_SEGRETI_DA, 'stdin');
+  assert.equal(avvio.options.stdio[0], 'pipe');
+  assert.equal(avvio.segreti, `TALOS_HARNESS_UI_TOKEN=${token}\n`);
+  assert.ok(!JSON.stringify(avvio.options.env).includes(token));
   assert.ok(!JSON.stringify(avvio.args).includes(token));
+  /* e uno ereditato dal sistema non resta accanto: il server rifiuterebbe due fonti */
+  assert.equal(creaAvvioFiglio({ execPath: resolve('Electron.exe'), percorsi, port: 49152, token, reportFile: resolve('report.json'), dataDir: resolve('profilo'), env: { talos_harness_ui_token: 'ereditato' } }).options.env.talos_harness_ui_token, undefined);
   assert.equal(avvio.options.shell, false);
   assert.equal(avvio.options.windowsHide, true);
   assert.throws(() => creaAvvioFiglio({ execPath: 'node', percorsi, port: 4174, token }), /porta|eseguibile/);

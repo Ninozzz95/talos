@@ -14,7 +14,7 @@ import { modelloDelPiano } from '../src/chatgpt-rotte.mjs';
  */
 function banco({ providerProbe, localModelStore, catalogoChatgpt } = {}) {
   const sessionRegistry = { elenca: () => [], esiste: () => false };
-  const httpApp = createHttpApp({ staticHandler: async () => null, sessionRegistry, providerProbe, localModelStore, catalogoChatgpt });
+  const httpApp = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry, providerProbe, localModelStore, catalogoChatgpt });
   const chiamaVera = creaChiamataInterna({ httpApp, porta: 4999 });
   const operazioni = creaOperazioni({ chiama: chiamaVera, sessionRegistry, iscriviConRigiocata });
   const contesto = { dispositivo: { id: 'd', nome: 'Pad' }, iscrizioni: new Map(), iscrivi: () => async () => {} };
@@ -50,6 +50,7 @@ test('RM4-09b D-REM-9: i livelli di ragionamento del piano ChatGPT e dei fornito
     supported_reasoning_levels: [{ effort: 'low' }, { effort: 'medium' }, { effort: 'high' }, { effort: 'xhigh' }], default_reasoning_level: 'medium' }), prezzi: { input: 0 } }] };
   const perFornitore = {
     zai: [{ id: 'zai:glm-5.3-flash', nome: 'GLM-5.3 Flash', provider: 'zai', livelliRagionamento: ['low', 'high', 'max'], livelloRagionamentoPredefinito: null,
+      fasciaVeloce: { id: 'priority', descrizione: 'Più veloce', interno: 'C:\\Users\\Mario\\x' },
       fonteMetadati: 'C:\\Users\\Mario\\cache.json' }],
   };
   const b = banco({ catalogoChatgpt, providerProbe: { elencaModelli: async (id) => ({ provider: id, modelli: perFornitore[id] ?? [] }) } });
@@ -57,6 +58,8 @@ test('RM4-09b D-REM-9: i livelli di ragionamento del piano ChatGPT e dei fornito
   assert.deepEqual([luna.livelliRagionamento, luna.livelloRagionamentoPredefinito], [['low', 'medium', 'high', 'xhigh'], 'medium']);
   const glm = (await b.operazioni.esegui('provider.models', { provider: 'zai' }, b.contesto)).modelli[0];
   assert.deepEqual([glm.livelliRagionamento, glm.livelloRagionamentoPredefinito], [['low', 'high', 'max'], null]);
+  assert.deepEqual(glm.fasciaVeloce, { id: 'priority', descrizione: 'Più veloce' }, 'contratto §11: senza questo campo il telefono non sa se il fulmine c\'è');
+  assert.equal(Object.hasOwn(luna, 'fasciaVeloce'), false, 'assente = niente fulmine');
   // AL CONTRARIO: il resto del filtro non cambia — né i prezzi né un percorso del PC
   assert.equal(Object.hasOwn(luna, 'prezzi'), false);
   assert.doesNotMatch(JSON.stringify(glm), /Mario/u);

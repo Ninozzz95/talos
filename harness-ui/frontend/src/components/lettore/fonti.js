@@ -10,23 +10,18 @@
  */
 import { t } from '../lingua.js';
 import { FORMATI_OSPITE, corniceOspite } from './office/cornice-ospite.js';
+import { erroreDalRifiuto, FRASE_GENERICA, FRASE_GENERICA_ALLEGATO } from '../rifiuti-dei-file.js';
 
 const API = '/api/v1';
 const enc = encodeURIComponent;
 
-async function erroreDa(risposta) {
-  let corpo = null;
-  try { corpo = await risposta.json(); } catch { /* il corpo non è JSON */ }
-  const motivo = corpo?.error?.message || t('varie.reader.source.httpStatus', { status: risposta.status });
-  const errore = new Error(motivo);
-  errore.code = corpo?.error?.code ?? null;
-  errore.status = risposta.status;
-  return errore;
-}
+/* Decisione 215 (owner 04/11/2026): «Il file non si è aperto: File not found» mostrava l'inglese della busta. Ora il codice (e il
+   motivo) diventa una frase di TALOS nella lingua della persona; un codice ignoto, la frase generica (`rifiuti-dei-file.js`). */
+const erroreDa = erroreDalRifiuto;
 
-async function byteDa(fetchFn, indirizzo) {
+async function byteDa(fetchFn, indirizzo, generica = FRASE_GENERICA) {
   const risposta = await fetchFn(indirizzo, { credentials: 'same-origin' });
-  if (!risposta.ok) throw await erroreDa(risposta);
+  if (!risposta.ok) throw await erroreDa(risposta, generica);
   return risposta.arrayBuffer();
 }
 
@@ -57,6 +52,18 @@ export function fonteDaCartella({ sessionId, percorso, nome = null, dimensione, 
     leggiByte: () => byteDa(fetchFn, `${API}/sessions/${enc(sessionId)}/file?percorso=${enc(percorso)}${origine}`),
     ...(perIlModello ? {} : { creaPagina: () => paginaDa(fetchFn, sessionId, { percorso }) }),
     indirizzoPdf: `${API}/sessions/${enc(sessionId)}/file/anteprima?percorso=${enc(percorso)}${origine}`,
+  };
+}
+
+/** Decisioni 43 e 47: un allegato di questa conversazione, per riferimento: non sta nella cartella del progetto. */
+export function fonteDaAllegato({ sessionId, allegatoId, nome, fetchFn = (...a) => globalThis.fetch(...a) }) {
+  return {
+    origine: 'allegato',
+    nome,
+    percorso: null,
+    dimensione: undefined,
+    leggiByte: () => byteDa(fetchFn, `${API}/sessions/${enc(sessionId)}/allegati/${enc(allegatoId)}`, FRASE_GENERICA_ALLEGATO),
+    indirizzoPdf: `${API}/sessions/${enc(sessionId)}/allegati/${enc(allegatoId)}/anteprima`,
   };
 }
 

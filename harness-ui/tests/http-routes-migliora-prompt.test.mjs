@@ -42,7 +42,7 @@ const CORPO_BUONO = JSON.stringify({
 });
 
 async function listen(t, opzioni = {}) {
-  const app = createHttpApp({ staticHandler: async () => null, ...opzioni });
+  const app = createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, ...opzioni });
   const server = createServer(app);
   await new Promise((risolvi, rifiuta) => { server.once('error', rifiuta); server.listen(0, '127.0.0.1', risolvi); });
   t.after(() => new Promise((risolvi) => server.close(risolvi)));

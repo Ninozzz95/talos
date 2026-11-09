@@ -20,7 +20,7 @@ import {
   SPECIE_ATTREZZI, ORDINE_SPECIE, specieAttrezzo, fraseSpecie, verboAttrezzo, iconaSpecie,
 } from '../../src/components/nomi-attrezzi.js';
 import {
-  bersaglioAttrezzo, titoloRagionamento, fraseAdesso, riassuntoVoci, creaRegolaAdesso, testoDelSegmento,
+  bersaglioAttrezzo, chiaveDelPercorso, titoloRagionamento, fraseAdesso, riassuntoVoci, creaRegolaAdesso, testoDelSegmento,
   PERMANENZA_MINIMA_AZIONE_MS, PAUSA_PROSSIMO_PASSO_MS, SOGLIA_FILTRI, TETTO_BERSAGLI_PX, LARGHEZZA_MINIMA_BERSAGLI_PX,
 } from '../../src/components/attivita-segmento.js';
 
@@ -64,7 +64,7 @@ test('ATTIVITA-D1-02 — la tabella delle specie è completa e ogni icona esiste
     assert.ok(sprite.includes(`id="${s.icona}"`), `icona ${s.icona} di ${specie} nello sprite`);
     assert.equal(iconaSpecie(specie), s.icona);
   }
-  assert.equal(iconaSpecie('altro:qualunque'), 'i-bolt');
+  assert.equal(iconaSpecie('altro:qualunque'), 'i-wrench');
   assert.deepEqual(verboAttrezzo('leggi'), ['Letto', 'Legge']);
   assert.deepEqual(verboAttrezzo('elenca'), ['Elencato', 'Elenca']);
   assert.equal(verboAttrezzo('memory_write')[0], 'scrittura in memoria');
@@ -140,7 +140,7 @@ test('ATTIVITA-D11-01 — la frase viva ha il verbo al presente in testa, il ber
   assert.equal(fraseAdesso(attrezzo('shell', { comando: 'npm test' }, 'in-corso')), 'Esegue npm test…');
   assert.equal(fraseAdesso(attrezzo('leggi', {}, 'in-corso')), 'Legge…');
   assert.equal(fraseAdesso(attrezzo('memory_write', { title: 'x' }, 'in-corso')), 'scrittura in memoria…');
-  assert.equal(fraseAdesso(ragionamento('**Cerco le prove sugli errori**\n\nIl file…', null, 'in-corso')), 'Sta ragionando: Cerco le prove sugli errori');
+  assert.equal(fraseAdesso(ragionamento('**Cerco le prove sugli errori**\n\nIl file…', null, 'in-corso')), 'Sta ragionando · Cerco le prove sugli errori');
   assert.equal(fraseAdesso(ragionamento('', null, 'in-corso')), 'Sta ragionando…');
   assert.equal(fraseAdesso(null), '');
 });
@@ -213,4 +213,50 @@ test('ATTIVITA-D6-01 — «Copia l\'attività come testo»: una riga per voce, i
     '- Esegue i test npm test (non riuscito)',
     '- Cerca «q» (in corso)',
   ]);
+});
+
+/*
+ * D16 del collaudo del 02/11 (foto `a-corsa-02`): «13 files edited» su 2 file. La frase dice FILE e il conto era delle CHIAMATE: tredici `file_edit` sugli stessi
+ * due file. Hermes conta allo stesso modo (`run-summary.ts:163`, una chiamata = una cosa) e ha la stessa frase: non si copia. Le frasi intere che nominano file o
+ * cartelle contano i percorsi diversi; le brevi («13 modifiche») restano il conto delle chiamate, che è ciò che dicono.
+ */
+test('ATTIVITA-D16 — «N file modificati» conta i file diversi, «N modifiche» le chiamate; letture, creazioni, scritture ed elenchi uguale', () => {
+  const tredici = [
+    ...Array.from({ length: 7 }, () => attrezzo('file_edit', { percorso: 'src/json_repair/json_repair.py' })),
+    ...Array.from({ length: 6 }, () => attrezzo('file_edit', { percorso: 'tests/test_depth.py' })),
+  ];
+  const r = riassuntoVoci(tredici);
+  assert.deepEqual(r.parti, ['2 file modificati']);
+  assert.deepEqual(r.partiBrevi, ['13 modifiche']);
+  /* lo stesso file scritto in due modi è lo stesso file */
+  assert.deepEqual(riassuntoVoci([attrezzo('leggi', { percorso: 'src\\a.py' }), attrezzo('leggi', { percorso: 'src/a.py' }), attrezzo('leggi', { percorso: './src/a.py' }), attrezzo('leggi', { percorso: 'src/b.py' })]).parti, ['2 file letti']);
+  assert.deepEqual(riassuntoVoci([attrezzo('scrivi', { percorso: 'a.md' }, 'riuscito', { operazione: 'add' }), attrezzo('scrivi', { percorso: 'a.md' }, 'riuscito', { operazione: 'add' })]).parti, ['1 file creato']);
+  assert.deepEqual(riassuntoVoci([attrezzo('scrivi', { percorso: 'a.md' }), attrezzo('scrivi', { percorso: 'a.md' })]).parti, ['1 file scritto']);
+  assert.deepEqual(riassuntoVoci([attrezzo('elenca', { percorso: 'src' }), attrezzo('elenca', { percorso: 'src' }), attrezzo('elenca', { percorso: 'tests' })]).parti, ['2 cartelle elencate']);
+  /* AL CONTRARIO: ciò che non nomina un file resta il conto delle chiamate; una chiamata senza percorso conta per sé */
+  assert.deepEqual(riassuntoVoci([attrezzo('cerca', { query: 'x', percorso: 'src' }), attrezzo('cerca', { query: 'x', percorso: 'src' })]).parti, ['2 ricerche'], 'una ricerca nella stessa cartella resta una ricerca in più');
+  assert.deepEqual(riassuntoVoci([attrezzo('file_edit', { percorso: 'a.py' }), attrezzo('file_edit', { percorso: 'b.py' }, 'fallito')]).parti, ['1 file modificato'], 'un file mai modificato non entra nel conto');
+  assert.deepEqual(riassuntoVoci([attrezzo('shell', { comando: 'npm test' }), attrezzo('shell', { comando: 'npm test' })]).parti, ['2 comandi']);
+  assert.deepEqual(riassuntoVoci([attrezzo('file_edit', {}), attrezzo('file_edit', {}), attrezzo('file_edit', { percorso: 'a.py' })]).parti, ['3 file modificati']);
+  /* i falliti restano chiamate: «2 modifiche non riuscite» */
+  const misto = riassuntoVoci([...tredici, attrezzo('file_edit', { percorso: 'src/json_repair/json_repair.py' }, 'fallito'), attrezzo('file_edit', { percorso: 'src/json_repair/json_repair.py' }, 'fallito')]);
+  assert.deepEqual(misto.erroriParti, ['2 modifiche non riuscite']);
+  assert.deepEqual(misto.parti, ['2 file modificati']);
+});
+
+test('ATTIVITA-D16-TESTA — la testa del giro (e l Indice dei giri, che la copia) conta i file come il segmento: niente due vocabolari', () => {
+  const app = readFileSync(path.join(qui, '..', '..', 'src', 'legacy', 'app.js'), 'utf8');
+  assert.match(app, /percorsi: \{ letto: new Set\(\), elencato: new Set\(\), modificato: new Set\(\), nuovo: new Set\(\) \}/u);
+  for (const [categoria, contatore] of [['letto', 'letti'], ['elencato', 'elencati'], ['modificato', 'modificati'], ['nuovo', 'nuovi']]) {
+    assert.match(app, new RegExp(`formattaConteggioAttivita\\('${categoria}', file\\('${categoria}', c\\.${contatore}\\)\\)`, 'u'), categoria);
+  }
+  assert.match(app, /batch\.percorsi\?\.\[operazione\.op === 'add' \? 'nuovo' : 'modificato'\]\?\.add\(chiaveDelPercorso\(percorso\)/u);
+  assert.match(app, /batch\.percorsi\?\.letto\?\.add\(chiaveDelPercorso\(info\.argomentiParsati\?\.percorso\)/u);
+  assert.match(app, /batch\.percorsi\?\.elencato\?\.add\(chiaveDelPercorso\(info\.argomentiParsati\?\.percorso\)/u);
+  assert.equal(chiaveDelPercorso('.\\src\\a.py'), 'src/a.py', 'la stessa chiave del segmento');
+  assert.equal(chiaveDelPercorso('./src/'), 'src');
+  assert.equal(chiaveDelPercorso('/'), '/', 'la radice resta la radice');
+  assert.equal(chiaveDelPercorso('Src/A.py') === chiaveDelPercorso('src/a.py'), false, 'le maiuscole contano');
+  assert.equal(chiaveDelPercorso(''), null);
+  assert.equal(chiaveDelPercorso(undefined), null);
 });

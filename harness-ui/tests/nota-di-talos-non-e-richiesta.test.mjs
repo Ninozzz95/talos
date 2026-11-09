@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { NOTA_CONTINUA_DOPO_SILENZIO, NOTA_CONTINUA_DOPO_TETTO, notaCopieScartate } from '../src/kernel/talosHarness.mjs';
+import { NOTA_CONTINUA_DOPO_SILENZIO, NOTA_CONTINUA_DOPO_TETTO, NOTA_RILEGGI_PRIMA_DI_CHIUDERE, notaCopieScartate } from '../src/kernel/talosHarness.mjs';
 import { dividiPerCompattazione, eNotaDiTalos, eRichiestaDellaPersona } from '../src/kernel/compattazione-desktop.mjs';
 import { eRichiestaDellaPersonaPerIlRegistro } from '../src/context-runtime.mjs';
 
@@ -30,7 +30,7 @@ test('NOTA-DI-TALOS-01 — tre note di TALOS non prendono il posto delle richies
 });
 
 test('NOTA-DI-TALOS-02 — le tre note del kernel sono riconosciute; al contrario, una richiesta della persona no (nemmeno se parla di TALOS)', () => {
-  for (const content of [NOTA.content, NOTA_CONTINUA_DOPO_TETTO, NOTA_CONTINUA_DOPO_SILENZIO]) {
+  for (const content of [NOTA.content, NOTA_CONTINUA_DOPO_TETTO, NOTA_CONTINUA_DOPO_SILENZIO, NOTA_RILEGGI_PRIMA_DI_CHIUDERE]) {
     assert.equal(eNotaDiTalos({ role: 'user', content }), true, content.slice(0, 40));
     assert.equal(eRichiestaDellaPersonaPerIlRegistro({ role: 'user', content }), false, 'nemmeno nel registro del motore');
   }

@@ -224,9 +224,11 @@ const SEGRETI_DEL_SERVER_ATTESI = [
   'TALOS_HARNESS_SEARCH_API_KEY',
   'ELECTRON_RUN_AS_NODE',
   'TALOS_DESKTOP_VERSION', // «Segnala un problema» (29/10/2026): la versione dell'app per la diagnostica, solo del server del guscio
+  'TALOS_LLAMA_SERVER_DAL_PACCHETTO', // 01/11: il marchio «viene dal pacchetto» vale solo per il server che il guscio avvia
   'TALOS_SEGNALAZIONE_PROBLEMA', // revisione D (F4): l'interruttore della seconda porta, solo del server del guscio
   'TALOS_HARNESS_UI_KEYRING_SCOPE', // 29/10: lo spazio di nomi del portachiavi dell'app, nascosto alla guardia da un commento
   'TALOS_HARNESS_UI_DEFAULT_PROJECT', // 29/10: «nessun progetto di serie» dell'app installata, nascosto allo stesso modo
+  'TALOS_HARNESS_UI_SEGRETI_DA', // 02/11/2026: ereditata, un TALOS lanciato da un comando aspetterebbe uno stdin che non arriva
 ];
 
 test('⛔⛔⛔ CLI-REQ-04 — il terminale NON eredita i segreti del server, asseriti UNO PER UNO per nome', () => {
@@ -360,7 +362,9 @@ test('⛔⛔⛔ CLI-REQ-04 (a) — ogni variabile che runtime.mjs mette nel figl
    * ritrovare la variabile che questa richiesta esiste per togliere.
    */
   assert.ok(nomi.size >= 9, `estratti solo ${nomi.size} nomi da runtime.mjs: il filtro è rotto`);
-  assert.ok(nomi.has('TALOS_HARNESS_UI_TOKEN'), 'il token deve comparire fra i nomi estratti');
+  /* dal 02/11/2026 («gettone sempre») il token non sta più nell'ambiente del figlio: la variabile che lo porta dallo stdin è quella che questa richiesta toglie ora */
+  assert.ok(nomi.has('TALOS_HARNESS_UI_SEGRETI_DA'), 'la variabile dello stdin deve comparire fra i nomi estratti');
+  assert.ok(!nomi.has('TALOS_HARNESS_UI_TOKEN'), 'il gettone non si passa nell\'ambiente del figlio');
 
   const tolte = new Set(VARIABILI_SOLO_DEL_SERVER.map((n) => n.toUpperCase()));
   const innocue = new Set(VARIABILI_DEL_SERVER_DICHIARATE_INNOCUE.map((n) => n.toUpperCase()));

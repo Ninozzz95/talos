@@ -363,7 +363,10 @@ test('CTX-PURE-TAIL-LAST-RESORT — se non basta, anche il più recente si accor
   const coda = [chiamata('c1', 'leggi', { percorso: 'g.txt' }), esito('c1', lungo('g', 60_000)), testo('Letto.')];
   const ridotta = riduciCodaSottoPressione(coda, { budgetToken: 1_000, stima: stimaCaratteri });
   assert.ok(ridotta.coda[1].content.includes(MARCATORE_ACCORCIATO), 'l unico esito, il più recente, si accorcia come ultima risorsa');
-  assert.ok(ridotta.coda[1].content.startsWith('INIZIO-') && ridotta.coda[1].content.endsWith('-FINE'));
+  /* M1 della cura per Luna 6 (05/11/2026): prima la riga del sistema che dice il taglio, poi inizio e fine come prima */
+  const [avviso, ...resto] = ridotta.coda[1].content.split('\n');
+  assert.ok(avviso.startsWith('[TALOS: this result was shortened to fit the context. Lines '), avviso.slice(0, 120));
+  assert.ok(resto.join('\n').startsWith('INIZIO-') && ridotta.coda[1].content.endsWith('-FINE'));
   assert.equal(ridotta.alMinimo, false, 'accorciato rientra: non è un pavimento');
   const bloccata = riduciCodaSottoPressione([user('z'.repeat(40_000))], { budgetToken: 1_000, stima: stimaCaratteri });
   assert.equal(bloccata.alMinimo, true, 'una richiesta della persona non si accorcia: quello è il pavimento vero');

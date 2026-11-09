@@ -317,9 +317,134 @@
 /* Con la selezione multipla accesa la casella prende il posto dei tre puntini: due comandi sulla
    stessa riga, nello stesso punto, sarebbero un bersaglio ambiguo. */
 .td-session-row.td-session-selection > .td-session-menu { display: none; }
+
+/*
+ * FE-001 (owner 02/11/2026): la stella per fissare. A riposo non c'è, così la riga resta quella approvata; si vede passando sopra o col
+ * fuoco, stesso gesto dei tre puntini. Sta sopra la colonna del tempo, come nel bozzetto, col fondo pieno perché i numeri non traspaiano.
+ */
+.td-session-star {
+  position: absolute;
+  right: 36px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--talos-panel);
+  color: var(--talos-muted);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.td-session-star .i { width: 15px; height: 15px; }
+/* Revisione d'uso della candidata, 04/11/2026, reperto 20: il fondo pieno non bastava, la stella copriva l'ora a metà («1⁄☆»). Passando
+   sopra (o col fuoco sulla stella) la stella prende il POSTO della colonna del tempo: l'ora torna appena il puntatore esce. `visibility`
+   e non `display`, così la riga non cambia larghezza e il titolo non salta. Hermes, clone del 01/11, `apps/desktop/src/app/chat/sidebar/
+   session-row.tsx:114-118` («The last thing in the trailing slot hands its place to the ⋯ button on hover»: `group-hover:opacity-0`). */
+.td-session-row:hover > .talos-session-item .talos-session-item__aside,
+.td-session-row:has(> .td-session-star:focus-visible) > .talos-session-item .talos-session-item__aside { visibility: hidden; }
+.td-session-row:hover > .td-session-star,
+.td-session-star:focus-visible { opacity: 1; pointer-events: auto; }
+.td-session-star:hover { border-color: var(--talos-border-strong); color: var(--talos-text); }
+.td-session-star:focus-visible { outline: var(--talos-focus-width) solid var(--talos-ring); outline-offset: var(--talos-focus-offset); }
+.td-session-star[aria-pressed="true"] { color: var(--talos-accent); }
+.td-session-star[aria-pressed="true"] .i { fill: currentColor; }
+.td-session-fissate { padding: 2px 8px 4px; font-size: 11px; color: var(--talos-muted); }
+.td-session-row--dopo-fissate { margin-top: 10px; }
 .td-session-row.td-session-selection > .talos-session-item { padding-right: 10px; }
 
 /* ⛔ La griglia della barra di selezione (`1fr auto`, cornice d'accento) resta quella approvata in
    `index.css`: qui si aggiunge SOLO il posto dei tre puntini, che prendono la colonna di destra
    dove prima stava «Elimina». Il bottone è quadrato e non si stira come gli altri della barra. */
 .talos-sidebar__selezione #sessionSelectionMore { justify-self: end; width: 28px; min-width: 0; padding: 0; }
+
+/* ───────────────────────── A-ter. BARRA CHIUSA, VARIANTE B «MENU A COMPARSA» (owner 30/10/2026 sera) ─────────────────────────
+ * A 64 px restano icone: nuova sessione e ricerca in alto (dopo una riga), poi Home, Sessioni, Spazi di lavoro, Strumenti; in fondo
+ * il tondo dello spazio di lavoro e Impostazioni. Sessioni, Spazi e Strumenti aprono un menu A COMPARSA accanto alla striscia, che
+ * mostra gli STESSI nodi della barra aperta (nessuna copia: `components/barra-comparsa.js`).
+ * ⛔ A barra chiusa i gruppi non si vedono come icone sciolte (era la vecchia «tutte visibili»): solo dentro la loro comparsa. Con la
+ *   variante D i gruppi nascono chiusi, e senza questa regola la barra chiusa avrebbe mostrato la sola Home.
+ */
+.td-striscia { display: none; }
+:root[data-sidebar="icone"] .td-striscia { display: flex; flex-direction: column; gap: 2px; padding: 0 8px; }
+/* ⛔ 31/10/2026 (BC78-4c, suite del blocco): lo stacco sotto la striscia alta sta DENTRO la striscia (8 px, la linea, 8 px). Un margine
+   fuori lasciava 8 px fra i figli della barra, e la barra a colonna li vuole impilati senza spazi (il vuoto solo sopra il piede). */
+:root[data-sidebar="icone"] .td-striscia--alta { position: relative; padding-bottom: 17px; }
+:root[data-sidebar="icone"] .td-striscia--alta::after { content: ""; position: absolute; left: 0; right: 0; bottom: 8px; height: 1px; background: var(--talos-border); }
+:root[data-sidebar="icone"] .td-striscia--luoghi { padding: 0; margin-top: 2px; }
+.td-striscia__voce { position: relative; }
+.td-striscia__voce[aria-expanded="true"] { background: var(--talos-card-hover); color: var(--talos-text); }
+/* il segnale «qualcosa lavora» sull'icona delle Sessioni: il pallino vivo delle righe, in alto a destra dell'icona */
+.td-striscia__segnale { position: absolute; top: 7px; right: 12px; }
+
+:root[data-sidebar="icone"] .talos-sidebar:not([data-comparsa="lavoro"]) #gruppoLavoro,
+:root[data-sidebar="icone"] .talos-sidebar:not([data-comparsa="strumenti"]) #gruppoStrumenti { display: none !important; }
+
+/* Impostazioni resta anche a barra chiusa, sotto il tondo dello spazio di lavoro */
+:root[data-sidebar="icone"] .talos-sidebar .talos-sidebar__foot { flex-direction: column; gap: 6px; }
+:root[data-sidebar="icone"] .talos-sidebar .talos-sidebar__foot > [data-vaia="impostazioni"] { display: inline-flex; }
+
+/* La comparsa: un pannello galleggiante accanto alla striscia, coi colori e l'ombra del pannello delle notifiche */
+:root[data-sidebar="icone"] .talos-sidebar[data-comparsa="lavoro"] #gruppoLavoro,
+:root[data-sidebar="icone"] .talos-sidebar[data-comparsa="strumenti"] #gruppoStrumenti,
+:root[data-sidebar="icone"] .talos-sidebar[data-comparsa="sessioni"] .talos-sidebar__actions,
+:root[data-sidebar="icone"] .talos-sidebar[data-comparsa="sessioni"] .talos-sidebar__sessions {
+  display: flex !important;
+  flex-direction: column;
+  gap: 2px;
+  position: fixed;
+  left: 72px;
+  top: var(--td-comparsa-top, 72px);
+  width: 260px;
+  max-height: calc(100vh - var(--td-comparsa-top, 72px) - 16px);
+  overflow: auto;
+  padding: 6px;
+  z-index: var(--talos-z-menu);
+  background: var(--talos-panel);
+  border: 1px solid var(--talos-border);
+  border-radius: 12px;
+  box-shadow: var(--talos-shadow-floating);
+}
+/* Sessioni: la ricerca in cima e l'elenco subito sotto, come un pannello solo */
+:root[data-sidebar="icone"] .talos-sidebar[data-comparsa="sessioni"] .talos-sidebar__actions {
+  width: 320px; flex-direction: row; align-items: center; border-radius: 12px 12px 0 0; border-bottom: 0; box-shadow: none;
+  max-height: none; overflow: visible;
+}
+:root[data-sidebar="icone"] .talos-sidebar[data-comparsa="sessioni"] .talos-sidebar__sessions {
+  width: 320px; top: calc(var(--td-comparsa-top, 72px) + var(--td-comparsa-azioni, 48px)); border-radius: 0 0 12px 12px; border-top: 0;
+  max-height: calc(100vh - var(--td-comparsa-top, 72px) - var(--td-comparsa-azioni, 48px) - 16px);
+}
+/* dentro la comparsa le voci tornano quelle della barra aperta: etichetta, conteggio, allineate a sinistra */
+:root[data-sidebar="icone"] .talos-sidebar[data-comparsa] .td-nav-group .talos-nav-item { justify-content: flex-start; padding: 0 10px; }
+:root[data-sidebar="icone"] .talos-sidebar[data-comparsa] .td-nav-group .talos-nav-item__label,
+:root[data-sidebar="icone"] .talos-sidebar[data-comparsa] .td-nav-group .talos-nav-item__count { display: inline; }
+:root[data-sidebar="icone"] .talos-sidebar[data-comparsa="sessioni"] .talos-sidebar__block-head { display: flex; }
+@media (max-width: 860px) { .td-striscia { display: none !important; } }
+
+/*
+ * D22 del Tester (02/11/2026), misurato sul 4174 a 390 px: il pulsante d'invio finiva a 413 px e la pagina scorreva di lato; il
+ * compositore era largo 196 px perché il piede teneva i margini del PC (104 a sinistra, 44 + 46 a destra), e le schede della testata
+ * passavano sotto le sue azioni. Sotto i 520 px: al piede resta solo il posto del tondo (48 + 2 × 12); il titolo lascia la fila, le
+ * schede scorrono dentro la loro colonna, le azioni restano ferme a destra. Sopra i 520 px non cambia niente.
+ */
+@media (max-width: 520px) {
+  :root .talos-chat-foot { padding-left: 72px; padding-right: 12px; }
+  :root .talos-chat-foot > #composerForm:not(#pannelloTerminale) { width: 100%; max-width: none; margin-left: 0; margin-right: 0; }
+  .talos-topbar:has([data-vistetab]) { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 0 10px; }
+  .talos-topbar:has([data-vistetab]) .talos-topbar__title { display: none; }
+  .talos-topbar:has([data-vistetab]) .talos-tabs { grid-column: 1; justify-self: stretch; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .talos-topbar:has([data-vistetab]) .talos-topbar__actions { grid-column: 2; }
+}
+/* Reperto del Tester (02/11/2026), misurato sul 4174 a 800×900: il tondo del cassetto copriva «All sessions» a riposo. Sotto gli 860 px,
+   dove il tondo esiste, il pulsante sta a destra: il tondo è in basso a sinistra. */
+@media (max-width: 860px) {
+  .workspace-recent__tutte { display: flex; width: fit-content; margin-left: auto; }
+}
+/* D22: nel compositore più stretto la fila dei comandi va a capo invece di spingere fuori il pulsante d'invio */
+@container (max-width: 320px) {
+  .talos-composer__bar { flex-wrap: wrap; row-gap: 4px; }
+}

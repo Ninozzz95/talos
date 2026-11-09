@@ -141,8 +141,12 @@ export function tipoDiScript(file) {
   return /\.tsx$/iu.test(file) ? ts.ScriptKind.TSX : /\.ts$/iu.test(file) ? ts.ScriptKind.TS : ts.ScriptKind.JS;
 }
 
-/** Le frasi italiane di un sorgente, fuori dagli argomenti del dizionario, da `console.*` e dagli import. */
-export function frasiItalianeNelSorgente(sorgente, file = 'sorgente.js') {
+/**
+ * Le frasi italiane di un sorgente, fuori dagli argomenti del dizionario, da `console.*` e dagli import.
+ * `lunghezza` taglia il testo riportato (160 per la lettura a schermo); chi cerca una parola dentro il testo chiede
+ * `Infinity`, o un template lungo la nasconde oltre il taglio (revisione API delle cure della gemella, 05/11/2026).
+ */
+export function frasiItalianeNelSorgente(sorgente, file = 'sorgente.js', { lunghezza = 160 } = {}) {
   const sf = ts.createSourceFile(file, sorgente, ts.ScriptTarget.Latest, true, tipoDiScript(file));
   const righe = [];
   const escluso = (nodo) => {
@@ -162,7 +166,7 @@ export function frasiItalianeNelSorgente(sorgente, file = 'sorgente.js') {
     else if (ts.isTemplateExpression(nodo)) testo = [nodo.head.text, ...nodo.templateSpans.map((s) => s.literal.text)].join(' … ');
     if (testo !== null && eFraseItaliana(testo) && !escluso(nodo) && !dichiaratoNonTesto(sorgente, nodo)) {
       const { line } = sf.getLineAndCharacterOfPosition(nodo.getStart(sf));
-      righe.push({ file, riga: line + 1, testo: testo.replace(/\s+/gu, ' ').trim().slice(0, 160) });
+      righe.push({ file, riga: line + 1, testo: testo.replace(/\s+/gu, ' ').trim().slice(0, lunghezza) });
     }
     if (!ts.isTemplateExpression(nodo)) ts.forEachChild(nodo, visita);
     else for (const s of nodo.templateSpans) visita(s.expression);
@@ -174,9 +178,10 @@ export function frasiItalianeNelSorgente(sorgente, file = 'sorgente.js') {
 /**
  * @param {string} sorgente il testo di un file `.js`
  * @param {string} file il nome da riportare
+ * @param {{lunghezza?: number}} [opzioni] `lunghezza` taglia il testo riportato, come in frasiItalianeNelSorgente
  * @returns {{file: string, riga: number, colonna: number, dove: string, testo: string}[]}
  */
-export function testiFissiNelSorgente(sorgente, file = 'sorgente.js') {
+export function testiFissiNelSorgente(sorgente, file = 'sorgente.js', { lunghezza = 160 } = {}) {
   const sf = ts.createSourceFile(file, sorgente, ts.ScriptTarget.Latest, true, tipoDiScript(file));
   const righe = [];
   const segna = (dove, espr) => {
@@ -184,7 +189,7 @@ export function testiFissiNelSorgente(sorgente, file = 'sorgente.js') {
     testiFissi(espr, trovati);
     for (const [nodo, testo] of trovati) {
       const { line, character } = sf.getLineAndCharacterOfPosition(nodo.getStart(sf));
-      righe.push({ file, riga: line + 1, colonna: character + 1, dove, testo: testo.replace(/\s+/gu, ' ').trim().slice(0, 160) });
+      righe.push({ file, riga: line + 1, colonna: character + 1, dove, testo: testo.replace(/\s+/gu, ' ').trim().slice(0, lunghezza) });
     }
   };
   const visita = (nodo) => {

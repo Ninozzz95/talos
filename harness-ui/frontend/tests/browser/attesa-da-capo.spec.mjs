@@ -58,7 +58,7 @@ for (const modo of ['light', 'dark']) {
           body: corpoMetriche(route.request().url(), eta),
         });
       });
-      await page.route(`**/api/v1/sessions/${sessione}/events`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
+      await page.route(`**/api/v1/sessions/${sessione}/events*`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
       const apertePrima = await page.evaluate(() => window.__apertureStream);
       await page.evaluate((id) => {
         window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'Attesa riaperta', 'z-ai/glm-5.3-flash', { conclusa: false, modello: 'z-ai/glm-5.3-flash' });
@@ -112,7 +112,7 @@ for (const modo of ['light', 'dark']) {
         letture += 1;
         return route.fulfill({ contentType: 'application/json', body: corpoMetriche(route.request().url(), letture === 1 ? {} : { 1: 33_000 }) });
       });
-      await page.route(`**/api/v1/sessions/${sessione}/events`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
+      await page.route(`**/api/v1/sessions/${sessione}/events*`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
       const apertePrima = await page.evaluate(() => window.__apertureStream);
       await page.evaluate((id) => {
         window.__talosHarnessUiRuntime.passaASessione(id, 'workspace', 'Attesa riaperta', 'z-ai/glm-5.3-flash', { conclusa: false, modello: 'z-ai/glm-5.3-flash' });
@@ -159,7 +159,7 @@ for (const modo of ['light', 'dark']) {
         if (new URL(route.request().url()).searchParams.get('eta') === '1') await new Promise((ok) => setTimeout(ok, 1_000));
         return route.fulfill({ contentType: 'application/json', body: corpoMetriche(route.request().url(), eta) });
       });
-      await page.route(`**/api/v1/sessions/${sessione}/events`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
+      await page.route(`**/api/v1/sessions/${sessione}/events*`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
       const chieste = [];
       page.on('request', (r) => { if (r.url().includes('/metrics')) chieste.push(new URL(r.url()).searchParams.get('eta')); });
       const apertePrima = await page.evaluate(() => window.__apertureStream);

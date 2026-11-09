@@ -338,9 +338,13 @@ export function dispatcherDiGenerazione({ limiteMs, dispatcherGlobale = undefine
    * un `EnvHttpProxyAgent` e accetta le stesse opzioni: si eredita la forma giusta invece di
    * imporne una.
    */
+  /* 02/11/2026: Node carica undici solo quando serve, e fino ad allora questo simbolo non c'è (misurato su v24.18.0: nemmeno leggere `fetch`
+     basta; `node:http` e `Headers` sì). `server.mjs` importa `node:http` e non lo vede; un processo senza quel modulo sì, e il banco del
+     motore ci è caduto. Leggere `Headers` carica undici adesso, senza rete. */
+  void globalThis.Headers;
   const attuale = dispatcherGlobale ?? globalThis[Symbol.for('undici.globalDispatcher.1')];
   const Costruttore = attuale?.constructor;
-  if (typeof Costruttore !== 'function') { dispatcherPerLimite.set(tetto, null); return null; }
+  if (typeof Costruttore !== 'function') return null; // mai ricordato: un null valido per sempre rimetterebbe i 300 s in silenzio
   let costruito = null;
   try {
     costruito = new Costruttore({ headersTimeout: tetto, bodyTimeout: tetto });
@@ -349,6 +353,6 @@ export function dispatcherDiGenerazione({ limiteMs, dispatcherGlobale = undefine
   } catch {
     costruito = null;
   }
-  dispatcherPerLimite.set(tetto, costruito);
+  if (costruito) dispatcherPerLimite.set(tetto, costruito);
   return costruito;
 }

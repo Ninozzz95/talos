@@ -38,7 +38,8 @@ test('BUG-A KERNEL-1: un segreto chiede con «Scrive nel progetto» (in Accesso 
 
 test('BUG-A KERNEL-2: il percorso consentito NON ridomanda; gli altri sì', async () => {
   const domande = [];
-  const consensiSessione = { segretiConsentiti: ['~/.npmrc'] };
+  /* decisione 107 (03/11): la chiave porta azione e motivo, come la compone `chiaveDelConsensoDi` */
+  const consensiSessione = { segretiConsentiti: ['lettura:segreto:~/.npmrc'] };
   const esito = await verificaPermessoScrittura(
     { tipo: 'shell', comando: COMANDO },
     { chiediApprovazioneFn: chiediFinto(domande), cartella: CART, consensiSessione },

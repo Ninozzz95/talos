@@ -15,7 +15,7 @@ import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 async function server(t, opzioni) {
-  const s = http.createServer(createHttpApp(opzioni));
+  const s = http.createServer(createHttpApp({ senzaGettone: 'prove', ...opzioni }));
   await new Promise((r) => s.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => s.close(r)));
   return `http://127.0.0.1:${s.address().port}/api/v1/local-engine`;

@@ -1240,7 +1240,7 @@ export function creaProviderCard(row,{aperta=false,prova=null,occupato=false,onM
  const vociMenu=[];
  if(d.tempo)vociMenu.push({chiave:'save-runtime',etichetta:row.supportsEndpoint||esterno?t('modelli.provider.saveConnection'):t('modelli.provider.saveTimeout'),icona:'i-clock',elemento:aggiungiNascosto(button('save-runtime',row.supportsEndpoint||esterno?t('modelli.provider.saveConnection'):t('modelli.provider.saveTimeout')))});
  // «Ripristina indirizzo» solo quando c'è qualcosa da ripristinare: valore diverso dal predefinito (egui `reset_button`, Zed #40135)
- if(row.supportsEndpoint&&row.endpointConfigured&&row.endpointPredefinito!==true)vociMenu.push({chiave:'reset-runtime',etichetta:t('modelli.provider.resetEndpoint'),icona:'i-history',elemento:aggiungiNascosto(button('reset-runtime',t('modelli.provider.resetEndpoint')))});
+ if(row.supportsEndpoint&&row.endpointConfigured&&row.endpointPredefinito!==true)vociMenu.push({chiave:'reset-runtime',etichetta:t('modelli.provider.resetEndpoint'),icona:'i-undo',elemento:aggiungiNascosto(button('reset-runtime',t('modelli.provider.resetEndpoint')))});
  if(row.keyConfigured&&!poolCollegato)vociMenu.push({chiave:'remove-key',etichetta:pool.length>1?t('modelli.provider.removeAllKeys'):t('modelli.provider.removeKey'),icona:'i-trash',pericolo:true,separaPrima:true,elemento:aggiungiNascosto(button('remove-key',pool.length>1?t('modelli.provider.removeAllKeys'):t('modelli.provider.removeKey'),'ghost talos-button--danger'))});
  if(configurazionePropria){
   const salvaRuntime=vociMenu.find(v=>v.chiave==='save-runtime').elemento;

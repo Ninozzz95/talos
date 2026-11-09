@@ -23,7 +23,7 @@ for (const modo of ['dark', 'light']) {
       await page.addInitScript((colorMode) => {
         try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode, uiLanguage: 'it' } })); } catch { /* storage assente */ }
       }, modo);
-      await page.route(`**/api/v1/sessions/${PADRE}/events`, () => { /* resta pending: aperto e muto */ });
+      await page.route(`**/api/v1/sessions/${PADRE}/events*`, () => { /* resta pending: aperto e muto */ });
       await page.goto('/');
       await page.waitForFunction(() => window.__talosHarnessUiRuntime);
       await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });

@@ -86,7 +86,7 @@ test('MCP-PROVA-04 la rotta: POST a corpo vuoto, 400 con altre chiavi, 409 per u
   const sessionRegistry = {
     provaServerMcp: async (id, srv) => { chiamate.push([id, srv]); return srv === 'nuovo' ? { erroreAvvio: 'x', code: 'SESSION_NOT_READY', reason: 'mcp-not-trusted' } : { ok: true, esito: 'collegato', attrezzi: 2, ms: 10 }; },
   };
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => server.close(r)));
   const base = `http://127.0.0.1:${server.address().port}`;

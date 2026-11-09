@@ -48,7 +48,7 @@ test.describe('C1 — il chip dei Permessi', () => {
     const conto = await apri(page);
     await scena(page, 'cp-ww', 'Workspace write');
     await expect(chip(page).locator('.talos-chip__label')).toHaveText('Scrive nel progetto');
-    await expect(chip(page)).toHaveAttribute('title', 'Senza chiedere: file, comandi, documenti\nPermesso: Scrive nel progetto\nChiede sempre: scritture fuori dal progetto, file con segreti, azioni dopo un contenuto sospetto\nCambia il permesso');
+    await expect(chip(page)).toHaveAttribute('title', 'Senza chiedere: file, comandi, documenti\nPermesso: Scrive nel progetto\nChiede sempre: cancellare un disco, una cartella principale, la tua cartella utente o il progetto, scritture fuori dal progetto, file con segreti, azioni dopo un contenuto sospetto\nCambia il permesso'); // cec8cbfdc (decisione 155, 04/11): la cancellazione di un percorso critico chiede sempre
     /* ⛔ visto nella prima foto: a 220 px il testo si tagliava e la scala riduceva il chip allo scudo anche a 1920, con 400 px
        vuoti nella barra. A 1920 la scala resta a 0 e l'etichetta si legge intera. */
     await page.evaluate(() => window.__talosHarnessUiRuntime.adattaScalaComposer());

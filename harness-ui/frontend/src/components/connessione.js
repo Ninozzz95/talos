@@ -148,15 +148,27 @@ export function creaSorveglianzaConnessione({
 }
 
 /**
+ * Revisione UX del 04/11/2026, righe 33 e 36: un errore che viene dalla rete del computer, non dal server. `navigator.onLine` si usa solo quando
+ * dice «no» (vedi sopra: quando dice «sì» può sbagliare); un `fetch` senza rete fallisce con un TypeError, con parole diverse per browser
+ * (Chromium «Failed to fetch», Firefox «NetworkError…», Safari «Load failed»: MDN, «Window: fetch() method», Exceptions).
+ */
+export function eSenzaRete(errore, online = globalThis.navigator?.onLine) {
+  if (online === false) return true;
+  return errore instanceof TypeError && /failed to fetch|networkerror|load failed/iu.test(String(errore.message));
+}
+
+/**
  * Scrive lo stato nel pezzo di barra di stato del mockup:
  * `<span data-runtime-connessione>` + `<button data-runtime-riprova>`.
+ * Riga 36: col computer senza rete la barra lo dice, invece di dare la colpa al server.
  */
-export function aggiornaStatoConnessione(barra, stato, { tentativi = 0 } = {}) {
+export function aggiornaStatoConnessione(barra, stato, { tentativi = 0, online = globalThis.navigator?.onLine } = {}) {
   if (!barra) return;
   const span = barra.querySelector('[data-runtime-connessione]');
   const riprova = barra.querySelector('[data-runtime-riprova]');
   if (!span) return;
-  const testo = typeof TESTI[stato] === 'function' ? TESTI[stato](tentativi) : TESTI[stato] || '';
+  const senzaRete = online === false && (stato === 'riconnessione' || stato === 'caduto');
+  const testo = senzaRete ? t('app.connection.offline') : typeof TESTI[stato] === 'function' ? TESTI[stato](tentativi) : TESTI[stato] || '';
   span.textContent = testo;
   span.hidden = !testo;
   span.dataset.stato = stato;

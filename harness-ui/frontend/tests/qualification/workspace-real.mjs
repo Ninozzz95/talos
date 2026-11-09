@@ -22,7 +22,7 @@ const result = { source: process.env.GITHUB_SHA || null, node: process.version, 
 const check = (name, condition) => { result.checks.push({ name, passed: Boolean(condition) }); assert.ok(condition, name); };
 let logs = '', browser, page;
 let ptyOutput = ''; const ptyControls = [];
-const server = spawn(process.execPath, [join(root, 'harness-ui/server.mjs')], {
+const server = spawn(process.execPath, [join(root, 'harness-ui/server.mjs'), '--senza-gettone=prove'], {
   cwd: root, env: { ...process.env, TALOS_HARNESS_UI_HOST: '127.0.0.1', TALOS_HARNESS_UI_PORT: new URL(base).port,
     TALOS_DESKTOP_DATA_DIR: data, TALOS_HARNESS_UI_SESSIONS_DIR: join(data, 'sessions'),
     TALOS_HARNESS_UI_PUBLIC_DIR: join(root, 'harness-ui/frontend/dist'), TALOS_INTRO: '1' },

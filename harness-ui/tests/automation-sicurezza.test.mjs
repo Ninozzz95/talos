@@ -230,7 +230,7 @@ test('SIC-08 — la rotta POST /automations/:id/runs/:runId/proposta {decisione}
   const dati = mkdtempSync(join(tmpdir(), 'talos-auto-sicurezza-http-'))
   t.after(() => rimuoviCartellaDiProva(dati))
   const store = createAutomationStore({ cartella: dati, clock: ORA })
-  const server = createServer(createHttpApp({ staticHandler: async () => null, automationStore: store, automationScheduler: { async eseguiOra() { return { ok: true } }, async fermaGiro() { return { ok: true } } } }))
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, automationStore: store, automationScheduler: { async eseguiOra() { return { ok: true } }, async fermaGiro() { return { ok: true } } } }))
   await new Promise((ok, ko) => { server.once('error', ko); server.listen(0, '127.0.0.1', ok) })
   t.after(() => new Promise((ok) => server.close(ok)))
   const base = `http://127.0.0.1:${server.address().port}`

@@ -19,9 +19,9 @@ const MEMORIE = [{ id: 'm1', titolo: 'I commit sono in inglese', contenuto: 'Tit
 const sse = (ev) => `retry: 3600000\n${ev.map((e) => `data: ${JSON.stringify(e)}\n\n`).join('')}`;
 const EVENTI = [{ type: 'RunStarted', input: { consegna: 'Prova' }, _sequenza: 1 }, { type: 'RunFinished', _sequenza: 2 }, { type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }];
 
-async function apri(page, colore) {
+async function apri(page, colore, tema = 'forge') {
   const nonGet = [];
-  await page.addInitScript((c) => { try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode: c, themePreset: 'calm', themePresetVersione: 2, uiLanguage: 'it' } })); } catch { /* */ } }, colore);
+  await page.addInitScript(({ c, t }) => { try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ appearance: { colorMode: c, themePreset: t, themePresetVersione: 2, uiLanguage: 'it' } })); } catch { /* */ } }, { c: colore, t: tema });
   await page.route('**/*', (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -67,18 +67,26 @@ const testata = (page) => page.evaluate(() => {
 
 const SEZIONI = [
   ['note', true], ['attivita', true], ['memoria', true], ['automazioni', true],
-  ['libreria', false], ['ricerca', false], ['progetti', false], ['board', false],
+  /* Progetti: «Apri un progetto» nella testata come nel bozzetto approvato il 29/10 (prima il cancello fissava `false`: mancava) */
+  ['libreria', false], ['ricerca', false], ['progetti', true], ['board', false],
+  /* owner 30/10/2026 notte (alla Frontend): «Capability e Officina: stessa testata» — erano fuori dal cancello senza un motivo scritto */
+  ['capability', false], ['officina', false],
 ];
+/* le sezioni la cui testata è quella del modello di pagina (`.talos-page__head`), non un `.td-intro` montato; la loro riga della
+   ricerca non fa parte della decisione (la Bacheca ha i filtri, Capability e Officina la loro ricerca stretta) */
+const PAGINE = new Set(['board', 'capability', 'officina']);
 
-for (const colore of ['light', 'dark']) {
-  test(`TESTATE-SEZIONI-01 · una testata sola per tutte le sezioni (${colore})`, async ({ page }) => {
-    const nonGet = await apri(page, colore);
+/* ⛔ 30/10 (Frontend, misurato): il tema di serie del PC è Forge (`avvio.js:59`, owner 24/09), e il cancello provava solo Calm, cioè
+   un tema che un utente nuovo non vede. Si provano tutti e due: Forge per primo. */
+for (const [tema, colore] of [['forge', 'light'], ['forge', 'dark'], ['calm', 'light'], ['calm', 'dark']]) {
+  test(`TESTATE-SEZIONI-01 · una testata sola per tutte le sezioni (${tema}, ${colore})`, async ({ page }) => {
+    const nonGet = await apri(page, colore, tema);
     const viste = {};
     for (const [sezione, crea] of SEZIONI) {
       await vai(page, sezione);
       /* si aspetta la testata MONTATA (`.td-intro`), non quella del modello di pagina che c'è un attimo prima del montaggio */
       await expect.poll(async () => page.evaluate((b) => b || Boolean([...document.querySelectorAll('.talos-screen[id^="schermo"]')]
-        .find((s) => !s.hidden && s.getClientRects().length)?.querySelector('.td-section .td-intro h2')), sezione === 'board'), { message: `${sezione}: testata montata` }).toBe(true);
+        .find((s) => !s.hidden && s.getClientRects().length)?.querySelector('.td-section .td-intro h2')), PAGINE.has(sezione)), { message: `${sezione}: testata montata` }).toBe(true);
       await expect.poll(async () => (await testata(page)).titolo, { message: `${sezione}: titolo` }).not.toBeNull();
       if (crea) await expect.poll(async () => (await testata(page)).nuova, { message: `${sezione}: «Nuova…» nella testata` }).toBe('testata');
       const t = await testata(page);
@@ -86,12 +94,25 @@ for (const colore of ['light', 'dark']) {
       expect(t.riquadro, `${sezione}: niente riquadro con l'icona`).toBe(false);
       expect(t.etichetta, `${sezione}: niente etichetta in maiuscolo`).toBe(false);
       expect(t.frase, `${sezione}: la frase è quella piccola`).toBe('11px');
-      await page.screenshot({ path: `test-results/testate-sezioni/${colore}-${sezione}.png` });
+      await page.screenshot({ path: `test-results/testate-sezioni/${tema}-${colore}-${sezione}.png` });
     }
     const note = viste.note.titolo;
     for (const [sezione] of SEZIONI) expect(viste[sezione].titolo, `${sezione}: titolo come Note`).toEqual(note);
     expect(note.size).toBe('22px');
-    for (const [sezione] of SEZIONI) if (sezione !== 'board') expect(viste[sezione].ricerca, `${sezione}: ricerca larga come in Note`).toBe(viste.note.ricerca);
+    for (const [sezione] of SEZIONI) if (!PAGINE.has(sezione)) expect(viste[sezione].ricerca, `${sezione}: ricerca larga come in Note`).toBe(viste.note.ricerca);
     expect(nonGet).toEqual([]);
   });
 }
+
+/* «Apri un progetto» della testata di Progetti è LA STESSA porta della Home (`openRealTaskSheet`): apre la finestra «Nuova sessione»
+   con la scelta della cartella. Si prova il clic fino alla finestra, non solo la presenza del pulsante. */
+test('TESTATE-SEZIONI-02 · Progetti: «Apri un progetto» nella testata apre la finestra «Nuova sessione», come dalla Home', async ({ page }) => {
+  const nonGet = await apri(page, 'light');
+  await vai(page, 'progetti');
+  const pulsante = page.locator('#schermoProgetti .td-intro [data-nuova]');
+  await expect(pulsante).toHaveCount(1);
+  await expect(pulsante).toHaveText('Apri un progetto');
+  await pulsante.click();
+  await expect(page.locator('#sheetDialog.sheet-dialog--new-session')).toBeVisible();
+  expect(nonGet).toEqual([]);
+});

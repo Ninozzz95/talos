@@ -43,7 +43,7 @@ for (const modo of ['dark', 'light']) {
         letture.push(Date.now());
         return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { items: [riga] }, meta: { schema: 'talos.harness-ui.api.v1' } }) });
       });
-      await page.route(`**/api/v1/sessions/${id}/events`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
+      await page.route(`**/api/v1/sessions/${id}/events*`, (route) => route.fulfill({ contentType: 'text/event-stream', body: 'retry: 3600000\n\n' }));
       await page.goto('/');
       await page.waitForFunction(() => window.__talosHarnessUiRuntime);
       await page.locator('#talosAvvio').waitFor({ state: 'detached', timeout: 8000 });
@@ -143,7 +143,7 @@ for (const modo of ['dark', 'light']) {
       await eventi(page, [{ type: 'RunStarted', input: { consegna: 'Alla fine scrivi soltanto quanti sono.', seguito: true }, contesto: { permessi: 'Full access', modello: MODELLO }, _sequenza: 3 }]);
       const domanda = page.locator('#conversation .talos-message--user').last();
       await expect(domanda).toContainText('Alla fine scrivi soltanto quanti sono.');
-      await expect(domanda.locator('.talos-message__meta')).toHaveText(/^\d{2}:\d{2} · Follow-up · \S/);
+      await expect(domanda.locator('.talos-message__meta')).toHaveText(/^\d{2}:\d{2} · Seguito · \S/); // decisione owner 165
       await expect(page.locator('#conversation .talos-turn[data-turno="talos"]').last().locator('.talos-message__meta').first()).toHaveText(/ · \d{2}:\d{2}$/);
     });
 
@@ -152,7 +152,7 @@ for (const modo of ['dark', 'light']) {
       await eventi(page, [{ type: 'RunStarted', input: { consegna: 'Un seguito della storia.', seguito: true }, contesto: { permessi: 'Full access', modello: MODELLO }, _sequenza: 3 }]);
       const domanda = page.locator('#conversation .talos-message--user').last();
       await expect(domanda).toContainText('Un seguito della storia.');
-      await expect(domanda.locator('.talos-message__meta')).toHaveText(/^Follow-up/);
+      await expect(domanda.locator('.talos-message__meta')).toHaveText(/^Seguito/); // decisione owner 165
     });
   });
 }

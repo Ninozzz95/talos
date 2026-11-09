@@ -66,7 +66,7 @@ async function banco(t) {
   const refs = [...input.state.resultRefs.values()];
   const find = (summary) => refs.find((ref) => ref.summary === summary);
   const registry = { leggiSessioneContesto: (id) => id === SESSION_ID ? { sessionId: id } : null };
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry: registry, workflowStore: store }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registry, workflowStore: store }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const url = `http://127.0.0.1:${server.address().port}/api/v1/sessions/${SESSION_ID}/workflows/${runId}/nodes/implement/output`;

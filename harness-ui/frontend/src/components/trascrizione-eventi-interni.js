@@ -1,5 +1,6 @@
-import { etichettaSeparatoreContesto } from './context-separator.js';
+import { etichettaSeparatoreContesto, testiModelloInutilizzabile } from './context-separator.js';
 import { fineMuta, interpretaEventoCompattazione, testoRigaCompattazione } from './compattazione-legacy.js';
+import { EVENTO_MODELLO_INUTILIZZABILE } from './motivi-compattazione.js';
 import { EVENTO_MCP_AVVIO, motivoMcp, nuoviServerNonPartiti } from './avviso-mcp.js';
 import { leggiControlloSpento, testiControlloSpento } from './avviso-controllo-spento.js';
 import { t } from './lingua.js';
@@ -26,8 +27,13 @@ import { suUnaRiga } from './testo-a-schermo.js';
  *   `default` col suo JSON, come prima. Si lascia fuori solo ciò che si è riconosciuto.
  */
 
-/** La contabilità del giro: la chat non la disegna come riga (costo e token vanno al contatore, l'uscita dei comandi al pannello). */
-export const EVENTI_CONTABILI = Object.freeze(['consumo-fornitore', 'talos.process-output']);
+/** La contabilità del giro: la chat non la disegna come riga (costo e token vanno al contatore, l'uscita dei comandi al pannello).
+ *  Spesa di servizio (30/10, parte 2 B): l'attesa del motore è una misura, la chat non la disegna.
+ *  PERF R-34 (Desktop 30/10): `talos.chiamata-nel-testo` è il giornale di una chiamata scritta come testo — la chat non la disegna
+ *  (la riga aspetta il bozzetto), e il suo frammento non va mai nel Markdown; resta nell'esportazione JSON.
+ *  Decisione 245 (05/11): `talos.continuazione` (ripreso dopo una fermata per il contesto) va solo al giornale su disco, mai a schermo. */
+export const EVENTI_CONTABILI = Object.freeze(['consumo-fornitore', 'consumo-di-servizio', 'talos.process-output', 'talos.attesa-del-motore',
+  'talos.chiamata-nel-testo', 'talos.continuazione']);
 const CONTABILI = new Set(EVENTI_CONTABILI);
 
 /** Uno span di codice Markdown che regge qualunque testo: il recinto è più lungo di ogni fila di backtick che contiene (dal ramo
@@ -54,6 +60,11 @@ export function creaContestoTrascrizione() {
 export function trascriviEventoInterno(evento, contesto = creaContestoTrascrizione()) {
   if (!evento || evento.type !== 'CUSTOM' || typeof evento.name !== 'string') return null;
   if (CONTABILI.has(evento.name)) return { omesso: true };
+  /* i passi del riassunto preparato in sottofondo (inizio, pronta, scartata, non arriva): la chat non ne disegna una riga, e prima finivano
+     nel trascritto col loro JSON. La riga che conta (rapido, migliorato) è già nell'evento `talos.compattazione`. */
+  if (evento.name === 'talos.compattazione-preparata') return { omesso: true };
+  if (evento.name === 'talos.blocco.azione.v1') return { omesso: true }; // il gesto è già il messaggio della persona
+  if (evento.name === 'talos.risultati-accorciati') return { omesso: true }; // la riga vive sotto la risposta: nel trascritto esportato sarebbe contabilità
   if (evento.name === 'talos.context') {
     const valore = evento.value;
     if (!valore || valore.schema !== 'talos.context.event.v1') return null;
@@ -67,11 +78,18 @@ export function trascriviEventoInterno(evento, contesto = creaContestoTrascrizio
     if (fineMuta(c)) return { omesso: true }; // (6) 21/10: un riassunto di sfondo che ha ceduto il posto non si racconta
     if (c.tipo === 'fine') {
       return { testo: c.compattato
-        ? testoRigaCompattazione({ stato: 'riassunta', tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo, ripiego: c.ripiego === true, ragione: c.ragione ?? null })
-        : testoRigaCompattazione({ stato: 'non-riuscita', motivo: c.motivo, dettaglio: c.dettaglio }) };
+        ? testoRigaCompattazione({ stato: 'riassunta', tokenPrima: c.tokenPrima, tokenDopo: c.tokenDopo, ripiego: c.ripiego === true, ragione: c.ragione ?? null, nonDisponibile: c.nonDisponibile ?? null, dallaRiserva: c.dallaRiserva === true, riassuntoDi: c.riassuntoDi ?? null, migliorata: Boolean(c.migliora) })
+        : testoRigaCompattazione({ stato: 'non-riuscita', giro: c.giro ?? null, motivo: c.motivo, dettaglio: c.dettaglio, nonDisponibile: c.nonDisponibile ?? null, motoreNonPartito: c.motoreNonPartito === true }) };
     }
     if (c.tipo === 'annullata') return { testo: testoRigaCompattazione({ stato: 'annullata' }) };
     return null;
+  }
+  /* Revisione del Blocco 22, F9: la riga che la chat disegna (FE-053), con le sue funzioni. In chat il perché sta nel `title`; in un documento da leggere dopo va scritto, e la
+     riga finisce coi due punti apposta. Un evento senza modello resta col suo JSON, come ogni forma che non si riconosce. */
+  if (evento.name === EVENTO_MODELLO_INUTILIZZABILE) {
+    if (typeof evento.value?.modello !== 'string' || !evento.value.modello) return null;
+    const { riga, perche } = testiModelloInutilizzabile(evento.value);
+    return { testo: `${riga} ${perche}` };
   }
   /* 18/10/2026 (dal ramo scartato `feat/mcp-avvio-in-chat`, adattato all'evento fuso): un server MCP che non è partito, con le parole
      della nota in chat e solo quando la chat la mostra (`nuoviServerNonPartiti`, lo stesso ricordo); un giro in cui niente cambia

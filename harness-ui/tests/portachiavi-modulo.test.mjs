@@ -136,7 +136,7 @@ async function avviaConModulo(t, sorgenteDelModulo) {
     TALOS_DESKTOP_DATA_DIR: join(radice, 'desktop'), TALOS_HARNESS_UI_KEYRING: `modulo:${file}`, TALOS_HARNESS_UI_KEYRING_SCOPE: '',
     TALOS_SCRATCH_DIR: join(radice, 'scratch'), TEMP: temp, TMP: temp, TMPDIR: temp,
   };
-  const figlio = spawn(process.execPath, ['server.mjs'], { cwd: RADICE, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env });
+  const figlio = spawn(process.execPath, ['server.mjs', '--senza-gettone=prove'], { cwd: RADICE, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env });
   const uscita = new Promise((fatto) => figlio.once('exit', fatto));
   // il server si ferma e si ASPETTA (al più 15 s) prima della pulizia: una cartella con un server vivo dentro non si cancella
   const ferma = async () => {

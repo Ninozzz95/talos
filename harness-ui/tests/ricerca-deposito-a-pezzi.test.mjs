@@ -171,7 +171,7 @@ test('BC49: deposito unico del banco resta byte per byte, anche senza adattatore
   assert.match(r.risposta, /^deposited:/);
 });
 
-test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichiarate (deposito, paginazione, modifica, Ask, dialogo agenti, Workflow, lotti, lettura byte)', () => {
+test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichiarate (deposito, paginazione, modifica, Ask, dialogo agenti, Workflow, lotti, lettura byte, blocchi in Libreria)', () => {
   /* 27/09/2026 — l'impronta estesa passa da 3b1ec130… a 105dd078… per l'esenzione della prosa di memory_search/update/delete
    * (vedi sotto). ⛔ Non è stata indovinata: la STESSA esenzione applicata all'inventario del commit 93e99fe2a (prima dei sei
    * attrezzi nuovi) dà 105dd078… anche lì — prova misurata che nient'altro è cambiato. La base (38d65a3f…) non si tocca. */
@@ -398,9 +398,44 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
     /* «Segnala un problema» (owner 29/10/2026, contratto con la CLI): `report_problem`, un attrezzo esteso NUOVO che non scrive niente,
      * fuori dalla base (il banco non passa mai `onSegnalazioneFn`); forma del contratto fissata qui, le due impronte restano */
     Object.assign(attrezziAutomazioni, { report_problem: [['description', 'kind', 'title'], ['kind', 'title']] });
+    /* Centro assistenza (owner 01/11/2026, «leggero, dal sito»): `talos_help`, un attrezzo esteso NUOVO di sola lettura della guida, fuori
+     * dalla base (il banco non passa mai `aiutoTalos`); forma fissata qui, nessun campo obbligatorio, le due impronte restano */
+    Object.assign(attrezziAutomazioni, { talos_help: [['limit', 'page', 'query', 'section'], []] });
+    /* Motore locale (01/11/2026, la seconda porta del modello locale; `switch` tolto in 55ce1de40 per la fase 8): `local_model`, un
+     * attrezzo esteso NUOVO (status/open/free, aprire e chiudere dietro la carta), fuori dalla base; le due impronte restano */
+    Object.assign(attrezziAutomazioni, { local_model: [['action', 'model'], ['action']] });
     /* Owner 27/10/2026 (server locali, terza scelta; scritto il 29/10): `local_page`, un attrezzo esteso NUOVO di sola lettura, fuori
      * dalla base (il banco non passa mai `apriPaginaLocaleFn`); forma concordata con la CLI, le due impronte restano */
     Object.assign(attrezziAutomazioni, { local_page: [['look', 'path', 'port'], ['port']] });
+    /* Fase 8 «Impostazioni dalla chat» (owner 01/11/2026): `app_settings`, un attrezzo esteso NUOVO fuori dalla base (il banco non passa mai
+     * `onImpostazioniFn`); forma della proposta approvata (forma §3.1) fissata qui, le due impronte restano */
+    Object.assign(attrezziAutomazioni, { app_settings: [['action', 'changes', 'expected_revision', 'key', 'query', 'reason', 'receipt_id', 'scope', 'section'], ['action']] });
+    /* FE-008 «Passi» (forma del 03/11/2026, commit c1728cdd3): `steps_update`, un attrezzo esteso NUOVO, offerto al giro solo con `listaPassi`
+     * (spento di serie), fuori dalla base; forma fissata qui come gli altri, le due impronte restano */
+    Object.assign(attrezziAutomazioni, { steps_update: [['steps'], ['steps']] });
+    /* Computer use (03/11/2026, i luoghi di «Consenti sempre», seconda porta): `computer_use_places_list` (sola lettura) e
+     * `computer_use_places_remove` (togliere, mai aggiungere), attrezzi estesi NUOVI fuori dalla base (il banco non passa mai
+     * `onLuoghiFn`); forma fissata qui come gli altri, le due impronte restano */
+    Object.assign(attrezziAutomazioni, { computer_use_places_list: [[], []], computer_use_places_remove: [['name', 'type'], ['name', 'type']] });
+    /* Computer use (05/11/2026, cura del Desktop): `computer_use`, l'attrezzo esteso NUOVO della seconda porta, entrato nella candidata
+     * con l'unione fe8a6532f senza esenzione qui, e da allora questa prova era rossa (impronta estesa 09693392…). Fuori dalla base (il
+     * banco non passa mai l'aiutante dello schermo). Prima di toglierlo si asseriscono le due frasi che lo rendono sicuro: solo se la
+     * persona l'ha chiesto in questo giro, e mai una schermata in risposta. Le due impronte restano quelle di prima. */
+    {
+      const uso = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === 'computer_use');
+      if (uso) {
+        assert.match(uso.description, /Call it ONLY when the person asked, in this turn, for something to be done on their computer\./u, 'computer_use: solo su richiesta della persona in questo giro');
+        assert.match(uso.description, /Returns a short text with the outcome, never a screenshot\./u, 'computer_use: mai una schermata al modello');
+      }
+    }
+    Object.assign(attrezziAutomazioni, { computer_use: [['task'], ['task']] });
+    /* Decisione 201 dell'owner (04/11/2026, forma FORMA-BROWSER-201 con gli OK di Performance, Mobile e CLI): `browser_page`, un attrezzo
+     * esteso NUOVO di sola lettura e SENZA campi (mai un indirizzo scelto dal modello), fuori dalla base (il banco non passa mai
+     * `leggiPaginaBrowserFn`); forma fissata qui come gli altri, le due impronte restano */
+    Object.assign(attrezziAutomazioni, { browser_page: [[], []] });
+    /* FE-081 (05/11/2026): `blocco_aggiorna`, attrezzo esteso nuovo dei blocchi interattivi (src/blocchi/aggiorna.mjs), fuori dalla base;
+     * forma fissata qui come gli altri, le due impronte restano (r39b, 09/11/2026) */
+    Object.assign(attrezziAutomazioni, { blocco_aggiorna: [['blocco', 'modifiche', 'sorgente'], ['blocco']] });
     for (const [nome, [campi, obbligatori]] of Object.entries(attrezziAutomazioni)) {
       const tool = attrezzi.map((entry) => entry.function ?? entry).find((entry) => entry.name === nome);
       if (attrezzi === ATTREZZI_OPENAI) assert.equal(tool, undefined, `${nome} non deve entrare nel banco base`);
@@ -546,8 +581,15 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
       }
       if (f.name === 'cerca') {
         const schema = f.parameters ?? f.input_schema;
-        assert.deepEqual(Object.keys(schema.properties).sort(), ['continua', 'dentro', 'nome', 'offset', 'testo']);
+        assert.deepEqual(Object.keys(schema.properties).sort(), ['continua', 'dentro', 'nome', 'offset', 'oppure', 'testo']);
         assert.deepEqual(schema.required, []);
+        /* PERF R-33 (30/10/2026), esenzione dichiarata col sì dell'owner e delle tre sessioni (PROPOSTA-CERCA-PIU-TERMINI-2026-10-30.md):
+         * `cerca` guadagna `oppure`, altri testi letterali in OR con `testo` (1..8, facoltativo). Il preambolo del banco cresce di ~65
+         * token, da dire confrontando campagne. Prima si asserisce che cosa è, poi si toglie dalla copia. */
+        assert.deepEqual({ type: schema.properties.oppure.type, items: schema.properties.oppure.items?.type, min: schema.properties.oppure.minItems, max: schema.properties.oppure.maxItems },
+          { type: 'array', items: 'string', min: 1, max: 8 });
+        assert.match(schema.properties.oppure.description, /OR-ed with "testo"/u);
+        delete schema.properties.oppure;
         /* F001b (01/10/2026), esenzione dichiarata col sì dell'owner dello stesso giorno («Ricerca che continua», «riferimento
          * esplicito»): `cerca` guadagna `continua`, il riferimento di una ricerca ancora viva. Si asserisce che cosa è
          * (stringa, facoltativa, e la prosa dice da dove viene), poi si toglie dalla copia come `offset`. */
@@ -555,7 +597,8 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         assert.equal(schema.required.includes('continua'), false, 'cerca: continua NON deve essere obbligatorio');
         /* R-24 (owner 29/10/2026), esenzione dichiarata: la prosa dice che vale SOLO l'id, e `pattern` ne fissa la forma; il preambolo
          * del banco cambia di questi pochi token (e la frase di `dentro` dice «subfolder or file», R-25), da dire confrontando campagne. */
-        assert.match(schema.properties.continua.description, /^Only the id of a search still running, given by a previous cerca reply/u);
+        /* PERF R-33 (30/10): niente più l'esempio «r1» da imitare — l'id viene solo da una risposta precedente, mai inventato */
+        assert.match(schema.properties.continua.description, /^Only an id you received in a previous cerca reply for a search still running; never make one up/u);
         assert.equal(schema.properties.continua.pattern, '^r[0-9]+$');
         assert.match(f.description, /gives a reference to pass as "continua"/u);
         delete schema.properties.continua;
@@ -600,6 +643,14 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         assert.equal(schema.properties.network?.type, 'boolean', 'shell: network deve essere un booleano');
         assert.equal((schema.required ?? []).includes('network'), false, 'shell: network resta FACOLTATIVO');
         delete schema.properties.network;
+      }
+      /* D4 (owner 02/11/2026, commit 627f507bc): una frase NUOVA nella descrizione di `research_start`, voluta (il Tester ha visto partire una
+       * ricerca da una domanda su una ricerca). Si asserisce la frase e si toglie dalla copia: l'impronta estesa resta 105dd078…, prova
+       * misurata che degli altri attrezzi non è cambiato niente. Ristamparla avrebbe spento la guardia. */
+      if (f.name === 'research_start') {
+        const frase = 'A question about research is not a request. ';
+        assert.ok(f.description.includes(frase), 'research_start: la frase di D4 deve restare');
+        f.description = f.description.replace(frase, '');
       }
       if (f.name === 'research_deposit') {
         const schema = f.parameters ?? f.input_schema;
@@ -726,6 +777,15 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         delete schema.properties.format;
         f.description = 'Reads one file of the workspace. Path is relative, e.g. "src/prezzo.mjs".';
       }
+      /* Blocchi in Libreria (04/11/2026, revisione J, D1, commit 32d556f45, forma FORMA-D1-BLOCCHI-IN-LIBRERIA col sì di CLI, Mobile e
+       * Performance), esenzione dichiarata: la prosa di `artifact_create` guadagna UNA frase in coda, la seconda porta di «Salva in
+       * Libreria» (+113 caratteri, ~33 token di preambolo esteso, da dire confrontando campagne). Nomi, campi e obbligatori invariati.
+       * Prima si asserisce la frase esatta in coda, poi si toglie: l'impronta 105dd078… resta, prova misurata che nient'altro è cambiato. */
+      if (f.name === 'artifact_create') {
+        const frase = ' To save a live block from this chat in the person\'s Library instead, pass the block source (`root = …`) as html.';
+        assert.ok(f.description.endsWith(frase), 'artifact_create: la prosa dice la seconda porta di «Salva in Libreria», in coda');
+        f.description = f.description.slice(0, -frase.length);
+      }
       if (f.name === 'library_delete') {
         const schema = f.parameters ?? f.input_schema;
         assert.ok(schema.properties.ids, 'library_delete: manca il campo `ids` dei lotti');
@@ -735,7 +795,9 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         delete f.description;
       }
     }
-    assert.equal(createHash('sha256').update(JSON.stringify(copia)).digest('hex'), impronta);
+    const misurata = createHash('sha256').update(JSON.stringify(copia)).digest('hex');
+    console.log(`BC49 impronta ${attrezzi === ATTREZZI_OPENAI ? 'base' : 'estesa'}: ${misurata}`); // 09/11/2026 r39b: printed once per list, so the log shows it
+    assert.equal(misurata, impronta);
   }
 });
 

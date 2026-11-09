@@ -39,6 +39,14 @@ const permessi = readFileSync(path.join(qui, '../../src/components/permessi.js')
 
 /** Gli attrezzi dichiarati dal kernel: i `name: '…'` dei due elenchi di schemi (base ed estesi). */
 const dichiarati = [...new Set([...kernel.matchAll(/^\s{4,12}name: '([a-z_]+)',\s*$/gm)].map((m) => m[1]))];
+/* ⛔ FE-081 (05/11/2026): uno schema IMPORTATO non ha `name: '…'` nel kernel, e la regex sopra non lo vedrebbe — la stessa misura
+   ristretta del 17/09. `blocco_aggiorna` vive in `src/blocchi/aggiorna.mjs`: il suo nome si legge là, e si pretende che il kernel
+   metta davvero il suo schema fra gli estesi. */
+const aggiornaBlocchi = leggi('../../../src/blocchi/aggiorna.mjs');
+const nomeBloccoAggiorna = /export const NOME_BLOCCO_AGGIORNA = '([a-z_]+)'/u.exec(aggiornaBlocchi)?.[1];
+assert.equal(nomeBloccoAggiorna, 'blocco_aggiorna', 'il nome di blocco_aggiorna non si legge più da aggiorna.mjs');
+assert.match(kernel, /^ {4}ATTREZZO_BLOCCO_AGGIORNA,\r?$/mu, 'il kernel non mette più lo schema di blocco_aggiorna fra gli estesi');
+dichiarati.push(nomeBloccoAggiorna);
 
 /** Il blocco di una mappa, per non confondere due tabelle dello stesso file. */
 function blocco(sorgente, nome) {
@@ -54,7 +62,7 @@ const haChiave = (testo, nome) => new RegExp('(^|[ \\t,{])' + nome + ":[ \\t]*'"
 const NOMI = blocco(nomiAttrezzi, 'NOMI_UMANI_ATTREZZI = Object.freeze({');
 const DESCRIZIONI = blocco(nomiAttrezzi, 'DESCRIZIONI_ATTREZZI = Object.freeze({');
 
-test('NOMI-ATTREZZI · il kernel dichiara i suoi attrezzi e sono molti più di zero', () => {
+test('NOMI-ATTREZZI · il kernel dichiara i suoi strumenti e sono molti più di zero', () => {
   /* ⛔ «Zero» qui vorrebbe dire «la regex non ha trovato niente», non «il kernel non ha attrezzi»:
      si conferma AL CONTRARIO, cercando due nomi che DEVONO esserci. */
   assert.ok(dichiarati.length >= 40, `trovati ${dichiarati.length}: ${dichiarati.join(', ')}`);
@@ -71,7 +79,7 @@ for (const nome of dichiarati) {
   });
 }
 
-test('NOMI-ATTREZZI · verso contrario: un attrezzo inventato non ha né nome né descrizione', () => {
+test('NOMI-ATTREZZI · verso contrario: uno strumento inventato non ha né nome né descrizione', () => {
   assert.equal(haChiave(NOMI, 'attrezzo_inventato'), false);
   assert.equal(haChiave(DESCRIZIONI, 'attrezzo_inventato'), false);
 });
@@ -101,8 +109,8 @@ const colCancelloUi = (() => {
   return [...b.slice(0, b.indexOf('\n  ]);')).matchAll(/^\s*\['([a-z_]+)',/gmu)].map((x) => x[1]);
 })();
 
-test('BC-59 · il foglio Permessi elenca ESATTAMENTE gli attrezzi col cancello dichiarati dal server', () => {
-  assert.ok(colCancelloServer.length >= 6, `attrezzi col cancello dal server: ${colCancelloServer.join(', ')}`);
+test('BC-59 · il foglio Permessi elenca ESATTAMENTE gli strumenti col cancello dichiarati dal server', () => {
+  assert.ok(colCancelloServer.length >= 6, `strumenti col cancello dal server: ${colCancelloServer.join(', ')}`);
   assert.deepEqual([...colCancelloUi].sort(), [...colCancelloServer].sort(),
     `la lista della UI e quella del server non coincidono — server: ${colCancelloServer.join(', ')} · UI: ${colCancelloUi.join(', ')}`);
 });
@@ -115,7 +123,7 @@ test('BC-59 · «file_edit» ha nome, descrizione, icona propria nelle DUE mappe
      indistinguibile da un attrezzo qualunque: è il gesto che l'owner deve riconoscere a colpo
      d'occhio nella riga attività. */
   assert.ok(haChiave(blocco(conversazione, 'ICONA_ATTREZZO = Object.freeze({'), 'file_edit'), 'icona nella riga attività (conversazione.js)');
-  assert.ok(/file_edit: 'i-/u.test(app.slice(app.indexOf('const ICONA_ATTREZZO = {'))), 'icona nell’elenco attrezzi (legacy/app.js)');
+  assert.equal(app.includes('const ICONA_ATTREZZO = {'), false, 'la mappa è una sola (FE-015): l’elenco strumenti usa quella della conversazione');
   assert.ok(colCancelloUi.includes('file_edit'), 'riga nel foglio Permessi');
   assert.ok(haChiave(blocco(permessi, 'SCRIVONO_LO_STESSO = Object.freeze({'), 'file_edit'),
     'porta laterale: chi chiude «scrivi» deve sapere che questo scrive lo stesso');

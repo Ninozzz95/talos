@@ -423,7 +423,7 @@ test('CTX-HOTFIX-TAIL-PRESSURE-STAYS-BOUNDED — letture grandi nella coda lette
   assert.ok(fini.length >= 3, `la compattazione continua lungo il turno: ${fini.length}`);
   assert.ok(fini.every((e) => e.compattato), 'ogni compattazione riesce');
   const ultima = lavoro.at(-1).messages;
-  assert.ok(ultima.some((m) => m.role === 'tool' && testoDi(m).includes('characters omitted to fit the context window')), 'gli esiti lunghi della coda portano il rimando');
+  assert.ok(ultima.some((m) => m.role === 'tool' && testoDi(m).includes('characters trimmed by TALOS; the full text is kept')), 'gli esiti lunghi della coda portano il rimando');
   assert.ok(ultima.some((m) => testoDi(m).includes(CONSEGNA.slice(0, 30))), 'la consegna della persona resta alla lettera');
 });
 
@@ -474,7 +474,11 @@ test('CTX-HOTFIX-OVERFLOW-SCALINI — contesto pieno due volte nel giro: il seco
  *   Il kernel deve riconoscerlo, comprimere e riprovare una volta — come per il 400 del fornitore qui sopra — invece di
  *   lasciarlo morire. Prima della cura quell'errore non esisteva: la riprova senza attrezzi lo nascondeva.
  */
-test('CTX-HOTFIX-OVERFLOW-LOCAL — il contesto pieno del motore locale, lanciato dall adapter: compattazione e UN ritentativo che riesce', async (t) => {
+/* ⭐ Aggiornata il 28/10/2026 (owner, «Rapido subito, il modello dopo»; contratto P1 con la CLI): sul motore locale, a POSTO UNICO,
+   all'overflow il giro non paga più un riassunto del modello dentro di sé — occuperebbe l'unico posto. Riparte SUBITO col riassunto
+   rapido (`aFineGiro`), e quello del modello lo scrive il fine giro del registro (PU-FINE-*). Il resto della prova non cambia: un solo
+   ritentativo, compattato, con gli attrezzi. */
+test('CTX-HOTFIX-OVERFLOW-LOCAL — il contesto pieno del motore locale, lanciato dall adapter: compattazione rapida («a fine giro») e UN ritentativo che riesce', async (t) => {
   conTetto(t, undefined);
   const cartella = cartellaDiProva(t);
   const storia = [];
@@ -500,8 +504,11 @@ test('CTX-HOTFIX-OVERFLOW-LOCAL — il contesto pieno del motore locale, lanciat
     fetchDiRete: fornitore.fetchDiRete, comandoProva: 'node -e 0', messaggiIniziali, onGiro: (e) => eventi.push(e),
   });
   assert.ok(esito, 'il giro riesce dopo la compattazione');
-  assert.equal(fornitore.riassuntiChiesti().length, 1, 'un solo riassunto forzato');
+  assert.equal(fornitore.riassuntiChiesti().length, 0, 'nessun riassunto del modello dentro il giro: lo scrive il fine giro');
   assert.deepEqual(eventi.filter((e) => e.tipo === 'compattazione-inizio').map((e) => e.motivo), ['overflow']);
+  const rapido = eventi.find((e) => e.tipo === 'compattazione-fine' && e.compattato === true);
+  assert.equal(rapido?.ragione, 'in-arrivo', 'il rapido promette il riassunto del modello');
+  assert.equal(rapido?.record?.aFineGiro, true, 'e dice che arriva dal fine giro');
   const lavoro = fornitore.corpi.filter((b) => !eRichiestaDiRiassunto(b));
   assert.ok(lavoro[1].messages.some((m) => testoDi(m).startsWith(MARCATORE_RIASSUNTO)), 'il ritentativo parte con la storia compattata');
   assert.ok(lavoro[1].tools?.length > 0, 'e con gli attrezzi: il contesto pieno non li toglie');

@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import { createContextEngine } from '../src/engine.mjs';
 import { createSqliteContextStore } from '../src/node/sqlite-store.mjs';
 import { parseContextSettings } from '../src/contracts.mjs';
-import { clearOldToolOutputs, shortenRecentLargeOutputs, KEEP_RECENT_TOOL_OUTPUTS, CLEARING_STEP } from '../src/tool-output-clearing.mjs';
+import { clearOldToolOutputs, shortenRecentLargeOutputs, KEEP_RECENT_TOOL_OUTPUTS, CLEARING_STEP, REASONING_KEEP_CHARS } from '../src/tool-output-clearing.mjs';
 
 const now = '2026-10-09T00:00:00.000Z';
 /** The window whose input limit (heuristic margin 15%, reserve 2048: `profiles.mjs:6`) puts `tokens` at `ratio`. */
@@ -57,6 +57,34 @@ test('C1-L1-PURE: old long outputs become signature + pointer; recent outputs, s
   assert.equal(messages.at(-3).reasoning_content, messaggi.at(-3).reasoning_content, 'recent reasoning untouched');
 });
 
+/* D3 (revisione di fine fase, 01/11/2026): con `accorciaRagionamento` il campo resta, coi primi caratteri e nient'altro */
+test('C1-L1-REASONING-SHORTENED: old reasoning keeps its first characters, in both fields, the same bytes at every request; short and recent reasoning stay', () => {
+  const lungo = 'r'.repeat(REASONING_KEEP_CHARS + 50);
+  const giri = storia(CLEARING_STEP + KEEP_RECENT_TOOL_OUTPUTS).map((m) => (m.role === 'assistant' && m.tool_calls ? { ...m, reasoning_content: lungo, reasoning: lungo } : m));
+  const indiceCorto = giri.findIndex((m) => m.tool_calls);
+  giri[indiceCorto] = { ...giri[indiceCorto], reasoning_content: 'corto', reasoning: 'x'.repeat(REASONING_KEEP_CHARS) };
+  const { messages } = clearOldToolOutputs(giri, { accorciaRagionamento: true });
+  const turni = messages.flatMap((m, i) => (m.tool_calls ? [[m, giri[i]]] : []));
+  assert.equal(turni[0][0].reasoning_content, 'corto', 'short reasoning is not rewritten');
+  assert.equal(turni[0][0].reasoning.length, REASONING_KEEP_CHARS, 'exactly at the limit: not rewritten');
+  assert.equal(turni[1][0].reasoning_content, lungo.slice(0, REASONING_KEEP_CHARS), 'no ellipsis, nothing added');
+  assert.equal(turni[1][0].reasoning, lungo.slice(0, REASONING_KEEP_CHARS));
+  assert.equal(turni.at(-1)[0].reasoning_content, lungo, 'recent reasoning untouched');
+  assert.deepEqual(clearOldToolOutputs(messages, { accorciaRagionamento: true }).messages, messages, 'a second pass changes no byte');
+});
+
+test('C1-L1-REASONING-SURROGATE: the cut never splits an emoji', () => {
+  const dopo = (testo) => clearOldToolOutputs(storia(CLEARING_STEP + KEEP_RECENT_TOOL_OUTPUTS).map((m) => (m.tool_calls ? { ...m, reasoning_content: testo } : m)), { accorciaRagionamento: true }).messages.find((m) => m.tool_calls).reasoning_content;
+  const conEmoji = `${'a'.repeat(REASONING_KEEP_CHARS - 1)}😀${'b'.repeat(50)}`;
+  assert.equal(dopo(conEmoji), 'a'.repeat(REASONING_KEEP_CHARS - 1));
+  assert.equal(dopo(`${'a'.repeat(REASONING_KEEP_CHARS - 2)}😀${'b'.repeat(50)}`).length, REASONING_KEEP_CHARS, 'a whole emoji at the end stays');
+});
+
+test('C1-L1-REASONING-DEFAULT: AL CONTRARIO: without the option the old reasoning still goes (the local engines, and a model port that does not say)', () => {
+  const giri = storia(CLEARING_STEP + KEEP_RECENT_TOOL_OUTPUTS).map((m) => (m.tool_calls ? { ...m, reasoning_content: 'r'.repeat(REASONING_KEEP_CHARS + 1) } : m));
+  assert.equal(Object.hasOwn(clearOldToolOutputs(giri).messages.find((m) => m.tool_calls), 'reasoning_content'), false);
+});
+
 test('C1-L1-STEPS: the cut moves only by whole blocks, so the cleared prefix (and its cache) stays identical between steps', () => {
   const base = CLEARING_STEP + KEEP_RECENT_TOOL_OUTPUTS;
   const a = clearOldToolOutputs(storia(base)).messages;
@@ -86,7 +114,7 @@ async function banco(t, messaggi, { windowTokens }) {
   const sessionId = 'chat';
   await store.initSession({ sessionId, settings: parseContextSettings({}) });
   for (const [i, message] of messaggi.entries()) await engine.appendOriginal({ sessionId, record: { id: `r${i}`, message, createdAt: now } });
-  const profilo = { provider: 'local', model: 'fixture', windowTokens, responseReserve: 2048, local: true };
+  const profilo = { provider: 'local', model: 'fixture', windowTokens, responseReserve: 2048, local: true, singleSlot: true };
   return { engine, richieste, sessionId, profilo };
 }
 
@@ -118,7 +146,8 @@ test('C1-L1-NOT-ENOUGH: when clearing cannot bring it under the trigger, level 2
   const pulita = shortenRecentLargeOutputs(clearOldToolOutputs(messaggi).messages).messages;
   const dopo = Math.ceil(JSON.stringify({ messages: pulita, tools: [] }).length / 4);
   const b = await banco(t, messaggi, { windowTokens: finestra(dopo, 0.9) }); // even cleared: ~90% > 75%
-  const preparata = await b.engine.prepareForRequest({ sessionId: b.sessionId, messages: messaggi, tools: [], sessionModel: b.profilo });
+  /* il riassunto in sottofondo parte solo dove c'è più di un posto: il posto unico lo aspetta a fine giro */
+  const preparata = await b.engine.prepareForRequest({ sessionId: b.sessionId, messages: messaggi, tools: [], sessionModel: { ...b.profilo, singleSlot: false } });
   assert.ok(preparata.job, 'level 2 starts');
 });
 
@@ -145,7 +174,7 @@ async function bancoContato(t, messaggi, { windowTokens, fallisceSullaPiena = fa
   const engine = createContextEngine({ store, model, tokenCounter, clock: () => now });
   await store.initSession({ sessionId: 'chat', settings: parseContextSettings({}) });
   for (const [i, message] of messaggi.entries()) await engine.appendOriginal({ sessionId: 'chat', record: { id: `r${i}`, message, createdAt: now } });
-  return { engine, conteggi, profilo: { provider: 'local', model: 'fixture', windowTokens, responseReserve: 2048, local: true } };
+  return { engine, conteggi, profilo: { provider: 'local', model: 'fixture', windowTokens, responseReserve: 2048, local: true, singleSlot: true } };
 }
 
 test('C1-L1-Y1-NO-FULL-COUNT: over the trigger the full history is estimated, never sent to the counter, on every request', async (t) => {

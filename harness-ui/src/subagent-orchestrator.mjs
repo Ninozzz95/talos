@@ -210,6 +210,7 @@ export const PREFISSI_STATO_DEL_KERNEL = Object.freeze([
   '⏸ paused on request',                         // C3 tappa 4: messo in pausa (la delega riprende con un messaggio nuovo)
   '⛔ turns exhausted:',                         // giri esauriti
   '⛔ generation stopped without an answer',     // generazione ferma senza risposta
+  '⛔ the model stopped and refused to continue', // il modello ha rifiutato dopo aver scritto del testo (il testo resta)
   '⛔ the model asked ',                         // la stessa richiesta ripetuta nella stessa risposta
 ]);
 export function riassuntoDelegaDaDetto(detto, { comeFinita = null } = {}) {
@@ -476,6 +477,7 @@ export function creaSubagentOrchestrator({
           ultimoEsito: statistiche.ultimoEsito ?? null,
           motivoChiusura: statistiche.motivoChiusura ?? null,
           usageSessione: statistiche.usageSessione ?? null,
+          servizio: statistiche.servizio ?? null, // spesa dei riassunti (owner 30/10 sera): si aggiunge a usageSessione così com'è
           operazioneCorrente: statistiche.operazioneCorrente ?? null,
           erroreConsegnaDelega: voce.erroreConsegnaDelega ?? null,
           /*
@@ -836,16 +838,23 @@ export function creaSubagentOrchestrator({
    *   server) e il suo esito torna al padre da `consegnaEsitoFiglia`, come la prima volta.
    *   ⇒ { esito: 'ripresa', childId } | { esito: 'rifiutato', motivo }
    */
-  function riprendiFiglia({ childId, azione } = {}) {
+  function riprendiFiglia({ childId, azione, motivo = null } = {}) {
     const voce = typeof childId === 'string' ? sessioni.get(childId) : null;
     if (!voce?.padreId) return { esito: 'rifiutato', motivo: 'not a sub-agent' };
     if (typeof riprendiFn !== 'function') return { esito: 'rifiutato', motivo: 'resuming a sub-agent is not available here' };
     if (voce.conclusa !== true) return { esito: 'rifiutato', motivo: 'the sub-agent is still running' };
-    if (azione === 'resume' && voce.esitoDelega !== 'in-pausa') return { esito: 'rifiutato', motivo: 'the sub-agent is not paused' };
+    /* decisione 198: si riprende anche una figlia il cui giro si è fermato prima della fine (`child_control` resume del padre, col
+       `motivo` che il registro legge da `daRiprendere`), come il ▶ della persona dopo uno Stop o un errore */
+    const ripresaDopoFermata = voce.esitoDelega === 'fallito' && (motivo === 'fermata' || motivo === 'errore' || motivo === 'giri-finiti');
+    if (azione === 'resume' && voce.esitoDelega !== 'in-pausa' && !ripresaDopoFermata) return { esito: 'rifiutato', motivo: 'the sub-agent is not paused' };
     if (azione === 'retry' && voce.esitoDelega !== 'fallito') return { esito: 'rifiutato', motivo: 'the sub-agent did not fail' };
     if (azione !== 'resume' && azione !== 'retry') return { esito: 'rifiutato', motivo: 'the action must be resume or retry' };
     const consegna = azione === 'resume'
-      ? 'You were paused by the person. Continue the task from where you stopped: the results of the tools you ran are in this conversation.'
+      ? (!ripresaDopoFermata
+        ? 'You were paused by the person. Continue the task from where you stopped: the results of the tools you ran are in this conversation.'
+        : motivo === 'fermata'
+          ? 'You were stopped before you finished. Continue the task from where you stopped: the results of the tools you ran are in this conversation.'
+          : 'Your previous turn ended before you finished. Continue the task from where you left off, without repeating what is already done: the results of the tools you ran are in this conversation.')
       : `Your previous attempt at this task did not finish: ${voce.motivoDelega ?? 'it failed'} Try again, and check first what is already done.`;
     const sessionPadreId = voce.padreId;
     const task = voce.task;

@@ -15,7 +15,7 @@ test('protezioni del kernel: il kernel vero le ha tutte', async () => {
 const guasti = {
   'T-01': (k) => k.replace("const RICERCA_NON_CONCLUSIVA = 'inconclusive search:", "const RICERCA_NON_CONCLUSIVA = 'no file matches:"),
   'T-02': (k) => k.replace('fileTroppoGrandi.push(p)', 'void p'),
-  RG: (k) => k.replace("'--max-columns-preview', '-e', testo", "'--max-columns-preview', '--max-filesize', String(MAX_BYTE_FILE), '-e', testo"),
+  RG: (k) => k.replace("'--max-columns-preview', ...termini", "'--max-columns-preview', '--max-filesize', String(MAX_BYTE_FILE), ...termini"),
   'T-03': (k) => k.replace('uscitaUtile(String(esito), 8_000, 0.5)', 'String(esito).slice(0, 8_000)'),
   'T-04': (k) => {
     const prova = k.indexOf("name: 'prova',")

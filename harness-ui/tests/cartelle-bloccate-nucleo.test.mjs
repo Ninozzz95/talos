@@ -11,7 +11,7 @@ import { mkdtempSync, mkdirSync, readFileSync, existsSync, realpathSync, symlink
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { bloccataDa, comandoNominaUnaBloccata } from '../src/path-policy.mjs';
+import { bloccataDa, comandoNominaUnaBloccata, indiceDeiNomi } from '../src/path-policy.mjs';
 import { talosLavora } from '../src/kernel/talosHarness.mjs';
 import { togliConfiniDati } from '../src/kernel/confine-dati.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
@@ -229,4 +229,45 @@ test('BLOC-K1-01 scrivi e file_edit dentro la bloccata: ricevuta «denied» via 
   /* K2: la frase è dell'ospite qualunque, non del desktop */
   assert.match(esiti.get('call_0'), /in that device's remote folders/u);
   assert.doesNotMatch(esiti.get('call_0'), /⋯|Remote devices →/u);
+});
+
+test('INDICE-NOMI N2: contiene dice ciò che dice il confronto nome per nome, senza disco', () => {
+  const radice = process.platform === 'win32' ? 'C:\\lavoro' : '/lavoro';
+  const un = (...p) => [radice, ...p].join(process.platform === 'win32' ? '\\' : '/');
+  const indice = indiceDeiNomi([un('a', 'b.txt'), un('c')]);
+  for (const p of [un('a', 'b.txt'), un('a'), radice]) assert.equal(indice.contiene(p), true, p);
+  for (const p of [un('a', 'b'), un('a', 'b.txt', 'x'), un('c', 'd'), un('ab')]) assert.equal(indice.contiene(p), false, p);
+  for (const p of [un('c'), un('c', 'd', 'e'), un('a', 'b.txt')]) assert.equal(indice.sotto(p), true, p);
+  for (const p of [un('a'), radice, un('cc')]) assert.equal(indice.sotto(p), false, p);
+  assert.equal(indiceDeiNomi([un('a')]).contiene(radice.slice(0, process.platform === 'win32' ? 3 : 1)), true, 'la radice del disco contiene tutto');
+  if (process.platform === 'win32') assert.equal(indiceDeiNomi(['C:\\Lavoro\\X']).contiene('c:/lavoro/x'), true, 'maiuscole e barre come `bloccataDa`');
+});
+
+/* 31/10/2026 (Mobile): il controllo toglieva gli spazi, `leggi` no. Provato sul nucleo: il contenuto usciva. */
+test('BLOCCO-SPAZI: una cartella col nome che comincia per spazio resta bloccata, e lo spazio in coda resta coperto', () => {
+  const cartella = realpathSync(mkdtempSync(join(tmpdir(), 'talos-blocco-spazi-')));
+  const conSpazio = join(cartella, ' sopra', 'segreta');
+  mkdirSync(conSpazio, { recursive: true });
+  mkdirSync(join(cartella, 'sopra', 'segreta'), { recursive: true });
+  assert.equal(bloccataDa(' sopra/segreta/k.txt', { cartella, bloccati: [conSpazio] })?.radice, conSpazio);
+  assert.equal(bloccataDa('sopra/segreta/k.txt', { cartella, bloccati: [conSpazio] }), null, 'al contrario: la cartella senza spazio è libera');
+  const senza = join(cartella, 'sopra', 'segreta');
+  assert.equal(bloccataDa('sopra/segreta ', { cartella, bloccati: [senza] })?.radice, senza, 'Windows apre «segreta » come «segreta»');
+  writeFileSync(join(senza, 'k.txt'), 'x', 'utf8');
+  /* la CLI: le regole di Win32 tolgono punto e spazio da ogni pezzo. Node no, ma un comando di shell sì */
+  if (process.platform === 'win32') for (const forma of ['sopra/segreta./k.txt', 'sopra/segreta /k.txt', 'sopra/segreta./nuovo.txt']) assert.equal(bloccataDa(forma, { cartella, bloccati: [senza] })?.radice, senza, forma);
+  assert.equal(bloccataDa('  ', { cartella, bloccati: [senza] }), null);
+  /* una cartella col punto in coda esiste, Node la crea: lì serve la forma con i soli bordi tolti */
+  const colPunto = join(cartella, 'sopra', 'punto.');
+  mkdirSync(colPunto, { recursive: true });
+  assert.equal(bloccataDa('sopra/punto. ', { cartella, bloccati: [colPunto] })?.radice, colPunto);
+  assert.equal(comandoNominaUnaBloccata('type sopra\\segreta.\\k.txt', { cartella, bloccati: [senza] })?.radice, process.platform === 'win32' ? senza : undefined);
+  assert.equal(bloccataDa('sopra/segreta2/k.txt', { cartella, bloccati: [senza] }), null, 'al contrario: un nome vicino resta libero');
+  /* revisione del blocco 17, A2: lo stream NTFS apre la stessa cartella. Il disco non è uno stream */
+  if (process.platform === 'win32') {
+    for (const forma of ['sopra/segreta::$INDEX_ALLOCATION/k.txt', 'sopra/segreta:$I30:$INDEX_ALLOCATION/k.txt', 'sopra/segreta/k.txt::$DATA']) assert.equal(bloccataDa(forma, { cartella, bloccati: [senza] })?.radice, senza, forma);
+    assert.equal(bloccataDa(`${cartella}\\sopra\\segreta::$INDEX_ALLOCATION\\k.txt`, { cartella, bloccati: [senza] })?.radice, senza, 'anche assoluto, con la lettera del disco');
+    assert.equal(bloccataDa(`${cartella}\\sopra\\segreta::$INDEX_ALLOCATION\\k.txt`, { bloccati: [senza] })?.irrisolvibile, undefined, 'dal nome, non da «non so dire»');
+  }
+  assert.equal(bloccataDa('sopra/segreta/../libera.txt', { cartella, bloccati: [senza] }), null, 'al contrario: «..» non si tocca');
 });

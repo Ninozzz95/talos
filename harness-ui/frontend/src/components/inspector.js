@@ -313,9 +313,9 @@ export function righeFile(file = []) {
  * da solo non dice niente a chi non distingue i colori, e nemmeno a chi legge con uno screen reader.
  */
 export const STATI_PROCESSO = Object.freeze({
-  'in-coda': { get etichetta() { return tr('processi.process.stateQueued'); }, tono: '', icona: 'i-list', vivo: true },
+  'in-coda': { get etichetta() { return tr('processi.process.stateQueued'); }, tono: '', icona: 'i-list-end', vivo: true },
   'in-avvio': { get etichetta() { return tr('processi.process.stateStarting'); }, tono: 'accent', icona: 'i-play', vivo: true },
-  'in-corso': { get etichetta() { return tr('processi.process.stateRunning'); }, tono: 'accent', icona: 'i-bolt', vivo: true },
+  'in-corso': { get etichetta() { return tr('processi.process.stateRunning'); }, tono: 'accent', icona: 'i-loader', vivo: true },
   'in-attesa': { get etichetta() { return tr('processi.process.stateWaiting'); }, tono: 'warning', icona: 'i-clock', vivo: true },
   /*
    * ⛔ 02/10/2026, owner: un comando dell'agente che aspetta il CONSENSO non è «in corso» — non è ancora partito. La prova
@@ -325,24 +325,24 @@ export const STATI_PROCESSO = Object.freeze({
    *   processi avviati, e l'approvazione resta a parte (`apps/desktop/src/components/assistant-ui/tool/approval.tsx:123`).
    *   Lo scudo è l'icona dei permessi nella chat («Chiede di scrivere»).
    */
-  'in-consenso': { get etichetta() { return tr('processi.process.stateAwaitingApproval'); }, tono: 'warning', icona: 'i-shield', vivo: true },
+  'in-consenso': { get etichetta() { return tr('processi.process.stateAwaitingApproval'); }, tono: 'warning', icona: 'i-shield-question', vivo: true },
   /*
    * ⛔ BUG-14 (05/10/2026): «IN SFONDO» non è «in corso» né «in attesa». Il comando GIRA ancora, ma fuori dalla cattura:
    *   l'agente ha già letto la sua «IN BACKGROUND», la persona legge l'output sul file. È VIVO — ma il suo silenzio è
    *   PER COSTRUZIONE (l'output va sul file, non più nella riga), quindi niente avviso «Nessuna uscita da N secondi».
    *   Non è né fermabile né sfondabile: non c'è più niente da sfondare, e lo Stop di un lavoro sfondato resta in chat.
    */
-  'in-sfondo': { get etichetta() { return tr('processi.process.stateBackgrounded'); }, tono: 'accent', icona: 'i-sfondo', vivo: true },
+  'in-sfondo': { get etichetta() { return tr('processi.process.stateBackgrounded'); }, tono: 'accent', icona: 'i-layers', vivo: true },
   riuscito: { get etichetta() { return tr('processi.process.stateSucceeded'); }, tono: 'success', icona: 'i-check', vivo: false },
   fallito: { get etichetta() { return tr('processi.process.stateFailed'); }, tono: 'danger', icona: 'i-x', vivo: false },
-  annullato: { get etichetta() { return tr('processi.process.stateCancelled'); }, tono: '', icona: 'i-stop', vivo: false },
-  ucciso: { get etichetta() { return tr('processi.process.stateKilled'); }, tono: 'warning', icona: 'i-stop', vivo: false },
+  annullato: { get etichetta() { return tr('processi.process.stateCancelled'); }, tono: '', icona: 'i-quadrato', vivo: false },
+  ucciso: { get etichetta() { return tr('processi.process.stateKilled'); }, tono: 'warning', icona: 'i-quadrato', vivo: false },
   /* A6-bis (08/10/2026): sfondato prima di un riavvio del server — il processo forse vive ancora, ma nessuno lo segue più:
      non si conta fra i vivi e non si inventa un esito (Hermes, `process_registry_notifications.py`: «Lost»). */
-  perso: { get etichetta() { return tr('processi.process.stateLost'); }, tono: '', icona: 'i-sfondo', vivo: false },
+  perso: { get etichetta() { return tr('processi.process.stateLost'); }, tono: '', icona: 'i-circle-dashed', vivo: false },
   /* Owner 17/10/2026 («Adottarli come Hermes»): un comando ripreso dopo un riavvio è uscito da solo. Il suo codice non l'ha raccolto
      nessuno (Hermes: «recovery has no waitable handle»): finito, ma senza dire se è riuscito. */
-  'finito-ignoto': { get etichetta() { return tr('processi.process.stateEndedUnknown'); }, tono: '', icona: 'i-sfondo', vivo: false },
+  'finito-ignoto': { get etichetta() { return tr('processi.process.stateEndedUnknown'); }, tono: '', icona: 'i-question', vivo: false },
   /*
    * ⛔ 17/09, OSS-2 — «NON ESEGUITO» non è «NON RIUSCITO», e la differenza si vede in una foto.
    *   Una `prova` su un progetto senza suite torna `exit 127` con «nessuna suite trovata», e il
@@ -351,14 +351,14 @@ export const STATI_PROCESSO = Object.freeze({
    *   ⛔ 127 non è una scelta nostra: nella shell POSIX è «command not found», cioè esattamente
    *   «non è partito». Tono neutro, non `danger`: non c'è niente di rotto da segnalare.
    */
-  'non-eseguito': { get etichetta() { return tr('processi.process.stateNotRun'); }, tono: 'warning', icona: 'i-stop', vivo: false },
+  'non-eseguito': { get etichetta() { return tr('processi.process.stateNotRun'); }, tono: 'warning', icona: 'i-ban', vivo: false },
   /*
    * ⛔ A6 (07/10/2026) — «INTERROTTO»: un comando in primo piano il cui giro è finito, fermato o morto senza che arrivasse
    *   il suo risultato. Non è «annullato» (nessuno l'ha annullato) né «fallito» (non c'è un'uscita): non si sa come è
    *   finito, e si dice così. Forma di Hermes, `tools/process_registry.py:538` (`completion_reason … lost`) e `:1017`
    *   («without inventing an exit»): niente codice d'uscita, niente durata. Tono neutro come «non eseguito».
    */
-  interrotto: { get etichetta() { return tr('processi.process.stateInterrupted'); }, tono: '', icona: 'i-stop', vivo: false },
+  interrotto: { get etichetta() { return tr('processi.process.stateInterrupted'); }, tono: '', icona: 'i-circle-dashed', vivo: false },
 });
 
 /**
@@ -674,17 +674,24 @@ const STATI_RARI_FILTRO = new Set(['in-coda', 'in-avvio', 'in-consenso', 'in-sfo
  *   shadcn «scroll-fade»). ⇒ L'ascoltatore sta SOLO su questa riga (26 px), e lascia passare ai due capi.
  *   ⛔ Con un DOM senza finestra (le prove unitarie) non fa niente: la riga resta quella di prima.
  */
-function strisciaScorrevole(riga) {
+/* Tester 04/11/2026 (S4 a 125%): la stessa striscia serve alla «Nuova sessione» (`legacy/app.js`): la fila delle cartelle (asse x) e la
+   colonna «Come lavoriamo» con le carte di Accesso sotto la piega (asse y, come `scrollEdges` di Hermes, `fade-scroll.tsx:30-34`, clone
+   del 01/11). Una seconda chiamata sulla stessa riga rimisura e basta: le carte cambiano a ogni cartella aperta. */
+export function strisciaScorrevole(riga, { asse = 'x' } = {}) {
+  if (typeof riga?.__talosRimisura === 'function') { riga.__talosRimisura(); return riga; }
   const vista = riga?.ownerDocument?.defaultView;
   if (!vista || typeof vista.ResizeObserver !== 'function' || typeof riga.addEventListener !== 'function' || !riga.dataset) return riga;
+  const y = asse === 'y';
   const misura = () => {
-    const prima = riga.scrollLeft > 1;
-    const dopo = riga.scrollLeft + riga.clientWidth < riga.scrollWidth - 1;
+    const [da, vede, tutto] = y ? [riga.scrollTop, riga.clientHeight, riga.scrollHeight] : [riga.scrollLeft, riga.clientWidth, riga.scrollWidth];
+    const prima = da > 1;
+    const dopo = da + vede < tutto - 1;
     const taglio = prima && dopo ? 'entrambi' : prima ? 'prima' : dopo ? 'dopo' : 'nessuno';
     if (riga.dataset.taglio !== taglio) riga.dataset.taglio = taglio;
   };
+  riga.__talosRimisura = misura;
   riga.addEventListener('scroll', misura, { passive: true });
-  riga.addEventListener('wheel', (evento) => {
+  if (!y) riga.addEventListener('wheel', (evento) => {
     if (evento.ctrlKey || Math.abs(evento.deltaY) <= Math.abs(evento.deltaX)) return;
     const massimo = riga.scrollWidth - riga.clientWidth;
     if (massimo <= 1) return;
@@ -722,7 +729,7 @@ function vociDellaRiga(riga, scheda) {
   const a = scheda.azioni || {};
   const voci = [];
   if (FERMABILE.has(stato) && typeof a.sfonda === 'function') {
-    voci.push({ chiave: 'sfonda', etichetta: tr('processi.process.background'), icona: 'i-sfondo', aziona: () => richiestaDellaRiga(riga, scheda, 'sfonda') });
+    voci.push({ chiave: 'sfonda', etichetta: tr('processi.process.background'), icona: 'i-layers', aziona: () => richiestaDellaRiga(riga, scheda, 'sfonda') });
   }
   if (FERMABILE_O_SFONDO.has(stato) && typeof a.ferma === 'function') {
     voci.push({ chiave: 'ferma', etichetta: tr('processi.process.stop'), icona: 'i-stop', pericolo: true, separaPrima: true, aziona: () => richiestaDellaRiga(riga, scheda, 'ferma') });
@@ -2264,6 +2271,8 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
     if (e.type === 'ApprovalRequested' && avviati.has(e.toolCallId)) {
       const p = avviati.get(e.toolCallId);
       if (typeof e.requestId === 'string') richiesteDiConsenso.set(e.requestId, e.toolCallId);
+      /* D20 (collaudo del treno): `prova` parte senza argomenti e la sua riga diceva «–» per tutto il comando; il comando lo porta la carta */
+      if (!p.comando && typeof e.comando === 'string' && e.comando.trim()) p.comando = e.comando.trim();
       if (p.stato === 'in-avvio' || p.stato === 'in-corso') p.stato = 'in-consenso';
       continue;
     }
@@ -2324,7 +2333,7 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
         id: e.toolCallId, comando: '', descrizione: '', stato: 'in-avvio', chi: e.chi === 'tu' ? 'tu' : 'agente', giro: e.giro ?? null,
         avviatoA: Number.isFinite(e.avviatoA) ? e.avviatoA : (e.ricevutoA ?? null),
         ricevutoA: Number.isFinite(e.ricevutoA) ? e.ricevutoA : null,
-        famiglia: FAMIGLIA_DELL_ATTREZZO[e.toolCallName] || null,
+        famiglia: Object.hasOwn(FAMIGLIA_DELL_ATTREZZO, e.toolCallName ?? '') ? FAMIGLIA_DELL_ATTREZZO[e.toolCallName] : null,
         durataMs: null, uscita: null, cwd: null,
       };
       avviati.set(e.toolCallId, p); argomenti.set(e.toolCallId, ''); lista.push(p);
@@ -2340,7 +2349,7 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
       p.uscita = Number.isFinite(e.uscita) ? e.uscita : (e.errore ? 1 : 0);
       /* ⛔ 17/09 sera — il rifiuto vince sul codice di uscita: un comando negato all'approvazione
          non è mai partito, e «REFUSED» non porta nessun `exit N` da cui dedurlo. */
-      p.stato = e.rifiutato === true || e.senzaSuite === true || e.doppione === true ? 'non-eseguito' : statoDaUscita(p.uscita, Boolean(e.errore)); // 12/10/2026: una copia identica saltata non è partita
+      p.stato = e.rifiutato === true || e.senzaSuite === true || e.doppione === true || e.annullata === true ? 'non-eseguito' : statoDaUscita(p.uscita, Boolean(e.errore)); // 12/10/2026: una copia identica saltata non è partita
       /* ⛔ BUG-14 (05/10/2026) — lo sfondo vince sull'«uscita» che non c'è (non è uscito), ma perde contro il rifiuto:
          un comando negato dal consenso non è mai partito, quindi non può essere in sfondo. Il file e chi lo ha sfondato
          passano solo se l'evento li porta davvero (niente stringhe vuote a schermo). */

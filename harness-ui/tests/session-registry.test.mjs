@@ -24,7 +24,7 @@ import { CustomTaskError } from '../src/custom-task.mjs';
 // ⛔ F15 (17/09/2026) — il kernel VERO: da quando il canale di approvazione si costruisce sempre,
 //   le garanzie che prima si leggevano dalla sua ASSENZA («in sola lettura non scrive», «sempre e
 //   nega li decide il cancello da solo») vanno provate dove vivono davvero, cioè nel cancello.
-import { talosLavora as talosLavoraReale } from '../src/kernel/talosHarness.mjs';
+import { talosLavora as talosLavoraReale, CARTA_SEMPRE } from '../src/kernel/talosHarness.mjs';
 // BC-09 (13/09/2026): la copia locale dei ritentativi e diventata l'aiuto condiviso, uno solo per tutta la suite.
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
@@ -162,6 +162,7 @@ const riassuntoreFinto = (testo = 'sintesi', { chiamate = null, attesa = null } 
 };
 const vistaDelGiro = (input) => applicaRecordCompattazione(input.messaggiIniziali, input.recordCompattazioneIniziale ?? null);
 const contiene = (messaggi, testo) => JSON.stringify(messaggi).includes(testo);
+import { cartelleGlobaliDiProva } from './aiuto/cartelle-globali-di-prova.mjs'; // decision 381: never the stores beside the code
 import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prova.mjs'; // DESK-TEMP-1, 23/09: la cartella nasce con la sua rimozione
 
 // Ne' avviaSessione ne' talosLavora girano MAI qui, veri o finti a metà: si
@@ -177,7 +178,9 @@ import { cartellaDiProva, cartellaDiProvaAttesa } from './aiuto/cartelle-di-prov
 // toccarli uno per uno: chi ha bisogno del watcher VERO lo inietta
 // esplicitamente (nessun test qui ne ha bisogno, per ora).
 function createSessionRegistry(opzioni) {
-  return createSessionRegistryReale({ guardaWorkspaceFn: () => () => {}, ...opzioni });
+  // decision 381 (judge 08/11): the four global stores default to a temp folder of this file, never `../.memory-store/` beside
+  // the code (in a running TALOS that is the person's real memory); a test that names its own folder still wins.
+  return createSessionRegistryReale({ guardaWorkspaceFn: () => () => {}, ...cartelleGlobaliDiProva(), ...opzioni });
 }
 
 test('CTX-HEADER-PREWRITE-FAIL-CLOSED — nessun modello, RAM o replay dopo header rifiutato', async () => {
@@ -1286,7 +1289,7 @@ test('⭐⭐ un resume eredita il modelloPlanner della voce originale, mai perso
   primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
   await new Promise((r) => setImmediate(r));
 
-  const ripreso = registro.resume(sessionId);
+  const ripreso = registro.resume(sessionId, 'continua');
   assert.equal(ripreso.sessionId, sessionId, 'resume deve riuscire DAVVERO, non SESSION_NOT_READY — altrimenti l\'asserzione sotto morderebbe dati del primo giro, non del resume');
   assert.equal(secondoGiro.chiamate, 1, 'avviaSessioneFn deve essere richiamata una SECONDA volta');
   assert.equal(secondoGiro.ultimoInput.modelloPlanner, 'planner-costoso');
@@ -1583,7 +1586,7 @@ test('⭐⭐⭐ resume() eredita il permesso della sessione origine', async () =
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
   await new Promise((r) => setImmediate(r));
 
-  const risultatoResume = registro.resume(sessionId);
+  const risultatoResume = registro.resume(sessionId, 'continua');
 
   // ⛔ mai assumere: se resume() avesse fallito in silenzio (senza
   // richiamare avviaSessioneFn), finta.ultimoInput sarebbe rimasto
@@ -1927,14 +1930,14 @@ test('⛔ REG-FUORI-03B: una domanda di approvazione mai risolta NON tiene vivo 
     import(process.env.PERCORSO_REGISTRO).then(({ createSessionRegistry }) => {
       let ingresso;
       const avviaSessioneFn = async (input) => { ingresso = input; input.onEvento({ type: 'RunStarted', threadId: 't1', runId: 'r1' }); return new Promise(() => {}); };
-      const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: () => ({ cartella: '/tmp/x', comandoProva: 'npm test', task: { id: 'task-vero', consegna: 'c' } }), modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+      const registro = createSessionRegistry({ ...JSON.parse(process.env.CARTELLE_GLOBALI), avviaSessioneFn, preparaEsecuzioneFn: () => ({ cartella: '/tmp/x', comandoProva: 'npm test', task: { id: 'task-vero', consegna: 'c' } }), modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
       registro.avvia('task-vero');
       setTimeout(() => {
         ingresso.chiediApprovazioneFn({ tipo: 'shell', comando: 'cat .env' }); // mai risolta: resta pendente PER PROGETTO
         console.log('PRONTO-CON-DOMANDA-PENDENTE');
       }, 50);
     }).catch((errore) => { console.error('IMPORT-FALLITO', errore && errore.message || errore); process.exit(2); }); // ⛔ N2: l'import fallito non deve travestirsi da «non esce da solo»
-  `], { env: { ...process.env, PERCORSO_REGISTRO: pathToFileURL(percorso).href }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  `], { env: { ...process.env, PERCORSO_REGISTRO: pathToFileURL(percorso).href, CARTELLE_GLOBALI: JSON.stringify(cartelleGlobaliDiProva()) /* decision 381 */ }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let fuori = '';
   let errori = '';
   figlio.stdout.on('data', (d) => { fuori += d; });
@@ -1969,7 +1972,7 @@ test('⛔ REG-FUORI-03B R1+R2: a attese brevi (100/100ms) il ciclo di rigioco no
     import(process.env.PERCORSO_REGISTRO).then(({ createSessionRegistry }) => {
       let ingresso;
       const avviaSessioneFn = async (input) => { ingresso = input; input.onEvento({ type: 'RunStarted', threadId: 't1', runId: 'r1' }); return new Promise(() => {}); };
-      const registro = createSessionRegistry({ avviaSessioneFn, preparaEsecuzioneFn: () => ({ cartella: '/tmp/x', comandoProva: 'npm test', task: { id: 'task-vero', consegna: 'c' } }), modello: 'm', chiave: 'k', cartellaEsisteFn: () => true, attesaSilenzioPrimaMs: 100, attesaSilenzioRipetiMs: 100 });
+      const registro = createSessionRegistry({ ...JSON.parse(process.env.CARTELLE_GLOBALI), avviaSessioneFn, preparaEsecuzioneFn: () => ({ cartella: '/tmp/x', comandoProva: 'npm test', task: { id: 'task-vero', consegna: 'c' } }), modello: 'm', chiave: 'k', cartellaEsisteFn: () => true, attesaSilenzioPrimaMs: 100, attesaSilenzioRipetiMs: 100 });
       registro.avvia('task-vero');
       let risolta = false; // ⛔ R2: bandierina di pendenza
       setTimeout(() => {
@@ -1983,7 +1986,7 @@ test('⛔ REG-FUORI-03B R1+R2: a attese brevi (100/100ms) il ciclo di rigioco no
         console.log('PRONTO-CON-DOMANDA-PENDENTE');
       }, 300);
     }).catch((errore) => { console.error('IMPORT-FALLITO', errore && errore.message || errore); process.exit(2); });
-  `], { env: { ...process.env, PERCORSO_REGISTRO: pathToFileURL(percorso).href }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+  `], { env: { ...process.env, PERCORSO_REGISTRO: pathToFileURL(percorso).href, CARTELLE_GLOBALI: JSON.stringify(cartelleGlobaliDiProva()) /* decision 381 */ }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   let fuori = '';
   let errori = '';
   figlio.stdout.on('data', (d) => { fuori += d; });
@@ -2012,13 +2015,13 @@ test('⛔ REG-FUORI-03B R1+R2: a attese brevi (100/100ms) il ciclo di rigioco no
  * questi test ermetici (nessun disco vero), stesso principio del blocco
  * hook qui sopra.
  */
-test('⭐⭐⭐ W1-13 — il cancello chiede approvazione ANCHE in Full access, dove chiediApprovazioneFn ordinario NON esiste', async () => {
+test('⭐⭐⭐ W1-13 — il cancello chiede approvazione ANCHE dove il kernel lascerebbe passare (fuori dall\'Accesso pieno, decisione 155)', async () => {
   const finta = sessioneControllabile();
   const registro = createSessionRegistry({
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
     caricaHooksFn: async () => ({ hooks: [] }),
   });
-  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' }); // 155: in Accesso pieno il cancello non chiede più (prova 155 qui sotto)
 
   /*
    * ⛔ F15 (17/09/2026) — questa riga diceva «Full access non costruisce mai il canale
@@ -2026,10 +2029,11 @@ test('⭐⭐⭐ W1-13 — il cancello chiede approvazione ANCHE in Full access, 
    * cancello che deve chiedere nega), e NON era comunque ciò che il test prova: W1-13 prova che
    * il cancello dei file di controllo passa dal PROPRIO canale, quello dentro `hookFn`, e chiede
    * anche dove `verificaPermessoScrittura` lascerebbe passare in silenzio. Quella prova è le
-   * venti righe qui sotto, ed è intatta — il livello di questa sessione resta `accesso-pieno`,
-   * cioè il caso in cui il kernel NON chiederebbe.
+   * venti righe qui sotto, ed è intatta — dalla decisione 155 (04/11/2026) la sessione è in
+   * «Workspace write», dove il kernel per una scrittura nel progetto NON chiederebbe: in Accesso
+   * pieno il cancello non chiede più (prova 155 più sotto).
    */
-  assert.equal(finta.ultimoInput.livelloAccesso, 'accesso-pieno', 'è il caso in cui il cancello ordinario del kernel non chiederebbe: il buco che questa riga chiude');
+  assert.equal(finta.ultimoInput.livelloAccesso, 'scrittura-progetto', 'una scrittura nel progetto: il cancello ordinario del kernel non chiederebbe (decisione 155: in Accesso pieno nemmeno questo)');
 
   const ricevuti = [];
   registro.iscriviti(sessionId, (e) => ricevuti.push(e));
@@ -2039,7 +2043,8 @@ test('⭐⭐⭐ W1-13 — il cancello chiede approvazione ANCHE in Full access, 
 
   const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
   assert.ok(richiesta, 'un file di controllo chiede SEMPRE, anche senza un canale ordinario');
-  assert.deepEqual(richiesta.azione, { tipo: 'scrivi', percorso: 'CLAUDE.md', fileDiControllo: true });
+  assert.deepEqual(richiesta.azione, { tipo: 'scrivi', percorso: 'CLAUDE.md', fileDiControllo: true, [CARTA_SEMPRE]: true }); // giudice 07/11 23:12: carta della persona, un sì automatico non la apre
+  assert.equal(JSON.stringify(richiesta.azione), JSON.stringify({ tipo: 'scrivi', percorso: 'CLAUDE.md', fileDiControllo: true }), 'the symbol never reaches the wire');
 
   registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
   assert.deepEqual(await esitoPromessa, { consentito: true });
@@ -2052,7 +2057,7 @@ test('⭐⭐ ...e un DINIEGO torna {consentito:false} con un motivo che nomina i
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
     caricaHooksFn: async () => ({ hooks: [] }),
   });
-  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' }); // 155: in Accesso pieno il cancello non chiede più (prova 155 qui sotto)
 
   const ricevuti = [];
   registro.iscriviti(sessionId, (e) => ricevuti.push(e));
@@ -2085,7 +2090,7 @@ test("⛔⛔⛔ PO-12 — file_edit NON e' una porta di servizio: anche una MODI
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
     caricaHooksFn: async () => ({ hooks: [] }),
   });
-  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' }); // 155: in Accesso pieno il cancello non chiede più (prova 155 qui sotto)
   const ricevuti = [];
   registro.iscriviti(sessionId, (e) => ricevuti.push(e));
 
@@ -2095,7 +2100,7 @@ test("⛔⛔⛔ PO-12 — file_edit NON e' una porta di servizio: anche una MODI
   const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
   assert.ok(richiesta, "⛔ una MODIFICA di CLAUDE.md deve chiedere quanto una riscrittura: mezza regola riscritta e' una regola riscritta");
   // ⛔ la card nomina l'attrezzo VERO: chiedere «scrivi» per una modifica e' chiedere il consenso per un'altra cosa
-  assert.deepEqual(richiesta.azione, { tipo: 'file_edit', percorso: 'CLAUDE.md', fileDiControllo: true });
+  assert.deepEqual(richiesta.azione, { tipo: 'file_edit', percorso: 'CLAUDE.md', fileDiControllo: true, [CARTA_SEMPRE]: true });
 
   registro.rispondiApprovazione(sessionId, richiesta.requestId, false);
   const esito = await esitoPromessa;
@@ -2125,7 +2130,7 @@ test('⭐⭐⭐ W1-13 — il cancello chiede ANCHE con permessiPerAttrezzo:{scri
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
     caricaHooksFn: async () => ({ hooks: [] }),
   });
-  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access', permessiPerAttrezzoScelto: { scrivi: 'sempre' } });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write', permessiPerAttrezzoScelto: { scrivi: 'sempre' } }); // 155: fuori dall'Accesso pieno
 
   const ricevuti = [];
   registro.iscriviti(sessionId, (e) => ricevuti.push(e));
@@ -2138,6 +2143,71 @@ test('⭐⭐⭐ W1-13 — il cancello chiede ANCHE con permessiPerAttrezzo:{scri
   registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
   assert.deepEqual(await esitoPromessa, { consentito: true });
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⛔ Decisione 155 dell'owner (04/11/2026): in Accesso pieno, come Claude Code in `bypassPermissions` (code.claude.com/docs/en/permission-modes,
+ *   letta il 04/11/2026: i percorsi protetti sono «Allowed»), il cancello dei file di controllo non chiede più: CLAUDE.md, AGENTS.md,
+ *   `.claude/`, `.talos/`, `.git`, con `scrivi` e con `file_edit`, con o senza un «sempre», con o senza un ascoltatore. Fuori dall'Accesso
+ *   pieno le prove W1-13 e PO-12 qui sopra restano come sono.
+ */
+// «Risolve subito» si misura con un tetto (nodejs.org/api/test.html, opzione `timeout`, letta 04/11/2026): un cancello che aspetta
+// una carta non risponde mai, e senza tetto la prova resterebbe appesa invece di diventare rossa.
+test('155 — in Accesso pieno il cancello dei file di controllo non chiede: hookFn risolve subito, zero ApprovalRequested, anche senza ascoltatori', { timeout: 10_000 }, async () => {
+  for (const [iscritto, permessiPerAttrezzoScelto] of [[true, undefined], [true, { scrivi: 'sempre' }], [false, undefined]]) {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+      caricaHooksFn: async () => ({ hooks: [] }),
+    });
+    const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access', ...(permessiPerAttrezzoScelto ? { permessiPerAttrezzoScelto } : {}) });
+    assert.equal(finta.ultimoInput.livelloAccesso, 'accesso-pieno');
+    const ricevuti = [];
+    if (iscritto) registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+    for (const [azione, percorso] of [['scrivi', 'CLAUDE.md'], ['scrivi', '.claude/settings.json'], ['file_edit', 'CLAUDE.md'], ['scrivi', 'AGENTS.md'],
+      ['scrivi', '.talos/permessi.json'], ['scrivi', '.git/hooks/pre-commit'], ['file_edit', '.harness-ui-hooks.json']]) {
+      assert.deepEqual(await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione, argomenti: { percorso }, giro: 0 }), { consentito: true }, `${azione} ${percorso}`);
+    }
+    assert.equal(ricevuti.find((e) => e.type === 'ApprovalRequested'), undefined, 'nessuna carta');
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  }
+});
+
+/*
+ * 155 — la CATENA intera conta (mutante M26 sopravvissuto al primo giro, 04/11 sera): il cancello dei file di controllo resta
+ * spento solo se la figlia E tutti i suoi antenati sono in Accesso pieno. Una figlia abbassata sotto una madre in Accesso pieno
+ * chiede; una figlia in Accesso pieno sotto una madre abbassata chiede anch'essa. Letto vivo: il cambio vale alla chiamata dopo.
+ */
+test('155 — la catena intera: una figlia abbassata, o una madre abbassata, fa tornare la carta dei file di controllo alla figlia', { timeout: 10_000 }, async () => {
+  for (const chiAbbasso of ['figlia', 'madre']) {
+    const finta = sessioniControllabili();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+      cartellaEsisteFn: () => true, caricaHooksFn: async () => ({ hooks: [] }),
+    });
+    const { sessionId: madreId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+    const esitoAvvio = await finta.run(0).input.onDelega('scrivi un modulo di test', '/tmp/figlia-155');
+    assert.equal(esitoAvvio.esito, 'avviato', chiAbbasso);
+    const figliaId = esitoAvvio.childId;
+    const hookDellaFiglia = finta.run(1).input.hookFn;
+    const ricevuti = [];
+    registro.iscriviti(figliaId, (e) => ricevuti.push(e));
+
+    // Prima: tutta la catena in Accesso pieno ⇒ nessuna carta.
+    assert.deepEqual(await hookDellaFiglia({ tipo: 'pre_tool_call', azione: 'scrivi', argomenti: { percorso: 'CLAUDE.md' }, giro: 0 }), { consentito: true }, `${chiAbbasso}: catena intera in Accesso pieno`);
+    assert.equal(ricevuti.find((e) => e.type === 'ApprovalRequested'), undefined, `${chiAbbasso}: nessuna carta prima`);
+
+    await registro.aggiornaImpostazioni(chiAbbasso === 'figlia' ? figliaId : madreId, { permessi: 'On request' });
+    const esitoPromessa = hookDellaFiglia({ tipo: 'pre_tool_call', azione: 'scrivi', argomenti: { percorso: 'CLAUDE.md' }, giro: 1 });
+    await Promise.resolve();
+    const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+    assert.ok(richiesta, `${chiAbbasso} abbassata: la figlia chiede di nuovo per un file di controllo`);
+    assert.equal(richiesta.azione.fileDiControllo, true);
+    registro.rispondiApprovazione(figliaId, richiesta.requestId, false);
+    assert.equal((await esitoPromessa).consentito, false, `${chiAbbasso}: col no il file di controllo non si scrive`);
+    finta.concludi(1, { type: 'RunFinished', threadId: 't2', runId: 'r2' });
+    finta.concludi(0, { type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  }
 });
 
 test('⛔⛔⛔ AL CONTRARIO — una scrittura su un file NORMALE del progetto in Full access non chiede nulla: hookFn risolve subito, zero ApprovalRequested', async () => {
@@ -2714,12 +2784,12 @@ test('⭐⭐⭐ resume() su una sessione CONCLUSA: STESSO sessionId, un giro in 
   primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: storiaDelPrimoGiro } });
   await new Promise((r) => setImmediate(r));
 
-  const ripreso = registro.resume(sessionId);
+  const ripreso = registro.resume(sessionId, 'continua');
   assert.equal(ripreso.sessionId, sessionId, 'resume torna LO STESSO id, non uno nuovo come forka()');
 
   const inputDelSecondoGiro = secondoGiro.ultimoInput;
   assert.equal(inputDelSecondoGiro.cartella, '/tmp/x');
-  assert.deepEqual(inputDelSecondoGiro.messaggiIniziali, storiaDelPrimoGiro);
+  assert.deepEqual(inputDelSecondoGiro.messaggiIniziali.slice(0, -1), storiaDelPrimoGiro); // decisione 198: una risposta finita si riprende con un messaggio
 
   // Un iscritto ORA (dopo resume, mentre il secondo giro è ancora sospeso)
   // deve vedere l'intera storia — primo giro E il RunStarted del secondo —
@@ -2757,7 +2827,7 @@ test('⭐⭐⭐ resume() preserva mobile:true della sessione, senza sovrascriver
   primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'c' }] } });
   await new Promise((r) => setImmediate(r));
 
-  registro.resume(sessionId);
+  registro.resume(sessionId, 'continua');
 
   assert.equal(secondoGiro.ultimoInput.mobile, true);
   secondoGiro.concludi({ type: 'RunFinished', threadId: 't2', runId: 'r2' });
@@ -2777,7 +2847,7 @@ test('⭐ ferma() dopo un resume aborta il controller del giro NUOVO, non quello
   const { sessionId } = registro.avvia('task-vero');
   primoGiro.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' }, { esito: { messaggiFinali: [{ role: 'user', content: 'x' }] } });
   await new Promise((r) => setImmediate(r));
-  registro.resume(sessionId);
+  registro.resume(sessionId, 'continua');
 
   assert.equal(secondoGiro.segnaleStop.aborted, false);
   registro.ferma(sessionId);
@@ -2851,7 +2921,7 @@ test('⭐⭐⭐ compatta(): chiama il riassuntore col modello e la chiave della 
   assert.deepEqual(senzaStime(risultato), { ok: true, compattato: true, annullabile: true });
 
   // ⭐ La prova che conta: il PROSSIMO giro (qui un resume, sulla STESSA voce) vede il riassunto, non la storia intera.
-  registro.resume(sessionId);
+  registro.resume(sessionId, 'continua');
   assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali.slice(0, storiaFinale.length), storiaFinale, 'la storia grezza resta com\'era');
   assert.equal(secondoGiro.ultimoInput.recordCompattazioneIniziale?.at, risultato.at, 'il giro parte col record del /compact');
   const vista = vistaDelGiro(secondoGiro.ultimoInput);
@@ -2890,7 +2960,7 @@ test('⛔ verso contrario: se il riassunto non viene, un resume successivo eredi
   const risultato = await registro.compatta(sessionId);
   assert.deepEqual(risultato, { ok: true, compattato: false, fase: 'riassunto', motivo: 'vuoto' }); // `fase`: lane CLI, 03/10/2026
 
-  registro.resume(sessionId);
+  registro.resume(sessionId, 'continua');
   assert.deepEqual(secondoGiro.ultimoInput.messaggiIniziali.slice(0, storiaFinale.length), storiaFinale, 'un riassunto che non viene non tocca la storia');
   assert.equal(secondoGiro.ultimoInput.recordCompattazioneIniziale, undefined, 'e non lascia un record');
 
@@ -4447,7 +4517,8 @@ test('⛔ svuotaCoda: rimosso:false su una coda già vuota, mai un errore — e 
  */
 test('⭐⭐⭐ avvia() passa SEMPRE cartellaTrustMcp a avviaSessioneFn — un default reale, non undefined', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  // decision 381: the real constructor, not the file wrapper (which passes temp folders): this test is about the PRODUCT default
+  const registro = createSessionRegistryReale({ guardaWorkspaceFn: () => () => {}, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero');
   assert.equal(typeof finta.ultimoInput.cartellaTrustMcp, 'string');
   assert.ok(finta.ultimoInput.cartellaTrustMcp.length > 0);
@@ -4904,7 +4975,8 @@ test('⛔ AL CONTRARIO — elencaMemorie su un id inesistente: NOT_FOUND', async
  */
 test('⭐⭐⭐ avvia() passa SEMPRE cartellaTrustPlugin a avviaSessioneFn — un default reale, non undefined', () => {
   const finta = sessioneControllabile();
-  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
+  // decision 381: the real constructor, not the file wrapper (which passes temp folders): this test is about the PRODUCT default
+  const registro = createSessionRegistryReale({ guardaWorkspaceFn: () => () => {}, avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k', cartellaEsisteFn: () => true });
   registro.avvia('task-vero');
   assert.equal(typeof finta.ultimoInput.cartellaTrustPlugin, 'string');
   assert.ok(finta.ultimoInput.cartellaTrustPlugin.length > 0);
@@ -5636,7 +5708,10 @@ test('⭐⭐ J C3-RESTORE-PAUSA — after a restart a paused child is still «in
       registraRigaSync({ cartellaStore, sessionId: id, record: { type: 'RunError', ...errore, _sequenza: 2 } });
     }
 
-    const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore });
+    // decision 381 (judge 08/11): Resume really starts the child, so the starter is a fake that never ends (as `primo` in
+    // LOCAL-RESUME-JSON-02 above); with the default one this test ran the REAL agent-service, which read the project config
+    // under '/tmp/x/.talos' on the disk of the machine (measured with a file tracer).
+    const registro = createSessionRegistry({ modello: 'm', chiave: 'k', cartellaStore, avviaSessioneFn: () => new Promise(() => {}) });
     await registro.ripristina();
     const figli = registro.elencaFigli('padre-p').figli;
     const pausa = figli.find((f) => f.sessionId === 'figlio-pausa');
@@ -6158,7 +6233,10 @@ test('SESSION-RECOVERY-CHECKPOINT-BEFORE-START-22 — un checkpoint più nuovo d
 
     assert.equal(registro.elenca()[0].conclusa, false);
     assert.equal(registro.elenca()[0].interrotta, true);
-    assert.equal(registro.resume(sessionId).code, 'SESSION_NOT_READY', 'senza nuovo input il checkpoint non può ripartire da solo');
+    /* decisione 198 (forma con l'OK di Performance, CLI e Mobile): da sola non riparte; il ▶ della persona la riprenderebbe con la nota
+       dell'interruzione (R198-6), quindi la riga lo dice. Qui resta la ripresa con un messaggio esplicito. */
+    assert.ok(!giroRetry.ultimoInput, 'senza nuovo input il checkpoint non riparte da solo');
+    assert.equal(registro.elenca()[0].daRiprendere, 'interrotta');
     registro.resume(sessionId, 'riprova esplicita');
     assert.deepEqual(giroRetry.ultimoInput.messaggiIniziali, [...checkpointSecondoGiro, { role: 'user', content: 'riprova esplicita' }]);
     giroRetry.concludi({ type: 'RunFinished', threadId: 't3', runId: 'r3' });
@@ -7147,7 +7225,7 @@ test('⭐⭐⭐ W1-13 (review) — nessun ascoltatore iscritto: il cancello RIFI
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
     caricaHooksFn: async () => ({ hooks: [] }),
   });
-  registro.avvia('task-vero', { permessiScelto: 'Full access' });
+  registro.avvia('task-vero', { permessiScelto: 'Workspace write' }); // 155: fuori dall'Accesso pieno
   // ⛔ NESSUN registro.iscriviti(): nessun client può rispondere.
 
   const appeso = Symbol('appeso');
@@ -7169,7 +7247,7 @@ test('⭐⭐ ...e AL CONTRARIO, con un ascoltatore vivo la richiesta parte davve
     avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
     caricaHooksFn: async () => ({ hooks: [] }),
   });
-  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Full access' });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' }); // 155: in Accesso pieno il cancello non chiede più (prova 155 qui sotto)
   const ricevuti = [];
   registro.iscriviti(sessionId, (e) => ricevuti.push(e));
 
@@ -7485,6 +7563,22 @@ test('⛔⛔ AL CONTRARIO — se l\'ESITO cambia non è un giro a vuoto: qualcos
     ...chiamata('p3', 'exit 0\ntutto verde'),
   ]);
   assert.deepEqual(guardiaDiStallo(eventi).segnalazioni.filter((s) => s.tipo === 'giro-a-vuoto'), []);
+});
+
+test('⛔⛔ AL CONTRARIO — una chiamata persa nella caduta e ridata dal ritento non è un giro a vuoto (revisione del blocco 17)', () => {
+  const chiamata = (id, esito) => [
+    { type: 'ToolCallStart', toolCallId: id, toolCallName: 'leggi' },
+    { type: 'ToolCallArgs', toolCallId: id, delta: '{"percorso":"a.txt"}' },
+    { type: 'ToolCallResult', toolCallId: id, messageId: `m-${id}`, content: 'persa', isError: true, ...esito },
+  ];
+  const vuoti = (esito) => guardiaDiStallo(insequenza([
+    { type: 'RunStarted', threadId: 't', runId: 'r', input: { consegna: 'c' } },
+    ...['a', 'b', 'c', 'd'].flatMap((id) => chiamata(id, esito)),
+  ])).segnalazioni.filter((s) => s.tipo === 'giro-a-vuoto');
+  assert.deepEqual(vuoti({ outcome: 'cancelled' }), []);
+  assert.deepEqual(vuoti({ interrotta: true }), []);
+  assert.equal(vuoti({}).length, 1, 'la stessa fila, senza caduta, resta un giro a vuoto');
+  assert.equal(vuoti({ outcome: 'cancelled', duplicate: true }).length, 1, 'le copie scartate le ha ripetute il modello');
 });
 
 test('⛔⛔ AL CONTRARIO — due sole ripetizioni sotto la soglia N non sono un giro a vuoto', () => {
@@ -7861,6 +7955,8 @@ test('⭐⭐⭐ metricheDaEventi — il MOTIVO DI CHIUSURA è normalizzato, e il
   // C3 tappa 4 (review Y-4B-1 del bugfixer): la pausa di una delega non è un «errore», come per `motivoChiusuraDaEventi`
   assert.deepEqual(conFinale({ type: 'RunError', message: '⏸ paused on request: before round 2.', code: 'in-pausa' }), { motivo: 'in-pausa', codice: 'in-pausa', motivoAssente: null });
   assert.deepEqual(conFinale({ type: 'RunError', message: 'boom', code: 'internal-error' }), { motivo: 'errore', codice: 'internal-error', motivoAssente: null });
+  // S4 O2 (03/11/2026, approvata da Mobile, CLI e Desktop): una chat che il modello rifiuta non è un guasto; la barra a sinistra la dice «rifiutata»
+  assert.deepEqual(conFinale({ type: 'RunError', message: '⛔ the model stopped and refused to continue: the text that arrived is kept.', code: 'rifiuto-del-modello' }), { motivo: 'rifiuto', codice: 'rifiuto-del-modello', motivoAssente: null });
 });
 
 test('⛔⛔ AL CONTRARIO — un codice di errore MAI VISTO non inventa un motivo nuovo: cade in «errore» DICENDO quale era', () => {
@@ -11538,4 +11634,44 @@ test('CACHE-RICOMINCIATA-REGISTRY-01 — owner 28/10 (cache, punto 2): lo stato 
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(registro.resume(sessionId, 'ancora').sessionId, sessionId);
   assert.deepEqual(finta.ultimoInput.statoCachePrecedente, stato);
+});
+
+test('BP-REGISTRY-01 — decisione 201: la pagina del Browser arriva al giro che la riporta, l\'attrezzo legge l\'ULTIMA riportata, e senza ospite non c\'è', async () => {
+  const PAGINA = { url: 'https://example.org/a', titolo: 'A', via: 'cornice' };
+  const ALTRA = { url: 'https://example.org/b', titolo: null, via: 'vivo' };
+  const richieste = [];
+  const leggiPaginaBrowserFn = async (r) => { richieste.push(r); return { ok: true, testo: 'x' }; };
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({ avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta, cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k', leggiPaginaBrowserFn });
+  const fine = () => finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { detto: 'done', comeFinita: 'concluso', messaggiFinali: [{ role: 'user', content: 'x' }, { role: 'assistant', content: 'fatto' }] } });
+  const { sessionId } = registro.avviaLibero({ cartellaId: '0', consegna: 'guarda', paginaBrowser: PAGINA });
+  assert.deepEqual(finta.ultimoInput.paginaBrowser, PAGINA, 'il primo giro la porta');
+  assert.ok(finta.ultimoInput.strumentiEstesi.includes('browser_page'), 'offerto con l\'ospite');
+  await finta.ultimoInput.leggiPaginaBrowserFn({ segnale: null });
+  assert.deepEqual(richieste.at(-1), { segnale: null, sessionId, pagina: PAGINA }, 'la pagina la dice il registro, non il modello');
+  /* la coda: una voce della persona con la sua pagina la consegna al nucleo e diventa l'ultima */
+  assert.equal(registro.accodaMessaggio(sessionId, 'e quest\'altra', [], { paginaBrowser: ALTRA }).ok, true);
+  assert.deepEqual(finta.ultimoInput.codaMessaggiFn(), { testo: 'e quest\'altra', dallaPersona: true, paginaBrowser: ALTRA });
+  await finta.ultimoInput.leggiPaginaBrowserFn({});
+  assert.deepEqual(richieste.at(-1).pagina, ALTRA);
+  assert.equal(registro.accodaMessaggio(sessionId, 'dal telefono').ok, true);
+  assert.deepEqual(finta.ultimoInput.codaMessaggiFn(), { testo: 'dal telefono', dallaPersona: true }, 'senza campo: nessuna pagina nella voce');
+  fine(); await new Promise(resolve => setImmediate(resolve));
+  /* ripresa dal PC con la pagina chiusa; poi dal telefono (nessun campo): il giro non la porta, l'attrezzo legge l'ultima */
+  assert.equal(registro.resume(sessionId, 'chiusa', [], { paginaBrowser: null }).sessionId, sessionId);
+  assert.equal(finta.ultimoInput.paginaBrowser, null);
+  fine(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(registro.resume(sessionId, 'riaperta', [], { paginaBrowser: PAGINA }).sessionId, sessionId);
+  fine(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(registro.resume(sessionId, 'dal telefono').sessionId, sessionId);
+  assert.equal('paginaBrowser' in finta.ultimoInput, false, 'il giro dal telefono non dice nessuna pagina');
+  await finta.ultimoInput.leggiPaginaBrowserFn({});
+  assert.deepEqual(richieste.at(-1).pagina, PAGINA, 'ma l\'attrezzo legge l\'ultima che il PC ha riportato');
+  fine(); await new Promise(resolve => setImmediate(resolve));
+  /* senza ospite (il telefono): niente attrezzo e niente funzione */
+  const finta2 = sessioneControllabile();
+  const senza = createSessionRegistry({ avviaSessioneFn: finta2.avviaSessioneFn, preparaEsecuzioneLiberaFn: preparaEsecuzioneLiberaFinta, cartelleProgetto: [{ id: '0', percorso: '/tmp/progetto', nome: 'progetto' }], modello: 'm', chiave: 'k' });
+  senza.avviaLibero({ cartellaId: '0', consegna: 'guarda', paginaBrowser: PAGINA });
+  assert.equal(finta2.ultimoInput.strumentiEstesi.includes('browser_page'), false);
+  assert.equal(finta2.ultimoInput.leggiPaginaBrowserFn, null);
 });

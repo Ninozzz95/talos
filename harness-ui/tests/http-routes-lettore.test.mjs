@@ -24,7 +24,7 @@ async function avvia(t, { token = null } = {}) {
       return { ok: true, bytes: file.get(percorso), dimensione: file.get(percorso).length, nome: percorso.split('/').pop() };
     },
   };
-  const server = createServer(createHttpApp({ staticHandler: async () => null, sessionRegistry, listaTaskDisponibili: () => [], token }));
+  const server = createServer(createHttpApp({ senzaGettone: 'prove', staticHandler: async () => null, sessionRegistry, listaTaskDisponibili: () => [], token }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
   return `http://127.0.0.1:${server.address().port}`;

@@ -27,6 +27,7 @@
 //   così le due superfici non possono divergere per costruzione, non per disciplina di chi scrive.
 import { descriviContextCompactor } from './context-compactor.js';
 import { t as traduci, elenco, linguaCorrenteDiT } from './lingua.js';
+import { tokenDellaCategoria } from './contesto-scheda.js'; // decisione 174: «Strumenti» = la categoria spedita, come nella scheda Contesto
 
 /* Numeri nella lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letti a ogni uso. */
 const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
@@ -60,7 +61,7 @@ export function pesoAttrezzi(attrezzi = []) {
  * torna `percentuale: null` e la superficie dirà «finestra non dichiarata».
  * Un 8% calcolato su una finestra inventata è peggio di nessun 8%.
  */
-export function ripartizioneContesto({ attrezzi = [], finestra = null, istruzioniToken = null, memoriaToken = null } = {}) {
+export function ripartizioneContesto({ attrezzi = [], finestra = null, istruzioniToken = null, memoriaToken = null, conto = null } = {}) {
   /*
    * ⛔ 09/09 — `finestra` accetta ANCHE il descrittore di `finestraDiContesto()`, non solo un
    * numero: la pagina «Memoria e contesto» divideva il peso degli schemi per il `contextLength`
@@ -68,8 +69,16 @@ export function ripartizioneContesto({ attrezzi = [], finestra = null, istruzion
    * dichiarato era in realtà il 45%. Stessa regola della colonna destra, stesso lettore.
    */
   const descrittore = finestra && typeof finestra === 'object' ? finestra : null;
-  const finestraToken = descrittore ? descrittore.finestra : finestra;
-  const attr = pesoAttrezzi(attrezzi);
+  /*
+   * Decisione 174 (04/11/2026): col `conto` (`contesto-scheda.js::contoDellaFinestra`, lo stesso della scheda Contesto e di
+   * Capability) la base è il limite che agisce, e «Strumenti» sono quelli SPEDITI nell'ultima richiesta, lo stesso numero della
+   * scheda. Prima qui si leggevano 266.667 (la finestra del profilo) e 21.538 (gli schemi offerti, contati in un altro modo) mentre la
+   * scheda diceva 165.999 e ~11k. Senza richiesta spedita (nessuna sessione) restano gli offerti, sul catalogo, e la frase lo dice.
+   */
+  const daConto = Boolean(conto && typeof conto === 'object' && Object.hasOwn(conto, 'base'));
+  const finestraToken = daConto ? conto.base : descrittore ? descrittore.finestra : finestra;
+  const inviati = daConto ? tokenDellaCategoria(conto.ripartizione, 'tools') : null;
+  const attr = inviati === null ? pesoAttrezzi(attrezzi) : { ...pesoAttrezzi([]), token: inviati };
   /*
    * ⛔ Una voce che NON so misurare non entra nell'elenco: non ci entra come
    * zero. `Number(null)` vale 0 ed è finito, quindi il primo giro dal vivo
@@ -88,7 +97,7 @@ export function ripartizioneContesto({ attrezzi = [], finestra = null, istruzion
   return {
     voci, occupato, finestra: f,
     // ⛔ da DOVE viene la finestra: senza questa parola due percentuali diverse sembrano un errore di calcolo
-    fonteFinestra: descrittore?.fonte ?? null,
+    fonteFinestra: daConto ? (conto.limite ? 'limite' : conto.fonte ?? null) : descrittore?.fonte ?? null,
     finestraDescritta: descrittore,
     // ⛔ le voci PROMESSE dal cappello della sezione che non si sono potute misurare: si dichiarano.
     mancanti: ['istruzioni', 'memoria'].filter((id) => !voci.some((v) => v.id === id)),
@@ -110,7 +119,8 @@ export function frasiRipartizione(r) {
   const mancanti = r.attrezziSenzaStima ? ` · ${traduci('varie.context.measure.toolsUndeclared', { missing: r.attrezziSenzaStima, total: r.attrezziTotale })}` : '';
   // ⛔ 09/09: la percentuale senza la sua finestra non si può verificare, e due finestre diverse
   //    sullo stesso schermo sono esattamente il difetto misurato oggi. La fonte si NOMINA.
-  const fonte = r.fonteFinestra === 'profilo' ? ` · ${traduci('varie.context.measure.windowFromProfile')}` : r.fonteFinestra === 'catalogo' ? ` · ${traduci('varie.context.measure.windowFromCatalog')}` : '';
+  const fonte = r.fonteFinestra === 'limite' ? ` · ${traduci('varie.context.measure.windowFromLimit')}` // decisione 174: la base della scheda Contesto
+    : r.fonteFinestra === 'profilo' ? ` · ${traduci('varie.context.measure.windowFromProfile')}` : r.fonteFinestra === 'catalogo' ? ` · ${traduci('varie.context.measure.windowFromCatalog')}` : '';
   return traduci('varie.context.measure.estimate', { text: `${testa}${fonte}${mancanti}` });
 }
 

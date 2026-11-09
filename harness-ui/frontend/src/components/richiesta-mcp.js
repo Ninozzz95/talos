@@ -105,7 +105,7 @@ function campoDelModulo(documentObj, nome, schema, obbligatorio) {
     if (typeof schema.maximum === 'number') input.max = String(schema.maximum);
     if (typeof schema.default === 'number') input.value = String(schema.default);
   } else {
-    input.type = TIPO_PER_FORMATO[schema.format] || 'text';
+    input.type = (Object.hasOwn(TIPO_PER_FORMATO, String(schema.format)) && TIPO_PER_FORMATO[schema.format]) || 'text'; // D-17: `constructor` non è un formato
     if (Number.isSafeInteger(schema.maxLength)) input.maxLength = schema.maxLength;
     if (typeof schema.default === 'string') input.value = schema.default;
   }

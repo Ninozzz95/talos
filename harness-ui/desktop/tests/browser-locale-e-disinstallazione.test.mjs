@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync as cpReale, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync as renameReale, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { desktopProfile } from '../profile.mjs';
 import { FILE_SEGNO_MIGRAZIONE, migraDatiBrowser } from '../migrazione-browser.mjs';
@@ -142,22 +142,161 @@ test('BROWSER-LOCALE-07 — il guscio migra PRIMA di app.setPath(\'sessionData\'
   assert.match(main, /PULIZIA_IN_CORSO\s*\?/, 'un ramo di pulizia (disinstallazione) non deve spostare dati');
 });
 
-test('BROWSER-LOCALE-08 — ogni modulo che il guscio importa è nell\'elenco dei file del pacchetto', () => {
+/*
+ * BROWSER-LOCALE-08 — gli attrezzi della guardia del pacchetto. Stanno fuori dalla prova perché si provano anche su alberi e
+ * elenchi finti (BROWSER-LOCALE-08b): i casi che la revisione avversaria del 05/11/2026 sera ha trovato scoperti.
+ *
+ * L'elenco `build.files` si legge come lo legge electron-builder (website/docs/contents.md e file-patterns.md, letti il 05/11/2026):
+ * i modelli valgono IN ORDINE e l'ultimo che prende un file decide (`"!foo/*.js"` seguito da `"foo/bar.js"` rimette foo/bar.js),
+ * le graffe sono ammesse (`**\/*.{node,pdb}`), e un nome di cartella prende tutto ciò che contiene.
+ */
+// I commenti si tolgono prima di cercare import e letture: un `// import('./vecchio.mjs')` non è un modulo da spedire. Le stringhe
+// e i template si saltano interi, così un `'**/*.mjs'` non apre un commento e un `'https://…'` non ne chiude la riga.
+function senzaCommenti(testo) {
+  return testo.replace(/'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`|\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, (m) => (m[0] === '/' ? ' ' : m));
+}
+// Gli import relativi: statici, per effetto, dinamici (`import('./x')`, anche col backtick senza `${`) ed `export … from`.
+const RELATIVO = /(?:\bfrom|\bimport)\s*\(?\s*(['"`])(\.\.?\/[^'"`$\n]+)\1/g;
+function importRelativi(testo) {
+  return [...senzaCommenti(testo).matchAll(RELATIVO)].map((m) => m[2]);
+}
+// La camminata dei moduli, dalle radici: ogni percorso relativo si risolve dalla cartella del modulo che lo importa.
+function camminata(radici, { leggi, esiste }) {
+  const visti = [];
+  const daGuardare = [...radici];
+  while (daGuardare.length) {
+    const f = daGuardare.shift();
+    if (visti.includes(f)) continue;
+    visti.push(f);
+    if (f.startsWith('../') || !esiste(f)) continue; // fuori dalla cartella o assente: resta «mancante» nella prova
+    for (const rel of importRelativi(leggi(f))) daGuardare.push(posix.normalize(posix.join(posix.dirname(f), rel)));
+  }
+  return visti;
+}
+// I file caricati PER PERCORSO dalla cartella dell'app: `join(app.getAppPath(), 'assets', 'x.png')`, `join(appPath, 'x.mjs')`.
+const PER_PERCORSO = /\bjoin\(\s*(?:app\.getAppPath\(\)|appPath)\s*((?:,\s*(['"])[^'"\n]+\2\s*)+)\)/g;
+function letturePerPercorso(testo) {
+  return [...senzaCommenti(testo).matchAll(PER_PERCORSO)].map((m) => posix.join(...[...m[1].matchAll(/['"]([^'"\n]+)['"]/g)].map((x) => x[1])));
+}
+function globInRegExp(modello) {
+  const letterale = (s) => s.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  let re = '';
+  for (let i = 0; i < modello.length; i++) {
+    const c = modello[i];
+    if (c === '*' && modello[i + 1] === '*') {
+      i++;
+      if (modello[i + 1] === '/') { i++; re += '(?:.*/)?'; } else re += '.*';
+    } else if (c === '*') re += '[^/]*';
+    else if (c === '?') re += '[^/]';
+    else if (c === '{' && modello.indexOf('}', i) > i) {
+      const fine = modello.indexOf('}', i);
+      re += `(?:${modello.slice(i + 1, fine).split(',').map((x) => letterale(x).replace(/\\\*|\*/g, '[^/]*')).join('|')})`;
+      i = fine;
+    } else re += letterale(c);
+  }
+  return new RegExp(`^${re}$`);
+}
+function copertoDa(elenco, file) {
+  let dentro = false;
+  for (const voce of elenco) {
+    const via = voce.startsWith('!');
+    const modello = via ? voce.slice(1) : voce;
+    if (modello === file || file.startsWith(`${modello.replace(/\/$/, '')}/`) || globInRegExp(modello).test(file)) dentro = !via;
+  }
+  return dentro;
+}
+/* I file che l'app carica PER PERCORSO e non per import: nessuna camminata degli import li vede. Revisione del 05/11/2026 sera,
+   MEDIO: tolto `child-bootstrap.mjs` da `files` la guardia restava verde, e senza di lui il processo server non parte
+   (runtime.mjs, `join(appPath, 'child-bootstrap.mjs')`); lo stesso per l'icona del vassoio (main.mjs, `new Tray(join(…, 'talos-tray.png'))`).
+   La prova legge anche i `join(app.getAppPath()|appPath, …)` veri dei moduli: un file letto così e non elencato qui è rosso.
+   `package.json` electron-builder lo spedisce sempre, ma il guscio lo legge per percorso e l'elenco lo nomina: resta qui. */
+const CARICATI_PER_PERCORSO = Object.freeze(['package.json', 'child-bootstrap.mjs', 'assets/talos.png', 'assets/talos-tray.png', 'assets/aggiornamenti-pubblica.pem']);
+
+// L'intero controllo, su un albero qualunque: la prova lo lancia sui file veri, 08b su un albero finto (così ogni ramo ha un rosso).
+function problemiDelPacchetto(files, caricati, { leggi, esiste }) {
+  const spedito = (f) => !f.startsWith('../') && esiste(f) && copertoDa(files, f);
+  const importati = camminata(['main.mjs', ...caricati.filter((f) => /\.m?js$/.test(f))], { leggi, esiste });
+  const letti = [...new Set(importati.filter((f) => !f.startsWith('../') && esiste(f)).flatMap((f) => letturePerPercorso(leggi(f))))];
+  return {
+    importati,
+    letti,
+    mancanti: importati.filter((f) => !spedito(f)),
+    nonDichiarati: letti.filter((f) => !caricati.includes(f)),
+    nonSpediti: caricati.filter((f) => !spedito(f)),
+    inesistenti: files.filter((p) => !/[*!?{]/.test(p) && !esiste(p)),
+  };
+}
+
+test('BROWSER-LOCALE-08 — ogni modulo che il guscio importa, e ogni file che carica per percorso, è nell\'elenco dei file del pacchetto', () => {
   const pacchetto = JSON.parse(readFileSync(join(desktop, 'package.json'), 'utf8'));
   /* 02/10/2026: anche gli import DEI moduli importati (`aggiornamenti.mjs` → `fonte-aggiornamenti.mjs`): la prima stesura guardava
      solo `main.mjs`, e un modulo nuovo importato da un altro modulo sarebbe mancato nel pacchetto senza nessun rosso. */
-  const importati = [];
-  const daGuardare = [...main.matchAll(/from '\.\/([^']+)'/g)].map((m) => m[1]);
-  while (daGuardare.length) {
-    const f = daGuardare.shift();
-    if (importati.includes(f)) continue;
-    importati.push(f);
-    daGuardare.push(...[...readFileSync(join(desktop, f), 'utf8').matchAll(/from '\.\/([^']+)'/g)].map((m) => m[1]));
-  }
-  assert.ok(importati.includes('migrazione-browser.mjs'));
-  assert.ok(importati.includes('firma-aggiornamenti.mjs'), 'la camminata scende nei moduli importati');
-  const mancanti = importati.filter((f) => !pacchetto.build.files.includes(f));
-  assert.deepEqual(mancanti, [], `moduli importati da main.mjs e non spediti (l'app installata non partirebbe): ${mancanti.join(', ')}`);
+  /* 05/11/2026: `pc-sveglio.mjs` (gemello) era importato da main.mjs e fuori dall'elenco, e questa prova era ROSSA senza che nessuno
+     la lanciasse. Ora legge anche gli import DINAMICI (`import('./x.mjs')`), le virgolette doppie, `export … from` e i percorsi
+     relativi ai sotto-moduli; l'elenco si confronta come lo legge electron-builder (nomi esatti, glob, graffe, cartelle, `!`
+     in ordine), i file caricati per percorso devono esserci, e ogni nome dell'elenco deve esistere. */
+  const p = problemiDelPacchetto(pacchetto.build.files, CARICATI_PER_PERCORSO, {
+    leggi: (f) => readFileSync(join(desktop, f), 'utf8'),
+    esiste: (f) => existsSync(join(desktop, f)),
+  });
+  assert.ok(p.importati.includes('migrazione-browser.mjs'));
+  assert.ok(p.importati.includes('firma-aggiornamenti.mjs'), 'la camminata scende nei moduli importati');
+  assert.ok(p.letti.includes('child-bootstrap.mjs') && p.letti.includes('assets/talos-tray.png'), `la lettura dei join(appPath, …) non trova i file caricati per percorso: ${p.letti.join(', ')}`);
+  assert.deepEqual(p.mancanti, [], `moduli importati da main.mjs e non spediti (l'app installata non partirebbe): ${p.mancanti.join(', ')}`);
+  assert.deepEqual(p.nonDichiarati, [], `file caricati per percorso e non elencati in CARICATI_PER_PERCORSO: ${p.nonDichiarati.join(', ')}`);
+  assert.deepEqual(p.nonSpediti, [], `file caricati per percorso e non spediti (l'app installata non partirebbe o perderebbe l'icona): ${p.nonSpediti.join(', ')}`);
+  assert.deepEqual(p.inesistenti, [], `nomi nell'elenco dei file senza un file vero: ${p.inesistenti.join(', ')}`);
+});
+
+test('BROWSER-LOCALE-08b — la guardia del pacchetto su casi finti: `**` profondo, modulo annidato, negazione, graffe, commenti', () => {
+  // `**` a profondità ≥ 2 (sopravvissuto G11 della revisione: a un livello solo anche `*` prende)
+  assert.equal(copertoDa(['sotto/**'], 'sotto/a/b/c.mjs'), true);
+  assert.equal(copertoDa(['**/*.mjs'], 'a/b/c.mjs'), true);
+  assert.equal(copertoDa(['**/*.mjs'], 'main.mjs'), true, '`**/` prende anche zero cartelle');
+  assert.equal(copertoDa(['sotto/*'], 'sotto/a/b.mjs'), false, 'AL CONTRARIO: `*` non scende');
+  // la negazione dopo un glob toglie, e l'ultimo modello che prende decide
+  assert.equal(copertoDa(['*.mjs', '!pc-sveglio.mjs'], 'pc-sveglio.mjs'), false);
+  assert.equal(copertoDa(['*.mjs', '!pc-sveglio.mjs'], 'main.mjs'), true);
+  assert.equal(copertoDa(['*.mjs', '!sotto/**', 'sotto/tieni.mjs'], 'sotto/tieni.mjs'), true, 'rimesso dopo la negazione');
+  assert.equal(copertoDa(['!main.mjs'], 'main.mjs'), false);
+  // le graffe non danno un falso rosso, e non prendono ciò che non nominano
+  assert.equal(copertoDa(['*.{mjs,json}'], 'pc-sveglio.mjs'), true);
+  assert.equal(copertoDa(['*.{mjs,json}'], 'package.json'), true);
+  assert.equal(copertoDa(['*.{mjs,json}'], 'assets/talos.png'), false);
+  assert.equal(copertoDa(['assets/*.{png,pem}'], 'assets/aggiornamenti-pubblica.pem'), true);
+  // una cartella intera prende ciò che contiene
+  assert.equal(copertoDa(['assets'], 'assets/talos-tray.png'), true);
+  assert.equal(copertoDa(['assets'], 'assets-vecchi/talos-tray.png'), false);
+  // un import dentro un commento non è un modulo; una stringa con `/*` o `//` non apre un commento
+  assert.deepEqual(importRelativi([
+    "// import('./vecchio.mjs')",
+    "/* import './altro.mjs'; */",
+    "const glob = '**/*.mjs'; const url = 'https://x'; import { a } from './vero.mjs';",
+    'const b = await import(`./dinamico.mjs`); export { c } from "./riesportato.mjs";',
+  ].join('\n')), ['./vero.mjs', './dinamico.mjs', './riesportato.mjs']);
+  // un modulo annidato che importa un fratello (G4: senza `dirname` diventerebbe `b.mjs` alla radice)
+  const albero = { 'main.mjs': "import './sotto/a.mjs';", 'sotto/a.mjs': "export { b } from './b.mjs';", 'sotto/b.mjs': 'await import("../c.mjs");', 'c.mjs': '' };
+  assert.deepEqual(camminata(['main.mjs'], { leggi: (f) => albero[f], esiste: (f) => f in albero }), ['main.mjs', 'sotto/a.mjs', 'sotto/b.mjs', 'c.mjs']);
+  // le letture per percorso, anche commentate (non contano)
+  assert.deepEqual(letturePerPercorso("join(app.getAppPath(), 'assets', 'x.png'); join(appPath, \"y.mjs\"); // join(appPath, 'z.mjs')"), ['assets/x.png', 'y.mjs']);
+  // il controllo intero su un albero finto: ogni ramo ha il suo rosso, senza dipendere da com'è oggi l'elenco vero
+  const finto = {
+    'main.mjs': "import './a.mjs'; new Tray(join(app.getAppPath(), 'assets', 'vassoio.png'));",
+    'a.mjs': "const figlio = join(appPath, 'avvio.mjs');",
+    'avvio.mjs': "import './b.mjs';",
+    'b.mjs': '',
+    'assets/vassoio.png': '',
+  };
+  const su = (files, caricati = ['avvio.mjs', 'assets/vassoio.png']) => problemiDelPacchetto(files, caricati, { leggi: (f) => finto[f], esiste: (f) => f in finto || Object.keys(finto).some((k) => k.startsWith(`${f}/`)) });
+  const tutti = ['main.mjs', 'a.mjs', 'avvio.mjs', 'b.mjs', 'assets'];
+  assert.deepEqual(su(tutti), { importati: ['main.mjs', 'avvio.mjs', 'a.mjs', 'b.mjs'], letti: ['assets/vassoio.png', 'avvio.mjs'], mancanti: [], nonDichiarati: [], nonSpediti: [], inesistenti: [] });
+  assert.deepEqual(su(['main.mjs', 'a.mjs', 'avvio.mjs', 'b.mjs']).nonSpediti, ['assets/vassoio.png'], 'un\'icona caricata per percorso e non spedita');
+  const senzaAvvio = su(['main.mjs', 'a.mjs', 'b.mjs', 'assets']);
+  assert.deepEqual([senzaAvvio.mancanti, senzaAvvio.nonSpediti], [['avvio.mjs'], ['avvio.mjs']], 'il modulo che il figlio carica per percorso');
+  assert.deepEqual(su(['main.mjs', 'avvio.mjs', 'b.mjs', 'assets']).mancanti, ['a.mjs']);
+  assert.deepEqual(su(tutti, ['avvio.mjs']).nonDichiarati, ['assets/vassoio.png'], 'una lettura per percorso fuori dall\'elenco dichiarato');
+  assert.deepEqual(su([...tutti, 'vecchio.mjs', 'x/*.mjs', '!b.mjs']).inesistenti, ['vecchio.mjs']);
+  assert.deepEqual(problemiDelPacchetto(['*.mjs'], [], { leggi: () => "import './sparito.mjs';", esiste: (f) => f === 'main.mjs' }).mancanti, ['sparito.mjs'], 'un import senza file non è «spedito» perché un glob lo prenderebbe');
 });
 
 test('DISINSTALLA-SCRATCH-01 — la radice dei temporanei si toglie a OGNI disinstallazione, fuori dalla scelta sui dati, mai all\'aggiornamento', () => {

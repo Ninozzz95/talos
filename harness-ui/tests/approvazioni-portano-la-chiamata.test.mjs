@@ -39,7 +39,9 @@ export function primiArgomentiDeiCancelli(sorgente) {
  * funzioni-cancello, che la ricevono già con l'id da chi le chiama. Prima la prova guardava solo il nome dell'argomento: un cancello
  * nuovo in fondo al file con `chiediApprovazioneFn(azione)` restava verde (provato dal revisore).
  */
-const DEFINIZIONI_DEI_CANCELLI = ['verificaAvvioAgente', 'verificaAzioneAutomazione', 'verificaPermessoScrittura'];
+/* D4: `chiediCartaRicerca` è il filtro del canale della carta della ricerca: inoltra l'azione che il cancello ha ricevuto, e le due chiamate
+   ai cancelli che lo usano scrivono `toolCallId` e restano controllate qui. */
+const DEFINIZIONI_DEI_CANCELLI = ['verificaAvvioAgente', 'verificaAzioneAutomazione', 'verificaPermessoScrittura', 'chiediCartaRicerca'];
 /* Seconda verifica del blocco 19: «fino al prossimo `export`» lasciava dentro una funzione NON esportata scritta subito dopo un
    cancello. Il corpo finisce dove si chiude la sua graffa: si salta la lista dei parametri (che ha `{ … } = {}`) bilanciando le
    tonde, poi si contano le graffe del corpo. */

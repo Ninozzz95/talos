@@ -52,10 +52,10 @@ export function suggerimentiDallaCartella({ voci = [], packageJson = null, total
   const test = packageJson?.scripts?.test;
   if (typeof test === 'string' && test.trim()) {
     const conteggio = Number.isFinite(totaleTest) && totaleTest > 0 ? ` · ${tn('varie.emptyState.testCount.one', 'varie.emptyState.testCount.many', totaleTest, { n: totaleTest.toLocaleString(localeUI()) })}` : '';
-    righe.push({ icona: 'i-check-sq', titolo: traduci('varie.emptyState.suggestion.passTests.title'), sub: `${traduci('varie.emptyState.suggestion.passTests.sub', { script: test.trim() })}${conteggio}`, testo: traduci('varie.emptyState.suggestion.passTests.prompt', { script: test.trim() }) });
+    righe.push({ icona: 'i-test-tube', titolo: traduci('varie.emptyState.suggestion.passTests.title'), sub: `${traduci('varie.emptyState.suggestion.passTests.sub', { script: test.trim() })}${conteggio}`, testo: traduci('varie.emptyState.suggestion.passTests.prompt', { script: test.trim() }) });
   }
   else if (nomi.has('tests') || nomi.has('test')) {
-    righe.push({ icona: 'i-check-sq', titolo: traduci('varie.emptyState.suggestion.runTests.title'), sub: traduci('varie.emptyState.suggestion.runTests.sub', { folder: nomi.has('tests') ? 'tests' : 'test' }), testo: traduci('varie.emptyState.suggestion.runTests.prompt') });
+    righe.push({ icona: 'i-test-tube', titolo: traduci('varie.emptyState.suggestion.runTests.title'), sub: traduci('varie.emptyState.suggestion.runTests.sub', { folder: nomi.has('tests') ? 'tests' : 'test' }), testo: traduci('varie.emptyState.suggestion.runTests.prompt') });
   }
   const readme = [...nomi].find((n) => n === 'readme.md' || n === 'readme');
   if (readme) righe.push({ icona: 'i-doc', titolo: traduci('varie.emptyState.suggestion.readme.title', { file: readme === 'readme' ? 'README' : 'README.md' }), sub: traduci('varie.emptyState.suggestion.readme.sub'), testo: traduci('varie.emptyState.suggestion.readme.prompt') });
@@ -94,7 +94,7 @@ export function creaStatoVuoto(dati = {}, opzioni = {}) {
       riga.type = 'button';
       riga.setAttribute('data-c', 'ListRow');
       const icona = el(documentObj, 'span', 'talos-list-row__icon');
-      icona.append(simbolo(documentObj, 'i', s.icona || 'i-bolt'));
+      icona.append(simbolo(documentObj, 'i', s.icona || 'i-wrench'));
       const testo = el(documentObj, 'span', 'talos-list-row__text');
       testo.append(el(documentObj, 'span', 'talos-list-row__title', s.titolo), el(documentObj, 'span', 'talos-list-row__sub', s.sub || ''));
       riga.append(icona, testo, el(documentObj, 'span', 'talos-kbd', '↵'));

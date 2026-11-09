@@ -1,0 +1,3 @@
+root = Tabella("t", null, a, [])
+a = b
+b = a

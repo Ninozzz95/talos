@@ -34,7 +34,7 @@ export default {
     'yourAgent': 'Il tuo agente',
     'noModelSelected': 'Nessun modello selezionato',
     'modelSelectedPermissionsWillBe': 'Modello selezionato. Le autorizzazioni vengono richieste quando servono.',
-    'youCanExploreYourWorkspace': 'Puoi esplorare il workspace. Configura un modello quando vuoi usare l’agente.',
+    'youCanExploreYourWorkspace': 'Puoi esplorare lo spazio di lavoro. Configura un modello quando vuoi usare l’agente.',
     'changeModel': 'Cambia modello',
     'chooseAModel': 'Scegli un modello',
     'providersAndAccess': 'Provider e accessi',

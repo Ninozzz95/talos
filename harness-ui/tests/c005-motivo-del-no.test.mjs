@@ -83,6 +83,28 @@ test('C005-MOTIVO-DAL-REGISTRO: un sì resta true anche se arriva un motivo', as
     }
 })
 
+/* Blocco 20 (01/11/2026, CLI): un sì dato da una regola, dalla modalità o dal classificatore lo dice nell'evento, così il registro delle notifiche non lo racconta come un
+   gesto della persona (`notifiche-scrittori.mjs`). Lista chiusa, e solo sui sì: il testo di un no può contenere ciò che la persona ha scritto al modello. */
+test('MOTIVO-DEL-SI-01: i tre motivi del sì arrivano nell evento; un sì senza motivo o con un altro testo resta come prima', async () => {
+    for (const motivo of ['regola', 'modalita', 'classificatore']) {
+        const { registro, sessionId, ricevuti, requestId } = await unaDomanda()
+        registro.rispondiApprovazione(sessionId, requestId, true, { motivo })
+        assert.equal(ricevuti.find((e) => e.type === 'ApprovalResolved').motivo, motivo)
+    }
+    for (const quarto of [undefined, { motivo: 'ignorato' }, 'regola fatta a mano', { motivo: 'fermato' }, { motivo: 'nessuna-interfaccia' }]) { // gli ultimi due: motivi validi dell'evento, ma non di un sì
+        const { registro, sessionId, ricevuti, requestId } = await unaDomanda()
+        registro.rispondiApprovazione(sessionId, requestId, true, quarto)
+        assert.equal(ricevuti.find((e) => e.type === 'ApprovalResolved').motivo, undefined, JSON.stringify(quarto))
+    }
+})
+
+test('MOTIVO-DEL-SI-02 — AL CONTRARIO: su un no lo stesso motivo non va nell evento, va solo al modello', async () => {
+    const { registro, sessionId, ricevuti, promessa, requestId } = await unaDomanda()
+    registro.rispondiApprovazione(sessionId, requestId, false, { motivo: 'regola' })
+    assert.deepEqual(await promessa, { approvato: false, motivo: 'regola' })
+    assert.equal(ricevuti.find((e) => e.type === 'ApprovalResolved').motivo, undefined)
+})
+
 /* La conferma di root in WSL (F009) legge la stessa risposta: un no col motivo, o un valore vero che non è `true`, non esegue
    NIENTE. Impalcatura presa dalla CLI (che l'aveva presa da tests/rev-f009-utente-wsl.test.mjs del desktop). */
 function fornitore(chiamate) {

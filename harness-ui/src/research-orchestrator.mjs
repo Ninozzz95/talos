@@ -95,6 +95,7 @@ import { talosResearchOpposingPrompt } from './research/opposing.mjs';
 import {
   TALOS_RESEARCH_DEPTHS, talosResearchPlanCost, talosResearchPlanFor, talosResearchPlanTotals,
 } from './research/plan.mjs';
+import { formattaDollari } from './kernel/costo-in-dollari.mjs'; // decisioni 57 e 144: la stessa forma della carta della ricerca
 import { creaRaccoltaViva } from './research/raccolta-viva.mjs';
 /*
  * ⭐⭐⭐ L4 (11/09/2026) — IL MOTORE PORTATO DAL MOBILE ENTRA IN SCENA.
@@ -1088,6 +1089,8 @@ export function creaResearchOrchestrator({
    * Il prezzo pubblicato del modello, quando lo si è ottenuto. ⛔ `null` = non lo sappiamo, e
    * allora il costo si dice in LAVORO (ricerche, pagine, token) e mai in denaro: «denaro solo se
    * un prezzo pubblicato è stato ottenuto» (§6.8, +1.5).
+   * Decisioni 57 e 144 (04/11/2026): `(modello) => TalosResearchPrice | null`, anche asincrona; riceve il
+   * modello della ricerca (il registro la collega al catalogo, la stessa fonte della carta della ricerca).
    */
   prezzoFn = () => null,
   /*
@@ -1346,14 +1349,15 @@ export function creaResearchOrchestrator({
    * ⛔ E si dice che è una STIMA, con la parola. La spesa vera si conta dai passi e si mostra
    *   accanto — «il divario stimato/speso è esso stesso una misura».
    */
-  function costoDetto(piano) {
+  async function costoDetto(piano, modello) {
     const totali = talosResearchPlanTotals(piano);
     let prezzo = null;
-    try { prezzo = prezzoFn(); } catch { prezzo = null; }
+    try { prezzo = await prezzoFn(modello); } catch { prezzo = null; }
     const costo = talosResearchPlanCost(totali, prezzo);
-    const denaro = costo?.known
-      ? ` ≈ ${costo.amount.toFixed(4)} ${costo.currency} at the published price`
-      : '';
+    /* Decisioni 57 e 144: in dollari la forma di `formattaDollari`, la stessa cifra che la persona legge sulla carta (due porte) */
+    const denaro = !costo?.known ? ''
+      : costo.currency === 'USD' ? `, ${formattaDollari(costo.amount)} at the published price`
+        : ` ≈ ${costo.amount.toFixed(4)} ${costo.currency} at the published price`;
     return {
       totali,
       costo,
@@ -1496,7 +1500,8 @@ export function creaResearchOrchestrator({
     /** @param {string} prompt */
     const chiedi = async (prompt) => {
       caratteri += prompt.length;
-      const risposta = await chiediAlModelloFn({ modello: modelloGiudice, prompt, scopo: 'giudice-ricerca' });
+      // sessionId: la ricerca È la sua sessione — la spesa del giudice va nel suo giornale (spesa di servizio, parte 2 C, 30/10)
+      const risposta = await chiediAlModelloFn({ modello: modelloGiudice, prompt, scopo: 'giudice-ricerca', sessionId: id });
       const detto = typeof risposta === 'string' ? risposta : String(risposta ?? '');
       caratteri += detto.length;
       return detto;
@@ -1959,7 +1964,7 @@ export function creaResearchOrchestrator({
     await registra(cartella, id, { kind: 'plan_proposed', branches: piano });
     try { await scriviPianoFn({ cartella, id, piano }); } catch { /* come il giornale: il piano su disco è una prova, non una condizione per lavorare. */ }
     await registra(cartella, id, { kind: 'plan_approved', branches: piano, auto: true });
-    const costo = costoDetto(piano);
+    const costo = await costoDetto(piano, modello);
     avviaESeguiFn({
       /* ⭐ PO-26 — la sessione lavora nel PROGETTO; i suoi file (`cartella`) stanno nella cartella dati. Senza
          `cartellaLavoro` le due coincidono, come prima. */
