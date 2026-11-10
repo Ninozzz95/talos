@@ -1242,6 +1242,27 @@ a.talos-button{text-decoration:none}
    della citazione interna sommato al padding di quella esterna. */
 .md-quote > :last-child{margin-bottom:0}
 .md-quote .md-quote{border-left-color:var(--talos-border-strong); color:var(--talos-muted)}
+/* ⭐ 10/11/2026 (0.2.1) — IL BLOCCO RICHIUDIBILE della chat: `<details>`/`<summary>` scritti dal modello (`components/markdown.js`,
+   `opzioni.blocchiRichiudibili`). È un `<details>` vero, quindi Invio e Spazio lo aprono e lo legge chi usa uno schermo parlante; qui
+   prende il vestito della chat: il bordo e il fondo dei pannelli morbidi, la freccia delle note di sistema, il fuoco del tema.
+   ⛔ Solo gettoni del tema, nessun colore scritto a mano: chiaro e scuro escono dalle stesse regole. */
+.md-richiudibile{margin:10px 0; border:1px solid var(--talos-border); border-radius:10px; background:var(--talos-panel-soft); color:var(--talos-assistant-text)}
+.md-richiudibile__titolo{display:flex; align-items:baseline; gap:8px; padding:9px 12px; cursor:pointer; list-style:none; font-size:.9em; font-weight:600; line-height:1.45; border-radius:10px}
+.md-richiudibile__titolo::-webkit-details-marker{display:none}
+.md-richiudibile__titolo::before{content:"▸"; flex:none; font-size:.85em; color:var(--talos-muted); transition:transform var(--talos-motion-duration-control,.15s) var(--talos-motion-ease)}
+.md-richiudibile[open] > .md-richiudibile__titolo::before{transform:rotate(90deg)}
+.md-richiudibile__titolo:hover{background:var(--talos-accent-soft)}
+.md-richiudibile__titolo:focus-visible{outline:var(--talos-focus-width) solid var(--talos-ring); outline-offset:-2px}
+.md-richiudibile[open] > .md-richiudibile__titolo{border-bottom:1px solid var(--talos-border-subtle); border-radius:10px 10px 0 0}
+.md-richiudibile__corpo{padding:12px 14px}
+.md-richiudibile__corpo:empty{display:none}
+.md-richiudibile__corpo > :first-child{margin-top:0}
+.md-richiudibile__corpo > :last-child{margin-bottom:0}
+.md-richiudibile .md-richiudibile{background:transparent}
+.md-richiudibile--vuoto > .md-richiudibile__titolo{cursor:auto}
+.md-richiudibile--vuoto > .md-richiudibile__titolo::before{visibility:hidden}
+.md-richiudibile--vuoto > .md-richiudibile__titolo:hover{background:transparent}
+@media (prefers-reduced-motion: reduce){.md-richiudibile__titolo::before{transition:none}}
 /* Il chip del codice INLINE: nella chat lo dà `.talos-message code` (riga 682), nel dettaglio di una
    nota/file/rapporto non lo dava nessuno — `` `npm run build` `` usciva come prosa. Stessi valori,
    così la stessa riga di Markdown si legge uguale nelle due superfici.

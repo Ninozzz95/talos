@@ -3544,7 +3544,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
    * mostra anche la conferma in pagina, cosa che il componente da solo non conosce).
    */
   function renderizzaMarkdownSemplice(testoGrezzo, { bloccoCodice = costruisciBloccoCodice } = {}) {
-    return renderizzaMarkdown(testoGrezzo, { document, bloccoCodice, linkConversazione: true, linkWeb: true }); // 27/09: il link a un'altra conversazione · 11/10: i link web, col clic che chiede conferma
+    /* 10/11/2026 (0.2.1): `<details>`/`<summary>` scritti dal modello diventano un blocco richiudibile SOLO in chat. La chat è chi passa il
+       suo blocco di codice (`bloccoCodiceDellaChat`, anche nella coda in arrivo); note, libreria e ricerca chiamano senza e restano com'erano. */
+    const inChat = bloccoCodice !== costruisciBloccoCodice;
+    return renderizzaMarkdown(testoGrezzo, { document, bloccoCodice, linkConversazione: true, linkWeb: true, blocchiRichiudibili: inChat }); // 27/09: il link a un'altra conversazione · 11/10: i link web, col clic che chiede conferma
   }
 
   /**
