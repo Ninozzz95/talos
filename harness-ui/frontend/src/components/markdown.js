@@ -41,6 +41,8 @@
 
 import { nodiDaHtml, urlAmmesso } from './html-fidato.js';
 import { fineDellIndirizzo, leggiLinkEsterno } from './link-esterni.js';
+import { apreRichiudibile, rigaDiRecinto, scorriRichiudibile, titoloECorpo } from './blocchi-richiudibili.js';
+import { t } from './lingua.js';
 
 /*
  * ⛔ QUANTO HTML VIENE DA UNA RIGA. Serve a sapere dove un blocco HTML FINISCE: nel README di un
@@ -139,6 +141,7 @@ export function bloccoCodiceNudo(doc, testoCodice, linguaggioDichiarato) {
  * @param {(testo:string, linguaggio:string, chiuso:boolean)=>Node} [opzioni.bloccoCodice]
  *        come si disegna un recinto ```: in app è il blocco della chat, qui di serie un `<pre>`
  */
+const MAX_RICHIUDIBILI_ANNIDATI = 8;
 export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
   const doc = opzioni.document || globalThis.document;
   const bloccoCodice = typeof opzioni.bloccoCodice === 'function'
@@ -181,6 +184,20 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
    *   considered part of the autolink»; una `)` conta solo se le parentesi dentro l'indirizzo sono bilanciate).
    */
   const conLinkWeb = opzioni.linkWeb === true;
+  /*
+   * ⭐ 10/11/2026 (0.2.1), owner dal vivo — IL BLOCCO RICHIUDIBILE. Il modello scrive `<details><summary>Cosa è successo</summary> … </details>`
+   *   e la chat lo mostrava come testo letterale. Si accende con `opzioni.blocchiRichiudibili` (la chat): passano SOLO `<details>` (nudo o
+   *   con `open`) e `<summary>`, e diventano nodi costruiti qui; dentro vale il Markdown del resto della risposta, annidamento compreso.
+   * ⛔ NON è `htmlFidato`, che resta della sola scheda del modello: ogni altro HTML (`<script>`, `<img onerror>`, `<div>`) resta testo,
+   *   e nessun attributo scritto dal modello arriva al DOM. La grammatica sta in `blocchi-richiudibili.js`, letta anche dalla scansione
+   *   del testo in arrivo, che deve tagliare negli stessi punti.
+   * ⛔ Un blocco NON ancora chiuso si disegna APERTO con tutto il testo arrivato dentro: non mangia il resto del messaggio, e durante
+   *   l'arrivo non lampeggia come sorgente (Streamdown, «Unterminated Block Parsing»). Un recinto mai chiuso fa lo stesso.
+   * ⛔ Il tetto all'annidamento: oltre `MAX_RICHIUDIBILI_ANNIDATI` i blocchi più interni restano testo. Senza, un messaggio con migliaia di
+   *   aperture una dentro l'altra manderebbe la ricorsione oltre la pila.
+   */
+  const livelloRichiudibile = Number.isInteger(opzioni.livelloRichiudibile) ? opzioni.livelloRichiudibile : 0;
+  const conRichiudibili = opzioni.blocchiRichiudibili === true && livelloRichiudibile < MAX_RICHIUDIBILI_ANNIDATI;
   /*
    * ⛔ `(?<!!)` NON È UN DETTAGLIO: SENZA, IL LINK MANGIA LE IMMAGINI. Trovato il 18/09/2026 da
    *   questa stessa review, sulla prova della scheda del modello: il README scrive
@@ -305,6 +322,59 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
      *   (`html-fidato.js`). Uno `<script>` non arriva al DOM vivo in nessuna forma.
      * ⛔ La chat e le note non cambiano: senza `opzioni.htmlFidato` questo ramo non esiste.
      */
+    const richiudibile = conRichiudibili ? apreRichiudibile(riga) : null;
+    if (richiudibile) {
+      chiudiParagrafo();
+      /* Fin dove arriva: si contano aperture e chiusure fuori dal codice (un `</details>` in un recinto o fra due apici è codice). */
+      const dentro = [];
+      let profondita = 1;
+      let nelRecinto = false;
+      let chiuso = false;
+      let dopo = '';
+      let j = i;
+      for (; j < righe.length; j += 1) {
+        const pezzo = j === i ? riga.slice(richiudibile.lunghezza) : righe[j];
+        if (j > i && rigaDiRecinto(pezzo)) { nelRecinto = !nelRecinto; dentro.push(pezzo); continue; }
+        if (nelRecinto) { dentro.push(pezzo); continue; }
+        const esito = scorriRichiudibile(pezzo, profondita);
+        profondita = esito.profondita;
+        if (esito.fine !== -1) { dentro.push(pezzo.slice(0, esito.inizioChiusura)); dopo = pezzo.slice(esito.fine); chiuso = true; break; }
+        dentro.push(pezzo);
+      }
+      i = chiuso ? j + 1 : righe.length;
+      if (dopo.trim() !== '') righe.splice(i, 0, dopo.trimStart()); // il testo dopo la chiusura sulla stessa riga non si perde: è la riga che segue
+      const { titolo, corpo } = titoloECorpo(dentro.join('\n'));
+      const scriviTitolo = (nodo) => {
+        if (titolo !== null) applicaInline(nodo, titolo);
+        else nodo.appendChild(doc.createTextNode(t('chat.detailsUntitled'))); // il modello non ha scritto un titolo: il nostro, nella lingua della app
+      };
+      /* Giudice v1328 (10/11): nella chat misurata 73 blocchi su 120 hanno il corpo VUOTO (titolo, riga vuota, chiusura). Un
+         riquadro con la freccia che si apre sul niente è un controllo morto: chiuso dal modello e senza corpo, è una riga di titolo
+         e basta, niente da aprire, niente fuoco, niente tasti. Mentre arriva (non ancora chiuso) resta il blocco aperto di sempre. */
+      if (chiuso && corpo.trim() === '') {
+        const riga = doc.createElement('div');
+        riga.className = 'md-richiudibile md-richiudibile--vuoto';
+        const etichetta = doc.createElement('div');
+        etichetta.className = 'md-richiudibile__titolo';
+        scriviTitolo(etichetta);
+        riga.appendChild(etichetta);
+        frammento.appendChild(riga);
+        continue;
+      }
+      const blocco = doc.createElement('details');
+      blocco.className = 'md-richiudibile';
+      if (richiudibile.aperto || !chiuso) blocco.setAttribute('open', '');
+      const legenda = doc.createElement('summary');
+      legenda.className = 'md-richiudibile__titolo';
+      scriviTitolo(legenda);
+      const contenuto = doc.createElement('div');
+      contenuto.className = 'md-richiudibile__corpo';
+      contenuto.appendChild(renderizzaMarkdown(corpo, { ...opzioni, document: doc, bloccoCodice, livelloRichiudibile: livelloRichiudibile + 1 }));
+      blocco.appendChild(legenda);
+      blocco.appendChild(contenuto);
+      frammento.appendChild(blocco);
+      continue;
+    }
     if (htmlFidato && /^\s*<[a-zA-Z]/.test(riga)) {
       chiudiParagrafo();
       const raccolte = [];
@@ -371,7 +441,8 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
         const apreUnAltroBlocco = /^```/.test(corrente.trim())
           || /^(-{3,}|\*{3,}|_{3,})\s*$/.test(corrente.trim())
           || voceDiLista(corrente) !== null
-          || /^(#{1,6})\s+/.test(corrente);
+          || /^(#{1,6})\s+/.test(corrente)
+          || (conRichiudibili && apreRichiudibile(corrente) !== null);
         if (apreUnAltroBlocco) break;
         dentro.push(corrente);
         i += 1;
@@ -435,7 +506,7 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
       tabella.appendChild(thead);
       const tbody = doc.createElement('tbody');
       i += 2;
-      while (i < righe.length && righe[i].includes('|') && righe[i].trim() !== '') {
+      while (i < righe.length && righe[i].includes('|') && righe[i].trim() !== '' && !(conRichiudibili && apreRichiudibile(righe[i]))) {
         const valori = celle(righe[i]);
         const tr = doc.createElement('tr');
         for (let n = 0; n < intestazioni.length; n += 1) {
@@ -484,6 +555,7 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
            giusta lo stesso: il secondo pezzo di «1. a / riga vuota / 2. b» comincia da 2 (`start`). */
         if (corrente.trim() === '') break;
         if (/^```/.test(corrente.trim())) break; // un recinto chiude l'elenco e si rende al suo posto, come prima
+        if (conRichiudibili && apreRichiudibile(corrente)) break; // e così un blocco richiudibile, a qualunque rientro
         const v = voceDiLista(corrente);
         if (!v) {
           /* il seguito di una voce: vale solo se rientrato fino al suo contenuto (niente continuazione pigra) */

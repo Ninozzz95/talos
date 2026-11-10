@@ -516,6 +516,7 @@ export default {
     'child.command': 'Comando',
     /* owner 24/10/2026 notte (punto 4 della revisione a blocco 5): «Follow-up» era rimasto inglese; cancello LINGUA-UGUALI */
     'child.followUp': 'Seguito',
+    'detailsUntitled': 'Dettagli', // 10/11/2026: il titolo di un blocco richiudibile che il modello ha scritto senza `<summary>`
     'child.stoppedBeforeFinish': 'La figlia è stata fermata prima di concludere.',
     'child.stoppedOnRequest': 'Fermata su richiesta.',
     'child.stoppedOnRequestAt': 'Fermata su richiesta: {punto}.',
@@ -1758,6 +1759,7 @@ export default {
     'child.toolNotRegistered': 'tool not yet registered',
     'child.command': 'Command',
     'child.followUp': 'Follow-up',
+    'detailsUntitled': 'Details',
     'child.stoppedBeforeFinish': 'The child session was stopped before finishing.',
     'child.stoppedOnRequest': 'Stopped on request.',
     'child.stoppedOnRequestAt': 'Stopped on request: {punto}.',

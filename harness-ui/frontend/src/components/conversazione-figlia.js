@@ -586,7 +586,8 @@ export function montaConversazioneFiglia(contenitore, {
    *   deve ritrovarlo. Si sostituiscono solo i suoi figli, e solo quando il testo è CAMBIATO.
    */
   function rendiMarkdown(contenitore, testoGrezzo) {
-    contenitore.replaceChildren(renderizzaMarkdown(testoGrezzo, { document: d, bloccoCodice: recinto }));
+    /* 10/11/2026 (0.2.1): anche qui `<details>`/`<summary>` del modello diventano un blocco richiudibile, come nella chat madre */
+    contenitore.replaceChildren(renderizzaMarkdown(testoGrezzo, { document: d, bloccoCodice: recinto, blocchiRichiudibili: true }));
   }
 
   function creaVistaBlocco(vistaTurno, blocco, gruppo, modello) {

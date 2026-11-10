@@ -29,6 +29,8 @@
  *      finale si disegna esattamente com'è, come lo ridisegna la storia.
  */
 
+import { apreRichiudibile, scorriRichiudibile, tagRichiudibileInArrivo, TAG_RICHIUDIBILE } from './blocchi-richiudibili.js';
+
 const SEGMENTATORE = typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function' ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
 
 const RIGA_RECINTO = /^\s*```/;
@@ -51,7 +53,7 @@ function celleDi(riga) {
 
 /** Lo stato della scansione dei confini di UN messaggio. */
 export function creaScansione() {
-  return { pos: 0, dentroFence: false, confine: 0, citazioneNelBlocco: false, rigaPrecedente: null, impronta: '' };
+  return { pos: 0, dentroFence: false, richiudibili: 0, confine: 0, citazioneNelBlocco: false, rigaPrecedente: null, impronta: '' };
 }
 
 /**
@@ -72,7 +74,26 @@ export function avanzaScansione(s, testo, limite = testo.length) {
     const inizio = s.pos;
     const riga = testo.slice(inizio, a);
     const t = riga.trim();
-    if (RIGA_RECINTO.test(riga)) {
+    const apertura = s.richiudibili === 0 && !s.dentroFence ? apreRichiudibile(riga) : null;
+    if (s.richiudibili > 0) {
+      /* ⭐ 10/11/2026 (0.2.1) — DENTRO UN BLOCCO RICHIUDIBILE APERTO NON SI TAGLIA: il renderer lo chiude solo alla sua chiusura, quindi
+         righe vuote, titoli e recinti lì dentro non sono confini (il blocco della foto dell'owner CONTIENE righe vuote). Si tiene solo il
+         conto: i recinti (dentro, un `</details>` è codice) e le aperture e chiusure annidate. La regola è quella di
+         `blocchi-richiudibili.js`, la stessa che legge il renderer. */
+      if (RIGA_RECINTO.test(riga)) s.dentroFence = !s.dentroFence;
+      else if (!s.dentroFence) {
+        const esito = scorriRichiudibile(riga, s.richiudibili);
+        s.richiudibili = esito.profondita;
+        /* chiuso: stabile da qui, ma solo se dopo la chiusura la riga è vuota (un testo lì comincia un paragrafo che può continuare) */
+        if (esito.fine !== -1 && riga.slice(esito.fine).trim() === '') s.confine = a + 1;
+      }
+    } else if (apertura) {
+      if (!s.citazioneNelBlocco) s.confine = inizio; // prima dell'apertura, come per un recinto: il renderer chiude lì paragrafo, elenco e tabella
+      const esito = scorriRichiudibile(riga.slice(apertura.lunghezza), 1);
+      s.richiudibili = esito.profondita;
+      if (esito.fine !== -1 && riga.slice(apertura.lunghezza + esito.fine).trim() === '') s.confine = a + 1;
+      s.citazioneNelBlocco = false;
+    } else if (RIGA_RECINTO.test(riga)) {
       if (s.dentroFence) {
         s.dentroFence = false;
         s.confine = a + 1; // dopo la chiusura il recinto è finito
@@ -181,6 +202,18 @@ export function confineDiRivelazione(testo, k, { dentroFence = false, finito = f
   /* la riga del recinto (apertura o chiusura) è intera o niente: è cornice, non testo */
   if (RIGA_RECINTO.test(riga) || (!completa && /^\s*`{1,2}$/.test(riga))) return completa ? Math.min(n, e + 1) : s;
   if (dentroFence) return k;
+  /* ⭐ 10/11/2026 (0.2.1) — i tag del blocco richiudibile non si vedono: uno intero passa in un colpo, uno che sta arrivando in fondo alla
+     riga aspetta (niente `<deta` a schermo che poi diventa un blocco). Un `<` che non può diventare uno dei due tag va al ritmo. */
+  {
+    const tag = new RegExp(TAG_RICHIUDIBILE, 'gi');
+    const qui = k - s;
+    let m;
+    while ((m = tag.exec(riga)) && m.index < qui) {
+      if (qui < m.index + m[0].length) return s + m.index + m[0].length;
+    }
+    const minore = riga.lastIndexOf('<');
+    if (!completa && minore !== -1 && qui > minore && !riga.slice(minore).includes('>') && tagRichiudibileInArrivo(riga.slice(minore))) return s + minore;
+  }
   if (!completa && SOLO_SEGNO.test(riga)) return s;
   /* le righe di separazione (orizzontale o di tabella) intere */
   if (RIGA_SEPARATORE.test(riga.trim()) || separatoreTabella(riga)) return completa ? Math.min(n, e + 1) : s;

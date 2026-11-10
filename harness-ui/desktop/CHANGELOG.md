@@ -4,6 +4,20 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
+## desktop-v0.2.1 — 2026-11-10
+
+### Fixed
+
+- **Collapsible sections in replies.** When the model wrote a section to open and close (`<details>` with a `<summary>`
+  title), the chat showed the raw tags as text. It is now a block you open with a click, Enter or Space; the title follows
+  the chat text and Markdown works inside. While the answer arrives the block stays open, so you see the text as it comes,
+  and no tag ever shows half written. A section with nothing inside is a plain title line, with nothing to open. Only these
+  two tags become a block: any other HTML the model writes stays text, and «Copy» still copies the reply exactly as written.
+
+### Known limits
+
+- The phone app still shows these sections as text.
+
 ## desktop-v0.2.0 — 2026-11-09
 
 ### Added
