@@ -58,7 +58,7 @@ jobs:
           git rev-parse HEAD > recovery/SOURCE_COMMIT.txt
           git archive --format=zip --output=recovery/source.zip HEAD harness-ui context-engine docs .github README.md LICENSE NOTICE THIRD_PARTY_NOTICES.md
           cp -r harness-ui/frontend/test-results recovery/evidence || true
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: talos-isolated-source-evidence-${{ inputs.source_sha || github.sha }}
@@ -194,7 +194,7 @@ jobs:
             $relative = [IO.Path]::GetRelativePath($out, $_.FullName).Replace('\','/')
             "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $relative"
           } | Set-Content (Join-Path $out 'SHA256SUMS.txt') -Encoding utf8
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: TALOS-Refactor-Preview-Windows-x64-${{ inputs.source_sha || github.sha }}
           path: preview-output/application/
@@ -202,7 +202,7 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           compression-level: 6
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: TALOS-Refactor-Windows-evidence-${{ inputs.source_sha || github.sha }}

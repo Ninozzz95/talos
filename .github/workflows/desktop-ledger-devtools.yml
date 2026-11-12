@@ -35,7 +35,7 @@ jobs:
           sha256sum harness-ui/package-lock.json harness-ui/frontend/package-lock.json context-engine/package-lock.json > tools/LOCK_SHA256SUMS.txt
           tar -czf transfer/locked-linux-devtools.tar.gz tools harness-ui/node_modules harness-ui/frontend/node_modules context-engine/node_modules
           sha256sum transfer/locked-linux-devtools.tar.gz > transfer/SHA256SUMS.txt
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: talos-locked-linux-devtools-${{ github.sha }}
           path: transfer/
