@@ -117,4 +117,25 @@ describe('le domande di TALOS nel Codice su r4 (K3-AP2)', () => {
         expect(erroreInvioDomandaR4(409, messaggioRifiutoDomandaR4('QUESTION_NOT_PENDING', '', 'it'), 'it').testo)
             .toBe('Domanda non più attiva: Questa domanda non è più in attesa: la sessione è andata avanti. Ricarica la sessione per verificare lo stato.')
     })
+
+    /*
+     * B2 del computer use (giudice v1548, v1561): «Consenti» davanti a un elenco che il telefono non mostra. Il server col computer
+     * use unito risponde 422 QUESTION_ANSWER_NEEDS_DETAILS; quello di oggi 403 QUESTION_ANSWER_FORBIDDEN. In tutti e due i casi la
+     * carta si libera (la domanda resta aperta: «Non consentire» e «Ferma» passano), come il dock del PC (`[400, 403, 422]`).
+     */
+    it('DOM-08 B2: il 422 nuovo libera la carta con la frase tradotta del server', () => {
+        const en = 'Open the whole list on the PC to allow this: this device cannot show it'
+        expect(messaggioRifiutoDomandaR4('QUESTION_ANSWER_NEEDS_DETAILS', en, 'it')).toBe('Apri l’elenco intero sul PC per consentire: questo dispositivo non lo mostra')
+        expect(messaggioRifiutoDomandaR4('QUESTION_ANSWER_NEEDS_DETAILS', 'x', 'en')).toBe(en)
+        const r = erroreInvioDomandaR4(422, messaggioRifiutoDomandaR4('QUESTION_ANSWER_NEEDS_DETAILS', en, 'it'), 'it')
+        expect(r).toEqual({ fase: null, testo: testoDomandaR4('chat.question.submit.failed', 'it', { errore: 'Apri l’elenco intero sul PC per consentire: questo dispositivo non lo mostra' }), bloccata: false })
+    })
+
+    it('DOM-09 B2: il 403 di oggi libera la carta anche lui, con la frase del server, invece di «esito non verificato»', () => {
+        for (const lingua of LINGUE) {
+            const frase = messaggioRifiutoDomandaR4('QUESTION_ANSWER_FORBIDDEN', 'Open the whole list on the PC to allow this: this device cannot show it. The question stays open.', lingua)
+            const r = erroreInvioDomandaR4(403, frase, lingua)
+            expect(r, lingua).toEqual({ fase: null, testo: testoDomandaR4('chat.question.submit.failed', lingua, { errore: frase }), bloccata: false })
+        }
+    })
 })

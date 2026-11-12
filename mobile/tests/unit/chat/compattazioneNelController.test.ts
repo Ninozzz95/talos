@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 import { createChatController, type ChatControllerDeps } from '@/stores/chatController'
 import { createMemoryChatRepository } from '@/repositories/memoryChatRepository'
-import { TALOS_METADATA_COMPATTAZIONE } from '@/lib/chat/compattazioneChat'
+import { TALOS_METADATA_COMPATTAZIONE, stimaDellaRichiestaDelPc } from '@/lib/chat/compattazioneChat'
 import { talosTestT } from '../../helpers/talosTestI18n'
 import { TALOS_EMPTY_TOOL_AUTHORIZATIONS } from '@/lib/tools/toolAuthorizations'
 
@@ -65,11 +65,23 @@ let promptDellaRisposta = 100
 /** Risposte realistiche: con risposte di una parola l'intestazione del riassunto pesa più di ciò che toglie (owner: almeno il 30%). */
 const LUNGA = 'con il ragionamento, le alternative scartate e i passi concreti da seguire. '.repeat(120)
 
+/** Giudice v1547: un fornitore tarato, i cui token veri sono `rapporto` × la stima del PC della richiesta che riceve. */
+let rapporto: number | null = null
+
 beforeEach(() => {
     promptDellaRisposta = 100
+    rapporto = null
     provider.complete.mockReset().mockImplementation(async (input: Input) => (eRiassunto(input)
         ? { text: 'RIASSUNTO DEL CONTROLLER', model: 'calm-test', finishReason: 'stop' }
-        : { text: `Risposta. ${LUNGA}`, model: 'calm-test', finishReason: 'stop', usage: { prompt_tokens: promptDellaRisposta, completion_tokens: 10 } }))
+        : {
+            text: `Risposta. ${LUNGA}`, model: 'calm-test', finishReason: 'stop',
+            usage: {
+                prompt_tokens: rapporto !== null
+                    ? Math.round(rapporto * stimaDellaRichiestaDelPc({ turni: input.turns as never, system: input.system, tools: input.tools }))
+                    : promptDellaRisposta,
+                completion_tokens: 10,
+            },
+        }))
 })
 afterEach(() => controllers.splice(0).forEach((c) => c.dispose()))
 
@@ -81,20 +93,40 @@ async function conversazione(controller: ReturnType<typeof createChatController>
 }
 
 describe('P4-ter passo 2 — la compattazione della chat nel controller', () => {
-    it('CTRL-COMP-01 «Compatta ora» con un fornitore remoto: richiesta separata senza attrezzi, poi la riga nella storia', async () => {
+    /*
+     * Telefono 0.1.48, giudice v1547 (strada (b)): questo fornitore finto dice 100 token per una richiesta che la stima del PC conta
+     * ~25.500 con sistema e attrezzi (rapporto 0,004). È un dato rotto: k scende al più a 1/FATTORE_K_MASSIMO (0,25), il riassunto atteso pesa 100 token
+     * veri, e 31 + 100 > 77 (il 70% di 110). Fino al giro dopo i revisori la prova si aspettava il riassunto; ora «niente».
+     */
+    it('CTRL-COMP-01 dato rotto ⇒ niente: un fornitore che dice 100 token su ~25.500 stimati non paga il riassunto', async () => {
         const { controller, repository } = setup()
         await controller.init()
         const sessione = await conversazione(controller)
         expect(chiamateDiRiassunto()).toHaveLength(0)
         const esito = await controller.chat.compattaOra(sessione)
-        expect(esito).toMatchObject({ ok: true, compattato: true })
+        expect(esito).toEqual({ ok: true, compattato: false, motivo: 'niente-da-guadagnare' })
+        expect(chiamateDiRiassunto()).toHaveLength(0)
+        expect((await repository.listMessages(sessione)).some((r) => r.metadata?.[TALOS_METADATA_COMPATTAZIONE])).toBe(false)
+    })
+
+    /*
+     * Giudice v1547: la via del controller ha ancora una prova che il riassunto si fa, con un fornitore tarato a 0,4 (i token veri
+     * sono 0,4 × la stima del PC della richiesta che riceve). A rapporto 1 su questa finestra da 4.000 non si può: sistema e attrezzi
+     * pesano ~2.700 token e l'ultima risposta ~2.290, il pavimento (5.023) sta già oltre il limite (3.499). A 0,4 il riassunto parte
+     * DA SOLO durante gli scambi, prima di «Compatta ora»: la prova lo dice e lo controlla.
+     */
+    it('CTRL-COMP-01b fornitore tarato a 0,4: il riassunto parte da solo durante gli scambi, separato e senza attrezzi, e la richiesta dopo lo porta', async () => {
+        rapporto = 0.4
+        const { controller, repository } = setup()
+        await controller.init()
+        const sessione = await conversazione(controller)
         const [richiesta] = chiamateDiRiassunto()
         expect(richiesta).toBeDefined()
         expect(richiesta!.tools ?? []).toHaveLength(0)
         expect(richiesta!.turns.some((t) => t.content === 'domanda 0')).toBe(true)
-        const righe = await repository.listMessages(sessione)
-        const riga = righe.find((r) => r.metadata?.[TALOS_METADATA_COMPATTAZIONE])
+        const riga = (await repository.listMessages(sessione)).find((r) => r.metadata?.[TALOS_METADATA_COMPATTAZIONE])
         expect(riga).toMatchObject({ role: 'system' })
+        expect((riga!.metadata[TALOS_METADATA_COMPATTAZIONE] as { motivo: string }).motivo).not.toBe('manuale')
         await controller.send('e adesso?')
         const ultima = provider.complete.mock.calls.at(-1)![0] as Input
         expect(ultima.turns.some((t) => t.content.includes('RIASSUNTO DEL CONTROLLER'))).toBe(true)

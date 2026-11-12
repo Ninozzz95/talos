@@ -1,11 +1,12 @@
 {
   "origine": {
-    "commit": "b000e725325cf4d9d1fa1266a43805e86029e7bc",
+    "commit": "aef69f7c0b304288e4abdae7b78deab7654be447",
     "percorso": "harness-ui/frontend/src/i18n/testi/errori.js",
-    "sha256": "33c13319b8ed7522ef4345804ce6429d38e2af89df7b89b398b7e3fb5ab82200",
+    "sha256": "7216c7b39f171d1ef85c660f06a3173fdcd9541eec92f2441d442d4a6aef8367",
     "prefisso": [
       "QUESTION_NOT_PENDING.message",
       "QUESTION_ANSWER_FORBIDDEN.message",
+      "QUESTION_ANSWER_NEEDS_DETAILS.message",
       "QUESTION_ANSWER_NOT_SAVED.message",
       "QUERY_INVALID.message",
       "NOT_FOUND.message"
@@ -15,6 +16,7 @@
     "QUERY_INVALID.message": "Query non valida",
     "NOT_FOUND.message": "Risorsa non trovata",
     "QUESTION_ANSWER_FORBIDDEN.message": "A questa domanda si risponde solo dalla sessione che l’ha fatta o da una che l’ha avviata",
+    "QUESTION_ANSWER_NEEDS_DETAILS.message": "Apri l’elenco intero sul PC per consentire: questo dispositivo non lo mostra",
     "QUESTION_NOT_PENDING.message": "Questa domanda non è più in attesa: la sessione è andata avanti",
     "QUESTION_ANSWER_NOT_SAVED.message": "La risposta non è stata salvata: la domanda è stata chiusa senza risposta",
     "QUERY_INVALID.message_reference_invalid": "Riferimento del messaggio non valido",
@@ -24,6 +26,7 @@
     "QUERY_INVALID.message": "Invalid query",
     "NOT_FOUND.message": "Resource not found",
     "QUESTION_ANSWER_FORBIDDEN.message": "This question can be answered only from the session that asked or from one that started it",
+    "QUESTION_ANSWER_NEEDS_DETAILS.message": "Open the whole list on the PC to allow this: this device cannot show it",
     "QUESTION_NOT_PENDING.message": "This question is no longer pending: the session has moved on",
     "QUESTION_ANSWER_NOT_SAVED.message": "The answer was not saved: the question was closed without an answer",
     "QUERY_INVALID.message_reference_invalid": "Invalid message reference",

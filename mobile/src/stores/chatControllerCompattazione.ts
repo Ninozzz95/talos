@@ -3,7 +3,7 @@ import type { TalosMobileProviderId } from '@/components/chat/mobileChatTypes'
 import type { TalosMobileHttpTransport } from '@/lib/chat/httpTransport'
 import type { ChatTurn, TalosFinestraCompattazione, TalosMisuraRichiesta, TalosRiassumiInput, TalosRiassuntoEsito } from '@/stores/chat'
 import { providerAdapterFor } from '@/lib/chat/providerRegistry'
-import { richiestaDiRiassunto, stimaRichiesta, type TalosUltimoGiroChat } from '@/lib/chat/compattazioneChat'
+import { richiestaDiRiassunto, stimaDellaRichiestaDelPc, stimaRichiesta, type TalosUltimoGiroChat } from '@/lib/chat/compattazioneChat'
 import { valutaRispostaDiRiassunto } from '@/lib/kernel/compattazione'
 
 /*
@@ -65,7 +65,19 @@ export function creaCompattazioneDelController(d: TalosDipendenzeCompattazioneCo
         const tokenRimasti = finestra && finestra.finestraToken !== null && finestra.promptTokens !== null
             ? finestra.finestraToken - finestra.promptTokens - (finestra.riservaUscita ?? 0)
             : undefined
-        const base = { provider: scelto.provider, turni: input.turni, parti: input.parti, ultimoGiro, tokenRimasti }
+        /*
+         * Telefono 0.1.48 (giudice v1536): oltre la finestra lo store passa lo spazio libero; il riassunto lo chiede in parole, metà dei
+         * token come per la riserva d'uscita qui sotto (l'italiano costa più di un token a parola). Sotto la finestra niente cambia.
+         * Giudice v1556: lo spazio arriva già diviso per k (unità della stima del PC, caratteri/4). Metà regge se una parola pesa al più
+         * 2 unità, cioè 8 caratteri con lo spazio: misurato sui testi del telefono, 6,44 in italiano e 6,01 in inglese (1,61 e 1,50).
+         */
+        const tettoInParole = Number.isFinite(input.spazioDelRiassunto) && (input.spazioDelRiassunto as number) > 0
+            ? Math.max(1, Math.floor((input.spazioDelRiassunto as number) / 2))
+            : undefined
+        const base = {
+            provider: scelto.provider, turni: input.turni, parti: input.parti, ultimoGiro, tokenRimasti,
+            ...(tettoInParole !== undefined ? { paroleMassime: tettoInParole } : {}),
+        }
         const richiesta = scelto.provider === 'local' && finestra && finestra.finestraToken !== null
             ? await richiestaLocaleNelTetto(scelto.model, base, finestra.finestraToken - (finestra.riservaUscita ?? 0) - 1, finestra.riservaUscita)
             : richiestaDiRiassunto(base)
@@ -119,7 +131,10 @@ export function creaCompattazioneDelController(d: TalosDipendenzeCompattazioneCo
             const token = await conta(inCoda)
             if (token === null || token <= limite) return inCoda
         }
-        const paroleMassime = riservaUscita ? Math.max(50, Math.floor(riservaUscita / 2)) : undefined
+        const dellaRiserva = riservaUscita ? Math.max(50, Math.floor(riservaUscita / 2)) : undefined
+        const paroleMassime = base.paroleMassime !== undefined && dellaRiserva !== undefined
+            ? Math.min(base.paroleMassime, dellaRiserva)
+            : base.paroleMassime ?? dellaRiserva
         let budgetCaratteri = Math.max(1, Math.floor(limite * 3.5))
         let aParte = richiestaDiRiassunto({ ...base, inCoda: false, budgetCaratteri, ...(paroleMassime ? { paroleMassime } : {}) })
         for (let misure = 0; misure < 4; misure += 1) {
@@ -151,11 +166,16 @@ export function creaCompattazioneDelController(d: TalosDipendenzeCompattazioneCo
                 thinking: giro?.thinking ?? false,
                 locale: d.locale(),
             })
-            return token !== null ? { token, misura: 'motore' } : null
+            return token !== null ? { token, misura: 'motore', stima: stimaDellaRichiestaDelPc({ turni: input.turni, system: giro?.system, tools: giro?.tools }) } : null
         }
         const rapporto = d.taratura(input.sessionId)
         if (rapporto === null) return null
-        return { token: Math.round(rapporto * stimaRichiesta({ turni: input.turni, system: giro?.system, tools: giro?.tools })), misura: 'fornitore' }
+        return {
+            token: Math.round(rapporto * stimaRichiesta({ turni: input.turni, system: giro?.system, tools: giro?.tools })),
+            misura: 'fornitore',
+            // Giudice v1535 (R1): la stima del PC della stessa richiesta, il denominatore di k.
+            stima: stimaDellaRichiestaDelPc({ turni: input.turni, system: giro?.system, tools: giro?.tools }),
+        }
     }
 
     return { finestraDellaChat, riassumiConversazione, misuraRichiesta }

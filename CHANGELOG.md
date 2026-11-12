@@ -4,7 +4,140 @@ What changed in each release, written for someone using the app rather than
 someone reading the commits. Every version here has a matching tag and a
 signed APK under [Releases](../../releases).
 
-Numbers in this file are measured on a device, not estimated.
+Numbers in this file are measured on a device unless a version says otherwise.
+
+## mobile-v0.1.48
+
+A security fix for Code on the device: two tools could write a file that may hold keys or passwords into your project
+without asking you. It also fixes the end of a reply showing twice for a moment, and text typed at that moment
+disappearing in a new chat.
+
+### Fixed
+
+- **A file that may hold keys or passwords was written without asking after you lowered the access level.** If a turn
+  started in Full access and you lowered the level while it was still running, creating a document could still write or
+  append to a file such as `credentials.json` or `.env` in your project, with no permission card. An agent started by the
+  chat before you lowered the level did the same. The level that counts is now the one set at the moment of each write.
+- **Exporting from the Library copied such a file into your project without asking.** Outside Full access, exporting a
+  Library item whose name is one of those files is now refused and nothing is written; the model is told to use the
+  ordinary write, which asks you first. In Full access nothing changes.
+- **The end of a reply showed twice for a moment.** When a reply finished, the finished message appeared while the text
+  being written was still on screen, so the same words were there twice until it went away. The text being written now
+  leaves at the very moment the finished message arrives, also on a tablet. This was already in 0.1.47. One case is
+  left, during a summary of the conversation: see Known limitations.
+  - In italiano: alla fine di una risposta lo stesso testo compariva due volte per un attimo: il messaggio finito arrivava
+    mentre il testo in scrittura era ancora a schermo. Ora il testo in scrittura se ne va nell'istante in cui arriva il
+    messaggio finito, anche su un tablet. Il difetto c'era già nella 0.1.47. Resta un caso, durante il riassunto della
+    conversazione: vedi i limiti noti.
+- **Text typed as the first reply of a new chat was finishing disappeared from the field.** It was kept under "new
+  chat" instead of the chat you were in. The draft now follows the chat as soon as your first message creates it.
+  - In italiano: il testo scritto mentre finiva la prima risposta di una chat nuova spariva dal campo: restava sotto
+    «chat nuova» invece che nella chat in cui eri. Ora la bozza segue la chat appena il tuo primo messaggio la crea.
+- **A long chat with a model on the device failed when it did not fit the model.** On a tablet the reply stopped with
+  "This conversation and its tools need about 4107 tokens, and this device can safely give this model 2816": the summary
+  always kept the last two exchanges, the last requests, the system text and the tools whole, and that alone did not fit.
+  Now, when the chat does not fit, the summary also shortens the part it kept whole: old tool results first, then the
+  oldest exchanges, never the message you are sending. The model is asked for a summary that fits the space left, and if
+  there is no room even for a short one TALOS says "Nothing to gain" at once, without asking the model. It works both for
+  "Compact now" and for the summary made before a reply, the 30% rule stays, and the summary line says what was left out. The saved chat, search, export and Undo still
+  have everything. If your message alone does not fit the model, TALOS says so at once, with the numbers. When a reply
+  stops because the chat is full, the summary may use all the room the model has, even less than the usual minimum, and
+  a summary longer than asked is cut at the end of a sentence or line instead of being thrown away. With room for fewer
+  than about 24 words TALOS does not ask the model: it says how many tokens the chat would need and suggests a new chat,
+  where your message fits. The limit the device can safely give the model changes within minutes (on a tablet 3,328
+  and then 4,096 tokens with 5,120 open): when the device refuses a reply, TALOS takes the limit it gives at that
+  moment, summarizes and tries once more. If the chat still does not fit, TALOS says how many tokens it needs and how
+  many the model can take there, or, when the device gives no numbers, that the chat is too long for it; the device's
+  own message no longer reaches the screen. This retry is tested on a computer and on a tablet, in both orientations,
+  with a refusal provoked by pasted text; the two messages for a chat that still does not fit never appeared on the
+  tablet and are tested only on a computer.
+  - In italiano: una chat lunga con un modello sul dispositivo falliva quando non entrava nel modello: il riassunto teneva
+    sempre interi gli ultimi due scambi, le ultime richieste, il testo di sistema e gli strumenti, e già quello non ci
+    stava. Ora, quando la chat non entra, il riassunto accorcia anche la parte tenuta intera: prima i risultati vecchi degli
+    strumenti, poi gli scambi più vecchi, mai il messaggio che stai mandando. Al modello si chiede un riassunto che stia nello
+    spazio rimasto, e se non c'è posto nemmeno per uno breve TALOS dice subito «Niente da guadagnare», senza chiedere al
+    modello. Vale per «Compatta ora» e per il riassunto
+    prima di una risposta, la regola del 30% resta, e la riga del riassunto dice cosa ha lasciato fuori. La chat salvata,
+    la ricerca, l'esportazione e Annulla hanno ancora tutto. Se il tuo messaggio da solo non entra nel modello, TALOS lo
+    dice subito, coi numeri. Quando una risposta si ferma perché la chat è piena, il riassunto può usare tutto lo spazio
+    che il modello ha, anche meno del minimo solito, e un riassunto più lungo del chiesto si taglia a fine frase o a fine
+    riga invece di buttarlo. Con spazio per meno di circa 24 parole TALOS non chiede al modello: dice quanti token
+    servirebbero alla chat e propone una chat nuova, dove il tuo messaggio entra. Il limite che il dispositivo può dare
+    al modello in sicurezza cambia in pochi minuti (su un tablet 3.328 e poi 4.096 token con 5.120 aperti): quando il
+    dispositivo rifiuta una risposta, TALOS prende il limite che dice in quel momento, riassume e riprova una volta. Se
+    la chat ancora non entra, TALOS dice quanti token servono e quanti il modello ne può ricevere lì, oppure, quando il
+    dispositivo non dà numeri, che la chat è troppo lunga per lui; il messaggio del dispositivo non arriva più a schermo.
+    Questo ritentativo è provato su un computer e su un tablet, nei due versi, con un rifiuto provocato da testo incollato;
+    i due messaggi per una chat che non entra nemmeno così sul tablet non sono mai comparsi e sono provati solo su un
+    computer.
+- **"Compact now" no longer thinks for about two minutes and then says "Nothing to gain".** On a tablet, at about 4,100
+  tokens and six exchanges, the model wrote a summary and TALOS then threw it away. Now TALOS counts the summary it
+  expects before asking for one, with the same rule as the computer app: at least 400 tokens, or the usual length of the
+  summaries already made in that chat. When even that cannot save 30%, it says "Nothing to gain" at once, without asking
+  the model. At eight exchanges the summary is still made.
+  - In italiano: «Compatta ora» non pensa più per circa due minuti per poi dire «Niente da guadagnare». Su un tablet, a
+    circa 4.100 token e sei scambi, il modello scriveva un riassunto e TALOS poi lo buttava. Ora TALOS conta il riassunto
+    che si aspetta prima di chiederlo, con la stessa regola dell'app per il computer: almeno 400 token, oppure la lunghezza
+    solita dei riassunti già fatti in quella chat. Quando nemmeno così si risparmia il 30%, dice subito «Niente da
+    guadagnare», senza chiedere al modello. A otto scambi il riassunto si fa ancora.
+
+### Known limitations
+
+- The security fix was tested on a computer and on a tablet with the app built from this release: there both cases above are
+  refused, and the same steps write the file on 0.1.47. Three rarer cases are tested only on a computer: the access level
+  lowered during a Library read, a hard link to a `.env` file exported from the Library, and a file whose name as read
+  differs from its name in the Library list.
+- The fix for the reply shown twice was also tested on a tablet with the app built from this release, in portrait and in
+  landscape: the end of each reply watched showed once, while a build without the fix showed it twice on the same tablet.
+  The fix for the text typed in a new chat was tested in a browser on a computer, at normal speed and with the processor
+  slowed four times; on the tablet the text stayed in the field even without the fix, so that test does not show it.
+  - In italiano: la cura del testo doppio è provata anche su un tablet con l'app costruita da questa versione, in verticale
+    e in orizzontale: ogni fine di risposta guardata è comparsa una volta sola, mentre una versione senza la cura, sullo
+    stesso tablet, la mostrava due volte. La cura del testo scritto in una chat nuova è provata in un browser sul computer,
+    a velocità normale e col processore rallentato quattro volte; sul tablet il testo restava nel campo anche senza la
+    cura, quindi quella prova non la mostra.
+- **The reply no longer shows twice when you come back to a chat while it is being summarized.** On a tablet, leaving a
+  chat and coming back during the summary that follows a reply showed the text being written below the finished message
+  until the summary ended (97.4 seconds measured in landscape and 96.5 in portrait, for summaries of 100.7 and 99.9
+  seconds). The chat read again kept the reply already saved while the reply was still being written on screen; now the
+  saved reply comes in when the writing ends, as when you do not leave.
+  - In italiano: la risposta non compare più due volte se torni in una chat mentre viene riassunta. Su un tablet, uscendo
+    da una chat e rientrando durante il riassunto che segue una risposta, il testo in scrittura restava sotto il messaggio
+    finito finché il riassunto finiva (misurati 97,4 secondi in orizzontale e 96,5 in verticale, per riassunti di 100,7 e
+    99,9 secondi). La chat riletta teneva la risposta già salvata mentre la risposta era ancora in scrittura a schermo;
+    ora la risposta salvata entra quando la scrittura finisce, come quando non esci.
+- When the computer refuses "Allow" on a question because this device cannot show the whole list it is about, the
+  question opens again on the device, but the reason it shows is a generic one ("This question can be answered only
+  from the session that asked or from one that started it") instead of "Open the whole list on the PC". Refusing or
+  stopping works from the device; to allow, answer from the computer.
+  - In italiano: quando il computer rifiuta «Consenti» su una domanda perché questo dispositivo non mostra l'elenco
+    intero a cui si riferisce, la domanda si riapre sul dispositivo, ma il motivo mostrato è generico («A questa domanda
+    si risponde solo dalla sessione che l'ha fatta o da una che l'ha avviata») invece di «Apri l'elenco intero sul PC».
+    Rifiutare o fermare funziona dal dispositivo; per consentire rispondi dal computer.
+- On a tablet "Compact now" can take about 10 seconds (9.9 to 11.0 measured, six exchanges) before saying "Nothing to
+  gain". The model is not called; the device counts the conversation three times to decide.
+  - In italiano: su un tablet «Compatta ora» può metterci circa 10 secondi (misurati da 9,9 a 11,0, sei scambi) prima di
+    dire «Niente da guadagnare». Il modello non viene chiamato; per decidere il dispositivo conta la conversazione tre
+    volte.
+- On a tablet, when a message does not fit and the conversation is summarized first, about 10 seconds pass between
+  sending and "Summarizing the conversation…" (9.7 and 10.0 measured; 22.3 when the model still has to load), and the
+  summary itself is slow: 189.8 and 521.1 seconds in the two runs measured on the final build, about 100 in the earlier
+  runs. The reply comes after the summary and one retry (520 seconds from the tap in the slowest run measured).
+  - In italiano: su un tablet, quando un messaggio non entra e prima si riassume la conversazione, passano circa 10
+    secondi fra l'invio e «Riassumo la conversazione…» (misurati 9,7 e 10,0; 22,3 se il modello è ancora da caricare), e
+    il riassunto stesso è lento: 189,8 e 521,1 secondi nelle due prove misurate sulla costruzione finale, circa 100 in
+    quelle di prima. La risposta arriva dopo il riassunto e una riprova (520 secondi dal tocco nella prova più lenta).
+- Two things were not tried on a tablet with the final build: coming back to a chat during a summary in landscape (tried
+  in portrait; landscape was tried on the build before it, and the code that draws the chat did not change since), and
+  "Resume" in portrait (no error offering "Resume" appeared).
+  - In italiano: due cose non sono state provate su un tablet con la costruzione finale: rientrare in una chat durante un
+    riassunto in orizzontale (provato in verticale; in orizzontale era provato sulla costruzione precedente, e il codice
+    che disegna la chat da allora non è cambiato), e «Riprendi» in verticale (non è comparso nessun errore che lo offra).
+- The TypeScript check announced in 0.1.47 for "the next version" is not in this one.
+
+### Install
+
+- From 0.1.46 TALOS updates itself to this version.
 
 ## mobile-v0.1.47
 

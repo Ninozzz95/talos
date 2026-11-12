@@ -133,6 +133,8 @@ const props = defineProps<{
     diagnostica?: boolean
     /** ⭐⭐ P4-ter passo 2 — questa chat sta riassumendo adesso: in fondo, la riga «Riassumo la conversazione…» con la barra. */
     compattazioneInCorso?: boolean
+    /** Telefono 0.1.48 (giudice v1585): «Compatta ora» sta controllando se conviene: la stessa riga con «Controllo…». */
+    compattazioneControllo?: boolean
     /** K3-B2: solo le azioni del messaggio che chi monta la lista sa fare; senza, tutte (la chat). */
     azioni?: readonly TalosAzioneMessaggio[]
     /**
@@ -243,16 +245,19 @@ interface TalosCompattazioneVista {
     at: string, tokenPrima: number | null, tokenDopo: number | null
     /** D-MO-12 (Codice su r4): il riassunto senza il modello e perché; `annullabile:false` per quella a mano. */
     ripiego: boolean, ragione: string | null, annullabile: boolean
+    /** Telefono 0.1.48: ciò che si è accorciato per stare nella finestra del modello (`chatCompattazione.ts`). */
+    accorciati: { esiti?: unknown, scambi?: unknown } | null
 }
 function compattazioneDi(message: TalosMobileMessageView): TalosCompattazioneVista | null {
     if (message.role !== 'system') return null
-    const voce = message.metadata?.[TALOS_METADATA_COMPATTAZIONE] as { record?: { at?: unknown, tokenPrima?: unknown, tokenDopo?: unknown }, ripiego?: unknown, ragione?: unknown, annullabile?: unknown } | undefined
+    const voce = message.metadata?.[TALOS_METADATA_COMPATTAZIONE] as { record?: { at?: unknown, tokenPrima?: unknown, tokenDopo?: unknown }, ripiego?: unknown, ragione?: unknown, annullabile?: unknown, accorciati?: unknown } | undefined
     const record = voce?.record
     if (!record || typeof record.at !== 'string') return null
     const numero = (valore: unknown) => (typeof valore === 'number' && Number.isFinite(valore) ? valore : null)
     return {
         at: record.at, tokenPrima: numero(record.tokenPrima), tokenDopo: numero(record.tokenDopo),
         ripiego: voce?.ripiego === true, ragione: typeof voce?.ragione === 'string' ? voce.ragione : null, annullabile: voce?.annullabile !== false,
+        accorciati: voce?.accorciati && typeof voce.accorciati === 'object' ? voce.accorciati as { esiti?: unknown, scambi?: unknown } : null,
     }
 }
 /** D-MO-12: la compattazione di r4 non riuscita («Conversazione non riassunta · <motivo>»). */
@@ -677,6 +682,7 @@ function messageStateLabel(state: string): string {
                 :ripiego="compattazioneDi(message)!.ripiego"
                 :ragione="compattazioneDi(message)!.ragione"
                 :annullabile="compattazioneDi(message)!.annullabile"
+                :accorciati="compattazioneDi(message)!.accorciati"
                 @annulla="emit('undoCompaction', compattazioneDi(message)!.at)"
             />
             <TalosMobileCompactionRow
@@ -1017,7 +1023,7 @@ function messageStateLabel(state: string): string {
         <!-- R1-5: the streaming tail subscribes to the store on its own — a
              token burst re-renders only that subtree, never this list. -->
         <TalosMobileStreamingReply :ereditata="ereditataDalVolo" />
-        <TalosMobileCompactionProgress v-if="compattazioneInCorso" />
+        <TalosMobileCompactionProgress v-if="compattazioneInCorso || compattazioneControllo" :fase="compattazioneInCorso ? 'riassunto' : 'controllo'" />
         <TalosMobileMessageEdit v-if="editTarget" v-bind="editTarget" @close="editTarget = null" />
         <TalosMobileComposerSheet
             v-if="testoDaSelezionare !== null"

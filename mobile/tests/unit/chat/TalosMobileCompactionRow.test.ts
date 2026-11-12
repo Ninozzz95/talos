@@ -53,4 +53,13 @@ describe('P4-ter passo 2 — la riga della compattazione nella chat', () => {
         const sorgente = readFileSync(resolve(process.cwd(), 'src/components/chat/TalosMobileCompactionProgress.vue'), 'utf8')
         expect(sorgente).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*animation: none[\s\S]*width: 100%/)
     })
+
+    it('CHAT-COMP-UI-04 telefono 0.1.48: la riga dice cosa si è accorciato per stare nel modello, con le parole del PC', () => {
+        const riga = mount(TalosMobileCompactionRow, { props: { tokenPrima: 3_082, tokenDopo: 1_560, annullata: false, accorciati: { esiti: 2, scambi: 1 } } })
+        expect(riga.text()).toContain('Conversazione riassunta · 3082 → 1560 token · 2 risultati accorciati · 1 scambio più vecchio lasciato fuori per stare in questo modello: TALOS può non aver visto tutto.')
+        expect(riga.findAll('button').map((b) => b.text())).toEqual(['Annulla'])
+        // Senza accorciamenti la riga resta quella di sempre.
+        expect(mount(TalosMobileCompactionRow, { props: { tokenPrima: 3_082, tokenDopo: 1_560, annullata: false, accorciati: { esiti: 0, scambi: 0 } } }).text())
+            .not.toContain('accorciat')
+    })
 })

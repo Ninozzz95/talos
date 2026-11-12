@@ -2,6 +2,7 @@
 import { computed, ref, useId } from 'vue'
 import { useTalosI18n } from '@/i18n'
 import { percheRipiegoR4, testoEsitoCompattazioneR4 } from '@/lib/harness/r4/compattazioneR4'
+import { testoAccorciatiPerLaFinestra, type TalosAccorciatiPerLaFinestra } from '@/lib/chat/compattazioneAccorciati'
 
 /*
  * ⭐⭐ P4-ter passo 2 (02/10/2026) — il punto in cui la conversazione è stata riassunta, fisso nella chat: due filetti, i
@@ -29,7 +30,9 @@ const props = withDefaults(defineProps<{
     stato?: 'riassunta' | 'non-riuscita'
     motivo?: string | null
     dettaglio?: string | null
-}>(), { annullabile: true, ripiego: false, inAnnullamento: false })
+    /** Telefono 0.1.48: uscite vecchie e scambi accorciati per stare nella finestra del modello. */
+    accorciati?: { esiti?: unknown, scambi?: unknown } | null
+}>(), { annullabile: true, ripiego: false, inAnnullamento: false, accorciati: null })
 const emit = defineEmits<{ annulla: [] }>()
 const { t, locale } = useTalosI18n()
 const idEtichetta = `talos-compaction-${useId()}`
@@ -47,14 +50,15 @@ const etichetta = computed(() => {
         tokenPrima: props.tokenPrima, tokenDopo: props.tokenDopo, ripiego: props.ripiego, ragione: props.ragione,
         motivo: props.motivo, dettaglio: props.dettaglio,
     }, traduci, locale.value)
-    if (esito) return esito
-    if (Number.isFinite(props.tokenPrima) && Number.isFinite(props.tokenDopo)) {
-        return t('chat.compaction.summarizedRow', {
+    const base = esito || (Number.isFinite(props.tokenPrima) && Number.isFinite(props.tokenDopo)
+        ? t('chat.compaction.summarizedRow', {
             before: formato.value.format(props.tokenPrima as number),
             after: formato.value.format(props.tokenDopo as number),
         })
-    }
-    return t('chat.compaction.summarized')
+        : t('chat.compaction.summarized'))
+    // Telefono 0.1.48: ciò che si è accorciato per stare nella finestra del modello, nella stessa riga.
+    const accorciati = nonRiuscita.value ? null : testoAccorciatiPerLaFinestra(traduci, props.accorciati as Partial<TalosAccorciatiPerLaFinestra> | null)
+    return accorciati ? `${base} · ${accorciati}` : base
 })
 const perche = computed(() => percheRipiegoR4(props.ragione, traduci))
 const conAnnulla = computed(() => !props.annullata && !nonRiuscita.value && props.annullabile !== false)

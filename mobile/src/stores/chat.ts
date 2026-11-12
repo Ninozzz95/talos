@@ -41,6 +41,7 @@ import type { TalosPartiCompattazione } from '@/lib/kernel/compattazione'
 /** La coda vuota condivisa dello store (la stessa forma di `CODA_VUOTA`, senza tirare il modulo nell'avvio). */
 const CODA_VUOTA_DELLO_STORE: TalosCodaStato = Object.freeze({ voci: Object.freeze([]) as readonly TalosCodaVoce[], inPausa: false })
 import { TalosMobileProviderError } from '@/lib/chat/providerErrors'
+import { TalosUiError } from '@/i18n/uiErrors'
 import type {
     TalosChatRepository,
     AppendChatAttachmentInput,
@@ -342,6 +343,12 @@ export interface ChatState {
     lastError: string | null
     /** ⭐⭐ P4-ter passo 2 — la chat che sta riassumendo adesso (riga «Riassumo la conversazione…» con la barra). */
     compattazioneInCorso: string | null
+    /**
+     * Telefono 0.1.48 (giudice v1585): la chat dove «Compatta ora» sta CONTROLLANDO se il riassunto conviene (riga «Controllo…»),
+     * dal tocco all'esito. Sulla 381 il controllo durava 10 s senza niente a schermo; se il riassunto parte, vale `compattazioneInCorso`.
+     * Una lista: «occupato» vale per CHAT (giudice v1598 d), e durante il controllo di una chat un'altra può partire col suo.
+     */
+    compattazioneControllo: readonly string[]
     persistenceStatus: ChatPersistenceStatus
     persistenceError: string | null
     /**
@@ -376,6 +383,12 @@ export interface TalosRiassumiInput {
     /** Le parti del nucleo: per i fornitori remoti la richiesta separata e oscurata si costruisce dal `mezzo`. */
     parti: TalosPartiCompattazione
     signal?: AbortSignal
+    /**
+     * Telefono 0.1.48 (giudice v1536): SOLO oltre la finestra, il tetto del riassunto, lo spazio libero nel limite della richiesta.
+     * Giudice v1556: nelle unità della stima del PC, cioè i token veri divisi per k (`kValido`), perché il controller lo traduce in
+     * parole. Assente sotto la finestra: la richiesta resta quella di prima.
+     */
+    spazioDelRiassunto?: number
 }
 export type TalosRiassuntoEsito = { ok: true, testo: string } | { ok: false, motivo: string }
 export interface TalosFinestraCompattazione {
@@ -390,6 +403,8 @@ export interface TalosMisuraRichiesta {
     token: number
     /** `motore`: contata dal tokenizzatore del modello locale; `fornitore`: tarata sul numero vero dell'ultima richiesta. */
     misura: 'motore' | 'fornitore'
+    /** Telefono 0.1.48 (giudice v1535, R1): la stima del PC della stessa richiesta intera, per k; assente = k vale 1. */
+    stima?: number
 }
 export type TalosEsitoCompattazioneChat =
     | { ok: true, compattato: true, at: string, tokenPrima: number, tokenDopo: number }
@@ -627,6 +642,35 @@ function modelIdentity(modelProfileId: string | null): { provider: string | null
     }
 }
 
+/**
+ * Giudice v1623 — il rifiuto del motore locale «la richiesta non entra» (`localAdapter.ts`, `promptTooLongFailure`), riconosciuto
+ * dalla sua chiave: il controller lo rilancia col testo tradotto, che cambia con la lingua e non dice niente al classificatore.
+ * `tetto` e `servono` sono i numeri del dispositivo in QUEL momento, quando li ha misurati.
+ */
+const CHIAVI_DEL_RIFIUTO_DEL_DISPOSITIVO = new Set(['models.localPromptTooLongMeasured', 'models.localPromptTooLong'])
+function rifiutoDelDispositivo(error: unknown): { tetto: number | null, servono: number | null } | null {
+    if (!(error instanceof TalosMobileProviderError) || !CHIAVI_DEL_RIFIUTO_DEL_DISPOSITIVO.has(error.uiMessageKey ?? '')) return null
+    const numero = (valore: unknown) => {
+        const n = Number(valore)
+        return Number.isFinite(n) && n > 0 ? Math.floor(n) : null
+    }
+    return { tetto: numero(error.uiMessageParameters?.available), servono: numero(error.uiMessageParameters?.required) }
+}
+
+/**
+ * Il rifiuto del dispositivo detto con le frasi del telefono; `null` se non è quel rifiuto. Mai la frase del rifiuto a schermo
+ * (giudice v1630, revisore A): senza misura una frase senza cifre; con la misura, «col riassunto più breve» solo se un riassunto
+ * c'è stato (`dopoIlRiassunto`), altrimenti i numeri della richiesta rifiutata e basta.
+ */
+function senzaPostoDopoIlRifiuto(error: unknown, signal: AbortSignal, dopoIlRiassunto: boolean): TalosUiError | null {
+    const dispositivo = signal.aborted ? null : rifiutoDelDispositivo(error)
+    if (!dispositivo) return null
+    if (dispositivo.tetto === null || dispositivo.servono === null) return new TalosUiError('TALOS_LOCAL_PROMPT_TOO_LONG', 'chat.compaction.deviceTooLong')
+    return new TalosUiError('TALOS_LOCAL_PROMPT_TOO_LONG', dopoIlRiassunto ? 'chat.compaction.noRoomForSummary' : 'chat.compaction.deviceTooLongMeasured', {
+        required: String(dispositivo.servono), available: String(dispositivo.tetto),
+    })
+}
+
 function providerFault(
     error: unknown,
     modelProfileId: string | null,
@@ -703,6 +747,12 @@ function providerFault(
     const guastoDelDeposito = /SQLITE|constraint failed|\(code \d+\)|database is locked/i
         .test(messaggioGrezzo)
     const checkpointRotto = messaggioGrezzo.includes('TALOS_TOOL_AUTHORIZATION_CHECKPOINT_INVALID')
+    /*
+     * Revisore A, ripasso v1589 punto 7 (giudice v1598 c): la compattazione che dice coi numeri che la chat non entra porta già
+     * l'azione giusta nella frase («Start a new chat…», «Shorten the message…»): «Check the selected model and connection» sotto
+     * la contraddiceva. Nessun consiglio in più.
+     */
+    const azioneNellaFrase = String((error as { uiMessageKey?: unknown } | null)?.uiMessageKey ?? '').startsWith('chat.compaction.')
     const troppoGrande = checkpointRotto && /too_large/.test(messaggioGrezzo)
     return {
         layer: 'system',
@@ -715,7 +765,7 @@ function providerFault(
                 ? translate('chat.storageHiccup')
                 : talosTranslatableErrorMessage(error, translate)
                     ?? errorMessage(error, translate),
-        next_action: translate(troppoGrande
+        next_action: azioneNellaFrase ? null : translate(troppoGrande
             ? 'chat.startFreshAfterTooBig'
             : checkpointRotto
                 ? 'chat.resendAfterAuthorizationLapsed'
@@ -768,6 +818,7 @@ export function createChatStore<Runtime = undefined>(
         queues: {},
         turnOutcomes: {},
         compattazioneInCorso: null,
+        compattazioneControllo: [],
     })
     let initialization: Promise<void> | null = null
     let navigationRevision = 0
@@ -918,7 +969,7 @@ export function createChatStore<Runtime = undefined>(
     function applySnapshot(snapshot: Awaited<ReturnType<typeof readSnapshot>>): void {
         sessions.splice(0, sessions.length, ...snapshot.sessions)
         activeSession.value = snapshot.active
-        messages.splice(0, messages.length, ...snapshot.messages)
+        messages.splice(0, messages.length, ...senzaLeRigheDelGiro(snapshot.active?.id, snapshot.messages))
         sessionBrowserActivities.splice(0, sessionBrowserActivities.length, ...snapshot.sessionBrowserActivities)
     }
 
@@ -1165,7 +1216,7 @@ export function createChatStore<Runtime = undefined>(
             if (!selected) throw new Error(CHAT_SESSION_NOT_FOUND)
             if (revision !== navigationRevision) return
             activeSession.value = selected
-            messages.splice(0, messages.length, ...restoredData.views)
+            messages.splice(0, messages.length, ...senzaLeRigheDelGiro(sessionId, restoredData.views))
             sessionBrowserActivities.splice(0, sessionBrowserActivities.length, ...browserActivities)
             state.lastError = null
         } catch (error) {
@@ -1262,7 +1313,7 @@ export function createChatStore<Runtime = undefined>(
             if (revision !== navigationRevision) return
             sessions.splice(0, sessions.length, ...available)
             activeSession.value = next
-            messages.splice(0, messages.length, ...restored)
+            messages.splice(0, messages.length, ...senzaLeRigheDelGiro(next?.id, restored))
             sessionBrowserActivities.splice(0, sessionBrowserActivities.length, ...browserActivities)
             state.lastError = null
         } catch (error) {
@@ -1638,6 +1689,38 @@ export function createChatStore<Runtime = undefined>(
         return active
     }
 
+    /** Le righe già salvate del giro in corso che aspettano la fine del giro per comparire (vedi `appendDurable`). */
+    let righeDelGiro: { sessionId: string, viste: TalosMobileMessageView[] } | null = null
+    /**
+     * ⛔ Tester R3 sul tablet (381) e giudice v1603: una chat riletta dal disco MENTRE il suo giro scorre ancora (uscita e rientro
+     * durante il riassunto dopo la risposta) ha già sul disco le righe del giro, che però a schermo porta `lasciaLaBolla` alla fine,
+     * e la bolla intanto scrive la stessa risposta: due copie per tutto il riassunto (97,4 s su 100,7). Le righe del giro restano
+     * fuori dalla lista riletta e entrano con la bolla che si spegne, come quando non si esce.
+     */
+    function senzaLeRigheDelGiro(sessionId: string | null | undefined, viste: TalosMobileMessageView[]): TalosMobileMessageView[] {
+        const giro = righeDelGiro
+        if (!giro || giro.sessionId !== sessionId) return viste
+        const delGiro = new Set(giro.viste.map((vista) => vista.id))
+        return viste.filter((vista) => !delGiro.has(vista.id))
+    }
+    /**
+     * Fine del giro a schermo, in UN passo sincrono: la bolla si spegne, poi entrano le righe del giro (mai due volte: una chat
+     * riletta dal disco nel frattempo le ha già). Chi chiama mette `sending` a falso subito dopo, nello stesso passo.
+     */
+    function lasciaLaBolla(): void {
+        state.streamingText = null
+        state.streamingSessionId = null
+        state.streamingSince = null
+        state.sendingSessionId = null
+        state.streamingReasoning = null
+        state.streamingConfini = null
+        state.streamingBozze = null
+        const giro = righeDelGiro
+        righeDelGiro = null
+        if (!giro || activeSession.value?.id !== giro.sessionId) return
+        for (const vista of giro.viste) if (!messages.some((m) => m.id === vista.id)) messages.push(vista)
+    }
+
     async function appendDurable(
         sessionId: string,
         role: 'user' | 'assistant' | 'system',
@@ -1659,7 +1742,17 @@ export function createChatStore<Runtime = undefined>(
             created_at: now(),
         })
         const view = await loadMessageView(persisted)
-        if (activeSession.value?.id === sessionId) messages.push(view)
+        /*
+         * ⛔ 0.1.48, il testo doppio (owner 11/11 «Prima si cura il difetto»): la risposta entrava nella lista QUI, ma la bolla che
+         * la stava scrivendo usciva solo in `finishSend`, dopo altri `await` (l'esito della coda, la compattazione): per qualche
+         * disegno lo stesso testo era a schermo due volte (CI della #22, B3-E2E-01 rossa 6 su 6). Le righe del giro che sta ancora
+         * scorrendo in questa chat (la risposta, e ciò che il giro aggiunge dopo) sono già sul disco, ma a schermo le porta
+         * `lasciaLaBolla`, nello stesso passo sincrono in cui la bolla si spegne e il giro finisce: un solo aggiornamento di Vue.
+         * Prima si svuota il vivo, poi si scrive la trascrizione, come Hermes (`turnController.ts:423-426`).
+         */
+        if (role === 'assistant' && state.streamingSessionId === sessionId) righeDelGiro ??= { sessionId, viste: [] }
+        if (righeDelGiro?.sessionId === sessionId) righeDelGiro.viste.push(view)
+        else if (activeSession.value?.id === sessionId) messages.push(view)
         bumpSessionRecency(sessionId, persisted.created_at, {
             role: persisted.role,
             state: persisted.state,
@@ -1836,13 +1929,7 @@ export function createChatStore<Runtime = undefined>(
             }
             return false
         } finally {
-            state.streamingText = null
-            state.streamingSessionId = null
-            state.streamingSince = null
-            state.sendingSessionId = null
-            state.streamingReasoning = null
-            state.streamingConfini = null
-            state.streamingBozze = null
+            lasciaLaBolla()
             if (activeStreamAbort === abort) activeStreamAbort = null
             state.sending = false
         }
@@ -1977,11 +2064,20 @@ export function createChatStore<Runtime = undefined>(
         modelProfileId: string | null,
         motivo: TalosMotivoCompattazioneChat,
         signal?: AbortSignal,
+        tettoDelRifiuto?: number | null,
     ): Promise<TalosEsitoCompattazioneChat> {
-        return (await compattazione()).eseguiCompattazione(sessionId, modelProfileId, motivo, signal)
+        return (await compattazione()).eseguiCompattazione(sessionId, modelProfileId, motivo, signal, tettoDelRifiuto)
     }
     async function compattaOra(sessionId: string): Promise<TalosEsitoCompattazioneChat> {
-        return (await compattazione()).compattaOra(sessionId)
+        // Giudice v1585: l'indicatore si accende al tocco, PRIMA di caricare il modulo e di contare; un secondo tocco sulla STESSA chat è
+        // «occupato» (v1598 d: prima valeva per tutta l'app, e B diceva «Wait for TALOS to finish the answer» durante il controllo di A).
+        if (state.compattazioneControllo.includes(sessionId)) return { ok: false, motivo: 'occupato' }
+        state.compattazioneControllo = [...state.compattazioneControllo, sessionId]
+        try {
+            return await (await compattazione()).compattaOra(sessionId)
+        } finally {
+            state.compattazioneControllo = state.compattazioneControllo.filter((id) => id !== sessionId)
+        }
     }
     async function annullaCompattazione(sessionId: string, at: string): Promise<void> {
         return (await compattazione()).annullaCompattazione(sessionId, at)
@@ -2036,13 +2132,7 @@ export function createChatStore<Runtime = undefined>(
         const abort = new AbortController()
         activeStreamAbort = abort
         const finishSend = (): void => {
-            state.streamingText = null
-            state.streamingSessionId = null
-            state.streamingSince = null
-            state.sendingSessionId = null
-            state.streamingReasoning = null
-            state.streamingConfini = null
-            state.streamingBozze = null
+            lasciaLaBolla()
             activeStreamAbort = null
             state.sending = false
             void drainContinuationQueue()
@@ -2171,7 +2261,13 @@ export function createChatStore<Runtime = undefined>(
              * lettera); la storia su disco resta intera. Prima dello schermo, che va sull'ultimo turno della persona.
              */
             const compattazione = await import('@/lib/chat/compattazioneChat')
-            turns = compattazione.applicaCompattazioneChat(turns, compattazione.compattazioneAttiva(history))
+            /*
+             * Telefono 0.1.48 (giudice v1516): la compattazione si cerca nella storia INTERA. Con «Riprendi» la storia
+             * per il modello finisce all'ultimo messaggio della persona, e la riga della compattazione fatta per «contesto
+             * pieno» in QUESTO giro sta dopo di lui: tagliata via, il ritentativo ripartiva dalla storia intera e falliva di
+             * nuovo. Un record che copre più turni di quelli inviati non si applica (`applicaRecord`).
+             */
+            turns = compattazione.applicaCompattazioneChat(turns, compattazione.compattazioneAttiva(storiaIntera))
             /*
              * ⭐⭐ E QUI lo schermo rientra: sull'ULTIMO turno dell'utente, solo
              * per questa richiesta.
@@ -2259,10 +2355,19 @@ export function createChatStore<Runtime = undefined>(
                  * ⭐⭐ P4-ter passo 2 — «contesto pieno» (fornitore o motore locale, `TALOS_LOCAL_PROMPT_TOO_LONG`): UNA
                  * compattazione e UN ritentativo, come il Codice. Niente da riassumere o riassunto fallito ⇒ l'errore vero.
                  */
+                /*
+                 * ⛔ Giudice v1623 (ROSSO del Tester sulla 382): il rifiuto del dispositivo arriva dal controller con la frase GIÀ
+                 * TRADOTTA e senza il codice (`chatController.ts`, `safeProviderMessage`), e il classificatore del nucleo, identico al
+                 * PC, legge solo testo e codice: si riconosce dalla chiave, come il Codex dal tipo e mai dal testo
+                 * (`codex-rs/core/src/session/turn.rs:369-380`). Il tetto che il dispositivo dice ADESSO è il limite del riassunto, e
+                 * se nemmeno dopo il riassunto la richiesta entra, a schermo vanno i numeri del telefono, mai la frase del rifiuto.
+                 */
+                const dispositivo = rifiutoDelDispositivo(error)
                 const { classificaErroreFornitore } = await import('@/lib/kernel/compattazione')
-                if (abort.signal.aborted || !options.riassumiConversazione || classificaErroreFornitore(error) !== 'contesto-pieno') throw error
-                const compattata = await eseguiCompattazione(session.id, modelProfileId, 'overflow', abort.signal)
-                if (!(compattata.ok && compattata.compattato)) throw error
+                if (abort.signal.aborted) throw error
+                if (!options.riassumiConversazione || (!dispositivo && classificaErroreFornitore(error) !== 'contesto-pieno')) throw senzaPostoDopoIlRifiuto(error, abort.signal, false) ?? error
+                const compattata = await eseguiCompattazione(session.id, modelProfileId, 'overflow', abort.signal, dispositivo?.tetto)
+                if (!(compattata.ok && compattata.compattato)) throw senzaPostoDopoIlRifiuto(error, abort.signal, false) ?? error
                 streamed = ''
                 reasoned = ''
                 confini = []
@@ -2271,7 +2376,12 @@ export function createChatStore<Runtime = undefined>(
                 state.streamingConfini = null
                 state.streamingBozze = null
                 turns = await costruisciTurni()
-                reply = await chiama(turns)
+                try {
+                    reply = await chiama(turns)
+                } catch (ancora) {
+                    // UN ritentativo solo: un secondo rifiuto del dispositivo si dice coi suoi numeri, e la chat si ferma lì.
+                    throw senzaPostoDopoIlRifiuto(ancora, abort.signal, true) ?? ancora
+                }
             }
             // Debt A1: the loop dispatches on finishReason. No tool is registered
             // yet, so 'tool_calls' cannot occur — but the turn is persisted with its

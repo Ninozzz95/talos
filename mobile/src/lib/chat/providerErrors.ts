@@ -16,6 +16,8 @@ export class TalosMobileProviderError extends Error {
     readonly status?: number
     readonly uiMessageKey?: string
     readonly uiMessageParameters?: TalosMessageParameters
+    /** Il codice stabile del rifiuto (es. `TALOS_LOCAL_PROMPT_TOO_LONG`), tenuto quando il messaggio diventa la frase tradotta. */
+    readonly code?: string
 
     constructor(args: {
         provider: TalosMobileProviderId
@@ -24,11 +26,13 @@ export class TalosMobileProviderError extends Error {
         status?: number
         uiMessageKey?: string
         uiMessageParameters?: TalosMessageParameters
+        code?: string
     }) {
         super(args.message)
         this.name = 'TalosMobileProviderError'
         this.provider = args.provider
         this.operation = args.operation
+        if (args.code !== undefined) this.code = args.code
         this.status = args.status
         this.uiMessageKey = args.uiMessageKey
         this.uiMessageParameters = args.uiMessageParameters

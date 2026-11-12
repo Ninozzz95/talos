@@ -99,6 +99,8 @@ function makeController(messages: FakeMessage[] = []) {
             sendingSessionId: null as string | null,
             persistenceStatus: 'ready',
             persistenceError: null as string | null,
+            // Telefono 0.1.48 (giudice v1598 d): le chat dove «Compatta ora» sta controllando, una lista come nello store vero.
+            compattazioneControllo: [] as string[],
             // ⭐ B3: la coda per chat, come nello store vero (`state.queues`, letta con `queueOf`).
             queues: {} as Record<string, { voci: Array<{ id: string; testo: string; creataAlle: string }>; inPausa: boolean }>,
         }),

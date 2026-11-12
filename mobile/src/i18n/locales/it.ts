@@ -860,6 +860,7 @@ export const TALOS_IT_MESSAGES = {
         // @ 3ecf7651d, app.js:46930-46935 e dizionario `:843-854`).
         compaction: {
             inProgress: 'Riassumo la conversazione…',
+            checking: 'Controllo…',
             summarized: 'Conversazione riassunta',
             tokens: 'token',
             summarizedRow: 'Conversazione riassunta · {before} → {after} token',
@@ -874,6 +875,16 @@ export const TALOS_IT_MESSAGES = {
             nothingToGain: 'Niente da guadagnare: riassumendo, la richiesta non scenderebbe di almeno il 30%.',
             failed: 'Il riassunto non è riuscito: la conversazione resta intera.',
             busy: 'Aspetta che TALOS finisca la risposta, poi compatta.',
+            // Telefono 0.1.48 (owner 11/11/2026): ciò che si è accorciato per stare nel modello, con le parole del PC (chat.js:819).
+            resultsShortenedOne: '1 risultato accorciato',
+            resultsShortenedMany: '{n} risultati accorciati',
+            exchangesLeftOutOne: '1 scambio più vecchio lasciato fuori',
+            exchangesLeftOutMany: '{n} scambi più vecchi lasciati fuori',
+            shortenedForDevice: '{what} per stare in questo modello: TALOS può non aver visto tutto.',
+            requestTooLong: 'Il tuo messaggio e gli strumenti chiedono circa {required} token anche senza la conversazione di prima, e qui questo modello ne può ricevere {available}. Accorcia il messaggio oppure scegli un altro modello.',
+            noRoomForSummary: 'Questa chat non entra più in questo modello sul dispositivo, nemmeno col riassunto più breve: servono circa {required} token e qui il modello ne può ricevere {available}. Apri una chat nuova (lì il tuo messaggio entra), oppure spegni gli strumenti che non ti servono.',
+            deviceTooLongMeasured: 'Questa chat chiede circa {required} token e adesso su questo dispositivo il modello ne può ricevere {available}, e un riassunto non è riuscito a farla entrare. Apri una chat nuova, oppure spegni gli strumenti che non ti servono.',
+            deviceTooLong: 'Questa chat è troppo lunga per questo modello sul dispositivo. Apri una chat nuova, oppure spegni gli strumenti che non ti servono.',
             // Ledger LEDGER-RIGA-VIVA-CODICE-2026-10-21: la riga viva del riassunto e la riga del ripiego del Codice (frasi del B1 desktop, r4 f87c8f800)
             live: {
                 summarizing: 'Riassumo il contesto',

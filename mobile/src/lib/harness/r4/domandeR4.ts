@@ -176,12 +176,15 @@ export function ricevutaDomandaR4(domande: DomandaUtenteR4[], status: string, es
 }
 
 /**
- * I rami d'errore di `submit`: 404/409/410 → la domanda non è più attiva (carta ferma); 400/422 → riapre col motivo del server;
+ * I rami d'errore di `submit`: 404/409/410 → la domanda non è più attiva (carta ferma); 400/403/422 → riapre col motivo del server;
  * il resto (nessuno status, 5xx) → esito non verificato, e la carta resta bloccata finché l'esito non arriva dal flusso.
+ * B2 del computer use (giudice v1548, v1561): anche il 403 è un rifiuto chiaro e la domanda resta aperta, come il dock del PC
+ * (`user-question-dock.js`, `[400, 403, 422]`): «Consenti» davanti a un elenco che il telefono non mostra (403 oggi, 422 col
+ * computer use unito) lascia «Non consentire» e «Ferma».
  */
 export function erroreInvioDomandaR4(stato: number | null, messaggio: string, lingua: string): { fase: 'stale' | null; testo: string; bloccata: boolean } {
     if (stato === 404 || stato === 409 || stato === 410) return { fase: 'stale', testo: testoDomandaR4('chat.question.submit.stale', lingua, { errore: messaggio }), bloccata: false }
-    if (stato === 400 || stato === 422) return { fase: null, testo: testoDomandaR4('chat.question.submit.failed', lingua, { errore: messaggio }), bloccata: false }
+    if (stato === 400 || stato === 403 || stato === 422) return { fase: null, testo: testoDomandaR4('chat.question.submit.failed', lingua, { errore: messaggio }), bloccata: false }
     return { fase: null, testo: testoDomandaR4('chat.question.submit.unverified', lingua), bloccata: true }
 }
 
