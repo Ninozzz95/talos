@@ -38,7 +38,7 @@ jobs:
           ref: 5e451092dba0c1a09ee83ff6e5be37b1152a5c58 # tag v1.1.0, lo stesso del pacchetto npm
           path: iroh-ffi
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
       - name: Il nostro Cargo.lock, e il suo controllo
