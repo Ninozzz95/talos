@@ -164,7 +164,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6
 
       # ⛔ 09/11/2026 (PR 91 rossa): `ubuntu-latest` è passata a Ubuntu 26.04 e
       # l'immagine non porta più il CMake 3.31.6 nell'SDK. `app/build.gradle`
