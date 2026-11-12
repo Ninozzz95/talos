@@ -529,9 +529,10 @@ jobs:
 
             ## What it was tested on
 
-            Two devices: a OnePlus 13 and a OnePlus Pad 3. Two devices are a
-            small sample, and Android ROMs diverge a good deal on
-            accessibility, background execution and lock screen behaviour.
+            What this version was tested on is written above, under "What
+            changed": a version that was not tested on a device says so
+            there. Android ROMs diverge a good deal on accessibility,
+            background execution and lock screen behaviour.
 
   # R-04: installer Windows completo. Lo staging R-02 usa una lista di inclusioni;
   # cancelli e prova dell'installato precedono attestazione e pubblicazione.

@@ -1,0 +1,22 @@
+{
+    "en": [
+        "Security fix for Code on the device: if you lower the access level while a turn is running, creating a document no longer writes a file that may hold keys or passwords (credentials.json, .env) without asking you.",
+        "Exporting from the Library no longer copies a file with such a name into your project outside Full access: nothing is written, and the ordinary write asks you first.",
+        "The security fix was tested on a computer and on a tablet with this app. Three rarer cases are tested only on a computer: access lowered during a Library read, a hard link to .env, a file name read differently from the Library list.",
+        "The end of a reply no longer shows twice for a moment, also on a tablet, and text typed while the first reply of a new chat was finishing now stays in that chat.",
+        "A long chat with a model on the device no longer fails when it does not fit: the summary also shortens old tool results, then old exchanges (never your message); Undo brings them back.",
+        "Coming back to a chat while it is being summarized no longer shows the reply twice. On a tablet a summary is slow: from about 100 s to 521 s in the measured runs.",
+        "On a tablet about 10 s pass after you send before \"Summarizing the conversation…\" appears (9.7 and 10.0 s measured, 22 s if the model still has to load), and before \"Compact now\" says \"Nothing to gain\" (9.9-11.0 s).",
+        "A small model on the device may say it did something you declined: the \"Permission denied\" line counts. If the computer refuses your \"Allow\" on a question, the device may show a generic reason: allow it from the computer."
+    ],
+    "it": [
+        "Correzione di sicurezza per il Codice sul dispositivo: se abbassi il livello di accesso mentre un giro corre, la creazione di un documento non scrive più senza chiedertelo un file che può tenere chiavi o password (credentials.json, .env).",
+        "L'esportazione dalla Libreria non copia più un file con un nome così nel tuo progetto fuori dall'Accesso pieno: non si scrive niente, e la scrittura ordinaria te lo chiede prima.",
+        "La correzione di sicurezza è provata su un computer e su un tablet con questa app. Tre casi più rari solo su un computer: accesso abbassato durante una lettura della Libreria, collegamento fisico a .env, nome letto diverso dall'elenco.",
+        "La fine di una risposta non compare più due volte per un attimo, anche su un tablet, e il testo scritto mentre finiva la prima risposta di una chat nuova ora resta in quella chat.",
+        "Una chat lunga col modello sul dispositivo non fallisce più se non entra: il riassunto accorcia anche i risultati vecchi, poi gli scambi vecchi (mai il tuo messaggio); Annulla li riporta.",
+        "Rientrando in una chat mentre viene riassunta, la risposta non compare più due volte. Su un tablet il riassunto è lento: da circa 100 s a 521 s nelle prove misurate.",
+        "Su un tablet passano circa 10 s dall'invio prima che compaia \"Riassumo la conversazione…\" (misurati 9,7 e 10,0 s; 22 s se il modello è ancora da caricare), e prima che \"Compatta ora\" dica \"Niente da guadagnare\" (9,9-11,0 s).",
+        "Un modello piccolo sul dispositivo può dire di aver fatto ciò che hai rifiutato: conta la riga \"Permesso negato\". Se il computer rifiuta il tuo \"Consenti\" a una domanda, il dispositivo può dare un motivo generico: consenti dal computer."
+    ]
+}

@@ -75,7 +75,7 @@ const AREE = {
     'app-trascrizione': { percorso: PERCORSO_TESTI_APP, prefisso: ['transcript.', 'sessions.export', 'sessions.noneToExport', 'sessions.menu.exportTranscript'] },
     'errori-modello': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['CONFIG_INVALID.message', 'CONFIG_INVALID.provider_key_missing', 'CONFIG_INVALID.provider_unavailable', 'MODEL_ID_INVALID.message', 'REASONING_INVALID.message', 'PROVIDER_INVALID.message'] },
     // il perché di una risposta rifiutata (`POST /question`), con le parole del desktop (`errori.js`, `<CODICE>.message`)
-    'errori-domande': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['QUESTION_NOT_PENDING.message', 'QUESTION_ANSWER_FORBIDDEN.message', 'QUESTION_ANSWER_NOT_SAVED.message', 'QUERY_INVALID.message', 'NOT_FOUND.message'] },
+    'errori-domande': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['QUESTION_NOT_PENDING.message', 'QUESTION_ANSWER_FORBIDDEN.message', 'QUESTION_ANSWER_NEEDS_DETAILS.message', 'QUESTION_ANSWER_NOT_SAVED.message', 'QUERY_INVALID.message', 'NOT_FOUND.message'] },
     // K3 pin r4 701c6c0d2: la frase del MOTIVO che il server pubblica per la persona (`fraseDelMotivo` di `errori.js`; i motivi di
     // `public-problem.mjs` MOTIVI_CON_FRASE_PER_LA_PERSONA: i rifiuti dell'albero, la chiave che manca, i terminali senza sessione)
     'errori-motivi': { percorso: PERCORSO_TESTI_ERRORI, prefisso: ['QUERY_INVALID.', 'CONFIG_INVALID.provider_key_missing', 'TERMINAL_LIMIT_REACHED.standalone_terminals_in_use'] },

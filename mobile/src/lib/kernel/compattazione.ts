@@ -547,6 +547,67 @@ export function riduciCodaSottoPressione(coda: readonly M[], { budgetToken, stim
     return { coda: copia, ridotti, alMinimo: !rientra(), tetto }
 }
 
+/* ═══════════════ la parte tenuta alla lettera, quando la richiesta non entra nella finestra (owner 11/11/2026) ═══════════════
+ * Telefono 0.1.48, owner 11/11 17:45 «Cura completa»: sul Pad la finestra del modello locale può essere di 2.816 token, e
+ * sistema + attrezzi + gli ultimi due scambi + la richiesta tenuta (tetti qui sopra) non ci stanno. Allora si accorcia anche
+ * la parte tenuta intera: PRIMA le uscite vecchie degli strumenti (Hermes `agent/context_compressor.py:836`,
+ * `_PRUNED_TOOL_PLACEHOLDER`), POI gli scambi più vecchi fra quelli tenuti, uno alla volta (Codex
+ * `codex-rs/core/src/compact.rs:366`, «removing oldest history item»), fermandosi appena entra.
+ * ⛔ Mai la richiesta in corso (l'ultima richiesta della persona e ciò che la segue), mai i `system` iniziali, mai il riassunto.
+ * ⛔ Lavora su una copia: tocca solo ciò che va al modello (giudice v1510), la storia salvata resta intera.
+ */
+export const ESITO_TOLTO_PER_LA_FINESTRA = '[Old tool output removed by TALOS to fit the context window of this device. The full output is kept in the chat history.]'
+
+export interface TalosAccorciamentoPerLaFinestra {
+    messaggi: M[]
+    /** Uscite vecchie sostituite che restano nella lista (quelle dentro uno scambio poi tolto non contano). */
+    esitiTolti: number
+    scambiTolti: number
+    /** `false` = tolto tutto ciò che si poteva e ancora non entra. */
+    entra: boolean
+}
+
+function eRiassuntoCompattato(m: M | undefined): boolean {
+    return m?.role === 'user' && typeof m.content === 'string' && m.content.startsWith(MARCATORE_RIASSUNTO)
+}
+
+export function accorciaPerLaFinestra(messaggi: readonly M[] | null | undefined, { bersaglio, stima = stimaTokenMessaggi }: {
+    bersaglio: number, stima?: (lista: readonly M[]) => number
+}): TalosAccorciamentoPerLaFinestra {
+    const lista: M[] = Array.isArray(messaggi) ? [...messaggi] : []
+    const entra = () => stima(lista) <= bersaglio
+    const tolto = (m: M | undefined) => m?.role === 'tool' && m.content === ESITO_TOLTO_PER_LA_FINESTRA
+    const giaTolti = lista.filter(tolto).length
+    const esito = (scambiTolti: number): TalosAccorciamentoPerLaFinestra =>
+        ({ messaggi: lista, esitiTolti: lista.filter(tolto).length - giaTolti, scambiTolti, entra: entra() })
+    if (entra()) return esito(0)
+    let fineTesta = 0
+    while (fineTesta < lista.length && eSistema(lista[fineTesta])) fineTesta += 1
+    let inizioRichiesta = lista.length
+    for (let i = lista.length - 1; i >= fineTesta; i -= 1) {
+        if (eRichiestaDellaPersona(lista[i])) { inizioRichiesta = i; break }
+    }
+    // 1. Le uscite vecchie degli strumenti, dalla più vecchia: la coppia chiamata/esito resta, cambia solo il testo.
+    for (let i = fineTesta; i < inizioRichiesta && !entra(); i += 1) {
+        const m = lista[i]!
+        if (m?.role !== 'tool' || typeof m.content !== 'string' || m.content.length <= ESITO_TOLTO_PER_LA_FINESTRA.length) continue
+        lista[i] = { ...m, content: ESITO_TOLTO_PER_LA_FINESTRA }
+    }
+    // 2. Gli scambi più vecchi fra quelli tenuti, interi (una richiesta e ciò che la segue): nessuna coppia si spezza.
+    let scambiTolti = 0
+    while (!entra()) {
+        let inizio = fineTesta
+        while (inizio < inizioRichiesta && eRiassuntoCompattato(lista[inizio])) inizio += 1
+        if (inizio >= inizioRichiesta) break
+        let fine = inizio + 1
+        while (fine < inizioRichiesta && !eRichiestaDellaPersona(lista[fine]) && !eRiassuntoCompattato(lista[fine])) fine += 1
+        lista.splice(inizio, fine - inizio)
+        inizioRichiesta -= fine - inizio
+        scambiTolti += 1
+    }
+    return esito(scambiTolti)
+}
+
 /* ═══════════════ il record (la storia grezza resta com'è) ═══════════════ */
 
 export interface TalosRecordCompattazione {
@@ -619,4 +680,175 @@ export function reasoningPerRiassunto(reasoning: unknown): Record<string, unknow
     if (typeof r.effort !== 'string') return { ...r }
     if (['none', 'minimal', 'low'].includes(r.effort)) return { ...r }
     return { ...r, effort: 'low' }
+}
+
+/*
+ * ⭐⭐ Telefono 0.1.48, giudice v1523 (11/11/2026 18:47, opzione (a)): «niente da guadagnare» con la regola del PC, portata INTERA
+ * (la linea unica la vuole uguale): `harness-ui/src/kernel/compattazione-desktop.mjs:307` (`RIASSUNTO_ATTESO_MINIMO_TOKEN = 400`),
+ * `:326-357` (`conRiassuntoVero`, `medianaRiassunti`, `riassuntoAtteso`, `guadagnoAtteso`), `:403-414` (`stimaConPezzi`) e la stima
+ * del PC `talosHarness.mjs:269-288` (`stimaToken`: i caratteri fuori dall'ASCII contano i byte UTF-8, gli ideogrammi uno a uno).
+ * Il riassunto ATTESO è la mediana dei riassunti veri della chat (le ultime nove) se ce ne sono, altrimenti un quinto del tratto da
+ * riassumere ma mai meno di 400 token; col tetto della finestra (5%, al più 10.000) e mai più del tratto. Hermes dimensiona il budget
+ * del riassunto allo stesso modo (`agent/context_compressor.py:824-825`, `_MIN_SUMMARY_TOKENS`, `_SUMMARY_RATIO = 0.20`).
+ * Misurato sul caso del Tester (APK 380, 6 scambi, ~4,1k): pavimento 2.351 + 400 > 70% di 3.899 = 2.729 ⇒ «niente» senza chiamare il
+ * modello; a 8 scambi (~4,7k) 2.351 + 487 ≤ 3.299 ⇒ si riassume. La parità coi numeri del PC: `paritaRiassuntoAtteso.test.ts`.
+ */
+export const RIASSUNTO_ATTESO_MINIMO_TOKEN = 400
+export const RIASSUNTI_VERI_TENUTI = 9
+export const FRAZIONE_RIASSUNTO_SUL_MEZZO = 0.20
+export const FRAZIONE_RIASSUNTO_SULLA_FINESTRA = 0.05
+export const TETTO_TOKEN_RIASSUNTO = 10_000
+export const COSTO_IMMAGINE_TOKEN = 1_500
+const CAMPO_IMMAGINI_GUARDATE = 'talos_immagini'
+const TIPI_IMMAGINE: ReadonlySet<unknown> = new Set(['image_url', 'input_image', 'image'])
+const NON_ASCII = /[^\x00-\x7f]/
+const CJK_DENSI = /[\u1100-\u11ff\u2e80-\u9fff\ua960-\ua97f\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/g
+const CODIFICATORE = new TextEncoder()
+
+/** La stima di un testo del PC (`talosHarness.mjs:273-278`): ASCII a quattro caratteri per token, il resto coi byte UTF-8. */
+export function stimaTokenDelPc(testo: unknown): number {
+    const s = String(testo ?? '')
+    if (!NON_ASCII.test(s)) return Math.ceil(s.length / 4)
+    const senza = s.replace(CJK_DENSI, '')
+    return (s.length - senza.length) + Math.ceil(CODIFICATORE.encode(senza).length / 4)
+}
+
+/** `stimaConPezzi` del PC: testo e argomenti delle chiamate, più i pezzi di testo e 1.500 token per immagine. */
+export function stimaConPezziDelPc(messaggi: readonly M[]): number {
+    const lista = Array.isArray(messaggi) ? messaggi : []
+    let somma = 0
+    for (const m of lista) {
+        if (typeof m.content === 'string') somma += stimaTokenDelPc(m.content)
+        for (const c of m.tool_calls ?? []) somma += stimaTokenDelPc(c.function?.arguments ?? '')
+        if (m?.role === 'tool' && Array.isArray(m[CAMPO_IMMAGINI_GUARDATE])) somma += (m[CAMPO_IMMAGINI_GUARDATE] as unknown[]).length * COSTO_IMMAGINE_TOKEN
+    }
+    for (const m of lista) {
+        if (!Array.isArray(m?.content)) continue
+        for (const parte of m.content as Array<{ type?: unknown, text?: unknown } | null>) {
+            if (TIPI_IMMAGINE.has(parte?.type)) somma += COSTO_IMMAGINE_TOKEN
+            else if (typeof parte?.text === 'string') somma += stimaTokenDelPc(parte.text)
+        }
+    }
+    return somma
+}
+
+const riassuntiValidi = (lista: unknown): number[] =>
+    (Array.isArray(lista) ? lista.filter((n): n is number => Number.isFinite(n) && (n as number) > 0) : []).slice(-RIASSUNTI_VERI_TENUTI)
+
+/** I riassunti veri della chat con uno nuovo in fondo (le ultime nove). */
+export function conRiassuntoVero(lista: unknown, token: unknown): number[] {
+    return riassuntiValidi([...riassuntiValidi(lista), token])
+}
+
+/** La mediana dei riassunti veri (le ultime nove, solo numeri positivi); `null` se non ce n'è nessuno. */
+export function medianaRiassunti(lista: unknown): number | null {
+    const ordinati = riassuntiValidi(lista).sort((a, b) => a - b)
+    if (ordinati.length === 0) return null
+    const mezzo = Math.floor(ordinati.length / 2)
+    return ordinati.length % 2 === 1 ? ordinati[mezzo]! : Math.round((ordinati[mezzo - 1]! + ordinati[mezzo]!) / 2)
+}
+
+export interface TalosOpzioniRiassuntoAtteso { finestraToken?: number | null, soglia?: number | null, mediana?: number | null }
+
+/** Quanto ci si aspetta che pesi il riassunto (`compattazione-desktop.mjs:345-353`). */
+export function riassuntoAtteso(mezzo: readonly M[], { finestraToken = null, soglia = null, mediana = null }: TalosOpzioniRiassuntoAtteso = {}): number {
+    const token = stimaConPezziDelPc(Array.isArray(mezzo) ? mezzo : [])
+    if (!(token > 0)) return 0
+    const positivo = (n: unknown): n is number => Number.isFinite(n) && (n as number) > 0
+    const finestra = positivo(finestraToken) ? finestraToken : (positivo(soglia) ? soglia : TETTO_TOKEN_DEFAULT) / FRAZIONE_FINESTRA
+    const tetto = Math.min(Math.floor(finestra * FRAZIONE_RIASSUNTO_SULLA_FINESTRA), TETTO_TOKEN_RIASSUNTO)
+    if (positivo(mediana)) return Math.min(token, Math.min(Math.round(mediana), tetto))
+    return Math.min(token, Math.max(RIASSUNTO_ATTESO_MINIMO_TOKEN, Math.min(Math.floor(token * FRAZIONE_RIASSUNTO_SUL_MEZZO), tetto)))
+}
+
+/** Ciò che il riassunto toglie, al meglio: la richiesta di adesso contro la proiezione riassunta (`compattazione-desktop.mjs:355-357`). */
+export function guadagnoAtteso({ prima, pavimentoConCornice, mezzo, finestraToken = null, soglia = null, mediana = null }: {
+    prima: number, pavimentoConCornice: number, mezzo: readonly M[]
+} & TalosOpzioniRiassuntoAtteso): number {
+    return prima - (pavimentoConCornice + riassuntoAtteso(mezzo, { finestraToken, soglia, mediana }))
+}
+
+
+/**
+ * Sopra la finestra, la regola del PC (`compattazione-desktop.mjs:366-370`, F6 della CLI): se nemmeno il pavimento più il riassunto
+ * atteso (più lo scarto) entra nella finestra DICHIARATA, nessun riassunto la farà entrare. Il pavimento che non entra, o `null`.
+ */
+export function pavimentoOltreLaFinestra({ pavimentoConCornice, mezzo, finestraToken = null, soglia = null, scarto = 0, mediana = null }: {
+    pavimentoConCornice: number, mezzo: readonly M[], scarto?: number | null
+} & TalosOpzioniRiassuntoAtteso): number | null {
+    if (!(Number.isFinite(finestraToken) && (finestraToken as number) > 0)) return null
+    const pavimento = pavimentoConCornice + riassuntoAtteso(mezzo, { finestraToken, soglia, mediana })
+        + (Number.isFinite(scarto) && (scarto as number) > 0 ? Math.round(scarto as number) : 0)
+    return pavimento >= (finestraToken as number) ? pavimento : null
+}
+
+/** `stimaDegliAttrezzi` del PC (`compattazione-desktop.mjs:485-487`): gli schemi degli attrezzi con la stima del testo. */
+export function stimaDegliAttrezziDelPc(attrezzi: unknown): number {
+    return Array.isArray(attrezzi) && attrezzi.length > 0 ? stimaTokenDelPc(JSON.stringify(attrezzi)) : 0
+}
+
+/*
+ * ⭐⭐ Telefono 0.1.48, giudice v1535 (R1, «la STESSA scala del PC»): k è il rapporto della richiesta INTERA, token veri del motore
+ * o del fornitore sulla stima del PC della stessa richiesta (turni, sistema e schemi degli attrezzi), come `fattoreK` del PC
+ * (`compattazione-desktop.mjs:325-328`, chiamato in `talosHarness.desktop-hotfix.mjs:2120`), e `kValido` (`:329`) lo tiene fra 1 e 4.
+ * Non il rapporto del tratto tolto (revisore A, R1: un tratto di JSON o base64 lo porta a 2-4 e gonfia un riassunto che è prosa).
+ * ⚠ Una sola differenza, scritta per il giudice: sotto 1 il telefono tiene il rapporto com'è. Il PC moltiplica per k TUTTO il
+ * guadagno, fatto in unità di stima (prima, pavimento e atteso: `riassuntoUtile` `:381`), e lì k = 1 sotto 1 sbaglia verso il
+ * riassumere. Il telefono MISURA prima e pavimento in token veri e porta in token veri solo l'atteso: lì k = 1 sotto 1 sbaglia verso
+ * il «niente». Misurato col fornitore tarato a 0,4 (REV-A-01, 8 scambi): pavimento 940 + 490 > 1.320 = «niente» a torto, mentre
+ * 940 + 196 ≤ 1.320 e il riassunto vero si salva. Senza misura vale 1, come `kValido(null)` del PC.
+ * Giudice v1543/v1547: sotto 1 mai meno di 1/FATTORE_K_MASSIMO (0,25), simmetrico al tetto di 4: un dato rotto (CTRL-COMP-01, 100
+ * token veri su ~25.500 stimati) non fa sembrare gratis il riassunto. Anche docker-agent tiene la sua correzione fra un minimo e un
+ * massimo (`pkg/compaction`, «clamped», pkg.go.dev v1.114.0).
+ */
+export const FATTORE_K_MASSIMO = 4
+/** `kValido` del PC (`compattazione-desktop.mjs:329`): fra 1 e 4, 1 se non è un numero. */
+export function kValido(k: unknown): number {
+    return Number.isFinite(k) ? Math.min(FATTORE_K_MASSIMO, Math.max(1, k as number)) : 1
+}
+/** Il rapporto della richiesta intera: token veri sulla stima del PC della stessa richiesta; `null` senza una misura. */
+export function rapportoDellaRichiesta(token: unknown, stima: unknown): number | null {
+    return Number.isFinite(token) && (token as number) > 0 && Number.isFinite(stima) && (stima as number) > 0 ? (token as number) / (stima as number) : null
+}
+/** Il riassunto atteso (unità di stima del PC) in token veri: per k, il rapporto della richiesta intera (sotto 1 com'è ma mai sotto 0,25, se no `kValido`). */
+export function attesoInTokenVeri(attesoStima: number, rapporto: number | null): number {
+    const k = rapporto !== null && rapporto > 0 && rapporto < 1 ? Math.max(1 / FATTORE_K_MASSIMO, rapporto) : kValido(rapporto)
+    return Math.ceil(attesoStima * k)
+}
+
+/*
+ * ⭐⭐ Telefono 0.1.48, giudice v1536: OLTRE la finestra la richiesta del riassunto porta un tetto, lo spazio libero (il limite meno il
+ * pavimento misurato), come Hermes porta il budget del riassunto nella richiesta (`agent/context_compressor.py:3396-3400`, `:3922`).
+ * Sotto un minimo, «niente» subito senza chiamare il modello. Il minimo è 400, il minimo del PC (`RIASSUNTO_ATTESO_MINIMO_TOKEN`), ma
+ * mai più del tetto che il PC dà al riassunto sulla finestra (5%, `riassuntoAtteso` `:350-352`, 140 sulla finestra del Pad da 2.816).
+ * È il min(mediana, tetto) del PC (`compattazione-desktop.mjs:351`); approvato dal giudice v1543. Col solo 400 il quinto punto del
+ * Tester (FIN-STORE-01: peso fisso 1.450, finestra 2.816) non partiva mai, perché lo spazio vero dopo l'accorciamento è 241 token; il
+ * Pad sul 380 misurava riassunti veri da 174 a 304 token.
+ */
+export function spazioMinimoDelRiassunto({ finestraToken = null, soglia = null }: TalosOpzioniRiassuntoAtteso = {}): number {
+    const positivo = (n: unknown): n is number => Number.isFinite(n) && (n as number) > 0
+    const finestra = positivo(finestraToken) ? finestraToken : (positivo(soglia) ? soglia : TETTO_TOKEN_DEFAULT) / FRAZIONE_FINESTRA
+    return Math.min(RIASSUNTO_ATTESO_MINIMO_TOKEN, Math.min(Math.floor(finestra * FRAZIONE_RIASSUNTO_SULLA_FINESTRA), TETTO_TOKEN_RIASSUNTO))
+}
+
+export interface TalosRiassuntoDaChiedere {
+    /** `false` = niente da guadagnare: nessuna chiamata. */
+    chiedi: boolean
+    /** Oltre la finestra, il tetto del riassunto in token veri (lo spazio libero); sotto la finestra `null` (richiesta invariata). */
+    spazio: number | null
+}
+
+/**
+ * Telefono 0.1.48 — PRIMA di chiamare il modello, tutto in token veri (giudice v1535, punti 1, 7 e 8; v1536):
+ * - sotto la finestra: il pavimento misurato più il riassunto atteso in token veri deve stare nel massimo (il 70% di prima);
+ * - oltre la finestra: lo spazio libero (massimo meno pavimento) deve bastare al riassunto più piccolo (`spazioMinimoDelRiassunto`), e
+ *   diventa il tetto della richiesta. È F6 del PC (`:366-370`) nelle unità della finestra, e più stretto: il massimo sta sotto il limite
+ *   della richiesta, che sta sotto la finestra; un riassunto che sfora lo stesso si scarta dopo, come prima.
+ */
+export function riassuntoDaChiedere({ pavimento, atteso, massimo, oltreLaFinestra, finestraToken = null, soglia = null }: {
+    pavimento: number, atteso: number, massimo: number, oltreLaFinestra: boolean
+} & Omit<TalosOpzioniRiassuntoAtteso, 'mediana'>): TalosRiassuntoDaChiedere {
+    if (!oltreLaFinestra) return { chiedi: pavimento + atteso <= massimo, spazio: null }
+    const spazio = Math.floor(massimo - pavimento)
+    return { chiedi: spazio >= spazioMinimoDelRiassunto({ finestraToken, soglia }), spazio }
 }

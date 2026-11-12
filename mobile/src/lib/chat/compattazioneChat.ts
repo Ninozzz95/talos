@@ -3,9 +3,12 @@ import type { TalosLocalChatMessage } from '@/repositories/chatRepository'
 import {
     applicaRecord,
     calcolaSoglie,
+    conRiassuntoVero,
     costruisciRichiestaDiRiassunto,
     decidiCompattazione,
     eRecordValido,
+    stimaConPezziDelPc,
+    stimaDegliAttrezziDelPc,
     stimaTokenMessaggi,
     type TalosMessaggioCompattabile,
     type TalosPartiCompattazione,
@@ -64,6 +67,11 @@ export function turniVersoNucleo(turni: readonly ChatTurn[]): TalosMessaggioComp
 export function nucleoVersoTurni(messaggi: readonly TalosMessaggioCompattabile[]): ChatTurn[] {
     return messaggi.map((m) => {
         const originale = m[TURNO_ORIGINALE] as ChatTurn | undefined
+        // Telefono 0.1.48: un testo cambiato nel nucleo (l'uscita vecchia tolta per la finestra) torna col testo nuovo e coi
+        // campi del turno (id della chiamata, nome dell'attrezzo): senza, il turno nascosto riportava il testo intero.
+        if (originale && typeof m.content === 'string' && typeof originale.content === 'string' && m.content !== originale.content) {
+            return { ...originale, content: m.content }
+        }
         if (originale) return originale
         const role: ChatTurn['role'] = m.role === 'assistant' || m.role === 'tool' ? m.role : 'user'
         return { role, content: typeof m.content === 'string' ? m.content : String(m.content ?? '') }
@@ -74,6 +82,20 @@ function datiDellaRiga(riga: TalosLocalChatMessage): TalosCompattazioneChat | nu
     const dati = riga.metadata?.[TALOS_METADATA_COMPATTAZIONE] as Partial<TalosCompattazioneChat> | undefined
     if (!dati || !eRecordValido(dati.record) || typeof dati.ultimoCoperto !== 'string' || !Number.isInteger(dati.righeCoperte)) return null
     return dati as TalosCompattazioneChat
+}
+
+/**
+ * Telefono 0.1.48, giudice v1523: i riassunti veri della chat (le ultime nove), nell'ordine in cui sono arrivati, dal peso che ogni
+ * riga di compattazione tiene (`riassuntoVero`, la stima del PC del testo). Come la lista della sessione del PC
+ * (`session-registry.mjs:6756`, `conRiassuntoVero`): anche un riassunto poi annullato è un riassunto vero di questo modello.
+ */
+export function riassuntiVeriDellaChat(righe: readonly TalosLocalChatMessage[]): number[] {
+    let lista: number[] = []
+    for (const riga of righe) {
+        const peso = (riga.metadata?.[TALOS_METADATA_COMPATTAZIONE] as { riassuntoVero?: unknown } | undefined)?.riassuntoVero
+        if (peso !== undefined) lista = conRiassuntoVero(lista, peso)
+    }
+    return lista
 }
 
 /** `at` delle compattazioni annullate da una riga successiva. */
@@ -124,8 +146,9 @@ export function paroleDelRiassunto(tokenRimasti: number): number {
     return Math.min(Math.max(stima, PAROLE_MINIME), PAROLE_MASSIME)
 }
 
-export function richiestaInCoda(turni: readonly ChatTurn[], { tokenRimasti }: { tokenRimasti: number }): ChatTurn[] {
-    const parole = paroleDelRiassunto(tokenRimasti)
+export function richiestaInCoda(turni: readonly ChatTurn[], { tokenRimasti, paroleMassime }: { tokenRimasti: number, paroleMassime?: number }): ChatTurn[] {
+    // Telefono 0.1.48 (giudice v1536): oltre la finestra il tetto dello spazio libero vince sulle parole di Gallery.
+    const parole = paroleMassime !== undefined ? Math.min(paroleMassime, paroleDelRiassunto(tokenRimasti)) : paroleDelRiassunto(tokenRimasti)
     return [
         ...turni,
         {
@@ -286,7 +309,7 @@ export function richiestaDiRiassunto({ provider, turni, parti, ultimoGiro, token
     if (provider === 'local' && ultimoGiro && inCoda) {
         return {
             modo: 'in-coda',
-            turns: richiestaInCoda(turni, { tokenRimasti }),
+            turns: richiestaInCoda(turni, { tokenRimasti, ...(paroleMassime !== undefined ? { paroleMassime } : {}) }),
             ...(ultimoGiro.system !== undefined ? { system: ultimoGiro.system } : {}),
             ...(ultimoGiro.tools !== undefined ? { tools: ultimoGiro.tools } : {}),
         }
@@ -318,6 +341,15 @@ export function tokenDellaRisposta(usage: Readonly<Record<string, number>> | nul
 export function tokenDellaRichiesta(usage: Readonly<Record<string, number>> | null | undefined): number | null {
     const prompt = Number(usage?.prompt_tokens ?? usage?.input_tokens ?? usage?.promptTokens ?? usage?.promptTokenCount)
     return Number.isFinite(prompt) && prompt > 0 ? prompt : null
+}
+
+/**
+ * Telefono 0.1.48, giudice v1535 (R1): la stima del PC della richiesta INTERA (sistema, turni coi pezzi, schemi degli attrezzi), il
+ * denominatore di k come in `talosHarness.desktop-hotfix.mjs:2120` (`stimaConPezzi` dei messaggi più `stimaDegliAttrezzi`).
+ */
+export function stimaDellaRichiestaDelPc({ turni, system, tools }: { turni: readonly ChatTurn[], system?: string, tools?: readonly unknown[] }): number {
+    const sistema: TalosMessaggioCompattabile[] = system ? [{ role: 'system', content: system }] : []
+    return stimaConPezziDelPc([...sistema, ...turniVersoNucleo(turni)]) + stimaDegliAttrezziDelPc(tools)
 }
 
 /**

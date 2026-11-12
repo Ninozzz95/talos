@@ -872,6 +872,44 @@ function riduciCodaSottoPressione(coda, { budgetToken, stima = stimaTokenMessagg
   if (!rientra() && ultimoEsito >= 0 && riduciAl(copia, ultimoEsito)) ridotti += 1;
   return { coda: copia, ridotti, alMinimo: !rientra(), tetto };
 }
+const ESITO_TOLTO_PER_LA_FINESTRA = "[Old tool output removed by TALOS to fit the context window of this device. The full output is kept in the chat history.]";
+function eRiassuntoCompattato(m) {
+  return m?.role === "user" && typeof m.content === "string" && m.content.startsWith(MARCATORE_RIASSUNTO);
+}
+function accorciaPerLaFinestra(messaggi, { bersaglio, stima = stimaTokenMessaggi }) {
+  const lista = Array.isArray(messaggi) ? [...messaggi] : [];
+  const entra = () => stima(lista) <= bersaglio;
+  const tolto = (m) => m?.role === "tool" && m.content === ESITO_TOLTO_PER_LA_FINESTRA;
+  const giaTolti = lista.filter(tolto).length;
+  const esito = (scambiTolti2) => ({ messaggi: lista, esitiTolti: lista.filter(tolto).length - giaTolti, scambiTolti: scambiTolti2, entra: entra() });
+  if (entra()) return esito(0);
+  let fineTesta = 0;
+  while (fineTesta < lista.length && eSistema(lista[fineTesta])) fineTesta += 1;
+  let inizioRichiesta = lista.length;
+  for (let i = lista.length - 1; i >= fineTesta; i -= 1) {
+    if (eRichiestaDellaPersona(lista[i])) {
+      inizioRichiesta = i;
+      break;
+    }
+  }
+  for (let i = fineTesta; i < inizioRichiesta && !entra(); i += 1) {
+    const m = lista[i];
+    if (m?.role !== "tool" || typeof m.content !== "string" || m.content.length <= ESITO_TOLTO_PER_LA_FINESTRA.length) continue;
+    lista[i] = { ...m, content: ESITO_TOLTO_PER_LA_FINESTRA };
+  }
+  let scambiTolti = 0;
+  while (!entra()) {
+    let inizio = fineTesta;
+    while (inizio < inizioRichiesta && eRiassuntoCompattato(lista[inizio])) inizio += 1;
+    if (inizio >= inizioRichiesta) break;
+    let fine = inizio + 1;
+    while (fine < inizioRichiesta && !eRichiestaDellaPersona(lista[fine]) && !eRiassuntoCompattato(lista[fine])) fine += 1;
+    lista.splice(inizio, fine - inizio);
+    inizioRichiesta -= fine - inizio;
+    scambiTolti += 1;
+  }
+  return esito(scambiTolti);
+}
 function creaRecord({ coveredThrough, riassunto, tokenPrima, tokenDopo, misura, at, modello, indice = null }) {
   if (!Number.isInteger(coveredThrough) || coveredThrough < 0) throw new TypeError("coveredThrough deve essere un intero ≥ 0");
   if (!Array.isArray(riassunto)) throw new TypeError("riassunto deve essere una lista di messaggi");
@@ -917,17 +955,107 @@ function reasoningPerRiassunto(reasoning) {
   if (["none", "minimal", "low"].includes(r.effort)) return { ...r };
   return { ...r, effort: "low" };
 }
+const RIASSUNTO_ATTESO_MINIMO_TOKEN = 400;
+const RIASSUNTI_VERI_TENUTI = 9;
+const FRAZIONE_RIASSUNTO_SUL_MEZZO = 0.2;
+const FRAZIONE_RIASSUNTO_SULLA_FINESTRA = 0.05;
+const TETTO_TOKEN_RIASSUNTO = 1e4;
+const COSTO_IMMAGINE_TOKEN = 1500;
+const CAMPO_IMMAGINI_GUARDATE = "talos_immagini";
+const TIPI_IMMAGINE = /* @__PURE__ */ new Set(["image_url", "input_image", "image"]);
+const NON_ASCII = /[^\x00-\x7f]/;
+const CJK_DENSI = /[\u1100-\u11ff\u2e80-\u9fff\ua960-\ua97f\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]/g;
+const CODIFICATORE = new TextEncoder();
+function stimaTokenDelPc(testo) {
+  const s = String(testo ?? "");
+  if (!NON_ASCII.test(s)) return Math.ceil(s.length / 4);
+  const senza = s.replace(CJK_DENSI, "");
+  return s.length - senza.length + Math.ceil(CODIFICATORE.encode(senza).length / 4);
+}
+function stimaConPezziDelPc(messaggi) {
+  const lista = Array.isArray(messaggi) ? messaggi : [];
+  let somma = 0;
+  for (const m of lista) {
+    if (typeof m.content === "string") somma += stimaTokenDelPc(m.content);
+    for (const c of m.tool_calls ?? []) somma += stimaTokenDelPc(c.function?.arguments ?? "");
+    if (m?.role === "tool" && Array.isArray(m[CAMPO_IMMAGINI_GUARDATE])) somma += m[CAMPO_IMMAGINI_GUARDATE].length * COSTO_IMMAGINE_TOKEN;
+  }
+  for (const m of lista) {
+    if (!Array.isArray(m?.content)) continue;
+    for (const parte of m.content) {
+      if (TIPI_IMMAGINE.has(parte?.type)) somma += COSTO_IMMAGINE_TOKEN;
+      else if (typeof parte?.text === "string") somma += stimaTokenDelPc(parte.text);
+    }
+  }
+  return somma;
+}
+const riassuntiValidi = (lista) => (Array.isArray(lista) ? lista.filter((n) => Number.isFinite(n) && n > 0) : []).slice(-RIASSUNTI_VERI_TENUTI);
+function conRiassuntoVero(lista, token) {
+  return riassuntiValidi([...riassuntiValidi(lista), token]);
+}
+function medianaRiassunti(lista) {
+  const ordinati = riassuntiValidi(lista).sort((a, b) => a - b);
+  if (ordinati.length === 0) return null;
+  const mezzo = Math.floor(ordinati.length / 2);
+  return ordinati.length % 2 === 1 ? ordinati[mezzo] : Math.round((ordinati[mezzo - 1] + ordinati[mezzo]) / 2);
+}
+function riassuntoAtteso(mezzo, { finestraToken = null, soglia = null, mediana = null } = {}) {
+  const token = stimaConPezziDelPc(Array.isArray(mezzo) ? mezzo : []);
+  if (!(token > 0)) return 0;
+  const positivo = (n) => Number.isFinite(n) && n > 0;
+  const finestra = positivo(finestraToken) ? finestraToken : (positivo(soglia) ? soglia : TETTO_TOKEN_DEFAULT) / FRAZIONE_FINESTRA;
+  const tetto = Math.min(Math.floor(finestra * FRAZIONE_RIASSUNTO_SULLA_FINESTRA), TETTO_TOKEN_RIASSUNTO);
+  if (positivo(mediana)) return Math.min(token, Math.min(Math.round(mediana), tetto));
+  return Math.min(token, Math.max(RIASSUNTO_ATTESO_MINIMO_TOKEN, Math.min(Math.floor(token * FRAZIONE_RIASSUNTO_SUL_MEZZO), tetto)));
+}
+function guadagnoAtteso({ prima, pavimentoConCornice, mezzo, finestraToken = null, soglia = null, mediana = null }) {
+  return prima - (pavimentoConCornice + riassuntoAtteso(mezzo, { finestraToken, soglia, mediana }));
+}
+function pavimentoOltreLaFinestra({ pavimentoConCornice, mezzo, finestraToken = null, soglia = null, scarto = 0, mediana = null }) {
+  if (!(Number.isFinite(finestraToken) && finestraToken > 0)) return null;
+  const pavimento = pavimentoConCornice + riassuntoAtteso(mezzo, { finestraToken, soglia, mediana }) + (Number.isFinite(scarto) && scarto > 0 ? Math.round(scarto) : 0);
+  return pavimento >= finestraToken ? pavimento : null;
+}
+function stimaDegliAttrezziDelPc(attrezzi) {
+  return Array.isArray(attrezzi) && attrezzi.length > 0 ? stimaTokenDelPc(JSON.stringify(attrezzi)) : 0;
+}
+const FATTORE_K_MASSIMO = 4;
+function kValido(k) {
+  return Number.isFinite(k) ? Math.min(FATTORE_K_MASSIMO, Math.max(1, k)) : 1;
+}
+function rapportoDellaRichiesta(token, stima) {
+  return Number.isFinite(token) && token > 0 && Number.isFinite(stima) && stima > 0 ? token / stima : null;
+}
+function attesoInTokenVeri(attesoStima, rapporto) {
+  const k = rapporto !== null && rapporto > 0 && rapporto < 1 ? Math.max(1 / FATTORE_K_MASSIMO, rapporto) : kValido(rapporto);
+  return Math.ceil(attesoStima * k);
+}
+function spazioMinimoDelRiassunto({ finestraToken = null, soglia = null } = {}) {
+  const positivo = (n) => Number.isFinite(n) && n > 0;
+  const finestra = positivo(finestraToken) ? finestraToken : (positivo(soglia) ? soglia : TETTO_TOKEN_DEFAULT) / FRAZIONE_FINESTRA;
+  return Math.min(RIASSUNTO_ATTESO_MINIMO_TOKEN, Math.min(Math.floor(finestra * FRAZIONE_RIASSUNTO_SULLA_FINESTRA), TETTO_TOKEN_RIASSUNTO));
+}
+function riassuntoDaChiedere({ pavimento, atteso, massimo, oltreLaFinestra, finestraToken = null, soglia = null }) {
+  if (!oltreLaFinestra) return { chiedi: pavimento + atteso <= massimo, spazio: null };
+  const spazio = Math.floor(massimo - pavimento);
+  return { chiedi: spazio >= spazioMinimoDelRiassunto({ finestraToken, soglia }), spazio };
+}
 const compattazione = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   ATTREZZI_SUI_FILE,
   CARATTERI_FINE_ESITO,
   CARATTERI_INIZIO_ESITO,
   CARATTERI_MINIMI_RIDUCIBILI,
+  COSTO_IMMAGINE_TOKEN,
   ESITO_DOPPIONE,
+  ESITO_TOLTO_PER_LA_FINESTRA,
+  FATTORE_K_MASSIMO,
   FILE_RILETTI_MASSIMI,
   FRAZIONE_CODA,
   FRAZIONE_EMERGENZA,
   FRAZIONE_FINESTRA,
+  FRAZIONE_RIASSUNTO_SULLA_FINESTRA,
+  FRAZIONE_RIASSUNTO_SUL_MEZZO,
   MARCATORE_ACCORCIATO,
   MARCATORE_INDICE,
   MARCATORE_RIASSUNTO,
@@ -936,16 +1064,22 @@ const compattazione = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defin
   MOLTIPLICATORE_CODA_MORBIDA,
   MOLTIPLICATORE_EMERGENZA_SENZA_FINESTRA,
   PAROLE_MASSIME_RIASSUNTO,
+  RIASSUNTI_VERI_TENUTI,
+  RIASSUNTO_ATTESO_MINIMO_TOKEN,
   RICHIESTE_UTENTE_LETTERALI,
   SCAMBI_CHIUSI_LETTERALI,
   SCHEMA_RECORD_COMPATTAZIONE,
   TETTO_TOKEN_DEFAULT,
+  TETTO_TOKEN_RIASSUNTO,
   VARIABILE_TETTO_TOKEN,
+  accorciaPerLaFinestra,
   accorciaTesto,
   applicaRecord,
+  attesoInTokenVeri,
   budgetCoda,
   calcolaSoglie,
   classificaErroreFornitore,
+  conRiassuntoVero,
   costruisciProiezione,
   costruisciRichiestaDiRiassunto,
   creaRecord,
@@ -953,14 +1087,25 @@ const compattazione = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defin
   dividiPerCompattazione,
   eRecordValido,
   eRichiestaDellaPersona,
+  guadagnoAtteso,
   indiceMeccanico,
+  kValido,
   leggiTettoEsplicito,
+  medianaRiassunti,
   misuraOccupazione,
   oscuraPerRiassunto,
+  pavimentoOltreLaFinestra,
+  rapportoDellaRichiesta,
   reasoningPerRiassunto,
+  riassuntoAtteso,
+  riassuntoDaChiedere,
   riattaccaEffimeri,
   riduciCodaSottoPressione,
+  spazioMinimoDelRiassunto,
   staccaEffimeri,
+  stimaConPezziDelPc,
+  stimaDegliAttrezziDelPc,
+  stimaTokenDelPc,
   stimaTokenMessaggi,
   testoRichiestaDiRiassunto,
   valutaRispostaDiRiassunto

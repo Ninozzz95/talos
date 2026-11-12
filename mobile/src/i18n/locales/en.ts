@@ -866,6 +866,7 @@ export const TALOS_EN_MESSAGES = {
         // ⭐⭐ P4-ter step 2 (02/10/2026): chat compaction, with the desktop's words.
         compaction: {
             inProgress: 'Summarizing the conversation…',
+            checking: 'Checking…',
             summarized: 'Conversation summarized',
             tokens: 'tokens',
             summarizedRow: 'Conversation summarized · {before} → {after} tokens',
@@ -880,6 +881,16 @@ export const TALOS_EN_MESSAGES = {
             nothingToGain: 'Nothing to gain: a summary would not make the request at least 30% lighter.',
             failed: 'The summary did not work: the conversation stays whole.',
             busy: 'Wait for TALOS to finish the answer, then compact.',
+            // Phone 0.1.48 (owner 11/11/2026): what was shortened to fit the model, with the PC's words (chat.js:2061).
+            resultsShortenedOne: '1 result shortened',
+            resultsShortenedMany: '{n} results shortened',
+            exchangesLeftOutOne: '1 older exchange left out',
+            exchangesLeftOutMany: '{n} older exchanges left out',
+            shortenedForDevice: '{what} to fit this model: TALOS may not have seen everything.',
+            requestTooLong: 'Your message and the tools need about {required} tokens even without the earlier conversation, and this model can take {available} here. Shorten the message or choose another model.',
+            noRoomForSummary: 'This chat no longer fits this model on this device, even with the shortest summary: it needs about {required} tokens and the model can take {available} here. Start a new chat (your message fits there), or turn off tools you do not need.',
+            deviceTooLongMeasured: 'This chat needs about {required} tokens and this model can take {available} on this device right now, and a summary could not make it fit. Start a new chat, or turn off tools you do not need.',
+            deviceTooLong: 'This chat is too long for this model on this device. Start a new chat, or turn off tools you do not need.',
             // Ledger LEDGER-RIGA-VIVA-CODICE-2026-10-21: the live summary row and the fallback row of Code (desktop B1 wording, r4 f87c8f800)
             live: {
                 summarizing: 'Summarizing context',

@@ -882,7 +882,16 @@ watch(() => chat.state.streamingText, async (text) => {
     scrollChatToBottom('auto')
 })
 
-watch(() => ambitoBozza(), async () => {
+/*
+ * ⛔ 0.1.48 (scoperto con la cura del testo doppio): il primo messaggio di una chat nuova crea la chat, ma la bozza passava da
+ * «nuova» alla chat solo a giro FINITO (`entraNellAmbito` dopo `controller.send`). Il testo scritto nel frattempo finiva sotto
+ * «nuova» e il campo si svuotava alla fine della risposta (misurato: 1 volta su 2 scrivendo mentre il giro si chiude). La bozza
+ * segue la chat nell'istante in cui l'invio le dà un'identità; dopo il giro `entraNellAmbito` trova lo stesso ambito e non tocca
+ * il testo. Come Hermes (`use-composer-draft.ts:705-720`: «the text the user kept typing follows the chat instead of vanishing»).
+ */
+let inviandoDaChatNuova = false
+watch(() => ambitoBozza(), async (nuovo, vecchio) => {
+    if (inviandoDaChatNuova && vecchio === 'new' && nuovo !== 'new') void draft.activateScope(nuovo)
     libraryTurnOverride.value = null
     liveEdge.rejoin()
     await nextTick()
@@ -929,10 +938,16 @@ async function onSend(): Promise<void> {
     // rejoin the live edge so the message-add watch auto-scrolls (it was gated
     // when the user had scrolled up).
     rejoinLiveEdge()
+    inviandoDaChatNuova = ambitoBozza() === 'new'
     // la lingua solo quando c'è: senza, la chiamata resta quella di sempre (le prove della schermata la tengono ferma)
-    const accepted = await (linguaSentita
-        ? controller.send(text, turnPolicy, diVoce, linguaSentita)
-        : controller.send(text, turnPolicy, diVoce))
+    let accepted: boolean
+    try {
+        accepted = await (linguaSentita
+            ? controller.send(text, turnPolicy, diVoce, linguaSentita)
+            : controller.send(text, turnPolicy, diVoce))
+    } finally {
+        inviandoDaChatNuova = false
+    }
     if (!accepted) {
         draft.updatePrompt(text)
         await draft.flush()
@@ -1832,6 +1847,7 @@ onBeforeUnmount(() => {
                     @review-authorization="controller.showToolAuthorization()"
                     @continue-after-limit="continuaDopoIlLimite"
                     :compattazione-in-corso="chat.state.compattazioneInCorso !== null && chat.state.compattazioneInCorso === chat.activeSession.value?.id"
+                    :compattazione-controllo="chat.state.compattazioneControllo.includes(chat.activeSession.value?.id ?? '')"
                     @undo-compaction="annullaCompattazione"
                 />
                 <!--

@@ -1192,6 +1192,25 @@ function safeProviderMessage(
     return message
 }
 
+/**
+ * Giudice v1630 (revisore A, pulizia): il rilancio verso lo store mette la frase tradotta al posto del messaggio, e con lui se ne
+ * andava il codice del rifiuto (`TALOS_LOCAL_PROMPT_TOO_LONG` dell'adattatore locale), che il classificatore del nucleo e gli altri
+ * lettori riconoscono. Il codice resta nel campo `code`; la cura del «contesto pieno» sta comunque nello store, che legge la chiave.
+ */
+const CODICE_DEL_RIFIUTO = /^[A-Z][A-Z0-9_]{2,}$/
+export function rilanciaErroreDelFornitore(error: TalosMobileProviderError, safeMessage: string): TalosMobileProviderError {
+    const code = error.code ?? (CODICE_DEL_RIFIUTO.test(error.message) ? error.message : undefined)
+    return new TalosMobileProviderError({
+        provider: error.provider,
+        operation: error.operation,
+        message: safeMessage,
+        status: error.status,
+        uiMessageKey: error.uiMessageKey,
+        uiMessageParameters: error.uiMessageParameters,
+        ...(code ? { code } : {}),
+    })
+}
+
 export function createChatController(deps: ChatControllerDeps = realDeps): ChatController {
     const localization = useTalosLocalization()
     const secrets = reactive<Record<string, boolean>>(
@@ -5545,16 +5564,7 @@ export function createChatController(deps: ChatControllerDeps = realDeps): ChatC
             // it gets persisted as a failed system message instead of a clean cancel.
             if (error instanceof Error && error.name === 'AbortError') throw error
             const safeMessage = safeProviderMessage(error, apiKey, deps.translate)
-            if (error instanceof TalosMobileProviderError) {
-                throw new TalosMobileProviderError({
-                    provider: error.provider,
-                    operation: error.operation,
-                    message: safeMessage,
-                    status: error.status,
-                    uiMessageKey: error.uiMessageKey,
-                    uiMessageParameters: error.uiMessageParameters,
-                })
-            }
+            if (error instanceof TalosMobileProviderError) throw rilanciaErroreDelFornitore(error, safeMessage)
             throw new Error(safeMessage)
         }
     }

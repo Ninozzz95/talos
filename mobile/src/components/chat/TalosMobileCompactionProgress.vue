@@ -6,11 +6,13 @@ import { useTalosI18n } from '@/i18n'
  * barra senza percentuale (la durata non si conosce). Le parole del desktop («Riassumo la conversazione…»).
  */
 const { t } = useTalosI18n()
+/** Telefono 0.1.48 (giudice v1585): prima del riassunto c'è il controllo, che sulla 381 durava 10 s: «Controllo…», stessa barra. */
+withDefaults(defineProps<{ fase?: 'controllo' | 'riassunto' }>(), { fase: 'riassunto' })
 </script>
 
 <template>
-    <div role="status" aria-live="polite" data-testid="talos-compaction-progress" class="talos-compaction-progress text-xs leading-5">
-        <span>{{ t('chat.compaction.inProgress') }}</span>
+    <div role="status" aria-live="polite" data-testid="talos-compaction-progress" :data-phase="fase === 'controllo' ? 'checking' : 'summarizing'" class="talos-compaction-progress text-xs leading-5">
+        <span>{{ t(fase === 'controllo' ? 'chat.compaction.checking' : 'chat.compaction.inProgress') }}</span>
         <span class="talos-compaction-bar" aria-hidden="true"><span /></span>
     </div>
 </template>
