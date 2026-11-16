@@ -43,3 +43,37 @@ test('H05-DECLINED il no della persona si spiega «Hai detto di no»; AL CONTRAR
   const rifiuto = spiegaRifiutoAttrezzo('REFUSED. "x" is inside a folder the person blocked.');
   assert.equal(rifiuto.tipo, 'rifiuto');
 });
+
+/*
+ * Uscita 0.2.2 (owner sì, giudice v1961-v1962, 16/11): il via `no-della-persona-nel-giro` del nucleo (talosHarness.mjs:15712) dice al
+ *   modello che la PERSONA ha già detto no a quella stessa chiamata in questo giro e che non le è stato chiesto di nuovo. La riga
+ *   dell attrezzo diceva «Lo strumento ha rifiutato la richiesta.», cioè dava la colpa allo strumento. Il testo qui sotto è copiato dal
+ *   sorgente del nucleo (motivo di :15712 dentro la forma di :20533, il ramo MCP), mai inventato.
+ */
+const NO_GIA_DETTO_NEL_GIRO = 'REFUSED. the person already said no to this same call in this turn: it was not asked again. Do not retry it: tell the person what you need. The tool "query" of the MCP server "db" was not called.';
+
+test('H05-GIA-DETTO-NO: un no della persona già dato in questo giro si dice come suo, nelle due lingue; AL CONTRARIO un rifiuto di sicurezza resta generico', async () => {
+  const { impostaLingua } = await import('../../src/components/lingua.js');
+  try {
+    impostaLingua('en');
+    const en = spiegaRifiutoAttrezzo(NO_GIA_DETTO_NEL_GIRO);
+    assert.equal(en.rifiutato, true);
+    assert.equal(en.detto, 'You had already said no to this same request in this turn, so you were not asked again.');
+    assert.equal(en.tecnico, NO_GIA_DETTO_NEL_GIRO, 'il testo del nucleo resta intero nel riquadro tecnico');
+    impostaLingua('it');
+    const it = spiegaRifiutoAttrezzo(NO_GIA_DETTO_NEL_GIRO);
+    assert.equal(it.detto, 'In questo giro avevi già detto di no a questa stessa richiesta, quindi non ti è stato chiesto di nuovo.');
+    assert.doesNotMatch(it.detto, /strumento/u, 'non è lo strumento ad aver rifiutato');
+    const sicurezza = spiegaRifiutoAttrezzo('REFUSED. "x" is inside a folder the person blocked for the device that sent this turn. Nothing was searched;');
+    assert.equal(sicurezza.detto, 'Lo strumento ha rifiutato la richiesta.', 'un rifiuto di sicurezza non diventa un no della persona');
+  } finally { impostaLingua('it'); }
+});
+
+/* Revisore della cura 0.2.2 (giudice v1971): due mutanti vivi. (1) La regola sta IN TESTA: un server che si chiama «too large db» non deve
+   far dire «troppo grande». (2) Il ponte delle chiamate scritte come testo (talosHarness.mjs:17467, testo copiato) resta generico. */
+test('H05-GIA-DETTO-NO-BORDI: la regola vince sulle altre anche col nome del server; il ponte del testo resta generico', () => {
+  const conNomeTroppoGrande = NO_GIA_DETTO_NEL_GIRO.replace('"db"', () => '"too large db"');
+  assert.equal(spiegaRifiutoAttrezzo(conNomeTroppoGrande).detto, 'In questo giro avevi già detto di no a questa stessa richiesta, quindi non ti è stato chiesto di nuovo.');
+  const ponte = spiegaRifiutoAttrezzo('REFUSED. The person already said no twice in this turn; no more cards are shown. Nothing was done. Go on without it, or say in one line what you can do instead.');
+  assert.deepEqual([ponte.rifiutato, ponte.tipo, ponte.detto], [true, 'rifiuto', 'Lo strumento ha rifiutato la richiesta.']);
+});

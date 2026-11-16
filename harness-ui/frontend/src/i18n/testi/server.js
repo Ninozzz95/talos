@@ -35,6 +35,13 @@ export default {
     'approval.network.action.open': "aprire un file",
     'approval.callFromText': "Il modello ha scritto questa chiamata come testo invece di chiamare lo strumento ({nome}). TALOS l'ha ricostruita: la eseguo?", // R-34 parte 2
     'approval.emulatedCall': 'Questo modello non ha strumenti propri: li fa funzionare TALOS, e chiede prima ({nome}). Lo eseguo?', // E1, decisione 121
+    'approval.mcpTool': 'Vuole usare lo strumento «{attrezzo}» del connettore «{server}». Un connettore fa girare un suo programma fuori da TALOS: serve il tuo sì.', // P018, 11/11/2026
+    // P018 giro 2 (owner 11/11/2026 13:08-13:50): plugin e Tool Forge passano dallo stesso cancello; in «Solo lettura» la carta dice perché chiede
+    'approval.pluginTool': 'Vuole usare lo strumento «{attrezzo}» del plugin «{plugin}». Un plugin fa girare un suo programma su questo PC: serve il tuo sì.',
+    'approval.forgeTool': 'Vuole usare «{attrezzo}», uno strumento fatto in Tool Forge. Può cambiare le tue note, attività e memoria: serve il tuo sì.',
+    'approval.mcpToolReadOnly': 'Sei in Solo lettura, ma lo strumento «{attrezzo}» del connettore «{server}» può cambiare cose fuori da questo PC. Lo consenti solo questa volta?',
+    'approval.pluginToolReadOnly': 'Sei in Solo lettura, ma lo strumento «{attrezzo}» del plugin «{plugin}» fa girare un programma che può cambiare cose su questo PC e fuori. Lo consenti solo questa volta?',
+    'approval.forgeToolReadOnly': 'Sei in Solo lettura, ma «{attrezzo}», uno strumento fatto in Tool Forge, può cambiare le tue note, attività e memoria. Lo consenti solo questa volta?',
     // decisione 155 (04/11/2026): la sola carta della shell rimasta in Accesso pieno
     'approval.criticalDelete.root': 'Questo comando cancella {percorso}, la radice di un disco. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.',
     'approval.criticalDelete.topLevel': 'Questo comando cancella {percorso}, una cartella principale del disco. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.',
@@ -351,6 +358,13 @@ export default {
     'approval.network.action.open': "open a file",
     'approval.callFromText': "The model wrote this tool call as text instead of calling the tool ({nome}). TALOS rebuilt it: run it?", // R-34 parte 2
     'approval.emulatedCall': 'This model has no tools of its own: TALOS runs them for it, and asks first ({nome}). Run it?', // E1, decision 121
+    'approval.mcpTool': 'It wants to use the tool «{attrezzo}» of the connector «{server}». A connector runs its own program outside TALOS: it needs your yes.', // P018, 11/11/2026
+    // P018 round 2 (owner 11/11/2026 13:08-13:50): plugin and Tool Forge pass the same gate; in Read only the card says why it asks
+    'approval.pluginTool': 'It wants to use the tool «{attrezzo}» of the plugin «{plugin}». A plugin runs its own program on this PC: it needs your yes.',
+    'approval.forgeTool': 'It wants to use «{attrezzo}», a tool made in Tool Forge. It can change your notes, tasks and memory: it needs your yes.',
+    'approval.mcpToolReadOnly': 'You are in Read only, but the tool «{attrezzo}» of the connector «{server}» can change things outside this PC. Allow it only this once?',
+    'approval.pluginToolReadOnly': 'You are in Read only, but the tool «{attrezzo}» of the plugin «{plugin}» runs a program that can change things on this PC and outside it. Allow it only this once?',
+    'approval.forgeToolReadOnly': 'You are in Read only, but «{attrezzo}», a tool made in Tool Forge, can change your notes, tasks and memory. Allow it only this once?',
     // decision 155 (04/11/2026): the only shell card left in Full access
     'approval.criticalDelete.root': 'This command deletes {percorso}, the root of a disk. With any permission, Full access included, this needs your yes every time.',
     'approval.criticalDelete.topLevel': 'This command deletes {percorso}, a top-level folder of the disk. With any permission, Full access included, this needs your yes every time.',

@@ -144,17 +144,89 @@ test('ARGOMENTI-03: chi scrive dentro `info.detail` salda PRIMA il disegno diffe
   morde(controllo, NUDO.replaceAll('disegnaArgomentiSeInAttesa(info);', ''));
 });
 
-test('ARGOMENTI-04: il secondo JSON.parse è sparito — l’oggetto si passa, non si riparsa', () => {
-  const controllo = (s) => {
-    const corpo = attorno(s, 'function renderizzaArgomentiAttrezzo(', 600);
-    assert.match(corpo, /function renderizzaArgomentiAttrezzo\(contenitore, jsonGrezzo, argomentiGiaParsati = undefined\)/);
-    assert.match(corpo, /if \(argomentiGiaParsati !== undefined\) argomenti = argomentiGiaParsati;/);
-    // chi non ce l'ha continua a chiamare con due argomenti: nessun chiamante costretto a cambiare
-    assert.match(corpo, /else \{ try \{ argomenti = JSON\.parse\(jsonGrezzo\); \}/);
+/*
+ * ⛔ Cura dell uscita 0.2.2 (16/11, giudice v1966). Il giro 7 della gemella ha messo le maschere della carta sugli argomenti della riga
+ *   (`argomentiDellaRiga`), e con loro è tornato il secondo JSON.parse che l 11/09 era stato tolto: `aggiornaVistaArgomentiAttrezzo`
+ *   legge la stringa, poi `argomentiDellaRiga` rilegge LA STESSA stringa. Misurato con una spia sul sorgente vero, un disegno nel replay:
+ *   0.2.1 = 1 JSON.parse, 0.2.2 = 2. La forma nuova: l oggetto già letto si passa ad `argomentiDellaRiga`, che lo maschera con la stessa
+ *   `oscuraPerStruttura` e non lo rilegge; se la lettura è fallita (un delta a metà) la strada è quella di prima, chiusura e maschera.
+ *   Le prove qui sotto fanno girare le DUE funzioni vere della pagina, estratte dal sorgente, con la carta vera.
+ */
+const funzioneDellaPagina = (sorgente, nome) => {
+  const inizio = sorgente.indexOf(`\n  function ${nome}(`);
+  assert.notEqual(inizio, -1, `manca ${nome}`);
+  return sorgente.slice(inizio, sorgente.indexOf('\n  }\n', inizio) + 4);
+};
+const carta = await import('../../src/components/carta-dal-testo.js');
+
+/** Un disegno degli argomenti di una riga nel replay, sul sorgente dato: quanti JSON.parse, che cosa arriva a schermo. */
+function disegnaNelReplay(sorgente, argomenti, cartaUsata = carta) {
+  const elemento = () => ({ children: [], className: '', textContent: '', appendChild(c) { this.children.push(c); return c; }, append(...c) { this.children.push(...c); }, replaceChildren() { this.children = []; } });
+  const visti = [];
+  const stub = {
+    document: { createElement: elemento, createTextNode: (testo) => ({ testo }) },
+    textElement: (tag, cls, testo) => ({ tag, cls, testo }),
+    etichettaArgomento: (k) => k,
+    tr: (k) => k,
+    localeUI: () => 'en',
+    riassuntoAttrezzoInCorso: (_nome, a) => { visti.push(JSON.stringify(a)); return 'riassunto'; },
+    dettaglioRigaAttrezzo: (_nome, a) => { visti.push(JSON.stringify(a)); return 'dettaglio'; },
+    argomentiAttrezzoInAttesa: new Set(),
+    argomentiDellaRiga: cartaUsata.argomentiDellaRiga,
+    leggiArgomentiDellaRiga: cartaUsata.leggiArgomentiDellaRiga,
+    argomentiGrezziDellaRiga: cartaUsata.argomentiGrezziDellaRiga,
   };
-  controllo(NUDO);
-  morde(controllo, NUDO.replace('function renderizzaArgomentiAttrezzo(contenitore, jsonGrezzo, argomentiGiaParsati = undefined)',
-    'function renderizzaArgomentiAttrezzo(contenitore, jsonGrezzo)'));
+  const corpo = `with (stub) { ${funzioneDellaPagina(sorgente, 'renderizzaArgomentiAttrezzo')}\n${funzioneDellaPagina(sorgente, 'aggiornaVistaArgomentiAttrezzo')}\n return aggiornaVistaArgomentiAttrezzo; }`;
+  const aggiorna = new Function('stub', corpo)(stub); // eslint-disable-line no-new-func
+  const info = { nome: 'scrivi', argomenti, summaryText: {}, dettaglio: {}, detail: elemento() };
+  const vero = JSON.parse;
+  let letture = 0;
+  JSON.parse = function spia(...a) { letture += 1; return vero.apply(this, a); };
+  try { aggiorna(info); } finally { JSON.parse = vero; }
+  return { letture, righe: info.detail.children, schermo: JSON.stringify(info.detail.children) + visti.join(''), info };
+}
+
+test('ARGOMENTI-04: nel replay gli argomenti già letti non si rileggono — UN JSON.parse per disegno', () => {
+  const argomenti = JSON.stringify({ path: 'C:/progetto/nota.txt', contenuto: 'riga uno\nriga due' });
+  const controllo = (s) => {
+    const { letture, righe } = disegnaNelReplay(s, argomenti);
+    assert.equal(letture, 1, `un disegno degli argomenti ha fatto ${letture} JSON.parse sulla stessa stringa`);
+    assert.equal(righe.length, 2, 'le righe degli argomenti si disegnano ancora');
+  };
+  controllo(APP);
+  // il chiamante che torna a passare solo la stringa (la forma del giro 7) rilegge: deve cadere
+  morde(controllo, APP.replace('const mostrati = letti.mostrati;', 'const mostrati = argomentiDellaRiga(info.argomenti);'));
+});
+
+test('ARGOMENTI-05: l oggetto già letto passa dalla maschera della carta — una password annidata resta oscurata', () => {
+  const argomenti = JSON.stringify({ path: 'C:/progetto/db.json', db: { host: 'localhost', password: 'hunter2' }, api_key: 'sk-segreto-0123456789' });
+  const { letture, schermo } = disegnaNelReplay(APP, argomenti);
+  assert.equal(letture, 1);
+  assert.doesNotMatch(schermo, /hunter2/u, 'la password annidata è arrivata a schermo in chiaro');
+  assert.doesNotMatch(schermo, /sk-segreto-0123456789/u, 'la chiave è arrivata a schermo in chiaro');
+  assert.match(schermo, /\[redacted\]/u);
+  assert.match(schermo, /localhost/u, 'ciò che non è segreto resta leggibile');
+});
+
+test('ARGOMENTI-06: un delta a metà segue la strada di prima — si chiude per la vista e si maschera', () => {
+  const argomenti = '{"path":"C:/progetto/db.json","db":{"password":"hunter2"},"conte';
+  const { righe, schermo } = disegnaNelReplay(APP, argomenti);
+  assert.equal(righe.length, 2, 'il JSON a metà si chiude per la vista: path e db');
+  assert.doesNotMatch(schermo, /hunter2/u);
+  assert.match(schermo, /\[redacted\]/u);
+  assert.match(schermo, /C:\/progetto\/db\.json/u);
+});
+
+/* Giudice v1971 (16/11): dal vivo `aggiornaVistaArgomentiAttrezzo` gira a OGNI delta. Su un delta a metà erano 3 JSON.parse (il chiamante,
+   poi `argomentiDellaRiga` che rileggeva la stessa stringa e la chiusa) contro 1 della 0.2.1: misurato 3,71 contro 0,81 ms per pezzo
+   (50 KB in 200 pezzi, mediana di 7 corse, C:/T/cura-022-lavoro/delta). Ora UNA lettura, della stringa chiusa, con la stessa maschera. */
+test('ARGOMENTI-07: un delta a metà costa UNA lettura per disegno, con la stessa chiusura e la stessa maschera', () => {
+  const { letture, righe, schermo, info } = disegnaNelReplay(APP, '{"path":"C:/progetto/db.json","db":{"password":"hunter2"},"conte');
+  assert.equal(letture, 1, `un delta a metà ha fatto ${letture} JSON.parse`);
+  assert.equal(righe.length, 2);
+  assert.doesNotMatch(schermo, /hunter2/u);
+  assert.equal(info.argomentiParsati, undefined, 'un JSON chiuso per la vista non vale come argomenti veri');
+  assert.deepEqual(disegnaNelReplay(APP, '{"path":"a.txt"}').info.argomentiParsati, { path: 'a.txt' }, 'intero sì');
 });
 
 test('FONDO-01: `fondoConversazioneInVista` legge il layout una volta per fotogramma, e scade', () => {

@@ -148,7 +148,9 @@ export async function preparaToolPluginPerSessione({ cartella, cartellaTrust }, 
 
     for (const t of p.tools) {
       const nomeEsposto = nomeEspostoPlugin(p.id, t.nome);
-      toolPlugin.push({ nome: nomeEsposto, descrizione: t.descrizione, parametri: t.parametri });
+      /* P018 giro 2 (11/11/2026): l'id vero del plugin e il nome originale viaggiano con lo strumento, per la carta e per il «sì per
+         questo strumento» (`chiaveAttrezzoDiFuori`); il modello riceve sempre e solo nome, descrizione e parametri (`attrezziPluginOpenAI`). */
+      toolPlugin.push({ nome: nomeEsposto, descrizione: t.descrizione, parametri: t.parametri, pluginId: p.id, nomeOriginale: t.nome });
       /*
        * ⛔⛔⛔ A-3 (17/09/2026): nella mappa ci va l'id VERO, non lo si ricava dal nome esposto.
        *   Chi deve riverificare la fiducia prima di eseguire (`agent-service.mjs`) tagliava il

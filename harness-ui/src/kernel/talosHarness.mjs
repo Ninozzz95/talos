@@ -53,6 +53,7 @@ import { comandoCheModifica, comandoFinitoRosso, deveRiaprireSuProvaRossa, eComa
 import { normalizzaMetadatiCattura } from '../process-output-contract.mjs'
 import { creaRegistroLetture, registraLetturaRighe, registraLetturaDentroRiga, registraScritturaPropria, motivoPerNonSovrascrivere, frasePerNonSovrascrivere, serveImpronta, haImpronta, registraImpronta } from '../letture-prima-di-sovrascrivere.mjs' // T25/B09: la lettura prima di sovrascrivere
 import { PROCESS_OUTPUT_ENCODINGS } from '../process-output-encoding.mjs' // OEM36: solo l'elenco; iconv-lite si carica lì, e solo a richiesta
+import { nomeDiCampoSegreto, oscuraFormeDiSegreto, SEGRETO_OSCURATO, siNoLeggibile } from '../forme-di-segreto.mjs' // cura gemella 0.2.2 giro 3: gli argomenti sulla carta di un attrezzo di fuori
 import { StringDecoder } from 'node:string_decoder'
 import { createParser } from 'eventsource-parser'
 import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, erroreEsitoProviderIncertoEsaurito, erroreNessunaPrimaRispostaEsaurito, leggiRifiutoProvider } from '../provider-retry.mjs'
@@ -8720,6 +8721,14 @@ export const FRASI_DI_PERMESSO = Object.freeze({
     'server.approval.callFromText': 'The model wrote this tool call as text instead of calling the tool ({nome}). TALOS rebuilt it: run it?',
     /* E1, decisione 121 (03/11/2026): un modello SENZA attrezzi propri; li fa funzionare TALOS e chiede prima di ogni azione */
     'server.approval.emulatedCall': 'This model has no tools of its own: TALOS runs them for it, and asks first ({nome}). Run it?',
+    /* P018 (owner 11/11/2026): a tool of a connector (an MCP server) runs a program outside TALOS, so it passes the same gate as the others */
+    'server.approval.mcpTool': 'It wants to use the tool «{attrezzo}» of the connector «{server}». A connector runs its own program outside TALOS: it needs your yes.',
+    /* P018 round 2 (owner 11/11/2026 13:08-13:50): a plugin tool and a Tool Forge tool pass the same gate; in Read only the card says why it asks */
+    'server.approval.pluginTool': 'It wants to use the tool «{attrezzo}» of the plugin «{plugin}». A plugin runs its own program on this PC: it needs your yes.',
+    'server.approval.forgeTool': 'It wants to use «{attrezzo}», a tool made in Tool Forge. It can change your notes, tasks and memory: it needs your yes.',
+    'server.approval.mcpToolReadOnly': 'You are in Read only, but the tool «{attrezzo}» of the connector «{server}» can change things outside this PC. Allow it only this once?',
+    'server.approval.pluginToolReadOnly': 'You are in Read only, but the tool «{attrezzo}» of the plugin «{plugin}» runs a program that can change things on this PC and outside it. Allow it only this once?',
+    'server.approval.forgeToolReadOnly': 'You are in Read only, but «{attrezzo}», a tool made in Tool Forge, can change your notes, tasks and memory. Allow it only this once?',
     'server.approval.research.quick': 'Depth: quick. Estimated cost: searches ~{ricerche}, pages ~{pagine}, tokens ~{token}, time ~{minuti} min.',
     'server.approval.research.deep': 'Depth: deep. Estimated cost: searches ~{ricerche}, pages ~{pagine}, tokens ~{token}, time ~{minuti} min.',
     'server.approval.research.exhaustive': 'Depth: exhaustive. Estimated cost: searches ~{ricerche}, pages ~{pagine}, tokens ~{token}, time ~{minuti} min.',
@@ -11610,6 +11619,169 @@ export const SICUREZZA_PER_ATTREZZO = {
      * secondo cancello che nessun "sempre" può scavalcare.
      */
     library_context_policy_update: { risk: 'R3', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+    /*
+     * ⛔ P018 (owner 11/11/2026) — a tool of an MCP server. What comes back is the server's (F-027 wraps it as outside data): untrusted
+     *   content. Its arguments go to a program of third parties, which can send them anywhere: it can transmit. `readsPrivateData`
+     *   stays false, measured: with true the SECOND call of the same tool in a turn closed the trifecta by itself (the first call
+     *   alone makes the chain private + untrusted), and «allow this tool» would never hold. Private data seen through the other
+     *   tools (a write, a note, the memory) still closes it: that is the case the trifecta exists for.
+     */
+    mcp_tool: { risk: 'R2', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
+    /*
+     * ⛔ P018 round 2 (owner 11/11/2026) — a plugin tool runs a program of third parties on this PC (`plugin-session.mjs`, a command
+     *   with the person's rights): what comes back is theirs (untrusted) and the program can reach the network (can transmit). Same
+     *   `readsPrivateData: false` as `mcp_tool`, for the same measured reason (with true the second call of the same plugin tool closes
+     *   the trifecta by itself and «for this tool» never holds).
+     */
+    plugin_tool: { risk: 'R2', readsPrivateData: false, readsUntrustedContent: true, canTransmit: true },
+    /*
+     * A Tool Forge tool composes the Notes, Tasks and Memory capabilities (`agent-service.mjs`, `eseguiCapacitaForge`): it reads and
+     *   changes private data of TALOS, nothing leaves the PC — the profile of `memory_write`, as the comment of `tool_create` says
+     *   («the real run of a forged tool inherits the security of ITS capabilities»).
+     */
+    forge_tool: { risk: 'R2', readsPrivateData: true, readsUntrustedContent: false, canTransmit: false },
+}
+
+/**
+ * P018 (owner 11/11/2026) — the key of «allow this tool in this conversation» for a tool of an MCP server: the pair (server, tool),
+ *   never the name exposed to the model (`mcp__<server>__<tool>` is ambiguous when a name holds `__`). Kernel and server compose it
+ *   here, from the question; the client never sends it. As Hermes (`tools/mcp_tool_handlers.py:60-64`, `mcp:{server}/{tool}`) and
+ *   Codex (`McpToolApprovalKey { server, tool_name }`, `codex-rs/core/src/mcp_tool_call.rs:1523-1529`).
+ */
+export function chiaveAttrezzoMcp(server, attrezzo) {
+    return JSON.stringify([typeof server === 'string' && server ? server : null, String(attrezzo ?? '')])
+}
+
+/**
+ * P018 round 2 (owner 11/11/2026) — the tools that run outside the kernel and pass the same gate: a connector (MCP), a plugin, a
+ *   Tool Forge tool. Their «yes for this tool» lives in ONE list (`consensiSessione.attrezziMcpConsentiti`, the name of round 1, kept
+ *   so nothing already wired changes), so the KIND is in the key of a plugin and of a Forge tool: a plugin «github» with «x» is not the
+ *   connector «github» with «x». A connector keeps its pair (`chiaveAttrezzoMcp`). As Codex, whose key holds server, plugin and tool
+ *   (`McpToolApprovalKey { server, plugin_id, connector_id, link_id, tool_name }`, `codex-rs/core/src/mcp_tool_call.rs:1523-1529`).
+ */
+export const TIPI_ATTREZZO_DI_FUORI = Object.freeze(['mcp_tool', 'plugin_tool', 'forge_tool'])
+export function chiaveAttrezzoDiFuori(tipo, origine, attrezzo) {
+    if (tipo === 'mcp_tool') return chiaveAttrezzoMcp(origine, attrezzo)
+    return JSON.stringify([String(tipo ?? ''), typeof origine === 'string' && origine ? origine : null, String(attrezzo ?? '')])
+}
+/** The key of a card of an outside tool, from the card itself (the server reads the QUESTION, never the client); `null` if none. */
+export function chiaveDellaCartaDiFuori(azione) {
+    if (!TIPI_ATTREZZO_DI_FUORI.includes(azione?.tipo) || typeof azione.attrezzo !== 'string' || azione.attrezzo === '') return null
+    return chiaveAttrezzoDiFuori(azione.tipo, azione.tipo === 'mcp_tool' ? azione.server : azione.tipo === 'plugin_tool' ? azione.plugin : null, azione.attrezzo)
+}
+
+/**
+ * Twin repair of 0.2.2, round 3 (owner 14/11/2026 09:56, «in 0.2.2»): the card of an outside tool shows WHAT the call sends, as the MCP
+ *   spec asks (2025-06-18, Tools, Security considerations: «Show tool inputs to the user before calling the server, to avoid malicious
+ *   or accidental data exfiltration»), Hermes (`tools/mcp_tool_handlers.py:105` and `:172`, «Arguments:») and Codex
+ *   (`codex-rs/core/src/mcp_tool_call.rs:2242`, `build_mcp_tool_approval_display_params`) do. ONLY the card gets this copy: the executor,
+ *   the model and the «same call» signature of a No keep the real arguments.
+ * The cap, in ONE place:
+ *   - `caratteriPerValore` 1_200: Hermes' own number for the arguments of its card (`_TRUST_GATE_ARGUMENTS_MAX_CHARS = 1_200`,
+ *     `tools/mcp_tool_handlers.py:78`), here for EACH value, so a long body does not hide the next argument;
+ *   - `caratteriInTutto` 4_800: the whole card, four values cut whole (Hermes masks a window of 4× its cap before cutting);
+ *   - `profondita` 8: deeper objects become «…» (a card is read, not explored);
+ *   - `orlo` 16_400: before masking a long string is cut to its cap PLUS the longest secret form `oscuraFormeDiSegreto` knows (a PEM body
+ *     of 16_384, a JWT of 16_390), so a secret that starts in the shown part is always seen whole by the masker; masking 10 MB costs
+ *     ~255 ms (measured), the window costs ~2 ms ON PLAIN TEXT. ⛔ Round 5 (reviewer 1, RED 1): «~2 ms» held only for a text that does
+ *     not make the recogniser work; on «a_»×8,800 one window cost 438 ms and four values of «a-»×50,000 2,821 ms, because the
+ *     value-after-a-secret-name recogniser was quadratic (`forme-di-segreto.mjs`, now linear: on 14/11 the
+ *     window of «a_»×8,800 costs p50 0.69 ms, four values of «a-»×50,000 p50 6.3 ms / p95 6.9 ms, four names of «a_»×50,000 p50 3.6 ms,
+ *     10 MB 0.63 ms; ≥2,000 samples each, with the machine busy at 46-57% by other work);
+ *   - `jsonInTutto` 24_000 (round 5, reviewer 1, RED 2): the JSON of the card's arguments never passes it. `[]`, `""` and `{}` cost
+ *     nothing in `caratteriInTutto`, so 2 million `[]` made a card of 6,000,007 characters with no cut counted. Now every element costs at
+ *     least 1 (an empty text, an empty or nested list or object, a number its digits), a text costs what JSON writes (`\u0001` is six),
+ *     so at most 4,800 elements reach the card: 4 JSON characters each at most (`"a",`), plus one last value of up to 1,200 characters
+ *     written six times longer: 4 × 3,600 + 6 × 1,200 = 21,600, under 24,000 with the cut signs.
+ *   ⛔ Round 6, the narrow road (reviewer 1 after round 5, REDS 1 and 2): the quoted-field form of round 5 was superlinear (37.6 ms on one
+ *     window) and the tail «to the end of the text» hid the rest of an argument after a quote that never closes, with no cut counted; both
+ *     are back to the base's forms. So the declared limit of round 3 is back: of a quoted password with spaces longer than the window,
+ *     what passes its first word stays readable (0.2.3). A yes/no value under a secret name the base 0.2.1 did not mask is shown
+ *     (`clear_cookies: true`); under one it masked (`password: true`) it stays masked (`siNoLeggibile`, forme-di-segreto.mjs).
+ */
+export const TETTO_ARGOMENTI_DELLA_CARTA = Object.freeze({ caratteriPerValore: 1_200, caratteriInTutto: 4_800, profondita: 8, orlo: 16_400, jsonInTutto: 24_000 })
+export const SEGNO_TAGLIATO = '…'
+/**
+ * The arguments for the card: MASKED first (a key that is a secret name loses its whole value, as Hermes `_mask_secret_fields`,
+ *   `tools/mcp_tool_handlers.py:87`; every text through `oscuraFormeDiSegreto`), CUT second (`tools/mcp_tool_handlers.py:115`: «Redact
+ *   before truncating so a cut cannot split a secret past its pattern»), with «…» where a value was cut and the number of cuts.
+ * Always a NEW object: the arguments passed in are never touched.
+ */
+export function argomentiPerLaCarta(argomenti) {
+    const T = TETTO_ARGOMENTI_DELLA_CARTA
+    let restano = T.caratteriInTutto
+    let tagliati = 0
+    const taglia = (s, max) => {
+        if (s.length <= max) return s
+        let fine = Math.max(0, max - 1)
+        const c = s.charCodeAt(fine - 1)
+        if (c >= 0xd800 && c <= 0xdbff) fine -= 1 // never half of a surrogate pair
+        tagliati += 1
+        return `${s.slice(0, fine)}${SEGNO_TAGLIATO}`
+    }
+    const oscuraIlMostrato = (s, max) => {
+        /* the masked text must reach `orlo` past what is shown: masking can shorten what comes before (a PEM block becomes ten letters),
+           so the window grows until the masked part is long enough or the whole string is in */
+        let finestra = max + T.orlo
+        let oscurato = oscuraFormeDiSegreto(s.length > finestra ? s.slice(0, finestra) : s)
+        while (finestra < s.length && oscurato.length < max + T.orlo) {
+            finestra *= 2
+            oscurato = oscuraFormeDiSegreto(s.length > finestra ? s.slice(0, finestra) : s)
+        }
+        return oscurato
+    }
+    const testo = (s) => {
+        const max = Math.max(1, Math.min(T.caratteriPerValore, restano))
+        const fuori = taglia(oscuraIlMostrato(s, max), max)
+        /* round 5 (RED 2): an empty text costs 1, and a text costs what JSON writes (a control character is six): never free */
+        restano -= Math.max(1, JSON.stringify(fuori).length - 2)
+        return fuori
+    }
+    const metti = (oggetto, chiave, valore) => Object.defineProperty(oggetto, chiave, { value: valore, enumerable: true, writable: true, configurable: true })
+    /* Twin repair of 0.2.2, round 4 (judge v1865): a name is cut at the cap too, and two names equal in their first 1,199 characters
+       became ONE name: the second value overwrote the first (a hostile connector could hide an argument behind a long equal prefix). A
+       name that would repeat one already on the card gets a visible number right after it, «(2)», «(3)», the first free one; the number
+       counts in the whole cap. Only own names count (`Object.hasOwn`): `constructor` or `toString` are never «already there». Hermes keeps
+       the names inside one JSON text (`tools/mcp_tool_handlers.py:105`) and Codex never cuts them (`mcp_tool_call.rs:2242`): neither
+       merges two names; here each name is cut on its own, so it is made unique. */
+    const unica = (oggetto, chiave) => {
+        if (!Object.hasOwn(oggetto, chiave)) return chiave
+        let n = 2
+        while (Object.hasOwn(oggetto, `${chiave}(${n})`)) n += 1
+        const segnata = `${chiave}(${n})`
+        restano -= segnata.length - chiave.length
+        return segnata
+    }
+    const visita = (v, profondita) => {
+        if (typeof v === 'string') return testo(v)
+        if (v === null || typeof v !== 'object') {
+            restano -= String(v).length
+            return v
+        }
+        if (profondita >= T.profondita) { tagliati += 1; restano -= 1; return SEGNO_TAGLIATO }
+        if (profondita > 0) restano -= 1 // round 5 (RED 2): a list or an object inside the arguments costs 1, so `[]` and `{}` are never free
+        const chiavi = Array.isArray(v) ? null : Object.keys(v) // a long list is never copied whole: only what fits is read
+        const quante = chiavi ? chiavi.length : v.length
+        const fuori = chiavi ? {} : []
+        for (let i = 0; i < quante; i++) {
+            if (restano <= 0) {
+                tagliati += quante - i
+                if (chiavi) metti(fuori, unica(fuori, SEGNO_TAGLIATO), SEGNO_TAGLIATO); else fuori.push(SEGNO_TAGLIATO)
+                break
+            }
+            if (!chiavi) { fuori.push(visita(v[i], profondita + 1)); continue }
+            const k = chiavi[i]
+            const x = v[k]
+            const chiave = unica(fuori, testo(k))
+            /* the REAL name decides: neither the cut nor the number may hide a secret name */
+            const segreto = nomeDiCampoSegreto(k) && x !== null && x !== undefined && x !== '' && !siNoLeggibile(k, x) // round 6: a yes/no under a name the base did not mask is shown
+            if (segreto) restano -= SEGRETO_OSCURATO.length
+            metti(fuori, chiave, segreto ? SEGRETO_OSCURATO : visita(x, profondita + 1))
+        }
+        return fuori
+    }
+    const carta = visita(argomenti ?? {}, 0)
+    return { argomenti: carta, tagliati }
 }
 
 /**
@@ -14979,6 +15151,11 @@ export async function talosLavora({
         const conSegno = voceInCoda !== null && typeof voceInCoda === 'object' && !Array.isArray(voceInCoda) && Object.hasOwn(voceInCoda, 'testo')
         const messaggioInCoda = conSegno ? voceInCoda.testo : voceInCoda
         messaggi.push({ role: 'user', content: messaggioInCoda })
+        /* P018 in 0.2.2, reviewer A RA-08 (13/11/2026): the person spoke again in this turn, so a No they gave earlier is theirs to
+           revisit — the same call asks again. ONLY with the person's mark: a child's result, a notice or a background exit (a plain
+           string, or an object without `dallaPersona: true`) never forgets it. Like Hermes, which resets its per-turn guardrails when
+           the person starts a turn (`agent/turn_context.py:624-631`). */
+        if (conSegno && voceInCoda.dallaPersona === true) noDelGiro.clear()
         /* Decisione 201: una voce della persona entrata in coda dalla finestra del PC porta la sua pagina del Browser (anche `null`):
            la nota, se è cambiata, va subito dopo di lei; e da qui `browser_page` sa che il giro viene dalla finestra. */
         if (conSegno && voceInCoda.dallaPersona === true && Object.hasOwn(voceInCoda, 'paginaBrowser')) {
@@ -15443,6 +15620,121 @@ export async function talosLavora({
     const divisioneDelGiro = () => { const modo = modoDellaDivisione(); return dividiPerIlPonte(attrezziOpenAI, centraliDel(modo), modo, finestraAttrezzi === null ? undefined : { budgetElenco }) }
     const attrezziVersoIlModello = () => (attrezziDifferiti ? divisioneDelGiro().attrezzi : attrezziOpenAI)
     const nomiToolMcp = attrezziMcpOpenAI ? new Set(attrezziMcpOpenAI.map((a) => a.function.name)) : null
+    /*
+     * P018 (owner 11/11/2026) — server and tool of an MCP name, for the card and the key of «allow this tool». The host says them
+     *   (`serverId`, `nomeOriginale`: `mcp-session.mjs`); a host that passes only the exposed name gets them read back from
+     *   `mcp__<server>__<tool>` (the first `__` after the prefix, as the chat's own fallback name, `nomi-attrezzi.js`).
+     */
+    const vociDegliStrumentiMcp = new Map((toolMcp ?? []).map((t) => [t?.name, t]))
+    const voceDelloStrumentoMcp = (nome) => {
+        const t = vociDegliStrumentiMcp.get(nome)
+        if (typeof t?.serverId === 'string' && t.serverId && typeof t?.nomeOriginale === 'string' && t.nomeOriginale) return { server: t.serverId, attrezzo: t.nomeOriginale }
+        const parti = /^mcp__(.+?)__(.+)$/u.exec(nome)
+        return parti ? { server: parti[1], attrezzo: parti[2] } : { server: null, attrezzo: nome }
+    }
+    /*
+     * P018 round 2 (owner 11/11/2026 13:08) — plugin and id of a plugin tool, the same way: the host says them (`pluginId`,
+     *   `nomeOriginale`: `plugin-session.mjs`, the id of its routing map, never cut from the name); an older host gets them read back
+     *   from `plugin__<plugin>__<tool>` (first `__`). A Tool Forge tool is `forge_<id>` (`FORGE_PREFISSO_NOME_TOOL`).
+     */
+    const vociDegliStrumentiPlugin = new Map((toolPlugin ?? []).map((t) => [t?.nome, t]))
+    const voceDelloStrumentoPlugin = (nome) => {
+        const t = vociDegliStrumentiPlugin.get(nome)
+        if (typeof t?.pluginId === 'string' && t.pluginId && typeof t?.nomeOriginale === 'string' && t.nomeOriginale) return { plugin: t.pluginId, attrezzo: t.nomeOriginale }
+        const parti = /^plugin__(.+?)__(.+)$/u.exec(nome)
+        return parti ? { plugin: parti[1], attrezzo: parti[2] } : { plugin: null, attrezzo: nome }
+    }
+    const voceDelloStrumentoForge = (nome) => ({ attrezzo: nome.startsWith(FORGE_PREFISSO_NOME_TOOL) ? nome.slice(FORGE_PREFISSO_NOME_TOOL.length) : nome })
+    /*
+     * ⛔ P018 (rounds 1 and 2) — the per-tool rule an outside tool (connector, plugin, Forge) brings to the gate, composed here and never
+     *   asked to the host (whose settings route does not even accept such a key, `config.mjs`). A rule the host did pass for the kind
+     *   stays sovereign.
+     *   - «Read only» (owner 13:08, «Carta di permesso», NOT the refusal): «ask», and a remembered yes does not count there — the card is
+     *     «only once» (`soloUnaVolta`). One exception, owner 13:50 «Come Claude Code»: a connector tool its server declared read-only
+     *     when it connected (`dichiaratoDiSolaLettura`, see `segnoDiSolaLetturaStabile`) is «always». «Always» still yields to trifecta,
+     *     suspicious content and the rest of the gate.
+     *   - «Research», workspace-only writes: no rule, so the level refuses.
+     *   - default («Workspace write»): «ask» — the first use is a card; the yes «for this tool» turns it into «always» for that pair only.
+     *   - «On request»: the level asks; the yes «for this tool» holds as for the other tools.
+     *   - «Full access» and no level (the bench, which has nobody to ask): nothing added, as for the other tools.
+     */
+    const permessiDelloStrumentoDiFuori = (tipo, chiave, { dichiaratoDiSolaLettura = false } = {}) => {
+        if (permessiPerAttrezzo?.[tipo] !== undefined) return permessiPerAttrezzo
+        const livello = livelloLetto(livelloAccesso)
+        if (livello === 'lettura') return { ...(permessiPerAttrezzo ?? {}), [tipo]: dichiaratoDiSolaLettura === true ? 'sempre' : 'chiedi' }
+        if (livello !== 'scrittura-progetto' && livello !== 'su-richiesta') return permessiPerAttrezzo
+        const consentiti = consensiSessione?.attrezziMcpConsentiti
+        if (Array.isArray(consentiti) && consentiti.includes(chiave)) return { ...(permessiPerAttrezzo ?? {}), [tipo]: 'sempre' }
+        return livello === 'scrittura-progetto' ? { ...(permessiPerAttrezzo ?? {}), [tipo]: 'chiedi' } : permessiPerAttrezzo
+    }
+    /*
+     * ⛔ Owner 13:50 (v1465), judge's conditions — the read-only sign of a connector tool (`annotations.readOnlyHint === true`, as the
+     *   server declared it in its tool list when it connected: `mcp-session.mjs` passes that sign and nothing else). The MCP spec says
+     *   annotations are untrusted «unless they come from trusted servers» (2025-06-18, Tools): a connector here runs only after the
+     *   person trusted it. Round 1 said «a server annotation is never read»: that still holds in every other mode; the sign is read ONLY
+     *   in «Read only» (`permessiDelloStrumentoDiFuori`). The first sign seen for a (server, tool) is remembered for the conversation
+     *   (in memory, beside the other session yeses); a sign that differs later — a reconnection that says something else — is never
+     *   trusted again in that conversation, whatever it says after.
+     */
+    const segniDiSolaLettura = consensiSessione && typeof consensiSessione === 'object'
+        ? (consensiSessione.segniDiSolaLetturaMcp ??= new Map())
+        : new Map()
+    const segnoDiSolaLetturaStabile = (chiave, dichiarato) => {
+        const visto = segniDiSolaLettura.get(chiave)
+        if (visto === undefined) { segniDiSolaLettura.set(chiave, dichiarato); return dichiarato }
+        if (visto !== dichiarato) { segniDiSolaLettura.set(chiave, 'cambiato'); return false }
+        return dichiarato
+    }
+    /*
+     * Owner 13:08 for «Read only», judge v1505 (11/11 17:40) for every mode: a no is not asked again in the turn — the same call (same
+     *   tool, same arguments) gets the no at once. Only a person's answer on THIS call's card goes in (never a rule, nobody to ask, or a
+     *   yes); it gives no permission, it only removes a duplicate card, and it lasts this turn only (this set lives in this run).
+     * P018 in 0.2.2, after the three reviewers (13/11/2026):
+     *   - the person speaking again in the turn (a queued message with their mark, an answer to a question) empties it
+     *     (`consegnaVoceInCoda`, `ask_user_question`): never an automatic event;
+     *   - «the same arguments» are compared with their keys sorted, nested and inside arrays too (`serializzaCanonica`), as Hermes
+     *     does for its duplicate calls (`run_agent.py:1207-1209`, `agent/tool_guardrails.py:208-209`); the order of an array counts.
+     */
+    const noDelGiro = new Set()
+    const argomentiConfrontabili = (argomenti) => {
+        try { return serializzaCanonica(argomenti ?? {}) }
+        catch { return JSON.stringify(argomenti ?? {}) } // a value JSON never gives (it comes parsed): compared as before
+    }
+    /**
+     * The gate of an outside tool: the action names the kind, who (server or plugin) and the tool; in «Read only» it is «only once»
+     *   (`soloUnaVolta`: no «for this tool», the server refuses that scope too) with the sentence that says why it asks.
+     */
+    const cancelloDelloStrumentoDiFuori = async ({ tipo, c, nome, argomenti, voce, frase, fraseParams, dichiaratoDiSolaLettura = false }) => {
+        const chiave = chiaveAttrezzoDiFuori(tipo, voce.server ?? voce.plugin ?? null, voce.attrezzo)
+        const inSolaLettura = livelloLetto(livelloAccesso) === 'lettura'
+        const firma = `${chiave}\u0000${argomentiConfrontabili(argomenti)}`
+        if (noDelGiro.has(firma)) {
+            return { consentito: false, via: 'no-della-persona-nel-giro', motivo: 'the person already said no to this same call in this turn: it was not asked again. Do not retry it: tell the person what you need.' }
+        }
+        let rispostaDellaCarta
+        const chiedi = typeof chiediApprovazioneFn === 'function'
+            ? async (domanda) => {
+                /* the question the gate built, with the id of THIS call written here too (APPROVAZIONI-CHIAMATA-01 reads every card) */
+                const r = await chiediApprovazioneFn({ ...domanda, toolCallId: domanda?.toolCallId ?? c.id })
+                if ((domanda?.toolCallId ?? c.id) === c.id) rispostaDellaCarta = { r }
+                return r
+            }
+            : chiediApprovazioneFn
+        /* twin repair of 0.2.2, round 3: the card shows what the call sends, masked then cut (`argomentiPerLaCarta`); the executor and
+           the model keep `argomenti`, the real ones, and so does `firma` above */
+        const carta = argomentiPerLaCarta(argomenti)
+        const permesso = await verificaPermessoConBarriera(
+            { tipo, toolCallId: c.id, nome, ...voce, argomenti: carta.argomenti, ...(carta.tagliati ? { argomentiTagliati: carta.tagliati } : {}), ...(inSolaLettura ? { soloUnaVolta: true } : {}), ...fraseDiPermesso(inSolaLettura ? `${frase}ReadOnly` : frase, fraseParams) },
+            { livelloAccesso, modalitaOperativa, chiediApprovazioneFn: chiedi, permessiPerAttrezzo: permessiDelloStrumentoDiFuori(tipo, chiave, { dichiaratoDiSolaLettura: inSolaLettura && dichiaratoDiSolaLettura }), cartella, catena, segnaleStop },
+        )
+        /* P018 in 0.2.2, after the checker (point 9, probe CTRL-9): a No the host marks `automatico: true` (the goal refuter's rule,
+           an automatic yes turned into a no, the CLI with -p or «dontAsk») is nobody's answer: it never enters, so the model never
+           hears «the person already said no» for it; the next identical call asks the host again and gets its true reason. As Codex
+           says who refused (`codex-rs/core/src/tools/approvals.rs:497-502`: configuration, automatic review, user). */
+        const noAutomatico = rispostaDellaCarta?.r?.automatico === true
+        if (!permesso.consentito && rispostaDellaCarta && !noAutomatico && esitoApprovazione(rispostaDellaCarta.r).approvato !== true) noDelGiro.add(firma)
+        return permesso
+    }
     const nomiToolPlugin = attrezziPluginOpenAI ? new Set(attrezziPluginOpenAI.map((a) => a.function.name)) : null
     const nomiToolForge = attrezziForgeOpenAI ? new Set(attrezziForgeOpenAI.map((a) => a.function.name)) : null
     const disco = discoNode({ radice: cartella })
@@ -19957,7 +20249,8 @@ export async function talosLavora({
                             const rispostaUtente = await chiediDomandaFn(questions, { toolCallId: c.id, messaggi: [...messaggi] })
                             esito = JSON.stringify(rispostaUtente)
                             /* R-53 bis, revisione del Blocco 21: una risposta è un messaggio della persona. Una domanda annullata, saltata o scaduta no. */
-                            if (rispostaUtente?.status === 'answered') { comandoRosso = false; comandiDelGiro.clear() }
+                            /* P018 in 0.2.2, reviewer A RA-09: the same holds for the No of the turn (an answer can be «yes, do it») */
+                            if (rispostaUtente?.status === 'answered') { comandoRosso = false; comandiDelGiro.clear(); noDelGiro.clear() }
                         }
                         catch (rotto) {
                             esito = ['QUERY_INVALID', 'QUESTION_ALREADY_PENDING'].includes(rotto?.code)
@@ -20209,14 +20502,42 @@ export async function talosLavora({
                  * delega_sottotask e per lo stesso motivo).
                  */
                 else if (nomiToolMcp?.has(nome)) {
+                    /*
+                     * ⛔⛔ P018 (owner 11/11/2026 12:18) — the call went straight to the server, without the gate every other tool passes.
+                     *   Now it passes `verificaPermessoConBarriera` like the others, with an action that names server and tool
+                     *   (`permessiDelloStrumentoDiFuori`: card the first time by default, at every call on «On request», «only once» in
+                     *   «Read only», none in «Full access»; the «yes for this tool» per (server, tool); trifecta, suspicious content and
+                     *   Plan as for every action). Outside «Read only» a server annotation (`readOnlyHint`) is not even read: the MCP spec
+                     *   says hints from a server are untrusted, and «Hosts must obtain explicit user consent before invoking any tool».
+                     *   In «Read only» (owner 13:50, «Come Claude Code») the sign declared at connection lets the call pass without a
+                     *   card, as long as it never changed in this conversation (`segnoDiSolaLetturaStabile`).
+                     */
+                    const voceMcp = voceDelloStrumentoMcp(nome)
+                    /* P018 in 0.2.2, reviewer A RA-12: a tool declared read-only AND destructive asks, as in Codex
+                       (`codex-rs/core/src/mcp_tool_call.rs:2595-2599`, `destructive_hint == Some(true)` decides before `read_only_hint`) */
+                    const annotazioniMcp = vociDegliStrumentiMcp.get(nome)?.annotations
+                    /* After the checker (mutant C4): the sign holds only with destructiveHint absent or exactly false; «"true"», 1, an
+                       object or null ask. The MCP schema types it `destructiveHint?: boolean` and Codex reads only a boolean
+                       (`Option<bool>`); a value that is not one is wrong on the side of the question, never on the side of running. */
+                    const senzaDistruttivo = annotazioniMcp?.destructiveHint === undefined || annotazioniMcp?.destructiveHint === false
+                    const segnoDichiarato = segnoDiSolaLetturaStabile(chiaveAttrezzoMcp(voceMcp.server, voceMcp.attrezzo), annotazioniMcp?.readOnlyHint === true && senzaDistruttivo)
+                    const permessoMcp = chiamaToolMcpFn ? await cancelloDelloStrumentoDiFuori({
+                        tipo: 'mcp_tool', c, nome, argomenti, voce: { server: voceMcp.server, attrezzo: voceMcp.attrezzo },
+                        frase: 'server.approval.mcpTool', fraseParams: { server: voceMcp.server ?? '?', attrezzo: voceMcp.attrezzo }, dichiaratoDiSolaLettura: segnoDichiarato,
+                    }) : null
                     if (!chiamaToolMcpFn) {
                         esito = 'MCP tool call is not configured on this harness: no MCP dispatch channel was set.'
+                    }
+                    else if (!permessoMcp.consentito) {
+                        erroreTool = true
+                        esito = `REFUSED. ${permessoMcp.motivo} The tool "${voceMcp.attrezzo}" of the MCP server "${voceMcp.server ?? '?'}" was not called.`
                     }
                     else {
                         try {
                             const risultato = await chiamaToolMcpFn(nome, argomenti)
                             esito = avvolgiEsterno(`mcp ${nome}`)(formattaEsitoMcp(risultato)) // F-027: tutto ciò che torna è del server
                             erroreTool = risultato?.isError === true // revisione K (owner 17/10): il verdetto esplicito, perché l'esito è già nel confine e nessuna forma lo riconoscerebbe
+                            if (!erroreTool) catena = avanzaCatena(catena, SICUREZZA_PER_ATTREZZO.mcp_tool) // P018: contenuto non fidato nella catena
                         }
                         catch (rotto) {
                             // F-027: il messaggio d'errore può essere del server (JSON-RPC `error.message`)
@@ -20233,13 +20554,29 @@ export async function talosLavora({
                  * formattaEsitoMcp, che presume {content,isError}.
                  */
                 else if (nomiToolPlugin?.has(nome)) {
+                    /*
+                     * ⛔⛔ P018 round 2 (owner 11/11/2026 13:08, «Curarla subito») — a plugin tool ran with no card in every mode, «Read
+                     *   only» included: only the trust re-checked at use (`agent-service.mjs`, the package hash). The same gate and the
+                     *   same card as a connector tool now, keyed on (plugin, tool) with the kind; the trust check stays AFTER the gate,
+                     *   so a plugin changed after the yes still does not run.
+                     */
+                    const vocePlugin = voceDelloStrumentoPlugin(nome)
+                    const permessoPlugin = eseguiToolPluginFn ? await cancelloDelloStrumentoDiFuori({
+                        tipo: 'plugin_tool', c, nome, argomenti, voce: { plugin: vocePlugin.plugin, attrezzo: vocePlugin.attrezzo },
+                        frase: 'server.approval.pluginTool', fraseParams: { plugin: vocePlugin.plugin ?? '?', attrezzo: vocePlugin.attrezzo },
+                    }) : null
                     if (!eseguiToolPluginFn) {
                         esito = 'plugin tool call is not configured on this harness: no plugin dispatch channel was set.'
+                    }
+                    else if (!permessoPlugin.consentito) {
+                        erroreTool = true
+                        esito = `REFUSED. ${permessoPlugin.motivo} The tool "${vocePlugin.attrezzo}" of the plugin "${vocePlugin.plugin ?? '?'}" was not run.`
                     }
                     else {
                         try {
                             const uscita = await eseguiToolPluginFn(nome, argomenti)
                             esito = typeof uscita === 'string' ? avvolgiEsterno(`plugin ${nome}`)(uscita) : uscita // F-027
+                            catena = avanzaCatena(catena, SICUREZZA_PER_ATTREZZO.plugin_tool) // P018 round 2: the output of a third-party program
                         }
                         catch (rotto) {
                             esito = avvolgiEsterno(`plugin ${nome}`)(`plugin tool call failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`)
@@ -20261,14 +20598,28 @@ export async function talosLavora({
                  * tornano).
                  */
                 else if (nomiToolForge?.has(nome)) {
+                    /*
+                     * ⛔⛔ P018 round 2 (owner 11/11/2026 13:34, «Sì, stessa cura») — a Tool Forge tool changes notes, tasks and memory
+                     *   and ran with no card: the same gate as plugins now, keyed on the forged tool with its kind.
+                     */
+                    const voceForge = voceDelloStrumentoForge(nome)
+                    const permessoForge = eseguiToolForgeFn ? await cancelloDelloStrumentoDiFuori({
+                        tipo: 'forge_tool', c, nome, argomenti, voce: { attrezzo: voceForge.attrezzo },
+                        frase: 'server.approval.forgeTool', fraseParams: { attrezzo: voceForge.attrezzo },
+                    }) : null
                     if (!eseguiToolForgeFn) {
                         esito = 'forged tool execution is not configured on this harness: no forge dispatch channel was set.'
+                    }
+                    else if (!permessoForge.consentito) {
+                        erroreTool = true
+                        esito = `REFUSED. ${permessoForge.motivo} The forged tool "${voceForge.attrezzo}" was not run.`
                     }
                     else {
                         try {
                             const risultatoForge = await eseguiToolForgeFn(nome, argomenti)
                             esito = avvolgiEsterno(`tool ${nome}`)(formattaEsitoForge(risultatoForge)) // F-027
                             erroreTool = risultatoForge?.status !== 'succeeded' // revisione K (owner 17/10): il verdetto esplicito, perché l'esito è già nel confine e nessuna forma lo riconoscerebbe
+                            if (!erroreTool) catena = avanzaCatena(catena, SICUREZZA_PER_ATTREZZO.forge_tool) // P018 round 2: notes, tasks, memory seen
                         }
                         catch (rotto) {
                             esito = avvolgiEsterno(`tool ${nome}`)(`forged tool call failed: ${rotto instanceof Error ? rotto.message : String(rotto)}`)

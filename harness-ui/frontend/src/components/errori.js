@@ -969,6 +969,9 @@ const REGOLE = [
  */
 /* `detto` è la CHIAVE del dizionario (si dice con `t()` quando serve, nella lingua di allora). */
 const RIFIUTI = [
+  /* uscita 0.2.2 (owner sì, giudice v1961): il no che la PERSONA ha già dato in questo giro (nucleo, via `no-della-persona-nel-giro`) non è un
+     rifiuto dello strumento; in testa, perché il resto della frase del nucleo non tocchi le prove sotto */
+  { prova: /^the person already said no to this same call in this turn\b/i, detto: 'errori.turno.no.giaDettoNo' },
   { prova: /empty html|html vuoto/i, detto: 'errori.turno.rifiuto.htmlVuoto' },
   { prova: /cartella is required|folder is required/i, detto: 'errori.turno.rifiuto.cartellaMancante' },
   { prova: /must be different from your own/i, detto: 'errori.turno.rifiuto.cartellaUguale' },

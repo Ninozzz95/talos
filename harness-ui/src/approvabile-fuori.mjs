@@ -8,7 +8,7 @@
  *   `FORMA-BARRA-APPROVAZIONI-2026-11-03.md`). Chi approva in blocco lo tiene fuori da sé.
  * ⛔ Si calcola sull'oggetto vivo, prima di serializzare: `CARTA_SEMPRE` è un Symbol e nel JSON si perde.
  */
-import { SEGNI_DI_CARTA_FORZATA } from './kernel/talosHarness.mjs';
+import { SEGNI_DI_CARTA_FORZATA, TIPI_ATTREZZO_DI_FUORI } from './kernel/talosHarness.mjs';
 import { oscuraFormeDiSegreto } from './forme-di-segreto.mjs';
 import { LUNGHEZZA_DATO } from './notifiche-registro.mjs';
 
@@ -31,6 +31,10 @@ export function approvabileFuori(azione, dato) {
   if (azione.tipo === 'chiamata-dal-testo' || azione.semprePersona === true) return false;
   /* computer use, 03/11: togliere un luogo ricordato cambia i permessi futuri, quindi si conferma sempre sulla carta, mai dalla tendina */
   if (azione.tipo === 'computer_use_places_remove') return false;
+  /* ⛔ P018 D8 (giudice 11/11, 0.2.2): uno strumento di fuori (connettore, plugin, Tool Forge) può mandare fuori i dati e cambiare cose
+     che non si annullano, e la tabella del 31/10 tiene fuori dalla somma chi invia fuori e l'irreversibile. Fuori di proposito, non perché
+     oggi la sua carta non porta un comando, un percorso o un indirizzo (`datoDellAzione` null): se un domani ne portasse uno, resta fuori. */
+  if (TIPI_ATTREZZO_DI_FUORI.includes(azione.tipo)) return false;
   if (SEGNI_DI_CARTA_FORZATA.some((segno) => azione[segno] !== undefined && azione[segno] !== null && azione[segno] !== false)) return false;
   if (dato.genere === 'indirizzo' || (typeof azione.url === 'string' && azione.url)) return false;
   const v = dato.valore;

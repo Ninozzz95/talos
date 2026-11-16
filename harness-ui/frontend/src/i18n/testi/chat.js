@@ -148,6 +148,10 @@ export default {
     'approval.fromText.badge': 'dal testo', // R-34 parte 2 (bozzetto G0 approvato, 30/10/2026)
     'approval.fromText.rowTitle': 'Chiamata scritta dal modello come testo e ricostruita da TALOS.',
     'approval.fromText.arguments': 'Argomenti ricostruiti',
+    /* Cura gemella della 0.2.2, giro 3: che cosa manda la chiamata di un connettore, di un plugin o di Tool Forge (oscurato e tagliato da TALOS) */
+    'approval.toolArguments': 'Che cosa manda la chiamata',
+    'approval.argumentValue': 'valore', // giro 7 (owner 19:57, variante A): la voce di un argomento senza nome (una lista o un testo nudo in cima)
+    'approval.argumentsCut': 'Valori tagliati su questa carta (…): {count}. Lo strumento li riceve interi.',
     'approval.fromText.alwaysAsks': 'Lo chiedo sempre, anche con Accesso pieno: un testo non parte mai da solo.',
     'approval.fromText.stopTitle': 'Non te lo chiedo più in questo giro',
     'approval.fromText.stopBody': 'Hai detto no due volte: TALOS ha chiesto al modello di rifare la chiamata nel modo giusto.',
@@ -1392,6 +1396,10 @@ export default {
     'approval.fromText.badge': 'from text', // R-34 part 2 (G0 mockup approved, 30/10/2026)
     'approval.fromText.rowTitle': 'A call the model wrote as text, rebuilt by TALOS.',
     'approval.fromText.arguments': 'Rebuilt arguments',
+    /* Twin repair of 0.2.2, round 3: what a connector, plugin or Tool Forge call sends, on its card (masked and cut by TALOS) */
+    'approval.toolArguments': 'What the call sends',
+    'approval.argumentValue': 'value', // round 7 (owner 19:57, variant A): the label of an argument with no name (a list or a bare text at the top)
+    'approval.argumentsCut': 'Values cut on this card (…): {count}. The tool receives them whole.',
     'approval.fromText.alwaysAsks': 'TALOS always asks, even with Full access: text never runs on its own.',
     'approval.fromText.stopTitle': 'Not asking again this turn',
     'approval.fromText.stopBody': 'You said no twice: TALOS asked the model to make the call the proper way.',
