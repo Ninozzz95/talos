@@ -4,6 +4,212 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
+## desktop-v0.2.2 — 2026-11-15
+
+### Security
+
+- **The tools of connectors (MCP servers), plugins and Tool Forge now ask before they run.** From 0.1.0 to 0.2.1 they ran
+  without a question in every permission mode, «Read only» included. Now they ask each time you use them, also in
+  «Writes to the project», where writing in the project does not ask, until you choose «For this tool in this session»,
+  which stops the question for that tool of that connector, plugin or Tool Forge until the conversation ends or TALOS
+  restarts; another tool, or the same tool of another
+  connector or plugin, asks on its own. The question can come back for a tool you already allowed when your data could
+  leave the PC: for example after the assistant has run a command or written a file in the same answer. «Full access» does
+  not ask, as for the other tools; Plan mode does not offer them.
+- **Gli strumenti dei connettori (i server MCP), dei plugin e di Tool Forge ora chiedono prima di partire.** Dalla 0.1.0
+  alla 0.2.1 partivano senza domanda, con qualsiasi permesso, anche in «Solo lettura». Ora chiedono ogni volta che li
+  usi, anche in «Scrive nel progetto», dove scrivere nel progetto non chiede, finché non scegli «Per questo strumento in
+  questa sessione», che toglie la domanda per quello strumento di quel connettore, plugin o Tool Forge fino alla fine
+  della conversazione o finché TALOS non si riavvia; un altro strumento, o lo stesso strumento di un altro connettore o plugin, chiede per conto suo. La domanda può
+  tornare per uno strumento già consentito quando i tuoi dati potrebbero uscire dal PC: per esempio dopo che l'assistente
+  ha lanciato un comando o scritto un file nella stessa risposta. «Accesso pieno» non chiede, come per gli altri
+  strumenti; la modalità Piano non li offre.
+
+- **In «Research only» these tools are now refused, without a question.** In 0.2.1 they ran there too; «Research only»
+  lets the assistant search and read, not use the tools of connectors, plugins or Tool Forge.
+- **In «Solo ricerca» questi strumenti ora sono rifiutati, senza domanda.** Nella 0.2.1 partivano anche lì; «Solo ricerca»
+  lascia cercare e leggere, non usare gli strumenti dei connettori, dei plugin o di Tool Forge.
+
+- **In «Read only» these tools ask each time, and only for that once.** From 0.1.0 to 0.2.1 «Read only» did not stop
+  them. The question says that the tool can change things outside your PC, and offers only «Allow once» and «Deny». A
+  tool that its connector declares as read-only runs without asking: in «Read only» TALOS trusts what the connector says
+  about its own tools, unless the connector also declares that tool as destructive: then it asks. A connector that writes
+  «read-only» or «destructive» as anything other than a plain yes or no breaks the connector standard: TALOS does not
+  connect to it and offers none of its tools, so no question appears, and the chat says that the connector did not start.
+  The core of TALOS asks for such a tool too, for a program built on it that does not check the standard. If the connector
+  later says something different about that tool, TALOS asks again for the rest of the conversation, until TALOS restarts.
+- **In «Solo lettura» questi strumenti chiedono ogni volta, e solo per quella volta.** Dalla 0.1.0 alla 0.2.1 «Solo
+  lettura» non li fermava. La domanda dice che lo strumento può cambiare cose fuori dal tuo PC, e offre solo «Consenti una
+  volta» e «Nega». Uno strumento che il suo connettore dichiara di sola lettura parte senza chiedere: in «Solo lettura»
+  TALOS si fida di ciò che il connettore dice dei suoi strumenti, a meno che il connettore non lo dichiari anche
+  distruttivo: allora chiede. Un connettore che scrive «sola lettura» o «distruttivo» in un modo diverso da un semplice sì o
+  no non rispetta lo standard dei connettori: TALOS non si collega e non offre nessuno dei suoi strumenti, quindi non
+  compare nessuna domanda, e la chat dice che il connettore non è partito. Il nucleo di TALOS chiede anche per uno strumento
+  così, per un programma costruito su TALOS che non controlla lo standard. Se poi il connettore dice altro su quello
+  strumento, TALOS chiede di nuovo per il resto della conversazione, finché TALOS non si riavvia.
+
+- **If you say no to one of these tools, the assistant cannot ask again for the same request in that answer**, in every
+  permission mode: the same tool with the same details gets your no at once, and the assistant is told that you already
+  said no. The same details written in another order count as the same request. With other details it asks again, and
+  if you write to the assistant or answer one of its questions after your no, the same request asks you again. A no that
+  does not come from you (a rule or an automatic answer) does not count as yours: the assistant is told who refused.
+- **Se dici di no a uno di questi strumenti, l'assistente non può chiedere di nuovo la stessa cosa in quella risposta**,
+  con qualsiasi permesso: lo stesso strumento con gli stessi dettagli riceve subito il tuo no, e all'assistente si dice
+  che hai già detto di no. Gli stessi dettagli scritti in un altro ordine contano come la stessa richiesta. Con dettagli
+  diversi chiede di nuovo, e se dopo il tuo no scrivi all'assistente o rispondi a una sua domanda, la stessa richiesta ti
+  chiede di nuovo. Un no che non viene da te (una regola o una risposta automatica) non conta come tuo: all'assistente si
+  dice chi ha rifiutato.
+
+- **«Allow all» never includes these questions**: each one is answered on its own card.
+- **«Consenti tutte» non comprende mai queste domande**: a ognuna si risponde sulla sua carta.
+
+- **The card names the tool once, in words you can read** («create issue», not «create_issue»), and the note near the
+  buttons says what each yes is worth: «Allow once» this call only, «For this tool» the whole session. When your private
+  data could leave the PC, the card says it first, in a red box.
+- **La carta nomina lo strumento una volta sola, in parole che si leggono** («create issue», non «create_issue»), e la nota
+  vicino ai pulsanti dice quanto vale ciascun sì: «Consenti una volta» solo questa chiamata, «Per questo strumento» tutta la
+  sessione. Quando i tuoi dati privati potrebbero uscire dal PC, la carta lo dice per prima cosa, in un riquadro rosso.
+
+- **On the phone these questions show neither the connector nor the tool yet**, and they offer only «Allow once» and
+  «Deny». To allow a tool for the whole session, answer on the PC.
+- **Sul telefono queste domande non mostrano ancora né il connettore né lo strumento**, e offrono solo «Consenti una
+  volta» e «Nega». Per consentire uno strumento per tutta la sessione, rispondi dal PC.
+
+### Known limits (connectors, plugins, Tool Forge)
+
+- In «Read only» a connector that declares one of its tools as read-only, and then changes things with it, runs it
+  without a question: TALOS cannot check what the connector really does.
+- In «Solo lettura» un connettore che dichiara di sola lettura un suo strumento, e poi con quello cambia qualcosa, lo fa
+  partire senza domanda: TALOS non può controllare che cosa fa davvero il connettore.
+
+- A yes «For this tool in this session» also counts for the agents this conversation starts, even in another folder, for
+  a connector there with the same name (it still needs your trust for that folder).
+- Un sì «Per questo strumento in questa sessione» vale anche per gli agenti che questa conversazione avvia, anche in
+  un'altra cartella, per un connettore lì con lo stesso nome (che deve comunque avere la tua fiducia per quella cartella).
+- A plugin check that runs before each tool cannot stop these tools: it stops only the actions that change your files
+  and your data in TALOS (as from 0.1.0).
+- Un controllo di un plugin che parte prima di ogni strumento non può fermare questi strumenti: ferma solo le azioni che
+  cambiano i tuoi file e i tuoi dati in TALOS (come dalla 0.1.0).
+- The TALOS command line (talos-cli 0.1.0 to 0.6.14) has the same gap; this update of the desktop app does not change it.
+- La riga di comando di TALOS (talos-cli dalla 0.1.0 alla 0.6.14) ha la stessa falla; questo aggiornamento dell'app per
+  il PC non la cambia.
+
+### Fixed
+
+- **On the card of a call written as text, a very long field name now wraps and its value is always visible.** Up to
+  0.2.1 a name of a few hundred characters pushed its value off the card, so you could not see what the call would do.
+- **Nella carta di una chiamata scritta come testo, un nome di campo lunghissimo ora va a capo e il suo valore si vede
+  sempre.** Fino alla 0.2.1 un nome di qualche centinaio di caratteri spingeva il valore fuori dalla carta, e non si
+  vedeva che cosa avrebbe fatto la chiamata.
+- **The card of a connector, plugin or Tool Forge tool now shows what the call sends.** Each argument is a row, name and
+  value, with the same layout as above. TALOS hides a field named like a secret (a key, a token, a password, at any
+  depth) and a value shaped like a key before the card shows it, and cuts a long value with «…»; the card then says how
+  many values were cut. Two long names that start the same stay two rows: the second gets a number after it, «(2)».
+  The tool still receives every argument whole. On the phone the card does not show them yet.
+- **La carta di uno strumento di un connettore, di un plugin o di Tool Forge ora mostra che cosa manda la chiamata.**
+  Ogni argomento è una riga, nome e valore, con la stessa impaginazione di sopra. TALOS nasconde un campo che ha il nome
+  di un segreto (una chiave, un token, una password, a qualsiasi profondità) e un valore che ha la forma di una chiave
+  prima che la carta lo mostri, e taglia un valore lungo con «…»; la carta dice poi quanti valori ha tagliato. Due nomi
+  lunghi che iniziano allo stesso modo restano due righe: il secondo ha un numero dopo, «(2)». Lo
+  strumento riceve comunque ogni argomento intero. Sul telefono la carta non li mostra ancora.
+- **That card shows every argument the call sends, hides more secrets, and never makes TALOS wait.** Before, a
+  call whose arguments were a list, a text or a number showed a card with no rows, an invisible character could make two
+  names look the same, some secrets stayed readable (a name like `githubtoken`, a cookie, a key with no end line), and a
+  hostile connector could keep TALOS busy for more than a second or send a card of megabytes; now that argument is one
+  row, the invisible character is shown as `\u200b`, those secrets are hidden while names such as `token_limit`,
+  `password_hint` or `clear_cookies: true` stay readable, the card is ready in a few milliseconds and never passes 24,000
+  characters. A secret in a JSON text or between escaped quotes, a name like `DB_PASSWORD_2`, a field named `pass` and
+  `secrets` written with spaces stay a known limit, fixed in 0.2.3.
+- **Quella carta mostra ogni argomento che manda la chiamata, nasconde più segreti e non fa mai aspettare TALOS.** Prima una chiamata con argomenti fatti di una lista, di un testo o di un numero mostrava una carta
+  senza righe, un carattere invisibile poteva far sembrare uguali due nomi, alcuni segreti restavano leggibili (un nome
+  come `githubtoken`, un cookie, una chiave senza la riga di fine) e un connettore
+  ostile poteva tenere TALOS occupato per più di un secondo o mandare una carta di megabyte; ora quell'argomento è una
+  riga, il carattere invisibile si vede come `\u200b`, quei segreti sono nascosti mentre nomi come `token_limit`,
+  `password_hint` o `clear_cookies: true` restano leggibili, la carta è pronta in pochi millisecondi e non supera mai 24.000
+  caratteri. Un segreto dentro un testo JSON o fra virgolette protette, un nome come `DB_PASSWORD_2`, un campo chiamato
+  `pass` e `secrets` scritto con gli spazi restano un limite noto, curato nella 0.2.3.
+- **The tool row and the terminal hide the same secrets as the card.** Before, the row of a connector tool in the
+  conversation showed `password`, `api_key` or a password inside an object in clear in its detail, also while the call was
+  still arriving, while the card above it hid them; now the row hides them while the call arrives, while the tool runs,
+  when it is over and after a reload. Before, the terminal printed those values on the tool row under its card; now it
+  hides them in the row as it is written and in the finished row. Before, the card written as text showed a secret inside
+  an object or a list in clear; now it hides it like the other card, at any depth. A row with no name now says «value».
+  The tool still receives every argument whole.
+- **La riga dello strumento e il terminale nascondono gli stessi segreti della carta.** Prima la riga di uno strumento di
+  un connettore nella conversazione mostrava in chiaro nel suo dettaglio `password`, `api_key` o una password dentro un
+  oggetto, anche mentre la chiamata arrivava, mentre la carta sopra li nascondeva; ora la riga li nasconde mentre la
+  chiamata arriva, mentre lo strumento lavora, alla fine e dopo un ricaricamento. Prima il terminale stampava quei valori
+  nella riga dello strumento sotto la sua carta; ora li nasconde nella riga mentre si scrive e nella riga finita. Prima la
+  carta scritta come testo mostrava in chiaro un segreto dentro un oggetto o una lista; ora lo nasconde come l'altra
+  carta, a qualsiasi profondità. Una riga senza nome ora dice «valore». Lo strumento riceve comunque ogni argomento intero.
+- **While a call arrives, a value of a JSON argument that is not complete is never shown, and two commands in one turn hide their secrets.**
+  Before, while the arguments of a call were still arriving, the tool row on the page and in the terminal showed the first
+  part of a value: most of a GitHub token, an access key or the password in a web address could be read before the card
+  hid it. Now a value of a JSON argument still arriving reads «…» until it is complete, then the row shows it with its secrets hidden; once
+  the call has arrived the row shows every value as before. Before, with two commands in the same turn, the activity group
+  showed the commands with their passwords in its rows, in its heading while a command ran and in the summary; now it
+  hides them like the row. Before, an invisible character inside a name such as `db_password` let the terminal
+  show its value; now it is hidden. Very large arguments (over a million characters or ten thousand names and values) end with «…»
+  on the row and inside a value of the card written as text, instead of keeping the page busy for seconds; a value cut
+  there is never shown in part. The tool still receives every argument whole.
+- **Mentre una chiamata arriva, un valore non ancora completo di un argomento JSON non si vede mai, e due comandi nello stesso giro nascondono
+  i loro segreti.** Prima, mentre gli argomenti di una chiamata arrivavano, la riga dello strumento nella pagina e nel
+  terminale mostrava la prima parte di un valore: si poteva leggere quasi tutto un token GitHub, una chiave d'accesso o la
+  password dentro un indirizzo web prima che la carta lo nascondesse. Ora un valore di un argomento JSON che sta ancora arrivando si legge «…»
+  finché non è completo, poi la riga lo mostra coi segreti nascosti; quando la chiamata è arrivata la riga mostra ogni
+  valore come prima. Prima, con due comandi nello stesso giro, il gruppo delle attività mostrava i comandi con le loro
+  password nelle righe, nel titolo mentre un comando lavorava e nel riepilogo; ora le nasconde come la riga. Prima un
+  carattere invisibile dentro un nome come `db_password` faceva mostrare al terminale il suo valore; ora è
+  nascosto. Argomenti molto grandi (oltre un milione di caratteri o diecimila fra nomi e valori) finiscono con «…» nella riga e dentro
+  un valore della carta scritta come testo, invece di tenere occupata la pagina per secondi; un valore tagliato lì non si
+  vede mai a metà. Lo strumento riceve comunque ogni argomento intero.
+- **When you already said no to a call of a connector, plugin or Tool Forge tool in this turn, its row now says so.** Before, when the model repeated
+  the same call after your no, TALOS did not ask you again, as it should, but the tool row said «The tool rejected the
+  request.», as if the tool had refused. Now it says «You had already said no to this same request in this turn, so you
+  were not asked again.»
+- **Quando in questo giro hai già detto di no a una chiamata di uno strumento di un connettore, di un plugin o di Tool Forge, ora la sua riga lo dice.** Prima, quando il
+  modello ripeteva la stessa chiamata dopo il tuo no, TALOS non ti chiedeva di nuovo, come deve, ma la riga dello
+  strumento diceva «Lo strumento ha rifiutato la richiesta.», come se avesse rifiutato lo strumento. Ora dice «In questo
+  giro avevi già detto di no a questa stessa richiesta, quindi non ti è stato chiesto di nuovo.»
+
+### Known limits of 0.2.2
+- **An empty variable in front of a slash** — when the variable is empty or not set, `rm -rf "$EMPTY"/*` is not recognised as a critical deletion. With Full access it runs without asking, as in 0.2.1, and Bash reads it as `rm -rf /*`. 0.2.3 asks for the card here. Until then, do not leave Full access on for commands built from variables you have not set yourself.
+- **Some secret shapes on the connector card** — 0.2.2 shows the connector's arguments on the card for the first time, with secrets masked. These four shapes are not recognised yet:
+  - secrets inside escaped quotes in JSON text;
+  - names with a number after the secret word, such as `DB_PASSWORD_2`;
+  - the short name `pass`;
+  - a `secrets` object written with spaces.
+
+  The model and the tool still receive the real values; only what the card shows is affected. 0.2.3 masks them, with a test bench of hostile texts.
+- **Two places that still show a connector's arguments unmasked, as in 0.2.1** — the phone's copy of the conversation page shows the tool row without the masks of the card, and the suggestion offered after a turn (for example «explain this command») can put an argument, unmasked, into the suggested message. Read the suggested message before you send it. Both were already so in 0.2.1; 0.2.3 puts them behind the same masks.
+- **A less common bash quoting form** — when a command uses one of bash's less common quoting forms in an unusual way, the permission check can lose track of where the quotes end, and a critical deletion later in the same command is not recognised. With Full access it runs without asking, as in 0.2.1. A later release asks for the card whenever the check cannot read the quoting. Until then, do not leave Full access on for commands you have not read yourself, especially commands that mix unusual quoting with a deletion.
+- **More places that can still show a connector's secret values, as in 0.2.1** — the masks recognise a secret field when its name ends with a secret word (`db_password`, `api_key`). A name where the secret word sits elsewhere, such as `password_confirmation` or `apiKeyValue`, is still shown in clear on the card and on the tool row. The same happens in the terminal row when the arguments arrive as a list, in the Processes column, and while arguments written inside a code fence are still arriving. A very large argument can also slow the tool row for about a fifth of a second when the call ends. All of these were already so in 0.2.1, where the tool row showed every argument unmasked. A later release reads secret words anywhere in a field name. Until then, prefer connectors that read secrets from their own settings rather than receiving them as arguments, and do not share your screen while a connector call carries a secret.
+- **Some commands with many wildcards can hold the permission check for a few seconds, as in 0.2.1.** When a command removes files using a long pattern with many `*` or `?` characters, TALOS can take a few seconds to decide whether to ask you, and the chat waits meanwhile. Nothing runs before the decision. This was already so in 0.2.1. A later release makes this check fast in every case. Until then, prefer a short pattern or a list of names over one long pattern.
+- **Computer use can look at a window of yours that comes to the front, as in 0.2.1** — while computer use works, it reads the window on top of the screen (or the top window of the app it was asked to use), not a window picked once at the start. What it sees there, including a screenshot, is sent to the model. If one of your windows comes to the front during a task, TALOS can read it and send it to the model. Before acting in an app that is not part of the task, it still asks you with a card. It does not ask when your window belongs to the same app as the task, or to an app you gave "Always allow". Moving the mouse or typing does not stop the task. A later release locks the task to the window chosen at the start, asks again if the window changes, and stops when you use the mouse or keyboard. Until then, do not use the PC while computer use is working, and do not give "Always allow" to an app where you keep windows of your own.
+- **Deleting an important folder may not ask on macOS and on Android, as in 0.2.1.** On macOS the permission check can miss an important folder when its name is written with different capital letters, with an accented letter in the other Unicode form, or with `ß` in place of `SS`. On Android the same can happen with capital letters in the phone's shared storage. In these cases the deletion can run without asking. This was already so in 0.2.1. A later release asks for the card in these cases. Until then, do not use Full access for deletion commands you did not write yourself.
+- **On any system, some very long commands can hide a deletion from the check, as in 0.2.1.** In these cases the deletion can run without asking. This was already so in 0.2.1. A later release asks for the card in these cases. Until then, do not use Full access for deletion commands you did not write yourself.
+- **The automatic tests in the source code can reach the system keyring used by the installed app, as in 0.2.1.** This concerns only people who run those tests from the source; using the app does not run them. A later release keeps the tests apart from the app's keyring. Until then, do not run the source tests on a PC where the installed TALOS keeps your keys.
+- **Some secret values placed in a list under certain field names can still show in clear on the permission card and on the tool row, as in 0.2.1.** The model and the tool receive the same values as before; only what you see is affected. A later release hides them. Until then, keep a connector's keys and tokens in that connector's own settings, rather than having the model pass them in the chat.
+
+### Limiti noti della 0.2.2
+- **Una variabile vuota davanti a una barra** — quando la variabile è vuota o non impostata, `rm -rf "$VUOTA"/*` non viene riconosciuto come cancellazione critica. Con Accesso pieno parte senza chiedere, come nella 0.2.1, e bash lo legge come `rm -rf /*`. La 0.2.3 qui chiede la carta. Fino ad allora non lasciare Accesso pieno acceso per comandi costruiti con variabili che non hai impostato tu.
+- **Alcune forme di segreto sulla carta dei connettori** — la 0.2.2 mostra per la prima volta sulla carta gli argomenti del connettore, con i segreti oscurati. Queste quattro forme non sono ancora riconosciute:
+  - i segreti fra virgolette protette in un testo JSON;
+  - i nomi con un numero dopo la parola del segreto, come `DB_PASSWORD_2`;
+  - il nome corto `pass`;
+  - un oggetto `secrets` scritto con gli spazi.
+
+  Il modello e l attrezzo ricevono comunque i valori veri; cambia solo ciò che mostra la carta. La 0.2.3 li oscura, con un banco di testi ostili.
+- **Due punti che mostrano ancora gli argomenti di un connettore senza maschera, come nella 0.2.1** — la copia della pagina della conversazione sul telefono mostra la riga dell attrezzo senza le maschere della carta, e il suggerimento proposto dopo un giro (per esempio «spiega questo comando») può mettere un argomento, senza maschera, nel messaggio proposto. Rileggi il messaggio proposto prima di inviarlo. Erano già così nella 0.2.1; la 0.2.3 li mette dietro le stesse maschere.
+- **Una forma di virgolette di bash poco comune** — quando un comando usa in modo insolito una delle forme di virgolette meno comuni di bash, il controllo dei permessi può perdere il punto in cui le virgolette finiscono, e una cancellazione critica più avanti nello stesso comando non viene riconosciuta. Con Accesso pieno parte senza chiedere, come nella 0.2.1. Una versione successiva chiede la carta ogni volta che il controllo non sa leggere le virgolette. Fino ad allora non lasciare Accesso pieno acceso per comandi che non hai letto tu, soprattutto se mescolano virgolette insolite e una cancellazione.
+- **Altri punti che possono ancora mostrare i valori segreti di un connettore, come nella 0.2.1** — le maschere riconoscono un campo segreto quando il suo nome finisce con una parola di segreto (`db_password`, `api_key`). Un nome in cui la parola del segreto sta altrove, come `password_confirmation` o `apiKeyValue`, si vede ancora in chiaro sulla carta e sulla riga dell attrezzo. Lo stesso succede nella riga del terminale quando gli argomenti arrivano come lista, nella colonna Processi e mentre arrivano argomenti scritti dentro un blocco di codice. Un argomento molto grande può anche rallentare la riga dell attrezzo per circa un quinto di secondo a fine chiamata. Erano già così nella 0.2.1, dove la riga dell attrezzo mostrava ogni argomento senza maschera. Una versione successiva legge le parole di segreto in ogni punto del nome del campo. Fino ad allora preferisci i connettori che leggono i segreti dalle proprie impostazioni invece di riceverli come argomenti, e non condividere lo schermo mentre una chiamata a un connettore porta un segreto.
+- **Alcuni comandi con molti caratteri jolly possono tenere fermo il controllo dei permessi per alcuni secondi, come nella 0.2.1.** Quando un comando cancella file con un modello lungo pieno di `*` o `?`, TALOS può metterci alcuni secondi a decidere se chiederti il permesso, e intanto la chat aspetta. Prima della decisione non parte niente. Era già così nella 0.2.1. Una versione successiva rende veloce questo controllo in ogni caso. Fino ad allora preferisci un modello corto o un elenco di nomi a un solo modello lungo.
+- **L'uso del computer può guardare una tua finestra che passa davanti, come nella 0.2.1** — mentre lavora, l'uso del computer legge la finestra che sta sopra le altre sullo schermo (o la prima finestra dell'app che gli hai chiesto di usare), non una finestra scelta una volta sola all'inizio. Quello che vede, compresa una foto, va al modello. Se durante il compito una tua finestra passa davanti, TALOS può leggerla e mandarla al modello. Prima di agire in un'app che non fa parte del compito ti chiede comunque il permesso con una carta. Non te lo chiede se la tua finestra è della stessa app del compito, o di un'app a cui hai dato «Consenti sempre». Muovere il mouse o scrivere non ferma il compito. Una versione successiva lega il compito alla finestra scelta all'inizio, ti richiede il permesso se la finestra cambia e si ferma quando usi mouse o tastiera. Fino ad allora non usare il PC mentre lavora l'uso del computer, e non dare «Consenti sempre» a un'app in cui tieni finestre tue.
+- **La cancellazione di una cartella importante può non chiedere conferma su macOS e su Android, come nella 0.2.1.** Su macOS il controllo dei permessi può non riconoscere una cartella importante quando il suo nome è scritto con maiuscole diverse, con una lettera accentata nell'altra forma Unicode o con `ß` al posto di `SS`. Su Android può succedere lo stesso con le maiuscole nella memoria condivisa del telefono. In questi casi la cancellazione può partire senza chiedere. Era già così nella 0.2.1. Una versione successiva chiede la carta in questi casi. Fino ad allora non usare Accesso pieno per comandi di cancellazione che non hai scritto tu.
+- **Su ogni sistema, alcuni comandi molto lunghi possono nascondere una cancellazione al controllo, come nella 0.2.1.** In questi casi la cancellazione può partire senza chiedere. Era già così nella 0.2.1. Una versione successiva chiede la carta in questi casi. Fino ad allora non usare Accesso pieno per comandi di cancellazione che non hai scritto tu.
+- **Le prove automatiche del codice sorgente possono raggiungere il portachiavi di sistema usato dall'app installata, come nella 0.2.1.** Riguarda solo chi fa girare quelle prove dal sorgente; usare l'app non le fa partire. Una versione successiva tiene le prove separate dal portachiavi dell'app. Fino ad allora non far girare le prove del sorgente su un PC dove il TALOS installato tiene le tue chiavi.
+- **Alcuni valori segreti messi in un elenco sotto certi nomi di campo possono ancora vedersi in chiaro sulla carta del permesso e sulla riga dello strumento, come nella 0.2.1.** Il modello e lo strumento ricevono gli stessi valori di prima; cambia solo ciò che vedi. Una versione successiva li nasconde. Fino ad allora, tieni le chiavi e i token di un connettore nelle impostazioni del connettore stesso, invece di farli passare dal modello nella chat.
+
 ## desktop-v0.2.1 — 2026-11-10
 
 ### Fixed

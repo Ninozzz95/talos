@@ -175,7 +175,17 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust, onEli
        * non possiamo correggere. Passarlo intatto a un motore che ne costruisce
        * una grammatica fa fallire l'intera richiesta — non solo quell'attrezzo.
        */
-      toolMcp.push({ name: nomeEsposto, description: t.description, inputSchema: schemaIngressoAttrezzo(t.inputSchema) });
+      /* P018 (11/11/2026): il server e il nome originale viaggiano con lo strumento, per la carta e per il «sì per questo strumento»
+         (`chiaveAttrezzoMcp`, per coppia); il modello riceve sempre e solo nome, descrizione e schema (`attrezziMcpOpenAI`). */
+      /* P018 giro 2 (owner 11/11/2026 13:50, «Come Claude Code»): il segno di sola lettura che il server dichiara qui, alla connessione,
+         e nient'altro delle sue annotazioni; il nucleo lo legge SOLO in «Solo lettura» (`segnoDiSolaLetturaStabile`). */
+      /* P018 nella 0.2.2, revisore A RA-12 (13/11/2026): uno strumento che si dice di lettura E distruttivo non porta il segno, come
+         Codex (`codex-rs/core/src/mcp_tool_call.rs:2595-2599`: `destructive_hint == Some(true)` chiede prima di leggere `read_only_hint`). */
+      /* Dopo il controllore (mutante C5): il segno solo con destructiveHint assente o esattamente false; «"true"», 1, un oggetto o
+         null chiedono (lo schema MCP lo vuole booleano; si sbaglia dalla parte della domanda, mai da quella dell'esecuzione). */
+      const senzaDistruttivo = t.annotations?.destructiveHint === undefined || t.annotations?.destructiveHint === false;
+      const segnoDiSolaLettura = t.annotations?.readOnlyHint === true && senzaDistruttivo ? { annotations: { readOnlyHint: true } } : {};
+      toolMcp.push({ name: nomeEsposto, description: t.description, inputSchema: schemaIngressoAttrezzo(t.inputSchema), serverId: esito.server.id, nomeOriginale: t.name, ...segnoDiSolaLettura });
       instradamento.set(nomeEsposto, { client: esito.client, nomeOriginale: t.name });
     }
   }

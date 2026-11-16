@@ -38,6 +38,7 @@ import { ORDINE_SPECIE, SPECIE_ATTREZZI, fraseSpecie, iconaSpecie, nomeLeggibile
 import { argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento } from './ragionamento.js';
 import { leggiEsitoComando } from './esito-comando.js';
 import { accorciaPercorso } from './schede.js';
+import { oscuraPerStruttura } from '../../../src/forme-di-segreto.mjs';
 
 void renderizzaMarkdown; // il ragionamento aperto usa il renderer condiviso, che il prodotto monta da `app.js` (D14): qui non c'è una seconda copia
 
@@ -325,8 +326,21 @@ export function testoDelSegmento(voci) {
 /**
  * Da ciò che `app.js` deposita in `DATI_VOCE` alla forma che le funzioni pure leggono. Il diff di una scrittura si
  * legge dal badge che `updateRealReview` ha già messo sulla riga (`.tool-note-diff`): un dato solo, non due.
+ * ⛔ Cura gemella della 0.2.2, giro 8 (revisore della pagina dopo il giro 7, P2): gli argomenti della voce sono quelli DA MOSTRARE, con le
+ *   maschere della carta (`oscuraPerStruttura`, forme-di-segreto.mjs). Prima passava `info.argomentiParsati` com'era, e con due comandi
+ *   nello stesso giro il gruppo riscriveva righe e testa coi veri: «Ran export DB_PASSWORD=… && make deploy». Hermes mostra una copia
+ *   oscurata degli argomenti nell'avanzamento (`agent/display.py:326-332`). Una copia per oggetto di argomenti (la vista si ridisegna
+ *   ogni 250 ms); l'attrezzo e il modello hanno i veri. Esportata per le prove.
  */
-function normalizzaVoce(elemento, dati) {
+const ARGOMENTI_DA_MOSTRARE = new WeakMap();
+/** La copia oscurata degli argomenti di una chiamata, una per oggetto: la usano anche la testa e il dettaglio della riga (app.js). */
+export function argomentiMascherati(argomenti) {
+  if (!argomenti || typeof argomenti !== 'object') return {};
+  let copia = ARGOMENTI_DA_MOSTRARE.get(argomenti);
+  if (!copia) { copia = oscuraPerStruttura(argomenti); ARGOMENTI_DA_MOSTRARE.set(argomenti, copia); }
+  return copia;
+}
+export function normalizzaVoce(elemento, dati) {
   if (!dati) return null;
   if (dati.tipo === 'reasoning') {
     const v = dati.voce;
@@ -345,7 +359,7 @@ function normalizzaVoce(elemento, dati) {
     if (Number.isFinite(piu) && Number.isFinite(meno)) diff = { piu, meno };
   }
   return {
-    tipo: 'tool', id: elemento, nome: info.nome, argomenti: info.argomentiParsati || {}, stato, annullata: info.annullata === true,
+    tipo: 'tool', id: elemento, nome: info.nome, argomenti: argomentiMascherati(info.argomentiParsati), stato, annullata: info.annullata === true,
     specie: specieAttrezzo(info.nome, info.operazione), esito: typeof info.esito === 'string' ? info.esito : '',
     diff, inizio: Number.isFinite(info.iniziatoA) ? info.iniziatoA : null, comandoDellaPersona: Boolean(info.comandoDellaPersona),
     inConsenso: stato === 'in-corso' && Boolean(info.richiestaConsenso), // reperto 4: la carta del consenso è aperta per questa chiamata

@@ -2903,6 +2903,19 @@ dialog.sheet-dialog .sheet-toggle-row input.talos-switch,
    modello, a capo compresi (un contenuto di file schiacciato su una riga non si può giudicare), e il blocco scorre oltre 14em */
 .talos-approval__automazione[data-argomenti-dal-testo]{max-height:14em; overflow:auto}
 .talos-approval__automazione[data-argomenti-dal-testo] .talos-kv__v{white-space:pre-wrap}
+/* Cura gemella della 0.2.2 (giudice v1807, owner 14/11): un nome di campo di 289 caratteri senza spazi era largo 1991 px (`flex:none`,
+   `nowrap`) e lasciava al valore 0 px, fuori dalla carta. Il nome va a capo anche dentro una parola (`anywhere` conta nella larghezza
+   minima, MDN) e non passa mai la riga; ogni riga tiene la sua altezza: scorre l'elenco, mai la riga. Come Codex, che va a capo sulla riga
+   «nome: valore» (`codex-rs/tui/src/bottom_pane/mcp_server_elicitation.rs:499-503`, `:940`).
+   Giro 3, dopo il ROSSO del controllore (giudice v1856):
+   - le regole valgono SOLO per l'elenco degli argomenti (`[data-argomenti-dal-testo]`, la carta dal testo e quella di un connettore): con
+     `.talos-approval__automazione` da sola cambiavano le altre sette carte che usano quel blocco (impostazioni dalla chat a 150%: 380 → 414 px);
+   - il tetto del 40% teneva il nome lungo in una colonna stretta: a 150-200% la sua riga era alta 175-194 px su 195 visibili e il secondo
+     argomento usciva sotto il bordo. Ora la riga va a capo (`flex-wrap`): un nome corto resta accanto al suo valore; un nome che non lascia
+     al valore almeno 12em prende la riga intera, e il valore va sotto, largo quanto la riga. */
+.talos-approval__automazione[data-argomenti-dal-testo] > .talos-kv{flex-shrink:0; flex-wrap:wrap; column-gap:12px; row-gap:0}
+.talos-approval__automazione[data-argomenti-dal-testo] > .talos-kv > .talos-kv__k{max-width:100%; white-space:normal; overflow-wrap:anywhere}
+.talos-approval__automazione[data-argomenti-dal-testo] > .talos-kv > .talos-kv__v{flex:1 1 12em}
 .talos-approval__automazione-istruzioni{display:flex; flex-direction:column; gap:4px; padding:6px 0}
 /* 0,2,1: batte `.talos-message p` (0,1,1, la misura del corpo della chat) — nella carta le istruzioni sono un dato, non la risposta */
 .talos-approval__automazione p.talos-automation__istruzioni-testo{margin:0; font-size:13.5px; line-height:1.55}
@@ -2912,6 +2925,8 @@ dialog.sheet-dialog .sheet-toggle-row input.talos-switch,
 .talos-callout--pericolo > .talos-approval__avvisi-corpo > b{color:var(--talos-danger)}
 .talos-approval__avvisi{margin:2px 0 6px; padding:10px 12px}
 .talos-approval__avvisi-corpo{display:flex; flex-direction:column; gap:4px; min-width:0}
+/* P018 nella 0.2.2 (revisore C): il riquadro della trifecta sulla carta del permesso, rientrato come la testa e il perché (stesso margine) */
+.talos-approval > .talos-approval__avvisi[data-avviso-trifecta]{margin:10px var(--talos-approval-gutter) 0}
 /* La proposta di un giro nello storico (decisione 13): il perché, le minacce, adesso → proposte, poi Approva · Scarta */
 .talos-automation__proposta{display:flex; flex-direction:column; gap:4px; margin-top:2px; padding-top:8px; border-top:1px solid var(--talos-border-subtle)}
 /* Y4: il «⋯» del giro è quello delle schede (`.td-card-azioni`), ma lì è assoluto rispetto alla scheda; nella riga del giro sta

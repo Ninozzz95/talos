@@ -217,6 +217,7 @@ import {
 import { cartellaFinaleValida } from './kernel/talosHarness.mjs';
 import { eNotaDiFermata } from './kernel/sistema-piegato.mjs'; // decisione 166 (R5): i racconti entrano prima della nota di fermata in coda
 import { ATTREZZI_LUOGHI, NOME_COMPUTER_USE } from './kernel/talosHarness.mjs'; // 03/11/2026: la scheda degli attrezzi; 04/11: computer_use
+import { chiaveDellaCartaDiFuori } from './kernel/talosHarness.mjs'; // P018 (11/11/2026, giro 2): «sì per questo strumento» di un connettore, di un plugin o di Tool Forge
 import { NOTA_RIPRENDI_DOPO_ERRORE, NOTA_RIPRENDI_DOPO_INTERRUZIONE } from './kernel/talosHarness.mjs'; // decisioni 198-199
 import { passoDaRiprendere, STATO_INIZIALE_DA_RIPRENDERE } from './da-riprendere.mjs'; // decisioni 198-199: c'è qualcosa da riprendere?
 import { normalizzaBozzaSegnalazione } from './segnalazione-problema.mjs'; // «Segnala un problema» (owner 29/10/2026)
@@ -7817,8 +7818,11 @@ export function createSessionRegistry({
       const approvato = (azione?.tipo === 'shell' || azione?.tipo === 'prova') && comando !== '' && contratto.includes(comando);
       broadcast(voce, richiestaDiApprovazione(requestId, azione));
       broadcast(voce, approvalResolved({ requestId, approvato, motivo: approvato ? 'contratto-obiettivo' : 'confutatore-sola-lettura' }));
+      /* P018 nella 0.2.2, dopo il controllore (CTRL-9): questo no è della regola, non della persona — `automatico: true`, così il nucleo
+         non lo ricorda come «the person already said no» (la chiamata uguale dopo risente questa frase, che dice chi rifiuta). */
       return Promise.resolve(approvato ? true : {
         approvato: false,
+        automatico: true,
         motivo: `you are the TALOS goal refuter and work READ-ONLY: you may only run the goal contract commands, exactly as written (${contratto.length ? contratto.map((c) => JSON.stringify(c)).join(', ') : 'this contract has none'}). Nothing else ran.`,
       });
     }
@@ -7897,6 +7901,11 @@ export function createSessionRegistry({
      *   percorso o per cartella, quando c'è, è un'altra promessa e resta). Come Hermes, dove il SERVER dice le scelte valide
      *   (`apps/desktop/src/components/assistant-ui/tool/approval.tsx:280-283`, `choices`). Coordinazione ha la sua regola qui sopra.
      */
+    /* P018 giro 2 (giudice v1462, D2; owner 13:08): la carta di uno strumento di fuori (connettore, plugin, Tool Forge) porta anche lei
+       `sempreNonBasta`. Il telefono toglie «Per questa sessione» solo con quel segno (Talos-Mobile `approvazioniR4.ts:213`), e quel
+       pulsante scriveva un'impostazione che il PC rifiuta: il sì valeva una volta senza dirlo. Finché il telefono non disegna server e
+       strumento, lì restano «una volta» e «No». Il PC tiene il suo «Per questo strumento» (`ambito: 'strumento'`, più sotto in
+       `rispondiApprovazione`), tranne sulla carta di «Solo lettura» (`soloUnaVolta`). */
     if (azione?.tipo && azione.tipo !== CHIAVE_COORDINAZIONE && !ATTREZZI_CON_PERMESSO_PER_ATTREZZO.has(azione.tipo)) {
       azione = { ...azione, sempreNonBasta: true };
     }
@@ -8510,7 +8519,8 @@ export function createSessionRegistry({
    * - Una radice riceve il suo oggetto com'è: banco, CLI e mobile restano identici a prima.
    */
   /* E1 (decisione 121): `strumentiEmulatiConsentiti` scende alla figlia come gli altri sì di sessione, e non risale. */
-  const CONSENSI_ELENCO = new Set(['cartelleFuori', 'segretiConsentiti', 'strumentiEmulatiConsentiti']);
+  /* P018 (11/11/2026): `attrezziMcpConsentiti`, il sì per uno strumento di un connettore, scende e non risale come gli altri. */
+  const CONSENSI_ELENCO = new Set(['cartelleFuori', 'segretiConsentiti', 'strumentiEmulatiConsentiti', 'attrezziMcpConsentiti']);
   const CONSENSI_SI = new Set(['reteCartella', 'rootWsl']);
   /* C2 R6: lo stesso simbolo che legge il kernel (`talosHarness.mjs`, `ORIGINE_CONSENSO`): `Symbol.for`, nessun import fra i due. */
   const ORIGINE_CONSENSO = Symbol.for('talos.consensi.origine');
@@ -16148,7 +16158,8 @@ export function createSessionRegistry({
       if (approvato === true && (pendente.azione?.[CARTA_SEMPRE] === true || pendente.azione?.semprePersona === true || pendente.azione?.cancellazioneCritica) && MOTIVI_DEL_SI_SENZA_PERSONA.includes(motivo)) {
         pendente.fermaOsservatore?.();
         voce.approvazionePendente = null;
-        pendente.resolve({ approvato: false, motivo: `only the person can approve "${String(pendente.azione?.tipo ?? 'this')}" on its card, and an automatic answer (a rule or the mode) is not the person's: nobody was asked, nothing was done.` });
+        /* P018 nella 0.2.2, dopo il controllore: un no che nessuna persona ha dato, segnato `automatico: true` (il nucleo non lo ricorda come suo) */
+        pendente.resolve({ approvato: false, automatico: true, motivo: `only the person can approve "${String(pendente.azione?.tipo ?? 'this')}" on its card, and an automatic answer (a rule or the mode) is not the person's: nobody was asked, nothing was done.` });
         broadcast(voce, approvalResolved({ requestId, approvato: false, motivo: 'nessuna-interfaccia', ...(rispostoDa !== undefined && rispostoDa !== sessionId ? { rispostoDa } : {}) }));
         return { ok: true };
       }
@@ -16172,6 +16183,13 @@ export function createSessionRegistry({
       /* 208 bis (MEDIA-5): la carta critica non ha «sempre» né «per la sessione»: nessun ambito si ricorda da lei (la carta resta in attesa) */
       const strumentoEmulato = pendente.azione?.tipo === 'chiamata-dal-testo' && pendente.azione?.emulata === true
         && typeof pendente.azione?.nome === 'string' && pendente.azione.nome ? pendente.azione.nome : null;
+      /* P018 (owner 11/11/2026): «sì per questo strumento» sulla carta di uno strumento di un connettore. La coppia (server, strumento) la
+         porta la DOMANDA, mai il client; e solo il sì di una persona si ricorda: una regola o la modalità approvano questa chiamata, non
+         le prossime (come Hermes, che ricorda solo una risposta della persona, `tools/mcp_tool_handlers.py:175`). */
+      /* P018 giro 2 (owner 11/11/2026 13:08-13:34): lo stesso per un plugin e per Tool Forge, con il tipo nella chiave
+         (`chiaveDellaCartaDiFuori`). Mai sulla carta di «Solo lettura» (`soloUnaVolta`): lì si consente solo una volta. */
+      const strumentoMcp = pendente.azione?.soloUnaVolta !== true && !MOTIVI_DEL_SI_SENZA_PERSONA.includes(motivo)
+        ? chiaveDellaCartaDiFuori(pendente.azione) : null;
       const ambitoValido = ambito === undefined
         || (!pendente.azione?.cancellazioneCritica && ((ambito === 'cartella' && approvato === true && typeof chiaveCartella === 'string' && chiaveCartella)
         || (ambito === 'percorso' && approvato === true && typeof percorsoSegreto === 'string' && percorsoSegreto)
@@ -16179,7 +16197,7 @@ export function createSessionRegistry({
         || (ambito === 'volta' && approvato === true && Boolean(pendente.azione?.wslRoot))
         /* E1, decisione 121 (owner 03/11/2026, forma `FORMA-CARTA-EMULATI-D-2026-11-03.md` §3): «Sì per questo strumento in questa
            conversazione» esiste solo sulla carta di una chiamata EMULATA. Il nome lo porta la DOMANDA, mai il client (come F4-03). */
-        || (ambito === 'strumento' && approvato === true && strumentoEmulato)));
+        || (ambito === 'strumento' && approvato === true && (strumentoEmulato || strumentoMcp))));
       if (!ambitoValido) {
         return rifiuto('QUERY_INVALID', 'permission-request-no-folder', 'This request has no folder to allow for the session');
       }
@@ -16195,8 +16213,9 @@ export function createSessionRegistry({
       }
       if (ambito === 'strumento') {
         const consensi = (voce.consensiSessione ??= {});
-        const elenco = (consensi.strumentiEmulatiConsentiti ??= []);
-        if (!elenco.includes(strumentoEmulato)) elenco.push(strumentoEmulato);
+        const [campo, valore] = strumentoMcp ? ['attrezziMcpConsentiti', strumentoMcp] : ['strumentiEmulatiConsentiti', strumentoEmulato];
+        const elenco = (consensi[campo] ??= []);
+        if (!elenco.includes(valore)) elenco.push(valore);
       }
       /*
        * Fase 8, cura 2 (forma `FORMA-FASE-8-TRE-CURE-2026-11-01.md` §2) — CHI ha confermato la carta di `app_settings`, per la sua

@@ -113,7 +113,8 @@ import { LINGUE as LINGUE_MENU, risolviLingua, linguaDaIndirizzo, applicaLingua,
 import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
 import { creaCopiaSulServer } from '../features/settings/copia-sul-server.js'; // Fase 8 (01/11/2026): le preferenze della finestra, copia sul server
 import { testoDelCampo, testoDelServer } from '../components/testo-server.js'; // K4b: i testi del server nella lingua dell'interfaccia
-import { bersaglioDalTesto, comandoDalTesto, bloccoDegliArgomenti, segnaDalTesto } from '../components/carta-dal-testo.js'; // R-34 parte 2: la carta «chiamata scritta come testo» (G0, owner 30/10)
+import { argomentiDellaRiga, leggiArgomentiDellaRiga, argomentiGrezziDellaRiga, bersaglioDalTesto, comandoDalTesto, bloccoDegliArgomenti, notaDegliArgomentiTagliati, segnaDalTesto } from '../components/carta-dal-testo.js';
+import { oscuraPerStruttura } from '../../../src/forme-di-segreto.mjs'; // giro 7 della gemella 0.2.2: la riga dell'attrezzo mostra gli argomenti con le maschere della carta // R-34 parte 2: la carta «chiamata scritta come testo» (G0, owner 30/10); giro 3 della gemella 0.2.2: anche la carta di un connettore
 import { TESTI } from '../i18n/testi/index.js'; // le frasi che il codice RICONOSCE (non solo scrive) si confrontano con tutte e due le lingue
 import { creaBrowser, prossimaDopoChiusura as prossimaDopoChiusuraBrowser, MASSIMO_SCHEDE as MASSIMO_SCHEDE_BROWSER, localeAnnotabile } from '../components/browser.js'; // 06/9 K-I: il Browser a schede
 import { impacchetta as impacchettaAnnotazioni } from '../components/annotazioni.js'; // Browser con annotazione 06/9
@@ -148,7 +149,7 @@ import { collegaTooltip } from '../components/tooltip.js'; // 06/9 O-40: i sugge
 import { porteLateraliAperte } from '../components/permessi.js'; // 06/9 T03-D2: chiudere «scrivi» non chiude il terminale, e va detto
 import { fraseDelMotivo, provenienzaDelGiroFinito, spiegaErrore, spiegaRifiutoAttrezzo, testoErroreServer, tonoDelTick, vestizioneErrore } from '../components/errori.js'; // 09/09: badge, titolo e tono li decide la FAMIGLIA della spiegazione, non un ramo scritto qui
 import { argomentoDelRagionamento, etichettaRagionamento, formattaDurataRagionamento, argomentoPuoCambiare } from '../components/ragionamento.js'; // 13/09 sera: il ragionamento si comprime invece di sparire, e mentre ragiona dice su cosa
-import { DATI_VOCE, chiaveDelPercorso, creaVistaSegmento } from '../components/attivita-segmento.js'; // R4 (24/09): il segmento compatto — segmento → voce → dettaglio, i dati delle voci fuori dal DOM
+import { DATI_VOCE, argomentiMascherati, chiaveDelPercorso, creaVistaSegmento } from '../components/attivita-segmento.js'; // R4 (24/09): il segmento compatto — segmento → voce → dettaglio, i dati delle voci fuori dal DOM
 import { descriviCoda, normalizzaStatoCoda, descriviRisultatoDelega, descriviEsitoWorkflow, descriviUscitaSfondo, descriviDialogoAgente, FRASE_DIALOGO_AGENTE } from '../components/coda-messaggi.js'; // 14/09: la coda è della sessione — le sue parole in un posto solo
 // 06/9 C24: la pagina delle Note — la monta `sezioni-adattatori.js`, che riusa `note.js`
 import { avvisoDelModello, disegnaAvvisoModello, fonteDelValore, usaModelloPrimaDiPartire } from '../components/avviso-modello.js'; // FE-040: gli avvisi sotto il modello
@@ -225,6 +226,8 @@ import { creaPonteBolla } from '../components/computer-use/ponte-bolla.js'; // F
 import { aggiornaTopbar, impostaConteggioScheda } from '../components/topbar.js'; // 05/9 Fase 2: Topbar — titolo, percorso e conteggi delle schede dai dati; 20/09: lo stesso scrittore di badge serve le schede della colonna destra
 import { aggiornaWorkspaceFooter, fornitoreDelModello, testiPiede as testiPiedeWorkspace } from '../components/workspace-footer.js'; // 05/9 Fase 2: WorkspaceFooter — il piede della sidebar dice cartella, tema e chi serve il modello // 05/9 Fase 2: SessionItem — la riga della sidebar è un componente del mockup // 19/09 FASE 3: `fornitoreDelModello` serve alla banda del laboratorio, che deve dire «Locale» o «Cloud»
 const avvisiMcpDetti = creaRicordoAvvisiMcp(); // owner 17/10/2026: i server MCP non partiti già detti, per sessione
+/* P018 giro 2 (owner 11/11/2026): le carte degli strumenti che girano fuori dal nucleo — connettore, plugin, Tool Forge (`TIPI_ATTREZZO_DI_FUORI` del nucleo) */
+const TIPI_STRUMENTO_DI_FUORI = new Set(['mcp_tool', 'plugin_tool', 'forge_tool']);
 
 (() => {
   /* Reperto 15 (Tester 04/11 20:15): a metà del corpo arrivava DOPO `rileggiStatoDelPiano()`, che crea il client centrale con la fetch
@@ -16637,7 +16640,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (state.realSession.chiusaDalServer) return;
     const info = state.realSession.toolCallNomi.get(toolCallId);
     if (!info || info.stato !== 'running') return;
-    mostraAttesaRisposta('comando', { etichettaData: riassuntoAttrezzoInCorso(info.nome, info.argomentiParsati), toolCallId });
+    mostraAttesaRisposta('comando', { etichettaData: riassuntoAttrezzoInCorso(info.nome, argomentiDaMostrare(info.argomentiParsati)), toolCallId });
   }
   function chiudiRigaDelComando(toolCallId) {
     const bolla = state.realSession.attesaBubble;
@@ -17687,15 +17690,19 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      già l'oggetto in mano (il ramo ToolCallArgs lo parsa per il riassunto della riga) e riparsarlo
      qui era lavoro doppio sulla stessa stringa. Chi non ce l'ha chiama come prima, con due
      argomenti, e il parse si fa qui: nessun chiamante è costretto a cambiare. */
-  function renderizzaArgomentiAttrezzo(contenitore, jsonGrezzo, argomentiGiaParsati = undefined) {
+  /* ⛔ Cura gemella della 0.2.2, giro 7 (punto zero): qui arrivavano gli argomenti VERI e il testo grezzo, e il dettaglio della riga
+     mostrava `password: hunter2` e una password annidata in chiaro mentre la carta li oscurava. Ora si disegnano solo gli argomenti DA
+     MOSTRARE (`argomentiDellaRiga`, carta-dal-testo.js: le maschere della carta, anche sul JSON che arriva a pezzi); un JSON che non si
+     chiude non si disegna, un testo che non è JSON passa dalle forme dei segreti (`argomentiGrezziDellaRiga`). */
+  function renderizzaArgomentiAttrezzo(contenitore, jsonGrezzo, argomentiMostrati = argomentiDellaRiga(jsonGrezzo)) {
     contenitore.replaceChildren();
-    let argomenti;
-    if (argomentiGiaParsati !== undefined) argomenti = argomentiGiaParsati;
-    else { try { argomenti = JSON.parse(jsonGrezzo); } catch { argomenti = null; } }
+    const argomenti = argomentiMostrati;
     if (!argomenti || typeof argomenti !== 'object') {
+      const grezzo = argomentiGrezziDellaRiga(jsonGrezzo);
+      if (!grezzo) return;
       const pre = document.createElement('pre');
       pre.className = 'tool-result-block';
-      pre.appendChild(textElement('code', '', jsonGrezzo));
+      pre.appendChild(textElement('code', '', grezzo));
       contenitore.appendChild(pre);
       return;
     }
@@ -17937,6 +17944,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     /* 02/10/2026 — `elenca` chiede solo davanti a una cartella su un computer di rete (`controllaPercorsoDiRete`). */
     if (azione?.tipo === 'elenca') return tr('app.approval.wantsListFolder');
     if (azione?.tipo === 'shell') return tr('app.approval.wantsRunCommand');
+    if (azione?.tipo === 'mcp_tool') return tr('app.approval.wantsUseConnectorTool'); // P018 (11/11/2026): lo strumento sta nel bersaglio, server e strumento nel perché
+    if (azione?.tipo === 'plugin_tool') return tr('app.approval.wantsUsePluginTool'); // P018 giro 2: plugin e strumento nel bersaglio e nel perché
+    if (azione?.tipo === 'forge_tool') return tr('app.approval.wantsUseForgeTool');
     if (azione?.tipo === 'document_create') return tr('app.approval.wantsCreateDocument', { formato: azione.formato || '?' });
     // ⭐⭐⭐ FASE B (28/8) — `prova` è il quarto attrezzo gated da verificaPermessoScrittura (trovato leggendo talosHarness.mjs): senza questo ramo, un permesso per-attrezzo `prova:'chiedi'` mostrava la card col fallback generico invece del comando VERO.
     if (azione?.tipo === 'prova') return tr('app.approval.wantsRunTests');
@@ -18027,6 +18037,39 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      `senzaPolitica` (review del bugfixer, 08/10/2026): DUE rami. Le frasi del kernel (segreto, root in WSL, fuori dal progetto,
      percorso di rete, contenuto sospetto, trifecta) sono vere a prescindere dalla politica e si dicono sempre; la frase sulla
      POLITICA si dice solo quando la politica che ha deciso è nota — altrimenti niente, mai quella della sessione aperta. */
+  /* P018 nella 0.2.2 (revisore C, 13/11/2026): la frase del nucleo per uno strumento di fuori con gli stessi nomi leggibili della
+     testa della carta («create issue», «daily note», mai `create_issue`): un nome solo per lo stesso strumento. Come Claude Code, che
+     nomina uno strumento MCP col server e il nome leggibile invece dell'identificatore (CHANGELOG.md:1200). La frase inglese del nucleo
+     resta il ripiego, com'è. */
+  function fraseDelloStrumentoDiFuori(azione) {
+    const p = azione?.fraseParams && typeof azione.fraseParams === 'object' ? azione.fraseParams : {};
+    const leggibili = Object.fromEntries(Object.entries(p).map(([k, v]) => [k, ['attrezzo', 'server', 'plugin'].includes(k) && typeof v === 'string' ? nomeDiRipiegoAttrezzo(v) || v : v]));
+    const f = testoDelServer(azione?.fraseChiave, leggibili, azione?.frase);
+    return typeof f === 'string' ? f.trim() : '';
+  }
+  /* La frase della trifecta, se questa carta la porta (`trifecta: true` dal nucleo, o una frase già scritta da un ospite vecchio). */
+  function fraseDellaTrifecta(azione) {
+    return typeof azione?.trifecta === 'string' ? azione.trifecta.trim() : (azione?.trifecta === true ? tr('app.approval.trifecta') : '');
+  }
+  /* P018 nella 0.2.2 (revisore C): il riquadro della trifecta, il `talos-callout--pericolo` di casa con `role="alert"` (lo stesso delle
+     minacce sulla carta d'automazione, `automazione-carta.js`): titolo in grassetto e la frase sotto. */
+  function avvisoDellaTrifecta(azione) {
+    const frase = fraseDellaTrifecta(azione);
+    if (!frase) return null;
+    const riquadro = document.createElement('div');
+    riquadro.className = 'talos-callout talos-callout--pericolo talos-approval__avvisi';
+    riquadro.dataset.avvisoTrifecta = '';
+    riquadro.setAttribute('role', 'alert');
+    const corpo = document.createElement('div');
+    corpo.className = 'talos-approval__avvisi-corpo';
+    const titolo = document.createElement('b');
+    titolo.textContent = tr('app.approval.trifectaTitle');
+    const testo = document.createElement('span');
+    testo.textContent = frase;
+    corpo.append(titolo, testo);
+    riquadro.append(corpo);
+    return riquadro;
+  }
   function motivoRichiestaApprovazione(azione, politicaDi = null, { senzaPolitica = false } = {}) {
     const perAttrezzo = (politicaDi ? politicaDi.perAttrezzo : state.permessiPerAttrezzo) || {};
     const regola = azione?.tipo ? perAttrezzo[azione.tipo] : null;
@@ -18062,11 +18105,15 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (fraseDiCampo(azione?.cancellazioneCritica)) frasiVere.push(fraseDiCampo(azione.cancellazioneCritica));
     /* D4:profondità e costo stimato della ricerca, un punto solo nel nucleo (`azioneCartaRicerca`) */
     if (azione?.tipo === 'research_start' && fraseDiCampo(azione)) frasiVere.push(fraseDiCampo(azione));
+    /* P018 (11/11/2026, giro 2): lo strumento di un connettore, di un plugin o di Tool Forge — chi e quale strumento nella frase del nucleo
+       (`server.approval.mcpTool`, `.pluginTool`, `.forgeTool`; in «Solo lettura» la frase `…ReadOnly` dice perché chiede) */
+    if (TIPI_STRUMENTO_DI_FUORI.has(azione?.tipo) && fraseDiCampo(azione)) frasiVere.push(fraseDelloStrumentoDiFuori(azione));
     /* ⛔ Se si chiude anche la trifecta sono DUE fatti, non uno: si mostrano tutti e due — una lista
-       di motivi si giudica da ciò che manca, e tacere il secondo sarebbe rassicurare a metà. */
-    const trifecta = typeof azione?.trifecta === 'string' ? azione.trifecta.trim() : (azione?.trifecta === true ? tr('app.approval.trifecta') : '');
-    if (trifecta) frasiVere.push(trifecta);
+       di motivi si giudica da ciò che manca, e tacere il secondo sarebbe rassicurare a metà.
+       P018 nella 0.2.2 (revisore C, 13/11/2026): la trifecta è il caso più grave e non sta più in mezzo alle altre frasi, grigia come
+       loro: ha il suo riquadro d'avviso rosso in testa alla carta (`avvisoDellaTrifecta`). Qui non si ripete. */
     if (frasiVere.length) return frasiVere.join(' ');
+    if (fraseDellaTrifecta(azione)) return ''; // il perché è il riquadro: niente frase sulla politica, che direbbe un'altra ragione
     /* C2b «Coordinazione»: il perché della carta d'avvio non dipende dalla politica della sessione ma da Coordinazione (spenta, o il
        tetto di avvii da soli raggiunto) — vale anche sulla carta di una figlia. */
     if (azione?.tipo === CHIAVE_COORDINAZIONE) {
@@ -18358,10 +18405,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const cartaRicerca = azione?.tipo === 'research_start' && typeof azione.fraseChiave === 'string'; // D4: la carta della chat; una carta vecchia senza costo resta com'era
     const bersaglio = cartaRicerca ? '' : dalTesto ? bersaglioDalTesto(azione, nomeUmanoAttrezzo(azione.nome || ''))
       : azione?.percorso || azione?.comando || azione?.question || azione?.title
-      || (azione?.tipo === CHIAVE_COORDINAZIONE ? azione?.modello : '') || ''; // C2b: sulla carta d'avvio, il modello chiesto dalla persona
+      || (azione?.tipo === CHIAVE_COORDINAZIONE ? azione?.modello : '') // C2b: sulla carta d'avvio, il modello chiesto dalla persona
+      || (azione?.tipo === 'mcp_tool' ? nomeDiRipiegoAttrezzo(azione.nome || '') : '') // P018: «create issue (github)», mai `mcp__github__create_issue`
+      || (azione?.tipo === 'plugin_tool' && azione.attrezzo ? `${nomeDiRipiegoAttrezzo(azione.attrezzo)}${azione.plugin ? ` (${nomeDiRipiegoAttrezzo(azione.plugin)})` : ''}` : '') // P018 giro 2: «check (lint)», mai `plugin__lint__check`
+      || (azione?.tipo === 'forge_tool' && azione.attrezzo ? nomeDiRipiegoAttrezzo(azione.attrezzo) : '') || ''; // «daily note», mai `forge_daily_note`
     /* ⛔ 17/09, F15 — `leggi` ha il suo badge: «Chiede il permesso» davanti a un `.env` non dice
        niente, e la persona deve capire a colpo d'occhio se sta per LEGGERE o per CAMBIARE. */
-    const badge = emulata ? tr('chat.approval.emulated.badge') : azione?.tipo === 'scrivi' ? tr('app.approval.badgeWrite') : azione?.tipo === 'file_edit' ? tr('app.approval.badgeEdit') : azione?.tipo === 'leggi' ? tr('app.approval.badgeRead') : azione?.tipo === 'elenca' ? tr('app.approval.badgeOpenFolder') : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? tr('app.approval.badgeRun') : azione?.tipo === 'research_start' ? tr('app.approval.badgeSearch') : azione?.tipo === CHIAVE_COORDINAZIONE ? tr('app.approval.badgeStartAgent') : azione?.tipo === 'giri-in-tondo' ? tr('app.approval.badgeRepeating') : tr('app.approval.badgePermission');
+    const badge = emulata ? tr('chat.approval.emulated.badge') : azione?.tipo === 'scrivi' ? tr('app.approval.badgeWrite') : azione?.tipo === 'file_edit' ? tr('app.approval.badgeEdit') : azione?.tipo === 'leggi' ? tr('app.approval.badgeRead') : azione?.tipo === 'elenca' ? tr('app.approval.badgeOpenFolder') : (azione?.tipo === 'shell' || azione?.tipo === 'prova') ? tr('app.approval.badgeRun') : azione?.tipo === 'research_start' ? tr('app.approval.badgeSearch') : azione?.tipo === CHIAVE_COORDINAZIONE ? tr('app.approval.badgeStartAgent') : azione?.tipo === 'giri-in-tondo' ? tr('app.approval.badgeRepeating') : azione?.tipo === 'mcp_tool' ? tr('app.approval.badgeConnector') : azione?.tipo === 'plugin_tool' ? tr('app.approval.badgePlugin') : azione?.tipo === 'forge_tool' ? tr('app.approval.badgeForge') : tr('app.approval.badgePermission');
     /* C2-R4-bis (08/10/2026): la carta di una figlia spiega il perché con la politica che ha DECISO (`politica`, l'incontro della
        catena fotografato dal server alla richiesta). Senza una politica nota (un server più vecchio, o permessi illeggibili:
        `permessi: null`) restano le sole frasi vere del kernel — mai la politica della sessione aperta, mai una inventata. */
@@ -18376,6 +18426,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const scheda = creaApprovazione({ badge, bersaglio, perche: cartaRicerca ? tr('app.approval.wantsDeepResearch') : descriviAzioneApprovazione(azione), codice: codiceAzioneApprovazione(azione), motivo,
       nota: cartaRicerca ? tr('appSettings.card.alsoInFullAccess') : tr('app.approval.appliesOnce') });
     const article = scheda.scheda;
+    /* P018 nella 0.2.2 (revisore C): la trifecta in testa, nel suo riquadro rosso, sopra il perché (dove prima era una frase grigia) */
+    const riquadroTrifecta = dalTesto ? null : avvisoDellaTrifecta(azione);
+    if (riquadroTrifecta) scheda.perche.before(riquadroTrifecta);
     /* D4 (owner 02/11/2026 sera, dopo la ricerca): domanda modificabile, profondità e costo, Avvia e Annulla. Gemini e ChatGPT fanno correggere
        il piano prima di partire; qui si corregge la domanda sulla carta, senza un giro in più. Niente «Per questa sessione»: una carta per ricerca. */
     let campoDomanda = null;
@@ -18408,6 +18461,18 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         article.dataset.emulata = 'si';
       } else scheda.pulsanti.sessione.remove();
       article.dataset.dalTesto = 'si';
+    }
+    /* Cura gemella della 0.2.2, giro 3 (owner 14/11 «Nella 0.2.2», giudice v1852): la carta di un connettore, di un plugin o di Tool Forge
+       dice CHE COSA parte, non solo il nome. Il nucleo mette nell'azione gli argomenti già oscurati e tagliati (`argomentiPerLaCarta`); qui
+       lo stesso pezzo e lo stesso CSS della carta dal testo, con tutti gli argomenti (nessun blocco del codice su questa carta) e, se il
+       nucleo ha tagliato, la riga che lo dice. Specifica MCP 2025-06-18: «Clients SHOULD show tool inputs to the user before calling the server». */
+    if (azione?.tipo === 'mcp_tool' || azione?.tipo === 'plugin_tool' || azione?.tipo === 'forge_tool') { // i tre tipi di `TIPI_ATTREZZO_DI_FUORI` del nucleo
+      const righe = bloccoDegliArgomenti(document, azione, { tutti: true, etichetta: 'chat.approval.toolArguments' });
+      if (righe) {
+        (scheda.motivo || scheda.piede).before(righe);
+        const tagliati = notaDegliArgomentiTagliati(document, azione);
+        if (tagliati) righe.after(tagliati);
+      }
     }
     article.classList.add('real-approval-card');
     article.dataset.requestId = requestId;
@@ -18496,7 +18561,22 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     /* ⛔ C2-a (07/10/2026) — in una figlia un «sempre» vale solo se la catena degli antenati lo lascia passare: dove non può
        valere, il server lo dice (`azione.sempreNonBasta`) e «Per questa sessione» si toglie, come davanti a un segreto (F15):
        sarebbe una promessa falsa. Resta il sì per la cartella o per il percorso, che non è un «sempre» dell'attrezzo. */
-    if (azione?.sempreNonBasta && !percorsoConsentibile && !cartellaConsentibile && !cartaDiRoot) sessioneBtn.remove();
+    /* P018 (owner 11/11/2026): sulla carta di uno strumento di un connettore il secondo pulsante è «Per questo strumento in questa sessione»
+       (`ambito: 'strumento'`): la coppia server e strumento la prende il server dalla domanda, e il nucleo la mantiene. Non davanti a una
+       trifecta né a un contenuto sospetto: lì il nucleo chiede anche col sì ricordato, e il pulsante sarebbe una promessa falsa.
+       P018 giro 2 (owner 11/11/2026 13:08-13:34): lo stesso per un plugin e per Tool Forge. Mai sulla carta di «Solo lettura»
+       (`soloUnaVolta`): lì si consente solo una volta. `sempreNonBasta` su queste carte è per il telefono (che non disegna ancora
+       server e strumento, `session-registry.mjs`): il PC tiene il suo pulsante, che il server onora. */
+    const strumentoMcpConsentibile = TIPI_STRUMENTO_DI_FUORI.has(azione?.tipo) && typeof azione.attrezzo === 'string' && azione.attrezzo !== ''
+      && !azione?.trifecta && !azione?.contenutoSospetto && azione?.soloUnaVolta !== true;
+    if (strumentoMcpConsentibile) {
+      sessioneBtn.textContent = tr('chat.approval.forThisToolSession');
+      const notaPiedeMcp = $('.talos-approval__foot-note', article);
+      /* P018 nella 0.2.2 (revisore C, 13/11/2026): «Vale per tutta la sessione» stava accanto a «Consenti una volta», il pulsante
+         principale, ed era falso per lui. La nota dice quanto vale ciascuno dei due sì. */
+      if (notaPiedeMcp) notaPiedeMcp.textContent = tr('app.approval.appliesOnceOrTool');
+    } else if (TIPI_STRUMENTO_DI_FUORI.has(azione?.tipo)) sessioneBtn.remove();
+    if (azione?.sempreNonBasta && !percorsoConsentibile && !cartellaConsentibile && !cartaDiRoot && !strumentoMcpConsentibile) sessioneBtn.remove();
     let rispostaDataDaQuestaScheda = false;
     /*
      * ⛔ Owner 03/10/2026, «Sì, stessa regola»: la regola della domanda di TALOS (revisione Codex del 02/10, rilievo 2). Un invio
@@ -18578,7 +18658,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     article._chiChiede = figlia?.chi ?? null;
     if (!dalTesto && approvaBtn.textContent === tr('chat.approval.allowOnce')) article._consentiUnaVolta = () => rispondi(true);
     sessioneBtn.addEventListener('click', () => {
-      if (emulata) return rispondi(true, false, 'strumento'); // E1: solo il nome scritto nella domanda, per la sessione
+      if (emulata || strumentoMcpConsentibile) return rispondi(true, false, 'strumento'); // E1 e P018: il server prende lo strumento dalla domanda
       if (cartaDiRoot) return rispondi(true);
       if (percorsoConsentibile) return rispondi(true, false, 'percorso'); // BUG-A: solo il percorso della domanda, per la sessione
       return cartellaConsentibile ? rispondi(true, false, 'cartella') : rispondi(true, true);
@@ -24553,8 +24633,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   function aggiornaVistaArgomentiAttrezzo(info) {
     argomentiAttrezzoInAttesa.delete(info);
     if (!info) return;
-    let argomentiParsati = null;
-    try { argomentiParsati = JSON.parse(info.argomenti); } catch { /* delta ancora incompleto: il riassunto resta quello generico finché non arriva tutto */ }
+    const letti = leggiArgomentiDellaRiga(info.argomenti); // giudice v1971: UNA lettura a ogni delta (carta-dal-testo.js)
+    const argomentiParsati = letti.interi; // null su un delta ancora incompleto: il riassunto resta quello generico finché non arriva tutto
     if (argomentiParsati) info.argomentiParsati = argomentiParsati;
     /*
      * ⛔⛔ PO-06 (10/09) — per un comando della PERSONA il corpo non rifa l'eco degli
@@ -24572,10 +24652,13 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
          riga di stato fino a troncarla («…non su Win…», visto nella foto del 10/09). */
       return;
     }
-    if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, argomentiParsati);
-    if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = dettaglioRigaAttrezzo(info.nome, argomentiParsati); // 05/9 Fase 2: il dettaglio mono della ToolRow
-    if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti, argomentiParsati);
+    const mostrati = letti.mostrati; // giro 7 della gemella 0.2.2: testa e dettaglio con le maschere della carta, letti una volta sola
+    if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, mostrati);
+    if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = dettaglioRigaAttrezzo(info.nome, mostrati); // 05/9 Fase 2: il dettaglio mono della ToolRow
+    if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti, mostrati);
   }
+  /** Giro 7 della gemella 0.2.2: gli argomenti di una riga già parsati (anche corretti dalla persona), con le maschere della carta. */
+  function argomentiDaMostrare(argomenti) { return argomenti && typeof argomenti === 'object' ? argomentiMascherati(argomenti) : argomenti; } // giro 8: una copia per oggetto, la stessa del gruppo delle attività (testa, dettaglio e riepilogo non rifanno il lavoro)
 
   function chiediDisegnoArgomentiAttrezzo(info) {
     argomentiAttrezzoInAttesa.add(info);
@@ -25816,12 +25899,12 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
                un comando fermato dopo secondi: era il tempo fra due eventi RIGIOCATI, e il giornale non ha una durata
                per il comando della persona. Una durata si scrive solo se inizio e fine sono stati visti dal vivo. */
             ? rigaDiStatoComando(esitoUmano, typeof info.iniziatoA === 'number' && info.iniziatoDalVivo && !state.realSession.inRigiocata ? Date.now() - info.iniziatoA : null)
-            : riassuntoAttrezzoConcluso(info.nome, info.argomentiParsati, testoEsito, fallito);
+            : riassuntoAttrezzoConcluso(info.nome, argomentiDaMostrare(info.argomentiParsati), testoEsito, fallito);
         }
         if (info?.article) {
           impostaEsitoRiga(info.article, domandaDaCorreggere ? 'corretta' : copiaSaltata ? 'duplicate' : fermatoApposta ? 'interrupted' : provaNonEseguita ? 'not-run' : dettoNo ? 'declined' : fallito ? 'error' : 'success'); // 05/9 Fase 2: il pallino della ToolRow
           info.article.setAttribute('aria-busy', 'false');
-          if (info.dettaglio && info.argomentiParsati && !info.comandoDellaPersona) info.dettaglio.textContent = dettaglioRigaAttrezzo(info.nome, info.argomentiParsati);
+          if (info.dettaglio && info.argomentiParsati && !info.comandoDellaPersona) info.dettaglio.textContent = dettaglioRigaAttrezzo(info.nome, argomentiDaMostrare(info.argomentiParsati));
         }
         /* F-027 (owner 02/10/2026, «+1 con conferma»): il risultato portava testo che sembra un'istruzione per un'IA — il segno sulla
            riga e la nota in testa al dettaglio, con le parole del kernel. */

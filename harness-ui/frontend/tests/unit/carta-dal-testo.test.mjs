@@ -68,3 +68,50 @@ test('DAL-TESTO-05 — le etichette degli argomenti si leggono nella lingua dell
   // ⛔ al contrario: le righe pure restano sulla chiave grezza (servono al segreto e alle prove di prima)
   assert.deepEqual(righeDegliArgomenti(azione).map((r) => r.k), ['percorso', 'contenuto', 'campo_ignoto_mcp', 'api_key']);
 });
+
+/* Cura gemella della 0.2.2, giro 5 (revisore 1, ROSSO 3 e GIALLO; owner 14/11 14:15 scelta A). ROSSO 3: se la cima degli argomenti è una
+   lista, un testo o un numero, il nucleo la porta sulla carta (`argomentiPerLaCarta`) ma la pagina la azzerava (`argomentiDi`): il plugin
+   partiva con `["--delete-all","/"]` dopo una carta senza righe. Ora è UNA riga, il suo JSON, come sul terminale. GIALLO: i caratteri di
+   direzione e quelli a larghezza zero arrivavano crudi («invoice\u202efdp.exe», due righe che si leggono «path»); ora si vedono come li scrive il
+   terminale (`inertText` di `cli/src/tui/overlays/approval-dialog.ts`): `\u202e`, `\u200b`, e la barra rovesciata raddoppiata. */
+const valori = (blocco) => blocco.figli.map((riga) => riga.figli.at(-1).textContent);
+test('DAL-TESTO-G5-01 — una cima che non è un oggetto (lista, testo, numero) è UNA riga della carta, il suo JSON, mai una carta vuota', () => {
+  for (const [cima, atteso] of [[['--delete-all', '/'], '["--delete-all","/"]'], ['rm -rf /', '"rm -rf /"'], [42, '42'], [false, 'false'], ['', '""']]) {
+    const righe = righeDegliArgomenti({ argomenti: cima }, { tutti: true });
+    assert.deepEqual(righe, [{ k: '', v: atteso }], JSON.stringify(cima));
+    const blocco = bloccoDegliArgomenti(docFinto, { argomenti: cima }, { tutti: true });
+    assert.ok(blocco, `${JSON.stringify(cima)}: il blocco c'è`);
+    assert.deepEqual(valori(blocco), [atteso]);
+    /* giro 7 (owner 19:57, variante A del bozzetto): la riga senza nome ha la voce «valore» nella colonna dei nomi */
+    assert.equal(blocco.figli[0].figli.length, 2, 'una riga senza nome: la voce «valore» e il valore');
+    assert.equal(blocco.figli[0].figli[0].textContent, 'valore');
+    assert.equal(blocco.figli[0].figli[0].className, 'talos-kv__k talos-kv__k--generico');
+  }
+  // anche sulla carta «chiamata scritta come testo»; il bersaglio e il comando restano dagli oggetti
+  assert.deepEqual(righeDegliArgomenti({ argomenti: ['a', 'b'] }), [{ k: '', v: '["a","b"]' }]);
+  assert.equal(bersaglioDalTesto({ argomenti: ['percorso'] }, 'Scrittura'), 'Scrittura');
+  // ⛔ al contrario: argomenti assenti, nulli o un oggetto vuoto non fanno righe
+  for (const nulla of [undefined, null, {}]) assert.deepEqual(righeDegliArgomenti({ argomenti: nulla }, { tutti: true }), [], String(nulla));
+});
+
+test('DAL-TESTO-G5-02 — la cima non oggetto passa ancora dalla maschera dei segreti', () => {
+  const [riga] = righeDegliArgomenti({ argomenti: [`token=${CHIAVE}`] }, { tutti: true });
+  assert.ok(!riga.v.includes(CHIAVE), riga.v);
+});
+
+test('DAL-TESTO-G5-03 — caratteri di direzione e a larghezza zero si vedono come sul terminale, nel valore e nel nome', () => {
+  const azione = { argomenti: { file: 'invoice\u202efdp.exe', path: '/safe', ['pa\u200bth']: '/etc/passwd', ['\u200b']: 'rm -rf /', nota: 'a\u2066b\u2069c\ufeff', bidi: '\u061c\u200e\u200f' } };
+  const righe = righeDegliArgomenti(azione, { tutti: true });
+  assert.deepEqual(righe.map((r) => r.v), ['invoice\\u202efdp.exe', '/safe', '/etc/passwd', 'rm -rf /', 'a\\u2066b\\u2069c\\ufeff', '\\u061c\\u200e\\u200f']);
+  const blocco = bloccoDegliArgomenti(docFinto, azione, { tutti: true });
+  assert.deepEqual(etichette(blocco).slice(2, 4), ['pa\\u200bth', '\\u200b'], 'the invisible character of a name is seen, in either language');
+  // due righe che prima si leggevano entrambe «path» ora si distinguono
+  assert.notEqual(etichette(blocco)[1], etichette(blocco)[2]);
+});
+
+test('DAL-TESTO-G5-04 — la stessa forma del terminale: la barra rovesciata raddoppia nel testo, resta com è nel JSON; a capo e tab restano', () => {
+  const righe = righeDegliArgomenti({ argomenti: { testo: 'scritto \\u202e a mano', vero: '\u202e', esc: '\u001b[2K', dati: { a: 'x\u200by' }, righe: 'uno\ndue\tfine' } }, { tutti: true });
+  assert.deepEqual(righe.map((r) => r.v), ['scritto \\\\u202e a mano', '\\u202e', '\\u001b[2K', '{\n  "a": "x\\u200by"\n}', 'uno\ndue\tfine']);
+  // ⛔ al contrario: un valore normale non cambia
+  assert.deepEqual(righeDegliArgomenti({ argomenti: { percorso: 'src/app.js', titolo: 'Città è già' } }, { tutti: true }).map((r) => r.v), ['src/app.js', 'Città è già']);
+});

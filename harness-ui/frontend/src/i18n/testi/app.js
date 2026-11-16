@@ -1074,6 +1074,8 @@ export default {
     'approval.allowThisTime': 'Solo questa volta',
     'approval.allowThisChat': 'Per questa chat',
     'approval.appliesSession': 'Vale per tutta la sessione',
+    'approval.appliesOnceOrTool': 'Una volta: solo questa chiamata. Per questo strumento: tutta la sessione', // P018 nella 0.2.2, revisore C
+    'approval.trifectaTitle': 'I tuoi dati privati potrebbero uscire da questo PC', // P018 nella 0.2.2, revisore C: il caso più grave ha il suo riquadro
     'approval.allowFolderSession': 'Consenti in questa cartella per la sessione',
     'approval.allowSecretSession': 'Consenti questo percorso per la sessione',
     'approval.responseFailed': 'Risposta non riuscita',
@@ -1088,6 +1090,9 @@ export default {
     'approval.wantsReadFile': 'Vuole leggere questo file:',
     'approval.wantsListFolder': 'Vuole vedere i file di questa cartella:',
     'approval.wantsRunCommand': 'Vuole eseguire questo comando nel terminale:',
+    'approval.wantsUseConnectorTool': 'Vuole usare uno strumento di un connettore:', // P018, 11/11/2026
+    'approval.wantsUsePluginTool': 'Vuole usare uno strumento di un plugin:', // P018 giro 2, 11/11/2026
+    'approval.wantsUseForgeTool': 'Vuole usare uno strumento di Tool Forge:', // P018 giro 2
     'approval.wantsCreateDocument': 'Vuole creare un documento (formato {formato})',
     'approval.wantsRunTests': 'Vuole eseguire la suite di test:',
     'approval.wantsDeepResearchOf': 'Vuole avviare una ricerca approfondita: {domanda}',
@@ -1113,7 +1118,7 @@ export default {
     'approval.wantsResumeAllAgents': 'Vuole riprendere tutti i sotto-agenti in pausa.',
     'approval.wantsRetryAgent': 'Vuole riprovare un sotto-agente che non è riuscito.',
     'approval.wantsRetryAllAgents': 'Vuole riprovare tutti i sotto-agenti che non sono riusciti.',
-    'approval.trifecta': 'Questa chiamata chiude la trifecta: dati privati, contenuto non attendibile e un modo per farli uscire.',
+    'approval.trifecta': 'Questa chiamata mette insieme tre cose: i tuoi dati privati, un contenuto non attendibile e un modo per mandarli fuori.', // P018 nella 0.2.2 dopo il controllore: niente parola tecnica a schermo
     'approval.whyToolGate': 'Chiede perché la regola di «{attrezzo}» è «Chiedi conferma», anche con la sessione su «{politica}».',
     'approval.whyOnRequest': 'Chiede perché la sessione è su «{politica}»: ogni azione che cambia qualcosa passa da te.',
     'approval.whyKernel': 'Chiede perché il kernel considera questa azione da confermare, anche con la sessione su «{politica}».',
@@ -1124,6 +1129,9 @@ export default {
     'approval.badgeRead': 'Chiede di leggere',
     'approval.badgeOpenFolder': 'Chiede di aprire una cartella',
     'approval.badgeRun': 'Chiede di eseguire',
+    'approval.badgeConnector': 'Chiede di usare un connettore', // P018
+    'approval.badgePlugin': 'Chiede di usare un plugin', // P018 giro 2
+    'approval.badgeForge': 'Chiede di usare uno strumento di Tool Forge', // P018 giro 2
     'approval.badgeSearch': 'Chiede di cercare',
     'approval.badgeStartAgent': 'Chiede di avviare un agente', // C2b
     'approval.badgeRepeating': 'Chiede se continuare', // A13
@@ -2828,6 +2836,8 @@ export default {
     'approval.allowThisTime': 'Only this time',
     'approval.allowThisChat': 'For this chat',
     'approval.appliesSession': 'Applies to the whole session',
+    'approval.appliesOnceOrTool': 'Once: only this call. For this tool: the whole session', // P018 in 0.2.2, reviewer C
+    'approval.trifectaTitle': 'Your private data could leave this PC', // P018 in 0.2.2, reviewer C: the most serious case has its own box
     'approval.allowFolderSession': 'Allow in this folder for the session',
     'approval.allowSecretSession': 'Allow this path for the session',
     'approval.responseFailed': 'Response failed',
@@ -2842,6 +2852,9 @@ export default {
     'approval.wantsReadFile': 'It wants to read this file:',
     'approval.wantsListFolder': 'It wants to see the files in this folder:',
     'approval.wantsRunCommand': 'It wants to run this command in the terminal:',
+    'approval.wantsUseConnectorTool': 'It wants to use a tool of a connector:', // P018, 11/11/2026
+    'approval.wantsUsePluginTool': 'It wants to use a tool of a plugin:', // P018 round 2, 11/11/2026
+    'approval.wantsUseForgeTool': 'It wants to use a Tool Forge tool:', // P018 round 2
     'approval.wantsCreateDocument': 'It wants to create a document (format {formato})',
     'approval.wantsRunTests': 'It wants to run the test suite:',
     'approval.wantsDeepResearchOf': 'It wants to start a deep research: {domanda}',
@@ -2867,7 +2880,7 @@ export default {
     'approval.wantsResumeAllAgents': 'It wants to resume all the paused sub-agents.',
     'approval.wantsRetryAgent': 'It wants to retry a sub-agent that failed.',
     'approval.wantsRetryAllAgents': 'It wants to retry all the sub-agents that failed.',
-    'approval.trifecta': 'This call completes the trifecta: private data, untrusted content and a way to get it out.',
+    'approval.trifecta': 'This call brings three things together: your private data, content that cannot be trusted and a way to send it out.', // P018 in 0.2.2 after the checker: no technical word on screen
     'approval.whyToolGate': 'It asks because the rule for “{attrezzo}” is “Ask for confirmation”, even with the session on “{politica}”.',
     'approval.whyOnRequest': 'It asks because the session is on “{politica}”: every action that changes something goes through you.',
     'approval.whyKernel': 'It asks because the kernel treats this action as one to confirm, even with the session on “{politica}”.',
@@ -2878,6 +2891,9 @@ export default {
     'approval.badgeRead': 'Asks to read',
     'approval.badgeOpenFolder': 'Asks to open a folder',
     'approval.badgeRun': 'Asks to run',
+    'approval.badgeConnector': 'Asks to use a connector', // P018
+    'approval.badgePlugin': 'Asks to use a plugin', // P018 round 2
+    'approval.badgeForge': 'Asks to use a Tool Forge tool', // P018 round 2
     'approval.badgeSearch': 'Asks to search',
     'approval.badgeStartAgent': 'Asks to start an agent', // C2b
     'approval.badgeRepeating': 'Asks whether to go on', // A13
