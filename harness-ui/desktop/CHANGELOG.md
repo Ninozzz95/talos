@@ -517,6 +517,23 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 - **Computer use: when the TALOS cursor stops, the helper's cursor takes up to about 2 seconds, plus the end of the action
   in progress, to come back.** During that time the screen may show no moving cursor. If the screens change (one added,
   removed, or rescaled) during a task, the helper's cursor is used for the rest of that task.
+- **Two places that still show a connector's arguments unmasked, as in 0.2.1.** The phone's copy of the conversation page
+  shows the tool row without the masks of the card, and the suggestion offered after a turn (for example «explain this
+  command») can put an argument, unmasked, into the suggested message. The notes of 0.2.2 said 0.2.3 would put both
+  behind the same masks; it does not. Read the suggested message before you send it.
+- **Some secret values placed in a list under certain field names can still show in clear on the permission card and on
+  the tool row, as in 0.2.1.** A field named `tokens` is read as a counter, like `max_tokens`, not as a secret field.
+  The model and the tool receive the same values as before; only what you see is affected. Keep a connector's keys and
+  tokens in that connector's own settings, rather than having the model pass them in the chat.
+- **Some secret shapes on the connector card are still not recognised, as in 0.2.2.** These four shapes are shown in
+  clear on the card:
+  - secrets inside escaped quotes in JSON text;
+  - names with a number after the secret word, such as `DB_PASSWORD_2`;
+  - the short name `pass`;
+  - a `secrets` object written with spaces.
+
+  The model and the tool still receive the real values; only what the card shows is affected. The notes of 0.2.2 said
+  0.2.3 would mask them; it does not.
 
 ### In italiano
 
@@ -963,6 +980,25 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   fine dell'azione in corso, a tornare.** In quel tempo sullo schermo può non esserci un cursore che si muove. Se gli
   schermi cambiano durante un compito (uno aggiunto, tolto o ridimensionato), per il resto di quel compito si usa il
   cursore dell'aiutante.
+- **Due punti che mostrano ancora gli argomenti di un connettore senza maschera, come nella 0.2.1.** La copia della
+  pagina della conversazione sul telefono mostra la riga dell'attrezzo senza le maschere della carta, e il suggerimento
+  proposto dopo un giro (per esempio «spiega questo comando») può mettere un argomento, senza maschera, nel messaggio
+  proposto. Le note della 0.2.2 dicevano che la 0.2.3 li avrebbe messi dietro le stesse maschere: non è così. Rileggi il
+  messaggio proposto prima di inviarlo.
+- **Alcuni valori segreti messi in un elenco sotto certi nomi di campo possono ancora vedersi in chiaro sulla carta del
+  permesso e sulla riga dell'attrezzo, come nella 0.2.1.** Un campo chiamato `tokens` è letto come un contatore, come
+  `max_tokens`, non come un campo segreto. Il modello e l'attrezzo ricevono gli stessi valori di prima; cambia solo ciò
+  che vedi. Tieni le chiavi e i token di un connettore nelle impostazioni del connettore stesso, invece di farli passare
+  dal modello nella chat.
+- **Alcune forme di segreto sulla carta dei connettori non sono ancora riconosciute, come nella 0.2.2.** Queste quattro
+  forme si vedono in chiaro sulla carta:
+  - i segreti fra virgolette protette in un testo JSON;
+  - i nomi con un numero dopo la parola del segreto, come `DB_PASSWORD_2`;
+  - il nome corto `pass`;
+  - un oggetto `secrets` scritto con gli spazi.
+
+  Il modello e l'attrezzo ricevono comunque i valori veri; cambia solo ciò che mostra la carta. Le note della 0.2.2
+  dicevano che la 0.2.3 le avrebbe oscurate: non è così.
 
 #### Impostazioni e Doctor
 
