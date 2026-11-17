@@ -246,9 +246,12 @@ export function lanciDelRepo(repo) {
 }
 test('SHELL-KEYRING-HOOK-EVERY-LAUNCH — every `node --test` of the repository (workflows, package.json, scripts) preloads the keyring hook, or is a named exception', () => {
   const lanci = lanciDelRepo(join(root, '..', '..'));
-  assert.ok(lanci.length >= 30, 'the scan found ' + lanci.length + ' launches');
+  // 17/11/2026 (PR 96): the public repository has 28 launches (it does not carry cli/ and other private folders); 30 was the private count.
+  assert.ok(lanci.length >= 25, 'the scan found ' + lanci.length + ' launches');
   for (const [file, motivo] of ECCEZIONI_DEI_LANCI) {
     assert.ok(motivo.trim().length >= 20, file + ': the reason is written');
+    // 17/11/2026 (PR 96): the public repository does not carry every folder (control-plane/, the autocompact bench): a file that is not there is skipped.
+    if (!existsSync(join(root, '..', '..', file))) continue;
     assert.ok(lanci.some(l => l.file === file && !l.gancio), file + ': a named exception that no launch needs any more');
   }
   const senza = lanci.filter(l => !l.gancio && !ECCEZIONI_DEI_LANCI.has(l.file)).map(l => l.dove + '  ' + l.pezzo);

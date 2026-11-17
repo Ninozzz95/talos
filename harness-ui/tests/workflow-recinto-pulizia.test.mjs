@@ -12,7 +12,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const CHILD = fileURLToPath(new URL('./aiuto/recinto-figlio.mjs', import.meta.url));
-const childEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/API_KEY|_TOKEN/iu.test(k)));
+// 17/11/2026 (PR 96): a rebuilt child env carries the explicit test mark (SHELL-KEYRING-MARK-REBUILD).
+const childEnv = () => ({ ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/API_KEY|_TOKEN/iu.test(k))), TALOS_PROVA_ISOLATA: '1' });
 
 test('thirteen scenarios x 20 runs: no QuickJS assertion, exit 0, empty stderr, the expected outcome every time', () => {
   const r = spawnSync(process.execPath, [CHILD, 'pulizia', '20'], { encoding: 'utf8', env: childEnv(), timeout: 240_000 });

@@ -36,6 +36,7 @@ import { join } from 'node:path'
 
 const ambienteSalvato = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.startsWith('TALOS_')))
 for (const k of Object.keys(ambienteSalvato)) delete process.env[k]
+process.env.TALOS_PROVA_ISOLATA = '1' // 17/11/2026 (PR 96): the explicit test mark stays while the other TALOS_ variables are set aside
 test.after(() => { Object.assign(process.env, ambienteSalvato) })
 
 const { createSessionRegistry } = await import('../src/session-registry.mjs')

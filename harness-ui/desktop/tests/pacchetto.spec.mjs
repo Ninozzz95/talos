@@ -137,6 +137,7 @@ test('R02-LANCIATORE-PACCHETTO — the packaged app carries the command helper, 
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/KEY|TOKEN|SECRET|PASSWORD|TALOS_|NODE_OPTIONS|ELECTRON_RUN_AS_NODE/i.test(k)));
   Object.assign(env, { TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_PROVA_ISOLATA: '1' });
   const avvio = creaAvvioFiglio({ execPath: join(dist, 'TALOS.exe'), percorsi, port, token, reportFile, dataDir, env });
+  const primaDelLancio = lineeDelGancio(); // K1: the hook trace is read from here on, after the launches below
   const p = spawn(avvio.command, avvio.args, avvio.options);
   consegnaSegreti(p, avvio);
   const log = creaRegistro(join(dataDir, 'registro.log'), [token]).canale();
@@ -160,7 +161,7 @@ test('R02-LANCIATORE-PACCHETTO — the packaged app carries the command helper, 
   const leggi = async percorso => { const r = await fetch(base + percorso, { headers: { cookie } }); assert.equal(r.status, 200, percorso); const j = await r.json(); return j.data ?? j; };
   const posta = (percorso, corpo) => fetch(base + percorso, { method: 'POST', headers: { cookie, origin: base, 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
   const finche = async (condizione, ms = 20000) => { const fine = Date.now() + ms; while (Date.now() < fine) { const v = await condizione(); if (v) return v; await attendi(200); } throw new Error('Tempo scaduto.'); };
-  const lanciatoriAttivi = () => String(spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Get-Process -Name talos-lanciatore -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }'], { encoding: 'utf8', windowsHide: true, timeout: 15000 }).stdout).split(/\r?\n/u).map(r => r.trim().toLowerCase()).filter(Boolean);
+  const lanciatoriAttivi = () => String(spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Get-Process -Name talos-lanciatore -ErrorAction SilentlyContinue | ForEach-Object { $_.Path }'], { encoding: 'utf8', windowsHide: true, timeout: 15000, env }).stdout).split(/\r?\n/u).map(r => r.trim().toLowerCase()).filter(Boolean);
   const diagnostica = await leggi('/api/v1/diagnostica-segnalazione');
   assert.equal(diagnostica.nipoti?.seguiti, true, `The packaged server does not follow commands through the helper: ${JSON.stringify(diagnostica.nipoti)}`);
   const ping = join(workspace, 'ping.txt');
@@ -183,5 +184,6 @@ test('R02-LANCIATORE-PACCHETTO — the packaged app carries the command helper, 
   assert.equal(lanciatoriAttivi().includes(exe.toLowerCase()), false, 'The packaged helper is still running after Stop.');
   assert.doesNotMatch(righeServer, /\[launcher\] programs left running by a command are not followed/u, 'The packaged server fell back to the old start.');
   await chiudi();
+  nessunPortachiaviVero(primaDelLancio);
   writeFileSync(join(root, '.prove/R02-pacchetto-lanciatore.json'), JSON.stringify({ data: new Date().toISOString(), lanciatore, riga: riga.toolCallId, esitoDellaRiga: riga.esito, righePing: readFileSync(ping, 'utf8').split(/\r?\n/u).filter(r => r.trim()).length, fermato: true }, null, 2));
 });
