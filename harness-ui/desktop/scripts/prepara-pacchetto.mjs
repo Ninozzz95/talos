@@ -11,6 +11,7 @@ import { BINARI_CASA_LINUX, preparaCasaLinux, verificaCasaLinux } from '../../sr
 import { preparaBindingIroh } from '../../scripts/scarica-binding-iroh.mjs';
 import { MOTORE_FISSATO } from '../../src/motore-fissato.mjs';
 import { IMPRONTA_AIUTANTE_PC, percorsoAiutantePredefinito } from '../../src/computer-use/aiutante-mcp.mjs';
+import { copiaLanciatore, rigaDelPacchetto } from './lanciatore-nel-pacchetto.mjs';
 
 /* il commit di cua da cui `native/aiutante-nativo/costruisci.mjs` costruisce l'aiutante (la build del 05/11 con l'impronta fissata) */
 const AIUTANTE_PIN = '0cdcec94bc9988d41087d470b32f1fad2ba28691';
@@ -122,7 +123,8 @@ export async function inventario(dir) {
  *   più ciò che a runtime non si carica mai: mappe, sorgenti TypeScript, e i binari nativi di altre piattaforme (il pacchetto è
  *   Windows x64). Misurati nella 0.1.27 installata: 1.746 tipi, 1.933 sorgenti .ts, 486 mappe, 209 documenti, 16 binari (30 MB).
  * ⛔ Licenze e avvisi restano SEMPRE (LICENSE, LICENCE, NOTICE, COPYING, AUTHORS, PATENTS): «licenze originali conservate nei
- *   rispettivi node_modules». E nessun file dentro `package.json`, `.node`, `.wasm` si tocca.
+ *   rispettivi node_modules». E nessun file dentro `package.json`, `.node`, `.wasm` si tocca (unica eccezione, con la sua prova:
+ *   i Wasm delle tre varianti QuickJS che il recinto non carica, `sfoltisciQuickjs`).
  */
 const RESTANO_SEMPRE = /^(licen[cs]e|notice|copying|authors|patents|third[-_]party)/i;
 const NOMI_DA_TOGLIERE = new Set(['.git', '.hg', '.svn', '.github', '.circleci', '.husky', '.idea', '.vs', '.nyc_output', '.DS_Store',
@@ -236,6 +238,34 @@ export async function sfoltisciEld(nodeModules) {
   const ngrams = join(nodeModules, 'eld', 'src', 'ngrams');
   if (!existsSync(join(ngrams, 'extrasmall.js'))) throw new Error('eld senza il dizionario extrasmall: la lingua dei messaggi scritti non si riconoscerebbe.');
   for (const f of ELD_DIZIONARI_DA_TOGLIERE) await rm(join(ngrams, f), { force: true });
+}
+
+/*
+ * Workflow, blocco 1 (owner 16/11/2026 14:30, decisione 234): quickjs-emscripten 0.31.0 installa QUATTRO varianti Wasm (misurate
+ *   dopo `npm ci` il 16/11: debug-sync 6,6 MB, debug-asyncify 1,6, release-asyncify 1,1, release-sync 0,5) e il recinto ne carica
+ *   UNA, release-sync (`src/workflow/recinto-lavoratore.mjs:41`). Le tre altre non si possono togliere intere: `quickjs-emscripten`
+ *   le importa in cima (`dist/chunk-*.mjs`: `import DEBUG_SYNC from "@jitl/quickjs-wasmfile-debug-sync"`), ma il loro `index` le
+ *   descrive soltanto e il Wasm con la sua colla Emscripten si carica solo a richiesta (`importModuleLoader: () =>
+ *   import(".../emscripten-module")`). Restano quindi package.json, index, ffi e licenza; vanno via i soli `dist/emscripten-module.*`.
+ *   È l'unica eccezione al «nessun .wasm si tocca» di sfoltisciDipendenze; release-sync non si tocca mai, e senza il suo Wasm il
+ *   pacchetto si ferma: un recinto senza motore è un Workflow rotto che nessuno vede.
+ */
+export const QUICKJS_VARIANTI_DA_SVUOTARE = Object.freeze(['quickjs-wasmfile-debug-sync', 'quickjs-wasmfile-debug-asyncify', 'quickjs-wasmfile-release-asyncify']);
+export async function sfoltisciQuickjs(nodeModules) {
+  const jitl = join(nodeModules, '@jitl');
+  if (!existsSync(join(jitl, 'quickjs-wasmfile-release-sync', 'dist', 'emscripten-module.wasm'))) throw new Error('QuickJS senza la variante release-sync: il recinto dei Workflow non partirebbe.');
+  const tolti = { file: 0, byte: 0 };
+  for (const variante of QUICKJS_VARIANTI_DA_SVUOTARE) {
+    const dist = join(jitl, variante, 'dist');
+    if (!existsSync(dist)) continue;
+    for (const nome of await readdir(dist)) {
+      if (!nome.startsWith('emscripten-module.')) continue;
+      const file = join(dist, nome);
+      tolti.file += 1; tolti.byte += (await stat(file)).size;
+      await rm(file, { force: true });
+    }
+  }
+  return tolti;
 }
 
 async function copiaAlberoProduzione(sorgente, destinazione) {
@@ -354,6 +384,14 @@ export async function preparaPacchetto() {
   for (const nome of [iroh.rif.file, `${iroh.rif.file}.sha256`]) await copyFile(join(root, '../native/iroh', nome), join(backend, 'native/iroh', nome));
   /* Owner 22/10/2026: le licenze delle crate Rust dentro il binding (cargo-about, `native/iroh-licenze/`) viaggiano con lui. */
   await copyFile(join(root, '../native/iroh-THIRD_PARTY_NOTICES.txt'), join(backend, 'native/iroh/THIRD_PARTY_NOTICES.txt'));
+  /*
+   * Il lanciatore dei comandi su Windows (owner via giudice v1815-v1816, 13/11/2026): nel rilascio dallo stesso commit, con l'impronta
+   * del passo che lo costruisce, e senza ci si ferma; in una build locale con l'impronta nulla il pacchetto esce senza e lo dice
+   * (`lanciatore-nel-pacchetto.mjs`). Accanto a src/ come lo cerca src/kernel/lanciatore-windows.mjs (`../../native/lanciatore-bin/`).
+   */
+  const lanciatore = await copiaLanciatore({ native: join(root, '../native'), destinazione: join(backend, 'native') });
+  const rigaLanciatore = rigaDelPacchetto(lanciatore);
+  console[rigaLanciatore.livello](rigaLanciatore.testo);
   for (const nome of ['package.json', 'package-lock.json', 'THIRD_PARTY_NOTICES.md']) await copyFile(join(root, '../..', 'context-engine', nome), join(contesto, nome));
   await copiaAlberoProduzione(join(root, '../..', 'context-engine/src'), join(contesto, 'src'));
   /* Centro assistenza (owner 01/11/2026): la guida per `talos_help`, accanto a server.mjs come la cerca `aiuto-del-server.mjs`. */
@@ -362,6 +400,7 @@ export async function preparaPacchetto() {
   await dipendenzeProduzione(backend);
   await sfoltisciPdfjs(join(backend, 'node_modules')); // F-001: ~5 MB invece di ~72 (owner 02/10)
   await sfoltisciEld(join(backend, 'node_modules')); // M 28/10: un dizionario solo, ~1 MB invece di 8,8
+  await sfoltisciQuickjs(join(backend, 'node_modules')); // Workflow 16/11: il solo Wasm release-sync che il recinto carica
   const sfoltiti = await sfoltisciDipendenze(join(backend, 'node_modules')); // owner 11/10: meno file, aggiornamento più veloce
   // dopo lo sfoltimento: quei `.d.ts` sono dati che il kernel legge, non dichiarazioni da buttare
   const libTs = await copiaLibreriaTypescript({ sorgente: join(root, '..', 'node_modules', 'typescript'), destinazione: join(backend, 'node_modules', 'typescript') });
@@ -406,6 +445,7 @@ export async function preparaPacchetto() {
     "Lucide 1.25.0 (ISC) e Feather (MIT): le icone dell'interfaccia; testi delle licenze in harness-ui/THIRD_PARTY_NOTICES.md.",
     'Go 1.27.1 (BSD-3-Clause): il helper upload include la standard library; licenza in harness-ui/native/GO-LICENSE.txt.',
     'iroh-ffi 1.1.0 (MIT o Apache-2.0) per il controllo remoto, con le crate Rust che contiene: testi delle licenze e fonti in harness-ui/native/iroh/THIRD_PARTY_NOTICES.txt.',
+    ...(lanciatore.incluso ? ['talos-lanciatore (codice di TALOS) per i comandi su Windows, con le crate Rust che contiene e la libreria standard di Rust (MIT o Apache-2.0): testi delle licenze in harness-ui/native/lanciatore-bin/THIRD_PARTY_NOTICES.txt.'] : []),
     'Node.js 24.18.0 per Linux (MIT): eseguito dentro WSL per gli attrezzi dei file; licenza in casa-linux/linux-x64/LICENSE-node.txt.',
     'ripgrep 15.0.0 per Linux (MIT o Unlicense: https://github.com/BurntSushi/ripgrep), dal pacchetto @vscode/ripgrep-linux-x64 1.18.0 (MIT); licenza del pacchetto in casa-linux/linux-x64/LICENSE-rg.txt.',
     `cua-driver di cua (MIT, Copyright (c) 2025 Cua AI, Inc.: https://github.com/trycua/cua/tree/${AIUTANTE_PIN}) per il computer use, con le crate Rust che contiene, fra cui uniffi 0.31.0 (MPL-2.0, sorgente su https://crates.io/crates/uniffi/0.31.0): licenza e avvisi in aiutante-pc/LICENSE.md e aiutante-pc/THIRD_PARTY_NOTICES.md.`,
@@ -416,7 +456,7 @@ export async function preparaPacchetto() {
   await copyFile(join(root, '../..', 'LICENSE'), join(staging, 'LICENZA-REPOSITORY.txt'));
   const files = await inventario(staging);
   if (files.some(f => /\.gguf$/i.test(f.path))) throw new Error('GGUF trovato nel pacchetto.');
-  const manifest = { schema: 'talos.desktop.package.v1', data: new Date().toISOString(), piattaforma: 'win32-x64', electron: '44.3.0', electronBuilder: '26.16.1', llama: LLAMA, casaLinux: BINARI_CASA_LINUX, files, totaleByte: files.reduce((n, f) => n + f.bytes, 0) };
+  const manifest = { schema: 'talos.desktop.package.v1', data: new Date().toISOString(), piattaforma: 'win32-x64', electron: '44.3.0', electronBuilder: '26.16.1', llama: LLAMA, casaLinux: BINARI_CASA_LINUX, lanciatore, files, totaleByte: files.reduce((n, f) => n + f.bytes, 0) };
   await writeFile(join(staging, 'MANIFEST.json'), JSON.stringify(manifest, null, 2) + '\n');
   console.log(`Staging verificato: ${files.length} file, ${manifest.totaleByte} byte (manifest escluso).`);
   return manifest;

@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
-import { chromium } from '@playwright/test';
+import { lanciaBrowserDelleProve } from '../aiuto/lancia-browser-delle-prove.mjs'; // 12/11: senza ambiente fallisce con la causa, mai salta
 import { build } from 'esbuild';
 
 /* 03/10/2026 — il componente ora importa il dizionario (`lingua.js`), come ogni altro: non si può più incollare il suo testo in una
@@ -38,7 +38,7 @@ const MODULO = { server: 'github', mode: 'form', message: 'Dettagli della pull r
 const PAGINA = { server: 'linear', mode: 'url', message: 'Accedi a Linear', url: 'https://linear.app/oauth/authorize?x=1', dominio: 'linear.app' };
 
 let browser;
-test.before(async () => { browser = await chromium.launch({ headless: true }); });
+test.before(async () => { browser = await lanciaBrowserDelleProve({ headless: true }); });
 test.after(async () => { await browser?.close(); });
 
 async function pagina() {

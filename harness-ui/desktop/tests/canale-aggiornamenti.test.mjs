@@ -38,7 +38,9 @@ test('CANALE-03: il copione posa lo stato e lancia l evento — e un testo ostil
 
 test('CANALE-04: lo stato per la pagina — spento con il suo motivo, acceso senza', () => {
   assert.deepEqual(statoPerLaPagina(null, { attivo: false, motivoSpento: 'preview', gettone: G }), {
-    attivo: false, motivoSpento: 'preview', versioneAttuale: null, stato: 'fermo', automatici: true, ultimoControllo: null, pronto: null, errore: null, nascosto: false, gettone: G,
+    attivo: false, motivoSpento: 'preview', versioneAttuale: null, stato: 'fermo', automatici: true, spentiDallAmbiente: false, ultimoControllo: null, pronto: null, errore: null, nascosto: false, gettone: G,
   });
   assert.equal(statoPerLaPagina({ stato: 'pronto' }, { attivo: true, motivoSpento: 'ignorato', gettone: G }).motivoSpento, null);
+  /* 0.2.2: `TALOS_DESKTOP_AGGIORNAMENTI=off` arriva alla pagina, che tiene fermo l'interruttore; solo il vero true */
+  assert.deepEqual([true, 'true', 1, undefined].map((v) => statoPerLaPagina({ spentiDallAmbiente: v, automatici: false }, { attivo: true, gettone: G }).spentiDallAmbiente), [true, false, false, false]);
 });

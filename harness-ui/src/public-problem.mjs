@@ -54,6 +54,8 @@ export const MESSAGES = Object.freeze({
   APPROVAL_ANSWER_FORBIDDEN: { title: 'Answer not allowed from here', explanation: 'This permission request belongs to an agent that this session did not start.', action: 'Open the session that started the agent, or the agent itself, and answer from there.' },
   // C2-Q (08/10/2026): the same rule for a child's question to the person
   QUESTION_ANSWER_FORBIDDEN: { title: 'Answer not allowed from here', explanation: 'This question belongs to an agent that this session did not start.', action: 'Open the session that started the agent, or the agent itself, and answer from there.' },
+  // giro di cura dopo i revisori (giudice v1553): «Consenti» davanti a un elenco che questo dispositivo non mostra (422)
+  QUESTION_ANSWER_NEEDS_DETAILS: { title: 'Open the list on the PC first', explanation: 'This device cannot show the whole list of recipients: allowing waits until the list has been opened on the PC. The question stays open.', action: 'Open the whole list on the PC and answer from there; refusing or stopping works from here too.' },
   /*
    * ⛔⛔ 07/9, owner bloccato: «la sessione e ancora bloccata, non riesco a inviare messaggi e
    * spunta errore toast». `SESSION_NOT_READY` NON era in questa mappa, quindi cadeva su
@@ -151,7 +153,7 @@ const MESSAGGIO_PER_LA_PERSONA_CON_MOTIVO = new Set(['SESSION_STORE_WRITE_FAILED
    fornitore. Solo questi motivi portano la frase vera; gli altri restano la copia del codice («Configurazione non pronta»). */
 /* 16/10/2026 (mobile): i rifiuti dell'albero dei file (`motivi-dei-file.mjs`) uscivano tutti come «Invalid query»; le loro frasi sono
    scritte per lo schermo e senza percorsi (lo pretende `tests/motivi-dei-file.test.mjs`). */
-const MOTIVI_CON_FRASE_PER_LA_PERSONA = new Set(['provider-key-missing', 'provider-key-missing-named', 'standalone-terminals-in-use', ...Object.keys(FRASI_DEI_MOTIVI_DEI_FILE)]);
+const MOTIVI_CON_FRASE_PER_LA_PERSONA = new Set(['provider-key-missing', 'provider-key-missing-named', 'standalone-terminals-in-use', 'context-settings-invalid', ...Object.keys(FRASI_DEI_MOTIVI_DEI_FILE)]);
 /* REV2-GOAL-05 (14/10/2026): la copia per MOTIVO, quando un motivo di un codice non parla di ciò che il codice dice. I due che la
    usavano (`summary-invalid-result`, `summary-invalid-history`, il riassunto storto del /compact a mano) non esistono più dal 22/10/2026:
    il /compact scrive un record come il riassunto di fine giro (S2-A), e un riassunto che non vale si dice con `motivo`, non è un errore. */

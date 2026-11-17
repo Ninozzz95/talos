@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { existsSync, rmdirSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { root, attendi, preparaRuntime } from './support.mjs';
+import { root, attendi, preparaRuntime, lineeDelGancio, nessunPortachiaviVero } from './support.mjs';
 
 const require = createRequire(import.meta.url);
 const { _electron } = require('../../frontend/node_modules/playwright');
@@ -25,6 +25,7 @@ test('SEGNALA-ELECTRON — menu della finestra → finestra con la diagnostica d
   const dist = join(root, '..', 'frontend', 'dist');
   assert.ok(existsSync(join(dist, 'index.html')), 'serve la build del frontend: npm run build in harness-ui/frontend');
   const prova = preparaRuntime('segnala');
+  const primaDelLancio = lineeDelGancio(); // round 3 (K1): the hook trace is read from here on, after the launches below
   rmdirSync(join(prova.runtime, 'public')); // la giunzione verso public/, tolta senza seguirla
   symlinkSync(dist, join(prova.runtime, 'public'), 'junction');
   const electronApp = await _electron.launch({ executablePath, args: [root], env: prova.env, timeout: 20000 });
@@ -65,4 +66,5 @@ test('SEGNALA-ELECTRON — menu della finestra → finestra con la diagnostica d
   assert.match(u.searchParams.get('diagnostica') ?? '', /^TALOS desktop /u);
   assert.equal(await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), 1, 'nessuna finestra nuova');
   assert.deepEqual(erroriPagina, []);
+  nessunPortachiaviVero(primaDelLancio); // round 3 (K1): no process of this test reached for the real keyring
 });

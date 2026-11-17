@@ -5,8 +5,10 @@ import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 function figlio() {
   const c = new EventEmitter();

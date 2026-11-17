@@ -42,8 +42,9 @@ test('RIGA NELL\'ELENCO ROSSA — cartella col «No»: la riga porta cartellaNon
   assert.equal(rigaDi(registro, sessionId).permessi, 'Full access')
 })
 
-test('RIGA NELL\'ELENCO AL CONTRARIO — fidata, mai chiesta o senza fonte (CLI, telefono): nessun campo nuovo', (t) => {
-  for (const fn of [() => true, () => null, null]) {
+/* falla del 10/11: «mai chiesta» porta `fiduciaDaChiedere` (`fiducia-cartella-mai-chiesta.test.mjs`), non è più qui */
+test('RIGA NELL\'ELENCO AL CONTRARIO — fidata o senza fonte (CLI, telefono): nessun campo nuovo', (t) => {
+  for (const fn of [() => true, null]) {
     const registro = banco(t, fn)
     const { sessionId } = registro.avvia('a', { permessiScelto: 'Full access' })
     const riga = rigaDi(registro, sessionId)

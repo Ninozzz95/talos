@@ -42,7 +42,7 @@ jobs:
           set -euo pipefail
           npm --prefix harness-ui/frontend run build
           node harness-ui/node_modules/typescript/bin/tsc -p harness-ui/frontend/tsconfig.refactor.json
-          node --test harness-ui/frontend/tests/refactor/*.test.mjs harness-ui/frontend/tests/unit/ui-experience-regression.test.mjs harness-ui/desktop/tests/profile-isolation.test.mjs
+          node --test --import=./harness-ui/desktop/tests/gancio-portachiavi.mjs harness-ui/frontend/tests/refactor/*.test.mjs harness-ui/frontend/tests/unit/ui-experience-regression.test.mjs harness-ui/desktop/tests/profile-isolation.test.mjs
       - id: unit
         name: Full frontend unit suite
         continue-on-error: true
@@ -126,7 +126,7 @@ jobs:
       - name: Server, kernel, frontend and Electron gates
         timeout-minutes: 15
         run: |
-          node --test harness-ui/tests/*.test.mjs
+          node --test --import=./harness-ui/desktop/tests/gancio-portachiavi.mjs harness-ui/tests/*.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Server suite failed.' }
           npm --prefix harness-ui run test:kernel
           if ($LASTEXITCODE -ne 0) { throw 'Kernel suite failed.' }
@@ -134,7 +134,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Kernel identity gate failed.' }
           npm --prefix harness-ui/frontend run test:unit
           if ($LASTEXITCODE -ne 0) { throw 'Frontend unit suite failed.' }
-          node --test harness-ui/frontend/tests/refactor/*.test.mjs
+          node --test --import=./harness-ui/desktop/tests/gancio-portachiavi.mjs harness-ui/frontend/tests/refactor/*.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Refactor regression suite failed.' }
           npm --prefix harness-ui/desktop run test:puri
           if ($LASTEXITCODE -ne 0) { throw 'Desktop pure suite failed.' }

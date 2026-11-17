@@ -105,6 +105,20 @@ export function voceDiLista(riga) {
 /* CommonMark §2.4: dentro grassetto, corsivo e testo dei link l'escape vale ancora; negli span di codice no (lì non si chiama). */
 const senzaEscape = (testo) => String(testo).replace(/\\([!-/:-@[-`{-~])/g, '$1');
 
+/**
+ * ⭐ L'Assistente (owner 11/11/2026 17:12, scelta 6): un riferimento a un file scritto in codice, `percorso:N` o `percorso:N-M`.
+ * Il percorso deve avere una barra o un'estensione (`src/app.js`, `README.md`, `C:/x/y.mjs`): `ora:12` o `a:b` restano codice.
+ * @returns {{ percorso: string, righe: string } | null}
+ */
+export function leggiRiferimentoFile(testo) {
+  const m = /^((?:[A-Za-z]:[\\/])?[^\s:`*?"<>|]+):(\d{1,7})(?:-(\d{1,7}))?$/u.exec(String(testo ?? '').trim());
+  if (!m) return null;
+  const percorso = m[1];
+  if (!/[\\/]/u.test(percorso) && !/\.[A-Za-z0-9]{1,10}$/u.test(percorso)) return null;
+  if (/^[a-z][a-z0-9+.-]*:\/\//iu.test(percorso)) return null;
+  return { percorso, righe: m[3] ? `${m[2]}-${m[3]}` : m[2] };
+}
+
 /** Un elemento con del testo dentro, senza passare da innerHTML. */
 function elementoTesto(doc, tag, classe, valore) {
   const elemento = doc.createElement(tag);
@@ -184,6 +198,13 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
    *   considered part of the autolink»; una `)` conta solo se le parentesi dentro l'indirizzo sono bilanciate).
    */
   const conLinkWeb = opzioni.linkWeb === true;
+  /*
+   * ⭐ L'Assistente (owner 11/11/2026 17:12, scelta 6) — I LINK AI FILE. Un `` `percorso:righe` `` in codice (`src/app.js:10-14`) diventa un
+   *   PULSANTE `talos-link-file` con `data-file` e `data-righe`: in chat apre la scheda File, nell'Assistente una sbirciata in sola lettura.
+   *   Chi disegna NON apre niente: il clic lo prende l'app, che chiede al server la regola dell'Assistente (un segreto o un file fuori
+   *   dalle cartelle fidate non si apre, e lo si dice). Si accende con `opzioni.linkFile`. Il testo resta quello scritto, dentro `<code>`.
+   */
+  const conLinkFile = opzioni.linkFile === true;
   /*
    * ⭐ 10/11/2026 (0.2.1), owner dal vivo — IL BLOCCO RICHIUDIBILE. Il modello scrive `<details><summary>Cosa è successo</summary> … </details>`
    *   e la chat lo mostrava come testo letterale. Si accende con `opzioni.blocchiRichiudibili` (la chat): passano SOLO `<details>` (nudo o
@@ -282,6 +303,15 @@ export function renderizzaMarkdown(testoGrezzo, opzioni = {}) {
         const forte = doc.createElement('strong');
         applicaInline(forte, match[GRUPPI.forte]);
         contenitore.appendChild(forte);
+      } else if (match[GRUPPI.codice] !== undefined && conLinkFile && leggiRiferimentoFile(match[GRUPPI.codice])) {
+        const rif = leggiRiferimentoFile(match[GRUPPI.codice]);
+        const b = doc.createElement('button');
+        b.type = 'button';
+        b.className = 'talos-link-file';
+        b.setAttribute('data-file', rif.percorso);
+        b.setAttribute('data-righe', rif.righe);
+        b.appendChild(elementoTesto(doc, 'code', '', match[GRUPPI.codice]));
+        contenitore.appendChild(b);
       } else if (match[GRUPPI.codice] !== undefined) contenitore.appendChild(elementoTesto(doc, 'code', '', match[GRUPPI.codice]));
       else contenitore.appendChild(elementoTesto(doc, 'em', '', senzaEscape(match[GRUPPI.corsivoA] !== undefined ? match[GRUPPI.corsivoA] : match[GRUPPI.corsivoB])));
       ultimo = pattern.lastIndex;

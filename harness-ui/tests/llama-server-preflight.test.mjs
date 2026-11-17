@@ -3,7 +3,9 @@ import { EventEmitter } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 const modelPath = join(tmpdir(), 'talos-preflight-test-model.gguf');
 const binaryPath = join(tmpdir(), 'talos-preflight-runtime', 'llama-server');

@@ -26,7 +26,7 @@ export const TETTO_VOCI = 500;
 export const TETTO_GIORNI = 30;
 export const LIMITE_ELENCO = 100;
 export const LUNGHEZZA_DATO = 240;
-export const FATTI_CHE_ASPETTANO = Object.freeze(new Set(['approvazione', 'domanda']));
+export const FATTI_CHE_ASPETTANO = Object.freeze(new Set(['approvazione', 'domanda', 'fiducia-cartella'])); // giro 2: «Mi fido di questa cartella»
 
 const GIORNO_MS = 24 * 60 * 60 * 1000;
 

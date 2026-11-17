@@ -270,3 +270,22 @@ test('SEGNALA-INTERRUTTORE — il figlio del guscio ha TALOS_SEGNALAZIONE_PROBLE
   assert.equal(creaAvvioFiglio({ ...base, env: {} }).options.env.TALOS_SEGNALAZIONE_PROBLEMA, 'on');
   assert.equal(creaAvvioFiglio({ ...base, env: { TALOS_SEGNALAZIONE_PROBLEMA: 'off' } }).options.env.TALOS_SEGNALAZIONE_PROBLEMA, 'on');
 });
+
+/* Giro 4 della bolla (13/11): il segno di TALOS acceso lo dice solo il guscio. Un TALOS_SEGNO_ACCESO ereditato dal sistema spegnerebbe il cursore
+   dell'aiutante senza che il segno si veda: zero cursori. */
+test('SEGNO-EREDITATO-01 — un TALOS_SEGNO_ACCESO del sistema, in qualunque maiuscola, non arriva al figlio', () => {
+  const base = { execPath: resolve('Electron.exe'), percorsi: percorsiR03, port: 49152, token: 'a'.repeat(64), dataDir: resolve('profilo') };
+  for (const nome of ['TALOS_SEGNO_ACCESO', 'talos_segno_acceso', 'Talos_Segno_Acceso']) {
+    const ambiente = creaAvvioFiglio({ ...base, env: { PATH: 'sistema', [nome]: '1' } }).options.env;
+    assert.equal(Object.keys(ambiente).some((k) => k.toUpperCase() === 'TALOS_SEGNO_ACCESO'), false, `${nome} ereditata passa al figlio`);
+    assert.equal(ambiente.PATH, 'sistema', 'il filtro toglie solo i nomi suoi');
+  }
+});
+
+test('SEGNO-EREDITATO-02 — AL CONTRARIO: col segno acceso dal guscio il figlio ha un solo TALOS_SEGNO_ACCESO=1, anche se il sistema ne aveva un altro', () => {
+  const base = { execPath: resolve('Electron.exe'), percorsi: percorsiR03, port: 49152, token: 'a'.repeat(64), dataDir: resolve('profilo') };
+  const ambiente = creaAvvioFiglio({ ...base, segnoAcceso: true, env: { talos_segno_acceso: '0' } }).options.env;
+  assert.deepEqual(Object.keys(ambiente).filter((k) => k.toUpperCase() === 'TALOS_SEGNO_ACCESO'), ['TALOS_SEGNO_ACCESO']);
+  assert.equal(ambiente.TALOS_SEGNO_ACCESO, '1');
+  assert.equal(creaAvvioFiglio({ ...base, segnoAcceso: 'sì', env: {} }).options.env.TALOS_SEGNO_ACCESO, undefined, 'solo true accende');
+});

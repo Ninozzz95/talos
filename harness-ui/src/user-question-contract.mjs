@@ -29,6 +29,11 @@ export const LIMITI_DOMANDA_UTENTE = Object.freeze({
   anteprimaMax: 2_000,
   anteprimaRigheMax: 20,
   notaMax: 1_000,
+  /* 11/11/2026, decisione dell'owner delle 17:12 (giudice v1499): un elenco che la carta non può mostrare intero (i destinatari di un
+     invio del computer use) va in `details`, che un pulsante apre tutto; un'opzione con `requiresDetails` si sceglie solo dopo averlo
+     aperto. Come Codex («⌃g view all» apre il comando intero, approval_overlay/clipping_tests.rs:56) e Claude Code (CHANGELOG.md:4206,
+     «don't ask again» negato quando il contenuto non si mostra tutto). Il tetto tiene ~5000 indirizzi. */
+  dettagliMax: 200_000,
 });
 
 export class ContrattoDomandaUtenteError extends Error {
@@ -92,6 +97,18 @@ function anteprima(value, nome) {
   return pulita;
 }
 
+/* L'elenco intero dietro il pulsante (decisione dell'owner 11/11 17:12): un'etichetta e il testo, che si mostra com'è. */
+function dettagli(value, nome) {
+  if (!oggettoSemplice(value)) rifiuta(`${nome} must be an object`);
+  soleChiavi(value, ['label', 'text'], nome);
+  const label = testo(value.label, { nome: `${nome}.label`, max: LIMITI_DOMANDA_UTENTE.etichettaMax });
+  if (typeof value.text !== 'string') rifiuta(`${nome}.text must be text`);
+  const text = value.text.replace(/\r\n/gu, '\n').replace(/\n+$/u, '');
+  if (!text.trim()) rifiuta(`${nome}.text cannot be empty`);
+  if (text.length > LIMITI_DOMANDA_UTENTE.dettagliMax) rifiuta(`${nome}.text exceeds the limit of ${LIMITI_DOMANDA_UTENTE.dettagliMax} characters`);
+  return { label, text };
+}
+
 function soleChiavi(value, ammesse, nome, { ignora = false } = {}) {
   const chiavi = Object.keys(value);
   if (!ignora && chiavi.some((chiave) => !ammesse.includes(chiave))) {
@@ -132,7 +149,7 @@ export function validaDomandeUtente(questions, { perche = 'facoltativo', campiIn
   const ids = new Set();
   return questions.map((question, indice) => {
     if (!oggettoSemplice(question)) rifiuta(`questions[${indice}] must be an object`);
-    soleChiavi(question, ['id', 'header', 'question', 'why', 'options', 'multiSelect'], `questions[${indice}]`, { ignora });
+    soleChiavi(question, ['id', 'header', 'question', 'why', 'options', 'multiSelect', 'details'], `questions[${indice}]`, { ignora });
     const id = testo(question.id, { nome: `questions[${indice}].id`, max: LIMITI_DOMANDA_UTENTE.idMax });
     if (!ID_DOMANDA.test(id)) rifiuta(`questions[${indice}].id must be a stable snake_case`);
     if (ids.has(id)) rifiuta(`duplicate question id: ${id}`);
@@ -149,6 +166,7 @@ export function validaDomandeUtente(questions, { perche = 'facoltativo', campiIn
       rifiuta(`questions[${indice}].multiSelect must be a boolean`);
     }
     const multiSelect = question.multiSelect === true;
+    const details = question.details === undefined ? undefined : dettagli(question.details, `questions[${indice}].details`);
     let options;
     if (question.options !== undefined) {
       if (!Array.isArray(question.options)
@@ -159,7 +177,13 @@ export function validaDomandeUtente(questions, { perche = 'facoltativo', campiIn
       const viste = new Set();
       options = question.options.map((option, opzioneIndice) => {
         if (!oggettoSemplice(option)) rifiuta(`questions[${indice}].options[${opzioneIndice}] must be an object`);
-        soleChiavi(option, ['label', 'description', 'recommended', 'preview'], `questions[${indice}].options[${opzioneIndice}]`, { ignora });
+        soleChiavi(option, ['label', 'description', 'recommended', 'preview', 'requiresDetails'], `questions[${indice}].options[${opzioneIndice}]`, { ignora });
+        if (option.requiresDetails !== undefined && typeof option.requiresDetails !== 'boolean') {
+          rifiuta(`questions[${indice}].options[${opzioneIndice}].requiresDetails must be a boolean`);
+        }
+        if (option.requiresDetails === true && details === undefined) {
+          rifiuta(`questions[${indice}].options[${opzioneIndice}].requiresDetails needs questions[${indice}].details`);
+        }
         if (option.recommended !== undefined && typeof option.recommended !== 'boolean') {
           rifiuta(`questions[${indice}].options[${opzioneIndice}].recommended must be a boolean`);
         }
@@ -175,6 +199,7 @@ export function validaDomandeUtente(questions, { perche = 'facoltativo', campiIn
           }),
           ...(option.recommended === true ? { recommended: true } : {}),
           ...(option.preview === undefined ? {} : { preview: anteprima(option.preview, `questions[${indice}].options[${opzioneIndice}].preview`) }),
+          ...(option.requiresDetails === true ? { requiresDetails: true } : {}),
         };
       });
       const consigliate = options.filter((option) => option.recommended === true);
@@ -190,6 +215,7 @@ export function validaDomandeUtente(questions, { perche = 'facoltativo', campiIn
       ...(why !== undefined ? { why } : {}),
       ...(options ? { options } : {}),
       ...(multiSelect ? { multiSelect: true } : {}),
+      ...(details !== undefined ? { details } : {}),
     };
   });
 }

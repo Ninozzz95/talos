@@ -479,6 +479,18 @@ function parseModelsDevUrl(raw) {
 }
 
 /*
+ * 0.2.2 — `TALOS_HARNESS_UI_CATALOGO_PUBBLICO`: `off` (o `0`, `false`, `no`) spegne il catalogo pubblico di OpenRouter come l'impostazione
+ * spenta, e la riga delle Impostazioni non lo riaccende; `on` (o vuota) lascia decidere l'impostazione. Un altro valore ferma l'avvio: per
+ * un interruttore di privacy un errore di battitura che lo lasciasse acceso in silenzio sarebbe peggio (come le altre variabili qui).
+ */
+function parseCatalogoPubblico(raw) {
+  const valore = String(raw ?? '').trim().toLowerCase();
+  if (valore === '' || ['on', '1', 'true', 'yes'].includes(valore)) return false;
+  if (['off', '0', 'false', 'no'].includes(valore)) return true;
+  fail('TALOS_HARNESS_UI_CATALOGO_PUBBLICO must be on or off');
+}
+
+/*
  * ⛔⛔⛔ 07/9 — IL KERNEL ORA VIVE NEL REPO, e questa funzione è il motivo per cui prima non
  * bastava averlo. Senza `TALOS_OWNER_RUNTIME_MODULE` questa tornava `undefined`: il server partiva,
  * `/api/v1/health` rispondeva 200, e **ogni giro reale falliva** con `OWNER_RUNTIME_NOT_CONFIGURED`.
@@ -664,6 +676,8 @@ export function loadConfig(
        sessioni con questo (il 4174 e l'app installata). Solo da leggere; vuoto ⇒ nessuno. */
     workflowAltroArchivio: parseWorkflowAltroArchivio(env),
     modelsDevUrl: parseModelsDevUrl(env.TALOS_HARNESS_UI_MODELS_DEV_URL),
+    /* 0.2.2 (SignPath, brief «rete spegnibile»): `off` spegne il catalogo pubblico di OpenRouter e lo tiene spento (`catalogo-pubblico.mjs`) */
+    catalogoPubblicoSpento: parseCatalogoPubblico(env.TALOS_HARNESS_UI_CATALOGO_PUBBLICO),
     llamaServerPath: parseLlamaServerPath(env.TALOS_LLAMA_SERVER_PATH, moduleUrl, sondaMotore),
     llamaServerFallbackPath: typeof env.TALOS_LLAMA_SERVER_FALLBACK_PATH === 'string' && env.TALOS_LLAMA_SERVER_FALLBACK_PATH.trim()
       ? resolve(env.TALOS_LLAMA_SERVER_FALLBACK_PATH.trim())

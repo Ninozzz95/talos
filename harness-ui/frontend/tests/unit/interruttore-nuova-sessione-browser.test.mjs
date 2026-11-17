@@ -11,7 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname, extname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
-import { chromium } from '@playwright/test';
+import { lanciaBrowserDelleProve } from '../aiuto/lancia-browser-delle-prove.mjs'; // 12/11: senza ambiente fallisce con la causa, mai salta
 import { build } from 'esbuild';
 
 const frontend = fileURLToPath(new URL('../..', import.meta.url));
@@ -31,7 +31,7 @@ test.after(() => browser?.close());
 
 test('INTERRUTTORE-NUOVA-SESSIONE: nella riga della nuova sessione il pallino resta DENTRO l interruttore, acceso e spento; una casella di spunta tiene i suoi 38 px', async (t) => {
   const stile = await build({ absWorkingDir: tmpdir(), plugins: [sorgenti], entryPoints: [resolve(frontend, 'src/styles/main.css')], tsconfigRaw: {}, bundle: true, write: false, external: ['./fonts/*'], logLevel: 'silent' });
-  browser = await chromium.launch({ channel: 'chrome', headless: true });
+  browser = await lanciaBrowserDelleProve({ channel: 'chrome', headless: true });
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, reducedMotion: 'reduce' });
   t.after(() => page.close());
   await page.route('**/*', (route) => route.abort());

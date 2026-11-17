@@ -126,3 +126,33 @@ test('LINGUA-7-06 — i dati locali: «1 item» e «3 items», «1 voce» e «3 
   const sorgente = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../../src/legacy/app.js'), 'utf8');
   assert.match(sorgente, /trn\('app\.settings\.localData\.itemsOne', 'app\.settings\.localData\.itemsMany', quante\)/u, 'la pagina sceglie il plurale con tn()');
 });
+
+/* D3 (a) del blocco del nucleo, 12/11/2026 (giudice v1605, condizione 1; rossa LINGUA-7-04 sull'unione 8163a9a0a): la riga «quale memoria
+   TALOS usa adesso» della carta «Memoria del modello» (ramo della soglia, 3de0e2b59) diceva «{n} tokens» con il plurale fisso, e in italiano
+   «{n} token, letti/scritti» col participio fisso. Il plurale ora lo sceglie il numero (`tn`), come la riga dei modelli scritti della stessa carta. */
+test('LINGUA-7-07 — la memoria in uso della carta «Memoria del modello»: il plurale segue il numero, nelle due lingue', async (prova) => {
+  prova.after(() => impostaLingua('it'));
+  const carta = await import('../../src/components/carta-memoria-modello.js');
+  assert.equal(typeof carta.testoInUso, 'function', 'la carta scrive la riga in uso con una funzione sola, che sceglie il plurale');
+  const riga = (fonte, finestra, letta) => carta.testoInUso(carta.memoriaInUso({ finestra, fonte, letta }));
+  const sotto = { finestra: 0, fonte: 'catalogo' }; // letta più piccola: «più grande del catalogo» anche con 1
+  impostaLingua('en');
+  assert.deepEqual([riga('catalogo', 1), riga('rotta', 163_840)], ['TALOS now uses 1 token, read from the catalog.', 'TALOS now uses 163,840 tokens, read from the catalog.']);
+  assert.deepEqual([riga('prudente', 1), riga('prudente', 128_000)], [
+    'TALOS now uses 1 token: this model\'s memory is not known, so this is a careful measure.',
+    'TALOS now uses 128,000 tokens: this model\'s memory is not known, so this is a careful measure.']);
+  assert.deepEqual([riga('persona', 1), riga('persona', 65_536)], ['TALOS now uses 1 token, written by you.', 'TALOS now uses 65,536 tokens, written by you.']);
+  assert.deepEqual([riga('persona', 1, sotto), riga('persona', 200_000, { finestra: 163_840, fonte: 'catalogo' })], [
+    'TALOS now uses 1 token, written by you: larger than the catalog (0).',
+    'TALOS now uses 200,000 tokens, written by you: larger than the catalog (163,840).']);
+  impostaLingua('it');
+  assert.deepEqual([riga('catalogo', 1), riga('rotta', 163_840)], ['Adesso TALOS usa 1 token, letto dal catalogo.', 'Adesso TALOS usa 163.840 token, letti dal catalogo.']);
+  assert.deepEqual([riga('prudente', 1), riga('prudente', 128_000)], [
+    'Adesso TALOS usa 1 token: la memoria di questo modello non è nota, ed è una misura prudente.',
+    'Adesso TALOS usa 128.000 token: la memoria di questo modello non è nota, ed è una misura prudente.']);
+  assert.deepEqual([riga('persona', 1), riga('persona', 65_536)], ['Adesso TALOS usa 1 token, scritto da te.', 'Adesso TALOS usa 65.536 token, scritti da te.']);
+  assert.deepEqual([riga('persona', 1, sotto), riga('persona', 200_000, { finestra: 163_840, fonte: 'catalogo' })], [
+    'Adesso TALOS usa 1 token, scritto da te: più grande del catalogo (0).',
+    'Adesso TALOS usa 200.000 token, scritti da te: più grande del catalogo (163.840).']);
+  assert.equal(carta.testoInUso(null), '', 'niente riga quando il server non ha detto la memoria in uso');
+});

@@ -8,6 +8,7 @@
  *   Ogni regola si prova nei due versi; e senza numeri la strada resta quella di prima (decide il fornitore).
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { talosLavora } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
@@ -23,8 +24,13 @@ const FINESTRA = 8_192;
 const corpoOnesto = (corpoJson) => { const c = JSON.parse(corpoJson); return { ...c, messages: c.messages.map((m) => (Array.isArray(m.content) && m.content.every((p) => p?.type === 'text') ? { ...m, content: m.content.map((p) => p.text).join('') } : m)) }; };
 const NOTA_NON_CONTATA = 620;
 /* PERF R-33 (30/10/2026): `cerca.oppure` ha aggiunto 260 caratteri (~65 token) agli schemi del kernel, che la finta conta; il sistema
-   dello scenario si accorcia di altrettanto, così la matematica della finestra resta quella del caso (stessa regola della nota qui sopra). */
-const SCHEMI_CERCA_OPPURE = 260;
+   dello scenario si accorcia di altrettanto, così la matematica della finestra resta quella del caso (stessa regola della nota qui sopra).
+   #48 (3/11/2026, OK del Desktop): lo spostamento non si scrive più a mano. Gli schemi del kernel nudo li misura PB-06 e li fissa
+   `budget-del-preambolo.json` (profilo `kernel-nudo`); la scena è tarata con gli schemi a 2.230 token (prima di R-33) e si accorcia di
+   4 caratteri per ogni token in più (stimaToken: ASCII = caratteri / 4). Oggi 2.295 ⇒ 260, come prima. */
+const KERNEL_NUDO = JSON.parse(readFileSync(new URL('../budget-del-preambolo.json', import.meta.url), 'utf8')).profili['kernel-nudo'];
+const TOKEN_SCHEMI_ALLA_TARATURA = 2_230;
+const SCHEMI_CERCA_OPPURE = 4 * (KERNEL_NUDO.tokenAttrezzi - TOKEN_SCHEMI_ALLA_TARATURA);
 const rifiuto = (message) => new Response(JSON.stringify({ error: { message } }), { status: 400, headers: { 'Content-Type': 'application/json' } });
 function fornitoreOnesto({ conNumeri = true, scala = 1 } = {}) {
   const conti = { richieste: 0, rifiutate: 0, riassunti: 0 };

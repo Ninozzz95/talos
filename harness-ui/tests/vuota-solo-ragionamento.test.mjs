@@ -519,6 +519,21 @@ test('VSR-31 (giro 3, c): DeepSeek diretto non prosegue l\u2019assistant in coda
   assert.deepEqual(prefillInCodaArriva('groq:openai/gpt-oss-20b'), { testo: false }, 'Groq riceve l assistant ma non il testo');
 });
 
+/* Decisione 330, parte del telefono (recupero P4, 12/11/2026): il motore dell'app è llama.cpp col JNI dell'app, e il servizio del motore
+   ospite chiede il prompt senza continuazione (`add_generation_prompt` vero, `continue_final_message` NONE), quindi un assistant in coda
+   non si prosegue: si apre un turno nuovo dopo un assistant vuoto. Il record `locale-ospite` lo dichiara e il kernel usa la scala di
+   oggi, come per DeepSeek (VSR-31). */
+test('VSR-32 (giro 3, c, telefono): il motore dell’app non prosegue l’assistant in coda ⇒ nessuna continuazione, la scala di oggi', async () => {
+  const r = rete(attrezzo(), vuotaRagionata('R'), risposta('Fatto.'));
+  const e = await lavora(r, { modello: 'locale-ospite:qwen3-1.7b' }).esito;
+  assert.equal(e.detto, 'Fatto.');
+  assert.equal(conPrefill(r.corpi[2]), false, 'nessun assistant in coda verso il motore del telefono');
+  assert.deepEqual(r.corpi[2].messages.at(-1), { role: 'user', content: NOTA_RISPOSTA_VUOTA });
+  const { prefillInCodaArriva } = await import('../src/openai-compatible-runtime.mjs');
+  assert.equal(prefillInCodaArriva('locale-ospite:qwen3-1.7b'), null);
+  assert.deepEqual(prefillInCodaArriva('local:qwen3-8b'), { testo: true }, 'al contrario: llama-server del PC lo prosegue');
+});
+
 test('VSR-33 (giro 4, M1 del revisore 1): dopo una continuazione, una vuota coi SOLI reasoning_tokens non rimanda la stessa richiesta', async () => {
   const nascosta = () => flussoIntero([{ choices: [{ index: 0, delta: { content: '' }, finish_reason: 'stop' }] }, uso(100, 40, { completion_tokens_details: { reasoning_tokens: 40 } })]);
   const r = rete(vuotaRagionata('A'), nascosta, risposta('Fatto.'), risposta('Fatto.'), risposta('Fatto.'));

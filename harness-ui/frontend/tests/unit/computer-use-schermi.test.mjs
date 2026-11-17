@@ -37,6 +37,30 @@ test('CU-02 mai «aiutante nativo» a schermo: una frase per assenza, e senza da
   assert.equal(fraseDiFine({ motivo: 'aiutante-assente', causa: 'binario' }), senza, '`causa` resta per pagare, inviare e cancellare');
 });
 
+/* Giudice v1793-v1794 (13/11): il segno di TALOS smette di vedersi e l'aiutante, riaperto per rimettere il suo cursore, non riparte. Il compito si ferma
+   (`aiutante-mcp.mjs`, `cursor-not-restored`; `attrezzo.mjs`, assenza `cursore` nell'esito) e la frase lo dice, senza nomi tecnici e senza «accendilo in
+   Impostazioni». */
+test('CU-02b il cursore che non si poteva rimettere ha la sua frase, in italiano e in inglese', async () => {
+  const it = fraseDiFine({ motivo: 'aiutante-assente', assenza: 'cursore' });
+  assert.match(it, /cursore/u);
+  assert.doesNotMatch(it, /Impostazioni|aiutante|overlay/u);
+  const { default: testi } = await import('../../src/i18n/testi/computer.js');
+  assert.match(testi.en['end.helperCursorLost'] ?? '', /cursor/u, 'inglese prima');
+  assert.match(testi.it['end.helperCursorLost'] ?? '', /cursore/u, 'poi italiano');
+});
+
+test('CU-02c con la lingua inglese la frase del cursore esce in inglese, ed è la sua: non quella generica né «accendilo in Impostazioni»', async () => {
+  const { impostaLingua } = await import('../../src/components/lingua.js');
+  const { default: testi } = await import('../../src/i18n/testi/computer.js');
+  impostaLingua('en');
+  try {
+    const en = fraseDiFine({ motivo: 'aiutante-assente', assenza: 'cursore' });
+    assert.equal(en, testi.en['end.helperCursorLost']);
+    assert.notEqual(en, fraseDiFine({ motivo: 'aiutante-assente', assenza: null }));
+    assert.notEqual(en, fraseDiFine({ motivo: 'aiutante-assente', assenza: 'spento' }));
+  } finally { impostaLingua('it'); }
+});
+
 test('CU-03 davanti a una protezione la causa sceglie la frase, e nessuna dice ciò che non è successo', () => {
   assert.equal(fraseDiFine({ motivo: 'protezione:pagamento', causa: 'non-chiesto' }), 'Stavo per pagare, ma tu non me l\'hai chiesto: mi fermo.');
   assert.equal(fraseDiFine({ motivo: 'protezione:invio', causa: 'non-chiesto' }), 'Stavo per inviare, ma tu non me l\'hai chiesto: mi fermo.');

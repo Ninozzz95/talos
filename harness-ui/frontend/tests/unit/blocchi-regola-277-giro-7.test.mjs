@@ -86,7 +86,7 @@ function app({ stato = 'turn running', chiaveDelMessaggio = 'vecchia' } = {}) {
       return { posizione: 1 };
     },
     paginaBrowserDelMessaggio: () => null, payloadImmagini: (x) => x, applicaStatoCoda: () => {}, renderizzaBannerCoda: () => {},
-    syncRunComposerState: () => {}, autoGrowTextarea: () => {}, ripristinaImmagini: () => {},
+    syncRunComposerState: () => {}, aggiornaInspectorDaStato: () => {}, autoGrowTextarea: () => {}, ripristinaImmagini: () => {},
     destinoInvioFallito, chiaveBozzaAllegati: () => `sessione:${state.realSession.id}`,
     bozzaDi: (k) => { if (!n.bozze.has(k)) n.bozze.set(k, { allegati: [], testo: '' }); return n.bozze.get(k); }, salvaBozze: () => {},
     aggiungiAllegato: () => {}, aggiornaModalitaShell: () => {},

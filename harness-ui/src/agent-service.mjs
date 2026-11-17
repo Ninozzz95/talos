@@ -1680,6 +1680,9 @@ export async function avviaSessione({
               ...(Number.isFinite(evento.nonDisponibile.finoAlle) ? { finoAlle: evento.nonDisponibile.finoAlle } : {}), ...(evento.nonDisponibile.diAccount === true ? { diAccount: true } : {}) } } : {}),
           ...(typeof evento.riassuntoDi === 'string' && evento.riassuntoDi ? { riassuntoDi: evento.riassuntoDi, ...(evento.dallaRiserva === true ? { dallaRiserva: true } : {}) } : {}),
           ...(typeof evento.classe === 'string' ? { classe: evento.classe } : {}),
+          /* Giudice v1597 (c), 12/11/2026: la linea d'emergenza dello scambio istantaneo, che non ha un inizio che la dica. Facoltativo:
+             solo su una fine istantanea all'emergenza, solo un intero positivo; un nucleo che non la scrive lascia la riga com'era. */
+          ...(evento.istantanea === true && evento.motivo === 'emergenza' && Number.isSafeInteger(evento.soglia) && evento.soglia > 0 ? { soglia: evento.soglia } : {}),
           /* 22/10/2026 (revisione 4 della CLI, S3-2): la riga del giro nata da un record preparato altrove lo dice — `at` di quel
              record (solo un istante ISO), `origine` ('giro' · 'fine-giro'), `tokenDopo` dopo di lui, `conResto`. Chi disegna anche la
              riga di sottofondo non la conta due volte. Solo questi campi, validati. */
@@ -3231,7 +3234,9 @@ export async function rispondiALato({ modello, chiave, messaggi, attrezzi, reaso
     ...(Number.isSafeInteger(maxOutputTokens) && maxOutputTokens > 0 ? { maxOutputTokens } : {}),
     ...(segnaleStop ? { segnaleStop } : {}),
   });
-  return { ...testoDellaRispostaALato(esito?.scelta), usage: esito?.usage ?? null };
+  /* L'Assistente (11/11/2026): le chiamate di attrezzo tornano a chi chiama, che le giudica coi due muri (`kernel/assistente-lato.mjs`) */
+  const chiamate = Array.isArray(esito?.scelta?.tool_calls) ? esito.scelta.tool_calls : [];
+  return { ...testoDellaRispostaALato(esito?.scelta), chiamate, usage: esito?.usage ?? null };
 }
 
 /** Il permesso detto al modello dall'ospite: una riga sola, entro 200 caratteri; vuoto o non stringa ⇒ `null` (vale `permessi`). */
@@ -3403,9 +3408,11 @@ export async function eseguiComandoDiretto({
     risultato = processOutputFn ? await processOutputFn({runId: comandoId, toolCallId}, execute) : await execute();
   } finally {
     // A6-bis R2: uno sfondato resta fermabile finché vive (come nel kernel): si sgancia alla sua uscita vera
-    if (typeof sgancia === 'function' && !(risultato?.messoInSfondo && risultato.uscita)) sgancia();
+    // decisione 374 R1 (owner 1037): e anche all'uscita dell'ultimo processo del suo albero, se il lanciatore la segue
+    if (typeof sgancia === 'function' && !(risultato?.messoInSfondo && risultato.uscita) && !risultato?.alberoVuoto) sgancia();
   }
-  if (typeof sgancia === 'function' && risultato?.messoInSfondo && risultato.uscita) risultato.uscita.finally(() => sgancia()).catch(() => {});
+  const fineVera = [risultato?.messoInSfondo ? risultato.uscita : null, risultato?.alberoVuoto].filter((x) => typeof x?.then === 'function');
+  if (typeof sgancia === 'function' && fineVera.length) Promise.allSettled(fineVera).then(() => sgancia()).catch(() => {});
   anteprima.flush(); // Anche l'ultimo pezzo ammesso deve essere consegnato.
   if (risultato?.messoInSfondo && risultato.uscita && typeof segnalaUscitaSfondo === 'function') {
     risultato.uscita.then((u) => segnalaUscitaSfondo({ toolCallId, ...u, comando, file: risultato.fileSfondoMostrato ?? risultato.fileSfondo ?? null, dellaPersona: true })).catch(() => {}); // A6-bis (G2); C06: comando e file per la nota al modello; blocco 26: il nome corto

@@ -178,10 +178,13 @@ export function createContextEmbeddingRuntime({ binaryPath, modelPath, modelSha2
       }
       check(signal);
       entry.child = processPolicy.spawn(binaryPath, [
-        '-m', modelPath, '--alias', MODEL_ID, '--host', '127.0.0.1', '--port', String(port), '--api-key', entry.token,
+        '-m', modelPath, '--alias', MODEL_ID, '--host', '127.0.0.1', '--port', String(port),
         '--embedding', '--pooling', 'last', '-ngl', '0', '--device', 'none', '-c', '8192', '-b', '8192', '-ub', '8192',
         '--parallel', '1', '--threads', '2', '--threads-batch', '2', '--no-webui',
-      ], { cwd: dirname(binaryPath), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+        /* 12/11/2026: the key in the environment (`LLAMA_API_KEY`, `--api-key`'s binding), never on the command line, as the engine's
+           (`llama-server-supervisor.mjs`, VARIABILE_CHIAVE). ⛔ A `createProcessPolicy` given to this runtime must list LLAMA_API_KEY
+           in its `envAllowlist`, or the engine starts with no key at all. */
+      ], { cwd: dirname(binaryPath), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], env: { LLAMA_API_KEY: entry.token } });
       if (!entry.child || typeof entry.child.once !== 'function') fail('Embedding process did not start', 'CTX_EMBEDDING_PROCESS');
       entry.completion = new Promise(resolve => entry.child.once('close', () => { entry.closed = true; if (active === entry) state = 'failed'; resolve(); }));
       entry.child.on('error', () => { entry.failure = true; if (active === entry) state = 'failed'; });
@@ -195,6 +198,13 @@ export function createContextEmbeddingRuntime({ binaryPath, modelPath, modelSha2
           const result = await jsonRequest(entry, '/health', { method: 'GET' }, startupSignal, 2000);
           if (result?.status !== 'ok') fail('Embedding health response is invalid', 'CTX_EMBEDDING_HEALTH');
           if (entry.closed || entry.failure) fail('Embedding process exited during health probe', 'CTX_EMBEDDING_PROCESS');
+          /* Round (a), judge v1599 (12/11/2026): fail CLOSED. The key reaches the engine only through its environment, which a process
+             policy may drop (`envAllowlist`): llama-server then starts with no key and answers anyone. b11669 answers 401 to a keyless
+             request (measured 12/11/2026); anything else stops the engine before any text is sent. The error never carries the key. */
+          const segnaleProva = scopedSignal(startupSignal, 2000);
+          const senzaChiave = await abortable(() => fetchFn(`${entry.baseURL}/v1/models`, { method: 'GET', redirect: 'error', signal: segnaleProva, headers: { Accept: 'application/json' } }), segnaleProva);
+          try { await senzaChiave?.body?.cancel?.(); } catch { /* nothing to free */ }
+          if (senzaChiave?.status !== 401) fail(`Local embedding engine answered without its key (HTTP ${Number(senzaChiave?.status) || 'none'}): stopped`, 'CTX_EMBEDDING_UNPROTECTED');
           check(signal); state = 'ready'; return entry;
         } catch (error) {
           if (!['CTX_EMBEDDING_HEALTH', 'CTX_EMBEDDING_HTTP'].includes(error?.code) && error?.name !== 'TypeError' && error?.name !== 'TimeoutError') throw error;

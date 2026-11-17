@@ -86,3 +86,16 @@ test('ERRORI-MOTIVO-REDIRECT — il motivo del reindirizzamento fallito nella li
   assert.match(ramo, /testoErroreServer\(\{ code: evento\.code, reason: evento\.reason, params: evento\.params, message: evento\.message \}\)/u);
   assert.doesNotMatch(ramo, /toast\(tr\('app\.redirect\.failed'\), evento\.message\)/u, 'il toast non mostra più le parole del server così come sono');
 });
+
+/* Giro di cura dopo i revisori (B, rosso del telefono; giudice v1553, punti 2-3): il rifiuto di «Consenti» senza l'elenco aperto ha un
+   codice suo (422, `QUESTION_ANSWER_NEEDS_DETAILS`) e la sua frase arriva sul filo; la casella del PC la mostra nella lingua scelta.
+   Prima la frase del dizionario sotto il motivo non si vedeva mai: il server mandava quella generica del codice. Senza punto finale,
+   perché la carta la mette dentro «Invio non riuscito: {errore}.» (e il telefono dentro la sua). */
+test('ERRORI-MOTIVO-DETTAGLI — il rifiuto di «Consenti» senza l elenco aperto si legge in italiano e in inglese, senza punto doppio', () => {
+  const filo = { code: 'QUESTION_ANSWER_NEEDS_DETAILS', reason: 'question-answer-needs-details', message: 'Open the whole list on the PC to allow this: this device cannot show it' };
+  assert.equal(testoErroreServer(filo).message, 'Apri l’elenco intero sul PC per consentire: questo dispositivo non lo mostra');
+  impostaLingua('en');
+  try { assert.equal(testoErroreServer(filo).message, filo.message); } finally { impostaLingua('it'); }
+  for (const lingua of ['it', 'en']) assert.doesNotMatch(TESTI[lingua]['errori.QUESTION_ANSWER_NEEDS_DETAILS.message'] ?? '', /\.$/u, lingua);
+  assert.equal(TESTI.en['errori.QUESTION_ANSWER_NEEDS_DETAILS.message'], filo.message);
+});

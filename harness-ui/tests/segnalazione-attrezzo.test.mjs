@@ -215,6 +215,26 @@ test('SEGN-H-01 — `GET /api/v1/diagnostica-segnalazione`: la diagnostica ripul
   assert.equal(post.headers.get('allow'), 'GET, HEAD')
 })
 
+test('SEGN-H-02 — la rotta porta «programmi lasciati accesi: seguiti sì/no» (solo su Windows), e per una conversazione che gira in Linux dice NO: quella strada non li segue', async (t) => {
+  const righe = [{ sessionId: 'sess-win' }, { sessionId: 'sess-wsl' }]
+  const sessionRegistry = { elenca: () => righe, esiste: (id) => righe.some((r) => r.sessionId === id), erroriPerSegnalazione: () => [],
+    impostazioniComandi: (id) => ({ ok: true, dove: id === 'sess-wsl' ? 'wsl2' : 'windows', comandiNellaConversazione: false }) }
+  const base = await ascolta(t, { sessionRegistry, versioneDesktopFn: () => ({ versione: '0.2.2', installata: true }) })
+  const senza = (await (await fetch(`${base}/api/v1/diagnostica-segnalazione`)).json()).data
+  const windows = (await (await fetch(`${base}/api/v1/diagnostica-segnalazione?sessionId=sess-win`)).json()).data
+  const linux = (await (await fetch(`${base}/api/v1/diagnostica-segnalazione?sessionId=sess-wsl`)).json()).data
+  if (process.platform !== 'win32') {
+    for (const d of [senza, windows, linux]) assert.equal('nipoti' in d, false, 'fuori da Windows il campo non c è')
+    return
+  }
+  // il mutante H1 del revisore C (la rotta che non passa la fonte) era vivo: qui il campo c è, ed è quello del nucleo
+  for (const d of [senza, windows]) {
+    assert.equal(typeof d.nipoti?.seguiti, 'boolean', 'la rotta passa la fonte')
+    assert.notEqual(d.nipoti.motivo, 'wsl')
+  }
+  assert.deepEqual(linux.nipoti, { seguiti: false, motivo: 'wsl' }, 'in Linux (WSL) i comandi non passano dall aiutante: mai «seguiti: sì»')
+})
+
 /* ——— lungo tutto il filo ——— */
 test('SEGN-FILO-01 — dalla rotta vera `POST /api/v1/sessions` al kernel vero: il modello chiama report_problem e a schermo arriva la bozza ripulita', async (t) => {
   const radice = await mkdtemp(join(tmpdir(), 'talos-segnala-filo-'))

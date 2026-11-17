@@ -1,7 +1,7 @@
 // Schede vere + HTTP locale vero; nessun agente reale o catalogo cloud.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chromium } from '@playwright/test';
+import { lanciaBrowserDelleProve } from '../aiuto/lancia-browser-delle-prove.mjs'; // 12/11: senza ambiente fallisce con la causa, mai salta
 import { createServer } from 'node:http';
 import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -45,7 +45,7 @@ for (const [nome, width, height] of [['desktop-1080p', 1920, 1080], ['desktop', 
   await new Promise((r, j) => { server.once('error', j); server.listen(0, '127.0.0.1', r); });
   assert.notEqual(server.address().port, 4174);
   t.after(async () => { await new Promise(r => { server.close(r); server.closeAllConnections(); }); rmSync(cwd, { recursive: true, force: true }); });
-  const browser = await chromium.launch({ headless: true });
+  const browser = await lanciaBrowserDelleProve({ headless: true });
   t.after(() => browser.close());
   const context = await browser.newContext({ viewport: { width, height }, reducedMotion: 'reduce' });
   t.after(() => context.close());

@@ -1,0 +1,17 @@
+# Come si collega il lanciatore (giro di cura del 12/11/2026, revisori B e C). Cargo legge questo file dalla cartella della crate,
+# che è la cartella di lavoro di ogni passo di `.github/workflows/lanciatore.yml`.
+
+# Il bersaglio della release. Due cose:
+# - CRT statico: senza, l'exe cerca VCRUNTIME140.dll, che Windows non garantisce e che l'app non porta: su un PC senza quella
+#   libreria il lanciatore morirebbe prima di partire a ogni comando. Codex fa lo stesso per tutti i suoi exe di Windows
+#   (`codex-rs/.cargo/config.toml:12`).
+# - `/Brepro`: il collegatore di Microsoft non scrive la data nel file, così due costruzioni dello stesso commit danno lo stesso
+#   exe e la stessa impronta. ⛔ Non ancora verificato su msvc (qui si costruisce solo con la toolchain gnu): lo dice la prima
+#   corsa del workflow, rifatta due volte.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/Brepro"]
+
+# La costruzione locale di chi sviluppa (toolchain gnu, non va in nessuna release): la stessa cosa per il collegatore GNU.
+# Misurato il 12/11/2026: due costruzioni da zero dello stesso commit, la stessa impronta.
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-arg=-Wl,--no-insert-timestamp"]

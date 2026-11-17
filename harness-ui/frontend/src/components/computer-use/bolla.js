@@ -6,7 +6,7 @@
  */
 import { linguaDaIndirizzo, risolviLingua, t } from '../lingua.js';
 import { INDIRIZZO_PORTA_DAVANTI, leggiMessaggio, riduciBolla, riprendiMotivoSegno, riprendiSegnoAssente, segnoDaSalvare, STATO_INIZIALE_BOLLA } from './bolla-protocollo.js';
-import { cartaCassa, cartaConferme, cartaDelCompito, cartaFine, cartaMano } from './carte.js';
+import { cartaCassa, cartaConferme, cartaDelCompito, cartaDomanda, cartaFine, cartaMano } from './carte.js';
 import { fraseDiFine } from './parole.js';
 
 const pezzo = (doc, tag, classe, testo) => {
@@ -19,6 +19,14 @@ const pezzo = (doc, tag, classe, testo) => {
 /** Le impostazioni della pagina principale: la bolla è della stessa origine e legge lo stesso archivio. */
 export const CHIAVE_IMPOSTAZIONI = 'talos.harness.desktop.settings.v1';
 export const CHIAVE_SEGNO_ASSENTE = 'talos.bolla.segnoAssente';
+
+/** Giro 6 della bolla (14/11): l'altezza massima della bolla in DIP, quella del guscio (`MISURA_BOLLA.maxA` 640 e `margine` 24, `desktop/bolla-finestra.mjs`)
+    dentro lo schermo: l'altezza disponibile meno il margine sopra e sotto, mai sotto la pillola con una riga di carta (160). Senza misura, 640. */
+export const TETTO_BOLLA = Object.freeze({ massimo: 640, margine: 24, minimo: 160 });
+export function tettoDellaBolla(altezzaSchermo) {
+  if (!Number.isFinite(altezzaSchermo) || altezzaSchermo <= 0) return TETTO_BOLLA.massimo;
+  return Math.max(TETTO_BOLLA.minimo, Math.min(TETTO_BOLLA.massimo, Math.floor(altezzaSchermo - 2 * TETTO_BOLLA.margine)));
+}
 
 /**
  * La lingua della bolla, scelta come la sceglie la pagina principale: la pseudo-lingua dall'àncora, poi `uiLanguage` salvata, poi la lingua del browser, poi l'inglese.
@@ -93,6 +101,7 @@ export function creaBolla({ document: doc, finestra, canale, timer = globalThis,
     if (porta === 'consenso') return cartaDelCompito(dati, { document: doc, alRisposta, alCambiaPosso: (valore) => manda({ tipo: 'posso', id, valore }) });
     if (porta === 'conferme') return cartaConferme({ voci: Array.isArray(dati.voci) ? dati.voci : [] }, { document: doc, alRisposta });
     if (porta === 'mano') return cartaMano(dati, { document: doc, alRisposta });
+    if (porta === 'domanda') return cartaDomanda(dati, { document: doc, alRisposta });
     if (dati.protezione === 'pagamento') return cartaCassa(dati, { document: doc, alRisposta });
     return cartaConferme({ voci: [{ id: 0, protezione: dati.protezione, prova: dati.prova }] }, { document: doc, alRisposta });
   }

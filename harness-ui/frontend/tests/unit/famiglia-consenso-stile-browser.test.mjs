@@ -13,7 +13,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname, extname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
-import { chromium } from '@playwright/test';
+import { lanciaBrowserDelleProve } from '../aiuto/lancia-browser-delle-prove.mjs'; // 12/11: senza ambiente fallisce con la causa, mai salta
 import { build } from 'esbuild';
 
 const frontend = fileURLToPath(new URL('../..', import.meta.url));
@@ -36,7 +36,7 @@ test.before(async () => {
     window.fc = { creaApprovazione, segnaEsitoApprovazione, mountUserQuestionDock };
   `, resolveDir: frontend, sourcefile: 'fc-banco.js' }, bundle: true, write: false, format: 'iife', logLevel: 'silent' })).outputFiles[0].text;
   foglio = (await build({ absWorkingDir: tmpdir(), plugins: [soloFrontend], entryPoints: [resolve(frontend, 'src/styles/main.css')], bundle: true, write: false, logLevel: 'silent' })).outputFiles[0].text;
-  browser = await chromium.launch({ headless: true });
+  browser = await lanciaBrowserDelleProve({ headless: true });
 });
 test.after(() => browser?.close());
 

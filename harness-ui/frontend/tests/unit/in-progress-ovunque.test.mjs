@@ -39,6 +39,11 @@ const VERBI = [
   ['en.js › attivita › esecuzione di {n} comandi…', 'running {n} commands…'],
   ['en.js › attivita › Esegue', 'Running'],
   ['en.js › attivita › Esegue i test', 'Running the tests'],
+  // 17/11/2026 (PR 96, owner decision 2026-11-17-1900): «a command leaves running» is a verb, not a state label (decision 98).
+  ['segnala.diag.leftRunningOn', 'Programs a command leaves running: followed, and stopped with it'],
+  ['segnala.diag.leftRunningOnNoSafety', 'Programs a command leaves running: followed, and stopped with it; a command stopped in its very first instant may stay paused (Windows refused the safety net)'],
+  ['segnala.diag.leftRunningOnTied', 'Programs a command leaves running: followed, and stopped with it; they also stop when TALOS closes or is updated (Windows did not let them go)'],
+  ['segnala.diag.leftRunningOff', 'Programs a command leaves running: not followed ({motivo})'],
 ];
 
 /* «acceso»: un servizio, un motore, TALOS stesso che è avviato. */
@@ -53,6 +58,8 @@ const ACCESO = [
   ['modello.capability.trustingAuthorizesThisDeclaration', 'Trusting authorizes this declaration. It does not prove that it is running. Changes to the checked content require new trust.'],
   ['en.js › browser › Controlla che il servizio sia acceso.', 'Check that the service is running.'],
   ['modelli.fonti.nonAcceso', '{nome} is not running on this computer'],
+  // 023 cura 1 (owner 11/11/2026, O2): la frase approvata parola per parola, inglese compreso; «running» = un motore locale acceso
+  ['varie.doctor.check.access.noneReady', 'No provider is ready. If you use a local engine that is already running, TALOS can answer through it: this check does not measure it.'],
 ];
 
 /* Frasi intere: «running» è il predicato o l'attributo del giro in una frase (il brief della decisione 97 le esclude). */

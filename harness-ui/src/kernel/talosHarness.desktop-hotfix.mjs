@@ -1518,7 +1518,12 @@ function wrapContextHooks(original, {
        riassunto e un resto di sola coda sono una compattazione, e `soloCoda` sulla riga vuol dire «niente riassunto in questa riga». */
     const gratuita = preparata.soloCoda === true && (adottato?.conResto !== true || baseGratuita === true);
     if (!gratuita && !(adottato?.origine === 'fine-giro' && adottato.conResto !== true) && !migliora) compactions += 1;
-    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record: preparata.record, ...(gratuita ? { soloCoda: true } : {}), ...(istantanea ? { istantanea: true, motivo } : {}),
+    /* Giudice v1597 (c), 12/11/2026: lo scambio istantaneo non ha un `compattazione-inizio`, quindi all'emergenza la linea che ha agito
+       la dice la fine stessa (`soglia`, la stessa `soglie.emergenza` del `sogliaDelMotivo` più sotto). Campo facoltativo e additivo: solo
+       all'emergenza, solo un intero positivo; alla soglia e sul rifiuto del fornitore la riga resta com'era. */
+    const lineaDEmergenza = istantanea && motivo === 'emergenza' && Number.isSafeInteger(soglie?.emergenza) && soglie.emergenza > 0 ? soglie.emergenza : null;
+    emitOnGiro?.({ giro: requestIndex, tipo: 'compattazione-fine', compattato: true, record: preparata.record, ...(gratuita ? { soloCoda: true } : {}),
+      ...(istantanea ? { istantanea: true, motivo, ...(lineaDEmergenza !== null ? { soglia: lineaDEmergenza } : {}) } : {}),
       ...(migliora ? { migliora } : {}),
       ...(preparata.accorciati > 0 ? { accorciati: preparata.accorciati } : {}),
       ...(preparata.accorciateRichiesta > 0 ? { accorciateRichiesta: preparata.accorciateRichiesta } : {}),

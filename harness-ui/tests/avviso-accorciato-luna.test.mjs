@@ -26,7 +26,8 @@ import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs';
 const banco = JSON.parse(readFileSync(new URL('./fixtures/banco-luna-c9-letture.json', import.meta.url), 'utf8'));
 const modulo = await import('../src/kernel/avviso-accorciato.mjs').catch(() => ({}));
 
-const AVVISO = /^\[TALOS: this result was shortened to fit the context\. Lines (\d+)–(\d+) of this output \(about ([\d,]+) characters\) are NOT shown below\. The full output is kept: read those lines again with leggi offset\/limit, or search them with cerca\. Do not treat the visible part as the whole file\.\]$/u;
+/* 11/11/2026: la forma della decisione 245 («trimmed by TALOS»), non più «shortened to fit the context» (finestra-sconosciuta-soglia-11-11) */
+const AVVISO = /^\[TALOS: this result was trimmed by TALOS\. Lines (\d+)–(\d+) of this output \(about ([\d,]+) characters\) are NOT shown below\. The full output is kept: read those lines again with leggi offset\/limit, or search them with cerca\. Do not treat the visible part as the whole file\.\]$/u;
 const percorsoLetto = (testo) => /from="leggi ([^"]+)"/u.exec(testo)?.[1] ?? null;
 
 /* L'oracolo, scritto in un altro modo dal codice: le righe di DATI (dopo l'apertura della busta, numerate dal file, cioè dalla prima
@@ -128,7 +129,7 @@ test('M1-05 (edges of the cut): a cut that starts on a newline, blank lines befo
 /* M2 ------------------------------------------------------------------------------------------------------------------------- */
 
 /* REV-M2-PIEGA (05/11): il testo della nota, che nasce `system` (la piega della decisione 194 la avvolge in <talos-note>) */
-const nota = (voci, k) => `[TALOS context note: to fit the context window, ${k} ${k === 1 ? 'result of the current request is' : 'results of the current request are'} shortened: ${voci}. Before answering, read again or search what you need. If something cannot be recovered, say clearly which part is missing.]`;
+const nota = (voci, k) => `[TALOS context note: ${k} ${k === 1 ? 'result of the current request is' : 'results of the current request are'} trimmed by TALOS; the full text is kept: ${voci}. Before answering, read again or search what you need. If something cannot be recovered, say clearly which part is missing.]`;
 const voceDi = (contenuto) => { const [, a, b] = AVVISO.exec(contenuto.split('\n')[0]); return `${percorsoLetto(contenuto)} (lines ${a}–${b} not shown)`; };
 
 test('M2-01 (C9, red before the cure): one system note at the TAIL lists the shortened results of the current request', () => {
@@ -174,11 +175,11 @@ test('M2-04: one result in the singular; a user message right after a tool resul
   const lungo = `${'cartella/'.repeat(12)}report2.txt`;
   const conFonte = (from) => [proiezione[0], proiezione[5], { ...proiezione[6], content: lettura.replace('from="leggi report2.txt"', `from=${JSON.stringify(from)}`) }];
   const [, a, b] = AVVISO.exec(lettura.split('\n')[0]);
-  assert.match(modulo.conNotaDegliAccorciati(conFonte('shell')).at(-1).content, new RegExp(`shortened: shell \\(lines ${a}–${b} not shown\\)\\.`, 'u'), 'a source that is not a read keeps its name');
+  assert.match(modulo.conNotaDegliAccorciati(conFonte('shell')).at(-1).content, new RegExp(`the full text is kept: shell \\(lines ${a}–${b} not shown\\)\\.`, 'u'), 'a source that is not a read keeps its name');
   const troncato = modulo.conNotaDegliAccorciati(conFonte(`leggi ${lungo}`)).at(-1).content;
-  assert.ok(troncato.includes(`shortened: ${lungo.slice(0, 79)}… (lines`), 'a long path is cut to 80 characters');
+  assert.ok(troncato.includes(`the full text is kept: ${lungo.slice(0, 79)}… (lines`), 'a long path is cut to 80 characters');
   const senzaBusta = [proiezione[0], proiezione[5], { ...proiezione[6], content: lettura.replace(/\n<<<TALOS_DATA id=[0-9a-f]{12} from="leggi report2\.txt">>>/u, '\nno envelope') }];
-  assert.match(modulo.conNotaDegliAccorciati(senzaBusta).at(-1).content, /shortened: a tool result \(lines/u);
+  assert.match(modulo.conNotaDegliAccorciati(senzaBusta).at(-1).content, /the full text is kept: a tool result \(lines/u);
 });
 
 /* Lungo il filo: il kernel vero, il fornitore finto, i file del banco ------------------------------------------------------- */
@@ -235,7 +236,7 @@ test('M12-FILO (C9 along the wire, red before the cure): what leaves for the mod
   assert.ok(!esito.messaggiFinali.some((m) => String(m.content ?? '').includes('TALOS context note')), 'the tail note is never saved in the history');
   const esiti = eventi.filter((e) => e.tipo === 'tool-esito');
   assert.equal(esiti.length, chiamate.length);
-  for (const e of esiti) assert.ok(!String(e.content).includes('[TALOS: this result was shortened') && !String(e.content).includes('TALOS context note'), 'the tool-esito event (tool.completed) is unchanged');
+  for (const e of esiti) assert.ok(!String(e.content).includes('[TALOS: this result was trimmed by TALOS') && !String(e.content).includes('[TALOS: this result was shortened') && !String(e.content).includes('TALOS context note'), 'the tool-esito event (tool.completed) is unchanged');
 });
 
 /* M2 e la linea certa del rifiuto (05/11, trovata da `c-contesto-pieno-bersaglio-23-10` C-UNO-PER-GIRO-01): la nota si aggiunge in

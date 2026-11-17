@@ -26,11 +26,13 @@ import { createSessionRegistry } from '../src/session-registry.mjs';
 import { attendiScritture } from '../src/session-store.mjs';
 import { VARIABILE_TETTO_TOKEN } from '../src/kernel/compattazione-desktop.mjs';
 import { TaskCatalogError } from '../src/task-catalog.mjs';
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { createLlamaServerRuntime } from '../src/local-runtime-llama-server.mjs';
 import { readGgufHeader } from '../src/gguf-header.mjs';
 import { avviaSessione } from '../src/agent-service.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 import { corpoSenzaMarcatori } from './aiuto/corpo-senza-marcatori.mjs'; // 28/10: cache, punto 1
 
 const cartellaTemp = (t, prefisso) => { const c = mkdtempSync(join(tmpdir(), prefisso)); t.after(() => rimuoviCartellaDiProva(c)); return c; };

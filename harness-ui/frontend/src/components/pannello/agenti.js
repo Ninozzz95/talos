@@ -36,7 +36,7 @@ import { fermataNellaLingua } from '../coda-messaggi.js';
 import { statoDelPasso, nomeDellAgente, attivitaDellAgente, contiDellAgente, passiDellAgente, verboAttrezzo, nomeLeggibileAttrezzo } from './fonti.js';
 import {
   el, icona, bottone, bottoneIcona, statoUi, disegnaScheda, testa, sezione, riga, piega, vuoto, scheletro, fatti, codice,
-  durata, oraBreve, kilo, eseguiNellaRiga, normalizza, chiediConferma, perSessione, cifra,
+  durata, oraBreve, kilo, eseguiNellaRiga, normalizza, chiediConferma, perSessione, cifra, disegnoUguale, firmaDellaScheda,
 } from './comune.js';
 
 /* stato del diagramma (`statoDelPasso`) → parola delle DELEGHE (owner 14/10), tono, icona (`ICONA_TONO`, grafo/comuni.js:69) */
@@ -173,7 +173,30 @@ export function disegnaAgenti(contenitore, dati = {}, azioni = {}, { interno = f
   perSessione(ui, dati.sessione); // al cambio di conversazione niente righe aperte, conferme o ricerca di quella prima
   ui.dati = dati; ui.azioni = azioni;
   ui.ridisegna = () => disegnaAgenti(contenitore, ui.dati, ui.azioni, { interno: true });
+  if (disegnoUguale(ui, contenitore, firmaAgenti(contenitore, dati), { interno })) return; // P3: coi dati di prima la scheda resta com'è
   disegnaScheda(contenitore, (d) => costruisci(d, ui, dati, azioni), { interno });
+}
+
+/** P3 (11/11/2026): la firma economica della scheda — per ogni agente i campi che la scheda legge (l'intestazione qui sopra, `statoDelPasso`,
+ *  `attivitaDellAgente`, `contiDellAgente`, `passiDellAgente`): le liste piccole per intero, i passi col numero e l'ultimo. Mai il tempo che
+ *  scorre: lo scrive l'orologio della scheda. */
+const CAMPI_AGENTE = Object.freeze(['sessionId', 'padreId', 'nome', 'title', 'taskCorto', 'task', 'modello', 'permessi', 'modalita', 'conclusa', 'interrotta',
+  'esitoDelega', 'ultimoEsito', 'motivoChiusura', 'avviataAlle', 'conclusaAlle', 'ultimaAttivitaAlle', 'approvalPendingCount', 'questionPendingCount',
+  'inAttesaApprovazione', 'inAttesaDomanda', 'inAttesaPiano', 'riassuntoDelega', 'notaDelega', 'erroreConsegnaDelega', 'numeroFigli', 'passoWorkflow']);
+function firmaAgenti(contenitore, dati) {
+  const agenti = Array.isArray(dati.agenti) ? dati.agenti : [];
+  const parti = [...firmaDellaScheda(contenitore, dati), dati.errore ?? '', dati.evidenziato ?? '', agenti.length];
+  const breve = (x) => { try { return JSON.stringify(x ?? null); } catch { return '?'; } }; // solo liste e oggetti piccoli
+  for (const a of agenti) {
+    if (!a) { parti.push('-'); continue; }
+    for (const k of CAMPI_AGENTE) parti.push(a[k]);
+    const att = a.attivita;
+    const passi = Array.isArray(att?.passi) ? att.passi : [];
+    parti.push(a.usageSessione?.prompt_tokens, a.usageSessione?.completion_tokens, att?.chiamate, att?.numeroFile, att?.attrezzoCorrente, att?.bersaglioCorrente,
+      att?.fileTagliati, breve(att?.file), passi.length, breve(passi.at(-1)), breve(a.operazioneCorrente), breve(a.collisioni), breve(a.richiesta));
+  }
+  parti.push(breve(dati.domande));
+  return parti.join('\u0001');
 }
 
 function costruisci(d, ui, dati, azioni) {

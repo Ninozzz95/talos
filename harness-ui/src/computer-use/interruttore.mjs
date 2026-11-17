@@ -29,6 +29,7 @@ import { creaRegistroLuoghi } from './luoghi-ricordati.mjs';
 import { creaOspiteLuoghi } from './luoghi-ospite.mjs';
 import { creaOspiteComputerUse } from './attrezzo.mjs';
 import { creaSessioneAttiva } from './sessione-attiva.mjs';
+import { creaSensoreInput } from './input-persona.mjs';
 import { aiutantePerMacchina, aiutanteUsabile, percorsoAiutantePredefinito, IMPRONTA_AIUTANTE_PC } from './aiutante-mcp.mjs';
 
 /* Decisione dell'owner 129 (04/11): il computer use entra nella versione nuova. Cambia la 79-80 solo qui: il verso spento resta provato
@@ -67,16 +68,17 @@ function ospiteCheRilegge(ospite, accesoOra) {
  * Cancello S2 (a) del Tester (05/11/2026): senza un aiutante usabile (impronta non fissata, file assente) il nucleo non riceve gli
  * attrezzi, così il modello non vede `computer_use` e non può dire alla persona di «attivarlo». Restano la pagina e le rotte dei luoghi
  * ricordati, che si possono rivedere e togliere anche su un computer dove l'aiutante non c'è.
- * @param {{ fileLuoghi: string, acceso?: boolean|(() => boolean), aiutante?: object, exe?: string, impronta?: string|null }} p
+ * `custode` (decisione 374): il custode dei file del computer use del server; i luoghi si leggono dalla sua versione approvata.
+ * @param {{ fileLuoghi: string, acceso?: boolean|(() => boolean), aiutante?: object, exe?: string, impronta?: string|null, custode?: object|null }} p
  */
 export function porteDelComputerUse({ fileLuoghi, acceso = COMPUTER_USE_DI_SERIE, aiutante, exe = percorsoAiutantePredefinito(),
-  impronta = IMPRONTA_AIUTANTE_PC }) {
+  impronta = IMPRONTA_AIUTANTE_PC, custode = null }) {
   const dalVivo = typeof acceso === 'function';
   if (COMPUTER_USE_ACCESO !== true || (!dalVivo && acceso !== true)) return { registroLuoghi: null, perHttp: {}, perRemoto: {}, perNucleo: {} };
   /* dal vivo: tutto si monta, e ogni porta chiede `accesoOra()` prima di servire. Il valore fisso `true` (solo le prove) resta senza involucri */
   const accesoOra = dalVivo ? leggiDalVivo(acceso) : null;
   const avvolgi = (ospite) => (accesoOra ? ospiteCheRilegge(ospite, accesoOra) : ospite);
-  const registroLuoghi = creaRegistroLuoghi({ file: fileLuoghi });
+  const registroLuoghi = creaRegistroLuoghi({ file: fileLuoghi, custode });
   const conAttrezzi = aiutante !== undefined || aiutanteUsabile({ exe, impronta });
   /* l'aiutante non parte qui: `aiutantePerMacchina` crea solo il cliente, che avvia il processo alla prima chiamata dell'attrezzo */
   const cliente = !conAttrezzi ? null : aiutante ?? aiutantePerMacchina({ exe, improntaAttesa: impronta });
@@ -90,7 +92,10 @@ export function porteDelComputerUse({ fileLuoghi, acceso = COMPUTER_USE_DI_SERIE
     perRemoto: { luoghi: registroLuoghi, ...(accesoOra ? { luoghiAccesiFn: accesoOra } : {}) },
     perNucleo: !conAttrezzi ? {} : {
       ospiteLuoghiFn: avvolgi(creaOspiteLuoghi({ registro: registroLuoghi })),
-      ospiteComputerUseFn: avvolgi(creaOspiteComputerUse({ aiutante: cliente, registroLuoghi, sessioneAttiva })),
+      /* cura «finestra bloccata» (0.2.3, punto 3): il sensore della mano della persona solo con l'aiutante vero della macchina; con
+         l'aiutante finto delle prove nessun sensore, così una prova non si ferma perché qualcuno muove il mouse del PC */
+      ospiteComputerUseFn: avvolgi(creaOspiteComputerUse({ aiutante: cliente, registroLuoghi, sessioneAttiva,
+        sensoreInput: aiutante === undefined ? creaSensoreInput() : null })),
       ...(accesoOra ? { computerUseAccesoFn: accesoOra } : {}),
     },
   };

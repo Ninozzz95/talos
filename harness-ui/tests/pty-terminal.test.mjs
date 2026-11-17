@@ -229,6 +229,7 @@ const SEGRETI_DEL_SERVER_ATTESI = [
   'TALOS_HARNESS_UI_KEYRING_SCOPE', // 29/10: lo spazio di nomi del portachiavi dell'app, nascosto alla guardia da un commento
   'TALOS_HARNESS_UI_DEFAULT_PROJECT', // 29/10: «nessun progetto di serie» dell'app installata, nascosto allo stesso modo
   'TALOS_HARNESS_UI_SEGRETI_DA', // 02/11/2026: ereditata, un TALOS lanciato da un comando aspetterebbe uno stdin che non arriva
+  'TALOS_SEGNO_ACCESO', // giudice v1790 (13/11/2026): ereditata, la CLI dal terminale spegnerebbe il cursore dell'aiutante senza il cursore di TALOS
 ];
 
 test('⛔⛔⛔ CLI-REQ-04 — il terminale NON eredita i segreti del server, asseriti UNO PER UNO per nome', () => {

@@ -25,7 +25,8 @@ for (const colorScheme of ['light', 'dark']) {
     const voce = await ctx.newPage();
     await voce.goto('segno.html');
     const manda = (name, value) => voce.evaluate(([n, v]) => { const c = new BroadcastChannel('talos-bolla'); c.postMessage({ tipo: 'evento', evento: { name: n, value: v } }); c.close(); }, [name, value]);
-    const aperti = () => schermo.evaluate(() => window.__aperti.slice());
+    /* giro 6 della bolla (14/11): la pagina in sottofondo ora batte anche senza fotogrammi (`creaBattito`, dai timer); il battito non è una richiesta di ripiego */
+    const aperti = () => schermo.evaluate(() => window.__aperti.filter((u) => u !== 'talos-segno:battito'));
 
     await manda('talos.computer-use-passo', { fase: 'annuncio', n: 1, tipo: 'clic', bersaglio: 'Treni' });
     await manda('talos.computer-use-passo', esito(1));

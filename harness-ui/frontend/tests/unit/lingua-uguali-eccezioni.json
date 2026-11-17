@@ -16,7 +16,6 @@
   "pannello.agenti.fileOne": "Pannello v2 (29/10/2026): «{n} file» al singolare è uguale nelle due lingue, come chat.context.separator.tokensOne",
   "pannello.agenti.tokenOne": "Pannello v2 (29/10/2026): «{k} token» al singolare è uguale nelle due lingue, come chat.goal.head.tokensOne",
   "pannello.contesto.tokenStimatiOne": "Pannello v2 (29/10/2026): «~{k} token» al singolare è uguale nelle due lingue",
-  "pannello.contesto.testataCostoOne": "Spesa dei riassunti (30/10/2026 sera): «{n} · {k} token» al singolare è uguale nelle due lingue",
   "pannello.contesto.cache": "Pannello v2 (29/10/2026): «cache {testo}» — «cache» si dice così anche in italiano, il resto è la frase già tradotta del riuso",
   "chat.context.live.durationSeconds": "Owner 29/10/2026 (via Mobile): «12s · 1m 4s» uguale su telefono e PC e in tutte le lingue.",
   "chat.context.live.durationMinutes": "Owner 29/10/2026 (via Mobile): «12s · 1m 4s» uguale su telefono e PC e in tutte le lingue.",
@@ -27,10 +26,14 @@
   "chat.chatgptAccess.seconds": "Decisione 116 C (04/11/2026): «{n} s», i secondi del rinnovo dell’accesso, uguali nelle due lingue come chat.context.live.durationSeconds.",
   "app.settings.localData.kilobytes": "Dati locali (revisione UX 7 del 04/11/2026): «{n} KB», il numero è già scritto nella lingua (virgola in italiano) e il simbolo dell’unità non si traduce; Intl.NumberFormat dice «kB» in italiano e in inglese.",
   "app.settings.localData.megabytes": "Dati locali (revisione UX 7 del 04/11/2026): «{n} MB», come app.settings.localData.kilobytes.",
-  "chat.trust.no": "Fiducia nella cartella (decisioni 173, 189 e 196, 04/11/2026; revisione R-4 del 05/11): il tasto «No» della domanda «Ti fidi di questa cartella?» si scrive uguale in italiano e in inglese, come nella CLI (firstrun.trust.*); il suggerimento chat.trust.noHint lo spiega nella lingua."
+  "chat.trust.no": "Fiducia nella cartella (decisioni 173, 189 e 196, 04/11/2026; revisione R-4 del 05/11): il tasto «No» della domanda «Ti fidi di questa cartella?» si scrive uguale in italiano e in inglese, come nella CLI (firstrun.trust.*); il suggerimento chat.trust.noHint lo spiega nella lingua.",
+  "sezioni.aLato.filesOne": "Assistente (11/11/2026): «{n} file» è la stessa parola nelle due lingue al singolare, come agenti.delegations.filesOne",
+  "sezioni.aLato.card.no": "Assistente, carta di un indirizzo (11/11/2026): il tasto «No» si scrive uguale nelle due lingue, come chat.trust.no"
  },
  "chiavi": [
   "agenti.delegations.filesOne",
+  "sezioni.aLato.filesOne",
+  "sezioni.aLato.card.no",
   "agenti.graph.batchLane",
   "agenti.graph.batchTitle",
   "agenti.graph.segmentCount",
@@ -372,7 +375,6 @@
   "pannello.agenti.fileOne",
   "pannello.agenti.tokenOne",
   "pannello.contesto.cache",
-  "pannello.contesto.testataCostoOne",
   "pannello.contesto.tokenStimatiOne",
   "processi.inspector.envFilesOne",
   "processi.process.detailPid",

@@ -3,11 +3,12 @@
  * `in-corso/bozzetto-piu-riassunti-2026-10-30`; contratto `in-corso/CONTRATTO-SPESA-RIASSUNTI-SCHEDA-CONTESTO-2026-10-30.md`, forma chiusa
  * da CLI, Mobile e Performance).
  *
- * Le righe `consumo-di-servizio` (una per tentativo pagato: riassunti, /compact, motore del contesto, giudici…) si tengono qui, come la
+ * Le righe `consumo-di-servizio` (una per chiamata pagata, che dice `tentativi` se ne ha fatti più d'uno: riassunti, /compact, motore del
+ * contesto, giudici…) si tengono qui, come la
  * storia del contesto: stato della pagina, ricostruito alla riapertura dalla rigiocata del giornale (tutte e tre le fonti sono durevoli).
  *   - ogni riga si lega al SUO riassunto con `idRiassunto` (o `jobId`, il lavoro del motore del contesto);
  *   - la riga «Riassunto al giro N» somma i token delle righe dei suoi id (dopo `migliora` sono due: il rapido e quello del modello);
- *   - la testata «Riassunti» somma gli scopi dei riassunti, anche quelli pagati e mai applicati (sono spesi);
+ *   - la riga sotto la testata «Compattazioni» somma gli scopi dei riassunti, anche quelli pagati e mai applicati (sono spesi);
  *   - il numero in fondo alla chat somma TUTTE le righe, di qualunque scopo (la regola dei lettori: uno scopo sconosciuto conta), tranne
  *     quelle del motore del contesto, che ci arrivano già per un'altra strada (`GIA_NEL_PIEDE`); la percentuale di cache non cambia.
  * «token» = entrata + uscita, la stessa formula del numero in fondo alla chat.
@@ -18,12 +19,14 @@
  * ⛔ Un riassunto di prima (senza id) non dice niente: il costo non si inventa.
  * Tutto è PURO e serializzabile (oggetti semplici, niente Map): la scheda confronta i dati con JSON per non ridisegnarsi a vuoto.
  */
-import { t, tn } from './lingua.js';
+import { t, tn, linguaCorrenteDiT } from './lingua.js';
 
 /** Gli scopi che sono riassunti: la testata «Riassunti» somma solo questi (CONTRATTO §3). */
 export const SCOPI_DEI_RIASSUNTI = Object.freeze(['riassunto', 'compact', 'motore']);
 const ID_VALIDO = /^[A-Za-z0-9._:-]{1,256}$/u;
-const conto = () => ({ token: 0, misurate: 0, nonMisurate: 0 });
+/* S1-b (11/11): `cache` = token letti dalla cache dichiarati, `conCache` = quante righe misurate li dichiarano (mai dedotti);
+   `chiamate` (ultimo giro) = le chiamate pagate, contate per tentativo */
+const conto = () => ({ token: 0, misurate: 0, nonMisurate: 0, cache: 0, conCache: 0, chiamate: 0 });
 
 export function nuovaSpesa() {
   return { perId: Object.create(null), riassunti: conto(), totale: conto(), piede: conto(), viste: [] };
@@ -43,9 +46,27 @@ export function tokenDellaRiga(valore) {
   return (dentro ?? 0) + (fuori ?? 0);
 }
 
-function aggiungi(c, token) {
+/** I token letti dalla cache che la riga DICHIARA (sottoinsieme di `prompt_tokens`), o `null`: le tre forme che il nucleo somma già. */
+export function cacheDellaRiga(valore) {
+  const u = valore?.usage;
+  if (!u || typeof u !== 'object') return null;
+  for (const v of [u.prompt_tokens_details?.cached_tokens, u.cache_read_input_tokens, u.prompt_cache_hit_tokens]) if (Number.isFinite(v) && v >= 0) return v;
+  return null;
+}
+
+/** Le chiamate pagate di una riga: `tentativi` se è un intero oltre 1 (il nucleo lo scrive solo allora, consumo-di-servizio.mjs:96), se no 1. */
+export function chiamateDellaRiga(valore) {
+  const n = valore?.tentativi;
+  return Number.isSafeInteger(n) && n > 1 ? n : 1;
+}
+
+function aggiungi(c, token, cache = null, chiamate = 1) {
+  c.chiamate = (c.chiamate ?? 0) + chiamate;
   if (token === null) c.nonMisurate += 1;
-  else { c.token += token; c.misurate += 1; }
+  else {
+    c.token += token; c.misurate += 1;
+    if (cache !== null) { c.cache = (c.cache ?? 0) + cache; c.conCache = (c.conCache ?? 0) + 1; }
+  }
 }
 
 /**
@@ -63,7 +84,7 @@ export function registraSpesa(spesa, valore, sequenza = null) {
   aggiungi(spesa.totale, token);
   if (!GIA_NEL_PIEDE.includes(valore.scopo)) aggiungi(spesa.piede ??= conto(), token);
   if (!SCOPI_DEI_RIASSUNTI.includes(valore.scopo)) return true;
-  aggiungi(spesa.riassunti, token);
+  aggiungi(spesa.riassunti, token, cacheDellaRiga(valore), chiamateDellaRiga(valore));
   for (const id of [valore.idRiassunto, valore.jobId]) {
     if (typeof id !== 'string' || !ID_VALIDO.test(id)) continue;
     aggiungi(spesa.perId[id] ??= conto(), token);
@@ -95,7 +116,7 @@ export function costoDelRiassunto(spesa, ids) {
   return stato(somma);
 }
 
-/** Il costo di tutti i riassunti della conversazione (la testata); `null` se nessuno è stato pagato (la testata resta il solo numero). */
+/** Il costo di tutte le compattazioni della conversazione (la riga sotto la testata); `null` se nessuna è stata pagata (nessuna riga). */
 export function costoDeiRiassunti(spesa) {
   const c = spesa?.riassunti;
   if (!c || (c.misurate === 0 && c.nonMisurate === 0)) return null;
@@ -114,17 +135,44 @@ export function testoCosto(costo, kilo) {
   if (costo.stato === 'nessuno') return t('pannello.contesto.nessunCosto');
   if (costo.stato === 'non-misurato') return t('pannello.contesto.costoNonMisurato');
   /* il plurale segue il numero (LINGUA-7); le chiavi per intero, perché il cancello dei letterali le ritrovi (LINGUA-1) */
-  const k = { k: kilo(costo.token) };
+  const k = { k: tokenBrevi(costo.token, kilo) }; // S1-b (11/11): da un milione «M», come la riga della spesa
   return costo.stato === 'almeno' ? tn('pannello.contesto.costoAlmenoOne', 'pannello.contesto.costoAlmenoMany', costo.token, k)
     : tn('pannello.contesto.costatoOne', 'pannello.contesto.costatoMany', costo.token, k);
 }
 
-/** Il conto della testata «Riassunti»: «3 · 2,2k token» (bozzetto), o il solo numero se nessun riassunto è stato pagato. */
-export function contoTestataRiassunti(numero, costo, kilo, cifra = String) {
-  if (!costo || costo.stato === 'nessuno') return numero;
-  const n = cifra(numero);
-  if (costo.stato === 'non-misurato') return t('pannello.contesto.testataNonMisurata', { n });
-  const v = { n, k: kilo(costo.token) };
-  return costo.stato === 'almeno' ? tn('pannello.contesto.testataAlmenoOne', 'pannello.contesto.testataAlmenoMany', costo.token, v)
-    : tn('pannello.contesto.testataCostoOne', 'pannello.contesto.testataCostoMany', costo.token, v);
+/*
+ * ⭐ S1-b (owner 11/11/2026 07:47-07:52, «Piccole subito»): la testata «Compattazioni N» dice solo il numero; la spesa sta su una riga sua,
+ *   sotto, perché il numero conta i riassunti applicati e la spesa OGNI chiamata pagata (segmenti, fusioni, ritentativi, mai applicati):
+ *   «3 · 5597,9k token» faceva leggere 1,9 M a riassunto. Ora: «Spesa delle compattazioni: almeno 5,6 M token in 41 chiamate, di cui
+ *   2,1 M dalla cache». La parte della cache SOLO se ogni riga misurata la dichiara (mai dedotta); «almeno» se una riga non ha l'uso.
+ * ⛔ Ultimo giro (controllore 11/11 10:45, owner 10:48): il nome è quello vero della somma (riassunti, /compact e motore del contesto:
+ *   `SCOPI_DEI_RIASSUNTI`), non «del motore»; le chiamate si contano per TENTATIVO (una riga con `tentativi: 3` sono tre chiamate pagate:
+ *   Hermes `agent/empty_response_guard.py:173` e `:240` conta e paga ogni tentativo vuoto).
+ * pi `footer.ts:25-30` (`formatTokens`): da un milione «M» con una cifra decimale; `:183` la cache letta solo se c'è.
+ */
+/** La spesa delle chiamate dei riassunti per la riga sotto la testata, o `null` se nessuna è stata pagata. PURA. */
+export function spesaDelMotore(spesa) {
+  const base = costoDeiRiassunti(spesa);
+  if (!base) return null;
+  const c = spesa.riassunti;
+  const tutteConCache = c.misurate > 0 && (c.conCache ?? 0) === c.misurate;
+  /* `chiamate` manca in un conto di una versione di prima (la pagina lo rifà dal giornale, ma per sicurezza): una per riga */
+  return { ...base, chiamate: c.chiamate ?? c.misurate + c.nonMisurate, cache: tutteConCache ? c.cache ?? 0 : null };
+}
+
+/** «41,2k» sotto il milione (il `kilo` di chi chiama), da lì «5,6 M» con una cifra decimale. 999.950 si scriverebbe «1000k»: è già «1,0 M». */
+export function tokenBrevi(n, kilo, locale = linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT') {
+  if (!Number.isFinite(n) || n < 999_950) return kilo(n);
+  return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(n / 1_000_000)} M`;
+}
+
+/** Le parole della riga sotto «Compattazioni N» da `spesaDelMotore`, o `null` (niente pagato: nessuna riga). */
+export function testoSpesaDelMotore(s, kilo, locale) {
+  if (!s) return null;
+  const n = s.chiamate;
+  if (s.stato === 'non-misurato') return tn('pannello.contesto.spesaCompattazioniNonMisurataOne', 'pannello.contesto.spesaCompattazioniNonMisurataMany', n, { n });
+  const v = { n, k: tokenBrevi(s.token, kilo, locale) };
+  const frase = s.stato === 'almeno' ? tn('pannello.contesto.spesaCompattazioniAlmenoOne', 'pannello.contesto.spesaCompattazioniAlmenoMany', n, v)
+    : tn('pannello.contesto.spesaCompattazioniOne', 'pannello.contesto.spesaCompattazioniMany', n, v);
+  return s.cache !== null && s.cache > 0 ? `${frase}${t('pannello.contesto.spesaCompattazioniCache', { k: tokenBrevi(s.cache, kilo, locale) })}` : frase;
 }

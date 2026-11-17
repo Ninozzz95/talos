@@ -234,6 +234,16 @@ export function supportaSpeculativaNgram(testoAiuto) {
 export const AMBIENTE_OFFLINE = Object.freeze({ LLAMA_ARG_OFFLINE: '1' });
 
 /**
+ * 12/11/2026 (owner 11/11 23:51, judge v1591): the engine's key goes in its ENVIRONMENT, never on its command line, which every process
+ * of the user reads (WMI `Win32_Process.CommandLine`) and which a spawn error carries in `spawnargs`. `LLAMA_API_KEY` is `--api-key`'s
+ * own binding (`common/arg.cpp:3550`), as Atomic does (`managed-api-key.ts:37-47`). Measured on b11669 (12/11/2026, CPU build, 5 starts):
+ * 401 without the key, 200 with it, the command line without it, no crash (Hermes saw libomp die with a `*_API_KEY` variable,
+ * `processes.py:94-99`; same libomp in the Vulkan build). Not the router's key FILE: b11669 opens it as an ANSI string and exits 1 on
+ * a non-ASCII profile path (measured, «failed to open file '…\J?rg …'»); the router needs its ASCII-path machinery, these two do not.
+ */
+export const VARIABILE_CHIAVE = 'LLAMA_API_KEY';
+
+/**
  * 02/11/2026, forma «proiettore nel conto» (OK di CLI, Mobile, Performance, Desktop). Il margine di serie di `--fit` è 1024 MiB per
  * scheda (`common/common.h:490`, b11960); la memoria del proiettore la dice `memoriaDelProiettoreMiB` (`proiettore-visione.mjs`).
  */
@@ -389,7 +399,7 @@ export function createLlamaServerSupervisor({
   if (typeof binaryPath !== 'string' || binaryPath.trim() === '') throw new LlamaServerSupervisorError('binaryPath is required', 'RUNTIME_MISCONFIGURED');
   if (fallbackBinaryPath !== null && (typeof fallbackBinaryPath !== 'string' || fallbackBinaryPath.trim() === '')) throw new LlamaServerSupervisorError('fallbackBinaryPath must be a non-empty string', 'RUNTIME_MISCONFIGURED');
   const processPolicy = createProcessPolicy({ allowedExecutables: [binaryPath, ...(fallbackBinaryPath ? [fallbackBinaryPath] : [])], spawnFn: spawnImpl,
-    envAllowlist: [...DEFAULT_ENV_ALLOWLIST, ...Object.keys(AMBIENTE_OFFLINE)] }); // A2-4, A-5: la variabile dell'offline arriva al motore
+    envAllowlist: [...DEFAULT_ENV_ALLOWLIST, ...Object.keys(AMBIENTE_OFFLINE), VARIABILE_CHIAVE] }); // A2-4, A-5: l'offline; la chiave (12/11)
   const probeBinary = sondaBinario ?? createLlamaBinaryProbe({ onObservation: onProbe });
   if (typeof probeBinary !== 'function') throw new LlamaServerSupervisorError('sondaBinario must be a function', 'RUNTIME_MISCONFIGURED');
   let pendingStart = null;
@@ -667,6 +677,18 @@ export function createLlamaServerSupervisor({
       }
       emitLog('stderr', chunk);
     });
+  }
+
+  /** The HTTP status of a request WITHOUT the key (`/v1/models`, not public in llama-server), or null if it did not get through. */
+  async function statoSenzaChiave(entry, operation) {
+    try {
+      const risposta = await fetchImpl(`${entry.baseUrl}/v1/models`, { headers: { Accept: 'application/json' },
+        signal: AbortSignal.any([operation.controller.signal, AbortSignal.timeout(3_000)]) });
+      try { await risposta?.body?.cancel?.(); } catch { /* nothing to free */ }
+      return Number(risposta?.status) || 0;
+    } catch {
+      return null;
+    }
   }
 
   async function health({ signal } = {}) {
@@ -951,14 +973,13 @@ export function createLlamaServerSupervisor({
       ...(modelId ? ['--alias', modelId] : []),
       '--host', LOOPBACK,
       '--port', String(selectedPort),
-      '--api-key', apiKey,
       ...argomentiScelti,
       '--jinja',
       '--metrics',
       '--props',
       ...(fotoQui ? ['--slot-save-path', fotoQui] : []),
     ], { cwd: isAbsolute(binario) ? dirname(binario) : process.cwd(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...AMBIENTE_OFFLINE } });
+      env: { ...AMBIENTE_OFFLINE, [VARIABILE_CHIAVE]: apiKey } }); // 12/11: the key in the environment, never in the arguments
     if (!entry.child || typeof entry.child.once !== 'function') throw new LlamaServerSupervisorError('spawn did not return a child process', 'RUNTIME_PROCESS_FAILED');
     attachProcess(entry);
     /*
@@ -995,6 +1016,18 @@ export function createLlamaServerSupervisor({
       const result = await health({ signal: AbortSignal.any([operation.controller.signal, AbortSignal.timeout(Math.max(1, deadline - Date.now()))]) });
       checkStart(operation);
       if (result.ok && !entry.closed && !entry.failure) {
+        /* 12/11/2026 (judge v1605, reviewer point 5): fail CLOSED, as the embedding engine does. The key reaches llama-server only
+           through its environment (VARIABILE_CHIAVE); an engine that answers a keyless request is open to every local process and web
+           page: it is stopped before anything else is asked of it. b11669 answers 401 (measured; 0.94 ms by the reviewer). The error
+           names the HTTP status only, never the key. A request that does not get through is asked again on the next turn. */
+        const senzaChiave = await statoSenzaChiave(entry, operation);
+        checkStart(operation);
+        if (senzaChiave === null) { await wait(pollIntervalMs, undefined, { signal: operation.controller.signal }); continue; }
+        if (senzaChiave !== 401) {
+          const aperto = new LlamaServerSupervisorError(`llama-server answered a request without its key (HTTP ${senzaChiave}): the engine was stopped and nothing was sent to it`, 'RUNTIME_PROCESS_FAILED');
+          aperto.apertoSenzaChiave = true; // not the projector's fault: no second opening without it
+          throw aperto;
+        }
         entry.windowTokens = await finestraLetta(entry, operation);
         checkStart(operation);
         /* Revisione del 20/10 (T2): il processo può morire durante la lettura di /props; allora NON è pronto. Il giro dopo del
@@ -1108,7 +1141,7 @@ export function createLlamaServerSupervisor({
         return await apriIlMotore(vista);
       } catch (conVista) {
         /* revisione CLI 02/11, R1: anche un motore che col proiettore resta muto (tempo scaduto) si riapre senza */
-        if (!vista || !['RUNTIME_PROCESS_FAILED', 'RUNTIME_OUT_OF_MEMORY', 'RUNTIME_HEALTH_TIMEOUT'].includes(conVista?.code)) throw conVista;
+        if (!vista || conVista?.apertoSenzaChiave || !['RUNTIME_PROCESS_FAILED', 'RUNTIME_OUT_OF_MEMORY', 'RUNTIME_HEALTH_TIMEOUT'].includes(conVista?.code)) throw conVista;
         checkStart(operation); // a stop is never a reason to open again
         const primaEntry = current;
         chiudi(primaEntry);

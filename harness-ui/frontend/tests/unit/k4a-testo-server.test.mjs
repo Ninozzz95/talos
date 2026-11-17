@@ -120,10 +120,12 @@ test('K4A-07 — lo stato di esecuzione di un fornitore nel Doctor: i valori not
   /* in italiano il valore resta quello che il server ha sempre mandato */
   for (const valore of Object.keys(CHIAVE_ESECUZIONE_FORNITORE)) assert.equal(esecuzioneDelFornitore(valore), valore);
   const c = controlliDoctor({ ...base, providers: { storeAvailable: true, items: [{ id: 'groq', label: 'Groq', keyConfigured: true, execution: 'collegato' }, { id: 'local', label: 'Motore locale (llama.cpp)', keyConfigured: false, requiresKey: false, execution: 'motore locale' }] } });
-  assert.match(righeDi(c, 'fornitori'), /Groq: .* · collegato/);
+  /* 023 passo 2: «collegato» (= l'adattatore esiste) non è un accesso e non si mostra più; si dice la chiave, e il motore locale col suo nome */
+  assert.match(righeDi(c, 'fornitori'), /Groq: Chiave salvata/);
+  assert.doesNotMatch(righeDi(c, 'fornitori'), /collegato/);
   impostaLingua('en');
   const e = controlliDoctor({ ...base, providers: { storeAvailable: true, items: [{ id: 'local', label: 'Motore locale (llama.cpp)', keyConfigured: false, requiresKey: false, execution: 'motore locale' }] } });
-  assert.match(righeDi(e, 'fornitori'), /Local engine \(llama\.cpp\): .* · local engine/);
+  assert.match(righeDi(e, 'fornitori'), /Local engine \(llama\.cpp\): Local engine/);
   impostaLingua('it');
 });
 

@@ -14,11 +14,12 @@ import {
   eCartaImpostazioni, registraCatalogoImpostazioni, nomeImpostazione, valoreInParole, prezzoInParole, direzioneDelloSforzo,
   frasiDiSicurezza, cartaAncheInAccessoPieno, testiCartaImpostazioni, creaBloccoCartaImpostazioni, ancoraNelleImpostazioni,
   esitoDellAnnullaRifiutato, ricevutaDallEsito, fattoSenzaCarta, mettiImpostazioniSullaRiga, segniDalleRicevute, testoDelSegno,
-  montaSegniImpostazioni, fraseDellaNotificaImpostazioni, suggerimentiImpostazioni,
+  montaSegniImpostazioni, montaSegniNonConfermate, VOCE_DEL_CAMPO_NON_CONFERMATO, fraseDellaNotificaImpostazioni, suggerimentiImpostazioni,
   comandoImpostazioniDaApplicare, ricordaRifiutoImpostazioni, creaNotaImpostazioniDellaPersona, rifiutoCheVaAlModello, creaNotaImpostazioniGiaCosi,
   citazioneDelModello, minacciaDellaRagioneInParole, fraseDellaPressioneSenzaCarta, CITAZIONE_MASSIMA,
 } from '../../src/components/impostazioni-dalla-chat.js';
 import { fraseDellaVoce, vociInOrdine, vociDaFare, FATTI_SENZA_RIGA, creaRigaNotifica, testoNotificaSistema } from '../../src/components/notifiche.js';
+import { CATALOGO_IMPOSTAZIONI, catalogoPubblico } from '../../../src/impostazioni/catalogo-impostazioni.mjs'; // giro 6: la voce VERA del server
 
 /* ───────────── il DOM finto ───────────── */
 const camel = (s) => s.replace(/-([a-z])/gu, (_, c) => c.toUpperCase());
@@ -367,6 +368,66 @@ test('IMPC-13 i segni nella pagina: sotto la griglia delle scelte o dentro la ri
   assert.deepEqual(ancoraNelleImpostazioni('tools.computerUse'), { selettore: '[data-setting-row="computerUseToggle"]', riga: true }, 'la ricevuta del computer use porta alla sua riga (decisione 310)');
   /* D24: la riga del modo colore non esiste nella pagina vera: la voce sta nello studio dei temi, il segno sotto la banda «Il tuo tema» */
   assert.deepEqual(ancoraNelleImpostazioni('appearance.colorMode'), { selettore: '[data-settings-band] .settings-band__help', riga: false, sezione: 'appearance' });
+});
+
+/*
+ * 0.2.2-DL, giro 6 (owner 10/11/2026 22:51; controllore del giro 5, R-A; giudice v1377 (i)) — IL SEGNO «non ancora confermata» accanto
+ *   all'interruttore, quando la finestra mostra un valore e TALOS ne legge un altro. La stessa grammatica del segno «Cambiata da TALOS»
+ *   (riga `talos-setting__help` col pallino, dentro la colonna del titolo), senza bottone: l'azione è l'interruttore che ha accanto.
+ */
+test('IMPC-13b (giro 6, R-A) il segno «non ancora confermata»: nella riga dell interruttore, EN e IT, senza bottone; rimontare non raddoppia, lista vuota lo toglie, convive col segno «Cambiata da TALOS»; campo o riga che non c è ⇒ niente', () => {
+  const VOCE = 'appearance.userBubbleFullWidth';
+  const CAMPO = 'userBubbleFullWidth';
+  /* la mappa campo della finestra → voce è quella del catalogo VERO del server (il catalogo pubblico non porta il nome del campo) */
+  for (const [campo, chiave] of Object.entries(VOCE_DEL_CAMPO_NON_CONFERMATO)) {
+    const v = CATALOGO_IMPOSTAZIONI.find((x) => x.chiave === chiave);
+    assert.deepEqual({ dove: v?.dove, campo: v?.campo }, { dove: 'finestra', campo }, `${campo} ⇒ ${chiave}`);
+  }
+  assert.deepEqual(Object.keys(VOCE_DEL_CAMPO_NON_CONFERMATO), [CAMPO], 'oggi una sola migrazione può aspettare');
+  const vera = catalogoPubblico().find((v) => v.key === VOCE);
+  assert.equal(vera.textKey, 'impostazioni.field.userBubbleFullWidthToggle.title');
+  const conLaVoce = (lingua) => { impostaLingua(lingua); registraCatalogoImpostazioni({ schema: CATALOGO.schema, voci: [...CATALOGO.voci, vera] }); };
+  conLaVoce('it');
+  const doc = documentoFinto();
+  const radice = doc.createElement('section');
+  /* la riga di `creaSettingRow`: la colonna del titolo, poi il controllo */
+  const riga = doc.createElement('div'); riga.dataset.settingRow = 'userBubbleFullWidthToggle';
+  const colonna = doc.createElement('div'); const titolo = doc.createElement('span'); titolo.textContent = 'Domande a tutta larghezza'; colonna.append(titolo);
+  const interruttore = doc.createElement('button'); interruttore.className = 'talos-switch';
+  riga.append(colonna, interruttore); radice.append(riga);
+  const segni = () => radice.querySelectorAll('[data-segno-non-confermata]');
+
+  assert.equal(montaSegniNonConfermate(radice, [], { document: doc }), 0);
+  assert.equal(segni().length, 0, 'd accordo ⇒ nessun segno');
+  assert.equal(montaSegniNonConfermate(radice, [CAMPO], { document: doc }), 1);
+  const [segno] = segni();
+  assert.equal(segno.padre, colonna, 'dentro la colonna del titolo, accanto all interruttore');
+  assert.deepEqual({ voce: segno.dataset.segnoNonConfermata, ruolo: segno.getAttribute('role'), classi: segno.className, pallino: segno.querySelectorAll('.talos-impostazione__punto').length, bottoni: segno.querySelectorAll('button').length },
+    { voce: VOCE, ruolo: 'status', classi: 'talos-setting__help talos-impostazione__segno', pallino: 1, bottoni: 0 });
+  assert.equal(segno.textContent, 'Non ancora confermata: TALOS la legge ancora al contrario. Tocca l’interruttore una volta per fissarla, e un’altra per tenerla com’è adesso.');
+  /* rimontare non raddoppia */
+  assert.equal(montaSegniNonConfermate(radice, [CAMPO], { document: doc }), 1);
+  assert.equal(segni().length, 1);
+  /* in inglese */
+  conLaVoce('en');
+  assert.equal(montaSegniNonConfermate(radice, [CAMPO], { document: doc }), 1);
+  assert.equal(segni()[0].textContent, 'Not confirmed yet: TALOS still reads this the other way. Flip the switch once to settle it, and once more to keep it as it is now.');
+  /* convive col segno «Cambiata da TALOS» della stessa riga: nessuno dei due toglie l'altro */
+  const quando = new Date(2026, 10, 2, 18, 12).toISOString();
+  const ricevute = [{ id: 'set-dl', sessionId: 's1', quando, origine: { tipo: 'modello', sessionId: 's1', dispositivoId: null }, confermatoDa: { tipo: 'finestra-pc' }, cambi: [{ chiave: VOCE, ambito: 'app', prima: true, dopo: false }], annullata: null }];
+  assert.equal(montaSegniImpostazioni(radice, ricevute, { adesso: new Date(2026, 10, 2, 20, 0), document: doc }), 1);
+  assert.deepEqual({ cambiata: radice.querySelectorAll('[data-segno-impostazione]').length, nonConfermata: segni().length }, { cambiata: 1, nonConfermata: 1 });
+  /* al contrario: lista vuota ⇒ il segno se ne va (senza ricaricare), l'altro resta */
+  assert.equal(montaSegniNonConfermate(radice, [], { document: doc }), 0);
+  assert.deepEqual({ cambiata: radice.querySelectorAll('[data-segno-impostazione]').length, nonConfermata: segni().length }, { cambiata: 1, nonConfermata: 0 });
+  /* un campo che la mappa non conosce, una pagina senza la riga, nessuna pagina ⇒ niente, e nessun errore */
+  assert.equal(montaSegniNonConfermate(radice, ['campoCheNonEsiste'], { document: doc }), 0);
+  assert.equal(montaSegniNonConfermate(doc.createElement('section'), [CAMPO], { document: doc }), 0);
+  assert.equal(montaSegniNonConfermate(null, [CAMPO], { document: doc }), 0);
+  /* senza il catalogo (non ancora caricato) il segno non si mette: mai una riga senza sapere dov'è la voce */
+  registraCatalogoImpostazioni(CATALOGO);
+  assert.equal(montaSegniNonConfermate(radice, [CAMPO], { document: doc }), 0);
+  assert.equal(segni().length, 0);
 });
 
 test('IMPC-14 la notifica `impostazioni` ha la sua riga in «Tutto»: frase e nomi; mai in «Da fare»; senza catalogo la frase senza i due punti', () => {

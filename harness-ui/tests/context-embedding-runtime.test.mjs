@@ -23,6 +23,13 @@ async function fixture(t, overrides = {}) {
     const input = JSON.parse(init.body).input;
     return { ok: true, json: async () => ({ data: input.map((_, index) => ({ index, embedding: Array(1024).fill(index + 1) })).reverse() }) };
   }, ...overrides };
+  /* 12/11/2026, round (a) of the engine key cure (judge v1599): at start the runtime sends one request WITHOUT the key and needs 401
+     (it fails closed on an engine that answers anyone). Every fake engine here, the default and the six that override `fetchFn`, now
+     answers like b11669: 401 without the key on every route but /health (`server-http.cpp:252-256`); what they test is unchanged. */
+  const fetchDelMotore = options.fetchFn;
+  options.fetchFn = async (url, init) => (!url.endsWith('/health') && !init?.headers?.Authorization
+    ? { ok: false, status: 401, json: async () => ({ error: { message: 'Invalid API Key' } }) }
+    : fetchDelMotore(url, init));
   const runtime = createContextEmbeddingRuntime(options); t.after(() => runtime.close());
   return { runtime, options, spawns, requests, children, modelPath, root };
 }

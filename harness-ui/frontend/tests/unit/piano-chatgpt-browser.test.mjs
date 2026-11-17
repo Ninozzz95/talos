@@ -11,7 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname, extname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
-import { chromium } from '@playwright/test';
+import { lanciaBrowserDelleProve } from '../aiuto/lancia-browser-delle-prove.mjs'; // 12/11: senza ambiente fallisce con la causa, mai salta
 import { build } from 'esbuild';
 
 const frontend = fileURLToPath(new URL('../..', import.meta.url));
@@ -48,7 +48,7 @@ test.before(async () => {
   `, resolveDir: frontend, sourcefile: 'pc-banco.js' }, tsconfigRaw: {}, bundle: true, write: false, format: 'iife', logLevel: 'silent' });
   const stile = await build({ absWorkingDir: tmpdir(), plugins: [sorgenti], entryPoints: [resolve(frontend, 'src/styles/main.css')], tsconfigRaw: {}, bundle: true, write: false, external: ['./fonts/*'], logLevel: 'silent' });
   const monolite = await readFile(resolve(frontend, 'src/styles/foglio-monolite.css'), 'utf8').catch(() => '');
-  browser = await chromium.launch({ channel: 'chrome', headless: true });
+  browser = await lanciaBrowserDelleProve({ channel: 'chrome', headless: true });
   pagina = async (t) => {
     /* CI #91 (09/11/2026): l'ora di «torna alle …» la scrive `provider-retry.js` con `toLocaleTimeString(undefined)`, cioè nella
        lingua del BROWSER; senza `locale` Playwright prende quella del sistema («Defaults to the system default locale») e sul runner

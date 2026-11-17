@@ -1,3 +1,7 @@
+import { existsSync } from 'node:fs';
+import { userInfo } from 'node:os';
+import { join } from 'node:path';
+
 /*
  * 15/10/2026 (bugfixer, seconda passata della revisione) — UNA PROVA DI UNITÀ APPESA TENEVA FERMA LA SUITE PER SEMPRE.
  *   Misurato: `tests/unit/provider-modale-salva-browser.test.mjs` è rimasta appesa più di 20 minuti (fermata a mano), e la suite
@@ -21,4 +25,48 @@ export function argomentiDelRunner(argomenti = [], { tettoMs = TETTO_DI_SERIE_MS
     ...(dato('--test-force-exit') ? [] : ['--test-force-exit']),
     ...argomenti,
   ];
+}
+
+/*
+ * 12/11/2026 (censimento delle 95 prove di unità che aprono un browser, giudice v1614-v1615) — COL PROFILO FINTO NESSUN BROWSER PARTIVA.
+ *   Misurato su edba3aee8 e su desktop-v0.2.1, 15 file, 4 lavoratori: 95 rosse su 95 col profilo finto, 95 verdi su 95 con l'ambiente
+ *   qui sotto. Due cause, tutte e due dell'ambiente delle prove, nessuna del prodotto:
+ *   - 31 prove (headless shell): Playwright cerca i binari in `%LOCALAPPDATA%\ms-playwright` (coreBundle.js, `defaultCacheDirectory`),
+ *     cioè sotto il profilo finto, dove non ci sono → «Executable doesn't exist».
+ *   - 64 prove (`channel: 'chrome'`): da Chrome 136 il canale dei DevTools vuole una cartella dati che NON sia quella di serie; con un
+ *     USERPROFILE finto senza `AppData\Local` Chrome non risolve quella di serie e rifiuta il canale («DevTools remote debugging requires
+ *     a non-default data directory») → «browser has been closed». Stesso LOCALAPPDATA, USERPROFILE con la cartella: verde; senza: rosso.
+ * ⇒ Di serie il runner dà ai figli i binari di Playwright dell'utente vero (`os.userInfo().homedir` legge il profilo dal sistema, non
+ *   dall'ambiente) — SOLO la cartella dei binari `ms-playwright`, mai il profilo — quando sotto quello dato non ci sono, e crea la
+ *   `AppData\Local` dentro un USERPROFILE che non ce l'ha. Chi passa `PLAYWRIGHT_BROWSERS_PATH` lo tiene; col profilo vero non cambia niente.
+ * Fonti: playwright.dev/docs/browsers («Managing browser binaries», PLAYWRIGHT_BROWSERS_PATH); developer.chrome.com/blog/remote-debugging-port.
+ */
+function cartellaCacheDi(piattaforma, ambiente, casa) {
+  if (piattaforma === 'win32') return ambiente.LOCALAPPDATA || join(casa, 'AppData', 'Local');
+  if (piattaforma === 'darwin') return join(casa, 'Library', 'Caches');
+  return ambiente.XDG_CACHE_HOME || join(casa, '.cache');
+}
+
+/** La cartella dell'utente detta dal sistema, non dall'ambiente; '' dove il sistema non la sa (`os.userInfo()` lancia). */
+export function casaDelSistema(leggi = userInfo) {
+  try { return leggi().homedir || ''; } catch { return ''; }
+}
+
+/** L'ambiente dei figli di `node --test`: `{ ambiente, cartelleDaCreare }`. Non tocca l'ambiente di chi chiama. */
+export function ambienteDelleProve(ambiente = process.env, {
+  cartellaUtenteVera = casaDelSistema(), esiste = existsSync, piattaforma = process.platform,
+} = {}) {
+  const risultato = { ...ambiente };
+  const cartelleDaCreare = [];
+  if (!risultato.PLAYWRIGHT_BROWSERS_PATH && cartellaUtenteVera) {
+    const casaData = (piattaforma === 'win32' ? ambiente.USERPROFILE : ambiente.HOME) || cartellaUtenteVera;
+    const dati = join(cartellaCacheDi(piattaforma, ambiente, casaData), 'ms-playwright');
+    const veri = join(cartellaCacheDi(piattaforma, {}, cartellaUtenteVera), 'ms-playwright');
+    if (!esiste(dati) && esiste(veri)) risultato.PLAYWRIGHT_BROWSERS_PATH = veri;
+  }
+  if (piattaforma === 'win32' && ambiente.USERPROFILE) {
+    const locale = join(ambiente.USERPROFILE, 'AppData', 'Local');
+    if (!esiste(locale)) cartelleDaCreare.push(locale);
+  }
+  return { ambiente: risultato, cartelleDaCreare };
 }

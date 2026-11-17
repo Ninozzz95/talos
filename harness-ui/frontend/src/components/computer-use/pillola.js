@@ -7,6 +7,8 @@ import { t } from '../lingua.js';
 import { fraseDelPasso, frasePausa } from './parole.js';
 
 export const STATO_PILLOLA_INIZIALE = Object.freeze({ fase: '', prima: '', lavora: false, fermo: false });
+/* reperto 3 (13/11): il ciclo annuncia il bersaglio come `{ ruolo, nome }` (`ciclo.mjs`, `breve`): si dice il nome, come Hermes l'etichetta (`tool.py:609`) */
+const nomeDelBersaglio = (b) => (typeof b === 'string' ? b : typeof b?.nome === 'string' ? b.nome : '');
 
 export function statoPillola(stato, evento) {
   const v = evento?.value ?? {};
@@ -14,7 +16,7 @@ export function statoPillola(stato, evento) {
     case 'talos.computer-use-passo':
       if (v.fase === 'esito' && !stato.fermo) { const f = fraseDelPasso(v); return f ? { ...stato, fase: f } : stato; }
       if (v.fase !== 'annuncio' || stato.fermo) return stato;
-      return { ...stato, fase: String(v.bersaglio ?? '') || stato.fase, lavora: true };
+      return { ...stato, fase: nomeDelBersaglio(v.bersaglio) || stato.fase, lavora: true };
     case 'talos.computer-use-pausa':
       if (v.motivo === 'persona' && v.fase === 'fine') return { ...stato, fase: stato.prima, prima: '', fermo: false };
       return { ...stato, prima: stato.fermo ? stato.prima : stato.fase, fase: frasePausa(v), fermo: true, lavora: true };

@@ -12,10 +12,12 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { leggiArchitetturaGguf } from '../src/gguf-header.mjs';
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { RIGA_ARCHITETTURA_SCONOSCIUTA, buildDelMotore, motoreConosceArchitettura, testoArchitetturaSconosciuta } from '../src/motore-architetture.mjs';
 import { cartellaDiProva } from './aiuto/cartelle-di-prova.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 /** Un GGUF v3 con UNA chiave: general.architecture (stringa, tipo 8), come la spec (ggml `docs/gguf.md`). */
 function ggufCon(architettura) {

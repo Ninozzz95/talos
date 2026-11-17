@@ -29,9 +29,15 @@ function valida(valore) {
   return { acceso: valore.acceso };
 }
 
-/** @param {{ file: string, diSerie?: boolean, avvisa?: (m: string) => void }} o */
-export function creaImpostazioneComputerUse({ file, diSerie = false, avvisa = (m) => console.warn(m) } = {}) {
+/*
+ * ⛔ Decisione 374 (07/11/2026): con un `custode` (`file-approvati.mjs`, uno per server) il valore viene dalla VERSIONE APPROVATA che il
+ *   custode tiene in memoria, MAI dal file: un comando o un processo in sottofondo che cambia il file non accende il computer use. Si
+ *   scrive attraverso il custode, che approva ciò che scrive. Senza custode (le prove vecchie, chi non lo passa) tutto com'era.
+ */
+/** @param {{ file: string, diSerie?: boolean, avvisa?: (m: string) => void, custode?: { custodisce: Function, testo: Function, scrivi: Function } | null }} o */
+export function creaImpostazioneComputerUse({ file, diSerie = false, avvisa = (m) => console.warn(m), custode = null } = {}) {
   if (typeof file !== 'string' || !file) throw errore('The computer use settings file is required.');
+  if (custode && !custode.custodisce(file)) throw errore('The computer use settings file is not kept by the given keeper.');
   const DI_SERIE = Object.freeze({ acceso: diSerie === true });
   let corrente = null;
   /* un file illeggibile non decide per la persona: vale il valore di serie del PC, e lo si dice */
@@ -41,6 +47,24 @@ export function creaImpostazioneComputerUse({ file, diSerie = false, avvisa = (m
       return { ...DI_SERIE };
     }
   };
+  if (custode) {
+    let ultimoTesto;
+    let ultimo = null;
+    const approvato = () => {
+      const testo = custode.testo(file);
+      if (ultimo === null || testo !== ultimoTesto) { ultimoTesto = testo; ultimo = testo === null ? { ...DI_SERIE } : daTesto(testo); }
+      return ultimo;
+    };
+    return Object.freeze({
+      acceso: () => approvato().acceso === true,
+      async leggi() { return { ...approvato() }; },
+      async scrivi(valore) {
+        const nuovo = valida(valore);
+        await custode.scrivi(file, `${JSON.stringify({ schema: SCHEMA_IMPOSTAZIONE_COMPUTER_USE, ...nuovo }, null, 2)}\n`);
+        return { ...nuovo };
+      },
+    });
+  }
   const nonLetto = (e) => { if (e?.code !== 'ENOENT') avvisa(`[computer-use-settings] ${file} cannot be read (${e?.code}): the PC default holds`); return null; };
   const caricaSincrono = () => {
     if (corrente) return corrente;

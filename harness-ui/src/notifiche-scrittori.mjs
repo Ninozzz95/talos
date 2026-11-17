@@ -16,6 +16,9 @@
  * indicizzate su quel codice. L'id viene dalla fonte (sessione + richiesta o giro), quindi la stessa carta rigiocata è la stessa voce.
  */
 
+import { createHash } from 'node:crypto';
+import { basename } from 'node:path';
+
 import { approvabileFuori, datoDellAzione } from './approvabile-fuori.mjs';
 
 const FERMATO = new Set(['fermato']); // `RunError.code` di un giro fermato dalla persona (session-registry, «Ferma tutto»)
@@ -58,6 +61,7 @@ export function creaScrittoriNotifiche({ registro, adesso = () => Date.now(), se
    *   giro dell'event loop: se la risposta arriva prima, non si scrive né si risolve niente.
    */
   const carteInArrivo = new Map(); // id → handle di setImmediate
+  const fiducieAnnunciate = new Set(); // giro 2, (2): gli avvisi di fiducia già chiesti da questo processo (la seconda guardia è il registro)
   const scriviCarta = (voce) => {
     clearImmediate(carteInArrivo.get(voce.id));
     carteInArrivo.set(voce.id, setImmediate(() => { carteInArrivo.delete(voce.id); scrivi(voce); }));
@@ -194,6 +198,33 @@ export function creaScrittoriNotifiche({ registro, adesso = () => Date.now(), se
         impostazioni: { ricevuta: ricevuta.id, cambi: cambi.map(({ chiave, prima, dopo }) => ({ chiave, prima, dopo })), confermatoDa: ricevuta.confermatoDa ?? null,
           ...(dalDispositivo ? { origine: { tipo: 'dispositivo', dispositivoId: ricevuta.origine.dispositivoId ?? null } } : {}) },
         istante: typeof ricevuta.quando === 'string' && !Number.isNaN(Date.parse(ricevuta.quando)) ? ricevuta.quando : new Date(adesso()).toISOString() });
+    },
+
+    /**
+     * Giro 2, (2) (owner 11/11 13:08, «Avviso con Mi fido»): un giro d'automazione in Accesso pieno su una cartella MAI chiesta gira
+     *   trattenuto, senza nessuno davanti. La persona lo sa da un avviso che aspetta lei («Da fare»), UNO per cartella e mai uno per giro:
+     *   l'id viene dalla cartella (un'impronta, mai il percorso, che non va al telefono), e una voce già scritta non si riscrive. La porta
+     *   apre la conversazione del giro, dove la carta «Sì, mi fido di questa cartella» c'è già. La risposta (Sì o No) la risolve
+     *   (`fiduciaRisposta`). Come Claude Code, che per i compiti in sottofondo chiede la fiducia invece di lavorare muto
+     *   (`CHANGELOG.md:2388`).
+     */
+    fiduciaDaChiedere({ automazioneId = null, sessionId, nome = '', cartella } = {}) {
+      if (typeof sessionId !== 'string' || !sessionId || typeof cartella !== 'string' || !cartella) return;
+      const chiave = process.platform === 'win32' ? cartella.toLowerCase() : cartella;
+      const id = `fiducia-cartella:cartella:${createHash('sha256').update(chiave).digest('hex').slice(0, 24)}`;
+      if (fiducieAnnunciate.has(id)) return;
+      fiducieAnnunciate.add(id);
+      Promise.resolve(registro.voce(id)).then((gia) => {
+        if (gia) return; // una volta per cartella, anche dopo un riavvio
+        scrivi({ id, fatto: 'fiducia-cartella', azione: null,
+          cosa: { tipo: typeof automazioneId === 'string' && automazioneId ? 'automazione' : 'sessione', id: automazioneId || sessionId, nome: typeof nome === 'string' ? nome : '' },
+          dato: { genere: 'testo', valore: basename(cartella) || cartella }, porta: { tipo: 'sessione', id: sessionId }, istante: new Date(adesso()).toISOString() });
+      }).catch(segnala);
+    },
+    /** La persona ha risposto sulla fiducia di una cartella: gli avvisi la cui conversazione non aspetta più si risolvono. */
+    fiduciaRisposta(aspettaAncora) {
+      if (typeof aspettaAncora !== 'function') return;
+      risolvi((v) => v.fatto === 'fiducia-cartella' && v.porta?.tipo === 'sessione' && !aspettaAncora(v.porta.id));
     },
 
     /** Una sessione eliminata: le sue voci (e quelle delle sue figlie, che portano a lei) diventano risolte. */

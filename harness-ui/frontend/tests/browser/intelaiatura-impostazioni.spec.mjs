@@ -120,16 +120,36 @@ test('INTELAIATURA-04 · il separatore sta nel CSS, non nel DOM', async ({ page 
   expect(separatore).toContain('›');
 });
 
-test('INTELAIATURA-06 · il cercatore del mockup è in sidebar, con la sua scorciatoia', async ({ page }) => {
+/*
+ * ⛔⛔ 023 passo 2 (owner 10/11/2026 21:47, bozzetto approvato): UNA SOLA RICERCA. Il bottone «Cerca impostazioni» e la finestra
+ *   «Trova un’impostazione» sono tolti; il glifo «Ctrl K» sta DENTRO il campo, come nel bozzetto. INTELAIATURA-06..09 sono riscritte
+ *   per il campo unico (023 cura 1, 11/11/2026): stesse domande, sul gesto che c'è oggi. La ricerca intera è provata in
+ *   `impostazioni-ricerca-unica.spec.mjs`.
+ */
+test('INTELAIATURA-06 · il campo unico è in sidebar, col glifo della scorciatoia dentro il campo', async ({ page }) => {
   await apriImpostazioni(page, 'appearance');
-  const bottone = page.locator('#schermoImpostazioni [data-settings-open-search]');
-  await expect(bottone).toHaveCount(1);
-  await expect(bottone).toContainText('Cerca impostazioni');
+  await expect(page.locator('#schermoImpostazioni [data-settings-open-search]'), 'il bottone vecchio è tolto').toHaveCount(0);
+  await expect(page.locator('dialog.settings-palette'), 'la finestra vecchia è tolta').toHaveCount(0);
+  await expect(page.locator('#schermoImpostazioni input[type="search"]:visible')).toHaveCount(1);
   // Il glifo della scorciatoia si vede ma non si annuncia — «Ctrl K» letto da uno screen
-  // reader è «Control K» e va detto a parole, non lasciato al caso.
-  const tasto = bottone.locator('kbd');
+  // reader è «Control K»: per chi ascolta lo dice `aria-keyshortcuts` sul campo.
+  const tasto = page.locator('#schermoImpostazioni [data-settings-shortcut]');
+  await expect(tasto).toHaveCount(1);
+  await expect(tasto).toBeVisible();
   await expect(tasto).toHaveAttribute('aria-hidden', 'true');
   await expect(tasto).toHaveText('Ctrl K');
+  await expect(page.locator('#settingsSearch')).toHaveAttribute('aria-keyshortcuts', 'Control+K /');
+  const glifo = await tasto.evaluate((k) => {
+    const campo = document.querySelector('#settingsSearch').getBoundingClientRect(); const r = k.getBoundingClientRect();
+    return { dentroIlCampo: Boolean(k.closest('.settings-search-field')), dentroIlBordo: r.left >= campo.left && r.right <= campo.right + 0.5 && r.top >= campo.top - 0.5 && r.bottom <= campo.bottom + 0.5 };
+  });
+  expect(glifo, 'il glifo «Ctrl K» sta dentro il campo, non accanto').toEqual({ dentroIlCampo: true, dentroIlBordo: true });
+  // e cercando lascia il posto alla × che svuota: mai tutti e due
+  await page.locator('#settingsSearch').fill('tema');
+  await expect(tasto).toBeHidden();
+  await expect(page.locator('#schermoImpostazioni [data-settings-clear]')).toBeVisible();
+  await page.locator('#settingsSearch').fill('');
+  await expect(tasto).toBeVisible();
   /*
    * ⛔ E IL CAMPO STA NELLA COLONNA, non più a tutta larghezza. Owner, 18/09/2026: «attento alla
    *   barra di ricerca io la vedo ancora full width e no sopra sidebar», e poi «sposta la barra».
@@ -271,72 +291,71 @@ test('INTELAIATURA-10 · cercando, la colonna non salta', async ({ page }) => {
   expect(Math.abs(dopo.altezzaBarra - prima.altezzaBarra), `la barra non torna com'era: ${prima.altezzaBarra} → ${dopo.altezzaBarra}`).toBeLessThanOrEqual(2);
 });
 
-test('INTELAIATURA-07 · Ctrl K apre la palette, Esc la chiude, e il fuoco torna al bottone', async ({ page }) => {
+test('INTELAIATURA-07 · Ctrl K porta il fuoco al campo e ne seleziona il testo; Esc svuota e il fuoco resta nel campo', async ({ page }) => {
   await apriImpostazioni(page, 'appearance');
-  const palette = page.locator('dialog.settings-palette');
-  await expect(palette).toBeHidden();
-  // Aperta DAL BOTTONE, il fuoco deve tornare al bottone: è il contratto di `showModal()`
-  // (`restoreFocus`, `manager.ts:75-86`) e senza di lui il prossimo Tab riparte da capo pagina.
-  const bottone = page.locator('#schermoImpostazioni [data-settings-open-search]');
-  await bottone.click();
-  await expect(palette).toBeVisible();
-  // `showModal()` mette il fuoco dentro da sé; noi lo mettiamo sul campo perché `autofocus`
-  // non è affidabile su tutti i browser desktop.
-  await expect(page.locator('#settingsPaletteQuery')).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(palette).toBeHidden();
-  await expect(bottone, 'il fuoco deve tornare a chi ha aperto').toBeFocused();
-  // E aperta DA TASTIERA, il fuoco torna dov'era: `showModal()` lo restituisce all'elemento
-  // che lo aveva, che con la scorciatoia non è il bottone.
-  await page.locator('#schermoImpostazioni .settings-section-heading h2').focus();
+  const campo = page.locator('#settingsSearch');
+  const titolo = page.locator('#schermoImpostazioni .settings-section-heading h2');
+  await titolo.focus();
   await page.keyboard.press('Control+k');
-  await expect(palette).toBeVisible();
+  await expect(campo).toBeFocused();
+  await page.keyboard.type('tema');
+  await expect(page.locator('#settingsSearchResults')).toBeVisible();
+  // dal resto della pagina, Ctrl K torna al campo e SELEZIONA ciò che c'è: si scrive subito una ricerca nuova
+  await page.locator('#schermoImpostazioni [role="tab"]').first().focus();
+  await page.keyboard.press('Control+k');
+  await expect(campo).toBeFocused();
+  expect(await campo.evaluate((e) => [e.selectionStart, e.selectionEnd])).toEqual([0, 4]);
   await page.keyboard.press('Escape');
-  await expect(palette).toBeHidden();
-  await expect(page.locator('#schermoImpostazioni .settings-section-heading h2')).toBeFocused();
+  await expect(campo).toHaveValue('');
+  await expect(campo, 'Esc svuota e il fuoco resta dov’era').toBeFocused();
+  await expect(page.locator('#settingsSearchResults')).toBeHidden();
+  await expect(titolo, 'la vista della sezione torna').toBeVisible();
 });
 
-test('INTELAIATURA-08 · la palette cerca sull’indice vero e porta alla riga', async ({ page }) => {
+test('INTELAIATURA-08 · il campo cerca sull’indice vero e Invio porta alla riga', async ({ page }) => {
   await apriImpostazioni(page, 'appearance');
-  await page.locator('#schermoImpostazioni [data-settings-open-search]').click();
-  const palette = page.locator('dialog.settings-palette');
-  await expect(palette).toBeVisible();
+  const conteggio = page.locator('#schermoImpostazioni [data-settings-results]');
+  const vuoto = page.locator('#schermoImpostazioni .settings-empty');
   /* 09/10/2026 (bugfixer, foto del 4174): a campo vuoto niente «0 risultati» e niente «Nessuna impostazione trovata» — non
      si è ancora cercato niente (come Hermes, che dice «nessun risultato» solo con una ricerca in corso). */
-  await expect(palette.locator('.settings-palette__count')).toHaveText('');
-  await expect(palette.locator('.settings-palette__empty')).toBeHidden();
-  await page.locator('#settingsPaletteQuery').fill('parola-che-non-esiste-xyz');
-  await expect(palette.locator('.settings-palette__count')).toHaveText('0 risultati');
-  await expect(palette.locator('.settings-palette__empty'), 'AL CONTRARIO: con una ricerca vera, il vuoto si dice').toBeVisible();
-  await page.locator('#settingsPaletteQuery').fill('elastica');
-  // Lo stesso indice della ricerca in pagina: 40 controlli + le 10 sezioni.
-  await expect(palette.locator('.settings-palette__count')).toHaveText('1 risultato');
-  const esito = palette.locator('[data-settings-result="motionEasingSelect"]');
-  await expect(esito).toHaveCount(1);
-  await esito.click();
-  await expect(palette).toBeHidden();
+  await expect(conteggio).toHaveText('');
+  await expect(page.locator('#settingsSearchResults')).toBeHidden();
+  await page.locator('#settingsSearch').fill('parola-che-non-esiste-xyz');
+  await expect(conteggio).toHaveText('0 risultati');
+  await expect(vuoto, 'AL CONTRARIO: con una ricerca vera, il vuoto si dice').toBeVisible();
+  await page.locator('#settingsSearch').fill('elastica');
+  // Lo stesso indice di sempre: i campi del contratto + le sezioni.
+  await expect(conteggio).toHaveText('1 risultato');
+  await expect(vuoto).toBeHidden();
+  await expect(page.locator('#settingsSearchResultList [data-settings-result="motionEasingSelect"]')).toHaveCount(1);
+  await page.locator('#settingsSearch').press('Enter');
+  await expect(page.locator('#settingsSearchResults')).toBeHidden();
   // La riga è evidenziata e il fuoco è sul suo controllo: si arriva davvero, non si "trova".
   await expect(page.locator('[data-setting-row="motionEasingSelect"][data-settings-hit]')).toHaveCount(1);
+  expect(await page.evaluate(() => document.activeElement?.closest('[data-setting-row]')?.dataset.settingRow)).toBe('motionEasingSelect');
 });
 
-test('INTELAIATURA-09 · Ctrl K ha un ambito: le impostazioni qui, i comandi fuori', async ({ page }) => {
+test('INTELAIATURA-09 · Ctrl K ha un ambito: il campo delle impostazioni qui, i comandi fuori', async ({ page }) => {
   await apriImpostazioni(page, 'appearance');
-  const palette = page.locator('dialog.settings-palette');
-  // Dentro le Impostazioni, fuori da un campo: vince il cercatore delle impostazioni.
-  await page.locator('#schermoImpostazioni .settings-nav__search').focus();
+  const comandi = () => page.evaluate(() => { const v = document.querySelector('#veloComandi'); return !!v && !v.hidden && v.getClientRects().length > 0; });
+  // Dentro le Impostazioni, fuori da un campo: vince il campo delle impostazioni.
+  await page.locator('#schermoImpostazioni [role="tab"]').first().focus();
   await page.keyboard.press('Control+k');
-  await expect(palette).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(palette).toBeHidden();
-  /*
-   * ⛔ COL FUOCO IN UN CAMPO la scorciatoia NON deve scattare: il composer della chat è a un
-   *   passo da qui. Misurato il 18/09: oggi l'app porta il fuoco a `#cercaComando`, cioè apre
-   *   la SUA palette dei comandi — comportamento che c'era prima di questa cura e che resta.
-   *   Quello che questa prova protegge è che NON si apra la paletta delle impostazioni.
-   */
-  await page.locator('#settingsSearch').click();
+  await expect(page.locator('#settingsSearch')).toBeFocused();
+  expect(await comandi(), 'nelle Impostazioni la palette dei comandi non si apre').toBe(false);
+  // Col fuoco già nel campo, Ctrl K resta lì (seleziona) e i comandi restano chiusi.
   await page.keyboard.press('Control+k');
-  await expect(palette, 'col fuoco in un campo la palette non deve aprirsi').toBeHidden();
+  await expect(page.locator('#settingsSearch')).toBeFocused();
+  expect(await comandi()).toBe(false);
+  // Fuori dalle Impostazioni Ctrl K resta alla palette dei comandi, come prima.
+  await page.locator('.talos-nav-item[data-vaia="chat"]').first().click();
+  await expect(page.locator('#schermoImpostazioni')).toBeHidden();
+  // l'uscita finisce quando cade la classe `active` (dura l'animazione: `velo-fornitori.spec.mjs:341-344`)
+  await expect(page.locator('#schermoImpostazioni')).not.toHaveClass(/(^|\s)active(\s|$)/);
+  await page.locator('body').click({ position: { x: 5, y: 5 } }).catch(() => {});
+  await page.keyboard.press('Control+k');
+  await expect.poll(comandi, { message: 'fuori dalle Impostazioni Ctrl K apre i comandi' }).toBe(true);
+  await expect(page.locator('#settingsSearch')).not.toBeFocused();
 });
 
 test('INTELAIATURA-05 · cercando, il breadcrumb sparisce come la testata', async ({ page }) => {

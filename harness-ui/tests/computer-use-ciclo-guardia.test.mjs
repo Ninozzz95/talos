@@ -82,7 +82,8 @@ test('GUARDIA-CICLO-05 (variante A): dentro la guardia il lotto si chiude dopo u
   const r = await eseguiCompito({ testoDellaPersona: 'x', politica: PIENO, porte: p.porte, guardia: ACCESA });
   assert.equal(r.esito, 'riuscito');
   assert.equal(p.eseguite.length, 1);
-  assert.equal(r.storia.filter((riga) => riga.includes('non-eseguita')).length, 2, r.storia.join(' | '));
+  // giro 2 della 0.2.1-CU: il resto di un lotto sta su UNA riga che dice quante azioni e di che tipo (prima erano due righe, una per azione)
+  assert.deepEqual(r.storia.filter((riga) => riga.includes('non-eseguita')), ['passo 1: azioni 2-3 del lotto (premi ×2) → non-eseguita'], r.storia.join(' | '));
   // fuori dalla guardia, con la guardia accesa, il lotto resta intero
   const fuori = porte({ risposte: [{ azioni: [premi(), premi()] }], guarda: () => negozio() });
   await eseguiCompito({ testoDellaPersona: 'x', politica: PIENO, porte: fuori.porte, guardia: ACCESA });
@@ -279,8 +280,10 @@ test('GUARDIA-CICLO-20 (D4): scaduti DOPO il conto del tetto e prima dell\'azion
 
 test('GUARDIA-CICLO-21 (D4): carta sul posto, ma dopo il sì il totale è cambiato: niente pagamento e la spesa contata si DISFA', async () => {
   let cambiato = false;
+  // the page keeps a title that is not a checkout (judge v1484 made «Cassa - Negozio» one): the first «Avanti» stays a step with no
+  // protection, as this test was written, and only «Paga ora» pays
   const p = porteConSalto({ risposte: [{ azioni: [premi('b1')] }, { azioni: [premi('paga')] }, { fine: { riuscito: true } }],
-    guarda: () => (cambiato ? cassa({ elementi: [{ ref: 'r0', ruolo: 'testo', nome: 'Totale 45,00 €' }, { ref: 'paga', ruolo: 'pulsante', nome: 'Paga ora' }] }) : cassa()),
+    guarda: () => (cambiato ? cassa({ titolo: 'Negozio', elementi: [{ ref: 'r0', ruolo: 'testo', nome: 'Totale 45,00 €' }, { ref: 'paga', ruolo: 'pulsante', nome: 'Paga ora' }] }) : cassa({ titolo: 'Negozio' })),
     dopoLaPersona: (q) => { if (q.motivo === 'guardia' && q.perche === 'tempo') cambiato = true; } });
   saltaFraContoEAzione(p);
   const r = await eseguiCompito({ ...TETTO, porte: p.porte });
@@ -420,3 +423,20 @@ test('GUARDIA-CICLO-30 (passaggio): sulla banca col sì, davanti la finestra di 
   assert.deepEqual([domandeGuardia(dev).length, dev.eseguite.length], [1, 2], dev.ordine.join(','));
   assert.equal((await corsa('TalosDev')).eseguite.length, 3, 'senza aggiunta è un\'app diversa');
 });
+
+// Second round (reviewer A, 5d): GUARDIA-CICLO-21 keeps «Negozio» as its title since «Cassa» became a checkout, and that hid a real
+// defect: on a checkout «Avanti» is a payment step and was booked as a spend, so the spend stayed after the screen changed. The same
+// scene on a checkout title: the spend is booked only by the action that pays, so nothing stays in the account.
+for (const titolo of ['Checkout - Negozio', 'Cassa - Negozio']) {
+  test(`GUARDIA-CICLO-21b (5a): «${titolo}», the total changes after the yes: nothing paid, nothing left in the spend, the log never says «pagati»`, async () => {
+    let cambiato = false;
+    const p = porteConSalto({ risposte: [{ azioni: [premi('b1')] }, { azioni: [premi('paga')] }, { fine: { riuscito: true } }],
+      guarda: () => (cambiato ? cassa({ titolo, elementi: [{ ref: 'r0', ruolo: 'testo', nome: 'Totale 45,00 €' }, { ref: 'paga', ruolo: 'pulsante', nome: 'Paga ora' }] }) : cassa({ titolo })),
+      dopoLaPersona: (q) => { if (q.motivo === 'guardia' && q.perche === 'tempo') cambiato = true; } });
+    saltaFraContoEAzione(p);
+    const r = await eseguiCompito({ ...TETTO, porte: p.porte });
+    assert.equal(pagati(p), 0, p.ordine.join(','));
+    assert.deepEqual(r.spese, [], 'a spend never made does not stay in the account');
+    assert.ok(!r.storia.some((x) => /pagati/u.test(x)), r.storia.join(' | '));
+  });
+}

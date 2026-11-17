@@ -29,6 +29,7 @@ import { GRUPPI_CARTA_SEMPRE } from '../kernel/impostazioni-app.mjs';
 import {
   CATALOGO_IMPOSTAZIONI, RIMANDI_IMPOSTAZIONI, SEZIONI_IMPOSTAZIONI, catalogoPubblico, controllaValore, valoreInterno, valorePubblico,
 } from './catalogo-impostazioni.mjs';
+import { FINESTRA_SCRITTA_MINIMA, FINESTRA_SCRITTA_MASSIMA } from '../finestra-di-ripiego.mjs';
 
 export const NOME_ATTREZZO_IMPOSTAZIONI = 'app_settings';
 /* REV8-03 (revisione della fase 8, 01/11/2026): dove una fonte mette, accanto ai campi letti, i valori INTERNI che la voce pubblica perde
@@ -50,8 +51,11 @@ const rifiutoCon = (messaggio, motivo, chiave = null) => ({ ok: false, messaggio
 const errore = (code, messaggio) => Object.assign(new Error(messaggio), { code });
 const stesso = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const mostra = (valore) => JSON.stringify(valore ?? null);
+/* 11/11/2026: come si scrive la memoria di un modello (`tipo: 'memoria'`), con gli stessi limiti di `finestra-di-ripiego.mjs` */
+const DESCRIZIONE_TOKEN = `a whole number of tokens between ${FINESTRA_SCRITTA_MINIMA.toLocaleString('en-US')} and ${FINESTRA_SCRITTA_MASSIMA.toLocaleString('en-US')}, or null for automatic`;
 const AMBITO_PUBBLICO = { app: 'app', conversazione: 'conversation' };
-const dove = (v) => (v.ambito === 'conversazione' ? 'this conversation' : v.dove === 'finestra' ? 'this app, window preference' : v.chiave.startsWith('context.engine') || v.chiave === 'tools.defaultCommandShell' || v.chiave === 'chat.liveBlocks' ? 'new conversations' : 'this app');
+/* giro dopo i revisori della soglia (punto 5, BASSO 3 di A): la memoria di un modello vale per QUEL modello in ogni conversazione, e resta salvata */
+const dove = (v) => (v.chiave === 'conversation.modelMemory' ? 'this model, in every conversation' : v.ambito === 'conversazione' ? 'this conversation' : v.dove === 'finestra' ? 'this app, window preference' : v.chiave.startsWith('context.engine') || v.chiave === 'tools.defaultCommandShell' || v.chiave === 'chat.liveBlocks' ? 'new conversations' : 'this app');
 const TAG_GRUPPO = { sicurezza: 'security', costo: 'cost', aggiornamenti: 'updates' };
 
 /*
@@ -417,17 +421,40 @@ function leggiLimiteRevisioni(file) {
  */
 const CODICI_DI_CONTESA = new Set(['EPERM', 'EBUSY', 'EACCES']);
 const LETTURA_TENTATIVI = 10;
-async function leggiFileRicevute(file) {
+/* 0.2.2-DL, giro 4 (revisione del giro 2, reperto 1): `perché` dice PERCHÉ il file non si è letto — `'rovinato'` (letto, ma il JSON è
+   rotto) o `'non-letto'` (c'è e non si apre: bloccato oltre i ritenti, una cartella, i permessi). Per la migrazione della copia della
+   finestra non è la stessa cosa: un file rovinato vale «nessuna ricevuta» (giudice v1304), uno non letto non decide niente. */
+async function leggiFileRicevute(file, perché = () => {}, tentativi = LETTURA_TENTATIVI) {
   for (let tentativo = 0; ; tentativo += 1) {
+    let testo;
     try {
-      const letto = JSON.parse(await readFile(file, 'utf8'));
-      return { ricevute: Array.isArray(letto?.ricevute) ? letto.ricevute.slice(-RICEVUTE_MASSIME) : [], limite: Number.isSafeInteger(letto?.limiteRevisioni) ? letto.limiteRevisioni : null };
+      testo = await readFile(file, 'utf8');
     } catch (e) {
       if (e?.code === 'ENOENT') return { ricevute: [], limite: null };
-      if (!CODICI_DI_CONTESA.has(e?.code) || tentativo >= LETTURA_TENTATIVI - 1) return null;
+      if (!CODICI_DI_CONTESA.has(e?.code) || tentativo >= tentativi - 1) { perché('non-letto'); return null; }
       await new Promise((risolvi) => { setTimeout(risolvi, Math.min(20 * (2 ** tentativo), 200)); });
+      continue;
     }
+    try {
+      const letto = JSON.parse(testo);
+      return { ricevute: Array.isArray(letto?.ricevute) ? letto.ricevute.slice(-RICEVUTE_MASSIME) : [], limite: Number.isSafeInteger(letto?.limiteRevisioni) ? letto.limiteRevisioni : null };
+    } catch { perché('rovinato'); return null; }
   }
+}
+
+/* 0.2.2-DL, giro 3: il nome della migrazione nel timbro della copia della finestra (vedi `creaServizioImpostazioni`) */
+export const MIGRAZIONE_DOMANDE_LARGHE = 'user-bubble-full-width-default-on-0.2.2';
+/* giro 5: chi ha chiesto il valore che una migrazione rimasta in sospeso porta alle finestre aperte: nessuno, è l'aggiornamento */
+const ORIGINE_AGGIORNAMENTO = Object.freeze({ tipo: 'aggiornamento' });
+/** L'ultimo cambio di una voce nelle ricevute (in ordine di arrivo): `{ dopo, annullata }` o `null`. Una ricevuta fuori forma non conta. */
+export function ultimoCambioDellaVoce(elenco, chiave) {
+  if (!Array.isArray(elenco)) return null;
+  for (let i = elenco.length - 1; i >= 0; i -= 1) {
+    const r = elenco[i];
+    const cambio = r && typeof r === 'object' && Array.isArray(r.cambi) ? r.cambi.find((c) => c && typeof c === 'object' && c.chiave === chiave) : null;
+    if (cambio) return { dopo: cambio.dopo, annullata: Boolean(r.annullata) };
+  }
+  return null;
 }
 
 /** Il prezzo detto sulla carta e nell'esito: dollari per milione di token, ingresso / uscita. */
@@ -463,7 +490,7 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
    *   la nota del cambio va col prossimo messaggio, «a mid-history system message would break providers and prompt caching») e Claude
    *   Code. Niente ricevuta nella nota (l'Annulla resta della persona). Chi annota e si rompe non cambia l'esito.
    */
-  const annotaPerIlModello = (ricevuta, { annullo = false } = {}) => {
+  const annotaPerIlModello = (ricevuta, { annullo = false, trattenuto = null } = {}) => {
     if (typeof annotaPerIlModelloFn !== 'function' || !ricevuta || typeof ricevuta.sessionId !== 'string' || !ricevuta.sessionId) return;
     const cambi = Array.isArray(ricevuta.cambi) ? ricevuta.cambi : [];
     if (!cambi.length) return;
@@ -471,7 +498,7 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
     const quanti = cambi.length === 1 ? (annullo ? 'a settings change' : 'a setting') : (annullo ? `a change to ${cambi.length} settings` : `${cambi.length} settings`);
     const righe = cambi.map((c) => {
       const v = perChiave.get(c.chiave);
-      return `${c.chiave}${v ? ` (${v.testo.en})` : ''}: ${mostra(c.prima)} → ${mostra(c.dopo)}${v ? ` (${dove(v)})` : ''}`;
+      return `${c.chiave}${v ? ` (${v.testo.en})` : ''}: ${mostra(c.prima)} → ${mostra(c.dopo)}${v ? ` (${dove(v)})` : ''}${trattenuto && c.chiave === trattenuto.chiave ? `,${fraseDelTrattenuto(trattenuto)}` : ''}`;
     });
     const testo = `The user ${annullo ? 'undid' : 'changed'} ${quanti} ${da}: ${righe.join('; ')}. It applies from this request.`;
     try { annotaPerIlModelloFn(ricevuta.sessionId, testo); } catch { /* la nota non cambia mai l'esito */ }
@@ -579,14 +606,29 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
     elenco = punteggi.sort((a, b) => b[1] - a[1]).map(([v]) => v);
     return { elenco, esatta: false };
   }
-  function rigaDiVoce(v, letto, esatta) {
+  /*
+   * 0.2.2-DL, giro 6 (controllore del giro 5, R-A; owner 10/11/2026 22:51) — LA PORTA DEL MODELLO DICE IL VERO. Finché la migrazione di
+   *   una voce della finestra aspetta (`copia-finestra.mjs`, `sospesi`), il valore che il modello legge non è confermato: la finestra può
+   *   mostrare l'opposto. `list` e `pick` lo dicono sulla riga di quella voce, e solo lì; leggere non decide mai niente (giudice v1377).
+   *   Come Hermes `tools/set_theme_tool.py:3-4` («The renderer applies the values and answers with what it applied, so the model reports
+   *   what the user sees»: l'attrezzo delle preferenze dice ciò che la persona vede, non ciò che il server crede).
+   */
+  const NOTA_NON_CONFERMATA = 'not confirmed yet: the Settings window may still show the opposite; a "set" to this same value, when the person asks for it, confirms it';
+  async function chiaviNonConfermate() {
+    if (typeof copiaFinestra?.nonConfermati !== 'function') return new Set();
+    let campi = {};
+    try { campi = await copiaFinestra.nonConfermati() ?? {}; } catch { campi = {}; }
+    return new Set(voci.filter((v) => v.fonte === 'finestra' && Object.hasOwn(campi, v.campo)).map((v) => v.chiave));
+  }
+  function rigaDiVoce(v, letto, esatta, nonConfermata = false) {
     const valori = v.tipo === 'modello' ? `a model id${v.nullo ? ' or null' : ''}`
+      : v.tipo === 'memoria' ? DESCRIZIONE_TOKEN // 11/11/2026: la memoria del modello (`conversation.modelMemory`)
       : v.tipo === 'sino' ? 'true or false'
         : esatta || v.valori.length <= VALORI_MOSTRATI + 2 ? `one of ${v.valori.join(', ')}`
           : `one of ${v.valori.slice(0, VALORI_MOSTRATI).join(', ')}, … (${v.valori.length}; query "${v.chiave}" for all)`;
     const attuale = letto?.errore !== undefined ? 'unreadable now' : mostra(letto?.valore);
     const tag = v.gruppo ? `, ${TAG_GRUPPO[v.gruppo]}` : '';
-    return `- ${v.chiave} = ${attuale}; ${valori}; ${AMBITO_PUBBLICO[v.ambito]}${tag}`;
+    return `- ${v.chiave} = ${attuale}; ${valori}; ${AMBITO_PUBBLICO[v.ambito]}${tag}${nonConfermata ? `; ${NOTA_NON_CONFERMATA}` : ''}`;
   }
   async function elenca(argomenti, contesto) {
     const sezione = typeof argomenti?.section === 'string' && argomenti.section.trim() ? argomenti.section.trim() : null;
@@ -598,7 +640,8 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
     const { elenco, esatta } = trova({ sezione, query });
     const prese = elenco.slice(0, VOCI_MASSIME_IN_ELENCO);
     const letti = await valoriDi(prese, contesto);
-    const righe = prese.map((v) => rigaDiVoce(v, letti.get(v.chiave), esatta));
+    const sospese = await chiaviNonConfermate(); // giro 6: vuoto quando le due parti sono d'accordo, e le righe restano quelle di sempre
+    const righe = prese.map((v) => rigaDiVoce(v, letti.get(v.chiave), esatta, sospese.has(v.chiave)));
     const termini = new Set(parole(query));
     const rimandi = query ? RIMANDI_IMPOSTAZIONI.filter((r) => r.parole.some((p) => termini.has(p))).map((r) => r.testo) : [];
     if (!righe.length && !rimandi.length) return { ok: true, testo: `No setting matches${query ? ` "${query}"` : ''}. Sections: ${conteggi().map(([s]) => s).join(', ')}. Revision ${contatore}.` };
@@ -721,6 +764,23 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
     return { risposta, finestraAnnunciata };
   }
 
+  /*
+   * Giro 2, D4 (giudice v1458/v1461, owner 13:08): l'Accesso pieno scelto e TRATTENUTO dalla fiducia della cartella. La scelta resta quella
+   *   (la ricevuta e l'Annulla la tengono), ma la persona e il modello leggono il modo VERO: la fonte della conversazione lo dice dopo la
+   *   scrittura (`trattenuto`: in attesa della risposta, o cartella col «No»). `{ chiave, motivo, vale }` o null. Come Codex, che dice il
+   *   modo in vigore e non quello chiesto (`permission_popups.rs:340`, la conferma prima di salire a full-access).
+   */
+  async function trattenutoDopo(cambi, contesto) {
+    const c = cambi.find((x) => x.v?.chiave === 'conversation.permissions' && x.dopo === 'fullAccess');
+    if (!c || typeof fonti.sessione?.leggi !== 'function' || !contesto?.sessionId) return null;
+    let letto = null;
+    try { letto = await fonti.sessione.leggi(contesto); } catch { return null; }
+    if (!letto?.trattenuto || letto.permessi === 'Full access') return null;
+    return { chiave: c.v.chiave, motivo: letto.trattenuto, vale: valorePubblico(c.v, letto.permessi) };
+  }
+  const fraseDelTrattenuto = (t) => (t.motivo === 'cartella-non-fidata'
+    ? ` but Full access is held: the person does not trust this folder, so here this conversation works as ${mostra(t.vale)} (edits and commands ask first).`
+    : ` but Full access is held: the person has not answered yet whether they trust this folder, so for now this conversation works as ${mostra(t.vale)} (edits and commands ask first).`);
   function codaDellaFinestra(c, esito) {
     if (c.v.fonte !== 'finestra') return '';
     if (!esito.finestraAnnunciata) return ' No TALOS window is open: it applies when one opens.';
@@ -743,6 +803,9 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
   /* PR21-I2: vero quando il file c'è ma non si è letto — allora NON si scrive (le ricevute nuove vivono in memoria), e a ogni scrittura
      si riprova a leggerlo; letto, le sue ricevute vanno davanti a quelle nuove. */
   let fileDaRileggere = false;
+  /* giro 4: perché l'ultima lettura non è riuscita (`'rovinato'` o `'non-letto'`, vedi `leggiFileRicevute`) */
+  let perchéNonLetto = null;
+  const segnaPerché = (motivo) => { perchéNonLetto = motivo; };
   let avvisato = false;
   function unisciDalDisco(letto) {
     ricevute.unshift(...letto.ricevute);
@@ -753,7 +816,7 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
   function caricaRicevute() {
     caricamento ??= (async () => {
       if (!fileRicevute) return ricevute;
-      const letto = await leggiFileRicevute(fileRicevute);
+      const letto = await leggiFileRicevute(fileRicevute, segnaPerché);
       if (letto) unisciDalDisco(letto); else fileDaRileggere = true;
       return ricevute;
     })();
@@ -761,18 +824,26 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
   }
   /* REV8-04: lo stesso file tiene le ricevute e il limite delle revisioni prenotate; le ricevute si caricano PRIMA di scrivere, così una
      prenotazione all'avvio non cancella quelle già sul disco. Il contenuto si costruisce quando tocca a lui: porta sempre l'ultimo limite. */
+  /* 0.2.2-DL, giro 5: la rilettura del file non letto. La chiedono `scriviFile` (coi ritenti interi) e il ritento della migrazione qui
+     sotto (un tentativo solo: chi cambia l'aspetto non aspetta 1,3 s a ogni clic), anche insieme: le ricevute del disco entrano in
+     memoria UNA volta sola (`unisciDalDisco`), chi arriva secondo le trova già lì. ⇒ vero se adesso sono in memoria. */
+  async function rileggi(tentativi = LETTURA_TENTATIVI) {
+    if (!fileDaRileggere) return true;
+    const letto = await leggiFileRicevute(fileRicevute, segnaPerché, tentativi);
+    if (letto && fileDaRileggere) { fileDaRileggere = false; unisciDalDisco(letto); }
+    return !fileDaRileggere;
+  }
   function scriviFile() {
     if (!fileRicevute) return Promise.resolve();
     const lavoro = async () => {
       await caricaRicevute();
       if (fileDaRileggere) {
-        const letto = await leggiFileRicevute(fileRicevute);
-        if (!letto) {
+        if (!(await rileggi())) {
           if (!avvisato) { avvisato = true; console.warn(`[impostazioni] the receipts file exists but cannot be read; it is left untouched and new receipts stay in memory: ${fileRicevute}`); }
           return;
         }
-        fileDaRileggere = false;
-        unisciDalDisco(letto);
+        /* giro 5 (reperto D1c): le ricevute sono tornate leggibili ⇒ la migrazione rimasta «non decisa» riprova adesso, non al riavvio */
+        try { await copiaFinestra?.ritentaMigrazioni?.(); } catch { /* la migrazione non ferma mai le ricevute */ }
       }
       await scriviAtomico(fileRicevute, `${JSON.stringify({ schema: 'talos.app-settings.receipts.v1', ricevute, limiteRevisioni }, null, 1)}\n`);
     };
@@ -781,6 +852,96 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
   }
   const salvaRicevute = scriviFile;
   void scriviFile(); // REV8-04: la prenotazione del primo blocco di questo avvio
+
+  /*
+   * 0.2.2-DL, giro 3 (decisione dell'owner del 09/11/2026 21:57, «Spente, rispetta la scelta»; giudice v1303-v1304) — «Domande a tutta
+   *   larghezza» è accesa di serie dalla 0.2.2, ma la finestra delle 0.2.0 e 0.2.1 mandava al server l'aspetto INTERO alla prima apertura
+   *   (`copia-sul-server.js`, `valoriDellaFinestra`): chi non l'ha mai toccata ha qui un `userBubbleFullWidth:false` esplicito, che
+   *   vincerebbe sul valore di serie nuovo (`leggiFonte`). Al primo avvio, una volta sola (`migraUnaVolta`, timbro nel file della copia):
+   *   · il false scritto prima del timbro si SCARTA (vale il valore di serie, accesa);
+   *   · TRANNE se nelle ricevute l'ultimo cambio di quella voce è «→ false» e non è stato annullato: una scelta con la ricevuta (il `set`
+   *     del modello, `/settings` della persona anche dal dispositivo, l'Annulla di un'accensione). Quel false RESTA, e la revisione
+   *     della copia avanza: la finestra, che in locale non l'aveva scritto (salvataggio rado della 0.2.0) e oggi mostra accesa, trova una
+   *     copia più nuova e si spegne;
+   *   · spenta con l'interruttore della finestra non lascia ricevuta: si scarta (indistinguibile da chi non l'ha mai toccata).
+   *   · Ricevute mancanti o rovinate (lette, JSON rotto o fuori forma) = nessuna ricevuta (il false si scarta), mai un errore all'avvio.
+   *   · (giro 4, revisione del giro 2, reperto 1) Ricevute che ci sono ma NON SI LEGGONO (bloccate oltre i ritenti da un antivirus o da
+   *     OneDrive, una cartella al loro posto, i permessi): la migrazione NON decide. `decidi` lancia ⇒ `'non-decisa'`: niente scarto,
+   *     niente timbro, il disco resta, si riprova all'avvio dopo. Decidere su un elenco non letto perderebbe per sempre un false scelto
+   *     con la ricevuta (la regola di `leggiFileRicevute`: «`null` vuol dire NON SCRIVERE SOPRA»). Come Hermes `cron/jobs.py:1468-1469`
+   *     («`[]` if missing, `None` if corrupt (never shrink-merge against an unknown baseline)») e `:1511-1519` («fail closed: writing over
+   *     an unknown baseline would silently drop every job in it»).
+   *   · (0.2.2, giro 5, revisione del giro 3, reperto D1) Una migrazione non decisa NON aspetta il riavvio (`copia-finestra.mjs`, in
+   *     testa): riprova quando `scriviFile` rilegge le ricevute, e prima di ogni scrittura della copia (qui con UNA lettura, senza i
+   *     ritenti). Finché aspetta: la finestra che manda «accesa» non l'ha mai vista spenta (è il suo valore di serie): non si scrive sopra
+   *     il false; la finestra che manda «spenta», e `/settings` della persona che la chiede spenta («già così», nessuna ricevuta),
+   *     l'hanno scelta in questa versione: resta, col timbro (giro 6: anche il `set` del modello ESEGUITO allo stesso valore, vedi `confermaSeInSospeso`; mai la sua anteprima né una lettura). Quando si chiude dopo un'attesa, le finestre aperte ricevono il valore
+   *     deciso (`talos.impostazioni-finestra`), sennò la prossima scheda mandata dalla finestra lo coprirebbe col suo.
+   *     Se le ricevute non si leggono MAI, la finestra mostra accesa e il modello legge spenta finché una delle due porte non sceglie
+   *     (misurato, FIN-05): NON si manda il false alla finestra prima di aver deciso, perché a chi non l'ha mai toccata resterebbe
+   *     scritto in locale anche dopo lo scarto (misurato su una copia il 10/11/2026: finestra spenta e modello accesa a ogni avvio dopo).
+   *   Le ricevute si leggono da `caricaRicevute` (il file `.impostazioni-ricevute.json`, `{ ricevute: [...] }` in ordine di arrivo: l'ultima
+   *   è la più nuova; ogni ricevuta `{ cambi: [{ chiave, prima, dopo }], annullata }`). Un ospite senza copia della finestra (la CLI) non fa
+   *   niente. Hermes `hermes_cli/config.py:2400-2403` (`_explicit_config_paths`: ciò che la persona ha scritto resta anche se uguale al
+   *   valore di serie) e `:1240-1243` (timbro con la migrazione).
+   */
+  const vocePiena = perChiave.get('appearance.userBubbleFullWidth');
+  if (vocePiena && vocePiena.fonte === 'finestra' && typeof copiaFinestra?.migraUnaVolta === 'function') {
+    let rimandoDetto = false;
+    void copiaFinestra.migraUnaVolta(MIGRAZIONE_DOMANDE_LARGHE, async (valori, { ritento = false } = {}) => {
+      if (valori[vocePiena.campo] !== false) return { valori, avanza: false };
+      let elenco = [];
+      try { const lette = await caricaRicevute(); elenco = Array.isArray(lette) ? lette : []; } catch { elenco = []; }
+      if (ritento && fileDaRileggere) await rileggi(1); // giro 5: al ritento si guarda di nuovo il disco (le lette entrano in `elenco`, che è l'elenco vivo)
+      if (fileDaRileggere && perchéNonLetto !== 'rovinato') {
+        if (!rimandoDetto) { rimandoDetto = true; console.warn(`[impostazioni] the receipts file exists but cannot be read: the full-width questions update waits until it can be read: ${fileRicevute}`); }
+        throw Object.assign(new Error('receipts file not read'), { code: 'RECEIPTS_NOT_READ' });
+      }
+      const ultimo = ultimoCambioDellaVoce(elenco, vocePiena.chiave);
+      if (ultimo && ultimo.dopo === false && !ultimo.annullata) return { valori, avanza: true };
+      const { [vocePiena.campo]: _scartato, ...resto } = valori;
+      return { valori: resto, avanza: false };
+    }, {
+      campi: [vocePiena.campo],
+      /* giro 5: chiusa dopo un'attesa ⇒ le finestre aperte prendono il valore deciso (accesa di serie se il false è stato scartato) */
+      quandoSiChiude: ({ revisione, valori }) => {
+        const deciso = Object.hasOwn(valori, vocePiena.campo) ? valori[vocePiena.campo] : diSerieFinestra[vocePiena.campo];
+        void annunciaAlleFinestre({ [vocePiena.campo]: deciso }, revisione, ORIGINE_AGGIORNAMENTO);
+      },
+    });
+  }
+  /* giro 5: la voce che la PERSONA chiede uguale a com'è («già così», `/settings`) mentre la sua migrazione aspetta è una scelta di
+     questa versione: resta.
+     giro 6 (R-A, owner 10/11/2026 22:51: «se la persona chiede di cambiarla, chiuda il disaccordo»): passa di qui anche il `set` del
+     modello ESEGUITO allo stesso valore. Nel giro 5 no («senza carta il modello non decide»): ma così rispondeva «Nothing to change»
+     mentre la finestra mostrava l'opposto, e la persona che gliel'aveva chiesta spenta la vedeva ancora accesa. Ora il valore che il
+     modello legge (e che `list` dichiara «not confirmed yet») diventa quello di tutti, e la finestra aperta lo segue. Resta senza carta
+     (0 carte in più; il valore non cambia per il modello). Giro 7 (K2): ma lascia la RICEVUTA di ciò che la finestra mostrava
+     (`confermeVisibili`), e la persona lo rovescia con il suo «Annulla» o con un tocco sull'interruttore.
+     ⇒ vero se una migrazione si è chiusa adesso. MAI dall'anteprima, da `list` o da `pick` (giudice v1377, (iii)). */
+  async function confermaSeInSospeso(chiavi) {
+    if (!vocePiena || !Array.isArray(chiavi) || !chiavi.includes(vocePiena.chiave) || typeof copiaFinestra?.confermaInSospeso !== 'function') return false;
+    return (await copiaFinestra.confermaInSospeso([vocePiena.campo])) === true;
+  }
+  /*
+   * 0.2.2-DL, giro 7 (controllore del giro 6, K2: R1 e R2) — CIÒ CHE LA PERSONA VEDE CAMBIARE HA LA SUA TRACCIA. Per il modello la
+   *   conferma non cambia niente (legge già quel valore), ma la finestra, che finché la migrazione aspetta mostra il suo valore di serie,
+   *   CAMBIA: l'interruttore passa da accesa a spenta. Prima quel cambio non aveva ricevuta, né «Cambiata da TALOS · Annulla», né
+   *   notifica, e nel `set` misto la carta non lo nominava: meno traccia di un cambio senza carta in Accesso pieno. Ora le voci chieste
+   *   uguali che il `set` confermerebbe e che la finestra mostra DIVERSE diventano cambi da mostrare `{ v, prima, dopo }`: `prima` è ciò
+   *   che la finestra mostra (il valore di serie: finché la migrazione aspetta il campo non le arriva, `copia-finestra.mjs`, `leggi`; e
+   *   una finestra che avesse mandato lo stesso valore l'avrebbe già chiusa), `dopo` ciò che il modello legge. Vanno sulla carta del
+   *   `set` misto, nella ricevuta e nella risposta. Il `set` puro resta senza carta (regola 17: 0 carte in più). Sola lettura: non decide.
+   *   Come WorkOS (blog «AI agent trace tampering and audit logs», letto l'11/11/2026): «Emit an audit event for every agent action that
+   *   changes state, with the agent as the actor»; Hermes `tools/set_theme_tool.py:3-4` («the model reports what the user sees»).
+   */
+  async function confermeVisibili(chiavi, contesto) {
+    if (!vocePiena || !Array.isArray(chiavi) || !chiavi.includes(vocePiena.chiave) || !(await chiaviNonConfermate()).has(vocePiena.chiave)) return [];
+    const mostrata = valorePubblico(vocePiena, diSerieFinestra[vocePiena.campo]);
+    const letta = (await valoriDi([vocePiena], contesto)).get(vocePiena.chiave);
+    if (!letta || letta.errore !== undefined || stesso(mostrata, letta.valore)) return [];
+    return [{ v: vocePiena, prima: mostrata, dopo: letta.valore }];
+  }
   async function nuovaRicevuta({ cambi, contesto, annulla = null }) {
     const elenco = await caricaRicevute();
     /* REV8-03: il valore INTERNO di prima, per chiave, solo delle voci che lo hanno (Coordinazione). Sta sul disco con la ricevuta, così
@@ -869,8 +1030,9 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
           const v = perChiave.get(typeof argomenti?.key === 'string' ? argomenti.key.trim() : '');
           if (!v) return rifiuto('"pick" needs "key": a key that list returned.');
           const letto = (await valoriDi([v], contesto)).get(v.chiave);
-          const scelte = v.tipo === 'sino' ? 'true, false' : v.tipo === 'modello' ? 'a model id from the model selector' : v.valori.join(', ');
-          return { ok: true, testo: `${v.chiave} (${v.testo.en}) is ${mostra(letto?.valore)}. Choices: ${scelte}. Ask the person with ask_user_question, then call "set" with their choice.` };
+          const scelte = v.tipo === 'sino' ? 'true, false' : v.tipo === 'modello' ? 'a model id from the model selector' : v.tipo === 'memoria' ? DESCRIZIONE_TOKEN : v.valori.join(', ');
+          const sospesa = (await chiaviNonConfermate()).has(v.chiave) ? ` N${NOTA_NON_CONFERMATA.slice(1)}.` : ''; // giro 6: dirlo non decide niente
+          return { ok: true, testo: `${v.chiave} (${v.testo.en}) is ${mostra(letto?.valore)}.${sospesa} Choices: ${scelte}. Ask the person with ask_user_question, then call "set" with their choice.` };
         }
         if (azione !== 'set' && azione !== 'undo') return rifiuto('app_settings needs action "list", "set", "pick" or "undo".');
         /* PR21-I6: l'esecuzione aspetta il suo turno; l'anteprima no */
@@ -888,8 +1050,26 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
         if (azione === 'set') {
           const piano = await pianoDelSet(argomenti, contesto);
           if (!piano.ok) return rifiuto(piano.messaggio); // al modello solo la frase: motivo e voce sono della rotta della persona
-          if (!piano.cambi.length) return fase === 'anteprima' ? { ok: true, carta: false } : { ok: true, testo: `Nothing to change: ${piano.gia.join(', ')} already ${piano.gia.length === 1 ? 'has' : 'have'} that value.` };
-          const cambi = await Promise.all(piano.cambi.map((c) => cambioDaMostrare(c.v, c.prima, c.dopo)));
+          if (!piano.cambi.length && fase === 'anteprima') return { ok: true, carta: false }; // regola 17: il `set` puro resta senza carta
+          /* giro 6 (R-A): solo all'ESECUZIONE, una voce chiesta uguale mentre la sua migrazione aspetta si conferma.
+             giro 7 (K2): ciò che la finestra mostrava e ora cambia (`confermeVisibili`, letto PRIMA della conferma) va sulla carta del
+             `set` misto (sola lettura) e, eseguito, nella ricevuta e nella risposta, come ogni cambio del modello. */
+          const visibili = await confermeVisibili(piano.gia, contesto);
+          let confermati = [];
+          let confermata = null;
+          if (fase !== 'anteprima' && await confermaSeInSospeso(piano.gia)) {
+            confermati = visibili;
+            if (!confermati.length) { // la finestra la mostrava già così: per la persona niente cambia, ed è vero dire «stays»
+              const letta = (await valoriDi([vocePiena], contesto)).get(vocePiena.chiave);
+              confermata = `Confirmed: ${vocePiena.chiave} stays ${mostra(letta?.valore)}; it was not confirmed yet.`;
+            }
+          }
+          if (!piano.cambi.length && !confermati.length) {
+            if (confermata) return { ok: true, testo: confermata };
+            return { ok: true, testo: `Nothing to change: ${piano.gia.join(', ')} already ${piano.gia.length === 1 ? 'has' : 'have'} that value.` };
+          }
+          const daMostrare = fase === 'anteprima' ? [...piano.cambi, ...visibili] : [...piano.cambi, ...confermati];
+          const cambi = await Promise.all(daMostrare.map((c) => cambioDaMostrare(c.v, c.prima, c.dopo)));
           if (fase === 'anteprima') {
             /* cura 4: la ragione e il suo segnale vanno SOLO nell'anteprima della carta, accanto alle righe del catalogo */
             const ragione = ragioneDellaCarta(argomenti?.reason);
@@ -906,7 +1086,8 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
           const o = origine();
           const confermatoDa = confermaDi(toolCallId, senzaCarta);
           const esito = await scriviCambi(piano.cambi, { ...contesto, origine: o, confermatoDa });
-          const ricevuta = await nuovaRicevuta({ cambi: piano.cambi, contesto: { ...contesto, origine: o, confermatoDa } });
+          /* giro 7 (K2): una ricevuta sola per tutto ciò che la persona vede cambiare, così il suo Annulla rimette anche la voce confermata */
+          const ricevuta = await nuovaRicevuta({ cambi: daMostrare, contesto: { ...contesto, origine: o, confermatoDa } });
           /*
            * Cura 5 (owner 01/11 sera, «Fallo e avvisami dopo», non la consigliata): in Accesso pieno una ragione sospetta non ferma il cambio,
            *   che è già avvenuto senza carta; l'evento della conversazione porta i codici (`avvisi`) e la ricevuta, e la finestra disegna la
@@ -919,8 +1100,13 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
               try { await fonti.sessione.avvisa(sessionId, { origine: o, confermatoDa, avvisi, ricevuta: ricevuta.id, frase: fraseDellaRagione(argomenti?.reason) }); } catch { /* l'esito resta */ }
             }
           }
-          const righe = cambi.map((c, i) => `${c.chiave}: ${mostra(c.prima)} → ${mostra(c.dopo)} (${dove(piano.cambi[i].v)}${c.prezzo ? `; ${frasePrezzo(c.prezzo.prima)} → ${frasePrezzo(c.prezzo.dopo)}` : ''}).${codaDellaFinestra(piano.cambi[i], esito)}`);
+          const trattenuto = await trattenutoDopo(piano.cambi, contesto); // giro 2, D4: il modo vero, non solo quello chiesto
+          const righe = cambi.map((c, i) => (i < piano.cambi.length
+            ? `${c.chiave}: ${mostra(c.prima)} → ${mostra(c.dopo)} (${dove(piano.cambi[i].v)}${c.prezzo ? `; ${frasePrezzo(c.prezzo.prima)} → ${frasePrezzo(c.prezzo.dopo)}` : ''})${trattenuto && c.chiave === trattenuto.chiave ? `,${fraseDelTrattenuto(trattenuto)}` : '.'}${codaDellaFinestra(piano.cambi[i], esito)}`
+            /* giro 7 (K2): il cambio come la persona lo vede, e perché per il modello il valore era già quello (mai «stays») */
+            : `${c.chiave}: ${mostra(c.prima)} → ${mostra(c.dopo)} (${dove(daMostrare[i].v)}). It was not confirmed yet: TALOS read ${mostra(c.dopo)} while the Settings window showed ${mostra(c.prima)}; now the window shows ${mostra(c.dopo)} too.`));
           righe[righe.length - 1] += ` Receipt ${ricevuta.id} (undo with receipt_id). Revision ${contatore}.`;
+          if (confermata) righe.push(confermata);
           notificaIlCambio(ricevuta); // cura 3: dopo l'esito, mai atteso
           return { ok: true, testo: righe.join('\n'), ricevuta: ricevuta.id };
         }
@@ -999,6 +1185,7 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
       if (MOTIVI_DELLA_REVISIONE.has(piano.motivo)) throw rifiutoDellaPersona('SETTINGS_CHANGED_MEANWHILE', 409, piano.messaggio, piano.motivo, params);
       throw rifiutoDellaPersona('SETTINGS_APPLY_REFUSED', 400, piano.messaggio, piano.motivo, params);
     }
+    await confermaSeInSospeso(piano.gia); // giro 5: «già così» è una scelta, se la migrazione aspetta
     if (!piano.cambi.length) return { ricevuta: null, cambi: [], gia: piano.gia, revisione: contatore };
     const pieno = { ...contesto, origine, confermatoDa };
     try {
@@ -1008,9 +1195,11 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
       throw rifiutoDellaPersona(typeof e?.code === 'string' ? e.code : 'SETTINGS_APPLY_REFUSED', 409, e?.message ?? 'nothing was changed.', 'setting-refused');
     }
     const ricevuta = await nuovaRicevuta({ cambi: piano.cambi, contesto: pieno });
+    const trattenuto = await trattenutoDopo(piano.cambi, contesto); // giro 2, D4: la ricevuta e la nota dicono il modo vero
     notificaIlCambio(ricevuta); // la stessa strada del modello; chi scrive la notifica tiene i cambi del modello e quelli dal dispositivo (giro 2, voce 2)
-    annotaPerIlModello(ricevuta); // giro 2, voce 1: il modello lo sa dal prossimo messaggio della persona
-    return { ricevuta: ricevuta.id, cambi: ricevuta.cambi.map((c) => ({ ...c })), gia: piano.gia, revisione: contatore };
+    annotaPerIlModello(ricevuta, { trattenuto }); // giro 2, voce 1: il modello lo sa dal prossimo messaggio della persona
+    return { ricevuta: ricevuta.id, cambi: ricevuta.cambi.map((c) => ({ ...c, ...(trattenuto && c.chiave === trattenuto.chiave ? { trattenuto: { motivo: trattenuto.motivo, vale: trattenuto.vale } } : {}) })),
+      gia: piano.gia, revisione: contatore };
   }
 
   return Object.freeze({
@@ -1047,7 +1236,7 @@ export function creaServizioImpostazioni({ fonti = {}, copiaFinestra = null, pre
         chiudi({ applicati: applicati && typeof applicati === 'object' ? applicati : {}, nonApplicati: nonApplicati && typeof nonApplicati === 'object' ? nonApplicati : {} });
         return { accettata: true };
       },
-      leggi: () => (copiaFinestra ? copiaFinestra.leggi() : Promise.resolve(null)),
+      leggi: () => (copiaFinestra ? copiaFinestra.leggi({ perLaFinestra: true }) : Promise.resolve(null)), // giro 5: senza ciò che una migrazione non ha ancora deciso
       /** La persona ha cambiato qualcosa nella finestra: la copia si aggiorna (e la revisione delle voci la vede alla prossima lettura). */
       dallaPersona: (valori) => (copiaFinestra ? copiaFinestra.dallaFinestra(valori) : Promise.resolve(null)),
     }),

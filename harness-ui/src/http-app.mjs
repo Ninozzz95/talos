@@ -34,6 +34,7 @@ import { ritrattoCartella } from './workspace-info.mjs'; // 06/9 F9/F10/F19-F21:
 import { modelloRichiestaValido, permessiPerAttrezzoRichiestaValido, permessiRichiestaValido, reasoningRichiestaValido } from './config.mjs';
 import { bollaValida, idAllegatiDellaBolla } from './bolla-della-persona.mjs';
 import { byteDichiarati, creaArchivioAllegati, eIdAllegato } from './allegati-dati.mjs'; // decisioni 43 e 47: gli allegati nei dati di TALOS
+import { provaIlMotoreLocale } from './doctor-motore-locale.mjs'; // 023 cura piccola: «Prova il motore locale» del Doctor
 import { ORIGINE_REMOTA, bollaConOrigine, origineValida } from './origine-remota.mjs'; // 18/10/2026: «dal telefono X»; R5.8 la chiusura
 
 /** C09 (owner 10/10/2026): la copia per lo schermo viaggia accanto al messaggio e si stacca prima dei validatori dei corpi, che
@@ -56,7 +57,7 @@ import { codiciDiagnosticiRecenti, getDiagnosticProblem, paramsPubblici, toPubli
 import { raccogliDiagnosticaSegnalazione } from './segnalazione-problema.mjs'; // «Segnala un problema» (owner 29/10/2026)
 import { createSseSession } from './http-lifecycle.mjs';
 import { eventoDiRichiesta } from './remoto/cartelle-dispositivi.mjs'; // R2.1 (24/10/2026): la carta del consenso spinta alla finestra
-import { iscriviConRigiocata } from './iscrizione-sessione.mjs';
+import { allineaSessioneDaFuori, iscriviConRigiocata } from './iscrizione-sessione.mjs';
 import { ROTTE_LUOGHI, PREFISSO_ROTTE_LUOGHI, creaRotteLuoghi } from './computer-use/luoghi-rotte.mjs'; // 03/11/2026: i luoghi di «Consenti sempre»
 import { COMPUTER_USE_ACCESO } from './computer-use/interruttore.mjs'; // decisioni 79-80: spento in questa release
 import { ROTTE_NOTIFICHE, creaRotteNotifiche } from './notifiche-rotte.mjs'; // contratto «notifiche» 31/10/2026: il registro del «visto» nel server
@@ -83,7 +84,7 @@ import { CARTELLA_MEMORIA, MemoryStoreError, aggiornaMemoria, creaMemoria, elimi
    (`research-store.mjs`): scriverne una seconda qui vorrebbe dire due difese che divergono
    proprio sul confine che conta. Qui serve per rispondere 400 invece di far lanciare il magazzino. */
 import { idRicercaValido } from './research-store.mjs';
-import { aliasDiLoopback, hostAmmesso, origineDellaFinestra, portaDaHost, rifiutoScritturaDaAltroSito } from './guardia-origine.mjs'; // 0.1.25
+import { aliasDiLoopback, etichettaDaHost, hostAmmesso, nomeDaHost, origineDellaFinestra, portaDaHost, rifiutoLetturaDaAltroSito, rifiutoScritturaDaAltroSito } from './guardia-origine.mjs'; // 0.1.25; giro 5 delle anteprime: nomi di pagina e letture da un altro sito
 import { CAMPO_BIGLIETTO, cookieValido, creaCassaDeiBiglietti, DURATA_COOKIE_S, firmaPaginaLocale, gettoneUguale, MODO_SENZA_GETTONE, NOME_COOKIE, valoreDelCookie } from './gettone.mjs'; // owner 02/11: il gettone c'è sempre
 /* ⭐⭐⭐⭐ 12/09, owner: «la ricerca approfondita deve avere una suite di esportazioni COMPLETA».
    ⛔ Il modulo è UNO e non conosce HTTP: qui si importa solo la porta (`costruisciEsportazione`) e
@@ -93,7 +94,9 @@ import { FORMATI_ESPORTAZIONE, costruisciEsportazione } from './research/esporta
 import { puntoDelRamo } from './punto-del-ramo.mjs'; // 24/10/2026: il fork «prima del giro» dalla finestra e dal dispositivo
 import { linguaDelTesto } from './lingua-del-testo.mjs'; // owner 28/10/2026 sera: la lingua dei messaggi scritti (ELD)
 import { capacitaDichiarate } from './capacita-dei-client.mjs'; // R-34 parte 2: `pending` filtra la carta di una chiamata scritta come testo
+import { statoDelLanciatore } from './kernel/lanciatore-windows.mjs'; // decisione 374 R1 (§10.6): «nipoti seguiti: sì/no» nella diagnostica
 import { requireRicercaDelMessaggio } from './ricerca-due-porte.mjs'; // 01/11/2026: la ricerca a due porte, il campo `ricerca`
+import { TETTI_LATO } from './chat-a-lato.mjs'; // l'Assistente (12/11/2026): da un dispositivo la domanda si chiude prima dei 120 s della chiamata in processo
 
 /*
  * La lingua di un messaggio SCRITTO che arriva senza `linguaDelMessaggio` (accordo con il Mobile, 28/10/2026 notte). Il server la riconosce
@@ -182,6 +185,7 @@ const API_ERROR_CODES = new Set([
   'SESSION_NOT_READY',
   'SIDE_CHAT_NO_ANSWER',
   'SIDE_CHAT_FAILED',
+  'ASSISTANT_FILE_REFUSED', // l'Assistente (11/11/2026): un file citato segreto o fuori dalle cartelle fidate
   'SESSION_STORE_WRITE_FAILED',
   'SESSION_STORE_HEADER_FAILED',
   'SESSION_STORE_FS_UNSUPPORTED', // 24/09/2026: cura exFAT, disco senza collegamenti né ripiego
@@ -285,6 +289,8 @@ const API_ERROR_CODES = new Set([
   'APPROVAL_ANSWER_FORBIDDEN',
   /* ⛔ C2-Q (08/10/2026) — la stessa cosa per la DOMANDA di una figlia alla persona. */
   'QUESTION_ANSWER_FORBIDDEN',
+  /* Giro di cura dopo i revisori (B, rosso del telefono; giudice v1553): «Consenti» davanti a un elenco che chi risponde non mostra. */
+  'QUESTION_ANSWER_NEEDS_DETAILS',
   'PREVIEW_FILE_SECRET', // anteprima nelle domande (owner 29/10/2026): un file del modello che la lettura tratterebbe da segreto
   /* ⛔ F3-10, 23/09/2026 — il modo Workflow è ritirato (400). */
   'MODE_WORKFLOW_RETIRED',
@@ -322,8 +328,12 @@ const API_ERROR_CODES = new Set([
   'CONTEXT_SETTINGS_UNAVAILABLE', // C1 (09/10/2026): l'interruttore del motore del contesto
   'COMMAND_SETTINGS_UNAVAILABLE', // owner 27/10/2026: dove girano i comandi, di serie
   'CHAT_SETTINGS_UNAVAILABLE', // decisione 140 (04/11/2026): «Blocchi vivi nelle risposte»
+  'ASSISTANT_SETTINGS_UNAVAILABLE', // l'Assistente (11/11/2026): con che modello pensa
   'COMPUTER_USE_SETTINGS_UNAVAILABLE', // decisione 310 (06/11/2026): «Uso del computer (Anteprima)» acceso o spento
+  'COMPUTER_USE_FILE_NOT_SET_ASIDE', // decisione 374 giro 2, A6 (08/11/2026): un cambio estraneo che non si mette da parte non si sovrascrive
+  'PUBLIC_CATALOG_SETTINGS_UNAVAILABLE', 'PUBLIC_CATALOG_LOCKED', // 0.2.2 (SignPath): «Catalogo pubblico dei modelli»; spento dalla variabile
   'FOLDER_TRUST_UNAVAILABLE', // decisioni 173/189/196 (04/11/2026): la fiducia delle cartelle (mai sul telefono)
+  'FOLDER_TRUST_TOO_WIDE', // giro 3 della fiducia (11/11/2026): un disco intero, la casa o sopra la casa non diventano mai fidati
   'SETTINGS_UNAVAILABLE', 'SETTINGS_UNDO_REFUSED', // Fase 8 (01/11/2026): le impostazioni dalla chat
   'SETTINGS_APPLY_REFUSED', 'SETTINGS_CHANGED_MEANWHILE', 'PC_CONFIRMATION_REQUIRED', // 02/11/2026: `/settings` della persona (dal PC e dal ponte)
   'MODEL_PREFERENCES_UNAVAILABLE', 'MODEL_FAVOURITES_FULL', // owner 29/10/2026: preferiti e recenti dei modelli, sul server
@@ -478,6 +488,7 @@ const STATUS_BY_CODE = Object.freeze({
   SESSION_NOT_READY: 409,
   SIDE_CHAT_NO_ANSWER: 502, // FE-010
   SIDE_CHAT_FAILED: 502, // FE-010
+  ASSISTANT_FILE_REFUSED: 403, // l'Assistente (11/11/2026)
   /* /goal G1 (14/10/2026): il testo non va (400, col suo codice: così la frase precisa arriva alla persona, vedi
      `MESSAGGIO_GIA_PER_LA_PERSONA`); l'obiettivo c'è ma non è nello stato giusto per il gesto (409, come
      WORKFLOW_RUN_STATE_CONFLICT); oppure questa conversazione non può averne uno (422: la richiesta è ben formata, è il
@@ -714,6 +725,10 @@ const STATUS_BY_CODE = Object.freeze({
   APPROVAL_ANSWER_FORBIDDEN: 403,
   /** C2-Q (08/10/2026): la stessa regola per la domanda di una figlia alla persona. */
   QUESTION_ANSWER_FORBIDDEN: 403,
+  /** Giro di cura dopo i revisori (B, rosso del telefono; giudice v1553): la risposta è capita ma non si può eseguire finché l'elenco intero
+      non è stato aperto (RFC 9110 §15.5.21, 422 Unprocessable Content). Non un 403: il telefono 0.1.48 libera la sua carta solo col 400 o
+      col 422 (domandeR4.ts:182-185) e col 403 restava bloccato su «Esito non verificato». */
+  QUESTION_ANSWER_NEEDS_DETAILS: 422,
   /** Anteprima nelle domande (owner 29/10/2026): un file indicato dall'anteprima del MODELLO che la lettura tratterebbe come segreto. */
   PREVIEW_FILE_SECRET: 403,
   /** ⛔ F3-10, 23/09/2026 — un valore ritirato è una richiesta sbagliata; Piano con figlie vive è lo stato che la blocca. */
@@ -753,8 +768,13 @@ const STATUS_BY_CODE = Object.freeze({
   CONTEXT_SETTINGS_UNAVAILABLE: 503,
   COMMAND_SETTINGS_UNAVAILABLE: 503,
   CHAT_SETTINGS_UNAVAILABLE: 503,
+  ASSISTANT_SETTINGS_UNAVAILABLE: 503,
   COMPUTER_USE_SETTINGS_UNAVAILABLE: 503,
+  COMPUTER_USE_FILE_NOT_SET_ASIDE: 409,
+  PUBLIC_CATALOG_SETTINGS_UNAVAILABLE: 503,
+  PUBLIC_CATALOG_LOCKED: 409,
   FOLDER_TRUST_UNAVAILABLE: 503,
+  FOLDER_TRUST_TOO_WIDE: 400,
   SETTINGS_UNAVAILABLE: 503,
   SETTINGS_UNDO_REFUSED: 409,
   SETTINGS_APPLY_REFUSED: 400,
@@ -878,8 +898,13 @@ export const MESSAGE_BY_CODE = Object.freeze({
   CONTEXT_SETTINGS_UNAVAILABLE: 'Context engine settings not available',
   COMMAND_SETTINGS_UNAVAILABLE: 'The default for where commands run is not available',
   CHAT_SETTINGS_UNAVAILABLE: 'Live blocks in replies is not available',
+  ASSISTANT_SETTINGS_UNAVAILABLE: 'The Assistant model choice is not available',
   COMPUTER_USE_SETTINGS_UNAVAILABLE: 'The computer use switch is not available',
+  COMPUTER_USE_FILE_NOT_SET_ASIDE: 'The computer use settings were changed outside TALOS and could not be moved aside, so nothing was saved',
+  PUBLIC_CATALOG_SETTINGS_UNAVAILABLE: 'The public model list switch is not available',
+  PUBLIC_CATALOG_LOCKED: 'The public model list is turned off for this computer by its system settings',
   FOLDER_TRUST_UNAVAILABLE: 'Folder trust is not available here',
+  FOLDER_TRUST_TOO_WIDE: 'TALOS never trusts a whole disk or the home folder: open the conversation in a project folder',
   SETTINGS_UNAVAILABLE: 'Settings from the chat are not available',
   SETTINGS_UNDO_REFUSED: 'The settings change was not undone',
   SETTINGS_APPLY_REFUSED: 'The settings change was not applied',
@@ -988,6 +1013,7 @@ export const MESSAGE_BY_CODE = Object.freeze({
   SESSION_NOT_READY: 'Session not ready for this action',
   SIDE_CHAT_NO_ANSWER: 'The model did not answer the side question',
   SIDE_CHAT_FAILED: 'The side question did not get an answer',
+  ASSISTANT_FILE_REFUSED: 'This file does not open from here',
   AUTOMATION_INVALID: 'Invalid automation parameters',
   AUTOMATION_SCHEDULE_INVALID: 'This schedule is not valid',
   AUTOMATION_SCHEDULE_TOO_FREQUENT: 'An automation runs at most every 5 minutes',
@@ -1083,6 +1109,8 @@ export const MESSAGE_BY_CODE = Object.freeze({
   APPROVAL_ANSWER_FORBIDDEN: 'This permission request can be answered only from the session that asked or from one that started it',
   QUESTION_NOT_PENDING: 'This question is no longer pending: the session has moved on',
   QUESTION_ANSWER_FORBIDDEN: 'This question can be answered only from the session that asked or from one that started it',
+  // senza punto finale: il PC e il telefono la mettono dentro la loro frase («Invio non riuscito: <frase>.»)
+  QUESTION_ANSWER_NEEDS_DETAILS: 'Open the whole list on the PC to allow this: this device cannot show it',
   PREVIEW_FILE_SECRET: 'This file is kept out of previews because it may hold a secret. Open it yourself from the Files tab if you need it',
   QUESTION_ANSWER_NOT_SAVED: 'The answer was not saved: the question was closed without an answer',
   PLAN_NOT_PENDING: 'This plan no longer waits for a choice: the session has moved on',
@@ -1249,7 +1277,10 @@ function creaNonceCsp() {
  */
 function intestazioniDocumentoConNonce(nonce, host) {
   /* un Host non di loopback non arriva fin qui: la guardia dell'Host lo rifiuta prima (`hostAmmesso`, in testa a `handle`) */
-  const proxy = typeof host === 'string' && host !== '' ? ` http://${aliasDiLoopback(host)}` : '';
+  /* Giro di sicurezza 5 delle anteprime: nel guscio del PC (che apre l'app su 127.0.0.1) ogni pagina resa ha un'origine sua alla stessa porta,
+     `<etichetta>.localhost` (`guardia-origine.mjs`). Solo quella porta, e sul nome `localhost` (il browser) no: lì le pagine restano dove erano. */
+  const pagine = typeof host === 'string' && nomeDaHost(host) === '127.0.0.1' ? ` http://*.localhost:${portaDaHost(host)}` : '';
+  const proxy = typeof host === 'string' && host !== '' ? ` http://${aliasDiLoopback(host)}${pagine}` : '';
   const csp = SECURITY_HEADERS['Content-Security-Policy']
     .replace("script-src 'self'", () => `script-src 'self' 'nonce-${nonce}'`)
     .replace("style-src 'self'", () => `style-src 'self' 'nonce-${nonce}'`)
@@ -2139,6 +2170,8 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/tools', metodi: ['GET'] },
   { schema: '/api/v1/setup/stato', metodi: ['GET'] },
   { schema: '/api/v1/doctor', metodi: ['GET'] },
+  // 023 cura piccola (owner 11/11/2026, decisione 9): «Prova il motore locale» del Doctor, solo dalla finestra di questo computer
+  { schema: '/api/v1/doctor/local-engine', metodi: ['POST'] },
   // «Segnala un problema» (owner 29/10/2026): la diagnostica della segnalazione, già ripulita nel server — sola lettura
   { schema: '/api/v1/diagnostica-segnalazione', metodi: ['GET'] },
   { schema: '/api/v1/workspace-info', metodi: ['GET'] },
@@ -2164,9 +2197,12 @@ const ROTTE_API = Object.freeze([
   { schema: '/api/v1/local-engine/window-policy', metodi: ['GET', 'POST'] },
   { schema: '/api/v1/local-engine/window/enlarge', metodi: ['POST'] }, // L1 1.3: «Enlarge the window» chiesto dalla persona // L1 1.3 (26/10/2026): quando la finestra di un modello locale si riempie // C1 (09/10/2026): l'interruttore del motore del contesto
   { schema: '/api/v1/context-settings', metodi: ['GET', 'POST'] }, // C1 (09/10/2026): l'interruttore del motore del contesto
+  { schema: '/api/v1/context-settings/model-window', metodi: ['GET'] }, // 11/11/2026: la memoria che TALOS usa per un modello
   { schema: '/api/v1/command-settings', metodi: ['GET', 'POST'] }, // owner 27/10/2026: dove girano i comandi, di serie
   { schema: '/api/v1/chat-settings', metodi: ['GET', 'POST'] }, // decisione 140 (04/11/2026): «Blocchi vivi nelle risposte»
-  { schema: '/api/v1/computer-use/settings', metodi: ['GET', 'POST'] }, // decisione 310 (06/11/2026): «Uso del computer (Anteprima)», spento di serie
+  { schema: '/api/v1/computer-use/settings', metodi: ['GET', 'POST'] },
+  { schema: '/api/v1/public-catalog/settings', metodi: ['GET', 'POST'] }, // 0.2.2 (SignPath): «Catalogo pubblico dei modelli» // decisione 310 (06/11/2026): «Uso del computer (Anteprima)», spento di serie
+  { schema: '/api/v1/assistant-settings', metodi: ['GET', 'POST'] }, // l'Assistente (11/11/2026): con che modello pensa
   { schema: '/api/v1/keep-awake-settings', metodi: ['GET', 'POST'] }, // 01/11/2026: «Tieni sveglio il PC»
   { schema: '/api/v1/conversation-memory-settings', metodi: ['GET', 'POST'] }, // 01/11/2026: «Memoria delle conversazioni»
   { schema: '/api/v1/model-preferences', metodi: ['GET', 'POST'] }, // owner 29/10/2026: preferiti e recenti dei modelli, PC e dispositivo
@@ -2347,7 +2383,8 @@ const ROTTE_API = Object.freeze([
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/resume$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/settings$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/compact$/, metodi: ['POST'] },
-  { schema: /^\/api\/v1\/sessions\/([^/]+)\/a-lato(?:\/trasforma)?$/, metodi: ['POST'] }, // FE-010
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/a-lato(?:\/trasforma|\/carta|\/ferma)?$/, metodi: ['POST'] }, // FE-010; l'Assistente: carta di un indirizzo e Stop (11/11)
+  { schema: /^\/api\/v1\/sessions\/([^/]+)\/a-lato(?:\/file)?$/, metodi: ['GET'] }, // l'Assistente (11/11/2026): le domande salvate e i file citati
   // BC-15 (11/09): «Migliora il prompt» — riscrive il testo del composer col modello DELLA SESSIONE.
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/migliora-prompt$/, metodi: ['POST'] },
   { schema: /^\/api\/v1\/sessions\/([^/]+)\/context\/?$/, metodi: ['GET'] },
@@ -3036,7 +3073,7 @@ function requireMemoriaBody(body, { creazione }) {
 function requireSessionSettingsBody(body) {
   // C2 «Per questa sessione» sul server (08/10/2026): `unisciPermessiPerAttrezzo` si unisce alle scelte vere, invece di sostituirle
   // C2-R7 (08/10/2026 sera): `rispettaNega` — il gesto della carta non scrive sopra un «nega» (vedi `aggiornaImpostazioniOra`)
-  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'fasciaVeloce', 'permessi', 'permessiPerAttrezzo', 'unisciPermessiPerAttrezzo', 'rispettaNega', 'fallbackProviders', 'modalitaOperativa', 'linguaInterfaccia', 'linguaDelleRisposte'];
+  const ammesse = ['modello', 'modelloPlanner', 'reasoning', 'fasciaVeloce', 'permessi', 'permessiPerAttrezzo', 'unisciPermessiPerAttrezzo', 'rispettaNega', 'fallbackProviders', 'modalitaOperativa', 'linguaInterfaccia', 'linguaDelleRisposte', 'motoRidotto'];
   const chiavi = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
   if (chiavi.length === 0 || chiavi.some((chiave) => !ammesse.includes(chiave))) {
     const errore = new Error('Invalid body: at least one recognized session preference is expected');
@@ -3087,6 +3124,11 @@ function requireSessionSettingsBody(body) {
     throw errore;
   }
   requireLinguaDelleRisposte(body);
+  if ('motoRidotto' in body && typeof body.motoRidotto !== 'boolean') { // reperto 17 (13/11)
+    const errore = new Error('motoRidotto must be true or false');
+    errore.code = 'QUERY_INVALID';
+    throw errore;
+  }
   return Object.fromEntries(chiavi.map((chiave) => [chiave, chiave === 'fallbackProviders' ? requireFallbackProviders(body[chiave]) : body[chiave]]));
 }
 
@@ -3179,10 +3221,12 @@ function requireApprovaBody(body) {
     || typeof body.requestId !== 'string' || body.requestId.length === 0
     || typeof body.approvato !== 'boolean'
     /* E1 (decisione 121): 'strumento' = «Sì per questo strumento in questa conversazione»; il nome lo prende il registro dalla domanda */
-    || (conAmbito && (!['cartella', 'percorso', 'volta', 'strumento'].includes(body.ambito) || body.approvato !== true))
+    /* Compiti lunghi (owner 13/11/2026 04:35): 'risposta' = «per tutte le chiamate della carta», con un sì o con un no; 'strumento' con
+       un no = «No a questo strumento fino al tuo prossimo messaggio». Quale carta li ammette lo decide il registro dalla domanda. */
+    || (conAmbito && (!['cartella', 'percorso', 'volta', 'strumento', 'risposta'].includes(body.ambito) || (body.approvato !== true && body.ambito !== 'strumento' && body.ambito !== 'risposta')))
     || (conRispostoDa && (typeof body.rispostoDa !== 'string' || body.rispostoDa.length === 0 || body.rispostoDa.length > 200))
   ) {
-    const errore = new Error('Invalid body: expected {requestId, approvato} or {requestId, approvato: true, ambito: "cartella"|"percorso"|"volta"|"strumento"}, with an optional rispostoDa');
+    const errore = new Error('Invalid body: expected {requestId, approvato} or {requestId, approvato: true, ambito: "cartella"|"percorso"|"volta"|"strumento"}, {requestId, approvato, ambito: "risposta"} or {requestId, approvato: false, ambito: "strumento"}, with an optional rispostoDa');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
@@ -3217,7 +3261,9 @@ function requireRispostaDomandaBody(body) {
   const chiavi = Object.keys(body ?? {});
   /* C2-Q (08/10/2026): `rispostoDa` facoltativo, come in `requireApprovaBody` — la sessione da cui la persona risponde (la carta
      della domanda di una figlia disegnata nel padre). Il registro lo verifica sulla catena; qui solo la forma. */
-  const ammesse = ['requestId', 'status', 'answers', 'rispostoDa'];
+  /* Giudice v1525 (decisione dell'owner 11/11 17:12 sul telefono di oggi): `showsDetails` facoltativo, vero o falso: il cliente dichiara
+     di saper mostrare l'elenco intero dietro una domanda (`details`). Senza, «Consenti» con `requiresDetails` si rifiuta (registro). */
+  const ammesse = ['requestId', 'status', 'answers', 'rispostoDa', 'showsDetails'];
   const conRispostoDa = Object.hasOwn(body ?? {}, 'rispostoDa');
   const status = body?.status;
   const answers = body?.answers;
@@ -3233,14 +3279,15 @@ function requireRispostaDomandaBody(body) {
     && typeof body?.requestId === 'string' && body.requestId.length > 0
     && ['answered', 'skipped', 'cancelled', 'expired'].includes(status) // 24/09/2026, decisione owner 35: la scadenza
     && answersCoerenti
-    && (!conRispostoDa || (typeof body.rispostoDa === 'string' && body.rispostoDa.length > 0 && body.rispostoDa.length <= 200));
+    && (!conRispostoDa || (typeof body.rispostoDa === 'string' && body.rispostoDa.length > 0 && body.rispostoDa.length <= 200))
+    && (!Object.hasOwn(body ?? {}, 'showsDetails') || typeof body.showsDetails === 'boolean');
   if (!valido) {
-    const errore = new Error('Invalid body: expected {requestId, status: answered|skipped|cancelled|expired, answers?}, with an optional rispostoDa');
+    const errore = new Error('Invalid body: expected {requestId, status: answered|skipped|cancelled|expired, answers?}, with an optional rispostoDa and an optional showsDetails (true or false)');
     errore.code = 'QUERY_INVALID';
     throw errore;
   }
   return { requestId: body.requestId, status, ...(status === 'answered' ? { answers } : {}),
-    ...(conRispostoDa ? { rispostoDa: body.rispostoDa } : {}) };
+    ...(conRispostoDa ? { rispostoDa: body.rispostoDa } : {}), ...(body.showsDetails === true ? { showsDetails: true } : {}) };
 }
 
 /**
@@ -3594,6 +3641,9 @@ export function createHttpApp({
   archivioAllegati = null, // decisioni 43 e 47: senza, nessuna scrittura e un errore chiaro, mai un ripiego nel progetto
   // C1 (owner 09/10/2026 sera): «Motore del contesto» in Impostazioni → Contesto (`impostazioni-contesto.mjs`).
   impostazioniContesto = null,
+  /* Giro dopo i revisori della soglia (11/11/2026, punto 11): `(modello) → { modello, finestra, fonte, letta }`, quale memoria TALOS usa
+     adesso per un modello (`finestra-di-ripiego.mjs::creaFinestraDellOspite`). Senza, la rotta risponde che non c'è. */
+  finestraDelModelloFn = null,
   /* Decisioni 173/189/196 (04/11/2026): la fiducia delle cartelle (`fiducia-cartelle.mjs`); assente sul telefono */
   fiduciaCartelle = null,
   finestraPiena = null, // L1 1.3: { scelta(), salvaScelta(v) } di `finestra-che-cresce.mjs`
@@ -3601,7 +3651,11 @@ export function createHttpApp({
   riconosciLinguaScritta = true,
   impostazioniComandi = null, // owner 27/10/2026: dove girano i comandi delle conversazioni nuove
   impostazioniChat = null, // decisione 140 (04/11/2026): i blocchi vivi delle conversazioni nuove (`impostazioni-chat.mjs`)
+  impostazioniAssistente = null, // l'Assistente (11/11/2026): il suo modello, di serie quello della chat (`impostazioni-assistente.mjs`)
   impostazioneComputerUse = null, // decisione 310 (06/11/2026): «Uso del computer (Anteprima)», spento di serie (`computer-use/impostazione.mjs`)
+  /* 0.2.2 (SignPath): «Catalogo pubblico dei modelli» (`catalogo-pubblico.mjs`): la sua riga, e la scelta di un modello di OpenRouter dalle
+     rotte delle sessioni (una scelta della persona riapre la lista spenta) */
+  catalogoPubblico = null,
   /* 01/11/2026, «Tieni sveglio il PC»: `{ leggi, scrivi }` (`impostazioni-pc-sveglio.mjs`) e se il server gira dentro l'app installata */
   impostazioniPcSveglio = null,
   nellAppInstallata = () => false,
@@ -3895,6 +3949,25 @@ export function createHttpApp({
     }
   }
 
+  /**
+   * Giro 5: un nome di pagina vale solo per `GET /api/v1/pagine/<lasciapassare>/…` col lasciapassare vivo di QUELLA etichetta (per pezzi, non una rotta).
+   * Correzione dell'11/11 (controllore del giro 5, punto 11): il cancello legge il percorso GREZZO, il router quello di `new URL`, che toglie
+   *   `%2e%2e`, `..` e trasforma le barre rovesciate (WHATWG URL, «double-dot URL path segment»): un percorso che la normalizzazione cambia
+   *   non è quello della pagina, come in `remoto/chiamata-interna.mjs:67-71`. Chromium manda già la forma normale (misurato in Electron:
+   *   `{`, `` ` ``, `^`, spazi e accenti arrivano codificati come li codifica `new URL`), quindi le pagine vere passano come prima.
+   *   Hermes ammette solo i nomi di loopback (`hermes_cli/web_server_boundary.py:18`, `_LOOPBACK_HOST_VALUES`, usato a `web_server.py:878`)
+   *   e rifiuta un percorso la cui decodifica aggiunge `.` o `..` (`web_server_files.py:50`).
+   */
+  function nomeDiPaginaAmmesso(req, method) {
+    const etichetta = etichettaDaHost(req.headers.host);
+    if (!etichetta || method !== 'GET') return false;
+    const grezzo = String(req.url ?? '').split('?')[0];
+    try { if (new URL(grezzo, 'http://127.0.0.1').pathname !== grezzo) return false; } catch { return false; }
+    const pezzi = grezzo.split('/');
+    if (pezzi.length < 6 || pezzi[0] !== '' || pezzi[1] !== 'api' || pezzi[2] !== 'v1' || pezzi[3] !== 'pagine') return false;
+    return lasciapassarePagine.etichetta(pezzi[4]) === etichetta;
+  }
+
   async function handle(req, res) {
     if (req.aborted || res.destroyed) return;
     const method = req.method || 'GET';
@@ -3919,7 +3992,12 @@ export function createHttpApp({
      *   diventa «stessa origine» e porta il SUO nome nell'Host). Solo i nomi di loopback, la porta non si confronta: come Hermes
      *   (`host_header_middleware`, web_server.py:620-640, 400). Vedi `guardia-origine.mjs`.
      */
-    if (!hostAmmesso(req.headers.host)) {
+    /*
+     * Giro di sicurezza 5 delle anteprime (11/11/2026, giudice v1417 a): il nome di una PAGINA (`<etichetta>.localhost`, `guardia-origine.mjs`)
+     *   passa SOLO per la rotta delle pagine, in GET, se l'etichetta è quella del lasciapassare nel percorso (vivo). Ogni altra rotta, ogni altro
+     *   metodo, l'etichetta di un altro lasciapassare o di uno scaduto: lo stesso 400 di un nome qualunque.
+     */
+    if (!hostAmmesso(req.headers.host) && !nomeDiPaginaAmmesso(req, method)) {
       sendJson(res, 400, errorEnvelope('HOST_FORBIDDEN', clock), method);
       return;
     }
@@ -3932,7 +4010,8 @@ export function createHttpApp({
      *   l'intestazione: il browser non le dà la risposta.
      */
     const requestOrigin = req.headers.origin;
-    const origineAmmessa = Boolean(requestOrigin) && origineDellaFinestra(requestOrigin, req.headers.host);
+    /* giro 5 (d): sul nome di una pagina nessuna intestazione CORS, per nessuna origine (la pagina non si legge da un'altra origine) */
+    const origineAmmessa = Boolean(requestOrigin) && !etichettaDaHost(req.headers.host) && origineDellaFinestra(requestOrigin, req.headers.host);
     if (requestOrigin) res.setHeader('Vary', 'Origin'); // la risposta cambia con l'Origin anche quando la si NEGA
     if (origineAmmessa) res.setHeader('Access-Control-Allow-Origin', requestOrigin);
     if (method === 'OPTIONS' && requestOrigin && !origineAmmessa) {
@@ -4135,6 +4214,13 @@ export function createHttpApp({
         sendJson(res, 401, errorEnvelope('AUTH_REQUIRED', clock), method);
         return;
       }
+      /* Giro di sicurezza 5 delle anteprime, condizione (d) del giudice v1430: col biscotto, l'API non risponde a un sito fratello né a un altro sito
+         (`rifiutoLetturaDaAltroSito`, Fetch Metadata). La rotta delle pagine ne è fuori (vive del lasciapassare, e le sue sottorisorse arrivano
+         `cross-site` per natura); il canale del dispositivo non è un browser. */
+      if (cookieBuono && url.pathname.startsWith('/api/') && !paginaConLasciapassare && !req[ORIGINE_REMOTA] && rifiutoLetturaDaAltroSito(req)) {
+        sendJson(res, 403, errorEnvelope('ORIGIN_FORBIDDEN', clock), method);
+        return;
+      }
       /* Revisione R8: il documento vero solo a chi è entrato. `fetch` e i programmi non chiedono html: per loro resta la pagina statica di sempre, che senza API non fa niente */
       if (method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html') && !cookieBuono && vieneDalBrowser(req)) {
         rifiutoBiglietto(req, res, method, clock, PAGINA_SENZA_INGRESSO);
@@ -4206,9 +4292,7 @@ export function createHttpApp({
       const scrive = method !== 'GET' && method !== 'HEAD' && rottaDiSessione[2] !== '/fork' && rottaDiSessione[2] !== '/retry';
       const apre = !scrive && (rottaDiSessione[2] === undefined || rottaDiSessione[2] === '/events');
       if (idAllineato && (scrive || apre)) {
-        let allineamento = null;
-        try { allineamento = await sessionRegistry.allineaSessione(idAllineato, { scrivere: scrive }); }
-        catch (errore) { console.error(`[affitto] session ${idAllineato} not aligned:`, errore instanceof Error ? errore.message : errore); }
+        const allineamento = await allineaSessioneDaFuori(sessionRegistry, idAllineato, { scrivere: scrive }); // S3: la stessa del telefono
         if (scrive && allineamento?.stato === 'altrove') {
           const errore = Object.assign(new Error(allineamento.messaggio ?? 'This chat is open in another TALOS window'), {
             code: 'SESSION_LEASED',
@@ -5609,7 +5693,8 @@ export function createHttpApp({
         }
         const gettone = lasciapassarePagine.crea(ambito);
         if (req.aborted || res.destroyed) return;
-        sendJson(res, 200, successEnvelope({ indirizzo: `/api/v1/pagine/${gettone}/${encodeURIComponent(esito.nome)}` }, clock), method);
+        /* giro 5: `etichetta` in più (il nome dell'origine della pagina nel guscio del PC); `indirizzo` resta quello di sempre per browser, telefono e CLI */
+        sendJson(res, 200, successEnvelope({ indirizzo: `/api/v1/pagine/${gettone}/${encodeURIComponent(esito.nome)}`, etichetta: lasciapassarePagine.etichetta(gettone) }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -5641,14 +5726,17 @@ export function createHttpApp({
           throw erroreDelRegistro(esito);
         }
         const origine = `http://${req.headers.host ?? '127.0.0.1'}`;
+        /* Giro 5: sul nome della pagina (`<etichetta>.localhost`, solo nel guscio del PC) `'self'` sarebbe la pagina stessa: la incornicia
+           solo il documento dell'app, che nel guscio sta su 127.0.0.1 alla stessa porta (`desktop/runtime.mjs` `validaHandshake`). */
+        const app = etichettaDaHost(req.headers.host) ? `http://127.0.0.1:${portaDaHost(req.headers.host)}` : null;
         res.writeHead(200, {
           'Content-Type': tipoPerPagina(esito.nome),
           'Content-Length': esito.bytes.length,
           'X-Content-Type-Options': 'nosniff',
           'Cache-Control': 'private, no-store',
           'Referrer-Policy': 'no-referrer',
-          'Content-Security-Policy': `sandbox allow-scripts; ${politicaPagina(`${origine}/api/v1/pagine/${paginaMatch[1]}/`)}; frame-ancestors 'self'`,
-          'Allow-CSP-From': origine,
+          'Content-Security-Policy': `sandbox allow-scripts; ${politicaPagina(`${origine}/api/v1/pagine/${paginaMatch[1]}/`)}; frame-ancestors ${app ?? "'self'"}`,
+          'Allow-CSP-From': app ?? origine,
         });
         res.end(esito.bytes);
       } catch (error) {
@@ -6598,6 +6686,8 @@ export function createHttpApp({
          *   chiamata resta identica a prima — stessa disciplina di ogni altro parametro opzionale
          *   qui dentro. Tre test che asseriscono la FORMA degli argomenti se ne sono accorti.
          */
+        /* 0.2.2: il modello scelto per la sessione nuova; se è di OpenRouter, la sua lista si può leggere già per il primo giro */
+        if (typeof modello === 'string') catalogoPubblico?.segnaSceltaDelModello(modello);
         const esito = sessionRegistry.avvia(taskId, opzioniSessione, origineDellaRichiesta(req));
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
@@ -6697,6 +6787,27 @@ export function createHttpApp({
      */
     /* L1 1.3 — «Enlarge the window» dalla carta di «Chiedimi»: l'ha chiesto la persona, quindi la scelta di serie non conta (`forza`);
        restano i limiti veri (massimo addestrato, memoria, motore occupato). Corpo: { modelId, servono }. */
+    /*
+     * 023 cura piccola (owner 11/11/2026 13:50, decisione 9; giudice v1477, correzioni 3 e 4) — «Prova il motore locale» del Doctor: una
+     *   richiesta minima al modello GIÀ caricato, esito e tempo (`doctor-motore-locale.mjs`). Mai un caricamento né uno scaricamento.
+     *   Fa lavorare il motore di questo computer: la stessa guardia di sola origine locale delle altre POST della persona (le notifiche,
+     *   `rifiutoOrigineApprovazione`): niente dal telefono, da un altro sito o da un programma senza il gettone. Il corpo è vuoto: chi
+     *   chiama non sceglie il modello.
+     */
+    if (method === 'POST' && url.pathname === '/api/v1/doctor/local-engine') {
+      try {
+        requireNoQuery(url);
+        if (req[ORIGINE_REMOTA] || rifiutoOrigineApprovazione(req, { token })) { sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method); return; }
+        const body = await leggiCorpoJson(req, 1024);
+        if (body !== null && body !== undefined && (typeof body !== 'object' || Array.isArray(body) || Object.keys(body).length)) { const error = new Error('Invalid body: expected {}'); error.code = 'QUERY_INVALID'; throw error; }
+        const data = await provaIlMotoreLocale({ modelli: async () => (typeof localModelStore?.list === 'function' ? localModelStore.list() : []), motore: localRuntimes?.['llama.cpp'] ?? null });
+        sendJson(res, 200, successEnvelope(data, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
     if (method === 'POST' && url.pathname === '/api/v1/local-engine/window/enlarge') {
       try {
         requireNoQuery(url);
@@ -6787,6 +6898,28 @@ export function createHttpApp({
       return;
     }
 
+    if (method === 'POST' && url.pathname === '/api/v1/public-catalog/settings') {
+      /* 0.2.2 (SignPath) — Impostazioni → Sicurezza e privacy, «Catalogo pubblico dei modelli»: un campo solo, sì o no. Vale dalla richiesta
+         dopo. Stessa guardia di «Uso del computer»: accendere una richiesta in rete senza gettone passa dalla carta di `app_settings`. */
+      try {
+        requireNoQuery(url);
+        if (req[ORIGINE_REMOTA] || rifiutoOrigineApprovazione(req, { token })) { sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method); return; }
+        if (!catalogoPubblico) { const error = new Error('Public catalog settings not configured'); error.code = 'PUBLIC_CATALOG_SETTINGS_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req, 4 * 1024);
+        const keys = Object.keys(body || {});
+        if (keys.length !== 1 || typeof body.acceso !== 'boolean') { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
+        if (body.acceso === true && !token) { sendJson(res, 403, errorEnvelope('PC_CONFIRMATION_REQUIRED', clock), method); return; }
+        let dati;
+        try { dati = await catalogoPubblico.scrivi({ acceso: body.acceso }); }
+        catch (errore) { if (errore?.code === 'PUBLIC_CATALOG_LOCKED') { sendJson(res, 409, errorEnvelope('PUBLIC_CATALOG_LOCKED', clock), method); return; } throw errore; }
+        sendJson(res, 200, successEnvelope(dati, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
     if (method === 'POST' && url.pathname === '/api/v1/computer-use/settings') {
       /* Decisione 310 (06/11/2026) — Impostazioni → Strumenti, «Uso del computer (Anteprima)»: un campo solo, sì o no; spento di serie. Vale dalla
          richiesta e dal giro dopo, senza riavviare. Passa dalla guardia d'origine della finestra come le altre scritture. */
@@ -6801,6 +6934,23 @@ export function createHttpApp({
            porta generale, `serveLaCarta: !token`) ⇒ accendere passa dalla carta di `app_settings`; spegnere resta libero. */
         if (body.acceso === true && !token) { sendJson(res, 403, errorEnvelope('PC_CONFIRMATION_REQUIRED', clock), method); return; }
         sendJson(res, 200, successEnvelope(await impostazioneComputerUse.scrivi({ acceso: body.acceso }), clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+
+    if (method === 'POST' && url.pathname === '/api/v1/assistant-settings') {
+      /* L'Assistente (decisione 1645 punto 2): un campo solo, `modello` (null = quello della chat). Dal pannello e da Impostazioni. */
+      try {
+        requireNoQuery(url);
+        if (!impostazioniAssistente) { const error = new Error('Assistant settings not configured'); error.code = 'ASSISTANT_SETTINGS_UNAVAILABLE'; throw error; }
+        const body = await leggiCorpoJson(req, 4 * 1024);
+        let salvate;
+        try { salvate = await impostazioniAssistente.scrivi(body); }
+        catch (e) { if (e?.code === 'ASSISTANT_SETTINGS_INVALID') { const error = new Error(e.message); error.code = 'QUERY_INVALID'; throw error; } throw e; }
+        sendJson(res, 200, successEnvelope(salvate, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
@@ -6851,6 +7001,8 @@ export function createHttpApp({
         const CHIAVI_CARTELLA = ['sessionId', 'cartellaId', 'cartellaLibera', 'workspaceLaunchId'];
         let scelta;
         let fidata;
+        let soloSeMaiChiesta = false;
+        let soloPerLaConversazione = false;
         if (method === 'GET') {
           const chiavi = [...url.searchParams.keys()];
           if (chiavi.length !== 1 || !CHIAVI_CARTELLA.includes(chiavi[0]) || url.searchParams.getAll(chiavi[0]).length !== 1) { const error = new Error('Invalid query'); error.code = 'QUERY_INVALID'; throw error; }
@@ -6860,7 +7012,15 @@ export function createHttpApp({
           const body = await leggiCorpoJson(req, 8 * 1024);
           const chiavi = Object.keys(body || {});
           const dellaCartella = chiavi.filter((k) => CHIAVI_CARTELLA.includes(k));
-          if (dellaCartella.length !== 1 || chiavi.length !== 2 || !chiavi.includes('fidata') || ![true, false, null].includes(body.fidata)
+          /* controllore 11/11 (a): la CARTA della domanda manda `soloSeMaiChiesta: true`: con due finestre, il «No» tardivo della seconda
+             non rovescia il «Sì» già dato nella prima (la risposta dice la decisione vera). La voce del velo cambia sempre. */
+          soloSeMaiChiesta = chiavi.includes('soloSeMaiChiesta');
+          /* giro 3-bis (owner 11/11 16:35): `soloPerLaConversazione: true`, su un disco intero o sulla casa, risponde (sì o no) solo per QUELLA
+             conversazione, in memoria: solo con `sessionId`, mai `null` */
+          soloPerLaConversazione = chiavi.includes('soloPerLaConversazione');
+          if (dellaCartella.length !== 1 || chiavi.length !== 2 + (soloSeMaiChiesta ? 1 : 0) + (soloPerLaConversazione ? 1 : 0) || !chiavi.includes('fidata') || ![true, false, null].includes(body.fidata)
+            || (soloSeMaiChiesta && body.soloSeMaiChiesta !== true)
+            || (soloPerLaConversazione && (body.soloPerLaConversazione !== true || dellaCartella[0] !== 'sessionId' || body.fidata === null))
             || typeof body[dellaCartella[0]] !== 'string') { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
           scelta = { [dellaCartella[0]]: body[dellaCartella[0]] };
           fidata = body.fidata;
@@ -6868,10 +7028,19 @@ export function createHttpApp({
         const risolta = sessionRegistry.cartellaPerLaFiducia(scelta);
         if (!risolta?.ok) { const error = new Error(risolta?.erroreAvvio ?? 'Folder not found'); error.code = risolta?.code ?? 'QUERY_INVALID'; throw error; }
         if (method === 'GET') {
-          sendJson(res, 200, successEnvelope({ cartella: risolta.cartella, fidata: fiduciaCartelle.stato(risolta.cartella) }, clock), method);
+          /* giro 3-bis: la risposta della conversazione vince (sul disco intero o sulla casa il file non ne ha); `soloPerLaConversazione` dice
+             alla carta che qui c'è solo «Mi fido solo per questa conversazione» */
+          sendJson(res, 200, successEnvelope({ cartella: risolta.cartella, fidata: typeof risolta.fiduciaSoloQui === 'boolean' ? risolta.fiduciaSoloQui : fiduciaCartelle.stato(risolta.cartella),
+            ...(risolta.soloPerLaConversazione ? { soloPerLaConversazione: true } : {}) }, clock), method);
           return;
         }
-        const ora = await fiduciaCartelle.imposta(risolta.cartella, fidata);
+        if (soloPerLaConversazione) {
+          const esito = sessionRegistry.fiduciaSoloPerQuestaConversazione?.(scelta.sessionId, fidata, { soloSeMaiChiesta });
+          if (!esito?.ok) { const error = new Error(esito?.erroreAvvio ?? 'Folder trust not configured'); error.code = esito?.code ?? 'FOLDER_TRUST_UNAVAILABLE'; throw error; }
+          sendJson(res, 200, successEnvelope({ cartella: esito.cartella, fidata: esito.fidata, cambiate: esito.cambiate, soloPerLaConversazione: true }, clock), method);
+          return;
+        }
+        const ora = await fiduciaCartelle.imposta(risolta.cartella, fidata, { soloSeMaiChiesta });
         const { cambiate = [] } = sessionRegistry.riapplicaFiducia?.() ?? {};
         sendJson(res, 200, successEnvelope({ cartella: risolta.cartella, fidata: ora, cambiate }, clock), method);
       } catch (error) {
@@ -6886,13 +7055,18 @@ export function createHttpApp({
         requireNoQuery(url);
         if (!impostazioniContesto) { const error = new Error('Context settings not configured'); error.code = 'CONTEXT_SETTINGS_UNAVAILABLE'; throw error; }
         const body = await leggiCorpoJson(req, 4 * 1024);
-        /* C6 (28/10/2026): oltre al motore, il modello del riassunto e la sua riserva — una o più scelte alla volta, mai un campo in più */
+        /* C6 (28/10/2026): oltre al motore, il modello del riassunto e la sua riserva — una o più scelte alla volta, mai un campo in più.
+           11/11/2026 (owner 13:50, v1465): e la memoria dei modelli scritta dalla persona (`impostazioni-contesto.mjs`, che la convalida) */
         const keys = Object.keys(body || {});
-        if (!keys.length || keys.some((k) => !['motore', 'modelloDelRiassunto', 'riservaDelRiassunto'].includes(k))
+        if (!keys.length || keys.some((k) => !['motore', 'modelloDelRiassunto', 'riservaDelRiassunto', 'finestreDeiModelli'].includes(k))
           || (keys.includes('motore') && !['engine', 'legacy'].includes(body.motore))) { const error = new Error('Invalid body'); error.code = 'QUERY_INVALID'; throw error; }
         let salvate;
         try { salvate = await impostazioniContesto.scrivi(body); }
-        catch (e) { if (e?.code === 'CTX_SETTINGS_INVALID') { const error = new Error(e.message); error.code = 'QUERY_INVALID'; throw error; } throw e; }
+        /* Giro dopo i revisori (punto 5, BASSO 5 di A): il rifiuto dice il PERCHÉ (i limiti della memoria, un modello locale), non solo «Invalid query» */
+        catch (e) {
+          if (e?.code === 'CTX_SETTINGS_INVALID') { const error = new Error(e.message); error.code = 'QUERY_INVALID'; error.reason = 'context-settings-invalid'; if (e.params) error.params = e.params; throw error; }
+          throw e;
+        }
         sendJson(res, 200, successEnvelope({ ...salvate, catena: sessionRegistry?.catenaDelleImpostazioni?.() ?? [] }, clock), method); // come il GET: sul ponte evita una seconda lettura (Mobile)
       } catch (error) {
         const normalized = normalizeError(error);
@@ -7558,6 +7732,7 @@ export function createHttpApp({
           const riconosciuta = await linguaScrittaDellaRichiesta(req, richiesta.consegna, { acceso: riconosciLinguaScritta });
           if (riconosciuta) richiesta.linguaDelMessaggio = riconosciuta;
         }
+        if (typeof richiesta.modello === 'string') catalogoPubblico?.segnaSceltaDelModello(richiesta.modello); // 0.2.2, come POST /sessions
         const esito = sessionRegistry.avviaLibero(richiesta, origineDellaRichiesta(req));
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
@@ -8483,7 +8658,12 @@ export function createHttpApp({
           sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method);
           return;
         }
-        const { linguaInterfaccia, linguaDelleRisposte, ...patch } = requireSessionSettingsBody(await leggiCorpoJson(req));
+        const { linguaInterfaccia, linguaDelleRisposte, motoRidotto, ...patch } = requireSessionSettingsBody(await leggiCorpoJson(req));
+        /* reperto 17 (13/11): il movimento ridotto dello schermo del PC, per il cursore del computer use; come la lingua, a parte, anche da solo */
+        if (motoRidotto !== undefined) {
+          const moto = sessionRegistry.impostaMotoRidotto?.(sessionId, motoRidotto) ?? { aggiornata: false };
+          if ('erroreAvvio' in moto) throw erroreDelRegistro(moto);
+        }
         /* K3b (03/10/2026): la lingua dell'interfaccia non è una preferenza della conversazione: si tiene a parte, e può arrivare da sola. */
         if (linguaInterfaccia !== undefined) {
           const lingua = sessionRegistry.impostaLinguaInterfaccia(sessionId, linguaInterfaccia);
@@ -8500,6 +8680,8 @@ export function createHttpApp({
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
+        /* 0.2.2: la persona ha cambiato il modello della conversazione; se è di OpenRouter, la sua lista si può leggere (`catalogo-pubblico.mjs`) */
+        if (typeof patch.modello === 'string') catalogoPubblico?.segnaSceltaDelModello(patch.modello);
         if (req.aborted || res.destroyed) return;
         // C2-R7: chi è rimasto «nega» (con `rispettaNega`), solo se qualcuno — senza salti la risposta è quella di sempre
         const nonUniti = Array.isArray(esito?.nonUniti) && esito.nonUniti.length ? { nonUniti: esito.nonUniti } : {};
@@ -8813,7 +8995,31 @@ export function createHttpApp({
     const compactMatch = method === 'POST' && sessionRegistry
       && /^\/api\/v1\/sessions\/([^/]+)\/compact$/.exec(url.pathname);
     /* FE-010: un guscio. La logica sta nel registro, dove la CLI la chiama senza HTTP. Se chi chiede se ne va, la chiamata al modello si ferma. */
-    const aLatoMatch = method === 'POST' && sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/a-lato(\/trasforma)?$/.exec(url.pathname);
+    /* L'Assistente (11/11/2026): le domande salvate con la chat, la spesa e ciò che ha letto; e il controllo di un file citato (segreto o fuori = no). */
+    const aLatoLeggiMatch = method === 'GET' && sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/a-lato(\/file)?$/.exec(url.pathname);
+    if (aLatoLeggiMatch) {
+      try {
+        let sessionId;
+        try { sessionId = decodeURIComponent(aLatoLeggiMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
+        let esito;
+        if (aLatoLeggiMatch[2]) {
+          for (const chiave of url.searchParams.keys()) {
+            if (chiave !== 'percorso') throw Object.assign(new Error('Only percorso is accepted.'), { code: 'QUERY_INVALID' });
+          }
+          esito = sessionRegistry.fileDellAssistente(sessionId, url.searchParams.get('percorso') ?? '');
+        } else {
+          requireNoQuery(url);
+          esito = sessionRegistry.leggiALato(sessionId);
+        }
+        if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+        sendJson(res, 200, successEnvelope(esito, clock), method);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        sendJson(res, normalized.statusCode, errorEnvelope(normalized.code, clock, { errore: error }), method);
+      }
+      return;
+    }
+    const aLatoMatch = method === 'POST' && sessionRegistry && /^\/api\/v1\/sessions\/([^/]+)\/a-lato(\/trasforma|\/carta|\/ferma)?$/.exec(url.pathname);
     if (aLatoMatch) {
       try {
         requireNoQuery(url);
@@ -8821,6 +9027,22 @@ export function createHttpApp({
         try { sessionId = decodeURIComponent(aLatoMatch[1]); } catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         const corpo = await leggiCorpoJson(req);
         if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo)) throw Object.assign(new Error('The body must be an object.'), { code: 'QUERY_INVALID' });
+        /* L'Assistente, giro di cura (11/11/2026): la carta di un indirizzo si risponde SOLO dalla finestra del PC, come le approvazioni
+           (stessa origine o gettone, mai l'origine remota); lo Stop del pannello ferma la domanda in corso di questa chat */
+        if (aLatoMatch[2] === '/carta' || aLatoMatch[2] === '/ferma') {
+          if (req[ORIGINE_REMOTA] || rifiutoOrigineApprovazione(req, { token })) { sendJson(res, 403, errorEnvelope('REMOTE_ORIGIN_FORBIDDEN', clock), method); return; }
+          const chiavi = Object.keys(corpo);
+          const ammesse = aLatoMatch[2] === '/carta' ? ['id', 'approvato'] : [];
+          if (chiavi.length !== ammesse.length || chiavi.some((k) => !ammesse.includes(k))) throw Object.assign(new Error('The body is not valid.'), { code: 'QUERY_INVALID' });
+          /* revisore C (mutante vivo M3): solo un booleano è una risposta; «"no"», 1 o null non arrivano al registro */
+          if (aLatoMatch[2] === '/carta' && (typeof corpo.id !== 'string' || typeof corpo.approvato !== 'boolean')) throw Object.assign(new Error('The body is not valid.'), { code: 'QUERY_INVALID' });
+          const esito = aLatoMatch[2] === '/carta'
+            ? sessionRegistry.rispondiCartaDellAssistente(sessionId, { id: corpo.id, approvato: corpo.approvato })
+            : sessionRegistry.fermaAssistente(sessionId);
+          if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
+          sendJson(res, 200, successEnvelope(esito, clock), method);
+          return;
+        }
         if (aLatoMatch[2]) {
           const esito = sessionRegistry.forka(sessionId, { filoALato: corpo.filo ?? [] });
           if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
@@ -8829,11 +9051,15 @@ export function createHttpApp({
         }
         const fermo = new AbortController();
         res.once('close', () => { if (!res.writableEnded) fermo.abort(); });
-        const esito = await sessionRegistry.chiediALato(sessionId, { domanda: corpo.domanda, filo: corpo.filo }, { segnale: fermo.signal });
+        /* owner 21:40: la carta di un indirizzo la sa mostrare solo la finestra del PC; dal telefono (anche ospitato dalla CLI) un rifiuto secco */
+        const daDispositivo = Boolean(req[ORIGINE_REMOTA]) || req.socket?.remoteAddress === 'talos-remote';
+        /* revisore B (secondo passaggio): la chiamata in processo del telefono aspetta 120 s; da un dispositivo la domanda si chiude prima */
+        const esito = await sessionRegistry.chiediALato(sessionId, { domanda: corpo.domanda, filo: corpo.filo }, { segnale: fermo.signal, conCarte: !daDispositivo,
+          ...(daDispositivo ? { attesaMs: TETTI_LATO.attesaDispositivoMs } : {}) });
         if ('erroreAvvio' in esito) throw erroreDelRegistro(esito);
         if (req.aborted || res.destroyed) return;
         /* decisioni 57 e 144: `costo` in dollari della risposta, `null` se il prezzo non è noto (campo nuovo: chi non lo legge resta giusto) */
-        sendJson(res, 200, successEnvelope({ risposta: esito.risposta, tagliata: esito.tagliata, filoTagliato: esito.filoTagliato, usage: esito.usage, costo: esito.costo ?? null }, clock), method);
+        sendJson(res, 200, successEnvelope({ risposta: esito.risposta, tagliata: esito.tagliata, filoTagliato: esito.filoTagliato, usage: esito.usage, costo: esito.costo ?? null, scambio: esito.scambio ?? null, spesa: esito.spesa ?? null }, clock), method);
       } catch (error) {
         const normalized = normalizeError(error);
         if (req.aborted || res.destroyed) return;
@@ -9236,12 +9462,13 @@ export function createHttpApp({
         try { sessionId = decodeURIComponent(questionMatch[1]); }
         catch { sendJson(res, 404, errorEnvelope('NOT_FOUND', clock), method); return; }
         // C2-Q: `rispostoDa` è un'opzione del registro, non una parte della risposta (il validatore delle risposte è chiuso)
-        const { rispostoDa, ...risposta } = requireRispostaDomandaBody(await leggiCorpoJson(req));
+        const { rispostoDa, showsDetails, ...risposta } = requireRispostaDomandaBody(await leggiCorpoJson(req));
         /* ⛔ CTX-D2, 23/09/2026 notte — si ASPETTA la conferma del registro: il 200 parte solo dopo che
            la risposta è sul disco (prima era una chiamata sincrona che dava ok prima della scrittura).
            Una ripetizione della stessa risposta riceve l'esito della prima (idempotenza, vedi
            `rispondiDomanda` in session-registry.mjs e draft-ietf-httpapi-idempotency-key-header-07 §2.6). */
-        const esito = await sessionRegistry.rispondiDomanda(sessionId, risposta.requestId, risposta, rispostoDa === undefined ? {} : { rispostoDa });
+        const esito = await sessionRegistry.rispondiDomanda(sessionId, risposta.requestId, risposta,
+          { ...(rispostoDa === undefined ? {} : { rispostoDa }), ...(showsDetails === true ? { mostraDettagli: true } : {}) });
         if ('erroreAvvio' in esito) {
           throw erroreDelRegistro(esito);
         }
@@ -10069,11 +10296,21 @@ export function createHttpApp({
         requireNoQuery(url);
         if (!impostazioniPcSveglio) { const error = new Error('Keep-awake settings not configured'); error.code = 'KEEP_AWAKE_SETTINGS_UNAVAILABLE'; throw error; }
         data = { ...(await impostazioniPcSveglio.leggi()), nellApp: nellAppInstallata() === true };
+      } else if (url.pathname === '/api/v1/public-catalog/settings') {
+        /* 0.2.2 (SignPath) — Impostazioni → Sicurezza e privacy, «Catalogo pubblico dei modelli»: `{ acceso, spentoDallAmbiente }` */
+        requireNoQuery(url);
+        if (!catalogoPubblico) { const error = new Error('Public catalog settings not configured'); error.code = 'PUBLIC_CATALOG_SETTINGS_UNAVAILABLE'; throw error; }
+        data = await catalogoPubblico.leggi();
       } else if (url.pathname === '/api/v1/computer-use/settings') {
         /* Decisione 310 (06/11/2026) — Impostazioni → Strumenti, «Uso del computer (Anteprima)». */
         requireNoQuery(url);
         if (!impostazioneComputerUse) { const error = new Error('Computer use settings not configured'); error.code = 'COMPUTER_USE_SETTINGS_UNAVAILABLE'; throw error; }
         data = await impostazioneComputerUse.leggi();
+      } else if (url.pathname === '/api/v1/assistant-settings') {
+        /* L'Assistente (11/11/2026): con che modello pensa (null = quello della chat). */
+        requireNoQuery(url);
+        if (!impostazioniAssistente) { const error = new Error('Assistant settings not configured'); error.code = 'ASSISTANT_SETTINGS_UNAVAILABLE'; throw error; }
+        data = await impostazioniAssistente.leggi();
       } else if (url.pathname === '/api/v1/chat-settings') {
         /* Decisione 140 — Impostazioni → Chat, «Blocchi vivi nelle risposte». */
         requireNoQuery(url);
@@ -10089,6 +10326,16 @@ export function createHttpApp({
         requireNoQuery(url);
         if (!impostazioniContesto) { const error = new Error('Context settings not configured'); error.code = 'CONTEXT_SETTINGS_UNAVAILABLE'; throw error; }
         data = { ...await impostazioniContesto.leggi(), catena: sessionRegistry?.catenaDelleImpostazioni?.() ?? [] }; // FE-053, solo memoria
+      } else if (url.pathname === '/api/v1/context-settings/model-window') {
+        /* Giro dopo i revisori della soglia (11/11/2026, punto 11, BASSO 4 di C): la carta «Memoria del modello» dice quale memoria TALOS usa
+           ADESSO per quel modello e da dove viene (scritta da te, letta, prudente), come DeepSeek «Uses the provider default»
+           (`ui-settings-models/src/client/locales.ts:56-57`). Sola lettura: un solo parametro, `model`. */
+        const modello = url.searchParams.get('model');
+        if ([...url.searchParams.keys()].some((k) => k !== 'model') || typeof modello !== 'string' || !modello.trim() || modello.length > 256) {
+          const error = new Error('Invalid query'); error.code = 'QUERY_INVALID'; throw error;
+        }
+        if (typeof finestraDelModelloFn !== 'function') { const error = new Error('Context settings not configured'); error.code = 'CONTEXT_SETTINGS_UNAVAILABLE'; throw error; }
+        data = finestraDelModelloFn(modello.trim()) ?? { modello: modello.trim(), finestra: null, fonte: null, letta: null };
       } else if (url.pathname === '/api/v1/search-source') {
         requireNoQuery(url);
         if (!searchSourceStore) { const error = new Error('Search source not configured'); error.code = 'SEARCH_STORE_UNAVAILABLE'; throw error; }
@@ -10145,6 +10392,13 @@ export function createHttpApp({
             return ['loading', 'ready', 'stopping'].includes(stato?.runtimeState);
           },
           remoto: async () => (await remotoFn()?.stato?.()) ?? undefined,
+          /* giro di cura del 12/11: una conversazione che fa girare i comandi in Linux (WSL) non passa dal lanciatore: per lei la
+             risposta è «non seguiti», mai lo stato dei comandi di Windows */
+          nipoti: () => {
+            if (process.platform !== 'win32') return undefined;
+            if (sessionId && sessionRegistry?.impostazioniComandi?.(sessionId)?.dove === 'wsl2') return { nipoti: false, motivo: 'wsl' };
+            return statoDelLanciatore();
+          },
         });
       } else if (url.pathname === '/api/v1/sessions') {
         requireNoQuery(url);

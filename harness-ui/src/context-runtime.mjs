@@ -8,7 +8,7 @@ import { createDesktopContextService } from './context-desktop-service.mjs';
 import { conAncoraDelFornitore } from './context-token-counters.mjs';
 import { separaFonteModello } from './model-destination.mjs';
 import { storiaPerIlMotore } from './session-registry.mjs'; // C1: le regole del giornale stanno nel registro
-import { RIGA_RECUPERO, indiceMeccanico, leggiTettoEsplicito, TETTO_TOKEN_DEFAULT, FRAZIONE_FINESTRA, eNotaDiTalos } from './kernel/compattazione-desktop.mjs';
+import { RIGA_RECUPERO, indiceMeccanico, leggiTettoEsplicito, TETTO_TOKEN_DEFAULT, eNotaDiTalos, finestraMassimaDelTetto } from './kernel/compattazione-desktop.mjs';
 /*
  * C1, review del bugfixer su 59cdfdcba (Y1): le BUSTE che TALOS scrive nella conversazione come messaggi `user` — il risultato di
  * un sotto-agente (`confine-dati.mjs::testoDelRisultatoFiglio`), l'esito di un Workflow (`testoDellEsitoWorkflow`), la domanda
@@ -65,7 +65,7 @@ export const FINESTRA_PRUDENTE_MOTORE_DELL_APP = 16_384;
 
 export async function resolveDesktopDefaultProfile({ provider, model, finestraFn, readLocalRuntime, env = process.env }) {
   const tetto = leggiTettoEsplicito(env) ?? TETTO_TOKEN_DEFAULT;
-  const massima = Math.ceil(tetto / FRAZIONE_FINESTRA);
+  const massima = finestraMassimaDelTetto(tetto); // 11/11/2026 (owner 17:47): lo stesso numero del compattatore di prima, scritto nel nucleo
   let finestra;
   if (provider === 'local') {
     const runtime = await readLocalRuntime?.();

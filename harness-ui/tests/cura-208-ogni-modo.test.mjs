@@ -197,18 +197,20 @@ test('208 PERCORSO INTERO — registro → kernel in «Scrive nel progetto»: la
 
 test('208 ROSSA→VERDE — la frase della carta non dice più «anche con Accesso pieno» come se valesse solo lì (inglese nel nucleo)', () => {
   const chiavi = Object.keys(FRASI_DI_PERMESSO).filter((k) => k.startsWith('server.approval.criticalDelete.'));
-  assert.equal(chiavi.length, 11);
+  assert.equal(chiavi.length, 12); // decimo giro dei permessi (14/11/2026): la dodicesima, `tooComplex`
+  assert.ok(chiavi.includes('server.approval.criticalDelete.tooComplex'));
   for (const k of chiavi) {
     assert.doesNotMatch(FRASI_DI_PERMESSO[k], /Even with Full access/u, k);
     assert.match(FRASI_DI_PERMESSO[k], /With any permission, Full access included, this needs your yes every time\.$/u, k);
   }
 });
 
-test('208 ROSSA→VERDE — anche l\'interfaccia dice la regola nuova, in inglese E in italiano (le 11 frasi della carta)', async () => {
+test('208 ROSSA→VERDE — anche l\'interfaccia dice la regola nuova, in inglese E in italiano (le 12 frasi della carta)', async () => {
   const { default: testi } = await import('../frontend/src/i18n/testi/server.js');
   for (const [lingua, fine] of [['en', /With any permission, Full access included, this needs your yes every time\.$/u], ['it', /Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta\.$/u]]) {
     const chiavi = Object.keys(testi[lingua]).filter((k) => k.startsWith('approval.criticalDelete.'));
-    assert.equal(chiavi.length, 11, lingua);
+    assert.equal(chiavi.length, 12, lingua); // decimo giro: anche `tooComplex`
+    assert.ok(chiavi.includes('approval.criticalDelete.tooComplex'), lingua);
     for (const k of chiavi) assert.match(testi[lingua][k], fine, `${lingua} ${k}`);
   }
 });

@@ -1161,9 +1161,15 @@ test('E1 HTTP-STRUMENTO-01: POST .../approve with scope «strumento» reaches th
   assert.equal(ok.status, 200);
   assert.deepEqual(sessionRegistry.ultimaRispostaApprovazione, { sessionId, requestId: 'richiesta-vera', approvato: true, ambito: 'strumento' });
   sessionRegistry.ultimaRispostaApprovazione = null;
+  /* Long tasks, B (owner 13/11/2026 04:35): a no with this scope is «No to this tool until your next message» — it reaches the registry,
+     which accepts it only on the card of an outside tool (`carte-compiti-lunghi-a-b-server.test.mjs`). A name from the client stays 400. */
+  const no = await invia({ requestId: 'richiesta-vera', approvato: false, ambito: 'strumento' });
+  assert.equal(no.status, 200);
+  assert.deepEqual(sessionRegistry.ultimaRispostaApprovazione, { sessionId, requestId: 'richiesta-vera', approvato: false, ambito: 'strumento' });
+  sessionRegistry.ultimaRispostaApprovazione = null;
   for (const corpo of [
-    { requestId: 'richiesta-vera', approvato: false, ambito: 'strumento' },
     { requestId: 'richiesta-vera', approvato: true, ambito: 'strumento', nome: 'shell' },
+    { requestId: 'richiesta-vera', approvato: false, ambito: 'strumento', nome: 'shell' },
   ]) {
     const risposta = await invia(corpo);
     assert.equal(risposta.status, 400, JSON.stringify(corpo));

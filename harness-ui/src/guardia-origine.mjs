@@ -55,6 +55,22 @@ export function hostAmmesso(host) {
   return NOMI_LOOPBACK.has(nomeDaHost(host));
 }
 
+/*
+ * ⭐ Giro di sicurezza 5 delle anteprime (11/11/2026; forma `FORMA-ORIGINE-PER-PAGINA-2026-11-11.md`, giudice v1417 a-c e v1430 d) — IL NOME
+ *   DI UNA PAGINA. Nel guscio del PC ogni pagina resa vive su `<etichetta>.localhost:<porta del servizio>`: un'origine sua, così Chromium
+ *   le dà un processo suo col raggruppamento di serie (una pagina che cade non porta via le sorelle). L'etichetta è del lasciapassare
+ *   (`pagine-lasciapassare.mjs`); qui solo la forma. `hostAmmesso` NON lo ammette: lo ammette `http-app.mjs` per la sola rotta delle
+ *   pagine, in GET, se l'etichetta è quella del lasciapassare della stessa richiesta. Chromium risolve `*.localhost` sul loopback da
+ *   sé, senza DNS (RFC 6761 §6.3; misurato nella prova di Electron col registro di rete); nessun altro pezzo costruisce questo nome.
+ *   Hermes ammette solo `localhost`, `127.0.0.1`, `::1` (`hermes_cli/web_server_boundary.py:18`,
+ *   `_LOOPBACK_HOST_VALUES`, usato a `hermes_cli/web_server.py:878`; clone del 01/11): un nome di pagina non è un suo nome.
+ */
+const NOME_DI_PAGINA = /^([0-9a-f]{32})\.localhost$/u;
+/** L'etichetta di un nome di pagina (`<32 cifre esadecimali>.localhost`, con o senza porta, maiuscole comprese), o `null`. */
+export function etichettaDaHost(host) {
+  return NOME_DI_PAGINA.exec(nomeDaHost(host))?.[1] ?? null;
+}
+
 /**
  * L'altro nome di loopback dello stesso server: `127.0.0.1:P` ⇄ `localhost:P`. Per il browser sono due SITI: un cookie `SameSite=Strict` di uno non segue l'altro, e
  * nemmeno arriva per host. Serve a `/api/v1/browser/proxy` (revisione R1).
@@ -112,6 +128,24 @@ export function origineDellaFinestra(origine, host) {
  * ⛔ Con l'origine della finestra si passa anche se il browser dice `cross-site`: il WebView del telefono (`https://localhost`)
  *   chiama 127.0.0.1, che per il browser è un altro sito, ed è la persona.
  */
+/*
+ * ⭐ Giro 5, condizione (d) del giudice v1430: col biscotto `talos_token` (SameSite=Strict) il browser lo manda a ogni richiesta dello
+ *   stesso SITO, e il sito ignora la porta e, per `localhost`, può comprendere i nomi sotto (`<etichetta>.localhost`). Una pagina di un
+ *   sito fratello (un dev server su un'altra porta, una pagina resa) che chiama l'API con una GET (fetch, immagine, collegamento) arriverebbe
+ *   COL biscotto: le scritture le ferma già `rifiutoScritturaDaAltroSito`, le letture no. Regola delle risorse di OWASP «Fetch Metadata»
+ *   (`Sec-Fetch-Site` `same-site` o `cross-site` ⇒ rifiuto), con le eccezioni di sempre: la finestra (stessa origine, o il WebView del
+ *   telefono col suo `Origin`), la persona che scrive l'indirizzo (`none`), un programma (nessuna intestazione).
+ *   Vale solo con un biscotto buono: senza, la richiesta non entra comunque (401), e il rientro OAuth (navigazione da un altro sito, senza
+ *   biscotto Strict) non cambia.
+ */
+export function rifiutoLetturaDaAltroSito(req) {
+  const sito = req?.headers?.['sec-fetch-site'];
+  if (sito !== 'same-site' && sito !== 'cross-site') return null;
+  const origine = req?.headers?.origin;
+  if (typeof origine === 'string' && origine !== '' && origine !== 'null' && origineDellaFinestra(origine, req?.headers?.host)) return null;
+  return sito === 'same-site' ? 'sito-fratello' : 'altro-sito';
+}
+
 export function rifiutoScritturaDaAltroSito(req) {
   const metodo = String(req?.method ?? 'GET').toUpperCase();
   if (METODI_SICURI.has(metodo)) return null;

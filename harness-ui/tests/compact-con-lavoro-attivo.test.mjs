@@ -17,10 +17,37 @@ const contatore = { countPreparedContext: async ({ messages, tools, model }) => 
 const MODELLO = { provider: 'local', model: 'test', windowTokens: 200_000, responseReserve: 2048 };
 const ATTIVI = (jobs) => (jobs ?? []).filter((j) => !['committed', 'failed', 'cancelled', 'paused'].includes(j.state));
 
+/* Giro 2 (revisione 021-A, reperto H): prima `finché` alla scadenza dei 30 s proseguiva zitto, e la prova falliva più avanti con un
+   messaggio che non diceva cosa mancava. Ora alla scadenza LANCIA, col nome della condizione. */
+const finché = async (condizione, cosa = 'la condizione') => {
+  const fino = Date.now() + 30_000;
+  while (!(await condizione())) {
+    if (Date.now() >= fino) throw new Error(`Non raggiunta entro 30 s: ${cosa}`);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+};
+/* La risposta del /compact è arrivata, oppure il /compact ha chiesto un altro riassunto (una ripartenza): l'evento giusto al posto
+   della finestra fissa di 200 ms, che sotto carico poteva chiudersi prima della ripartenza e dare un falso verde. */
+const finitaORipartita = (attese, liberi, giàInAttesa = liberi.length) => {
+  let finita = false;
+  attese.then(() => { finita = true; }, () => { finita = true; });
+  return finché(() => finita || liberi.length > giàInAttesa, 'il /compact ha risposto, o ha chiesto un altro riassunto');
+};
+
 /* `riesce(n)`: la chiamata n-esima, quando la si libera, risponde con un riassunto valido (citazione presa dall'originale vero) */
 async function scena(t, { riesce = () => false } = {}) {
   const store = createSqliteContextStore({ databasePath: ':memory:' });
   const liberi = [];
+  /* COMPACT-ATTIVO-04 (gates su main 42660197808, 09/11/2026): «liberi.shift(...) is not a function». Il lavoro risulta attivo nel
+     registro PRIMA che il riassuntore sia chiamato (archivio in un worker, impronta con crypto.subtle): sotto carico `liberi` è ancora
+     vuoto. Chi libera ASPETTA la chiamata: `prossimo()` si sveglia quando `summarize` aggiunge il suo liberatore, mai a tempo. */
+  const sveglie = [];
+  const prossimo = async (cosa = 'un riassunto da liberare') => {
+    let tetto;
+    const scaduto = new Promise((_, rifiuta) => { tetto = setTimeout(() => rifiuta(new Error(`nessuna chiamata al riassuntore: ${cosa}`)), 30_000); });
+    try { while (!liberi.length) await Promise.race([new Promise((sveglia) => sveglie.push(sveglia)), scaduto]); } finally { clearTimeout(tetto); }
+    return liberi.shift();
+  };
   let chiamate = 0;
   const valido = async (request) => {
     const dati = JSON.parse(request.messages.at(-1).content);
@@ -34,6 +61,7 @@ async function scena(t, { riesce = () => false } = {}) {
   const summarize = (request) => { chiamate += 1; const n = chiamate; return new Promise((risolvi, rifiuta) => {
     request.signal?.addEventListener?.('abort', () => rifiuta(request.signal.reason ?? new Error('annullato')), { once: true });
     liberi.push(() => (riesce(n) ? valido(request).then(risolvi, rifiuta) : rifiuta(new Error('riassunto finito male'))));
+    for (const sveglia of sveglie.splice(0)) sveglia();
   }); };
   const engine = createContextEngine({ store, model: { resolveModel: async ({ sessionModel }) => sessionModel, summarize }, tokenCounter: contatore, clock: () => '2026-10-31T10:00:00.000Z' });
   const service = createDesktopContextService({ store, engine, readSession: id => id === 'chat' ? { sessionId: id, modello: 'local:test', conclusa: true } : null, isSessionEnabled: id => id === 'chat', resolveSessionModel: async () => MODELLO, clock: () => '2026-10-27T20:00:00.000Z' });
@@ -44,24 +72,25 @@ async function scena(t, { riesce = () => false } = {}) {
   await hooks.prepare({ messages: STORIA, originali: STORIA, tools: [] });
   const snap = await store.readContextSnapshot({ sessionId: 'chat' });
   void service.request({ sessionId: 'chat', method: 'POST', path: '/jobs', body: { kind: 'compact', expectedRevision: snap.revision, idempotencyKey: 'fine-giro' } }).catch(() => {});
-  for (let i = 0; i < 50 && !ATTIVI((await store.readContextSnapshot({ sessionId: 'chat' }))?.jobs).length; i++) await new Promise((r) => setTimeout(r, 20));
+  // reperto H: prima un tetto fisso di 1 s (50 giri da 20 ms); ora si aspetta la condizione, e alla scadenza la prova lo dice
+  await finché(async () => ATTIVI((await store.readContextSnapshot({ sessionId: 'chat' }))?.jobs).length > 0, 'il lavoro di fine giro è attivo nel registro');
   assert.equal(ATTIVI((await store.readContextSnapshot({ sessionId: 'chat' }))?.jobs).length, 1, 'la scena ha davvero un lavoro attivo');
-  return { store, service, STORIA, liberi, chiamate: () => chiamate };
+  return { store, service, STORIA, liberi, prossimo, chiamate: () => chiamate };
 }
 
-const finché = async (condizione) => { for (let i = 0; i < 100 && !(await condizione()); i++) await new Promise((r) => setTimeout(r, 20)); };
-
 test('COMPACT-ATTIVO-01 — col riassunto di fine giro ancora al lavoro il /compact lo aspetta (nessun secondo lavoro mentre quello lavora); se finisce male parte il suo (B3), UNA volta, e dice com\'è andato quello', async (t) => {
-  const { store, service, STORIA, liberi, chiamate } = await scena(t);
+  const { store, service, STORIA, prossimo, chiamate } = await scena(t);
   const lavori = [];
   const attese = service.compact({ sessionId: 'chat', messages: STORIA, attesaDellaPersona: true, onLavoro: (id) => lavori.push(id) });
-  await new Promise((r) => setTimeout(r, 60));
+  const primo = await prossimo('il riassunto di fine giro');
+  await finché(() => lavori.length >= 1);
+  await new Promise((r) => setTimeout(r, 60)); // finestra della prova al contrario: in questo tempo NON deve partire un secondo riassunto
   assert.equal(chiamate(), 1, 'nessun secondo riassunto mentre quello lavora');
   assert.equal((await store.readContextSnapshot({ sessionId: 'chat' })).jobs.length, 1, 'un lavoro solo mentre quello lavora');
-  liberi.shift()();
-  await finché(() => chiamate() === 2);
+  primo();
+  const secondo = await prossimo('B3: il riassunto della persona');
   assert.equal(chiamate(), 2, 'B3: il lavoro agganciato è finito male ⇒ il riassunto della persona parte subito');
-  liberi.shift()();
+  secondo();
   const esito = await attese;
   assert.equal(esito.ok, true);
   assert.equal(esito.compattato, false, 'anche il suo è finito male, e il /compact lo dice');
@@ -74,10 +103,12 @@ test('COMPACT-ATTIVO-01 — col riassunto di fine giro ancora al lavoro il /comp
 });
 
 test('COMPACT-ATTIVO-02 (B3, banco del 04/11: rossa prima della cura) — il lavoro agganciato fallisce, il suo riesce: la POST risponde compattato:true', async (t) => {
-  const { store, service, STORIA, liberi, chiamate } = await scena(t, { riesce: (n) => n >= 2 });
-  const attese = service.compact({ sessionId: 'chat', messages: STORIA, attesaDellaPersona: true });
-  await new Promise((r) => setTimeout(r, 60));
-  liberi.shift()();
+  const { store, service, STORIA, liberi, prossimo, chiamate } = await scena(t, { riesce: (n) => n >= 2 });
+  const lavori = [];
+  const attese = service.compact({ sessionId: 'chat', messages: STORIA, attesaDellaPersona: true, onLavoro: (id) => lavori.push(id) });
+  const primo = await prossimo('il riassunto di fine giro');
+  await finché(() => lavori.length >= 1);
+  primo();
   await finché(() => liberi.length >= 1 || chiamate() >= 2);
   while (liberi.length) liberi.shift()();
   const esito = await Promise.race([attese, new Promise((r) => setTimeout(() => r('appeso'), 5000))]);
@@ -90,10 +121,12 @@ test('COMPACT-ATTIVO-02 (B3, banco del 04/11: rossa prima della cura) — il lav
 });
 
 test('COMPACT-ATTIVO-03 (al contrario) — il lavoro agganciato riesce: niente riparte, un lavoro e una chiamata', async (t) => {
-  const { store, service, STORIA, liberi, chiamate } = await scena(t, { riesce: () => true });
-  const attese = service.compact({ sessionId: 'chat', messages: STORIA, attesaDellaPersona: true });
-  await new Promise((r) => setTimeout(r, 60));
-  liberi.shift()();
+  const { store, service, STORIA, prossimo, chiamate } = await scena(t, { riesce: () => true });
+  const lavori = [];
+  const attese = service.compact({ sessionId: 'chat', messages: STORIA, attesaDellaPersona: true, onLavoro: (id) => lavori.push(id) });
+  const primo = await prossimo('il riassunto di fine giro');
+  await finché(() => lavori.length >= 1);
+  primo();
   const esito = await attese;
   assert.equal(esito.compattato, true);
   assert.equal(chiamate(), 1);
@@ -101,15 +134,14 @@ test('COMPACT-ATTIVO-03 (al contrario) — il lavoro agganciato riesce: niente r
 });
 
 test('COMPACT-ATTIVO-04 (al contrario, B3) — nessun lavoro da agganciare e il suo finisce male: non riparte, un lavoro suo e il suo esito', async (t) => {
-  const { store, service, STORIA, liberi, chiamate } = await scena(t);
-  liberi.shift()();
+  const { store, service, STORIA, liberi, prossimo, chiamate } = await scena(t);
+  (await prossimo('il riassunto di fine giro'))();
   await finché(async () => !ATTIVI((await store.readContextSnapshot({ sessionId: 'chat' })).jobs).length);
   const lavori = [];
   const attese = service.compact({ sessionId: 'chat', messages: STORIA, attesaDellaPersona: true, onLavoro: (id) => lavori.push(id) });
-  await finché(() => liberi.length >= 1);
-  liberi.shift()();
+  (await prossimo('il riassunto della persona'))();
   // una ripartenza chiederebbe un altro riassunto: lo si libera, così la prova non resta appesa
-  await new Promise((r) => setTimeout(r, 200));
+  await finitaORipartita(attese, liberi);
   while (liberi.length) liberi.shift()();
   const esito = await Promise.race([attese, new Promise((r) => setTimeout(() => r('appeso'), 5000))]);
   assert.notEqual(esito, 'appeso');
@@ -127,9 +159,10 @@ test('COMPACT-ATTIVO-05 (B3-c, revisione del 05/11) — il lavoro agganciato vie
   await finché(() => lavori.length >= 1);
   assert.equal(lavori.length, 1, 'il /compact si è agganciato al lavoro di fine giro');
   const snap = await store.readContextSnapshot({ sessionId: 'chat' });
+  const giàInAttesa = liberi.length; // il riassunto di fine giro, mai liberato: una ripartenza ne aggiungerebbe un altro
   await service.request({ sessionId: 'chat', method: 'DELETE', path: `/jobs/${lavori[0]}`, body: { expectedRevision: snap.revision, idempotencyKey: 'annulla-da-fuori' } }).catch(() => {});
   // una ripartenza chiederebbe un altro riassunto: lo si libera, così la prova non resta appesa
-  await new Promise((r) => setTimeout(r, 200));
+  await finitaORipartita(attese, liberi, giàInAttesa);
   while (liberi.length) liberi.shift()();
   const esito = await Promise.race([attese, new Promise((r) => setTimeout(() => r('appeso'), 5000))]);
   assert.notEqual(esito, 'appeso');

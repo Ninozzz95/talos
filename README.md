@@ -38,6 +38,14 @@ Desktop release automation is prepared; consult the published assets and [deskto
 ## Local-first, no telemetry
 
 Neither product requires a TALOS account or sends TALOS telemetry. Local models run on your device. Choosing a cloud provider, searching the web or downloading a model uses the network for that action.
+On its own, TALOS Desktop goes online only to check for updates on GitHub and, once you pick an OpenRouter model, add its key or turn it on (it is off by default, and an administrator setting can keep it off for the whole computer), to read OpenRouter's public model list; what each request sends, and how to turn things off, is in the [privacy policy](PRIVACY.md), for the PC app only; the phone app and the CLI are not covered yet.
+
+## Code signing policy
+
+- Not signed yet: TALOS Desktop releases are published as unsigned files today. Once code signing is in place, the files that will be signed are the Windows release binaries of TALOS Desktop built by this repository's release workflow (the app executable, the installer and the uninstaller). Third-party binaries shipped unchanged will keep their upstream state.
+- Committers and reviewers: [Ninozzz95](https://github.com/Ninozzz95) (single maintainer)
+- Approvers: [Ninozzz95](https://github.com/Ninozzz95); every signing request will be approved manually.
+- Privacy policy: [PRIVACY.md](PRIVACY.md), for the PC app only; the phone app and the CLI are not covered yet.
 
 The source tree keeps each product in its own place: [`mobile/`](mobile/README.md), [`harness-ui/`](harness-ui/README.md), and the shared desktop context component [`context-engine/`](context-engine/).
 Mobile release notes remain in [CHANGELOG.md](CHANGELOG.md); desktop notes are in [harness-ui/desktop/CHANGELOG.md](harness-ui/desktop/CHANGELOG.md).

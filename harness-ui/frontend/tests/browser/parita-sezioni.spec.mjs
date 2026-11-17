@@ -89,7 +89,23 @@ test.beforeEach(async ({ page }) => {
    (`/api/v1/context-settings`), come `motoreContesto`: fuori dal contratto delle preferenze locali. */
 /* 07/11/2026 (curatore, rossa del treno M): due righe nuove fuori dal contratto, ciascuna con la sua memoria: «Blocchi vivi nelle risposte»
    (`liveBlocksToggle`, 803a748a3, 04/11) e «Uso del computer» in Anteprima (`computerUseToggle`, 17b6c7a17 + 92607b484, decisione 310, 06/11). */
-const FUORI_CONTRATTO = ['workspaceRestore', 'motoreContesto', 'linkDove', 'modelloDelRiassunto', 'riservaDelRiassunto', 'liveBlocksToggle', 'computerUseToggle'];
+/* 12/11/2026 (D3 a del blocco del nucleo, giudice v1605): due righe nuove fuori dal contratto, tutte e due impostazioni del SERVER, non
+   preferenze locali in `values[field.chiave]`: «Scarica l'elenco dei modelli di OpenRouter» (`publicCatalogToggle`, rete spegnibile,
+   965f53023: `/api/v1/public-catalog/settings`) e il menu dei modelli della carta «Memoria del modello» (`memoriaModello`, ramo della soglia,
+   c22d02a0b: `/api/v1/context-settings`, `finestreDeiModelli`). Si montano DOPO la loro lettura dal server: PARITA-03 e PARITA-07 le
+   aspettano tutte (`aspettaFuoriContratto`), poi il confronto resta ESATTO, per nome e per numero. */
+/* 12/11/2026 (cura del secondo blocco del nucleo, giudice v1692; rosse PARITA-03 e PARITA-07 portate dalla testa dell'Assistente): «Modello
+   dell'Assistente» (`modelloDellAssistente`, `carta-assistente.js:28`, 856ab456a; decisione 1645 punto 2 dell'11/11: «con che modello pensa»),
+   la riga della carta «Assistente» in Impostazioni → Memoria e contesto. Scrive un'impostazione del SERVER (`/api/v1/assistant-settings`,
+   archivio a sé `src/impostazioni-assistente.mjs`), non `values[field.chiave]`: fuori dal contratto delle preferenze locali, come
+   `modelloDelRiassunto`. La sua parità, misurata il 12/11: sul PC questa riga, più le tre scelte nel pannello dell'Assistente (`a-lato.js`),
+   che scrivono lo stesso dato; sul telefono nessuna riga (`mobile/` non nomina `assistant-settings`: l'Assistente sul telefono arriva dopo
+   la 0.2.2, owner 11/11 17:25); nella CLI nessuna riga e nessun comando (`cli/src` non nomina né l'Assistente né `assistant-settings`). */
+const FUORI_CONTRATTO = ['workspaceRestore', 'motoreContesto', 'linkDove', 'modelloDelRiassunto', 'riservaDelRiassunto', 'liveBlocksToggle', 'computerUseToggle',
+  'publicCatalogToggle', 'memoriaModello', 'modelloDellAssistente'];
+async function aspettaFuoriContratto(page) {
+  await page.waitForFunction((ids) => ids.every((id) => document.querySelector(`#schermoImpostazioni [data-setting-row="${id}"]`)), FUORI_CONTRATTO, { timeout: 8000 }).catch(() => {});
+}
 
 test('PARITA-01 · i cinque gruppi del mockup, nell’ordine del mockup, con i suoi titoli', async ({ page }) => {
   await apriAspetto(page);
@@ -160,6 +176,7 @@ test('PARITA-03 · la pastiglia dice i controlli del contratto e i 14 temi, e so
    *   vanno spiegati invece che copiati. Le righe dello schermo sono 41: i 40 controlli del
    *   contratto, più una riga che il contratto NON elenca. Quale sia, lo dice il DOM.
    */
+  await aspettaFuoriContratto(page);
   const righe = await page.evaluate(() => [...document.querySelectorAll('#schermoImpostazioni [data-setting-row]')].map((r) => r.dataset.settingRow));
   /* C1 (10/10/2026): «Motore del contesto» (Memoria e contesto) è un'impostazione del SERVER (`/api/v1/context-settings`), non una
      preferenza locale: fuori dal contratto `CAMPI_IMPOSTAZIONI`, che lega ogni riga a `values[field.chiave]`, come `workspaceRestore`. */
@@ -287,6 +304,7 @@ test('PARITA-07 · niente si perde: le righe sono ESATTAMENTE quelle di prima', 
     expect(perGruppo[chiave]?.migrate ?? 0, `le righe migrate del gruppo ${chiave}`).toBe(suoi.filter((campo) => CONTROLLI_MIGRATI.includes(campo.id)).length);
   }
   // Lo schermo INTERO: i 40 controlli del contratto più la riga fuori contratto, tutti vivi, senza doppioni.
+  await aspettaFuoriContratto(page);
   const schermo = await page.evaluate(() => [...document.querySelectorAll('#schermoImpostazioni [data-setting-row]')].map((r) => r.dataset.settingRow));
   expect(schermo.length).toBe(CAMPI_IMPOSTAZIONI.length + FUORI_CONTRATTO.length);
   expect(new Set(schermo).size).toBe(schermo.length);

@@ -57,6 +57,11 @@ const FONTI_RICERCA = {
 /* 13/10/2026 (bugfixer): la carta «Link dalla chat» (decisione owner 11/10 «link in chat cliccabili, con conferma del sito»,
    `efba058c1`; la scelta «dove si aprono», owner 12/10, `756ecdedd`) è la terza carta della privacy. Gli inventari di questa spec
    erano fermi a due carte: non è cambiata la regola, è nata una carta. */
+/* 12/11/2026 (D3 a del blocco del nucleo, giudice v1605): la carta «Catalogo pubblico dei modelli» (rete spegnibile, 965f53023,
+   `catalogo-pubblico-impostazione.js`) è la seconda carta della privacy, subito dopo «Link dalla chat». Porta quattro id: il titolo,
+   l'interruttore, la sua copia calma (`calm-controls.js`) e il suo aiuto. Si monta DOPO la lettura di `/api/v1/public-catalog/settings`:
+   le prove che contano le carte la aspettano (`CARTA_CATALOGO`), poi il confronto resta ESATTO. */
+const CARTA_CATALOGO = '#setting-panel-privacy [data-settings-card="privacy-public-catalog"]';
 const SEZIONI = [
   {
     id: 'privacy',
@@ -64,6 +69,7 @@ const SEZIONI = [
       'settings-group-privacy-local', 'settings-group-privacy-transfer', 'settings-group-privacy-link', 'settingsPrivacyList',
       'settingsSvuotaLocali', 'settingsTrasferimento', 'settingsEsporta', 'settingsImporta',
       'settingsRipristina', 'settingsImportaFile', 'settingsTrasferimentoEsito',
+      'settings-group-privacy-public-catalog', 'setting-publicCatalogToggle', 'setting-publicCatalogToggle--calm', 'settingsHelp-publicCatalogToggle',
     ],
   },
   {
@@ -128,13 +134,18 @@ test('FORME-01 · ogni carta delle tre sezioni ha la sua TESTATA, col titolo dal
   const tentate = await avvia(page);
   /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni: la carta «Stato degli accessi» non esiste più. */
   const attese = {
-    privacy: ['Link dalla chat', 'Dati locali del browser', 'Trasferisci le preferenze'], // decisione owner 164 (bozzetto 14 B): «Link dalla chat» in cima, la banda resta in fondo
+    // decisione owner 164 (bozzetto 14 B): «Link dalla chat» in cima, la banda resta in fondo; 12/11: «Catalogo pubblico dei modelli» subito dopo (965f53023)
+    privacy: ['Link dalla chat', 'Catalogo pubblico dei modelli', 'Dati locali del browser', 'Trasferisci le preferenze'],
     /* «Dove girano i comandi» (owner 27/10) arriva dopo una lettura dal server: la prova leggeva le carte prima, e passava per tempismo
        (rossa nel blocco 12 quando la risposta è arrivata prima). Si aspetta la carta, poi si contano tutte. */
     tools: ['Policy della sessione', 'Dove girano i comandi · conversazioni nuove', 'Tieni sveglio il PC', 'Uso del computer', 'Origine della ricerca web'], // 01/11: «Tieni sveglio il PC» (77bf7608e)
   };
   for (const sezione of Object.keys(attese)) {
     await apriSezione(page, sezione);
+    /* 12/11/2026 (D3 a): FORME-01 era rossa solo nella corsa intera perché leggeva le carte senza aspettare questa, che si monta dopo la
+       lettura dal server: il colore dipendeva da chi arrivava prima. Misurato con l'elenco nuovo e senza attesa: 4 rosse su 12 (le prime
+       di ogni lavoratore, server freddo). Si aspetta la carta, poi si contano tutte, come per gli Strumenti. */
+    if (sezione === 'privacy') await expect(page.locator(CARTA_CATALOGO)).toBeAttached();
     if (sezione === 'tools') {
       await expect(page.locator('#setting-panel-tools [data-settings-card="tools-dove-girano"]')).toBeAttached();
       await expect(page.locator('#setting-panel-tools [data-settings-card="tools-pc-sveglio"]')).toBeAttached(); // anche lei dopo una lettura dal server
@@ -239,6 +250,11 @@ test('FORME-06 · il RIMONTAGGIO non duplica la testata', async ({ page }) => {
    */
   const tentate = await avvia(page);
   await apriSezione(page, 'privacy');
+  /* 12/11/2026 (D3 a, giudice v1605): la privacy ha QUATTRO carte, «Catalogo pubblico dei modelli» (965f53023) è la seconda. Si monta dopo
+     la lettura dal server: la si aspetta con tutti i suoi id (anche la copia calma dell'interruttore), poi si misura «prima». */
+  const idPrivacy = SEZIONI.find((x) => x.id === 'privacy').idAttesi;
+  await expect(page.locator(CARTA_CATALOGO)).toBeAttached();
+  await page.waitForFunction((ids) => ids.every((x) => document.querySelector(`#setting-panel-privacy #${CSS.escape(x)}`)), idPrivacy, { timeout: 4000 }).catch(() => {});
   const forma = () => page.evaluate(() => {
     const pannello = document.getElementById('setting-panel-privacy');
     return {
@@ -249,9 +265,10 @@ test('FORME-06 · il RIMONTAGGIO non duplica la testata', async ({ page }) => {
     };
   });
   const prima = await forma();
-  expect(prima.testate).toBe(3);
-  expect(prima.carte).toBe(3);
-  expect(prima.titoli).toEqual(['Link dalla chat', 'Dati locali del browser', 'Trasferisci le preferenze']);
+  expect(prima.testate).toBe(4);
+  expect(prima.carte).toBe(4);
+  expect(prima.titoli).toEqual(['Link dalla chat', 'Catalogo pubblico dei modelli', 'Dati locali del browser', 'Trasferisci le preferenze']);
+  expect(prima.id).toEqual([...idPrivacy].sort());
   await page.locator('#settingsRipristina').click();
   await page.getByRole('button', { name: 'Ripristina', exact: true }).click();
   await page.waitForTimeout(400);
@@ -260,9 +277,9 @@ test('FORME-06 · il RIMONTAGGIO non duplica la testata', async ({ page }) => {
      chiave delle preferenze, quindi `uiLanguage` torna al predefinito dell'app — che è l'inglese.
      È il prodotto che lo fa, non la corsia: quello che si prova qui è che la testata NON si
      duplica e che gli id restano gli stessi. */
-  expect(dopo.testate, 'la testata si è duplicata al rimontaggio').toBe(3);
-  expect(dopo.carte).toBe(3);
-  expect(dopo.titoli.length).toBe(3);
+  expect(dopo.testate, 'la testata si è duplicata al rimontaggio').toBe(4);
+  expect(dopo.carte).toBe(4);
+  expect(dopo.titoli.length).toBe(4);
   expect(dopo.titoli.every((t) => t && t.length > 0)).toBe(true);
   expect(dopo.id).toEqual(prima.id);
   expect(tentate).toEqual([]);
@@ -279,12 +296,12 @@ test('FORME-05 · la copia che la testata ha spostato c\'è ancora, in italiano 
   const attesi = {
     /* 23/09/2026, decisione owner: «Provider e accessi» è tolta del tutto dalle Impostazioni: niente più «Stato degli accessi» / «Access state». */
     it: {
-      privacy: ['Link dalla chat', 'Dati locali del browser', 'Trasferisci le preferenze'],
+      privacy: ['Link dalla chat', 'Catalogo pubblico dei modelli', 'Dati locali del browser', 'Trasferisci le preferenze'], // 12/11: la carta della rete (965f53023)
       tools: ['Policy della sessione', 'Dove girano i comandi · conversazioni nuove', 'Tieni sveglio il PC', 'Uso del computer', 'Origine della ricerca web'], // 27/10: la carta di serie dei comandi; 01/11: il PC sveglio
       costi: ['Consumo registrato'],
     },
     en: {
-      privacy: ['Links from chat', 'Local browser data', 'Transfer preferences'],
+      privacy: ['Links from chat', 'Public model list', 'Local browser data', 'Transfer preferences'],
       tools: ['Session policy', 'Where commands run · new conversations', 'Keep the PC awake', 'Computer use', 'Web search source'],
       costi: ['Recorded usage'],
     },

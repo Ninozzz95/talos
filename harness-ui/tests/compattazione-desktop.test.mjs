@@ -9,7 +9,7 @@ import { RIGA_RECUPERO } from '../src/kernel/compattazione-desktop.mjs'; // C1 (
 import {
   CARATTERI_MINIMI_RIDUCIBILI, ESITO_DOPPIONE, MARCATORE_ACCORCIATO,
   MARCATORE_INDICE, MARCATORE_RIASSUNTO, SCHEMA_RECORD_COMPATTAZIONE, TETTO_TOKEN_DEFAULT, VARIABILE_TETTO_TOKEN,
-  accorciaTesto, applicaRecord, budgetCoda, calcolaSoglie, riduciCodaSottoPressione, classificaErroreFornitore, costruisciProiezione, costruisciRichiestaDiRiassunto,
+  accorciaTesto, applicaRecord, budgetCoda, calcolaSoglie, finestraMassimaDelTetto, riduciCodaSottoPressione, classificaErroreFornitore, costruisciProiezione, costruisciRichiestaDiRiassunto,
   creaRecord, decidiCompattazione, dividiPerCompattazione, eRecordValido, indiceMeccanico, leggiTettoToken, leggiTettoEsplicito,
   misuraOccupazione, reasoningPerRiassunto, riattaccaEffimeri, staccaEffimeri, valutaRispostaDiRiassunto,
 } from '../src/kernel/compattazione-desktop.mjs';
@@ -32,16 +32,19 @@ test('CTX-PURE-CAP — il tetto viene dall ambiente, intero positivo, tutto il r
 
 test('CTX-PURE-THRESHOLDS — il minore fra tetto e 0,75 finestra; emergenza 0,90 finestra o tetto × 1,2', () => {
   assert.deepEqual(calcolaSoglie({ tettoToken: 200_000, finestraToken: null }), { soglia: 200_000, warningTokens: 160_000, emergenza: 240_000, fonte: 'tetto', tettoToken: 200_000, finestraToken: null });
-  assert.deepEqual(calcolaSoglie({ tettoToken: 200_000, finestraToken: 1_000_000 }), { soglia: 200_000, warningTokens: 160_000, emergenza: 900_000, fonte: 'tetto', tettoToken: 200_000, finestraToken: 1_000_000 });
+  assert.deepEqual(calcolaSoglie({ tettoToken: 200_000, finestraToken: 1_000_000 }), { soglia: 200_000, warningTokens: 160_000, emergenza: 240_000, fonte: 'tetto', tettoToken: 200_000, finestraToken: 1_000_000 }); // owner 11/11 17:47: emergenza dal tetto del motore, non dalla finestra intera
+  assert.equal(calcolaSoglie({ tettoToken: 200_000, finestraToken: 1_000_000 }).emergenza, Math.floor(finestraMassimaDelTetto(200_000) * 0.9));
   assert.deepEqual(calcolaSoglie({ tettoToken: 200_000, finestraToken: 128_000 }), { soglia: 96_000, warningTokens: 76_800, emergenza: 115_200, fonte: 'finestra', tettoToken: 200_000, finestraToken: 128_000 });
   assert.equal(calcolaSoglie({ tettoToken: -1, finestraToken: 0 }).soglia, TETTO_TOKEN_DEFAULT, 'valori invalidi → default');
 });
 
-test('CTX-WINDOW-VERIFIED-MATH — il default storico non limita una finestra verificata', () => {
+/* Owner 11/11 17:47 (punto 12 del giro dopo i revisori): il compattatore di prima prende il tetto del motore (`finestraMassimaDelTetto`):
+   una finestra verificata da 1M compatta a 200.000 come il motore, non più a 750.000. Una finestra più stretta del tetto governa come prima. */
+test('CTX-WINDOW-VERIFIED-MATH — una finestra verificata più grande del tetto del motore compatta al tetto (1M ⇒ 200.000); una più stretta governa', () => {
   const verificata = calcolaSoglie({ finestraToken: 1_000_000 });
-  assert.equal(verificata.soglia, 750_000);
-  assert.equal(verificata.emergenza, 900_000);
-  assert.equal(verificata.warningTokens, 600_000);
+  assert.equal(verificata.soglia, 200_000);
+  assert.equal(verificata.emergenza, 240_000);
+  assert.equal(verificata.warningTokens, 160_000);
   assert.equal(decidiCompattazione({ token: 163_901, soglia: verificata.soglia, emergenza: verificata.emergenza }).scatta, false);
   assert.equal(calcolaSoglie({ finestraToken: 262_144 }).soglia, 196_608, 'la route più stretta governa il trigger');
   assert.equal(calcolaSoglie({ tettoToken: 150_000, finestraToken: 1_000_000 }).soglia, 150_000, 'un limite esplicito più basso prevale');
@@ -365,7 +368,7 @@ test('CTX-PURE-TAIL-LAST-RESORT — se non basta, anche il più recente si accor
   assert.ok(ridotta.coda[1].content.includes(MARCATORE_ACCORCIATO), 'l unico esito, il più recente, si accorcia come ultima risorsa');
   /* M1 della cura per Luna 6 (05/11/2026): prima la riga del sistema che dice il taglio, poi inizio e fine come prima */
   const [avviso, ...resto] = ridotta.coda[1].content.split('\n');
-  assert.ok(avviso.startsWith('[TALOS: this result was shortened to fit the context. Lines '), avviso.slice(0, 120));
+  assert.ok(avviso.startsWith('[TALOS: this result was trimmed by TALOS. Lines '), avviso.slice(0, 120)); // 11/11/2026: la forma della 245
   assert.ok(resto.join('\n').startsWith('INIZIO-') && ridotta.coda[1].content.endsWith('-FINE'));
   assert.equal(ridotta.alMinimo, false, 'accorciato rientra: non è un pavimento');
   const bloccata = riduciCodaSottoPressione([user('z'.repeat(40_000))], { budgetToken: 1_000, stima: stimaCaratteri });

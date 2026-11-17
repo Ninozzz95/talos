@@ -56,12 +56,12 @@ const righeVive = (page) => page.locator('#railProcessi .pn-riga .pn-segno').eva
   ETICHETTE_VIVE,
 );
 
-async function scena(page, { tema = 'dark', larghezza = 1440, altezza = 900 } = {}) {
+async function scena(page, { tema = 'dark', larghezza = 1440, altezza = 900, lingua = 'it' } = {}) {
   await page.setViewportSize({ width: larghezza, height: altezza });
-  await page.addInitScript(({ colorMode }) => {
+  await page.addInitScript(({ colorMode, uiLanguage }) => {
     if (window.top !== window) return;
-    try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiLanguage: 'it' } })); } catch { /* finestra privata */ }
-  }, { colorMode: tema });
+    try { localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { colorMode, uiLanguage } })); } catch { /* finestra privata */ }
+  }, { colorMode: tema, uiLanguage: lingua });
   // ⛔ 08/10/2026: il flusso finto porta il confine fra storia e presente (aiuto-confine.mjs)
   await page.route('**/api/v1/sessions/bdg-*/events*', flussoConConfine);
   await page.route('**/api/v1/sessions/bdg-uno/children', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ ok: true, data: { figli: FIGLIE } }) }));
@@ -189,25 +189,62 @@ test('BADGE-PROCESSI — conta i processi VIVI, e si aggiorna a scheda chiusa', 
   expect(await righeVive(page), 'il badge dice 1 processo vivo e la lista ne disegna un altro numero: i due non leggono lo stesso criterio').toBe(1);
 });
 
-for (const tema of ['dark', 'light']) {
-  for (const [larghezza, altezza] of [[1440, 900], [1024, 800]]) {
-    test(`BADGE-LARGHEZZA (${tema}, ${larghezza}) — i numeri non spingono le schede fuori dalla colonna`, async ({ page }) => {
-      await scena(page, { tema, larghezza, altezza });
+/*
+ * ⭐ 12/11/2026 (cura del secondo blocco del nucleo, giudice v1692: «si cura nell'interfaccia, non nella prova») — la sesta scheda ora si
+ *   chiama «Assistente» (owner 11/11 17:12, scelta 1; eb043e295, `index.template.html:1416`, `modello.js:543`): 75,8 px contro i 46,8 di
+ *   «A lato», cioè 29 px in più su 10 liberi. La fila sbordava di 19 px in italiano (334 su 315) e di 24 in inglese (339 su 315), e
+ *   «Assistente» si vedeva tagliata a metà parola. Quattro cose in più da pretendere, tutte misurate sulla pagina:
+ *   1. anche in INGLESE (l'app nasce in inglese, e i nomi inglesi sono i più larghi): prima questa prova guardava solo l'italiano;
+ *   2. la fila ci sta con dell'ARIA, non al pixel: un altro Chrome o un carattere reso mezzo pixel più largo non deve bastare a farla
+ *      scorrere (il `+ 1` qui sotto lascia passare 315,5 px su 315);
+ *   3. stringendo i margini nessuna scheda scende sotto i 24 px di lato (WCAG 2.2, 2.5.8 «Target Size (Minimum)»): «Git» è la più corta;
+ *   4. e al contrario i nomi restano parole distinte: fra la fine di uno e l'inizio del successivo almeno 9 px.
+ */
+const NOMI_DELLE_SCHEDE = {
+  it: ['Contesto', 'File', 'Git', 'Agenti 3', 'Processi 1', 'Assistente'],
+  en: ['Context', 'Files', 'Git', 'Agents 3', 'Processes 1', 'Assistant'],
+};
+const ARIA_DELLA_FILA = 3; // px liberi a destra dell'ultima scheda, al minimo
+const LATO_MINIMO = 24; // px, WCAG 2.2 2.5.8
+const STACCO_FRA_I_NOMI = 9; // px fra la fine di un nome e l'inizio del successivo (due margini da 4 e 1 px di spazio): più stretti non vanno
+/* i quattro casi italiani di sempre, più due inglesi: il tema e la finestra non cambiano le larghezze, la lingua sì */
+const CASI_LARGHEZZA = {
+  it: [['dark', 1440, 900], ['dark', 1024, 800], ['light', 1440, 900], ['light', 1024, 800]],
+  en: [['dark', 1440, 900], ['light', 1024, 800]],
+};
+
+for (const lingua of ['it', 'en']) {
+  for (const [tema, larghezza, altezza] of CASI_LARGHEZZA[lingua]) {
+    test(`BADGE-LARGHEZZA (${tema}, ${larghezza}${lingua === 'it' ? '' : `, ${lingua}`}) — i numeri non spingono le schede fuori dalla colonna`, async ({ page }) => {
+      await scena(page, { tema, larghezza, altezza, lingua });
       /* Due badge ACCESI insieme: è il caso peggiore per la larghezza, ed è il caso vero. */
       await mandaAgente(page, { ...FIGLIE[0], sessionId: 'bdg-c', taskCorto: 'secondo agente' });
       await mandaProcesso(page, { id: 'bdg-p1', fase: 'inizio' });
       await expect(badge(page, 'agenti')).toHaveText('3');
       await expect(badge(page, 'processi')).toHaveText('1');
 
-      const m = await page.locator('#railTabs').evaluate((n) => ({
-        clientWidth: n.clientWidth,
-        scrollWidth: n.scrollWidth,
-        schede: [...n.querySelectorAll('.talos-tabs__tab')].map((b) => {
-          const r = b.getBoundingClientRect();
-          return { testo: (b.textContent || '').replace(/\s+/g, ' ').trim(), sinistra: Math.round(r.left), destra: Math.round(r.right), largo: Math.round(r.width) };
-        }),
-      }));
-      console.log(`MISURA-BADGE-LARGHEZZA ${tema} ${larghezza} = ${JSON.stringify(m)}`);
+      const m = await page.locator('#railTabs').evaluate((n) => {
+        const schede = [...n.querySelectorAll('.talos-tabs__tab')];
+        /* lo spazio che la colonna dà alla fila (il contenitore meno i suoi margini) contro ciò che le schede occupano, al decimo di pixel */
+        const stile = getComputedStyle(n.parentElement);
+        const utile = n.parentElement.clientWidth - parseFloat(stile.paddingLeft) - parseFloat(stile.paddingRight);
+        const occupato = schede.at(-1).getBoundingClientRect().right - schede[0].getBoundingClientRect().left;
+        return {
+          clientWidth: n.clientWidth,
+          scrollWidth: n.scrollWidth,
+          utile: Math.round(utile * 10) / 10,
+          occupato: Math.round(occupato * 10) / 10,
+          schede: schede.map((b) => {
+            const r = b.getBoundingClientRect();
+            /* il NOME della scheda, cioè il suo testo senza il conto: da dove a dove si legge */
+            const nome = document.createRange();
+            nome.selectNodeContents([...b.childNodes].find((x) => x.nodeType === 3 && x.textContent.trim()) ?? b);
+            const t = nome.getBoundingClientRect();
+            return { testo: (b.textContent || '').replace(/\s+/g, ' ').trim(), sinistra: Math.round(r.left), destra: Math.round(r.right), largo: Math.round(r.width), largoVero: Math.round(r.width * 10) / 10, alto: Math.round(r.height * 10) / 10, nomeDa: t.left, nomeA: t.right };
+          }),
+        };
+      });
+      console.log(`MISURA-BADGE-LARGHEZZA ${tema} ${larghezza} ${lingua} = ${JSON.stringify(m)}`);
 
       /* 1. Le schede ci stanno: la lista non scorre e nessuna scheda esce dalla colonna. */
       expect(m.scrollWidth, `la lista delle schede sborda: ${m.scrollWidth} px di contenuto su ${m.clientWidth} visibili`).toBeLessThanOrEqual(m.clientWidth + 1);
@@ -215,13 +252,21 @@ for (const tema of ['dark', 'light']) {
       for (const s of m.schede) {
         expect(s.destra, `la scheda «${s.testo}» esce dalla colonna a destra (${s.destra} > ${Math.round(colonna.x + colonna.width)})`).toBeLessThanOrEqual(Math.round(colonna.x + colonna.width) + 1);
         expect(s.largo, `la scheda «${s.testo}» è larga ${s.largo} px`).toBeGreaterThan(0);
+        expect(Math.min(s.largoVero, s.alto), `la scheda «${s.testo}» è ${s.largoVero} × ${s.alto} px: sotto i ${LATO_MINIMO} px di lato non si prende più col puntatore`).toBeGreaterThanOrEqual(LATO_MINIMO);
+      }
+      expect(m.utile - m.occupato, `la fila delle schede occupa ${m.occupato} px dei ${m.utile} che la colonna le dà: servono almeno ${ARIA_DELLA_FILA} px d'aria`).toBeGreaterThanOrEqual(ARIA_DELLA_FILA);
+      /* e al contrario: per farcele stare i nomi non si attaccano l'uno all'altro, restano parole distinte */
+      for (let i = 1; i < m.schede.length; i += 1) {
+        const stacco = Math.round((m.schede[i].nomeDa - m.schede[i - 1].nomeA) * 10) / 10;
+        expect(stacco, `fra «${m.schede[i - 1].testo}» e «${m.schede[i].testo}» restano ${stacco} px: sotto i ${STACCO_FRA_I_NOMI} i nomi si leggono come una frase sola`).toBeGreaterThanOrEqual(STACCO_FRA_I_NOMI);
       }
 
       /* 2. ⛔ E IL NUMERO NON MANGIA L'ETICHETTA: dentro la scheda si legge la parola E il numero. */
       // 26/09/2026 — F6-1 (decisioni dell'owner su F6): la quinta scheda «GitHub», subito dopo File. Ci stanno tutte e cinque grazie
       // al margine di 6 px delle schede (owner, stesso giorno, seconda risposta coi numeri giusti: «margine 6 px + scorrimento»).
       // 03/11/2026 — FE-010 (la chat a lato, owner 31/10): la sesta scheda «A lato», in fondo; se non ci stanno, la fila scorre.
-      expect(m.schede.map((s) => s.testo)).toEqual(['Contesto', 'File', 'Git', 'Agenti 3', 'Processi 1', 'A lato']);
+      // 12/11/2026 — la sesta scheda è «Assistente» / «Assistant» (owner 11/11 17:12): i nomi attesi stanno in `NOMI_DELLE_SCHEDE`, qui sopra.
+      expect(m.schede.map((s) => s.testo)).toEqual(NOMI_DELLE_SCHEDE[lingua]);
     });
   }
 }

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -51,6 +51,27 @@ try {
 } finally {
   rmSync(cartellaAllegati, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
-console.log('Addon reali verificati con Electron 44.3.0: node-pty 1.1.0 (processo), keyring (caricamento), sqlite-vec 0.1.9 (query), iroh 1.1.0 (endpoint diretto), helper degli allegati (salvataggio vero).');
+/*
+ * Il lanciatore dei comandi (13/11/2026, giudice v1815-v1816): se il pacchetto lo porta, il nucleo DEL PACCHETTO lo trova in modalità
+ * app (dove `TALOS_LANCIATORE` non conta) e un comando vero passa da lui: senza `fermaAlbero` sarebbe partito col ripiego di prima.
+ */
+const exeLanciatore = join(backend, 'native', 'lanciatore-bin', 'talos-lanciatore.exe');
+let rigaLanciatore = 'lanciatore dei comandi assente (build locale senza impronta)';
+if (existsSync(exeLanciatore)) {
+  const L = await import(pathToFileURL(join(backend, 'src/kernel/lanciatore-windows.mjs')).href);
+  const ambienteApp = { ...process.env, TALOS_DESKTOP_DATA_DIR: 'verifica-nativi' };
+  const trovato = L.trovaLanciatore({ ambiente: ambienteApp });
+  assert.equal(trovato.percorso, exeLanciatore, `Lanciatore non trovato dal nucleo del pacchetto: ${trovato.motivo}`);
+  const comando = L.lanciaComando('echo TALOS-R02-LANCIATORE', { cwd: backend, shell: true, windowsHide: true }, { ambiente: ambienteApp, log: (riga) => console.warn(riga) });
+  assert.equal(typeof comando.fermaAlbero, 'function', 'Il comando non è passato dal lanciatore del pacchetto.');
+  let uscitaLanciatore = '';
+  comando.stdout.on('data', (d) => { uscitaLanciatore += d; });
+  const codiceLanciatore = await new Promise((ok) => comando.once('exit', (codice) => ok(codice)));
+  await comando.alberoVuoto;
+  assert.equal(codiceLanciatore, 0, 'Comando del lanciatore non riuscito.');
+  assert.match(uscitaLanciatore, /TALOS-R02-LANCIATORE/u, 'Il comando del lanciatore non ha scritto la sua riga.');
+  rigaLanciatore = 'lanciatore dei comandi (comando vero col suo gruppo)';
+}
+console.log(`Addon reali verificati con Electron 44.3.0: node-pty 1.1.0 (processo), keyring (caricamento), sqlite-vec 0.1.9 (query), iroh 1.1.0 (endpoint diretto), helper degli allegati (salvataggio vero), ${rigaLanciatore}.`);
 // La shell è già uscita; node-pty mantiene il suo helper ConPTY fino all'uscita del processo host.
 process.exit(0);

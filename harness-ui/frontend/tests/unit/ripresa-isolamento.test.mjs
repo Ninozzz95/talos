@@ -78,12 +78,28 @@ test('RIPRESA-R0-PORTACHIAVI: adattatore TALOS reale, keyring in memoria e nuovo
   const run = esecuzione(t, 'keyring-test');
   const env = creaAmbienteIsolato(run);
   const adapter = new URL('../../../src/adattatore-keyring.mjs', import.meta.url).href;
-  const script = `const {creaAdattatorePortachiaviSistema}=await import(${JSON.stringify(adapter)}); const k=await creaAdattatorePortachiaviSistema(); const before=k.get('ripresa-test','sentinel'); k.set('ripresa-test','sentinel','test-only'); const after=k.get('ripresa-test','sentinel'); k.remove('ripresa-test','sentinel'); console.log(JSON.stringify({before,after,removed:k.get('ripresa-test','sentinel')}));`;
+  // round k4 (judge v1542, road A): the product's own factory, which reads the keychain the bench declares (memoria)
+  const script = `const {creaAdattatorePortachiavi,leggiSceltaPortachiavi}=await import(${JSON.stringify(adapter)}); if (leggiSceltaPortachiavi()!=='memoria') throw new Error('the bench declares no memory keychain'); const k=await creaAdattatorePortachiavi(); const before=k.get('ripresa-test','sentinel'); k.set('ripresa-test','sentinel','test-only'); const after=k.get('ripresa-test','sentinel'); k.remove('ripresa-test','sentinel'); console.log(JSON.stringify({before,after,removed:k.get('ripresa-test','sentinel')}));`;
   for (let n = 0; n < 2; n++) {
     const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(JSON.parse(result.stdout), { before: null, after: 'test-only', removed: null });
   }
+});
+
+/*
+ * Round k4, 11/11/2026 (judge v1542, road A): under the product guard of P045 a test run never opens the system keychain adapter,
+ * so the R0 check may not reach it either: the bench DECLARES its test keychain (`TALOS_HARNESS_UI_KEYRING=memoria`, the choice the
+ * keyring scans of round k recognise) and R0 goes through the product's own factory. No exemption in the guard (v1522 forbids it).
+ */
+test('RIPRESA-R0-PORTACHIAVI-DICHIARATO: il banco dichiara il portachiavi in memoria e R0 non chiama mai l\'adattatore di sistema', (t) => {
+  const run = esecuzione(t, 'keyring-declared-test');
+  assert.equal(creaAmbienteIsolato(run).TALOS_HARNESS_UI_KEYRING, 'memoria', 'the isolated bench declares the memory keychain');
+  const sorgente = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+  const inizio = sorgente.indexOf("test('RIPRESA-R0-PORTACHIAVI:");
+  const corpo = sorgente.slice(inizio, sorgente.indexOf('\ntest(', inizio + 1));
+  assert.ok(inizio >= 0 && corpo.length > 100, 'the R0 keychain check is still here');
+  assert.equal(/creaAdattatorePortachiaviSistema/.test(corpo), false, 'R0 must not call the system keychain adapter: the guard stops it in a test run');
 });
 
 test('RIPRESA-R0-RAPPORTI: esecuzioni distinte conservano manifest e stato distinti', (t) => {

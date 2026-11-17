@@ -6,8 +6,10 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { capacitaDelLocaleAperto } from '../src/proiettore-visione.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 test('VDM-1 the open local model: what the engine said decides; another model, an engine not ready or silent stay unknown', () => {
   const pronto = { state: 'ready', modelId: 'q4', vede: false };

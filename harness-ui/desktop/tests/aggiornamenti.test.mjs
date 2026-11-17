@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { firmaManifesto, sha512Base64 } from '../firma-aggiornamenti.mjs';
 import {
-  INTERVALLO_MS, RITARDO_PRIMO_CONTROLLO_MS, confrontaVersioni, creaAggiornatore, AVVISO_PRIMA_DELL_INSTALLAZIONE_MS, leggiManifestoVerificato, sceltaRelease,
+  INTERVALLO_MS, RITARDO_PRIMO_CONTROLLO_MS, aggiornamentiSpentiDallAmbiente, confrontaVersioni, creaAggiornatore, AVVISO_PRIMA_DELL_INSTALLAZIONE_MS, leggiManifestoVerificato, sceltaRelease,
 } from '../aggiornamenti.mjs';
 
 /*
@@ -85,7 +86,7 @@ function tempo() {
   };
 }
 
-function aggiornatore({ updater = updaterFinto(), fetchFinto = rete(), salvate = {}, sha = sha512Base64(INSTALLER), notifiche = [], versioneAttuale = '0.1.20' } = {}) {
+function aggiornatore({ updater = updaterFinto(), fetchFinto = rete(), salvate = {}, sha = sha512Base64(INSTALLER), notifiche = [], versioneAttuale = '0.1.20', spentiDallAmbiente } = {}) {
   const t = tempo();
   const scritte = [];
   const a = creaAggiornatore({
@@ -93,6 +94,7 @@ function aggiornatore({ updater = updaterFinto(), fetchFinto = rete(), salvate =
     impostazioni: { leggi: () => salvate, scrivi: (v) => scritte.push(v) },
     pianifica: t.pianifica, annulla: t.annulla, ora: () => new Date('2026-10-01T21:00:00.000Z'),
     notifica: (s) => notifiche.push(s), calcolaSha512: async () => sha,
+    ...(spentiDallAmbiente !== undefined ? { spentiDallAmbiente } : {}),
   });
   return { a, t, scritte, updater, notifiche, fetchFinto };
 }
@@ -300,4 +302,41 @@ test('AGG-FONTE-01: con la fonte di prova (passo 4) l aggiornatore chiede l elen
   assert.equal(stato.stato, 'pronto');
   assert.deepEqual(updater.feed, { provider: 'generic', url: `${LOCALE}/prova/talos/releases/download/desktop-v0.1.21`, useMultipleRangeRequest: false });
   assert.ok(chiamate.every((u) => u.startsWith(LOCALE)), `nessuna chiamata fuori dalla fonte: ${chiamate.join(', ')}`);
+});
+
+/*
+ * 0.2.2 (SignPath, brief «rete spegnibile»): `TALOS_DESKTOP_AGGIORNAMENTI=off` vale come l'interruttore spento e lo tiene spento.
+ */
+test('AGG-AMBIENTE-01: la variabile — off/0/false/no spengono; vuota, on o altro no', () => {
+  for (const v of ['off', 'OFF', ' off ', '0', 'false', 'no']) assert.equal(aggiornamentiSpentiDallAmbiente({ TALOS_DESKTOP_AGGIORNAMENTI: v }), true, v);
+  for (const v of [undefined, '', 'on', '1', 'true', 'spento']) assert.equal(aggiornamentiSpentiDallAmbiente(v === undefined ? {} : { TALOS_DESKTOP_AGGIORNAMENTI: v }), false, String(v));
+  assert.equal(aggiornamentiSpentiDallAmbiente(undefined), false);
+});
+
+test('AGG-AMBIENTE-02: con la variabile spenta il controllo NON parte (nessun timer, zero richieste), anche se la persona li aveva accesi; la riga non li riaccende; «Controlla ora» resta e non cancella la scelta salvata', async () => {
+  const notifiche = [];
+  const { a, t, fetchFinto, scritte, updater } = aggiornatore({ salvate: { automatici: true }, spentiDallAmbiente: true, notifiche });
+  a.avvia();
+  assert.deepEqual(t.attivi(), [], 'nessun controllo programmato');
+  assert.equal((await a.controlla()).stato, 'fermo');
+  assert.deepEqual(fetchFinto.chiamate, [], 'zero richieste a GitHub');
+  assert.equal(a.stato().automatici, false);
+  assert.equal(a.stato().spentiDallAmbiente, true, 'la pagina lo sa e tiene fermo l interruttore');
+  a.impostaAutomatici(true);
+  assert.equal(a.stato().automatici, false, 'la riga non li riaccende');
+  assert.deepEqual(t.attivi(), [], 'e non programma niente');
+  assert.deepEqual(scritte, [], 'niente si salva sopra la scelta della persona');
+  const m = await a.controlla({ manuale: true });
+  assert.equal(m.stato, 'pronto', '«Controlla ora» è una richiesta della persona: resta');
+  assert.equal(updater.autoInstallOnAppQuit, false, 'scaricato a mano, ma non si installa da solo alla chiusura');
+  assert.equal(scritte.at(-1).automatici, true, 'si salva la scelta della PERSONA: tolta la variabile, torna la sua');
+  assert.deepEqual(t.attivi(), [], 'dopo il controllo a mano nessun controllo automatico programmato');
+  assert.ok(notifiche.length > 0);
+});
+
+test('AGG-AMBIENTE-03: il guscio legge la variabile e la passa all aggiornatore; il pacchetto porta il lettore delle preferenze iniziali', () => {
+  const main = readFileSync(new URL('../main.mjs', import.meta.url), 'utf8');
+  assert.match(main, /spentiDallAmbiente: aggiornamentiSpentiDallAmbiente\(process\.env\)/u);
+  const pacchetto = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.ok(pacchetto.build.files.includes('preferenze-iniziali.mjs'), 'senza, l app installata cade all avvio (ERR_MODULE_NOT_FOUND)');
 });

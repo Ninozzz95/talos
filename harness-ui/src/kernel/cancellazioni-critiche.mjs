@@ -31,12 +31,26 @@
  *   UNA volta per terna, e si ricorda (`memoriaDeiVeri`). Prova: `tests/accesso-pieno-155.test.mjs`, «nessuna lettura del disco per comando».
  * ⛔ Oltre il tetto di annidamento (`TETTO_ANNIDAMENTO`) la funzione FALLISCE CHIUSA, come Codex: un testo che sembra cancellare e che
  *   non si riesce a guardare fino in fondo è una carta (`troppo-annidato`), mai un sì muto.
- * ⛔ Non è un isolamento: un bersaglio scritto con una variabile che il server non conosce, `xargs rm`, `[IO.Directory]::Delete` o un
- *   programma che cancella da sé non si vedono. È la rete di sicurezza di Claude Code, non un confine.
+ * ⛔ Non è un isolamento: un bersaglio scritto con una variabile che ha un valore che il server non sa dire, `xargs rm`,
+ *   `[IO.Directory]::Delete` o un programma che cancella da sé non si vedono (0.2.3: una variabile VUOTA o IGNOTA davanti a «/» o «\»
+ *   invece sì, è la radice: vedi `senzaLeVuoteInTesta`). È la rete di sicurezza di Claude Code, non un confine.
+ * ⛔⛔ Sesto giro (13/11/2026, owner 18:49 «doppio controllo», giudice v1801): TALOS CHIEDE ALMENO OGNI VOLTA CHE CHIEDEVA LA 0.2.1, PER
+ *   COSTRUZIONE. Quattro ROSSI di fila: una lettura più precisa del sottofondo toglieva una carta che la 0.2.1 dava. Ora la decisione
+ *   della 0.2.1 viaggia FERMA dentro il prodotto: `fermo-0.2.1-5e9fdc1b9/cancellazioni-critiche.mjs` è il file del commit 5e9fdc1b9
+ *   (desktop 0.2.1, SHA-256 254e06446eef4255d8ee85ead9e7e92f32be7f6bdced47d5067858ddf60c4354) con UN solo cambio del nono giro
+ *   (14/11/2026, giudice v1880-v1881): l'ambiente letto una volta per chiamata invece che per ogni variabile e ogni bersaglio, solo nel
+ *   modo di leggere, ogni risultato identico; SHA-256 di oggi 9484d89beaab932317aaffefe646d402242ade59c11162cc9d75a42c84ea1ea8. Importa
+ *   solo `node:` (nessun modulo cambiato dalla 0.2.1). Non si tocca altro: una prova (`permessi-doppio-controllo.test.mjs`, FERMO-*) la
+ *   confronta col commit, con la 0.2.1 delle prove più i cambi scritti (`tests/aiuto/cambi-della-copia-ferma.mjs`) e con l'impronta.
+ *   `cancellazioneCritica` chiede se chiede la lettura nuova OPPURE la 0.2.1; il motivo è quello della lettura nuova
+ *   quando chiede, altrimenti quello della 0.2.1. Come Codex (`codex-rs/shell-command/src/bash.rs:52`, `:260-272`: nel dubbio non si
+ *   crede alla lettura) e Hermes (`tools/approval_detection.py:230`: ogni `rm -r` chiede), una lettura nuova non può togliere carte.
  */
 import { realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
+/* la decisione della 0.2.1, ferma: vedi la nota qui sopra. ⛔ Mai importarla da un altro posto né cambiarla oltre i cambi scritti del nono giro. */
+import { cancellazioneCritica as decisioneDella021, dimenticaPercorsiVeri as dimenticaQuelliDella021 } from './fermo-0.2.1-5e9fdc1b9/cancellazioni-critiche.mjs'
 
 const COMANDI_CHE_CANCELLANO = new Set(['rm', 'rmdir', 'rd', 'del', 'erase', 'remove-item', 'ri'])
 const INTERRUTTORI_DI_CMD = new Set(['rd', 'del', 'erase'])
@@ -84,6 +98,9 @@ const INVOLUCRI = new Map([
   ['chroot', { valore: ['--userspec', '--groups'], posizionali: 1 }],
   ['su', { valore: ['-c', '--command', '-s', '--shell', '-g', '--group', '-G', '--supp-group', '-w', '--whitelist-environment'], testo: ['-c', '--command'], posizionali: 1 }],
   ['script', { valore: ['-c', '--command', '-t', '--timing', '-O', '--log-out', '-I', '--log-in', '-B', '--log-io', '-E', '--echo', '-T', '--log-timing', '-m', '--logging-format'], testo: ['-c', '--command'] }],
+  /* cura del ROSSO del revisore (giudice v1742): `wsl bash -c …`, `wsl -e sh -c …`: la shell dentro WSL parte nella cartella del
+     comando (learn.microsoft.com/windows/wsl/basic-commands: `--distribution`, `--user`); `--cd` la cambia. Solo il testo, mai eseguito. */
+  ['wsl', { valore: ['-d', '--distribution', '--distribution-id', '-u', '--user', '--cd', '--shell-type'], cartella: ['--cd'] }],
 ].map(([nome, { valore = [], cartella = [], testo = [], posizionali = 0 }]) => [nome, { valore: new Set(valore), cartella: new Set(cartella), testo: new Set(testo), posizionali }]))
 const SEMBRA_CANCELLARE = /(?:^|[^\p{L}\p{N}_.-])(?:rm|rmdir|rd|del|erase|remove-item|ri)(?:\.exe)?(?=$|[^\p{L}\p{N}_-])/iu
 /** Il prefiltro guarda anche ciò che la shell ricompone (`r''m`, `\rm`), PowerShell codificato e `find -delete`. */
@@ -166,6 +183,65 @@ function comeLoLeggeCmd(testo) {
    dinamiche che cmd calcola e l'ambiente non ha (`%__CD__%`, `%RANDOM%`…): misurate in un cmd vero il 05/11/2026 */
 const CMD_CALCOLATO = /%~|%[^%\s:]*:|%=|%(?:__\w+__|random|date|time|errorlevel|cmdcmdline|cmdextversion|highestnumanodenumber)%|%%?[A-Za-z](?![\w%])|![A-Za-z_][\w]*!/iu
 const TETTO_ANNIDAMENTO = 4
+/*
+ * ⛔ Settimo giro (13/11/2026, owner sì al giro breve, giudice v1823-v1824): UN TETTO UNICO DI LETTURE PER COMANDO. Ogni lettura di un
+ *   testo (`giudicaUnTesto`), a ogni livello, in ogni caso e in ogni giro (`letturaNuova`), conta UNA volta in un contatore solo del
+ *   comando; oltre il tetto la carta (`troppo-annidato`), mai il calcolo fino in fondo. Prima il tetto (256) valeva per livello e i casi
+ *   dentro i casi si moltiplicavano: 8+8 `(cd x && npm i)` (il secondo gruppo in un `bash -c`) costava 2,8-3,8 s, 8+8+8 più di 100 s, e
+ *   il cancello è sincrono (server fermo). Codex fa lo stesso con gli involucri (`is_dangerous_command.rs:35`, tetto 8; `:55-57`, oltre
+ *   il tetto il comando è pericoloso). Il valore: oggi nessun comando senza carta fa più di 257 letture (misurato sulle 18.000 forme del
+ *   revisore, sui gruppi, su `tetto.json` e `nuove.json`, W L A M: otto `cd` che possono non restare = 256, dentro `bash -c` 257); 300
+ *   lascia posto agli involucri e alle letture in più e tiene la carta da nove `cd` (512 letture). Il caso peggiore si ferma a 301 letture.
+ */
+const TETTO_DELLE_LETTURE = 300
+/*
+ * ⛔ Ottavo giro (14/11/2026, owner «ottavo giro», giudice v1838-v1839): UN TETTO SUL LAVORO DEL COMANDO, a numero fisso (mai un tempo,
+ *   mai un orologio). Il tetto delle letture conta quante volte un testo si rilegge, non quanto costa ogni lettura: ogni lettura rifà
+ *   tutti i bersagli per tutti i valori del `for`, e nel cancello ogni bersaglio con la barra in coda chiede al disco il percorso vero
+ *   (un percorso diverso per ogni caso: nessuna memoria lo salva). Il revisore del settimo giro ha misurato un comando onesto di 551
+ *   caratteri (otto `(cd packages/x && npm ci)`, un `for` di 16 pacchetti con 6 cartelle) a 256 letture, senza carta, col cancello
+ *   fermo 1,1-2,2 s; uno di 864 caratteri 10-17 s (la 0.2.1: 20-35 ms e 0,2-0,3 s). Ora ogni unità di lavoro conta in un contatore solo
+ *   del comando (`ctx.conto.lavoro`), sommato su livelli, casi, giri e letture, mai azzerato (`conta`):
+ *   - ogni lettura di un testo: `PESI.lettura`, più una unità ogni `PESI.caratteri` caratteri (ogni lettura scompone il testo intero);
+ *   - ogni comando semplice guardato: `PESI.comando`;
+ *   - ogni bersaglio guardato, dopo i valori del `for` e le graffe (un bersaglio per valore), e ogni posto di robocopy/rsync, `find`
+ *     e `git clean`: `PESI.bersaglio`;
+ *   - ogni percorso vero chiesto per seguire un collegamento: `PESI.realpath` (nel cancello è una lettura vera del disco, ~35 µs su
+ *     Windows per un percorso che non c'è, misurato).
+ *   Oltre il tetto la carta (`troppo-annidato`), subito: mai il calcolo fino in fondo, mai un errore. Codex fa lo stesso con un numero
+ *   fisso (`is_dangerous_command.rs:35`, `MAX_DANGEROUS_COMMAND_WRAPPER_DEPTH = 8`; `:55-57` oltre il tetto il comando è pericoloso) e
+ *   analizza solo i comandi di parole semplici (`bash.rs:25-29`); Hermes guarda ogni riga una volta (`approval_detection.py:228-231`).
+ *   Il valore e i pesi sono misurati (rapporto dell'ottavo giro): sul PC un'unità costa 1-3,7 µs, quindi il lavoro della lettura nuova
+ *   resta sotto ~37 ms; le forme che conosciamo senza carta (i cinque gruppi, 20 tipici, le 23.000 forme dei revisori) stanno sotto
+ *   2.000 unità, otto `cd` che possono non restare con `rm -rf dist` 6.144, con `rm -rf dist/` 9.216; il comando da 551 caratteri
+ *   chiede al primo caso (300.000 unità se andasse fino in fondo).
+ */
+const TETTO_DEL_LAVORO = 10000
+const PESI = Object.freeze({ lettura: 2, caratteri: 64, comando: 1, bersaglio: 3, realpath: 12 })
+/** Aggiunge il lavoro al contatore del comando: `true` se il comando è oltre il tetto (la carta). */
+const conta = (ctx, unita) => (ctx.conto.lavoro += unita) > TETTO_DEL_LAVORO
+/*
+ * ⛔ Decimo giro (14/11/2026, owner 18:10 «strada sicura», giudice v1901-v1902): UN TETTO SUI CARATTERI ESPANSI DEL COMANDO. Le
+ *   variabili assegnate nel testo si moltiplicano (`a=x…; b=$a$a…; c=$b$b…`): ogni livello moltiplica la lunghezza. Il tetto del lavoro
+ *   conta le letture e i bersagli, non quanto è lunga una stringa costruita: 285 caratteri costruivano 63 milioni di caratteri (il
+ *   cancello intero 1,65-4,27 s), e con qualche copia in più il valore passava la lunghezza massima di una stringa (V8: 2^30 - 25), la
+ *   lettura si fermava con un errore e il cancello rispondeva «nessuna carta» (già nella 0.2.1). Ora ogni carattere che una variabile
+ *   aggiunge (`espanso`, i valori del `for` nei bersagli, i pezzi `%X:a=b%` di cmd) si conta in `ctx.conto.espansi`, comune a tutto il
+ *   comando come il lavoro (giri, letture, livelli), PRIMA di metterlo nella stringa: oltre il tetto la lettura si ferma e chiede
+ *   (`troppo-complesso`). Il valore: 4 MiB (4.194.304), misurato (rapporto del decimo giro), con le variabili vere del processo:
+ *   - le 25.644 forme dei due revisori del nono giro, i cinque gruppi onesti, i 13 comandi del telefono e i comandi di tempo
+ *     dell'owner contano al massimo 43.513 caratteri;
+ *   - il caso onesto più grande che abbiamo costruito, `export PATH="$PATH:…"` e otto `(cd x && npm i)`, rilegge il PATH in 256
+ *     letture: 449.792 con un PATH di 1.757 caratteri. 4 MiB regge un PATH fino a 16.384 caratteri (con 1 MiB un PATH di Windows da
+ *     4.100 avrebbe dato una carta in più);
+ *   - sotto il tetto il cancello intero più lento che abbiamo trovato ci mette 79-98 ms (2 milioni di caratteri in un bersaglio dopo
+ *     otto `cd`, su Windows); la forma da 285 caratteri ora chiede in 2-5 ms. Hermes fa lo stesso prima di leggere
+ *   (`approval_detection.py:702-704`: oltre il tetto «fails closed»); Codex non dà il sì se l'albero ha un errore (`bash.rs:30-31`).
+ */
+const TETTO_DELL_ESPANSIONE = 1 << 22
+const TRABOCCO_DELL_ESPANSIONE = Object.freeze({ trabocco: 'espansione' })
+/** Aggiunge al conto del comando i caratteri che una variabile sta per mettere nella stringa; oltre il tetto ferma la lettura. */
+const espande = (ctx, caratteri) => { if ((ctx.conto.espansi += caratteri) > TETTO_DELL_ESPANSIONE) throw TRABOCCO_DELL_ESPANSIONE }
 const TETTO_MEMORIA = 64
 const GLOB = /[*?[]/u
 
@@ -208,16 +284,67 @@ function comandiSemplici(testo, posix = false) {
   let haParola = false
   let apice = ''
   let daPipe = false
+  let nuda = true // senza apici né barre: può essere una parola riservata di bash
   const chiudiParola = () => {
-    if (haParola) parole.push({ testo: parola, sostituzione: /^(?:\$\(.*\)|`.*`)$/su.test(parola) })
+    const tolta = haParola && nuda && parole.length === 0 && riservata(parola)
+    if (haParola && !tolta) parole.push({ testo: parola, sostituzione: /^(?:\$\(.*\)|`.*`)$/su.test(parola) })
     parola = ''
     haParola = false
+    nuda = true
   }
-  const chiudiComando = () => {
+  /* giro unico: chi chiude col `;` lo dice (`puntoEVirgola`), perché cmd non separa lì (vedi `giudicaUnTesto`, il `cd` di cmd) */
+  const chiudiComando = (puntoEVirgola = false) => {
     chiudiParola()
-    if (parole.length) { if (daPipe) parole.dopoPipe = true; comandi.push(parole) }
+    if (parole.length) { if (daPipe) parole.dopoPipe = true; if (puntoEVirgola) parole.puntoEVirgola = true; if (salva) parole.salvaPrima = salva; salva = 0; comandi.push(parole) }
     parole = []
     daPipe = false
+  }
+  /*
+   * giro piccolo dopo il controllore (13/11/2026): dove la cartella torna com'era, per chi legge con la regola di bash (vedi
+   * `giudicaUnTesto`, `ctx.bash`): `( … )` è una sottoshell, e con un `&` da solo l'intera lista prima di lui gira in sottofondo
+   * (gnu.org bash manual, «Lists of Commands», «Grouping Commands»). `salvaPrima`: quante cartelle si mettono da parte prima del
+   * comando; `ripristinaDopo`: quante se ne riprendono dopo. Un `&` di `&&`, `>&`, `&>`, `|&` non manda niente in sottofondo.
+   */
+  let salva = 0
+  let aperte = 0
+  let inizioLista = 0
+  /*
+   * cura del ROSSO del revisore (13/11/2026): la PILA delle liste. Un `&` dentro `( … )` o `{ … }` manda in sottofondo solo la lista
+   * di DENTRO: all'apertura si mette da parte la lista di fuori, alla chiusura si riprende (prima `(` e `{` non la azzeravano, e in
+   * `cd src; cd .. && (npm run dev &) ; rm -rf *` la cartella tornava a `src`). Un gruppo fra graffe davanti a una pipe gira in una
+   * sottoshell come `( … )` (gnu.org bash manual, «Pipelines», «Command Grouping»): `gruppo` è l'ultimo chiuso, [primo, ultimo].
+   */
+  const liste = []
+  let gruppo = null
+  const segna = (k, chiave) => { comandi[k][chiave] = (comandi[k][chiave] ?? 0) + 1 }
+  /*
+   * cura precisa del ROSSO della pila (13/11/2026; man7.org bash(1), «Compound Commands»): `if`, `case`, `while`, `until`, `for`,
+   * `select` aprono una lista come `{` (chiusa da `fi`, `esac`, `done`), e la lista riparte a `then`, `do`, `else`, `elif` e alla `)` del
+   * modello di un ramo di `case` (`ramo`: la prossima `)`, e una `(` davanti al modello, non sono una sottoshell; di nuovo dopo `;;`,
+   * `;&`, `;;&`). Così in `cd .. && if make & then …` il sottofondo è solo `make`, e il `cd ..` resta.
+   */
+  const APRE = { if: 'fi', case: 'esac', while: 'done', until: 'done', for: 'done', select: 'done' }
+  let ramo = false
+  const riservata = (w) => {
+    if (ramo && w !== 'esac') return false
+    if (posix && w === '}') { confine('}'); return true } // R15: su POSIX la `}` è una parola riservata che chiude il gruppo (sotto Windows separa già)
+    /* quinto giro: un composto chiuso (`fi`, `done`, `esac`) davanti a una pipe gira in una sottoshell come `( … )` («Pipelines»): `gruppo` */
+    if (APRE[w]) { liste.push([APRE[w], inizioLista, comandi.length]); inizioLista = comandi.length; ramo = w === 'case' } else if (w === liste.at(-1)?.[0]) { const [, fuori, da] = liste.pop(); inizioLista = fuori; ramo = false; gruppo = comandi.length > da ? [da, comandi.length - 1] : null; return true } else if (/^(?:then|do|else|elif)$/u.test(w)) inizioLista = comandi.length
+  }
+  /* il carattere k è scritto se lo precedono barre in numero DISPARI (`\\&` è una barra scritta e un `&` vero; man7.org bash(1), QUOTING) */
+  const scritto = (k) => { let n = 0; while (testo[k - n - 1] === '\\') n += 1; return n % 2 === 1 }
+  const confine = (c, i) => {
+    if (ramo && liste.at(-1)?.[0] === 'esac' && (c === '(' || c === ')')) { if (c === ')') { ramo = false; inizioLista = comandi.length } gruppo = null; return }
+    if (c === ';' && liste.at(-1)?.[0] === 'esac' && /[;&]/u.test(testo[i + 1] ?? '')) ramo = true
+    if (c === '(') { aperte += 1; salva += 1 } else if (c === ')' && aperte > 0) { aperte -= 1; if (salva > 0) salva -= 1; else if (comandi.length) segna(comandi.length - 1, 'ripristinaDopo') } else if (c === '&' && !/[&>|]/u.test(testo[i - 1] ?? '') && !scritto(i) && !(/[<;]/u.test(testo[i - 1] ?? '') && !scritto(i - 1)) && !/[&>]/u.test(testo[i + 1] ?? '')) {
+      if (comandi.length > inizioLista) { comandi.at(-1).sfondo = true; segna(inizioLista, 'salvaPrima'); segna(comandi.length - 1, 'ripristinaDopo') }
+      inizioLista = comandi.length
+    } else if (c === '\n' || c === ';') inizioLista = comandi.length
+    if (c === '(' || c === '{') { liste.push([c, inizioLista, comandi.length]); inizioLista = comandi.length; gruppo = null } else if ((c === ')' || c === '}') && liste.at(-1)?.[0] === (c === ')' ? '(' : '{')) {
+      const [, fuori, da] = liste.pop()
+      inizioLista = fuori
+      gruppo = comandi.length > da ? [da, comandi.length - 1] : null
+    } else gruppo = null
   }
   for (let i = 0; i < testo.length; i += 1) {
     const c = testo[i]
@@ -230,6 +357,7 @@ function comandiSemplici(testo, posix = false) {
       if (!apice || dopo === '"' || dopo === '\\' || dopo === '$' || dopo === '`') {
         parola += dopo === '$' || dopo === '`' ? `\\${dopo}` : dopo === '\n' ? '' : dopo
         haParola = haParola || dopo !== '\n'
+        nuda = nuda && dopo === '\n'
         i += 1
         continue
       }
@@ -240,7 +368,7 @@ function comandiSemplici(testo, posix = false) {
       continue
     }
     if (c === '$' && testo[i + 1] === "'") continue
-    if (c === "'" || c === '"') { apice = c; haParola = true; continue }
+    if (c === "'" || c === '"') { apice = c; haParola = true; nuda = false; continue }
     /* `${NOME}`, `${env:NOME}`: una parola sola anche dove le graffe separano (PowerShell) */
     if (c === '$' && testo[i + 1] === '{') {
       const j = testo.indexOf('}', i + 2)
@@ -281,16 +409,31 @@ function comandiSemplici(testo, posix = false) {
       i = fine
       continue
     }
+    /*
+     * undicesimo giro: `@(…)`, `!(…)`, `+(…)`, `*(…)`, `?(…)` attaccati a un argomento sono un glob esteso di bash (extglob), non una
+     * sottoshell: restano nella parola, e il confronto dei nomi, che non li sa leggere, chiede (vedi `globPrende`). In testa al comando
+     * (`!(rm -rf ~)`) la parentesi resta una sottoshell.
+     */
+    if (c === '(' && haParola && parole.length > 0 && /[@!+*?]$/u.test(parola)) {
+      let profondita = 0
+      let j = i
+      for (; j < testo.length; j += 1) {
+        if (testo[j] === '(') profondita += 1
+        else if (testo[j] === ')' && --profondita === 0) break
+      }
+      if (j < testo.length) { parola += testo.slice(i, j + 1); i = j; continue }
+    }
     if (c === '#' && !haParola) { const a = testo.indexOf('\n', i); i = a === -1 ? testo.length : a - 1; continue }
     if (c === '|') {
       const oppure = testo[i + 1] === '|'
+      const prima = comandi.length
       chiudiComando()
       if (oppure) i += 1
-      else daPipe = true
+      else { daPipe = true; if (comandi.length > prima) comandi[prima].primaDiPipe = true; else if (gruppo) { segna(gruppo[0], 'salvaPrima'); segna(gruppo[1], 'ripristinaDopo') } }
       continue
     }
-    if (c === '\n' || c === ';' || c === '&' || c === '(' || c === ')' || c === '{' && !haParola && /\s/u.test(testo[i + 1] ?? ' ')) { chiudiComando(); continue } // `{ cmd; }` è un gruppo, `{..,x}` una graffa
-    if (!posix && (c === '{' || c === '}')) { chiudiComando(); continue } // P: in PowerShell e cmd le graffe separano sempre (`& {Remove-Item …}`)
+    if (c === '\n' || c === ';' || c === '&' || c === '(' || c === ')' || c === '{' && !haParola && /\s/u.test(testo[i + 1] ?? ' ')) { chiudiComando(c === ';'); confine(c, i); continue } // `{ cmd; }` è un gruppo, `{..,x}` una graffa
+    if (!posix && (c === '{' || c === '}')) { chiudiComando(); confine(c, i); continue } // P: in PowerShell e cmd le graffe separano sempre (`& {Remove-Item …}`)
     if (c === ' ' || c === '\t' || c === '\r') { chiudiParola(); continue }
     parola += c
     haParola = true
@@ -364,8 +507,11 @@ const nomeDelComando = (parola) => parola.split(/[\\/]/u).pop().toLowerCase().re
 
 function contesto({ cartella, home, piattaforma, ambiente, progettiCritici = [] }) {
   const windows = piattaforma === 'win32'
+  /* dodicesimo giro (owner 13:44): macOS, dove APFS di serie non bada alle maiuscole (vedi `dove`) */
+  const mac = piattaforma === 'darwin'
   const p = windows ? path.win32 : path.posix
-  return { cartella, home, piattaforma, ambiente, windows, p, progettiCritici }
+  /* giro 2: la lettura del movimento di sempre (`X:` da solo non sposta, `cd` sposta) e la cartella ricordata di ogni disco */
+  return { cartella, home, piattaforma, ambiente, windows, mac, p, progettiCritici, discoDaSolo: false, cdCambiaDisco: true, perDisco: new Map() }
 }
 
 /** `$NOME`, `${NOME}`, `$env:NOME`, `${env:NOME}`, `%NOME%`: il valore, o `null` se il server non lo sa (allora non si giudica). */
@@ -380,20 +526,109 @@ function valoreDi(nome, ctx, dove) {
   /* P: una variabile assegnata nello stesso testo (`D=..; rm -rf $D`, `$d = "…"`, `set D=…`); con più valori (`for`) se ne occupa chi giudica */
   const locale = ctx.locali?.get(n)
   if (locale) return locale.length === 1 ? locale[0] : null
-  const trovato = Object.entries(ctx.ambiente ?? {}).find(([k]) => (ctx.windows ? k.toUpperCase() === n : k === n))
-  return typeof trovato?.[1] === 'string' && trovato[1] !== '' ? trovato[1] : null
+  const trovato = ambienteDi(ctx).get(n)
+  if (typeof trovato === 'string' && trovato !== '') return trovato
+  /* giro piccolo dopo il controllore: `%ComSpec%` è cmd anche quando il cancello non ha la variabile (learn.microsoft.com, `cmd`) */
+  return n === 'COMSPEC' && ctx.windows ? 'cmd.exe' : null
+}
+
+/**
+ * Ottavo giro: l'ambiente come Map, letto UNA volta per giro (`ctx.ambiente` non si riassegna mai). Prima ogni variabile che il testo
+ * non assegna rifaceva `Object.entries(process.env)`: ~160 µs a chiamata su Windows (misurato), e il cancello la pagava per ogni
+ * bersaglio di ogni lettura. Come prima vale la PRIMA voce col nome giusto (su Windows senza badare alle maiuscole).
+ */
+function ambienteDi(ctx) {
+  if (ctx.ambienteLetto) return ctx.ambienteLetto
+  const voci = new Map()
+  for (const [k, v] of Object.entries(ctx.ambiente ?? {})) { const n = ctx.windows ? k.toUpperCase() : k; if (!voci.has(n)) voci.set(n, v) }
+  return (ctx.ambienteLetto = voci)
+}
+
+/*
+ * ⛔ 0.2.3 (14/11/2026, giudice v1914-v1915): UNA VARIABILE VUOTA O IGNOTA DAVANTI A «/» O «\» È LA RADICE. La sonda del mutante K01
+ *   del nono giro: `rm -rf "$VUOTA"/*` passava senza carta (qui e nella 0.2.1, `fermo-…/cancellazioni-critiche.mjs:384`: vuota = ignota =
+ *   `null`, non si giudica), mentre bash legge `rm -rf /*`: una variabile non messa vale la stringa vuota (manuale di GNU Bash, «Shell
+ *   Parameter Expansion»; `${X:?}` è la guardia apposta), e PowerShell dà `$null` a `$env:X` che non c'è, quindi `"$env:X\*"` è `\*`, la
+ *   radice del disco. Il cancello non sa quale shell leggerà: le grafie di bash, cmd e PowerShell valgono su ogni sistema, e su POSIX la
+ *   barra rovescia dopo la variabile è quella di PowerShell (che la legge come «/» anche su Linux e macOS).
+ *   Quando una variabile, o più di fila, apre la parola ed è subito seguita da «/» o «\», si guarda che cosa si sa di lei:
+ *   - VUOTA: il testo la assegna vuota (`V=`, `set V=`, `$v = ""`, `local v`) o l'ambiente la ha con valore vuoto, o è `$null`;
+ *   - IGNOTA: il testo non le dà un valore in nessun modo e l'ambiente non la ha;
+ *   - SCONOSCIUTA (NON è ignota): ha un valore che il server non sa dire. La assegna il testo con un valore calcolato (`D=$(mktemp -d)`)
+ *     o con più valori (`for`), la legge un costrutto che non seguiamo (`read`, `mapfile`, `getopts`, `select`, `printf -v`, il `foreach`
+ *     e i `param` di PowerShell, `-OutVariable`, `Set-Variable`: `legateNelTesto`), è un nome che la shell mette da sé (`$PWD`, `$_`,
+ *     `$OSTYPE`, … `MESSE_DALLA_SHELL`), su Windows una che il sistema mette sempre (`%TEMP%`, `%SystemRoot%`: `MESSE_DA_WINDOWS`,
+ *     anche quando l'ambiente passato al cancello non la ha), o l'ambiente le dà un valore che non è una stringa.
+ *   Vuota o ignota: la parola si legge senza di lei, cioè dalla radice («/», o «\» che su Windows è la radice del disco), e la carta è
+ *   quella di sempre (`radice`, `primo-livello`, …): nessun motivo nuovo. Sconosciuta: come prima (non si giudica). Le forme col valore di
+ *   serie (`${X:-y}`, `${X:=y}`) e la guardia `${X:?}` restano come prima. Non cambia il tetto dell'espansione: togliere una variabile
+ *   vuota non aggiunge caratteri, e ogni errore resta «troppo complesso». Codex chiede per ogni `rm -rf` (`is_dangerous_command.rs:141-142`);
+ *   Claude Code chiede per un bersaglio calcolato (`CHANGELOG.md:2384`) e per `rm -rf` sui parametri posizionali (`:3481`).
+ */
+const VARIABILE_IN_TESTA = /^(?:\$\{env:([A-Za-z_]\w*)\}|\$env:([A-Za-z_]\w*)|\$\{([A-Za-z_]\w*)(?:%%?[^}]*|##?[^}]*|:\+[^}]*)?\}|\$([A-Za-z_]\w*)(?!\.)|%([A-Za-z_]\w*)%|!([A-Za-z_]\w*)!)/iu
+/** I nomi che la shell mette da sé e che non sono mai vuoti (bash, PowerShell, cmd), in maiuscole. `$null` NON c'è: è vuota. */
+const MESSE_DALLA_SHELL = new Set([
+  'PWD', 'CD', '__CD__', 'HOME', 'USERPROFILE', 'HOMEDRIVE', 'COMSPEC', 'ERRORLEVEL', 'DATE', 'TIME', 'CMDCMDLINE', 'CMDEXTVERSION',
+  'BASH', 'BASHPID', 'BASH_VERSION', 'HOSTNAME', 'HOSTTYPE', 'OSTYPE', 'MACHTYPE', 'PPID', 'UID', 'EUID', 'RANDOM', 'SECONDS', 'SHLVL',
+  'LINENO', 'GROUPS', 'IFS', '_', 'PSITEM', 'ARGS', 'INPUT', 'THIS', 'MATCHES', 'PSHOME', 'PROFILE', 'HOST', 'PID', 'PSCMDLET',
+  'MYINVOCATION', 'EXECUTIONCONTEXT', 'SHELLID', 'PSVERSIONTABLE', 'PSCULTURE', 'PSUICULTURE', 'ISWINDOWS', 'ISLINUX', 'ISMACOS',
+  'ISCORECLR', 'TRUE', 'FALSE',
+])
+/** Le variabili che Windows mette sempre (anche quando l'ambiente passato al cancello non le ha): su Windows non sono mai «ignote». */
+const MESSE_DA_WINDOWS = new Set([
+  'SYSTEMROOT', 'WINDIR', 'SYSTEMDRIVE', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMFILES', 'PROGRAMDATA', 'PROGRAMW6432',
+  'COMMONPROGRAMFILES', 'PUBLIC', 'ALLUSERSPROFILE', 'HOMEPATH', 'USERNAME', 'USERDOMAIN', 'COMPUTERNAME', 'OS', 'PATHEXT',
+  'PROCESSOR_ARCHITECTURE', 'NUMBER_OF_PROCESSORS', 'PATH',
+])
+/** I nomi a cui il testo dà un valore con un costrutto che la lettura non segue (in maiuscole): per loro il valore non si sa. */
+function legateNelTesto(testo) {
+  const legate = new Set()
+  const nomi = (pezzo, re = /^[A-Za-z_]\w*$/u) => { for (const w of pezzo.split(/[\s,]+/u)) if (re.test(w)) legate.add(w.replace(/^\$/u, '').toUpperCase()) }
+  for (const m of testo.matchAll(/\b(?:read|mapfile|readarray)\b([^;&|<>\n(){}]*)/gu)) nomi(m[1])
+  for (const m of testo.matchAll(/\b(?:getopts\s+\S+|select|printf\s+-v)\s+([A-Za-z_]\w*)/gu)) nomi(m[1])
+  for (const m of testo.matchAll(/\bforeach\s*\(\s*\$([A-Za-z_]\w*)\s+in\b/giu)) nomi(m[1])
+  for (const m of testo.matchAll(/\bparam\s*\(([^)]*)\)/giu)) nomi(m[1].replace(/\[[^\]]*\]/gu, ' '), /^\$[A-Za-z_]\w*$/u)
+  for (const m of testo.matchAll(/(?:^|\s)-(?:outvariable|ov|pipelinevariable|pv|errorvariable|ev|warningvariable|wv|informationvariable|iv)(?::|\s+)["']?\+?([A-Za-z_]\w*)/giu)) nomi(m[1])
+  for (const m of testo.matchAll(/\b(?:set-variable|new-variable|sv|nv)\s+(?:-name(?::|\s+))?["']?([A-Za-z_]\w*)/giu)) nomi(m[1])
+  return legate
+}
+/** Vera se la variabile è VUOTA o IGNOTA (vedi sopra); falsa se ha un valore, anche uno che non si sa dire. */
+function vuotaOIgnota(nome, ctx, dove) {
+  const n = nome.toUpperCase()
+  if (MESSE_DALLA_SHELL.has(n)) return false
+  const v = valoreDi(nome, ctx, dove)
+  if (v !== null) return v === ''
+  const chiave = ctx.windows ? n : nome
+  if (ctx.locali?.has(chiave)) return false
+  const voce = ambienteDi(ctx).get(chiave)
+  if (voce !== undefined) return voce === ''
+  return !ctx.legate?.has(n) && !(ctx.windows && MESSE_DA_WINDOWS.has(n))
+}
+/** La parola senza le variabili vuote o ignote che la aprono, se subito dopo viene «/» o «\»; altrimenti la parola com'era. */
+function senzaLeVuoteInTesta(parola, ctx, dove) {
+  let resto = parola
+  for (let m = VARIABILE_IN_TESTA.exec(resto); m; m = VARIABILE_IN_TESTA.exec(resto)) {
+    if (!vuotaOIgnota(m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5] ?? m[6], ctx, dove)) return parola
+    resto = resto.slice(m[0].length)
+  }
+  if (resto === parola || !/^[\\/]/u.test(resto)) return parola
+  return ctx.windows ? resto : `/${resto.slice(1)}`
 }
 
 function espanso(parola, ctx, dove) {
   let ignoto = false
-  let t = ctx.windows ? parola : parola.replace(/\\(.)/gsu, (_, c) => c) // su POSIX `\.\.` è `..`
-  const sost = (re) => { t = t.replace(re, (tutto, nome) => { const v = valoreDi(nome, ctx, dove); if (v === null) { ignoto = true; return tutto } return v }) }
-  if (/^\$\((?:\s*pwd\s*)\)|^`\s*pwd\s*`/iu.test(t)) { if (dove === null) return null; t = t.replace(/^\$\((?:\s*pwd\s*)\)|^`\s*pwd\s*`/iu, () => dove) }
-  if (t === '~' || /^~[\\/]/u.test(t)) t = ctx.home + t.slice(1)
+  let t = senzaLeVuoteInTesta(parola, ctx, dove)
+  if (!ctx.windows) t = t.replace(/\\(.)/gsu, (_, c) => c) // su POSIX `\.\.` è `..`
+  /* ⛔ decimo giro: ogni valore si conta (`espande`) PRIMA di entrare nella stringa; oltre il tetto la lettura si ferma */
+  const sost = (re) => { t = t.replace(re, (tutto, nome) => { const v = valoreDi(nome, ctx, dove); if (v === null) { ignoto = true; return tutto } espande(ctx, v.length); return v }) }
+  if (/^\$\((?:\s*pwd\s*)\)|^`\s*pwd\s*`/iu.test(t)) { if (dove === null) return null; espande(ctx, dove.length); t = t.replace(/^\$\((?:\s*pwd\s*)\)|^`\s*pwd\s*`/iu, () => dove) }
+  if (t === '~' || /^~[\\/]/u.test(t)) { espande(ctx, ctx.home.length); t = ctx.home + t.slice(1) }
   else if (/^~[^\\/]+(?:[\\/]|$)/u.test(t)) {
     /* `~nino`: la casa di quell'utente; si sa solo se è la nostra */
     const [, utente, resto] = /^~([^\\/]+)(.*)$/su.exec(t)
-    if (ctx.home && ctx.p.basename(ctx.home).toLowerCase() === utente.toLowerCase()) t = ctx.home + resto
+    /* tredicesimo giro: su macOS come APFS (forma Unicode e maiuscole, `piegaDelMac`) */
+    const piega = ctx.mac ? (x) => piegaDelMac(x.normalize('NFC')) : (x) => x.toLowerCase()
+    if (ctx.home && piega(ctx.p.basename(ctx.home)) === piega(utente)) { espande(ctx, ctx.home.length); t = ctx.home + resto }
     else return null
   }
   sost(/\$\{env:([A-Za-z_][\w]*)\}/giu)
@@ -411,15 +646,20 @@ function espanso(parola, ctx, dove) {
       if (v === null) { ignoto = true; return tutto }
       const inizio = Number(a) < 0 ? Math.max(0, v.length + Number(a)) : Math.min(Number(a), v.length)
       const fine = b === undefined ? v.length : Number(b) < 0 ? v.length + Number(b) : inizio + Number(b)
-      return v.slice(inizio, Math.max(inizio, fine))
+      const pezzo = v.slice(inizio, Math.max(inizio, fine))
+      espande(ctx, pezzo.length)
+      return pezzo
     })
     /* 208 ter (ALTO-1): `%CD:\progetto=%` (cmd `set /?`): ogni `da` diventa `a` senza badare alle maiuscole; `%X:*da=a%` fino al primo */
     t = t.replace(/%([A-Za-z_][\w]*):(\*?)([^%=]+)=([^%]*)%/gu, (tutto, nome, stella, da, a) => {
       const v = valoreDi(nome, ctx, dove)
       if (v === null) { ignoto = true; return tutto }
       const re = new RegExp(da.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), stella ? 'iu' : 'giu')
-      if (!stella) return v.replace(re, () => a)
+      /* ⛔ decimo giro: il valore e ogni `a` che entra al posto di un `da` si contano prima (`%X:a=…%` moltiplica come una variabile) */
+      espande(ctx, v.length)
+      if (!stella) return v.replace(re, () => { espande(ctx, a.length); return a })
       const m = re.exec(v)
+      if (m) espande(ctx, a.length)
       return m ? a + v.slice(m.index + da.length) : v
     })
     sost(/%(=[A-Za-z]:)%/gu)
@@ -435,23 +675,69 @@ function espanso(parola, ctx, dove) {
  * amministrativa `\\<macchina>\C$\` (la doc di Claude Code: `\\localhost\C$` è `C:\`). Il nome della macchina NON si controlla: la
  * radice `C$` di un'altra macchina è una cancellazione critica lo stesso, e il nostro nome può essere scritto in mille modi.
  */
-function discoLocale(t) {
+/*
+ * ⛔ Uscita di riparazione (owner 12/11/2026): `/x/…` e `/mnt/x/…`, con UNA lettera, hanno DUE letture. Per Git Bash e WSL è il disco
+ *   `x:`; per un programma nativo (PowerShell, cmd) è la cartella `\x` del disco corrente, cioè di quello della cartella della sessione:
+ *   col progetto in `C:\T\lavori\progetto`, `Remove-Item -Recurse -Force /T/lavori/progetto` lo cancella, e si guardava un disco `T:`.
+ *   Si giudica il comando intero nelle due letture (`cancellazioneCritica`): la prima è quella di sempre, e se il comando ha una di
+ *   queste grafie (`ctx.senzaDisco`) e non è critico, lo si rilegge come lo legge il sistema (`ctx.comeIlSistema`: il percorso resta
+ *   com'è, e `resolve` gli dà il disco della cartella). Critico se lo è in UNA delle due: mai una carta in meno di prima.
+ */
+function discoLocale(t, ctx) {
   const b = t.replace(/\//gu, '\\')
   const esteso = /^\\\\[?.]\\(?:UNC\\[^\\]+\\([A-Za-z])\$|([A-Za-z]:))(\\.*)?$/iu.exec(b)
   if (esteso) return `${esteso[1] ? `${esteso[1]}:` : esteso[2]}${esteso[3] ?? '\\'}`
   const amministrativa = /^\\\\[^\\?.][^\\]*\\([A-Za-z])\$(\\.*)?$/iu.exec(b)
   if (amministrativa) return `${amministrativa[1]}:${amministrativa[2] ?? '\\'}`
   const unix = /^\/(?:mnt\/)?([A-Za-z])(\/.*)?$/su.exec(t)
-  if (unix) return `${unix[1]}:${unix[2] ?? '\\'}`
+  if (unix) ctx.senzaDisco = true
+  if (unix && !ctx.comeIlSistema) return `${unix[1]}:${unix[2] ?? '\\'}`
   return t
+}
+
+/*
+ * ⛔ Uscita di riparazione, giro 2 (12/11/2026, revisore B: P3, P4, P5). Il DISCO su cui un comando lavora può cambiare dentro il comando,
+ *   e le shell non sono d'accordo su come:
+ *   - `X:` da solo cambia disco in cmd e in PowerShell; in una shell POSIX è un comando che non c'è, e non sposta niente;
+ *   - `cd X:\altro` SENZA `/d` verso un altro disco in cmd NON sposta (cambia solo la cartella ricordata di quel disco: Microsoft
+ *     Learn, `cd`), mentre in PowerShell e in una shell POSIX sposta.
+ *   Il cancello non sa quale shell leggerà: giudica il comando nelle tre letture (`ctx.discoDaSolo`, `ctx.cdCambiaDisco`), ognuna col
+ *   suo contesto nuovo, ed è critico se lo è in UNA. Le due letture in più si fanno solo se il comando ha uno dei due inneschi
+ *   (`ctx.movimentoDubbio`): gli altri comandi costano come prima. Ogni disco ricorda la sua cartella (`ctx.perDisco`), come fa cmd.
+ */
+const discoDi = (p) => /^([A-Za-z]):/u.exec(String(p ?? ''))?.[1]?.toLowerCase() ?? null
+/** La cartella dopo `X:` da solo: quella ricordata di quel disco, o la sua radice; sullo stesso disco non cambia niente. */
+function dopoIlDisco(disco, cartella, ctx) {
+  const lettera = disco.slice(0, 1).toLowerCase()
+  const attuale = discoDi(cartella)
+  if (attuale === lettera) return cartella
+  if (attuale !== null) ctx.perDisco.set(attuale, cartella)
+  return ctx.perDisco.get(lettera) ?? `${disco.slice(0, 1)}:\\`
+}
+/** Chi lascia un disco con `cd /d`, `pushd`, `popd`, `Set-Location` ne ricorda la cartella, come con `X:` da solo: cmd e PowerShell
+ *  tengono una cartella corrente per disco, e `cd /d D:\x & C: & rd /s /q ..` torna dov'era, non alla radice di `C:`. Vale anche
+ *  per chi va dove non si sa dire (`a` è `null`: un `popd` senza niente da riprendere, un `cd` verso una variabile ignota):
+ *  dell'ultimo posto conosciuto di quel disco resta il ricordo. */
+function ricordaIlDiscoLasciato(ctx, da, a) {
+  const lasciato = discoDi(da)
+  if (ctx.windows && lasciato !== null && discoDi(a) !== lasciato) ctx.perDisco.set(lasciato, da)
+}
+/** `X:rel` verso un disco che non è quello della cartella corrente: vale la cartella ricordata di quel disco, o la radice (Node
+ *  guarderebbe la cartella di lavoro del PROCESSO, che il comando non eredita). Sullo stesso disco resta com'è. */
+function sulSuoDisco(t, ctx, dove) {
+  const m = /^([A-Za-z]):(?![\\/])(.*)$/su.exec(t)
+  const qui = discoDi(dove ?? ctx.cartella)
+  if (!m || qui === null || qui === m[1].toLowerCase()) return t
+  return ctx.p.resolve(ctx.perDisco?.get(m[1].toLowerCase()) ?? `${m[1]}:\\`, m[2] === '' ? '.' : m[2])
 }
 
 /** Il bersaglio assoluto, a parole, senza il glob in coda («/sdcard/*» è «/sdcard»), o `null` se non si può dire. */
 function bersaglioAssoluto(scritto, ctx, dove) {
   let t = espanso(scritto, ctx, dove)
   if (t === null || t === '') return null
-  if (ctx.windows) t = discoLocale(t)
-  if (/^[a-z][a-z0-9+.-]*:\/\//iu.test(t)) return null
+  if (ctx.windows) t = sulSuoDisco(discoLocale(t, ctx), ctx, dove)
+  /* giro 2 (revisore A, B3): su Windows una lettera sola non è uno schema: `C://Users//nino` è `C:\Users\nino` con le barre raddoppiate */
+  if ((ctx.windows ? /^[a-z][a-z0-9+.-]+:\/\//iu : /^[a-z][a-z0-9+.-]*:\/\//iu).test(t)) return null
   if (dove === null && !ctx.p.isAbsolute(t)) return null // dopo un `cd` che non si sa dove porta, un bersaglio relativo non si giudica
   let assoluto = ctx.p.resolve(dove ?? ctx.cartella, t)
   /* P: Win32 toglie punti e spazi in coda all'ultimo pezzo (`progetto.`, `"progetto "`; Python issue 41509, PathCchCanonicalizeEx) */
@@ -477,36 +763,292 @@ const cartelleDeiProgetti = (ambiente) => {
 const memoriaDeiVeri = new Map()
 /** Il percorso vero (giunzioni, collegamenti) di cartella, casa e cartelle dei progetti: UNA volta per terna, poi dalla memoria. */
 function veriDi(ctx, realpathFn) {
-  const progetti = cartelleDeiProgetti(ctx.ambiente)
+  /* settimo giro: l'ambiente si legge UNA volta per giro (con `process.env`, `Object.entries` costava ~1 ms a chiamata su Windows e
+     si chiamava a ogni lettura: 8+8 col cancello intero 88 ms invece di 16, misurato col profilo) */
+  const progetti = (ctx.progettiDellAmbiente ??= cartelleDeiProgetti(ctx.ambiente))
   const chiave = `${ctx.piattaforma}\u0000${ctx.cartella}\u0000${ctx.home}\u0000${progetti.join(';')}\u0000${ctx.progettiCritici.join(';')}`
   if (memoriaDeiVeri.has(chiave)) return memoriaDeiVeri.get(chiave)
-  const vero = (x) => { if (typeof x !== 'string' || x === '') return null; try { return realpathFn(x) } catch { return null } }
+  /* sesto giro: `noti` ricorda ogni risposta (anche `null`), per darla alla 0.2.1 ferma senza leggere il disco una seconda volta */
+  const noti = new Map()
+  const vero = (x) => { if (typeof x !== 'string' || x === '') return null; let v; try { v = realpathFn(x) } catch { v = null } noti.set(x, v); return v }
   const veri = { cartella: vero(ctx.cartella), home: vero(ctx.home), progetti: progetti.map((x) => [x, vero(x)]).flat().filter(Boolean),
-    progettiCritici: ctx.progettiCritici.map((x) => [x, vero(x)]).flat().filter(Boolean) }
+    progettiCritici: ctx.progettiCritici.map((x) => [x, vero(x)]).flat().filter(Boolean), noti }
   if (memoriaDeiVeri.size >= TETTO_MEMORIA) memoriaDeiVeri.delete(memoriaDeiVeri.keys().next().value)
   memoriaDeiVeri.set(chiave, veri)
   return veri
 }
 
 /** Per le prove: la memoria dei percorsi veri si svuota. */
-export function dimenticaPercorsiVeri() { memoriaDeiVeri.clear() }
+export function dimenticaPercorsiVeri() { memoriaDeiVeri.clear(); dimenticaQuelliDella021() }
 
-/** Un glob di UN nome (`ni*`, `progett?`, `[pP]rog*`) come espressione, o `null` se non si legge. */
-function globDiUnNome(nome, windows) {
-  let re = ''
-  for (let i = 0; i < nome.length; i += 1) {
-    const c = nome[i]
-    if (c === '*') re += '.*'
-    else if (c === '?') re += '.'
-    else if (c === '[') {
-      const j = nome.indexOf(']', i + 2)
-      if (j === -1) { re += '\\['; continue }
-      const dentro = nome.slice(i + 1, j).replace(/^!/u, '^').replace(/\\/gu, '\\\\')
-      re += `[${dentro}]`
-      i = j
-    } else re += c.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')
+/*
+ * ⛔ Undicesimo giro (15/11/2026, owner «solo le stelle», giudice v1923-v1924): IL GLOB DI UN NOME SI CONFRONTA SENZA ESPRESSIONE
+ *   REGOLARE. Prima le stelle diventavano `^.*.*…Z$`, che torna indietro contro il nome della cartella critica: `rm -rf ../************Z`
+ *   (23 caratteri, progetto in una cartella di 19 lettere) teneva la lettura nuova oltre 1 s, e ogni stella in più costava circa ×3.
+ *   Ora il confronto è a due puntatori (la stella si ricorda; quando un pezzo non prende, la stella prende un carattere in più):
+ *   i passi sono al massimo (n+1)·(m+1), contati in `ctx.conto.glob`. Le stelle in fila sono una stella sola.
+ *   - Lente del giudice (v1923): un glob che il confronto non sa leggere CHIEDE (`troppo-complesso`, via `GLOB_ILLEGGIBILE`), mai
+ *     «nome diverso» (prima un glob che non diventava espressione tornava `null`, e `stessoNome` lo leggeva come un nome diverso).
+ *   - Si legge come bash (manuale, «Pattern Matching»): `*`, `?`, `[…]` con `!` o `^` per negare, `]` per primo, gli intervalli (per
+ *     punto di codice, come `globasciiranges`) e le classi POSIX (`[:alpha:]` e le altre 13), larghe come Unicode (prendere di più dà più
+ *     carte, mai meno). Chiedono: un intervallo rovesciato, una classe sconosciuta, `[=c=]`, `[.c.]`, una classe in parentesi non chiuse,
+ *     ogni barra rovesciata (sulle POSIX la lettura ha già tolto le fughe: quella che arriva viene dagli apici semplici) e i glob estesi
+ *     (`@(…)`, `!(…)`, `+(…)`, `*(…)`, `?(…)`). Una `[` senza chiusura è un carattere, come in bash.
+ *   - Né la stella né `?` né un insieme prendono una barra (su Windows anche quella rovesciata): il glob di un nome non attraversa le
+ *     cartelle. Su Windows senza maiuscole, come prima (`windows`).
+ *   Codex non legge mai una parola con `*?[` come letterale (`bash.rs:272`) e non dà il sì se il lettore ha un errore (`bash.rs:30`);
+ *   pi confronta i glob con una libreria (`package-manager.ts:680`, `minimatch`), non con un'espressione fatta in casa.
+ * ⛔ Dodicesimo giro (15/11/2026, owner 13:44, giudice v1948-v1949): LA LETTURA DEL MODELLO È LINEARE, SI FA UNA VOLTA E SI CONTA.
+ *   Il revisore dell'undicesimo giro: `a=[[[…` (500 `[`) e `rm -rf ../$a$a…` (64 volte, 642 caratteri) tenevano il cancello 11,8-12,4 s
+ *   (0.2.1: 27-29 ms). Ogni `[` senza chiusura riscorreva il glob fino in fondo (quadratico), il glob si rileggeva a ogni confronto, e
+ *   la lettura restava fuori dal conto (`conto.glob` = 1).
+ *   - Una `[` senza chiusura si decide una volta: le posizioni che una lettura dell'insieme ha già percorso fino in fondo senza chiusura,
+ *     senza classi e senza errori si ricordano (`senzaFine`), e la lettura di un'altra `[` che ci arriva si ferma lì con la stessa
+ *     risposta. Ogni posizione si percorre al più una volta: passi ≤ ~3 per carattere. Le risposte restano quelle dell'undicesimo giro.
+ *   - Il modello si legge una volta per comando (`conto.modelli`, comune ai giri e ai confronti), anche quando chiede.
+ *   - I passi della lettura e del confronto si contano in `conto.glob`; oltre `TETTO_DEL_GLOB` la lettura chiede (`troppo-complesso`,
+ *     via `GLOB_ILLEGGIBILE`), mai «nome diverso». La lunghezza si conta PRIMA di costruire il modello. Come Hermes
+ *     (`approval_detection.py:700-712`, il lavoro del lettore si limita prima di leggere; `:1550`, oltre il tetto si chiede).
+ */
+const STELLA = 0
+const UNO = 1
+const GLOB_ILLEGGIBILE = Object.freeze({ trabocco: 'glob' })
+/*
+ * Il tetto dei passi del glob di un comando (lettura dei modelli e confronti): 256 Ki passi (262.144), contati mentre si legge. Misurato
+ * in questo giro: il glob più lungo delle prove e dei banchi senza carta (la forma da 642 caratteri, 32.000 `[`) ne usa 96.000; le
+ * 4.000 stelle che prendono il nome della cartella ~12.000; il caso peggiore dei due puntatori contro un nome di 255 lettere con 1.000
+ * stelle resta sotto. Al tetto la lettura si ferma in pochi millisecondi (vedi il rapporto del dodicesimo giro).
+ */
+const TETTO_DEL_GLOB = 1 << 18
+const GLOB_ESTESO = /[@!+*?]\(/u
+const CLASSI_POSIX = new Map(Object.entries({
+  alnum: /[\p{Alphabetic}\p{Nd}]/u, alpha: /\p{Alphabetic}/u, ascii: /[\0-\x7f]/u, blank: /[\t\p{Zs}]/u, cntrl: /\p{Cc}/u, digit: /\p{Nd}/u,
+  graph: /[^\p{White_Space}\p{Cc}\p{Cs}\p{Cn}]/u, lower: /\p{Lowercase}/u, print: /[^\p{Cc}\p{Cs}\p{Cn}\n\r\t\v\f]/u, punct: /[\p{P}\p{S}]/u,
+  space: /\p{White_Space}/u, upper: /\p{Uppercase}/u, word: /[\p{Alphabetic}\p{Nd}_]/u, xdigit: /[0-9A-Fa-f]/u,
+}))
+
+/**
+ * L'insieme `[…]` che comincia in `cs[i]`: `{ nega, voci, fine }`, o `null` se non si chiude (la `[` è un carattere). `lettura`: i passi
+ * contati e `senzaFine`, le posizioni da cui (dopo il primo carattere) una lettura è già arrivata in fondo senza chiusura, classi né
+ * errori: da lì la risposta è la stessa, e non si riscorre (dodicesimo giro).
+ */
+function insiemeDelGlob(cs, i, lettura) {
+  let j = i + 1
+  const nega = cs[j] === '!' || cs[j] === '^'
+  if (nega) j += 1
+  /* le voci si scrivono come dati (un carattere, `[da, a]`, la classe) e diventano funzioni solo se l'insieme si chiude */
+  const voci = []
+  let classe = false
+  for (let primo = true; j < cs.length && (cs[j] !== ']' || primo); primo = false) {
+    /* il segno si mette subito: se questa lettura si chiude o lancia, nessuna lettura dopo torna su queste posizioni (la prossima `[`
+       comincia dopo la chiusura, e un errore ferma tutto il glob) */
+    if (!primo) {
+      if (lettura.senzaFine[j] === 1) { j = cs.length; break }
+      lettura.senzaFine[j] = 1
+    }
+    if (++lettura.passi > lettura.resto) throw GLOB_ILLEGGIBILE // un passo, come `passoDellaLettura(lettura, 1)`, senza la chiamata
+    const c = cs[j]
+    if (c === '\\') throw GLOB_ILLEGGIBILE
+    if (c === '[' && (cs[j + 1] === ':' || cs[j + 1] === '=' || cs[j + 1] === '.')) {
+      const tipo = cs[j + 1]
+      let k = j + 2
+      while (k + 1 < cs.length && !(cs[k] === tipo && cs[k + 1] === ']')) k += 1
+      passoDellaLettura(lettura, k - j)
+      const nome = cs.slice(j + 2, k).join('')
+      if (tipo !== ':' || k + 1 >= cs.length || !CLASSI_POSIX.has(nome)) throw GLOB_ILLEGGIBILE
+      voci.push(CLASSI_POSIX.get(nome))
+      classe = true
+      j = k + 2
+      continue
+    }
+    if (cs[j + 1] === '-' && j + 2 < cs.length && cs[j + 2] !== ']') {
+      const fino = cs[j + 2]
+      if (fino === '\\' || fino === '[') throw GLOB_ILLEGGIBILE
+      const da = c.codePointAt(0)
+      const a = fino.codePointAt(0)
+      if (da > a) throw GLOB_ILLEGGIBILE
+      voci.push([da, a])
+      j += 3
+      continue
+    }
+    voci.push(c)
+    j += 1
   }
-  try { return new RegExp(`^${re}$`, windows ? 'iu' : 'u') } catch { return null }
+  if (j >= cs.length) {
+    if (classe) throw GLOB_ILLEGGIBILE // `[[:alpha:]…` senza chiusura: chi legge come bash non è sicuro di come finisce
+    return null
+  }
+  return insiemeChiuso(nega, voci, j, lettura)
+}
+
+/**
+ * ⛔ Tredicesimo giro (16/11/2026, owner v1977, giudice v1979, lente v1952): UN INSIEME CHIUSO SI PROVA UNA VOLTA PER CARATTERE E OGNI
+ *   VOCE PROVATA SI CONTA. Il revisore del dodicesimo giro: `a='*[b×4000]'` e `rm -rf ../$a` × 1.000 (cartella di 64 lettere) teneva il
+ *   cancello 4,1-4,6 s su macOS e Windows (0.2.1: 0,30-0,39 s): il confronto provava le 4.000 voci per ognuna delle tre forme del
+ *   carattere a ogni posizione, e il conto contava le posizioni, non le voci.
+ *   - Le voci diventano dati senza doppioni: i caratteri in un `Set` (un intervallo `[b-b]` è il carattere), gli intervalli diversi in
+ *     fila, le classi una volta (sono al più 14). Costruirlo costa un passo per voce, contato nella lettura.
+ *   - La risposta per un carattere (nelle sue forme, con o senza maiuscole) si calcola una volta per comando (l insieme sta nel modello,
+ *     in `conto.modelli`) e si ricorda in `risposte`; la prima volta costa forme × (1 + intervalli + classi) passi, contati PRIMA di
+ *     provarle nello stesso tetto del glob: oltre, la lettura chiede (`troppo-complesso`), mai «nome diverso».
+ *   Come Hermes, il lavoro del lettore sta sotto un tetto unico e oltre chiede (`approval_detection.py:696`, `:1548-1550`).
+ */
+function insiemeChiuso(nega, voci, fine, lettura) {
+  passoDellaLettura(lettura, voci.length)
+  const caratteri = new Set()
+  const intervalli = []
+  const visti = new Set()
+  const classi = new Set()
+  for (const v of voci) {
+    if (typeof v === 'string') caratteri.add(v)
+    else if (v instanceof RegExp) classi.add(v)
+    else if (v[0] === v[1]) caratteri.add(String.fromCodePoint(v[0]))
+    else if (!visti.has(`${v[0]}-${v[1]}`)) { visti.add(`${v[0]}-${v[1]}`); intervalli.push(v) }
+  }
+  return { nega, caratteri, intervalli, classi: [...classi], risposte: [new Map(), new Map()], fine }
+}
+
+/** Una forma `y` del carattere sta nell insieme? Un carattere, un intervallo per punto di codice (come `globasciiranges`), una classe. */
+function nellInsieme(insieme, y) {
+  if (insieme.caratteri.has(y)) return true
+  const p = y.codePointAt(0)
+  for (const [da, a] of insieme.intervalli) if (p >= da && p <= a) return true
+  for (const classe of insieme.classi) if (classe.test(y)) return true
+  return false
+}
+
+/** Conta `n` passi della lettura del modello; oltre quelli che restano sotto `TETTO_DEL_GLOB` la lettura chiede, subito. */
+function passoDellaLettura(lettura, n) {
+  /* tredicesimo giro: anche un conto di molti passi insieme si ferma al tetto più uno, come un passo solo */
+  if (lettura.passi + n > lettura.resto) { lettura.passi = lettura.resto + 1; throw GLOB_ILLEGGIBILE }
+  lettura.passi += n
+}
+
+/** Un glob di UN nome (`ni*`, `progett?`, `[pP]rog*`) in pezzi: `STELLA`, `UNO`, un carattere, un insieme. Lancia `GLOB_ILLEGGIBILE`. */
+function leggiIlGlob(nome, lettura) {
+  /* tredicesimo giro (lente v1952): un passo per carattere, contato tutto PRIMA di cominciare, paga il lavoro costante che ogni carattere
+     costa nella preparazione (glob esteso, caratteri, segni) e nel suo giro qui sotto; le letture degli insiemi si contano a parte */
+  passoDellaLettura(lettura, nome.length)
+  if (GLOB_ESTESO.test(nome)) throw GLOB_ILLEGGIBILE
+  const cs = Array.from(nome)
+  lettura.senzaFine = new Uint8Array(cs.length + 1)
+  const pezzi = []
+  for (let i = 0; i < cs.length; i += 1) {
+    const c = cs[i]
+    if (c === '*') { if (pezzi.at(-1) !== STELLA) pezzi.push(STELLA) } else if (c === '?') pezzi.push(UNO)
+    else if (c === '\\') throw GLOB_ILLEGGIBILE
+    else if (c === '[') {
+      /* tredicesimo giro, la prima chiamata della forma da 642 caratteri su Windows: se dalla seconda posizione dell insieme una lettura
+         è già arrivata in fondo senza chiusura (`senzaFine`) e il primo carattere è una voce semplice (non `!`, `^`, `\`, una classe, un
+         intervallo), `insiemeDelGlob` direbbe `null` dopo un passo: la stessa risposta, senza chiamarlo */
+      const d = cs[i + 1]
+      const e = cs[i + 2]
+      if (lettura.senzaFine[i + 2] === 1 && d !== '!' && d !== '^' && d !== '\\' && e !== '-' && !(d === '[' && (e === ':' || e === '=' || e === '.'))) {
+        passoDellaLettura(lettura, 1)
+        pezzi.push(c)
+        continue
+      }
+      const insieme = insiemeDelGlob(cs, i, lettura)
+      if (insieme === null) pezzi.push(c)
+      else { pezzi.push(insieme); i = insieme.fine }
+    } else pezzi.push(c)
+  }
+  return pezzi
+}
+
+/**
+ * Il modello del glob, letto UNA volta per comando (`conto.modelli`, anche la risposta «chiede») e contato in `conto.glob`: la
+ * lunghezza prima di costruire, i passi veri durante; oltre `TETTO_DEL_GLOB` lancia `GLOB_ILLEGGIBILE` (la lettura chiede).
+ */
+function pezziDelGlob(nome, conto = null) {
+  const modelli = conto ? (conto.modelli ??= new Map()) : null
+  const letto = modelli?.get(nome)
+  if (letto === GLOB_ILLEGGIBILE) throw GLOB_ILLEGGIBILE
+  if (letto !== undefined) return letto
+  const lettura = { passi: 0, senzaFine: null, resto: conto ? TETTO_DEL_GLOB - (conto.glob ?? 0) : Infinity }
+  try {
+    const pezzi = leggiIlGlob(nome, lettura)
+    modelli?.set(nome, pezzi)
+    return pezzi
+  } catch (errore) {
+    if (errore === GLOB_ILLEGGIBILE) modelli?.set(nome, GLOB_ILLEGGIBILE)
+    throw errore
+  } finally {
+    if (conto) conto.glob = (conto.glob ?? 0) + lettura.passi
+  }
+}
+
+/** Il carattere `x` nelle sue forme (su Windows senza maiuscole: com'è, minuscolo, maiuscolo). */
+const formeDi = (x, senzaMaiuscole) => (senzaMaiuscole ? [x, x.toLowerCase(), x.toUpperCase()] : [x])
+
+/**
+ * Un pezzo che non è la stella prende il carattere `x`? Mai una barra (`barra`: anche quella rovesciata). Un insieme risponde una volta
+ * per carattere (`risposte`); la prima volta `conta` i passi delle voci da provare prima di provarle (tredicesimo giro).
+ */
+function pezzoPrende(pezzo, x, senzaMaiuscole, barra, conta) {
+  if (typeof pezzo === 'string') return formeDi(x, senzaMaiuscole).some((y) => y === pezzo || (senzaMaiuscole && y === pezzo.toLowerCase()))
+  if (x === '/' || (barra && x === '\\')) return false
+  if (pezzo === UNO) return true
+  const risposte = pezzo.risposte[senzaMaiuscole ? 1 : 0]
+  let dentro = risposte.get(x)
+  if (dentro === undefined) {
+    const forme = formeDi(x, senzaMaiuscole)
+    conta(forme.length * (1 + pezzo.intervalli.length + pezzo.classi.length))
+    /* Reviewer finding of round 13 (17/11/2026): without capitals the gate does not know which shell will read the set, so it takes
+       the more careful answer. A plain set takes the character when ONE of its forms is inside; a negated set takes it when one
+       of its forms is OUTSIDE (`[!W]` takes `w` in a shell that minds capitals: Git Bash, macOS, Android). Before, the negated
+       set denied the answer of the plain one and let `rm -rf ../[!P]rogetto` pass with no card. */
+    dentro = pezzo.nega ? !forme.every((y) => nellInsieme(pezzo, y)) : forme.some((y) => nellInsieme(pezzo, y))
+    risposte.set(x, dentro)
+  }
+  return dentro
+}
+
+/**
+ * I caratteri del nome `vero`, presi una volta per comando (`conto.nomi`) e contati la prima volta (tredicesimo giro, lente v1952: anche
+ * questo è un giro sul nome).
+ */
+function caratteriDel(vero, conto, conta) {
+  const nomi = conto ? (conto.nomi ??= new Map()) : null
+  const presi = nomi?.get(vero)
+  if (presi !== undefined) return presi
+  conta(vero.length)
+  const s = Array.from(vero)
+  nomi?.set(vero, s)
+  return s
+}
+
+/**
+ * Il glob di UN nome prende il nome `vero`? Due puntatori, senza tornare indietro oltre l'ultima stella: al massimo (n+1)·(m+1) passi,
+ * aggiunti a `conto.glob`, più le voci degli insiemi provate la prima volta e i caratteri del nome. `senzaMaiuscole`: le lettere senza
+ * maiuscole (Windows, macOS, la memoria condivisa del telefono); `barra`: anche la barra rovesciata separa (Windows e macOS, come prima).
+ * Lancia `GLOB_ILLEGGIBILE` (la lettura chiede).
+ */
+function globPrende(glob, vero, senzaMaiuscole, conto = null, barra = senzaMaiuscole) {
+  const p = pezziDelGlob(glob, conto)
+  let i = 0
+  let j = 0
+  let stella = -1
+  let segno = 0
+  let passi = 0
+  /* dodicesimo giro: i passi del confronto stanno sotto il tetto del glob del comando, insieme alla lettura */
+  const resto = conto ? TETTO_DEL_GLOB - (conto.glob ?? 0) : Infinity
+  const conta = (n) => { if (passi + n > resto) { passi = resto + 1; throw GLOB_ILLEGGIBILE } passi += n }
+  try {
+    const s = caratteriDel(vero, conto, conta)
+    while (i < s.length) {
+      if ((passi += 1) > resto) throw GLOB_ILLEGGIBILE
+      if (p[j] === STELLA) { stella = j; segno = i; j += 1 } else if (j < p.length && pezzoPrende(p[j], s[i], senzaMaiuscole, barra, conta)) { i += 1; j += 1 } else if (stella !== -1 && s[segno] !== '/' && !(barra && s[segno] === '\\')) {
+        segno += 1
+        i = segno
+        j = stella + 1
+      } else return false
+    }
+    while (p[j] === STELLA) j += 1
+    return j === p.length
+  } finally {
+    if (conto) conto.glob = (conto.glob ?? 0) + passi
+  }
 }
 
 /**
@@ -514,15 +1056,31 @@ function globDiUnNome(nome, windows) {
  * `PROGRA~1` per `Program Files`: le prime sei lettere senza spazi e punti, poi `~N`), o un glob che lo prende (`ni*`).
  */
 function stessoNome(scritto, vero, ctx, senzaMaiuscole = ctx.windows) {
-  const a = senzaMaiuscole ? scritto.toLowerCase() : scritto
-  const c = senzaMaiuscole ? vero.toLowerCase() : vero
+  /* tredicesimo giro (sicurezza, già nella 0.2.1): su macOS i due nomi si leggono nella stessa forma Unicode (NFC) e senza maiuscole
+     come APFS (vedi `piegaDelMac`); Windows e Linux restano come prima */
+  if (ctx.mac) { scritto = scritto.normalize('NFC'); vero = vero.normalize('NFC') }
+  const piega = ctx.mac ? piegaDelMac : (x) => x.toLowerCase()
+  const a = senzaMaiuscole ? piega(scritto) : scritto
+  const c = senzaMaiuscole ? piega(vero) : vero
   if (a === c) return true
   if (ctx.windows) {
     const corto = /^([^~\s.]{1,6})~\d+$/u.exec(a)
     if (corto && c.replace(/[\s.]/gu, '').startsWith(corto[1])) return true
   }
-  return GLOB.test(scritto) ? Boolean(globDiUnNome(scritto, ctx.windows)?.test(vero)) : false
+  /* undicesimo giro: due puntatori, e un glob che non si sa leggere chiede (vedi `globPrende`); dodicesimo: su macOS senza maiuscole;
+     tredicesimo (sicurezza, già nella 0.2.1): le maiuscole come il nome, così anche la memoria condivisa del telefono (prima solo
+     Windows e macOS: `Documents/W*` non prendeva `w`); la barra rovesciata separa come prima, solo su Windows e macOS */
+  return GLOB.test(scritto) || GLOB_ESTESO.test(scritto) ? globPrende(scritto, vero, senzaMaiuscole, ctx.conto, ctx.windows || ctx.mac) : false
 }
+
+/**
+ * Tredicesimo giro (sicurezza, già nella 0.2.1; reperto del revisore del dodicesimo giro): il nome come lo confronta APFS nella variante
+ * di serie, che non bada né alla forma Unicode (Apple, APFS Guide FAQ) né alle maiuscole, con il confronto completo: `ß`, `ẞ` e `SS`
+ * sono lo stesso nome, come `casefold` di Python (Hermes `tools/skills_hub_models.py:336`; NFC come `tools/file_operations.py:1197`).
+ * Minuscolo, maiuscolo, minuscolo: il passo in maiuscolo apre `ß` in `SS` e le legature. Prende al più qualche nome in più (`ı` e `i`):
+ * una carta in più, mai una in meno.
+ */
+const piegaDelMac = (x) => x.toLowerCase().toUpperCase().toLowerCase().normalize('NFC')
 
 function pezzi(x, ctx) {
   const r = ctx.p.resolve(x)
@@ -542,8 +1100,12 @@ function dove(a, c, ctx) {
   if (typeof c !== 'string' || c === '') return null
   const C = pezzi(ctx.windows ? c : comeSulTelefono(c), ctx)
   if (a.radice !== C.radice || a.nomi.length > C.nomi.length) return null
-  const senzaMaiuscole = ctx.windows || (nellaMemoriaCondivisa(a.nomi) && nellaMemoriaCondivisa(C.nomi))
-  const volume = !ctx.windows && senzaMaiuscole ? (a.nomi[1] === 'emulated' ? 3 : 2) : 0
+  /* dodicesimo giro (owner 13:44, già nella 0.2.1): su macOS APFS di serie non bada alle maiuscole, e `rm -rf /Users/TIZIO` cancella
+     la casa `/Users/tizio`; i nomi si confrontano senza maiuscole come su Windows (Hermes confronta il comando in minuscole,
+     `approval_detection.py:211`). Un disco APFS con le maiuscole dà al più una carta in più, mai una in meno. */
+  const condivisa = !ctx.windows && !ctx.mac && nellaMemoriaCondivisa(a.nomi) && nellaMemoriaCondivisa(C.nomi)
+  const senzaMaiuscole = ctx.windows || ctx.mac || condivisa
+  const volume = condivisa ? (a.nomi[1] === 'emulated' ? 3 : 2) : 0
   for (let i = 0; i < a.nomi.length; i += 1) if (!stessoNome(a.nomi[i], C.nomi[i], ctx, senzaMaiuscole && i >= volume)) return null
   return a.nomi.length === C.nomi.length ? 'uguale' : 'sopra'
 }
@@ -712,7 +1274,7 @@ function cartellaDopo(scritto, ctx, dove) {
   if (sostituzione) return cartellaDellaSostituzione(sostituzione[1] ?? sostituzione[2], ctx, dove)
   const t = espanso(scritto, ctx, dove)
   if (t === null || t === '') return null
-  const disco = ctx.windows ? discoLocale(t) : t
+  const disco = ctx.windows ? discoLocale(t, ctx) : t
   if (dove === null && !ctx.p.isAbsolute(disco)) return null
   return ctx.p.resolve(dove ?? ctx.cartella, disco)
 }
@@ -765,6 +1327,8 @@ function decodificaPowerShell(b64) {
 }
 
 const TROPPO_ANNIDATO = Object.freeze({ percorso: null, perche: 'troppo-annidato' })
+/* ⛔ decimo giro: il comando che la lettura nuova non riesce a leggere fino in fondo (il tetto dell'espansione, un errore qualsiasi) */
+const TROPPO_COMPLESSO = Object.freeze({ percorso: null, perche: 'troppo-complesso' })
 
 /** C: ciò che arriva alla pipe è scelto da un filtro (`-Filter`, `-Include`, un glob nel nome come `*.log`): niente carta per la pipe. */
 function filtrata(parole, ctx) {
@@ -781,7 +1345,8 @@ function variantiDi(testo, ctx) {
   for (const [nome, valori] of ctx.locali ?? []) {
     if (valori.length < 2) continue
     const re = new RegExp(`\\$\\{${nome}\\}|\\$${nome}(?![\\w])`, ctx.windows ? 'giu' : 'gu')
-    uscite = uscite.flatMap((u) => (u.search(re) === -1 ? [u] : valori.map((v) => u.replace(re, () => v)))).slice(0, 16)
+    /* ⛔ decimo giro: ogni valore del `for` messo nel bersaglio si conta prima (`espande`), come ogni variabile */
+    uscite = uscite.flatMap((u) => (u.search(re) === -1 ? [u] : valori.map((v) => u.replace(re, () => { espande(ctx, v.length); return v })))).slice(0, 16)
   }
   return uscite
 }
@@ -854,7 +1419,7 @@ function giudicaForfiles(parole, ctx, realpathFn, qui, rileggi) {
   const neutra = rileggi(conIlNome(ctx.p.join(radice, 'talos-forfiles')), radice)
   if (neutra || !usaIlNome) return neutra
   const tutti = /^\*(?:\.\*)?$/u.test(maschera)
-  const prende = (nome) => tutti || Boolean(globDiUnNome(maschera, ctx.windows)?.test(nome))
+  const prende = (nome) => tutti || globPrende(maschera, nome, ctx.windows, ctx.conto)
   const r = pezzi(radice, ctx)
   if (r.nomi.length === 0 && tutti) return { percorso: ctx.p.join(radice, '*'), perche: 'primo-livello' }
   const veri = veriDi(ctx, realpathFn)
@@ -871,7 +1436,17 @@ function giudicaForfiles(parole, ctx, realpathFn, qui, rileggi) {
   return null
 }
 
-function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
+/*
+ * `scelte`, `eventi` (quinto giro, 13/11/2026: la regola del sottofondo può solo AGGIUNGERE carte): ogni punto dove la regola di bash
+ * dice che un `cd` NON resta (una cartella ripresa dopo una sottoshell, un sottofondo o una pipe; un `cd` saltato in una pipe o in
+ * sottofondo) ha un nome (`r<comando>.<k>`, `c<comando>`). Se il nome sta in `scelte` il `cd` resta; se no la regola vale e il nome
+ * va in `eventi` (solo se la cartella cambia davvero). `conTuttiICasi` rilegge il testo con ogni combinazione.
+ */
+function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null, eventi = null) {
+  /* ⛔ settimo giro: oltre il tetto unico di letture del comando (`TETTO_DELLE_LETTURE`) la carta, a qualunque livello */
+  if ((ctx.conto.letture += 1) > TETTO_DELLE_LETTURE) return TROPPO_ANNIDATO
+  /* ⛔ ottavo giro: ogni lettura scompone il testo intero, e il lavoro conta nel tetto del comando (`TETTO_DEL_LAVORO`) */
+  if (conta(ctx, PESI.lettura + Math.floor(testo.length / PESI.caratteri))) return TROPPO_ANNIDATO
   /* ⛔ oltre il tetto si fallisce CHIUSI (Codex `is_dangerous_command.rs:35-58`): un testo che sembra cancellare e che non si guarda fino in fondo è una carta */
   if (profondita > TETTO_ANNIDAMENTO) return sembraCancellare(testo) ? TROPPO_ANNIDATO : null
   /* P: `[IO.Directory]::Delete(…)`, `(Get-Item X).Delete($true)`: il parser non li segue, si fallisce chiusi */
@@ -881,10 +1456,43 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
   let precedente = null
   let elencoInPipe = null // P: ciò che `gci X | % { … }` dà a `$_`
   const rileggi = (t, dentro = cartella) => giudica(t, ctx, realpathFn, profondita + 1, dentro)
+  /*
+   * ⛔ Giro unico della riparazione (12/11/2026, revisori B e C, giudice 19:59): il testo che una shell DETTA PER NOME eseguirà si
+   *   legge con la regola di QUELLA shell. In PowerShell (`cd` è `Set-Location`) e in bash `cd X:\altro` sposta anche di disco: la
+   *   lettura di cmd (P4) lì dava la carta «cancella il progetto» a `powershell -Command "cd K:\build; Remove-Item -Recurse *"`, e
+   *   nominava un posto che non si cancella. Il testo di `cmd /c` torna alla regola della lettura in corso (`ctx.cdDelGiro`), anche
+   *   dentro PowerShell o bash: `powershell -c "cmd /c 'cd K:\x && rd /s /q .'"` cancella il progetto e resta visto.
+   */
+  const rileggiCon = (cdCambiaDisco, t, dentro, bash = false) => {
+    const era = ctx.cdCambiaDisco
+    const eraBash = ctx.bash
+    ctx.cdCambiaDisco = cdCambiaDisco
+    ctx.bash = bash // il testo che riceve bash per nome (R15, 13/11/2026: anche fuori da Windows)
+    try { return rileggi(t, dentro) } finally { ctx.cdCambiaDisco = era; ctx.bash = eraBash }
+  }
+  /* giro piccolo dopo il controllore: con la regola di bash, la cartella messa da parte prima di una sottoshell o di una lista in
+     sottofondo (`comandiSemplici`, `salvaPrima`) torna dopo di lei (`ripristinaDopo`) */
+  const daParte = []
+  let daRiprendere = 0
+  /* giro unico: in cmd il `;` non separa: `cd X:\…; Remove-Item …` è un `cd` verso «X:\…; Remove-Item …», che fallisce, e ciò che
+     segue fino al primo `&`, `|` o a capo non parte (misurato con cmd.exe, 12/11/2026). Vale per la lettura di cmd del `cd` qui sotto. */
+  let ingoiato = false
   /* C: il corpo di un heredoc è testo; si rilegge solo quello che riceve una shell */
   const { testo: senzaCorpi, corpi } = ctx.windows ? { testo, corpi: [] } : separaHeredoc(testo)
   for (const corpo of corpi) { const trovata = rileggi(corpo); if (trovata) return trovata }
-  for (const comando of comandiSemplici(senzaCorpi, !ctx.windows)) {
+  for (const [n, comando] of comandiSemplici(senzaCorpi, !ctx.windows).entries()) {
+    if (conta(ctx, PESI.comando)) return TROPPO_ANNIDATO // ottavo giro: ogni comando guardato è lavoro
+    if (ctx.bash) {
+      for (let k = 0; daRiprendere > 0 && daParte.length; daRiprendere -= 1, k += 1) {
+        const ripresa = daParte.pop()
+        if (ripresa === cartella || scelte?.has(`r${n}.${k}`)) continue // il caso «il cd resta»
+        eventi?.add(`r${n}.${k}`)
+        cartella = ripresa
+      }
+      for (let k = 0; k < (comando.salvaPrima ?? 0); k += 1) daParte.push(cartella)
+      daRiprendere = comando.ripristinaDopo ?? 0
+    }
+    if (ingoiato) { ingoiato = comando.puntoEVirgola === true; continue }
     /* le sostituzioni si eseguono: si guardano come comandi a sé; un gruppo fra parentesi che non si calcola si rilegge (`if exist x (rd …)`) */
     for (const w of comando) for (const dentro of sostituzioniDi(w.testo)) {
       const trovata = rileggi(dentro)
@@ -913,8 +1521,31 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
     const resto = () => parole.slice(1).map((w) => w.testo).join(' ')
     /* `cd C:\Users && rm -rf nino`: la cartella cambia per i comandi dopo */
     /* 208 ter (MEDIA-3): `Push-Location`/`Pop-Location` di PowerShell come `pushd`/`popd` (about_Locations) */
-    if (COMANDI_CHE_SPOSTANO.has(nome)) { if (nome === 'pushd' || nome === 'push-location') pila.push(cartella); cartella = cartellaDopo(argomentoDelCd(parole, ctx), ctx, cartella); continue }
-    if (nome === 'popd' || nome === 'pop-location') { cartella = pila.length ? pila.pop() : null; continue }
+    if (COMANDI_CHE_SPOSTANO.has(nome)) {
+      /* giro piccolo dopo il controllore: in bash un `cd` in una pipe gira in una sottoshell («Pipelines»); e un `cd /x/…` di Git Bash
+         chiuso da un `&` da solo va in sottofondo in bash (e in PowerShell 7): chi viene dopo resta dov'era */
+      if (((ctx.bash && (comando.primaDiPipe || comando.dopoPipe)) || (ctx.windows && comando.sfondo && /^\/(?:mnt\/)?[A-Za-z](?:\/|$)/u.test(argomentoDelCd(parole, ctx) ?? ''))) && !scelte?.has(`c${n}`)) { eventi?.add(`c${n}`); continue }
+      if (nome === 'pushd' || nome === 'push-location') pila.push(cartella)
+      const nuova = cartellaDopo(argomentoScelto(argomentoDelCd(parole, ctx), ctx, n, scelte, eventi), ctx, cartella)
+      /* giro 2 (P4): `cd X:\altro` senza `/d` verso un altro disco: in cmd la cartella NON cambia (`rd /s /q .` resta il progetto) */
+      /* giro unico: un disco letto alla maniera di Git Bash e di WSL (`cd /c/x`, `cd /mnt/c/x`) non è un altro disco per cmd (per cmd è
+         la cartella `\c\x` del disco corrente), quindi lì la regola di cmd non c'entra: `cd /c/tmp && rm -rf *` gira in Git Bash */
+      if (ctx.windows && (nome === 'cd' || nome === 'chdir') && discoDi(nuova) !== null && discoDi(cartella) !== null && discoDi(nuova) !== discoDi(cartella)
+        && !parole.some((w, k) => k > 0 && /^\/d$/iu.test(w.testo)) && !/^\/(?:mnt\/)?[A-Za-z](?:\/|$)/u.test(argomentoDelCd(parole, ctx) ?? '')) {
+        ctx.movimentoDubbio = true
+        if (!ctx.cdCambiaDisco) { if (comando.puntoEVirgola) ingoiato = true; else ctx.perDisco.set(discoDi(nuova), nuova); continue }
+      }
+      ricordaIlDiscoLasciato(ctx, cartella, nuova)
+      cartella = nuova
+      continue
+    }
+    /* giro 2 (P3): `X:` da solo è un cambio di disco (cmd, PowerShell): ciò che viene dopo senza disco sta lì */
+    if (ctx.windows && parole.length === 1 && /^[A-Za-z]:$/u.test(parole[0].testo)) {
+      ctx.movimentoDubbio = true
+      if (ctx.discoDaSolo) cartella = dopoIlDisco(parole[0].testo, cartella, ctx)
+      continue
+    }
+    if (nome === 'popd' || nome === 'pop-location') { const lasciata = cartella; cartella = pila.length ? pila.pop() : null; ricordaIlDiscoLasciato(ctx, lasciata, cartella); continue }
     if (nome === 'forfiles') { const trovata = giudicaForfiles(parole, ctx, realpathFn, qui, rileggi); if (trovata) return trovata; continue }
     /* `eval`, e in PowerShell `iex`/`Invoke-Expression` (P): il testo si rilegge, con le variabili assegnate prima */
     if (nome === 'eval' || nome === 'iex' || nome === 'invoke-expression') {
@@ -933,7 +1564,7 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
         /* P: `bash -c "$(printf …)"`: il testo lo scrive un comando, non si sa → carta se il testo cancella */
         if (parole[k].sostituzione && sembraCancellare(testo)) return TROPPO_ANNIDATO
         /* P: `sh -c '… "$1"' _ X`: i posizionali entrano nel testo */
-        const trovata = rileggi(conPosizionali(parole[k].testo, parole.slice(k + 1).map((w) => w.testo)), qui)
+        const trovata = rileggiCon(true, conPosizionali(parole[k].testo, parole.slice(k + 1).map((w) => w.testo)), qui, true)
         if (trovata) return trovata
         continue
       }
@@ -941,14 +1572,14 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
       const h = parole.findIndex((w, j) => j > 0 && w.testo.startsWith('<<<'))
       if (h > 0) {
         const stringa = parole[h].testo === '<<<' ? parole[h + 1]?.testo : parole[h].testo.slice(3)
-        if (stringa) { const trovata = rileggi(stringa, qui); if (trovata) return trovata }
+        if (stringa) { const trovata = rileggiCon(true, stringa, qui, true); if (trovata) return trovata }
         continue
       }
       /* P: `echo '…' | bash`, `printf … | sh`: si rilegge il testo; un'altra fonte nella pipe di una shell non si sa → carta se il testo cancella */
       if (comando.dopoPipe && prima?.length) {
         const fonte = nomeDelComando(prima[0].testo)
         if (fonte === 'echo' || fonte === 'printf') {
-          const trovata = rileggi(prima.slice(1).filter((w) => !/^-[neE]+$/u.test(w.testo)).map((w) => w.testo).join(' '), qui)
+          const trovata = rileggiCon(true, prima.slice(1).filter((w) => !/^-[neE]+$/u.test(w.testo)).map((w) => w.testo).join(' '), qui, true)
           if (trovata) return trovata
         } else if (sembraCancellare(testo)) return TROPPO_ANNIDATO
       }
@@ -959,7 +1590,7 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
         const t = parole[j].testo
         const attaccato = /^\/[ck](?!:)(.+)$/isu.exec(t) // P: `cmd /c"rd /s /q …"`
         if (!/^\/[ckr]$/iu.test(t) && !attaccato) continue // `/r` è un altro nome di `/c`
-        const trovata = rileggi([...(attaccato ? [attaccato[1]] : []), ...parole.slice(j + 1).map((w) => w.testo)].join(' '), qui)
+        const trovata = rileggiCon(ctx.cdDelGiro, [...(attaccato ? [attaccato[1]] : []), ...parole.slice(j + 1).map((w) => w.testo)].join(' '), qui)
         if (trovata) return trovata
         break
       }
@@ -1000,7 +1631,7 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
         if (nome === 'powershell') corpo = parole.slice(j).map((w) => w.testo).join(' ') // powershell.exe: il primo argomento è -Command
         break
       }
-      if (corpo) { const trovata = rileggi(corpo, dentro); if (trovata) return trovata }
+      if (corpo) { const trovata = rileggiCon(true, corpo, dentro); if (trovata) return trovata }
       continue
     }
     /* P: `gci X | % { ri $_ … }`, `ForEach-Object { Remove-Item $_.FullName … }`: `$_` vale ciò che elenca chi sta prima della pipe */
@@ -1014,6 +1645,7 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
       : nome === 'rsync' && parole.some((w) => /^--del/u.test(w.testo)) ? parole.slice(1).filter((w) => !w.testo.startsWith('-')).at(-1) : null
     if (specchio) {
       if (nome === 'rsync' && /^[^/]*:/u.test(specchio.testo) && !/^[A-Za-z]:[\\/]/u.test(specchio.testo)) continue // un'altra macchina
+      if (conta(ctx, PESI.bersaglio)) return TROPPO_ANNIDATO
       const assoluto = bersaglioAssoluto(specchio.testo, ctx, qui)
       const motivo = assoluto === null ? null : perche(assoluto, ctx, veriDi(ctx, realpathFn))
       if (motivo) return { percorso: assoluto, perche: motivo }
@@ -1039,6 +1671,7 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
       const senzaFiltri = filtri.every((t, j) => /^-(?:delete|depth|xdev|mount|noleaf|ignore_readdir_race|d)$/u.test(t) || /^-(?:min|max)depth$/u.test(t) || /^\d+$/u.test(t) && /^-(?:min|max)depth$/u.test(filtri[j - 1] ?? ''))
       if (!senzaFiltri) continue
       for (const w of radici.length ? radici : [{ testo: '.', sostituzione: false }]) {
+        if (conta(ctx, PESI.bersaglio)) return TROPPO_ANNIDATO
         const assoluto = bersaglioAssoluto(w.testo, ctx, qui)
         const motivo = assoluto === null ? null : perche(assoluto, ctx, veriDi(ctx, realpathFn))
         if (motivo) return { percorso: assoluto, perche: motivo }
@@ -1076,6 +1709,7 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
       const spostato = albero !== null || altroRepo
       const percorsi = opzioni.filter((t, k) => !t.startsWith('-') && !/^(?:-e|--exclude)$/u.test(opzioni[k - 1] ?? ''))
       for (const p of percorsi.length ? percorsi : ['.']) {
+        if (conta(ctx, PESI.bersaglio)) return TROPPO_ANNIDATO
         const daRadice = /^:(?:\/|\([^)]*\btop\b[^)]*\))(.*)$/su.exec(p)
         const assoluto = daRadice ? (daRadice[1] ? bersaglioAssoluto(daRadice[1], ctx, radice) : radice) : bersaglioAssoluto(p, ctx, dentro)
         const motivo = assoluto === null ? null : perche(assoluto, ctx, veriDi(ctx, realpathFn))
@@ -1084,6 +1718,10 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
       continue
     }
     if (!COMANDI_CHE_CANCELLANO.has(nome)) continue
+    /* giro 2: un `rm` con le opzioni unite alla POSIX (`-rf`, `-fr`, `--recursive`) gira in Git Bash o in WSL, non in PowerShell
+       (dove `rm -rf` è un errore): serve a `cancellazioneCritica` per scegliere quale lettura di `/x/…` nominare sulla carta */
+    ctx.allaPosix = nome === 'rm' && parole.some((w, k) => k > 0 && /^-(?:[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-recursive|-force|-no-preserve-root)$/u.test(w.testo))
+      && !parole.some((w, k) => k > 0 && /^-(?:rec|fo|lit|pat|con|whatif)/iu.test(w.testo))
     let bersagli = [...bersagliDel(parole, ctx)]
     let dove2 = qui
     /* `gci C:\Users\nino -Recurse | Remove-Item`: senza percorso, Remove-Item cancella ciò che la pipe gli porta (C: se un filtro sceglie, niente carta) */
@@ -1105,6 +1743,8 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
       return g && !b.sostituzione ? g[2].split(',').slice(0, 16).map((scelta) => ({ testo: `${g[1]}${scelta}${g[3]}`, sostituzione: false })) : [b]
     })
     for (const bersaglio of bersagli) {
+      /* ⛔ ottavo giro: ogni bersaglio, uno per valore del `for` e per scelta delle graffe, è lavoro del comando */
+      if (conta(ctx, PESI.bersaglio)) return TROPPO_ANNIDATO
       /* P: `Remove-Item (Join-Path A B)`: il gruppo si calcola a parole; ogni altro gruppo non si sa → carta */
       if (bersaglio.gruppo !== undefined) {
         const valore = calcolaGruppo(bersaglio.gruppo, ctx, dove2)
@@ -1122,7 +1762,7 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
          sa solo mentre gira: carta, come per la sostituzione (si fallisce chiusi, mai un sì muto) */
       if (dove2 === null && ricorsivo(parole)) {
         const scritto = espanso(bersaglio.testo, ctx, null)
-        if (scritto === null || !ctx.p.isAbsolute(ctx.windows ? discoLocale(scritto) : scritto)) return { percorso: bersaglio.testo, perche: 'sostituzione' }
+        if (scritto === null || !ctx.p.isAbsolute(ctx.windows ? discoLocale(scritto, ctx) : scritto)) return { percorso: bersaglio.testo, perche: 'sostituzione' }
       }
       /* 208 bis: `%~dp0`, `!X!` ignota, `%X:~a,b%` ignota in un comando ricorsivo di Windows: il posto si sa solo mentre gira → carta */
       if (ctx.windows && ricorsivo(parole) && CMD_CALCOLATO.test(bersaglio.testo)) {
@@ -1144,6 +1784,7 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
       const delRicorsivo = ctx.windows && (nome === 'del' || nome === 'erase') && ricorsivo(parole) && !GLOB.test(assoluto)
       if (/[\\/]\.?["']?$/u.test(bersaglio.testo) || nome === 'remove-item' || nome === 'ri' || delRicorsivo) {
         let vero = null
+        if (conta(ctx, PESI.realpath)) return TROPPO_ANNIDATO // ottavo giro: nel cancello è una lettura vera del disco
         try { vero = realpathFn(assoluto) } catch { /* non c'è: niente da seguire */ }
         const viaLink = typeof vero === 'string' && vero !== assoluto ? perche(vero, ctx, veriDi(ctx, realpathFn)) : null
         if (viaLink) return { percorso: vero, perche: viaLink }
@@ -1153,30 +1794,292 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove) {
   return null
 }
 
+/*
+ * ⛔ Quinto giro (13/11/2026, giudice v1776, owner 16:33 «solo domande in più»): LA REGOLA DEL SOTTOFONDO PUÒ SOLO AGGIUNGERE CARTE.
+ *   Tre ROSSI di fila avevano la stessa radice: la regola di bash (un `cd` in sottofondo, in una sottoshell o in una pipe non resta)
+ *   leggeva male una `&` (dentro `${…}`, `$(…)`, `$[…]`, dopo una barra, in un `case`) e TOGLIEVA una carta che la 0.2.1 dava. Ora per
+ *   ogni `cd` che la regola giudica «non resta» la cartella si calcola nei DUE casi (resta / non resta), in ogni combinazione, e la carta
+ *   arriva se ALMENO UNO cade in un posto critico: nessun ramo decide «niente carta» sulla sola lettura del sottofondo, e R15 resta preso.
+ *   Il prezzo: dove la regola leggeva giusto e il `cd` davvero non resta (`cd .. | true; rm -rf *` da `src`), la carta c'è come nella
+ *   0.2.1. Oltre `TETTO_DELLE_LETTURE` letture DEL COMANDO (settimo giro: un tetto solo, sommato su tutti i livelli, non più 256 per
+ *   livello) si fallisce chiusi (carta), come Codex (`bash.rs:52`: un `&` non è mai una parola semplice).
+ *   Ogni lettura riparte dalle variabili di prima (`D=…`, `for`, le cartelle dei dischi): un caso non lascia niente al caso dopo.
+ *   Sostituisce la rete chiusa del giro 2 (`RETE_DEL_SOTTOFONDO`, il testo letto anche senza la regola dove compariva `case`, `if`,
+ *   `while`, `until`, `\&`, `<&`): quella lettura è il caso «ogni `cd` resta», che qui c'è sempre (misurato: 0 risposte diverse con e
+ *   senza la rete su 20.320 forme per tre sistemi).
+ */
+const fotografia = (ctx) => ({ locali: ctx.locali && new Map(ctx.locali), forIgnoti: ctx.forIgnoti && new Set(ctx.forIgnoti), perDisco: new Map(ctx.perDisco) })
+const rimetti = (ctx, f) => { ctx.locali = f.locali && new Map(f.locali); ctx.forIgnoti = f.forIgnoti && new Set(f.forIgnoti); ctx.perDisco = new Map(f.perDisco) }
+/*
+ * ⛔ Sesto giro (13/11/2026, F1 del quarto ROSSO): dopo una lettura nei due casi le variabili tengono i valori di TUTTI i casi, non
+ *   quelli della prima lettura. `cd src; eval 'cd .. & X=$PWD'; rm -rf "$X"`: in un caso X è `src`, nell'altro il progetto, e il
+ *   comando dopo l'eval li guarda tutti e due (`variantiDi` per un bersaglio, `argomentoScelto` per un `cd`). Un valore che un caso non
+ *   sa (`[]`) non toglie quelli che gli altri casi sanno; al più 16 valori. Le cartelle dei dischi (`perDisco`) restano quelle della
+ *   prima lettura, come prima (limite: solo la lettura di cmd le usa, e lì la regola del sottofondo non c'è).
+ */
+function unione(fotografie) {
+  if (fotografie.length === 1) return fotografie[0]
+  let locali = null
+  for (const f of fotografie) {
+    for (const [nome, valori] of f.locali ?? []) {
+      locali ??= new Map()
+      const ora = locali.get(nome)
+      if (ora === undefined) { locali.set(nome, [...valori]); continue }
+      for (const v of valori) if (!ora.includes(v) && ora.length < 16) ora.push(v)
+    }
+  }
+  let forIgnoti = null
+  for (const f of fotografie) for (const nome of f.forIgnoti ?? []) (forIgnoti ??= new Set()).add(nome)
+  return { locali, forIgnoti, perDisco: fotografie[0].perDisco }
+}
+/** Un `cd "$X"` con più valori (dopo `unione`): il primo, e ogni altro è un caso (`v<comando>.<i>`) che `conTuttiICasi` legge. */
+function argomentoScelto(scritto, ctx, n, scelte, eventi) {
+  if (typeof scritto !== 'string' || !ctx.locali?.size) return scritto
+  const varianti = variantiDi(scritto, ctx)
+  if (varianti.length < 2) return scritto
+  for (let i = 1; i < varianti.length; i += 1) if (scelte?.has(`v${n}.${i}`)) return varianti[i]
+  for (let i = 1; i < varianti.length; i += 1) if (varianti[i] !== varianti[0]) eventi?.add(`v${n}.${i}`)
+  return varianti[0]
+}
+/*
+ * ⛔ Sesto giro (F2 del quarto ROSSO): una `&` DENTRO `${…}` non spezza niente. Per bash la graffa che chiude è «the first `}` not
+ *   escaped by a backslash or within a quoted string, and not within an embedded arithmetic expansion, command substitution, or
+ *   parameter expansion» (bash(1), Parameter Expansion, letta il 13/11/2026). La lettura di sempre chiude `${` alla prima `}`, anche
+ *   `\}`: in `echo ${x/\}/&} cd progetto && rm -rf "$PWD"` vedeva un `cd progetto` che bash non esegue (per bash è un solo `echo`).
+ *   Qui si scrive il testo con quelle `&` al posto di un `_`, e `conTuttiICasi` lo legge IN PIÙ: una carta in una delle due letture è
+ *   una carta (la lettura di sempre resta, e con lei la carta falsa F09). Ciò che sta in `$(…)` dentro `${…}` resta com'è.
+ */
+function senzaECommercialiNelleGraffe(testo) {
+  if (!testo.includes('${') || !testo.includes('&')) return testo
+  const n = testo.length
+  let fuori = ''
+  let cambiato = false
+  let doppie = false
+  let i = 0
+  /* `$( … )` (anche `$(( … ))`) da `j`: l'indice dopo la `)` che chiude, a parole (le virgolette dentro non si contano) */
+  const dopoLaParentesi = (j) => { let prof = 0; for (; j < n; j += 1) { if (testo[j] === '\\') { j += 1; continue } if (testo[j] === '(') prof += 1; else if (testo[j] === ')' && (prof -= 1) === 0) return j + 1 } return n }
+  while (i < n) {
+    const c = testo[i]
+    if (c === '\\') { fuori += testo.slice(i, i + 2); i += 2; continue }
+    if (c === "'" && !doppie) { const j = testo.indexOf("'", i + 1); const fine = j === -1 ? n : j + 1; fuori += testo.slice(i, fine); i = fine; continue }
+    if (c === '"') { doppie = !doppie; fuori += c; i += 1; continue }
+    if (c !== '$' || testo[i + 1] !== '{') { fuori += c; i += 1; continue }
+    let prof = 1
+    let virgolette = null
+    let j = i + 2
+    fuori += '${'
+    while (j < n && prof > 0) {
+      const d = testo[j]
+      if (virgolette === "'") { fuori += d; j += 1; if (d === "'") virgolette = null; continue }
+      if (d === '\\') { fuori += testo.slice(j, j + 2); j += 2; continue }
+      if (virgolette === '"') { fuori += d; j += 1; if (d === '"') virgolette = null; continue }
+      if (d === "'" || d === '"') { virgolette = d; fuori += d; j += 1; continue }
+      if (d === '$' && testo[j + 1] === '(') {
+        /* dentro `$( … )` una `&` da sola manda davvero in sottofondo e resta; un `${…}` lì dentro si legge con la stessa regola */
+        const fine = dopoLaParentesi(j + 1)
+        const corpo = testo.slice(j + 2, Math.max(j + 2, fine - 1))
+        const letto = senzaECommercialiNelleGraffe(corpo)
+        if (letto !== corpo) cambiato = true
+        fuori += `$(${letto}${testo.slice(j + 2 + corpo.length, fine)}`
+        j = fine
+        continue
+      }
+      if (d === '$' && testo[j + 1] === '{') { prof += 1; fuori += '${'; j += 2; continue }
+      if (d === '}') prof -= 1
+      if (d === '&') { fuori += '_'; cambiato = true; j += 1; continue }
+      fuori += d
+      j += 1
+    }
+    i = j
+  }
+  return cambiato ? fuori : testo
+}
+/*
+ * Le letture IN PIÙ di un testo per bash: quella con le `&` delle graffe tolte e, se il testo ha barre, la stessa sul testo come lo
+ * riceve una shell da dentro le virgolette doppie (`sh -c "echo \${x/\\}/&} cd src; rm -rf ."`: `\$`, `\\`, `\"` e `` \` `` perdono la
+ * barra, POSIX «Double-Quotes»), solo quando lì c'è una `&` dentro `${…}`. Vengono PRIMA della lettura di sempre: se una chiede, il
+ * motivo è il suo, il più preciso (`echo ${x//\}/&} cd src && rm -rf ../*` cancella la madre, non il progetto).
+ */
+function lettureInPiu(testo) {
+  const altre = []
+  const senza = senzaECommercialiNelleGraffe(testo)
+  if (senza !== testo) altre.push(senza)
+  if (testo.includes('\\')) {
+    const comeLaRiceve = testo.replace(/\\([$`"\\])/gu, (_, c) => c)
+    const senzaLei = comeLaRiceve === testo ? comeLaRiceve : senzaECommercialiNelleGraffe(comeLaRiceve)
+    if (senzaLei !== comeLaRiceve && !altre.includes(senzaLei)) altre.push(senzaLei)
+  }
+  return altre
+}
+function conTuttiICasi(testo, ctx, realpathFn, profondita, dove) {
+  const altre = ctx.bash ? lettureInPiu(testo) : []
+  if (altre.length === 0) return casiDiUnTesto(testo, ctx, realpathFn, profondita, dove)
+  const prima = fotografia(ctx)
+  const finali = []
+  for (const t of [...altre, testo]) {
+    rimetti(ctx, prima)
+    const trovata = casiDiUnTesto(t, ctx, realpathFn, profondita, dove)
+    if (trovata) return trovata
+    finali.push(fotografia(ctx))
+  }
+  /* la lettura di sempre prima: i suoi valori vengono primi, e le cartelle dei dischi sono le sue */
+  rimetti(ctx, unione([finali.at(-1), ...finali.slice(0, -1)]))
+  return null
+}
+function casiDiUnTesto(testo, ctx, realpathFn, profondita, dove) {
+  const prima = fotografia(ctx)
+  const eventi = new Set()
+  const trovata = giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, null, eventi)
+  if (trovata || eventi.size === 0) return trovata
+  const finali = [fotografia(ctx)]
+  const visti = new Set()
+  const coda = [[new Set(), eventi]]
+  try {
+    while (coda.length) {
+      const [scelte, nati] = coda.shift()
+      for (const nome of nati) {
+        const altre = new Set(scelte).add(nome)
+        const chiave = [...altre].sort().join(' ')
+        if (visti.has(chiave)) continue
+        visti.add(chiave)
+        rimetti(ctx, prima)
+        const loro = new Set()
+        const caso = giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, altre, loro)
+        if (caso) return caso
+        finali.push(fotografia(ctx))
+        coda.push([altre, loro])
+      }
+    }
+    return null
+  } finally { rimetti(ctx, unione(finali)) }
+}
+
 /** 208 bis: su Windows si giudica il testo grezzo e, se cmd lo legge diverso, anche come lo legge cmd (l'unione: mai una carta in meno). */
 function giudica(testo, ctx, realpathFn, profondita, dove) {
-  const grezzo = giudicaUnTesto(testo, ctx, realpathFn, profondita, dove)
+  const grezzo = conTuttiICasi(testo, ctx, realpathFn, profondita, dove)
   if (grezzo || !ctx.windows) return grezzo
   const comeCmd = comeLoLeggeCmd(testo)
-  return comeCmd === testo ? null : giudicaUnTesto(comeCmd, ctx, realpathFn, profondita, dove)
+  if (comeCmd === testo) return null
+  /* giro piccolo dopo il controllore: la lettura di cmd non ha le sottoshell né il sottofondo di bash (`ctx.bash`) */
+  const eraBash = ctx.bash
+  ctx.bash = false
+  try { return conTuttiICasi(comeCmd, ctx, realpathFn, profondita, dove) } finally { ctx.bash = eraBash }
 }
 
 /**
  * La cancellazione critica che il comando farebbe: `{ percorso, perche }` (`perche`: 'radice' | 'primo-livello' | 'telefono' |
  * 'cartella-del-telefono' | 'casa' | 'dati-dell-app' | 'tutti-i-progetti' | 'progetto' | 'sopra-il-progetto' | 'sostituzione' |
- * 'troppo-annidato', quest'ultimo con `percorso: null`), o `null`. Mai un'eccezione: un cancello non lancia.
+ * 'troppo-annidato' | 'troppo-complesso', questi ultimi due con `percorso: null`), o `null`. Mai un'eccezione: un cancello non lancia.
+ * ⛔ Decimo giro: ogni errore dentro la lettura (anche il tetto dell'espansione, `TETTO_DELL_ESPANSIONE`) è 'troppo-complesso', mai `null`.
+ * ⛔ Sesto giro: questa è la lettura NUOVA. Il cancello chiama `cancellazioneCritica` (più sotto), che la mette insieme alla 0.2.1 ferma.
  */
-export function cancellazioneCritica(comando, { cartella, home = homedir(), piattaforma = process.platform, ambiente = process.env, realpathFn = realpathSync.native, progettiCritici = [] } = {}) {
+let ultimeLetture = 0 // per le prove soltanto (`__perLeProve.letture`): le letture del comando appena giudicato
+let ultimoLavoro = 0 // per le prove soltanto (`__perLeProve.lavoro`): il lavoro contato del comando appena giudicato
+let ultimiEspansi = 0 // per le prove soltanto (`__perLeProve.espansi`): i caratteri espansi contati del comando appena giudicato
+let ultimiPassiDelGlob = 0 // per le prove soltanto (`__perLeProve.globPassi`): i passi dei confronti dei glob del comando appena giudicato
+function letturaNuova(comando, { cartella, home = homedir(), piattaforma = process.platform, ambiente = process.env, realpathFn = realpathSync.native, progettiCritici = [] } = {}) {
+  /* settimo e ottavo giro: UN conto per comando, comune a tutti i giri, i livelli e i casi: le letture (`TETTO_DELLE_LETTURE`) e il
+     lavoro (`TETTO_DEL_LAVORO`) */
+  const conto = { letture: 0, lavoro: 0, espansi: 0, glob: 0 }
   try {
     const testo = String(comando ?? '')
     if (testo.trim() === '' || (!sembraCancellare(testo) && !(piattaforma === 'win32' && sembraCancellare(comeLoLeggeCmd(testo))))) return null
     if (typeof cartella !== 'string' || cartella === '') return null
     /* K: un elenco di stringhe; altro = ignorato. Assente = come prima */
     const critici = Array.isArray(progettiCritici) ? progettiCritici.filter((x) => typeof x === 'string' && x !== '' && x !== cartella) : []
-    const ctx = contesto({ cartella, home: typeof home === 'string' && home !== '' ? home : null, piattaforma, ambiente, progettiCritici: critici })
-    if (ctx.home === null) ctx.home = ''
-    return giudica(testo, ctx, realpathFn, 0, cartella)
+    /* Ogni lettura ha un contesto NUOVO: un giro ci scrive le sue variabili (`D=…`), e non devono arrivare al giro dopo. */
+    const visto = { grafia: false, movimento: false }
+    /* 0.2.3: i nomi a cui il testo dà un valore che non seguiamo (`read d`, `foreach ($d in …)`): mai «ignoti» (vedi `vuotaOIgnota`) */
+    const legate = legateNelTesto(testo)
+    const giro = (comeIlSistema, shell) => {
+      const ctx = contesto({ cartella, home: typeof home === 'string' && home !== '' ? home : null, piattaforma, ambiente, progettiCritici: critici })
+      if (ctx.home === null) ctx.home = ''
+      ctx.comeIlSistema = comeIlSistema
+      ctx.discoDaSolo = shell !== 'posix'
+      ctx.cdCambiaDisco = ctx.cdDelGiro = shell !== 'cmd'
+      ctx.perDisco = new Map()
+      ctx.conto = conto
+      ctx.legate = legate
+      /* R15 (13/11/2026, giudice v1757 f, owner 12:25): fuori da Windows il comando lo esegue una shell POSIX, con le sue regole del
+         sottofondo, delle sottoshell e delle pipe (`cd /x & rm -rf *` cancella la cartella del comando) */
+      ctx.bash = !ctx.windows
+      const trovata = giudica(testo, ctx, realpathFn, 0, cartella)
+      if (ctx.senzaDisco) visto.grafia = true
+      if (ctx.movimentoDubbio) visto.movimento = true
+      return trovata ? { trovata, allaPosix: ctx.allaPosix === true } : null
+    }
+    /* le letture del movimento (vedi `dopoIlDisco`): quella di sempre, e le altre due solo se il comando ha un innesco */
+    const leggi = (comeIlSistema) => giro(comeIlSistema, 'posix') ?? (visto.movimento ? giro(comeIlSistema, 'cmd') ?? giro(comeIlSistema, 'powershell') : null)
+    const comeGitBash = leggi(false)
+    /* 12/11/2026, le due letture di `/x/…` (vedi `discoLocale`): solo se il comando ha una di quelle grafie */
+    if (!visto.grafia) return comeGitBash?.trovata ?? null
+    const comeSistema = leggi(true)
+    /* giro 2 (limite 2 del revisore C): la carta di un'azione che non si annulla nomina il posto che verrà cancellato DAVVERO. Se
+       tutte e due le letture sono critiche vale quella del sistema (`Remove-Item /T/progetto` è `C:\T\progetto`, non `T:\progetto`),
+       tranne per un `rm` scritto alla POSIX (`rm -rf /c/…`), che gira in Git Bash o in WSL: lì `/c` è il disco. */
+    if (comeSistema && comeGitBash) return comeGitBash.allaPosix ? comeGitBash.trovata : comeSistema.trovata
+    return (comeSistema ?? comeGitBash)?.trovata ?? null
   } catch {
-    return null
+    /* ⛔ decimo giro: FALLISCE CHIUSA. Il tetto dell'espansione, una stringa troppo lunga, un ambiente illeggibile, qualunque errore:
+       un comando che la lettura non sa leggere fino in fondo chiede (prima un errore qui era `null`, nessuna carta, e la cancellazione
+       scritta dopo passava). Hermes `approval_detection.py:702-704`, Codex `bash.rs:30-31`, Claude Code `CHANGELOG.md:4699`. */
+    return TROPPO_COMPLESSO
+  } finally {
+    ultimeLetture = conto.letture
+    ultimoLavoro = conto.lavoro
+    ultimiEspansi = conto.espansi
+    ultimiPassiDelGlob = conto.glob
   }
 }
+
+/** Il contesto della terna come lo fa `letturaNuova` (stessi valori di serie): per chiedere a `veriDi` i percorsi veri già ricordati. */
+function contestoDellaTerna({ cartella, home = homedir(), piattaforma = process.platform, ambiente = process.env, progettiCritici = [] }) {
+  const critici = Array.isArray(progettiCritici) ? progettiCritici.filter((x) => typeof x === 'string' && x !== '' && x !== cartella) : []
+  const ctx = contesto({ cartella, home: typeof home === 'string' && home !== '' ? home : null, piattaforma, ambiente, progettiCritici: critici })
+  if (ctx.home === null) ctx.home = ''
+  return ctx
+}
+
+/*
+ * ⛔⛔ Sesto giro (owner 18:49 «doppio controllo», giudice v1801): la carta c'è se la dà la lettura nuova OPPURE la 0.2.1 ferma.
+ *   - Il motivo: quello della lettura nuova se chiede (il più preciso), altrimenti quello della 0.2.1. La 0.2.1 si legge solo se la
+ *     nuova tace: per un comando che chiede il prezzo resta quello di prima.
+ *   - ⛔ Decimo giro (giudice v1901), l'ordine: la copia ferma si salta SOLO quando la lettura nuova ha già dato la carta (anche
+ *     «troppo complesso»): così le carte restano almeno quelle della 0.2.1 (carte(testa) ⊇ carte(0.2.1)), e un comando che la lettura
+ *     nuova ferma al tetto non paga i secondi della copia ferma. Quando la nuova tace, la ferma si consulta come prima, dopo.
+ *   - Nessuna lettura del disco in più (condizione di Performance): le due letture hanno un `realpath` comune che legge ogni percorso UNA
+ *     volta per comando, e la 0.2.1 riceve i percorsi veri della terna (cartella, casa, progetti) dalla memoria della lettura nuova
+ *     (`veriDi`, `noti`), così il disco si legge una volta per terna come prima.
+ *   - Stessa firma e stessi valori di sempre (la CLI e il telefono non cambiano niente): `{ percorso, perche }` o `null`, mai un'eccezione.
+ */
+function unaCartaSeUnaChiede(nuova, ferma) {
+  return function cancellazioneCritica(comando, opzioni = {}) {
+    try {
+      const o = opzioni ?? {}
+      const realpathFn = typeof o.realpathFn === 'function' ? o.realpathFn : realpathSync.native
+      const letti = new Map()
+      const unaVolta = (p) => {
+        if (!letti.has(p)) { try { letti.set(p, { valore: realpathFn(p) }) } catch (errore) { letti.set(p, { errore }) } }
+        const r = letti.get(p)
+        if ('errore' in r) throw r.errore
+        return r.valore
+      }
+      const diQuella = nuova(comando, { ...o, realpathFn: unaVolta })
+      if (diQuella) return diQuella
+      let noti = null
+      const perLaFerma = (p) => {
+        if (noti === null) { try { noti = veriDi(contestoDellaTerna(o), unaVolta).noti ?? new Map() } catch { noti = new Map() } }
+        return noti.has(p) ? noti.get(p) : unaVolta(p)
+      }
+      return ferma(comando, { ...o, realpathFn: perLaFerma })
+    } catch {
+      /* ⛔ decimo giro: anche qui si fallisce chiusi, mai `null` da un errore */
+      return TROPPO_COMPLESSO
+    }
+  }
+}
+
+export const cancellazioneCritica = unaCartaSeUnaChiede(letturaNuova, decisioneDella021)
+
+/** Per le prove soltanto: le due letture da sole e il modo in cui si mettono insieme (nessun valore nuovo per chi chiama). */
+export const __perLeProve = Object.freeze({ letturaNuova, della021: decisioneDella021, unaCartaSeUnaChiede, TETTO_DELLE_LETTURE, letture: () => ultimeLetture, TETTO_DEL_LAVORO, PESI, lavoro: () => ultimoLavoro, TETTO_DELL_ESPANSIONE, espansi: () => ultimiEspansi, globPrende, globPassi: () => ultimiPassiDelGlob, TETTO_DEL_GLOB })

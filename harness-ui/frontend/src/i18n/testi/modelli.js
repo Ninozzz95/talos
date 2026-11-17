@@ -1,6 +1,14 @@
 /* Area modelli — testi stabili italiano e inglese. */
 export default {
   "it": {
+    "publicCatalog.title": "Catalogo pubblico dei modelli",
+    "publicCatalog.description": "All’apertura TALOS può scaricare l’elenco pubblico dei modelli di OpenRouter (nomi, prezzi, dimensioni del contesto). Se la lettura non riesce, TALOS riprova una volta dopo 30 secondi, poi al più una volta ogni 10 minuti. Non manda chiavi né conversazioni; OpenRouter vede il tuo indirizzo IP.",
+    "publicCatalog.label": "Scarica l’elenco dei modelli di OpenRouter",
+    "publicCatalog.help": "Spento, TALOS chiede a OpenRouter solo dopo che scegli uno dei suoi modelli o aggiungi una chiave di OpenRouter. Il selettore dei modelli continua a funzionare con l’elenco incorporato in TALOS.",
+    "publicCatalog.forcedOff": "Spento per questo computer dalle impostazioni di sistema: qui non si può accendere.",
+    "publicCatalog.notSaved": "Non salvato: l’interruttore è tornato com’era. Riprova.",
+    "publicCatalog.unavailable": "Questa impostazione ora non è disponibile.",
+    "sources.reserveCatalogOff": "Catalogo pubblico spento: elenco incorporato in TALOS{date}",
     "fonti.nonAcceso": "{nome} non è acceso su questo computer",
     "permission.inherit": "Come la sessione",
     "permission.alwaysAllow": "Consenti sempre",
@@ -133,6 +141,7 @@ export default {
     "sources.externalAgent": "Agente esterno",
     "sources.local": "locale",
     "sources.reserveList": "{name} · elenco di riserva",
+    "sources.builtInList": "{name} · elenco incorporato",
     "sources.catalogUnavailable": "Catalogo {provider} non disponibile: {error}",
     "sources.configureExternalAgent": "Configura l'agente esterno in Fornitori e accessi",
     "sources.readingCatalog": "Leggo il catalogo {provider}…",
@@ -1112,6 +1121,14 @@ export default {
     "catalog.error.minAboveMax": "Il minimo di parametri supera il massimo."
   },
   "en": {
+    "publicCatalog.title": "Public model list",
+    "publicCatalog.description": "TALOS can download the public list of OpenRouter models (names, prices, context sizes) when it opens. If a read fails, TALOS tries once more after 30 seconds, then at most once every 10 minutes. It sends no key and no conversation; OpenRouter sees your IP address.",
+    "publicCatalog.label": "Download the OpenRouter model list",
+    "publicCatalog.help": "Turned off, TALOS asks OpenRouter only after you pick one of its models or add an OpenRouter key. The model picker keeps working with the list built into TALOS.",
+    "publicCatalog.forcedOff": "Turned off for this computer by its system settings: it can’t be turned on here.",
+    "publicCatalog.notSaved": "Not saved: the switch is back where it was. Try again.",
+    "publicCatalog.unavailable": "This setting is not available right now.",
+    "sources.reserveCatalogOff": "Public model list off: list built into TALOS{date}",
     "fonti.nonAcceso": "{nome} is not running on this computer",
     "permission.inherit": "Same as the session",
     "permission.alwaysAllow": "Always allow",
@@ -1244,6 +1261,7 @@ export default {
     "sources.externalAgent": "External agent",
     "sources.local": "local",
     "sources.reserveList": "{name} · backup list",
+    "sources.builtInList": "{name} · built-in list",
     "sources.catalogUnavailable": "{provider} catalog unavailable: {error}",
     "sources.configureExternalAgent": "Configure the external agent in Providers and access",
     "sources.readingCatalog": "Reading the {provider} catalog…",

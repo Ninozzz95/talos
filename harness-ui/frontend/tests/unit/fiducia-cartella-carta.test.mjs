@@ -21,7 +21,7 @@ test('CARTA-01: «Sì, mi fido di questa cartella» salva true, la carta chiude 
   const { scheda, risposta } = creaCartaFiducia(doc, { cartella: 'progetto', salva: async (f) => { salvate.push(f); } });
   assert.equal(scheda.querySelector('.talos-badge').textContent, 'Ti fidi di questa cartella?');
   assert.equal(scheda.querySelector('.talos-approval__why').textContent, 'TALOS caricherà le istruzioni, i ganci automatici e gli strumenti collegati di questa cartella.');
-  assert.match(scheda.querySelector('.talos-approval__motivo').textContent, /Se dici No, qui lavora come in Su richiesta/u);
+  assert.match(scheda.querySelector('.talos-approval__motivo').textContent, /Se dici No, qui lavora come in Chiede prima/u);
   const pulsanti = scheda.querySelectorAll('button');
   assert.deepEqual(pulsanti.map((b) => b.textContent), ['Sì, mi fido di questa cartella', 'No'], 'niente «Per questa sessione»');
   assert.equal(scheda.querySelector('.talos-approval__foot-note').textContent, 'Apri senza le istruzioni di questa cartella');

@@ -2,7 +2,9 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
-import { bozzeDellaRisposta, createLlamaServerSupervisor, passiAlSecondo, tempiDellaRisposta } from '../src/llama-server-supervisor.mjs';
+import { bozzeDellaRisposta, createLlamaServerSupervisor as creaSupervisoreVero, passiAlSecondo, tempiDellaRisposta } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 const RIGA = '       eval time =    9523.17 ms /   400 tokens (   23.81 ms per token,    42.00 tokens per second)';
 const PROMPT = 'prompt eval time =     812.40 ms /  1500 tokens (    0.54 ms per token,  1846.38 tokens per second)';

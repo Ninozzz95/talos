@@ -8,10 +8,17 @@ export const CANALE_BOLLA = 'talos-bolla';
 export const INDIRIZZO_PORTA_DAVANTI = 'talos-bolla:porta-davanti';
 /** FE-074: la pagina del segno chiede con `window.open` la posizione vera del mouse; il guscio nega e risponde con `segno-ripiego` (`segno-finestra.mjs`). */
 export const INDIRIZZO_RIPIEGO = 'talos-segno:ripiego';
+/** Giro 5 della bolla (owner 14/11): il battito della pagina del segno, DOPO il disegno, ogni MS_BATTITO; il guscio nega e lo conta (`segno-finestra.mjs`,
+    stessi valori). Senza battito il guscio rimette il cursore dell'aiutante. */
+export const INDIRIZZO_BATTITO = 'talos-segno:battito';
+export const MS_BATTITO = 500;
 
 const EVENTI = new Set(['talos.computer-use-passo', 'talos.computer-use-annuncio', 'talos.computer-use-guarda', 'talos.computer-use-pausa', 'talos.computer-use-fermato', 'talos.computer-use-esito', 'talos.computer-use-protezione', 'talos.computer-use-permessi']);
-const PORTE = new Set(['consenso', 'conferma', 'conferme', 'mano']);
+/* reperto 2 (13/11): 'domanda' è la carta del computer use com'è nella chat, con le sue scelte (`ponte-bolla.js`, `cartaComputerUse`) */
+const PORTE = new Set(['consenso', 'conferma', 'conferme', 'mano', 'domanda']);
 const testoPieno = (x) => typeof x === 'string' && x !== '';
+/** Reperto 17 (13/11): il movimento ridotto della persona = il sistema lo chiede O «Riduci movimento» di TALOS è acceso (Claude Code, CHANGELOG.md:1081). */
+export const motoRidottoDa = ({ impostazioni = null, mediaRidotto = false } = {}) => mediaRidotto === true || impostazioni?.appearance?.reducedMotion === true;
 const oggetto = (x) => x !== null && typeof x === 'object' && !Array.isArray(x);
 
 /** Il messaggio dalla pagina principale, o `null` se la forma non è nota. */

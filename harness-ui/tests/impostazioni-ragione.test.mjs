@@ -15,13 +15,16 @@ import { creaCopiaFinestra } from '../src/impostazioni/copia-finestra.mjs'
 import { creaFonteSessione } from '../src/impostazioni/fonti-impostazioni.mjs'
 import { DEFINIZIONE_IMPOSTAZIONI } from '../src/kernel/impostazioni-app.mjs'
 
-function banco() {
+/* `adesso` (facoltativo): l'orologio del servizio. La base delle revisioni viene dal secondo d'avvio (`servizio-impostazioni.mjs`,
+   `dalTempo`): due banchi che si CONFRONTANO fra loro vogliono lo stesso orologio (RAG-01), altrimenti a cavallo del secondo i due
+   testi differiscono per «Revision N» (revisione avversaria 0.2.2-DL del 09/11/2026, reperto 3: 4 rossi su 200 corse). */
+function banco(adesso) {
   const s = { modello: 'z-ai/glm-5.3-flash', modelloPlanner: null, reasoning: { effort: 'high' }, fasciaVeloce: false, permessi: 'Workspace write',
     permessiPerAttrezzo: {}, doveGiranoIComandi: null, comandiNellaConversazione: false }
   const registro = { impostazioniCorrenti: () => structuredClone(s), aggiornaImpostazioni: async (id, patch) => { Object.assign(s, patch); return { aggiornate: true } },
     doveGiranoIComandi: async () => ({ ok: true }), comandiNellaConversazione: async () => ({ ok: true }) }
   let n = 0
-  const servizio = creaServizioImpostazioni({ fonti: { sessione: creaFonteSessione(() => registro) }, copiaFinestra: creaCopiaFinestra(), idFn: () => `id-${++n}`, attesaFinestraMs: 20 })
+  const servizio = creaServizioImpostazioni({ fonti: { sessione: creaFonteSessione(() => registro) }, copiaFinestra: creaCopiaFinestra(), idFn: () => `id-${++n}`, attesaFinestraMs: 20, ...(adesso ? { adesso } : {}) })
   const fn = servizio.perLaSessione({ sessionId: 'sess-1' })
   const rev = async () => Number(/Revision (\d+)/u.exec((await fn('app_settings', { action: 'list', query: 'theme' }, { fase: 'esegui' })).testo)[1])
   const anteprima = async (reason, changes = [{ key: 'appearance.theme', value: 'paper' }]) =>
@@ -30,17 +33,27 @@ function banco() {
 }
 
 test('RAG-01: la ragione arriva alla carta come azione.ragione, e il testo letto dal modello resta quello di oggi', async () => {
-  const a = banco()
+  /* i due banchi nascono nello STESSO istante: il confronto dei due testi interi non dipende più dal secondo in cui cade la prova */
+  const ora = Date.now()
+  const a = banco(() => ora)
   const carta = await a.anteprima('  The person asked for a lighter theme.  ')
   assert.equal(carta.carta, true)
   assert.equal(carta.azione.ragione, 'The person asked for a lighter theme.')
-  const senza = banco()
+  const senza = banco(() => ora)
   const esitoSenza = await senza.fn('app_settings', { action: 'set', expected_revision: await senza.rev(), changes: [{ key: 'appearance.theme', value: 'paper' }] }, { fase: 'esegui', toolCallId: 'c' })
   const esito = await a.fn('app_settings', { action: 'set', expected_revision: await a.rev(), changes: [{ key: 'appearance.theme', value: 'paper' }], reason: 'The person asked for a lighter theme.' }, { fase: 'esegui', toolCallId: 'c' })
   assert.deepEqual(esito, esitoSenza, 'Performance: mai nel testo letto dal modello')
   assert.doesNotMatch(esito.testo, /lighter/u)
   const [ricevuta] = await a.servizio.ricevute()
   assert.doesNotMatch(JSON.stringify(ricevuta), /lighter/u, 'nemmeno nella ricevuta, che il modello può rileggere da list e undo')
+})
+
+test('RAG-01b (AL CONTRARIO): due banchi nati a cavallo del secondo danno lo stesso testo tranne «Revision N» — per questo RAG-01 inietta l\'orologio', async () => {
+  const esito = async (ora) => { const b = banco(() => ora); return (await b.fn('app_settings', { action: 'set', expected_revision: await b.rev(), changes: [{ key: 'appearance.theme', value: 'paper' }] }, { fase: 'esegui', toolCallId: 'c' })).testo }
+  const [prima, dopo] = [await esito(1_700_000_060_999), await esito(1_700_000_061_000)]
+  assert.notEqual(prima, dopo, 'un millisecondo dopo, nel secondo seguente: la base delle revisioni è un\'altra')
+  assert.equal(prima.replace(/Revision \d+/u, ''), dopo.replace(/Revision \d+/u, ''), 'e la differenza è solo la revisione')
+  assert.equal(await esito(1_700_000_060_100), await esito(1_700_000_060_900), 'nello stesso secondo i due testi coincidono')
 })
 
 test('RAG-02 (Performance, Mobile 1): tetto di 200 caratteri tenuto dal server con l\'ellissi; controllo e bidi tolti PRIMA del taglio; una riga', async () => {

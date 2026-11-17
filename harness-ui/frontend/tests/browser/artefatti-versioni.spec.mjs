@@ -103,17 +103,35 @@ test('ARTEFATTI-VERSIONI-01 — chat: ogni carta resta sulla sua versione, «v1 
   await expect(prima.locator('.talos-artifact__versione')).toHaveText('v1 of 3');
   await expect(carte.nth(1).locator('.talos-artifact__versione')).toHaveText('v2 of 3');
   await expect(prima.locator('.talos-artifact__avviso')).toContainText('Updated later in “Q2 planning”: v3 is the latest.');
+  /* 0.2.1-ART D2+D3 (09/11/2026): in chat non c'è più un'anteprima; il contenuto si guarda a lato, un artefatto alla volta */
+  await expect(page.locator('.talos-artifact iframe')).toHaveCount(0);
+  const cornice = page.locator('#latoArtefatto iframe');
+  const dentro = page.frameLocator('#latoArtefatto iframe').locator('h1');
+  await expect(cornice).toHaveCount(0);
   /* il contenuto: la carta del giro 1 mostra la v1, non l'ultima */
-  await expect(prima.frameLocator('iframe').locator('h1')).toHaveText('v1');
-  await expect(carte.nth(1).frameLocator('iframe').locator('h1')).toHaveText('v2');
-  const srcPrima = await prima.locator('iframe').getAttribute('src');
+  await prima.locator('.talos-artifact__carta').click();
+  await expect(prima.locator('.talos-artifact__carta')).toHaveAttribute('aria-expanded', 'true');
+  await expect(dentro).toHaveText('v1');
+  await carte.nth(1).locator('.talos-artifact__carta').click();
+  await expect(dentro).toHaveText('v2');
+  await expect(prima.locator('.talos-artifact__carta')).toHaveAttribute('aria-expanded', 'false');
+  await expect(cornice).toHaveCount(1);
+  await prima.locator('.talos-artifact__carta').click();
+  await expect(dentro).toHaveText('v1');
+  const srcPrima = await cornice.getAttribute('src');
   await prima.locator('[data-artefatto-ultima]').click();
   await expect(prima.locator('.talos-artifact__versione')).toHaveText('v3 of 3 · latest');
   await expect(prima.locator('[data-artefatto-ultima]')).toHaveText('Back to v1');
-  await expect.poll(() => prima.locator('iframe').getAttribute('src')).not.toBe(srcPrima);
+  await expect.poll(() => cornice.getAttribute('src')).not.toBe(srcPrima);
+  await expect(dentro).toHaveText('v3');
   /* AL CONTRARIO: e si torna alla versione di quel giro */
   await prima.locator('[data-artefatto-ultima]').click();
   await expect(prima.locator('.talos-artifact__versione')).toHaveText('v1 of 3');
+  await expect(dentro).toHaveText('v1');
+  /* la ✕ del pannello lo chiude e la cornice se ne va: una pagina chiusa non gira più */
+  await page.locator('#latoArtefatto .lato-art__chiudi').click();
+  await expect(cornice).toHaveCount(0);
+  await expect(prima.locator('.talos-artifact__carta')).toHaveAttribute('aria-expanded', 'false');
   expect(nonGet.filter((r) => !r.endsWith('/pagine'))).toEqual([]);
 });
 
@@ -168,18 +186,21 @@ test('ARTEFATTI-VERSIONI-REV3-A2 — su «Show latest», quando nasce una versio
   await page.evaluate(() => { const r = window.__talosHarnessUiRuntime; r.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata', value: null }, r.realSessionState.generation); });
   await evento(1, 6000);
   const prima = page.locator('.talos-artifact').first();
+  /* 0.2.1-ART D2 (09/11/2026): la pagina sta a lato; la carta la apre e «Show latest» ricarica il pannello */
+  const dentro = page.frameLocator('#latoArtefatto iframe').locator('h1');
+  await prima.locator('.talos-artifact__carta').click();
   await prima.locator('[data-artefatto-ultima]').click();
   const totale = (await chiedi(base)).data.totale;
   expect(totale).toBe(4);
   await expect(prima.locator('.talos-artifact__versione')).toHaveText(`v${totale} of ${totale} · latest`);
-  await expect(prima.frameLocator('iframe').locator('h1')).toHaveText('v1');
+  await expect(dentro).toHaveText('v1');
   /* nasce una versione nuova (il ripristino della v2), e la sua carta lo annuncia alle sorelle */
   const nuova = await chiedi(`${base}/2/restore`, 'POST');
   expect(nuova.data?.versione, JSON.stringify(nuova)).toBe(totale + 1);
   await evento(nuova.data.versione, 6001);
   await expect(prima.locator('.talos-artifact__versione')).toHaveText(`v${totale + 1} of ${totale + 1} · latest`);
   /* AL CONTRARIO del difetto: non basta l'etichetta, la cornice mostra davvero il testo della versione nuova */
-  await expect(prima.frameLocator('iframe').locator('h1')).toHaveText('v2', { timeout: 10_000 });
+  await expect(dentro).toHaveText('v2', { timeout: 10_000 });
 });
 
 test('ARTEFATTI-VERSIONI-REV4-ART-1 — la versione nuova nasce PRIMA di «Show latest»: etichetta e cornice dicono la stessa versione', async ({ page }) => {
@@ -209,7 +230,10 @@ test('ARTEFATTI-VERSIONI-REV4-ART-1 — la versione nuova nasce PRIMA di «Show 
   /* solo ADESSO la persona preme «Show latest» */
   await prima.locator('[data-artefatto-ultima]').click();
   await expect(prima.locator('.talos-artifact__versione')).toHaveText(`v${totale + 1} of ${totale + 1} · latest`);
-  await expect(prima.frameLocator('iframe').locator('h1')).toHaveText('v3', { timeout: 10_000 });
+  /* 0.2.1-ART D2 (09/11/2026): col pannello chiuso «Show latest» non carica niente; la carta, aperta dopo, apre l'ultima */
+  await expect(page.locator('#latoArtefatto iframe')).toHaveCount(0);
+  await prima.locator('.talos-artifact__carta').click();
+  await expect(page.frameLocator('#latoArtefatto iframe').locator('h1')).toHaveText('v3', { timeout: 10_000 });
   await expect(prima.locator('.talos-artifact__avviso')).toContainText(`${totale + 1}`);
   expect(nonGet.filter((r) => !/\/pagine$|\/restore$/u.test(r)), 'nessuna scrittura oltre le pagine e il ripristino').toEqual([]);
 });

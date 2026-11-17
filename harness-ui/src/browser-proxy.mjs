@@ -4,6 +4,7 @@
  * Local content is NOT inherently trusted. Serving this HTML under the app's
  * origin does not provide isolation; F01/EXT-02 remains a separate release gate.
  */
+import { etichettaDaHost } from './guardia-origine.mjs'; // giro 5 delle anteprime: il nome di una pagina
 import { urlAmmesso, MILLISECONDI_MASSIMI, classificaGuasto } from './browser-frame.mjs'; // 16/09: il guasto si nomina in UN posto solo
 
 export const BYTE_MASSIMI = 5 * 1024 * 1024;
@@ -13,6 +14,9 @@ export const SCRIPT_OVERLAY = '/talos/browser-annota.js';
 /** Loopback targets only; this is an egress policy, not a trust decision. */
 export function bersaglioLocale(url) {
   const host = String(url?.hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+  /* Giro di sicurezza 5 delle anteprime (giudice v1417 c): `<etichetta>.localhost` è il nome di una pagina resa, che apre solo il guscio del PC
+     (Chromium lo risolve da sé). Node lo chiederebbe al DNS del sistema (getaddrinfo), e non è un dev server: qui non passa. */
+  if (etichettaDaHost(host)) return false;
   return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.localhost');
 }
 

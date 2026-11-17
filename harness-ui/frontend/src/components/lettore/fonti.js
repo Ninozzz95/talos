@@ -25,15 +25,36 @@ async function byteDa(fetchFn, indirizzo, generica = FRASE_GENERICA) {
   return risposta.arrayBuffer();
 }
 
-async function paginaDa(fetchFn, sessionId, corpo) {
+async function rispostaPagina(fetchFn, sessionId, corpo) {
   const risposta = await fetchFn(`${API}/sessions/${enc(sessionId)}/pagine`, {
     method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo),
   });
   if (!risposta.ok) throw await erroreDa(risposta);
   const dati = await risposta.json();
   if (typeof dati?.data?.indirizzo !== 'string' || !dati.data.indirizzo.startsWith(`${API}/pagine/`)) throw new Error(t('varie.reader.source.noPageAddress'));
-  return dati.data.indirizzo;
+  return dati.data;
 }
+/** L'indirizzo della pagina sul nome del servizio: per i BYTE (la politica dell'app, `connect-src 'self'`, non ammette altre origini). */
+const paginaDa = async (fetchFn, sessionId, corpo) => (await rispostaPagina(fetchFn, sessionId, corpo)).indirizzo;
+
+/*
+ * Giro di sicurezza 5 delle anteprime (11/11/2026; forma `FORMA-ORIGINE-PER-PAGINA-2026-11-11.md`, giudice v1417 a e c): nel guscio del PC la pagina
+ *   si apre sulla SUA origine, `http://<etichetta>.localhost:<porta>`: Chromium le dà un processo suo (una che cade non porta via le sorelle) e
+ *   risolve il nome da sé, senza DNS. L'etichetta la dà il servizio col lasciapassare; il servizio apre quel nome solo per quel lasciapassare.
+ * ⛔ Solo nel guscio del PC (il suo gettone, l'app su 127.0.0.1 con una porta): nel browser (remoto, 4174) e nel telefono l'indirizzo resta quello
+ *   di sempre, perché fuori da Chromium un nome sotto `localhost` può finire al DNS. Un'etichetta fuori forma vale come nessuna etichetta.
+ */
+const ETICHETTA_PAGINA = /^[0-9a-f]{32}$/;
+const GETTONE_DEL_GUSCIO = /^[0-9a-f]{48}$/;
+export function indirizzoDellaPagina({ indirizzo, etichetta } = {}, finestra = globalThis, gettone = finestra?.__talosGuscioArtefatti?.gettone) {
+  const posto = finestra?.location;
+  const nelGuscio = typeof gettone === 'string' && GETTONE_DEL_GUSCIO.test(gettone)
+    && posto?.protocol === 'http:' && posto.hostname === '127.0.0.1' && /^\d{1,5}$/.test(String(posto.port ?? ''));
+  if (!nelGuscio || typeof etichetta !== 'string' || !ETICHETTA_PAGINA.test(etichetta)) return indirizzo;
+  return `http://${etichetta}.localhost:${posto.port}${indirizzo}`;
+}
+/** La pagina per la CORNICE (pannello, lettore, finestra a parte): sulla sua origine nel guscio, altrimenti com'è. */
+const paginaPerLaCornice = async (fetchFn, sessionId, corpo, perLaCornice) => perLaCornice(await rispostaPagina(fetchFn, sessionId, corpo));
 
 /**
  * Un file della cartella della sessione (percorso relativo, con `/`).
@@ -41,7 +62,8 @@ async function paginaDa(fetchFn, sessionId, corpo) {
  *   applicano la regola dei segreti della lettura (`PREVIEW_FILE_SECRET`); e niente `creaPagina`: una pagina HTML resa coi suoi vicini
  *   potrebbe incorniciare un `.env` accanto a lei, quindi l'HTML di un'anteprima si disegna da solo, senza file né rete (chi la chiama).
  */
-export function fonteDaCartella({ sessionId, percorso, nome = null, dimensione, perIlModello = false, fetchFn = (...a) => globalThis.fetch(...a) }) {
+export function fonteDaCartella({ sessionId, percorso, nome = null, dimensione, perIlModello = false, fetchFn = (...a) => globalThis.fetch(...a), finestra = globalThis,
+  perLaCornice = (dati) => indirizzoDellaPagina(dati, finestra) }) {
   const nomeVero = nome ?? String(percorso ?? '').split('/').pop();
   const origine = perIlModello ? '&origine=modello' : '';
   return {
@@ -50,7 +72,7 @@ export function fonteDaCartella({ sessionId, percorso, nome = null, dimensione, 
     percorso,
     dimensione: Number.isFinite(dimensione) ? dimensione : undefined,
     leggiByte: () => byteDa(fetchFn, `${API}/sessions/${enc(sessionId)}/file?percorso=${enc(percorso)}${origine}`),
-    ...(perIlModello ? {} : { creaPagina: () => paginaDa(fetchFn, sessionId, { percorso }) }),
+    ...(perIlModello ? {} : { creaPagina: () => paginaPerLaCornice(fetchFn, sessionId, { percorso }, perLaCornice) }),
     indirizzoPdf: `${API}/sessions/${enc(sessionId)}/file/anteprima?percorso=${enc(percorso)}${origine}`,
   };
 }
@@ -68,7 +90,8 @@ export function fonteDaAllegato({ sessionId, allegatoId, nome, fetchFn = (...a) 
 }
 
 /** Una voce della Libreria (`{id, nome, ...}`). */
-export function fonteDaLibreria({ sessionId, voce, nome = null, dimensione, versione = null, fetchFn = (...a) => globalThis.fetch(...a) }) {
+export function fonteDaLibreria({ sessionId, voce, nome = null, dimensione, versione = null, fetchFn = (...a) => globalThis.fetch(...a), finestra = globalThis,
+  perLaCornice = (dati) => indirizzoDellaPagina(dati, finestra) }) {
   const voceId = String(voce?.id ?? '');
   /* 24/10/2026 (artefatti con versioni): `versione` rende QUELLA versione — la pagina e il suo testo; senza, l'ultima come prima */
   if (Number.isSafeInteger(versione) && versione >= 1) {
@@ -79,7 +102,7 @@ export function fonteDaLibreria({ sessionId, voce, nome = null, dimensione, vers
       versione,
       dimensione: undefined,
       leggiByte: async () => byteDa(fetchFn, await paginaDa(fetchFn, sessionId, { voceId, versione })),
-      creaPagina: () => paginaDa(fetchFn, sessionId, { voceId, versione }),
+      creaPagina: () => paginaPerLaCornice(fetchFn, sessionId, { voceId, versione }, perLaCornice),
       indirizzoPdf: null,
     };
   }
@@ -89,7 +112,7 @@ export function fonteDaLibreria({ sessionId, voce, nome = null, dimensione, vers
     percorso: null,
     dimensione: Number.isFinite(dimensione) ? dimensione : undefined,
     leggiByte: () => byteDa(fetchFn, `${API}/sessions/${enc(sessionId)}/library/${enc(voceId)}/file`),
-    creaPagina: () => paginaDa(fetchFn, sessionId, { voceId }),
+    creaPagina: () => paginaPerLaCornice(fetchFn, sessionId, { voceId }, perLaCornice),
     indirizzoPdf: `${API}/sessions/${enc(sessionId)}/library/${enc(voceId)}/anteprima`,
   };
 }

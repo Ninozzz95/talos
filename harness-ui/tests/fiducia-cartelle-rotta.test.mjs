@@ -36,7 +36,9 @@ test('ROTTA — GET dice null, POST «No» abbassa la conversazione viva in Acce
   assert.deepEqual(prima.data, { cartella: progetto, fidata: null }, JSON.stringify(prima))
   const { sessionId } = registro.avviaLibero({ cartellaLibera: progetto, consegna: 'x', permessi: 'Full access' })
   await new Promise((r) => { setTimeout(r, 60) })
-  assert.equal(registro.impostazioniCorrenti(sessionId).permessi, 'Full access')
+  /* falla del 10/11: nata in Accesso pieno su una cartella mai chiesta (una via senza la finestra), parte trattenuta e chiede */
+  assert.equal(registro.impostazioniCorrenti(sessionId).permessi, 'On request')
+  assert.equal(registro.impostazioniCorrenti(sessionId).fiduciaDaChiedere, true)
   const no = await (await posta(base, { sessionId, fidata: false })).json()
   assert.equal(no.data.fidata, false)
   assert.deepEqual(no.data.cambiate, [sessionId])

@@ -3,16 +3,18 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, dialog, globalShortcut, Menu, net, powerMonitor, powerSaveBlocker, screen, shell, Tray } from 'electron';
+import { app, BrowserWindow, dialog, globalShortcut, Menu, net, powerMonitor, powerSaveBlocker, screen, session, shell, Tray } from 'electron';
 import { bollaAccesa, creaBolla } from './bolla-finestra.mjs'; // FE-066, la bolla del computer use: spenta di serie (03/11/2026)
 import { creaSegnoFinestre } from './segno-finestra.mjs'; // FE-070, il cursore di TALOS e il bordo: una finestra trasparente per schermo (05/11/2026)
 import { creaPcSveglio } from './pc-sveglio.mjs'; // il PC non dorme mentre TALOS lavora (01/11/2026, forma con l'OK del Desktop)
-import { creaAggiornatore } from './aggiornamenti.mjs';
+import { aggiornamentiSpentiDallAmbiente, creaAggiornatore } from './aggiornamenti.mjs';
+import { applicaPreferenzeIniziali } from './preferenze-iniziali.mjs'; // 0.2.2 (SignPath): le due scelte dell'installatore, una volta sola
 import { leggiFonteDiProva } from './fonte-aggiornamenti.mjs';
 import { azioneAggiornamenti, copioneStato, statoPerLaPagina } from './canale-aggiornamenti.mjs';
 import { creaCicloDiVita } from './lifecycle.mjs';
 import { leggiStatoFinestra, salvaStatoFinestra } from './window-state.mjs';
 import { coloriDellaBarra, puntoDelMenu } from './barra-finestra.mjs';
+import { PARTIZIONE_ARTEFATTI, chiudiRetePagineRese, consegnaGettoneArtefatti, creaFinestreArtefatto, gestisciRichiestaArtefatto, isolaPagineRese, sorvegliaAnteprime } from './finestra-artefatto.mjs'; // 0.2.1-ART D1: «Apri» di un artefatto (09/11/2026)
 import { copioneSegnala, etichettaSegnala } from './segnalazione.mjs'; // «Segnala un problema» (owner 29/10/2026)
 import { apribileNelBrowserDelSistema, consegnaSegreti, creaAvvioFiglio, rimandoConsentito, navigazioneCorniceConsentita, risolviPercorsi, scegliMotoreLocale, scegliPortaPersistente, urlIngresso, validaHandshake } from './runtime.mjs';
 import { creaRegistro } from './log.mjs';
@@ -38,6 +40,8 @@ mkdirSync(migrazioneBrowser.cartella, { recursive: true });
 app.setPath('userData', profile.dataDir);
 app.setPath('sessionData', migrazioneBrowser.cartella);
 app.commandLine.appendSwitch('ignore-gpu-blocklist');
+/* 0.2.2, giro di sicurezza 3 (N1): ogni pagina resa ha un processo suo, così una che cade non porta via le altre (finestra-artefatto.mjs) */
+isolaPagineRese(app.commandLine);
 /*
  * ⛔ Owner 12/10/2026, «Sì, segue il sistema»: qui c'era `appendSwitch('lang', 'it')`, dal primo guscio (12/09, prima della fase
  *   della lingua). Forzava Chromium in italiano su OGNI Windows ⇒ `navigator.languages` era sempre `['it']` e l'interfaccia,
@@ -96,6 +100,12 @@ function avviaGuscio() {
   const token = randomBytes(32).toString('hex');
   const segreti = Object.entries(process.env).filter(([k]) => /TOKEN|KEY|SECRET|PASSWORD/i.test(k)).map(([, v]) => v);
   const registro = creaRegistro(fileRegistro, [token, ...segreti]);
+  /* 0.2.2 (SignPath): le scelte dell'installatore (aggiornamenti automatici, catalogo pubblico dei modelli), lette UNA volta e SOLO dalla
+     cartella dell'utente, PRIMA che partano l'aggiornatore e il server che le leggono (`preferenze-iniziali.mjs`, regole del giudice v1313). */
+  try {
+    const iniziali = applicaPreferenzeIniziali({ cartellaUtente: dataDir });
+    if (iniziali.esito !== 'nessuno') registro.scrivi('Preferenze dell’installazione: ' + JSON.stringify(iniziali));
+  } catch (errore) { registro.scrivi('Preferenze dell’installazione non lette: ' + (errore?.code ?? errore?.message ?? errore)); }
   if (migrazioneBrowser.stato === 'migrata' || migrazioneBrowser.stato === 'rimandata') {
     const { stato, cartella, spostate, copiate, lasciate, errori } = migrazioneBrowser;
     registro.scrivi('Dati del browser interno: ' + JSON.stringify({ stato, cartella, spostate, copiate, lasciate, errori }));
@@ -121,7 +131,10 @@ function avviaGuscio() {
     portaDavanti: () => portaDavanti(), filePosto: join(dataDir, 'bolla.json'), lingua: () => app.getLocale(), quandoPronta: () => segno.bollaPronta() });
   /* FE-070: il segno del computer use, con lo stesso cancello della bolla; su Windows prima della 2004 niente finestre, e lo dice la bolla (segno-finestra.mjs) */
   const segno = creaSegnoFinestre({ accesa: bollaAccesa(process.argv), BrowserWindow, screen, registro: riga => registro.scrivi(riga),
-    postaNellaBolla: messaggio => bolla.posta(messaggio) });
+    postaNellaBolla: messaggio => bolla.posta(messaggio),
+    /* giudice v1790: il segno smette di vedersi ⇒ il server lo sa (child-bootstrap.mjs) e l'aiutante riaccende il suo cursore al prossimo avvio.
+       Giro 5 della bolla: anche quando torna a vedersi (primo battito di ogni schermo), e il prossimo aiutante parte senza il suo cursore */
+    quandoCambia: acceso => { for (const h of figli) if (h.proc.connected) h.proc.send({ tipo: 'segno', acceso }, () => {}); } });
 
   /*
    * ⭐ 01/10/2026 — L'AGGIORNAMENTO AUTOMATICO (owner: «seamless, automatizzato e user friendly», come Codex, Hermes e Claude).
@@ -131,6 +144,10 @@ function avviaGuscio() {
    *   le impostazioni in `aggiornamenti.json` accanto alle altre del guscio.
    */
   const gettoneAggiornamenti = randomBytes(24).toString('hex');
+  /* 0.2.1-ART D1 (09/11/2026): «Apri» di un artefatto chiede la finestra con un gettone suo, come gli aggiornamenti (finestra-artefatto.mjs) */
+  const gettoneArtefatti = randomBytes(24).toString('hex');
+  const finestreArtefatto = creaFinestreArtefatto({ BrowserWindow, sessione: () => session.fromPartition(PARTIZIONE_ARTEFATTI),
+    registro: riga => registro.scrivi(riga), icona: join(app.getAppPath(), 'assets', 'talos.png'), lingua: () => app.getLocale() });
   const fileAggiornamenti = join(dataDir, 'aggiornamenti.json');
   const motivoAggiornamentiSpenti = profile.preview ? 'preview' : !app.isPackaged ? 'sviluppo' : null;
   let aggiornatore = null; let avvisoAggiornamentoNascosto = false;
@@ -166,6 +183,7 @@ function avviaGuscio() {
         ...(fonteDiProva ? { fonte: { api: fonteDiProva.api, download: fonteDiProva.download }, repo: fonteDiProva.repo } : {}),
         chiavePubblica: fonteDiProva?.chiavePubblica ?? readFileSync(join(app.getAppPath(), 'assets', 'aggiornamenti-pubblica.pem'), 'utf8'),
         versioneAttuale: app.getVersion(), impostazioni: impostazioniAggiornamenti,
+        spentiDallAmbiente: aggiornamentiSpentiDallAmbiente(process.env), // 0.2.2: `TALOS_DESKTOP_AGGIORNAMENTI=off`
         registra: (dove, errore) => registro.scrivi('Aggiornamenti (' + dove + '): ' + (errore?.message ?? errore)),
         notifica: () => inviaStatoAggiornamenti(),
       });
@@ -260,7 +278,7 @@ function avviaGuscio() {
          (24 ore senza scritture): si ricrea prima di ogni figlio, o il nuovo handshake non avrebbe dove scriversi. */
       mkdirSync(cartellaHandshake, { recursive: true });
       const reportFile = join(cartellaHandshake, 'figlio-' + (++generazione) + '.json');
-      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, scratchDir: profile.scratchDir, motoreLocale, keyringScope: profile.keyringScope, installata: app.isPackaged, versione: app.getVersion() });
+      const avvio = creaAvvioFiglio({ execPath: process.execPath, percorsi, port, token, reportFile, dataDir, scratchDir: profile.scratchDir, motoreLocale, keyringScope: profile.keyringScope, installata: app.isPackaged, versione: app.getVersion(), segnoAcceso: segno.acceso() });
       for (const avviso of avvio.avvisi) registro.scrivi(avviso); // L3-8: una variabile del kernel ereditata e ignorata si dice
       const proc = spawn(avvio.command, avvio.args, avvio.options);
       consegnaSegreti(proc, avvio);
@@ -268,12 +286,17 @@ function avviaGuscio() {
       figli.add(handle);
       /* il server dice { tipo: 'sveglio', acceso } quando i giri al lavoro passano da 0 a 1 e da 1 a 0; vale solo questo figlio */
       pcSveglio.nuovoFiglio(proc);
-      proc.on('message', messaggio => { pcSveglio.messaggio(proc, messaggio); });
+      proc.on('message', messaggio => {
+        pcSveglio.messaggio(proc, messaggio);
+        /* giro 5 della bolla: il server dice quando un suo aiutante gira col SUO cursore; finché uno qualunque dei figli sì, il segno non si mostra (mai due) */
+        if (messaggio?.tipo === 'segno-aiutante') segno.aiutante(messaggio.conCursore, handle);
+      });
       const uscita = registro.canale(); const errori = registro.canale();
       proc.stdout.on('data', chunk => uscita.scrivi(chunk)); proc.stderr.on('data', chunk => errori.scrivi(chunk));
       proc.once('close', () => { uscita.fine(); errori.fine(); });
       const terminato = codice => {
         handle.terminato = true; figli.delete(handle);
+        segno.aiutante(false, handle); // il suo aiutante esce con lui
         pcSveglio.figlioUscito(proc); // un server caduto col blocco preso non può più dire «spento»
         registro.scrivi('Servizio locale terminato (' + (codice ?? 'errore') + '), generazione ' + handle.generazione + '.');
         if (ciclo.handle() === handle) ciclo.figlioUscito(codice);
@@ -377,6 +400,9 @@ function avviaGuscio() {
       /* F6-3 (27/09): la finestra nuova si nega SEMPRE; un indirizzo di github.com (una PR, un controllo) va al browser del
          sistema, come nell'esempio di Electron security.md §14 (`setImmediate` + `shell.openExternal`, poi `deny`) */
       questa.webContents.setWindowOpenHandler(({ url }) => {
+        /* 0.2.1-ART D1 (09/11/2026): la richiesta di un artefatto si nega come finestra di Chromium e, col gettone giusto, la finestra la apre il guscio */
+        const sceltaArtefatto = gestisciRichiestaArtefatto(url, { gettone: gettoneArtefatti, base, apri: dove => finestreArtefatto.apri(dove), registro: riga => registro.scrivi(riga) });
+        if (sceltaArtefatto) return sceltaArtefatto;
         /* 01/10/2026 — gli aggiornamenti: stessa forma del menu qui sotto; senza il gettone giusto si nega e basta. */
         const richiestaAggiornamenti = azioneAggiornamenti(url, gettoneAggiornamenti);
         if (richiestaAggiornamenti) {
@@ -407,7 +433,13 @@ function avviaGuscio() {
         evento.preventDefault();
       };
       /* Ogni caricamento (anche un «Ricarica») ritrova lo stato degli aggiornamenti. */
-      questa.webContents.on('did-finish-load', () => inviaStatoAggiornamenti());
+      questa.webContents.on('did-finish-load', () => {
+        inviaStatoAggiornamenti();
+        /* revisioni di sicurezza 1 (R1), 2 (N20) e 3 (reperto 5, M25): solo sul documento dell'app, solo nella cornice principale, senza gesto simulato (finestra-artefatto.mjs) */
+        consegnaGettoneArtefatti(questa.webContents, base, gettoneArtefatti, riga => registro.scrivi(riga));
+      });
+      /* 0.2.2, giro di sicurezza 3 (N1): un'anteprima il cui processo cade lo si dice al documento dell'app, che la ricarica una volta (finestra-artefatto.mjs) */
+      sorvegliaAnteprime(questa.webContents, () => base, { registro: riga => registro.scrivi(riga) });
       questa.webContents.on('will-navigate', controllaNavigazione);
       questa.webContents.on('will-redirect', (evento) => { if (!rimandoConsentito(base, evento.url, evento.isMainFrame !== false)) evento.preventDefault(); });
       // F5: una cornice di pagina HTML resa nel lettore non naviga fuori dal suo lasciapassare (runtime.mjs)
@@ -422,7 +454,7 @@ function avviaGuscio() {
         if (!staUscendo && restaNelVassoio) { evento.preventDefault(); questa.hide(); }
       });
       /* con la bolla aperta `window-all-closed` non arriverebbe: senza vassoio la principale chiusa chiude anche lei, e l'app esce come prima */
-      questa.on('closed', () => { clearTimeout(timer); finestra = null; if (!staUscendo && !restaNelVassoio) bolla.chiudi(); if (!staUscendo && !restaNelVassoio) segno.chiudi(); });
+      questa.on('closed', () => { clearTimeout(timer); finestra = null; if (!staUscendo && !restaNelVassoio) bolla.chiudi(); if (!staUscendo && !restaNelVassoio) segno.chiudi(); if (!staUscendo && !restaNelVassoio) finestreArtefatto.chiudiTutte(); });
     }
     if (generazioneMostrata !== generazione) {
       await finestra.loadURL(urlIngresso(base, token));
@@ -441,7 +473,7 @@ function avviaGuscio() {
     if (uscitaPronta) return;
     evento.preventDefault();
     if (staUscendo) return;
-    staUscendo = true; salva(); ciclo.chiudi(); aggiornatore?.ferma(); pcSveglio.chiudi(); bolla.chiudi(); segno.chiudi();
+    staUscendo = true; salva(); ciclo.chiudi(); aggiornatore?.ferma(); pcSveglio.chiudi(); bolla.chiudi(); segno.chiudi(); finestreArtefatto.chiudiTutte();
     void (async () => {
       await Promise.all([...figli].map(fermaFiglio));
       if (vassoio && !vassoio.isDestroyed()) vassoio.destroy();
@@ -451,6 +483,7 @@ function avviaGuscio() {
     })();
   });
   app.whenReady().then(async () => {
+    chiudiRetePagineRese(session.defaultSession, () => base); // 0.2.2, giro di sicurezza 2: l'anteprima di una pagina resa non esce con WebRTC (finestra-artefatto.mjs)
     vassoio = new Tray(join(app.getAppPath(), 'assets', 'talos-tray.png'));
     bolla.registraScorciatoia(); // prima del menu: se è occupata la voce lo dice
     vassoio.setToolTip(profile.name); vassoio.on('double-click', portaDavanti); creaMenu();

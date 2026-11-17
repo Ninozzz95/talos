@@ -22,13 +22,25 @@
  */
 import { SEGNO_NOTA } from './sistema-piegato.mjs';
 
-export const INIZIO_AVVISO_ACCORCIATO = '[TALOS: this result was shortened to fit the context. Lines ';
-const RE_AVVISO = /^\[TALOS: this result was shortened to fit the context\. Lines (\d+)–(\d+) of this output \(about ([\d,]+) characters\) are NOT shown below\. The full output is kept: read those lines again with leggi offset\/limit, or search them with cerca\. Do not treat the visible part as the whole file\.\]\n/u;
+/*
+ * 11/11/2026 (brief `BRIEF-AGENTE-SOGLIA-200K-E-SCRITTA-245-2026-11-11.md`, voce c; misura I6 di MISURE-RESA-DEL-MODELLO-2026-11-10.md):
+ *   M1 e M2 erano nate lo stesso giorno della decisione 245 e portavano ancora «shortened to fit the context» e «to fit the context
+ *   window», la scritta che la 245 aveva tolto da ogni marcatore perché DeepSeek la leggeva come «sono agli ultimi token» e si fermava.
+ *   Arrivava proprio sul percorso peggiore (finestra ignota, rifiuto del fornitore). Ora la forma della 245, copiata: «trimmed by TALOS»
+ *   e «the full text is kept» (`MARCATORE_ACCORCIATO` di compattazione-desktop.mjs). Righe, caratteri e come recuperare non cambiano.
+ *   La forma di prima si LEGGE ancora (`RE_AVVISO`, come `RE_MARCATORE_ACCORCIATO` della 245): una proiezione salvata non si riaccorcia.
+ */
+export const INIZIO_AVVISO_ACCORCIATO = '[TALOS: this result was trimmed by TALOS. Lines ';
+const INIZIO_AVVISO_ACCORCIATO_DI_PRIMA = '[TALOS: this result was shortened to fit the context. Lines ';
+const RE_AVVISO = /^\[TALOS: this result was (?:trimmed by TALOS|shortened to fit the context)\. Lines (\d+)–(\d+) of this output \(about ([\d,]+) characters\) are NOT shown below\. The full output is kept: read those lines again with leggi offset\/limit, or search them with cerca\. Do not treat the visible part as the whole file\.\]\n/u;
+/** Vero se il contenuto comincia con l'avviso M1, nella forma di oggi o in quella di prima del 11/11. */
+export const iniziaConAvvisoAccorciato = (contenuto) => typeof contenuto === 'string'
+  && (contenuto.startsWith(INIZIO_AVVISO_ACCORCIATO) || contenuto.startsWith(INIZIO_AVVISO_ACCORCIATO_DI_PRIMA));
 const APERTURA = '<<<TALOS_DATA id=';
 const CHIUSURA = '<<<END_TALOS_DATA id=';
 export const VOCI_MASSIME_NELLA_NOTA = 6;
 const LUNGHEZZA_MASSIMA_ETICHETTA = 80;
-const INIZIO_NOTA_DEGLI_ACCORCIATI = '[TALOS context note: to fit the context window, ';
+const INIZIO_NOTA_DEGLI_ACCORCIATI = '[TALOS context note: ';
 
 /**
  * La riga dell'avviso per un testo di cui si tengono i primi `inizio` e gli ultimi `fine` caratteri.
@@ -65,7 +77,7 @@ export function avvisoAccorciato(testo, { inizio, fine }) {
 
 /** L'avviso in testa a un contenuto, se c'è: `{ da, a, caratteri }`; altrimenti null. */
 export function leggiAvvisoAccorciato(contenuto) {
-  if (typeof contenuto !== 'string' || !contenuto.startsWith(INIZIO_AVVISO_ACCORCIATO)) return null;
+  if (!iniziaConAvvisoAccorciato(contenuto)) return null;
   const m = RE_AVVISO.exec(contenuto);
   return m ? { da: Number(m[1]), a: Number(m[2]), caratteri: m[3] } : null;
 }
@@ -96,7 +108,7 @@ export function notaDegliAccorciati(messaggi) {
   const k = voci.length;
   if (k === 0) return null;
   const elenco = voci.slice(0, VOCI_MASSIME_NELLA_NOTA).join(', ') + (k > VOCI_MASSIME_NELLA_NOTA ? `, +${k - VOCI_MASSIME_NELLA_NOTA} others` : '');
-  return `${INIZIO_NOTA_DEGLI_ACCORCIATI}${k} ${k === 1 ? 'result of the current request is' : 'results of the current request are'} shortened: ${elenco}. Before answering, read again or search what you need. If something cannot be recovered, say clearly which part is missing.]`;
+  return `${INIZIO_NOTA_DEGLI_ACCORCIATI}${k} ${k === 1 ? 'result of the current request is' : 'results of the current request are'} trimmed by TALOS; the full text is kept: ${elenco}. Before answering, read again or search what you need. If something cannot be recovered, say clearly which part is missing.]`;
 }
 
 /** La nota M2 come la scrive TALOS: un `system` il cui testo comincia col prefisso della nota (come `eNotaDiFermata` per la nota dello Stop). */

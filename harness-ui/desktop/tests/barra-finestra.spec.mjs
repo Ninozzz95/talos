@@ -10,7 +10,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { root, attendi, preparaRuntime } from './support.mjs';
+import { root, attendi, preparaRuntime, lineeDelGancio, nessunPortachiaviVero } from './support.mjs';
 
 const require = createRequire(import.meta.url);
 const { _electron } = require('../../frontend/node_modules/playwright');
@@ -23,14 +23,17 @@ async function finche(fn, timeout = 15000) {
 }
 
 /* Una foto dello SCHERMO nel rettangolo della finestra: i comandi di Windows non stanno nella pagina. */
-function fotoDelloSchermo(file, { x, y, width, height }) {
+/* 11/11/2026 (round 3, K2): the photo helper hands powershell the TEST environment (no provider keys, in-memory keyring, the
+   keyring hook), never the whole environment of whoever runs the tests. */
+function fotoDelloSchermo(file, { x, y, width, height }, env) {
   const script = `Add-Type -AssemblyName System.Drawing; $b = New-Object System.Drawing.Bitmap ${width}, ${height}; `
     + `$g = [System.Drawing.Graphics]::FromImage($b); $g.CopyFromScreen(${x}, ${y}, 0, 0, $b.Size); $b.Save('${file.replace(/'/g, "''")}'); $g.Dispose(); $b.Dispose()`;
-  execFileSync('powershell', ['-NoProfile', '-Command', script], { stdio: 'ignore' });
+  execFileSync('powershell', ['-NoProfile', '-Command', script], { stdio: 'ignore', env });
 }
 
 test('F7-BARRA-ELECTRON — striscia propria, comandi nel colore del tema, menu nativo dal «⋯», nessun ponte', { timeout: 120000 }, async t => {
   const prova = preparaRuntime('barra');
+  const primaDelLancio = lineeDelGancio(); // round 3 (K1): the hook trace is read from here on, after the launches below
   const electronApp = await _electron.launch({ executablePath, args: [root], env: prova.env, timeout: 20000 });
   t.after(async () => { try { await electronApp.close(); } catch {} });
   const pagina = await electronApp.firstWindow({ timeout: 25000 });
@@ -111,8 +114,8 @@ test('F7-BARRA-ELECTRON — striscia propria, comandi nel colore del tema, menu 
         return { x: Math.round(b.x * s), y: Math.round(b.y * s), width: Math.round(b.width * s), height: Math.round(b.height * s), s };
       });
       await attendi(500);
-      fotoDelloSchermo(`${process.env.TALOS_FOTO_BARRA}/barra-${tema}.png`, { ...bounds, height: Math.min(bounds.height, Math.round(140 * bounds.s)) });
-      fotoDelloSchermo(`${process.env.TALOS_FOTO_BARRA}/finestra-${tema}.png`, bounds);
+      fotoDelloSchermo(`${process.env.TALOS_FOTO_BARRA}/barra-${tema}.png`, { ...bounds, height: Math.min(bounds.height, Math.round(140 * bounds.s)) }, prova.env);
+      fotoDelloSchermo(`${process.env.TALOS_FOTO_BARRA}/finestra-${tema}.png`, bounds, prova.env);
       await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setAlwaysOnTop(false));
     }
   }
@@ -133,4 +136,5 @@ test('F7-BARRA-ELECTRON — striscia propria, comandi nel colore del tema, menu 
   assert.ok(Math.abs(popup.x - Math.round(rett.x)) <= 1 && Math.abs(popup.y - Math.round(rett.y + rett.height)) <= 1, JSON.stringify({ popup, rett }));
   assert.equal(await electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), 1, 'nessuna finestra nuova');
   assert.deepEqual(erroriPagina, []);
+  nessunPortachiaviVero(primaDelLancio); // round 3 (K1): no process of this test reached for the real keyring
 });

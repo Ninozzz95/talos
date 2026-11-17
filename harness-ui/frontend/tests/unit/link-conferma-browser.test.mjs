@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname, extname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
-import { chromium } from '@playwright/test';
+import { lanciaBrowserDelleProve } from '../aiuto/lancia-browser-delle-prove.mjs'; // 12/11: senza ambiente fallisce con la causa, mai salta
 import { build } from 'esbuild';
 
 const frontend = fileURLToPath(new URL('../..', import.meta.url));
@@ -40,7 +40,7 @@ test.before(async () => {
     window.lk = { apriLinkEsterno, montaClicSuiLink, creaSitiFidati, creaDestinazioneDeiLink, montaSitiFidati, creaMessaggioUtente, renderizzaMarkdown };
   `, resolveDir: frontend, sourcefile: 'lk-banco.js' }, tsconfigRaw: {}, bundle: true, write: false, format: 'iife', logLevel: 'silent' });
   const stile = await build({ absWorkingDir: tmpdir(), plugins: [sorgenti], entryPoints: [resolve(frontend, 'src/styles/main.css')], tsconfigRaw: {}, bundle: true, write: false, external: ['./fonts/*'], logLevel: 'silent' });
-  browser = await chromium.launch({ channel: 'chrome', headless: true });
+  browser = await lanciaBrowserDelleProve({ channel: 'chrome', headless: true });
   pagina = async (t) => {
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, reducedMotion: 'reduce' });
     t.after(() => page.close());

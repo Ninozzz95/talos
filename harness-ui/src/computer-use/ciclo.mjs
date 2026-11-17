@@ -19,7 +19,7 @@
  *   - tetto alle azioni per lotto e al tempo prima di ogni azione; due «no» della persona alla stessa azione ⇒ fermato;
  *   - l'esito porta `verificato` (null = non si è potuto verificare) e i campi di Performance (null = non misurato, mai assenti).
  */
-import { valutaAzione, intenzioniDallaFrase, tettoDallaFrase, eUnaCassa, totaleFinale, dominioSotto } from './protezioni.mjs';
+import { valutaAzione, intenzioniDallaFrase, tettoDallaFrase, eUnaCassa, totaleFinale, dominioSotto, improntaDeiDialoghi, eScorciatoiaDInvio, nomeConfrontabile } from './protezioni.mjs';
 import { rilevaSospetto } from './rilevatore.mjs';
 import {
   STATO_GUARDIA_VUOTO, cambiaQualcosa, elencoAppGuardia, elencoGuardia, elencoPassaggio, hostDi, passoGuardia, siDellaPersona, sitoDelicato,
@@ -50,6 +50,119 @@ const destinatarioDi = (s) => {
   if (typeof s?.conversazione === 'string' && s.conversazione.trim()) return s.conversazione.trim();
   const t = (Array.isArray(s?.elementi) ? s.elementi : []).find((e) => e?.ruolo === 'intestazione' && typeof e.nome === 'string' && e.nome.trim());
   return t ? t.nome.trim() : null;
+};
+/* Cinque cure (F2 sull'invio): per il sì ricordato il destinatario si legge anche dal campo «A/To» della finestra di scrittura. Con la
+   sola testata, «Nuovo messaggio» con l'indirizzo vero nel campo che cambia a ogni clic mandava 6 messaggi a 6 persone con un sì. */
+// giro ultimo (K5-06): anche «To recipients» e «A destinatari» (Outlook web), e il destinatario scelto da una casella a tendina
+// invii in lotto (B3): «Destinatario» al singolare (prima `destinatar[io]` leggeva «destinatari» e «destinataro»)
+// cura del rosso (R2): anche l'etichetta doppia di un client tradotto a metà, «Ccn/Bcc» o «Cc/Ccn» (prima 2 carte per 6 indirizzi)
+// secondo giro (revisore B, punto 3): anche «Cc recipients» e «Bcc recipients» (prima solo «To recipients»: un Ccn aggiunto non si leggeva)
+const CAMPO_DESTINATARIO = /^(?:(?:a|to|cc|ccn|bcc)\s+)?(?:a|to|per|cc|ccn|bcc|destinatari|destinatario|recipients?)(?:\s*\/\s*(?:cc|ccn|bcc))?\s*:?$/iu;
+// invii in lotto (B3): lo stesso indirizzo scritto in altre forme (maiuscole, spazi, «;», «Nome <indirizzo>») è lo stesso destinatario,
+// come browser-use che confronta i testi scritti senza maiuscole né spazi (browser_use/agent/views.py:131)
+const INDIRIZZO = /[^\s<>;,"']+@[^\s<>;,"']+/gu;
+/* Cura del rosso (R2, controllore 11/11 12:42, MEDIA): i destinatari si leggono INTERI. Prima, con almeno un indirizzo nel campo, tutto
+   ciò che non aveva la chiocciola si buttava: «marco@…; Capo Ufficio», «marco@… e altri 3», «marco@…, Tutti i dipendenti» valevano come
+   «marco@…», e una mail creduta a una persona andava a un gruppo col sì dato per Marco. Ora ogni voce del campo (separata da «;», «,» o
+   a capo) conta: l'indirizzo senza maiuscole né punto finale, e il resto (un nome, un gruppo, «e altri 3») come parole. Il nome prima
+   di «<indirizzo>» è solo l'etichetta di quell'indirizzo. Così gli stessi nomi in un altro ordine restano lo stesso destinatario. */
+/* Secondo giro (revisore C, 5f): le voci di un campo si leggono una per una sul valore INTERO, e «Rossi, Mario <m@…>» o «"Bianchi, Luca"
+   <l@…>» sono UNA voce: la virgola dentro il nome di chi ha l'indirizzo non separa due destinatari (prima contavano due). Una parola sola
+   seguita da una virgola e da «Nome <indirizzo>» è il cognome scritto per primo. */
+const VOCE = /\s*(?:"[^"]*"\s*<[^<>]*>|(?:[^\s;,<>"@]+,\s*)?[^;,<>\n"]*<[^<>]*>|[^;,\n]*)\s*(?:[;,\n]+|$)/uy;
+const vociGrezze = (t) => {
+  const testo = String(t ?? ''); const voci = [];
+  for (let k = 0; k < testo.length;) {
+    VOCE.lastIndex = k;
+    const m = VOCE.exec(testo);
+    if (!m || m[0].length === 0) break;
+    const v = m[0].replace(/[;,\n\s]+$/u, '').trim();
+    if (v) voci.push(v);
+    k += m[0].length;
+  }
+  return voci;
+};
+const vociDelCampo = (t) => vociGrezze(t).flatMap(vociDellaVoce);
+function vociDellaVoce(voce) {
+  const voci = [];
+  for (const pezzo of [String(voce ?? '').toLowerCase()]) {
+    const indirizzi = pezzo.match(INDIRIZZO) ?? [];
+    for (const x of indirizzi) voci.push(x.replace(/\.+$/u, ''));
+    // «Nome <indirizzo>»: il nome è l'etichetta; altrimenti ciò che resta tolti gli indirizzi è un destinatario anche lui
+    const resto = (/<[^<>]*@[^<>]*>/u.test(pezzo) ? pezzo.slice(pezzo.lastIndexOf('>') + 1) : indirizzi.reduce((r, x) => r.split(x).join(' '), pezzo))
+      .replace(/["'<>]/gu, ' ').replace(/\s+/gu, ' ').trim().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    if (/[\p{L}\p{N}]/u.test(resto)) voci.push(resto);
+  }
+  return voci;
+};
+// R2: «Ccn: capo» spostato in «A: marco; capo» è un altro destinatario: ogni voce porta il tipo del suo campo (a, cc, ccn)
+const tipoDelCampo = (nome) => (/(?:ccn|bcc)/iu.test(nome) ? 'ccn' : (/(?:^|[^\p{L}])cc(?![\p{L}])/iu.test(nome) ? 'cc' : 'a'));
+const campiDestinatario = (s) => (Array.isArray(s?.elementi) ? s.elementi : [])
+  .filter((e) => (e?.ruolo === 'campo' || e?.ruolo === 'scelta') && CAMPO_DESTINATARIO.test(String(e.nome ?? '').trim()));
+/* Secondo giro (revisore B, punto 3): Gmail e Outlook mostrano i destinatari come «gettoni», un elemento per nome accanto al campo «A»
+   che resta VUOTO. Prima si leggeva solo il campo: col campo vuoto il destinatario era la testata («A: Nuovo messaggio») e cambiare i
+   gettoni dopo il sì non chiedeva. Ora, con il campo vuoto, si leggono gli elementi di nome attaccati al campo nell'albero (prima e
+   dopo, fino al primo che non è un nome), sulla stessa riga quando lo schermo dà i riquadri; i comandi («Cc», «Invia», «Rimuovi») no. */
+const RUOLI_GETTONE = new Set(['pulsante', 'voce', 'testo', 'collegamento']);
+const NON_GETTONE = /^(?:a|to|da|from|cc|ccn|bcc|oggetto|subject|invia|send|allega|attach|annulla|cancel|elimina|delete|rimuovi|remove|chiudi|close|aggiungi|add)(?![\p{L}])/iu;
+const stessaRiga = (a, b) => !a || !b || ![a.y, a.h, b.y, b.h].every(Number.isFinite) || (a.y < b.y + b.h && b.y < a.y + a.h);
+function gettoniAccanto(elementi, k) {
+  const campo = elementi[k]; const prima = []; const dopo = [];
+  for (const [passo, dove] of [[-1, prima], [1, dopo]]) {
+    for (let j = k + passo; j >= 0 && j < elementi.length; j += passo) {
+      const e = elementi[j];
+      const nome = String(e?.nome ?? '').replace(/\s+/gu, ' ').trim();
+      if (!RUOLI_GETTONE.has(e?.ruolo) || e.visibile === false || !nome || NON_GETTONE.test(nome) || !stessaRiga(e.rettangolo, campo?.rettangolo)) break;
+      dove.push(nome);
+    }
+  }
+  return [...prima.reverse(), ...dopo];
+}
+/** Ogni campo dei destinatari com'è a schermo: il tipo, il valore (o i gettoni accanto al campo vuoto) e le voci intere, una per destinatario. */
+function campiLetti(s) {
+  const elementi = Array.isArray(s?.elementi) ? s.elementi : [];
+  const letti = [];
+  elementi.forEach((e, k) => {
+    if (!((e?.ruolo === 'campo' || e?.ruolo === 'scelta') && CAMPO_DESTINATARIO.test(String(e.nome ?? '').trim()))) return;
+    const tipo = tipoDelCampo(String(e.nome));
+    const valore = String(e.valore ?? '').replace(/\s+/gu, ' ').trim().replace(/^[;,\s]+|[;,\s]+$/gu, '');
+    if (valore) { letti.push({ tipo, valore, voci: vociGrezze(e.valore) }); return; }
+    const gettoni = gettoniAccanto(elementi, k);
+    letti.push({ tipo, valore: gettoni.join('; '), voci: gettoni });
+  });
+  return letti;
+}
+/** Un nome di campo che porta i destinatari («A», «To», «Cc», «Ccn», «Destinatario»…): l'ospite del PC non ne taglia il valore. */
+export const eCampoDestinatario = (nome) => CAMPO_DESTINATARIO.test(String(nome ?? '').trim());
+// secondo giro (revisore B, punto 3): un campo dei destinatari a schermo ma vuoto, senza gettoni, è un destinatario che non si legge (null:
+// ogni invio chiede), mai la testata
+const destinatarioDelSi = (s) => {
+  const letti = campiLetti(s);
+  const campi = [...new Set(letti.flatMap((c) => c.voci.flatMap(vociDellaVoce).map((x) => `${c.tipo}:${x}`)))].sort();
+  if (campi.length) return JSON.stringify([destinatarioDi(s), ...campi]);
+  return letti.length ? null : destinatarioDi(s);
+};
+/* Cura del rosso (R4, giudice v1459): la carta del PC dice A CHI va l'invio, con TUTTI i nomi letti nei campi, mai «e altri N»: il
+   valore di ogni campo com'è a schermo (spazi ridotti), raccolto per tipo. Senza campi la conversazione o la testata; niente di
+   leggibile ⇒ la carta lo dice. Se è lo schermo stesso ad accorciare l'elenco («e altri 3», «+3», «…») la carta dice anche questo.
+   pi mostra il comando intero prima di «Allow?» (permission-gate.ts:25); DeepSeek no («The request carries no tool arguments»). */
+const ELENCO_ACCORCIATO = /(?:(?:^|[^\p{L}])(?:e|and|y|et|und)\s+(?:\d+\s+)?(?:altri|altre|others?|more|otros|autres|weitere)(?![\p{L}])|(?:^|\s)\+\s?\d+(?!\d)|…|\.\.\.)/iu;
+/* Secondo giro (revisori B e C): ogni campo porta anche `quanti`, le voci contate sul valore intero (5f); la testata è il destinatario solo
+   di una chat SENZA campi dei destinatari, e mai una testata da finestra di scrittura («Nuovo messaggio», «New message»): la carta dice
+   allora che il destinatario non si legge (revisore B, punto 3). */
+const TESTATA_DI_SCRITTURA = /^(?:nuovo messaggio|new message|messaggio|message|bozza|draft|scrivi|compose|nuova email|new email|rispondi|reply|inoltra|forward)$/iu;
+const destinatarioPerLaCarta = (s) => {
+  const letti = campiLetti(s);
+  const perTipo = new Map();
+  for (const c of letti) {
+    if (!c.valore) continue;
+    const t = perTipo.get(c.tipo) ?? { valori: [], quanti: 0 };
+    t.valori.push(c.valore); t.quanti += c.voci.length;
+    perTipo.set(c.tipo, t);
+  }
+  const campi = ['a', 'cc', 'ccn'].filter((t) => perTipo.has(t)).map((tipo) => ({ tipo, valore: perTipo.get(tipo).valori.join('; '), quanti: perTipo.get(tipo).quanti }));
+  const testata = letti.length ? null : destinatarioDi(s);
+  return { campi, conversazione: testata && !TESTATA_DI_SCRITTURA.test(testata) ? testata : null, accorciato: campi.some((c) => ELENCO_ACCORCIATO.test(c.valore)) };
 };
 // T7: una casella che dice solo di aver letto l'informativa (privacy) è coperta dalla carta iniziale; termini, condizioni e contratti no
 const SOLO_INFORMATIVA = /(?:informativa|privacy|trattamento dei dati|ho letto)/iu;
@@ -123,7 +236,13 @@ const tettoValido = (t) => (t && typeof t === 'object' && Number.isFinite(t.impo
 
 /** Tetti di partenza: quelli del telefono (owner 10/08); sul PC si tarano sul banco e arrivano dalle impostazioni (`tettoPassi`…). */
 // `msAttesaPermesso`: quanto si aspetta la persona davanti alla riga «Posso» prima di chiudere (condizione del Desktop, 02/11)
-export const LIMITI_PREDEFINITI = Object.freeze({ passi: 20, millisecondi: 120_000, fallimentiDiFila: 2, msPerPasso: 25_000, azioniPerLotto: 10, msAnnullamento: 2_000, msAttesaPermesso: 600_000 });
+// `elementiNonTrovati` (giro 2 della 0.2.1-CU, Performance R1): quante volte PER COMPITO un «premi» o «scegli» può nominare un elemento che
+// non c'è; una riuscita in mezzo non lo azzera. Misurato il 09/11/2026 su 676 chiusure delle prove `computer-use-*` e sui 20 compiti
+// tipici: nessun compito riuscito ne incontra più di una. Hermes e Copilot Studio fermano lo stesso giro a 2-3 ritentativi.
+// `fallimentiSulloStessoElemento` (giro 3, Performance N2): quante volte PER COMPITO la stessa azione sullo stesso elemento può fallire
+// (l'aiutante la rifiuta, o va a vuoto); una riuscita su QUELL'elemento azzera il suo conto, una riuscita altrove no. Chiude il giro
+// «premi che fallisce → clic al buio o scorri che riesce → premi che fallisce» che arrivava a 20 richieste (scene S8 e S9 del revisore).
+export const LIMITI_PREDEFINITI = Object.freeze({ passi: 20, millisecondi: 120_000, fallimentiDiFila: 2, elementiNonTrovati: 3, fallimentiSulloStessoElemento: 3, msPerPasso: 25_000, azioniPerLotto: 10, msAnnullamento: 2_000, msAttesaPermesso: 600_000 });
 /** Le protezioni che una voce della riga «Posso» può sbloccare, e la voce (owner 02/11: §1 = A). */
 const VOCE_DELLA_PROTEZIONE = Object.freeze({ pagamento: 'pagare', invio: 'inviare', cancellazione: 'cancellare' });
 const GIRI_DEL_PERMESSO = 3; // «aggiunto» che non basta (per esempio col sospetto): si richiede, ma non all'infinito
@@ -228,6 +347,19 @@ async function conTetto(chiama, ms, msAnnullamento) {
 const tipoDi = (azione) => (azione && typeof azione === 'object' ? String(azione.tipo ?? '') : '');
 const breve = (b) => (b && typeof b === 'object' ? { ruolo: b.ruolo ?? null, nome: typeof b.nome === 'string' ? b.nome.slice(0, 80) : null } : null);
 const stessoElemento = (a, b) => Boolean(a && b) && (a.ref ?? null) === (b.ref ?? null) && a.ruolo === b.ruolo && a.nome === b.nome;
+/* Giro 3 (CLI R1, Telefono R1; RC-02 del 04/11): un'azione che per natura NON nomina un elemento (un clic per coordinate su un punto
+   senza elemento, un tasto alla finestra) riletta dopo l'attesa della persona ha ancora bersaglio nullo: è la STESSA. Prima due nulli
+   erano sempre «elemento sparito» e dopo «Consenti» il clic non partiva mai (20 carte, 0 clic). Un'azione che NOMINA un elemento
+   (`ref`, o il legame di un tasto di conferma) e non lo trova resta «sparito», com'era: l'ospite non la manderebbe comunque.
+   Ciò che il nullo non dice (quale finestra c'è sotto) lo dice `stessiDialoghi`: senza bersaglio il sì vale per le finestre di
+   conferma che la carta aveva davanti. */
+const nominaUnElemento = (azione) => azione?.ref != null || azione?.legatoA != null;
+const stessoBersaglio = (azione, a, b) => (a == null && b == null ? !nominaUnElemento(azione) : stessoElemento(a, b));
+const stessiDialoghi = (a, b) => improntaDeiDialoghi(a) === improntaDeiDialoghi(b);
+/* Giro 4 (punto 2 del controllore del giro 3): fra la carta e l'azione senza bersaglio non basta la stessa finestra di conferma; anche
+   l'app o il sito (`origineDi`) e il titolo della finestra dell'app (`paginaDi`) devono essere quelli. Prima un dialogo identico davanti a
+   un'altra app, o sopra un'altra cartella, riceveva il clic col sì dato per l'altra. */
+const stessaFinestra = (a, b) => origineDi(a) === origineDi(b) && paginaDi(a) === paginaDi(b) && stessiDialoghi(a, b);
 const chiaveAzione = (azione, bersaglio) => `${tipoDi(azione)}|${bersaglio?.ref ?? ''}|${bersaglio?.nome ?? ''}`;
 
 // Le finestre di TALOS (la bolla, il cursore): invisibili alle catture, sempre sopra, prendono i clic. Il modello vede il pulsante che sta
@@ -242,6 +374,108 @@ const centroDi = (e) => {
 };
 const puntoDi = (p) => (p && typeof p === 'object' && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : null);
 // le azioni che arrivano a un punto dello schermo; `tasti`, `aspetta`, `apri`, `programma` vanno alla finestra col fuoco
+/* 0.2.1-CU (owner 09/11/2026, giudice v1278-v1279, S6-S7): un passo che non va torna al modello dello schermo col MOTIVO e un SUGGERIMENTO,
+   mai una fermata muta. Viene da Hermes: ogni rifiuto e ogni esito portano `error` + `hint` (tools/computer_use/tool.py:66-67, :521-563:
+   «Re-capture and confirm before continuing», `escalate` con `recommended: px`), e da cua-driver che con l'albero vuoto raccomanda il
+   clic per coordinate (get_window_state.rs:599-607). In inglese come gli altri avvisi del modello (attrezzo.mjs, «Skipped from…»). */
+export const SUGGERIMENTI = Object.freeze({
+  elementoNonTrovato: 'element not found on this screen: take a new capture, or click by coordinates on what you see.',
+  clicAlBuio: 'click sent by coordinates, nothing readable was under the point: check the new capture before the next step.',
+  passoFallito: 'the step did not work: check the new capture before retrying; try another element, or a click by coordinates.',
+});
+// giro 3 (N1): l'albero letto di una schermata senza riferimenti (si rinumerano) e senza l'immagine (un cursore che lampeggia la cambia)
+const alberoDi = (s) => JSON.stringify([s?.app ?? null, s?.titolo ?? null, s?.dominio ?? null,
+  (Array.isArray(s?.elementi) ? s.elementi : []).map((e) => [e?.ruolo ?? null, e?.nome ?? null, e?.valore ?? null])]);
+/* Giro 4 (8d del controllore): lo schermo per il perdono, senza i testi semplici (ruolo 'testo': un orologio, un contatore,
+   «Caricamento…»). Con l'orologio nell'albero ogni cattura era «uno schermo nuovo» e un elemento che lampeggia si perdonava sempre: 20
+   richieste e 41 catture. Il brief chiedeva «al più 2 perdoni per nome»: misurato l'11/11, chiude L3 (il negozio perdona «Carica altri»
+   sette volte, una per pagina) e GAV-3 (cinque suggerimenti con lo stesso nome); lo schermo senza i testi tiene tutti e tre. */
+const alberoStabileDi = (s) => JSON.stringify([s?.app ?? null, s?.titolo ?? null, s?.dominio ?? null,
+  (Array.isArray(s?.elementi) ? s.elementi : []).filter((e) => e?.ruolo !== 'testo').map((e) => [e?.ruolo ?? null, e?.nome ?? null, e?.valore ?? null])]);
+// giro 4 (F2): quante azioni dopo quella della carta un sì ricordato per una finestra può coprire
+const USI_DEL_SI_RICORDATO = 3;
+/* Cura del rosso (R1, controllore 11/11 12:42, ALTA): il sì dato a «Invia» copriva OGNI invio della pagina allo stesso destinatario,
+   anche di un altro tipo: un indirizzo che porta dati della persona, un file trascinato nell'area di caricamento, Invio in un'altra
+   chat, un programma che va in rete, un'azione di uscita. Su 899a47eff e sul rilascio ognuno chiedeva la sua carta. Il motivo si
+   ignora solo fra i modi di premere «Invia» della stessa bozza o finestra: il pulsante (anche da tastiera o in una finestra), il
+   clic al buio sulla finestra, e la scorciatoia d'invio della finestra (Alt+S); Ctrl+Invio nel campo del messaggio vale solo per quel
+   campo (secondo giro, `doveDelSi` qui sotto). Invio da solo in un campo
+   di chat è l'invio di QUELLA chat: vale solo per sé. Come Hermes, dove ogni destinazione si autorizza da sola
+   (tools/send_message_tool.py:264-265, «an attested parent must not vouch for an arbitrary thread»). */
+const MODI_DI_PREMERE_INVIA = new Set(['pulsante', 'tasti', 'tasti-invio', 'pulsante-in-finestra', 'clic-senza-bersaglio']);
+const premeInvia = (motivo, azione) => MODI_DI_PREMERE_INVIA.has(motivo)
+  || (motivo === 'tasti-in-campo-chat' && tipoDi(azione) === 'tasti' && eScorciatoiaDInvio(azione?.combinazione ?? ''));
+/* Secondo giro (revisore B, R1 e 5j): il sì ricorda DOVE è stato dato. Ctrl/Cmd+Invio in un campo di chat vale per QUEL campo (`campo:<ref>`);
+   un pulsante, Invio sul pulsante col fuoco e il clic al buio valgono per il pulsante col suo nome (`pulsante:<nome>`): «Pubblica»
+   dopo un sì a «Invia» chiede la sua carta; la scorciatoia d'invio della finestra (Alt+S, `tasti-invio`) è il suo pulsante «Invia».
+   Prima Ctrl+Invio in un'altra chat della pagina, o «Invia» dopo Ctrl+Invio nella chat, passava col sì dell'altro (1 carta per 2 invii). */
+/* Giro di cura dopo i revisori (B, RB-1 e RB-2; giudice v1544): il posto era il NOME del pulsante, e su una pagina con una mail e una
+   chat, ognuna col suo «Invia», il sì dell'una copriva l'altra (1 carta per 2 invii; il rilascio ne chiedeva 2). Il campo di chat era il
+   suo `ref`, che cua-driver lega alla schermata in cui è letto: un messaggio nuovo sopra lo spostava (4 carte per 4 invii nello stesso
+   campo). Ora il posto è l'ELEMENTO: ruolo, nome, e il suo posto fra gli elementi con lo stesso ruolo e lo stesso nome. Un ridisegno che
+   rinomina i riferimenti tiene lo stesso elemento, e il sì vale ancora; l'altro «Invia» della pagina chiede la sua carta. La scorciatoia
+   d'invio della finestra (Alt+S, Ctrl+Invio nel corpo) è il SOLO pulsante d'invio dello schermo: con due non è nessuno dei due, e chiede.
+   Il clic al buio è il pulsante col nome della prova, se ce n'è uno solo. Come Hermes, dove ogni destinazione si autorizza da sola
+   (tools/send_message_tool.py:264-265). */
+const PULSANTE_DI_INVIO = /^(?:invia|invio|send|envoyer|enviar|senden)(?![\p{L}])/u;
+const elementoDi = (s, bersaglio, azione) => bersaglio
+  ?? (azione?.ref != null && azione.ref !== '' ? (s?.elementi ?? []).find((e) => e?.ref === azione.ref) ?? null : null);
+/* Giudice v1571 (revisore B, B9b): due finestrelle di chat, ognuna col suo campo, si scambiano di posto dopo il primo invio; il campo
+   del secondo invio prendeva il posto del primo (stesso ruolo, nome e posto fra i pari: 1 carta per 2 invii). Il posto è ora l'elemento
+   NELLA SUA chat: il riquadro con un nome più piccolo che lo contiene (la finestrella «Anna», la finestra di scrittura), il Document
+   escluso. Se il lettore non dà quel riquadro, vale come prima. Come Hermes, ogni destinazione si autorizza da sola
+   (tools/send_message_tool.py:264-265). */
+const riquadro = (r) => Boolean(r) && [r.x, r.y, r.w, r.h].every(Number.isFinite);
+const chatDi = (s, e) => {
+  const r = e?.rettangolo;
+  if (!riquadro(r)) return '';
+  const fuori = (s?.elementi ?? []).filter((x) => x && x !== e && x.ref !== e.ref && x.ruolo !== 'campo' && x.visibile !== false
+    && String(x.nome ?? '').trim() !== '' && riquadro(x.rettangolo) && x.rettangolo.w * x.rettangolo.h > r.w * r.h
+    && x.rettangolo.x <= r.x && x.rettangolo.y <= r.y && x.rettangolo.x + x.rettangolo.w >= r.x + r.w && x.rettangolo.y + x.rettangolo.h >= r.y + r.h);
+  fuori.sort((a, b) => a.rettangolo.w * a.rettangolo.h - b.rettangolo.w * b.rettangolo.h);
+  return fuori.length > 0 ? nomeConfrontabile(fuori[0].nome) : '';
+};
+const identitaDi = (s, e) => {
+  const nome = nomeConfrontabile(e.nome ?? '');
+  const chat = chatDi(s, e);
+  const pari = (s?.elementi ?? []).filter((x) => x?.ruolo === e.ruolo && nomeConfrontabile(x?.nome ?? '') === nome && chatDi(s, x) === chat);
+  const k = pari.findIndex((x) => x === e || (e.ref != null && x.ref === e.ref));
+  return `${e.ruolo}:${nome}${chat === '' ? '' : `@${chat}`}#${Math.max(k, 0)}`;
+};
+const unicoDi = (s, adatto) => { const tutti = (s?.elementi ?? []).filter((x) => x && adatto(x)); return tutti.length === 1 ? tutti[0] : null; };
+const doveDelSi = (v, azione, s, bersaglio) => {
+  if (v.protezione !== 'invio') return null;
+  const e = elementoDi(s, bersaglio, azione);
+  if (v.motivo === 'tasti-in-campo-chat') return `campo:${e ? identitaDi(s, e) : (azione?.ref ?? '')}`;
+  if (!premeInvia(v.motivo, azione)) return null;
+  if (v.motivo === 'tasti-invio') {
+    const pulsante = unicoDi(s, (x) => x.ruolo === 'pulsante' && PULSANTE_DI_INVIO.test(nomeConfrontabile(x.nome ?? '')));
+    return pulsante ? `pulsante:${identitaDi(s, pulsante)}` : 'scorciatoia';
+  }
+  if (e && v.motivo !== 'clic-senza-bersaglio') return `pulsante:${identitaDi(s, e)}`;
+  const prova = String(v.prova ?? '');
+  const alBuio = unicoDi(s, (x) => x.ruolo === 'pulsante' && nomeConfrontabile(x.nome ?? '').slice(0, 80) === prova);
+  return alBuio ? `pulsante:${identitaDi(s, alBuio)}` : `buio:${prova}`;
+};
+// fra due invii che non premono «Invia» (stesso motivo, `dove` nullo) vale come prima: lo stesso sì (mutante C9, 0 carte in più)
+const stessoPosto = (a, b) => a === b;
+// giro 4 (8c): le azioni che, riuscite su un elemento, fanno avanzare il compito (riempire, scegliere, premere); scorrere e aspettare no
+const AZIONI_CHE_AVANZANO = new Set(['scrivi', 'scegli', 'premi', 'clic']);
+/* Giro 2 (Performance R1, parte b): ciò che si legge di una schermata, per dire se un clic al buio l'ha cambiata. `impronta` è
+   l'impronta della cattura data dall'ospite (attrezzo.mjs): con l'albero vuoto è il solo segno di uno schermo cambiato. */
+const improntaDi = (s) => JSON.stringify([s?.app ?? null, s?.titolo ?? null, s?.dominio ?? null, s?.impronta ?? null,
+  (Array.isArray(s?.elementi) ? s.elementi : []).map((e) => [e?.ref ?? null, e?.ruolo ?? null, e?.nome ?? null, e?.valore ?? null])]);
+/** Il resto di un lotto in poche parole: «scrivi, aspetta ×8» (tipi uguali vicini contati, al più 10 gruppi). */
+function tipiInBreve(azioni) {
+  const gruppi = [];
+  for (const a of azioni) {
+    const tipo = tipoDi(a) || '?';
+    const ultimo = gruppi[gruppi.length - 1];
+    if (ultimo && ultimo.tipo === tipo) ultimo.n += 1; else gruppi.push({ tipo, n: 1 });
+  }
+  const testo = gruppi.slice(0, 10).map((g) => (g.n > 1 ? `${g.tipo} ×${g.n}` : g.tipo)).join(', ');
+  return gruppi.length > 10 ? `${testo}, …` : testo;
+}
 const SPAZIALI = new Set(['premi', 'scegli', 'clic', 'trascina', 'hover', 'scorri', 'scrivi', 'zoom']);
 const puntiDellAzione = (azione, bersaglio, s) => {
   const el = (ref) => (Array.isArray(s?.elementi) ? s.elementi : []).find((e) => e?.ref === ref) ?? null;
@@ -390,6 +624,12 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
   // il tetto viene SOLO dalle parole della persona o dalla riga «Posso» (condizione del Desktop), mai dal modello o da una pagina
   let tetto = tettoDallaFrase(testoDellaPersona); let fonteTetto = tetto ? 'frase' : null;
   let speso = 0; let ultimoSottoTetto = null; const spese = [];
+  /* Secondo giro (revisore A, 5a): in cassa ogni conferma è un pagamento («Avanti», «Continua»), ma non paga per forza. Sotto il tetto la
+     sua cifra si RISERVA (conta per il tetto, come Hermes che prenota la spesa prima della chiamata, tools/mcp_tool_costs.py:175-191) e si
+     segna fra i pagati solo quando parte l'azione che paga quella stessa cifra sullo stesso sito («Paga ora»): niente carta in più per
+     «Paga ora» dopo «Avanti», e la storia non dice mai «pagati» per un passo che non ha pagato. La riserva resta nel tetto fino alla
+     fine del compito: se «Avanti» avesse pagato davvero, il tetto non si supera. */
+  let riserva = null;
   // chi ha deciso ogni azione delicata (Frontend): 'frase' | 'tocco-posso' | 'si-carta' | 'serie' | 'permesso'
   const fonteVoce = { pagare: 'frase', inviare: 'frase', cancellare: 'frase' }; const decisioni = [];
   const citazione = String(testoDellaPersona ?? '').slice(0, 80);
@@ -402,26 +642,70 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
   let fermo = 0; // millisecondi passati ad aspettare la persona: l'orologio dei tetti è fermo (Mobile)
   const storia = []; const protezioni = [];
   let passi = 0; let fallimenti = 0; let n = 0;
+  // giro 2 (Performance R1): (a) gli «elemento non trovato» del compito, che una riuscita non azzera; (b) la schermata letta PRIMA di un
+  // clic al buio riuscito: la lettura dopo dice se l'ha cambiata, e solo allora i fallimenti di fila si azzerano
+  let nonTrovati = 0; let buio = null;
+  // giro 3 (Performance N1): i «non trovato» che una cattura vicina può perdonare, perché l'elemento stava solo arrivando; e (N2) quante
+  // volte ogni azione è fallita sullo stesso elemento in questo compito
+  const daPerdonare = []; const schermiPerdonati = new Set(); const falliteSu = new Map();
+  let dopoRiuscita = false; let testiDopoAzione = ''; let refRiuscito = null; // cinque cure (8d): i testi letti dopo l'ultima azione riuscita che fa avanzare, e su quale elemento
+  /* Giro 4 (8c del controllore, ALTA): il conto di un elemento riparte quando il compito ha cambiato qualcosa dal suo ultimo fallimento:
+     un'azione riuscita che riempie, sceglie o preme un elemento, mai fatta prima nel compito. «Salva» spento finché mancano tre campi,
+     rifiutato tre volte NON di fila con un campo riempito in mezzo, chiudeva un compito sano con `elemento-non-risponde`. Lo schermo che
+     cambia da solo (un titolo animato, un orologio, la lista che scorre) non conta: con lui S8, S9 e «Carica altri» tornavano a 20. */
+  const progressiVisti = new Set(); let progressi = 0; const perElemento = new Map();
+  /* Giro 3, punto 2 (decisione 375: mai venti carte per la stessa finestra): il sì dato a un clic SENZA bersaglio vale per gli altri clic
+     senza bersaglio finché a schermo ci sono le STESSE finestre di conferma. «Stesse» si misura: stessa app o stesso sito (`origineDi`),
+     stesso titolo della finestra (`paginaDi`), stessa `improntaDeiDialoghi` (titoli e testi delle finestre di conferma, senza i
+     riferimenti degli elementi, che cambiano a ogni lettura), stessa protezione con lo stesso motivo e la stessa prova. La prima cattura
+     che non le mostra più uguali lo cancella (`guarda`): un dialogo chiuso e riaperto chiede di nuovo. Mai per un pagamento (owner
+     02/11), mai dopo un sospetto nato più tardi, mai oltre una pausa. Come Hermes, dove un permesso ha una chiave e una durata
+     (tools/computer_use/tool.py:34 e :382-401, `cua:<azione>:<modo>`, once/session/always), e Codex, che richiede solo se la chiave
+     dell'azione cambia (codex-rs/core/src/tools/sandboxing.rs:66-97, `with_cached_approval`). */
+  let siDialogo = null;
+  // lo schermo è già quello: ogni cattura passa da `guarda`, che cancella il sì appena app, titolo o finestre di conferma cambiano
+  /* Giro 4 (F2 e punto 6): il sì ricordato copre al più USI_DEL_SI_RICORDATO azioni dopo quella della carta, e lo stesso OGGETTO: un
+     invio lo stesso destinatario letto a schermo (illeggibile: lo schermo intero immutato); un pagamento (solo dove la politica dà una
+     carta per pagamento) lo stesso pagamento = schermo intero immutato, stessa cifra, stessi importi, stesso destinatario. */
+  const serveLAlbero = (d) => d.protezione === 'pagamento' || (d.protezione === 'invio' && d.destinatario === null);
+  const stessoOggetto = (d, s) => (d.protezione === 'invio' && d.destinatario !== null ? d.destinatario === destinatarioDelSi(s) : true)
+    && (d.protezione !== 'pagamento' || (d.totale === chiaveTotale(s) && d.importi === importiDi(s) && d.destinatario === destinatarioDelSi(s)))
+    && (!serveLAlbero(d) || d.albero === alberoDi(s));
+  const siDelDialogo = (v, s) => (siDialogo && v.protezione === siDialogo.protezione && v.motivo === siDialogo.motivo && v.prova === siDialogo.prova
+    && !(contesto.sospetto && !siDialogo.sospetto) && siDialogo.usi < USI_DEL_SI_RICORDATO
+    // invii in lotto (B2): un invio conta anche gli usi mirati dello stesso sì (al buio e mirati insieme: 3 dopo la carta)
+    && (v.protezione !== 'invio' || siDialogo.voce.azioni.length <= USI_DEL_SI_RICORDATO) && stessoOggetto(siDialogo, s) ? siDialogo : null);
   const misure = { richieste: 0, catture: 0, azioni: 0, azioniFallite: 0, azioniRitentate: 0, msModello: 0, msAiutante: 0, msAttesa: 0 };
   const rifiuti = new Map();
   const siAttivi = []; const conferme = []; // T2: i sì validi adesso, e tutti quelli dati (per l'esito finale)
   let noMiste = 0; // S-5: i «no» alla carta del pulsante illeggibile, per compito; al secondo ci si ferma
-  const siValido = (v, s, bersaglio) => {
+  const siValido = (v, s, bersaglio, azione) => {
     if (v.protezione === 'cancellazione') return null;
     // un'azione che non si sa valutare non ha un'operazione da aprire: il sì vale per lei sola (C5, S-5)
     if (v.protezione === null) return null;
     // il sì alla cassa della guardia (variante A, PC) vale per il pulsante che paga quell'importo su quella pagina, una volta
-    return siAttivi.find((e) => e.protezione === v.protezione && (e.motivo === v.motivo || e.daCassa === true) && e.origine !== null
+    // invii in lotto (B2): per un invio conta l'oggetto (pagina e destinatario), non il modo: un clic al buio e «Invia», Ctrl+Invio e
+    // «Invia» sulla stessa bozza sono lo stesso sì, col tetto comune (prima una carta doppia subito dopo il sì)
+    // cura del rosso (R1): fra i soli modi di premere «Invia» (`premeInvia`); un invio d'altro tipo vuole il suo sì
+    return siAttivi.find((e) => e.protezione === v.protezione && (e.motivo === v.motivo || e.daCassa === true || (v.protezione === 'invio' && e.premeInvia === true && premeInvia(v.motivo, azione))) && e.origine !== null
       && e.origine === origineDi(s) && e.pagina !== null && e.pagina === paginaDi(s)
       && (v.protezione !== 'pagamento' || (e.importi !== '' && e.importi === importiDi(s) && e.totale !== '' && e.totale === chiaveTotale(s) && (e.daCassa === true || confermaDelloStessoPagamento(bersaglio))))
       // un invio vale solo verso lo STESSO destinatario letto a schermo; se il destinatario non si legge, ogni invio chiede (Mobile)
-      && (v.protezione !== 'invio' || (e.destinatario !== null && e.destinatario === destinatarioDi(s)))
+      && (v.protezione !== 'invio' || (e.destinatario !== null && e.destinatario === destinatarioDelSi(s)))
+      // secondo giro (R1, 5j): lo stesso posto (lo stesso campo di chat, lo stesso pulsante)
+      && (v.protezione !== 'invio' || stessoPosto(e.dove ?? null, doveDelSi(v, azione, s, bersaglio)))
+      // giro ultimo: come il sì della finestra, al più USI_DEL_SI_RICORDATO invii dopo quello della carta (`azioni` = la carta + gli usi;
+      // `disfaConti` toglie l'uso di un'azione che non parte). Prima 20 invii mirati, a parole o da tastiera, costavano una carta
+      && (v.protezione !== 'invio' || e.azioni.length <= USI_DEL_SI_RICORDATO)
+      // invii in lotto (B1): il sì della domanda unica copre ESATTAMENTE gli invii elencati, una volta ciascuno: mai altri dopo
+      && !(v.protezione === 'invio' && e.daLotto === true)
       && !(contesto.sospetto && !e.sospetto)) ?? null;
   };
   // il sì apre un'operazione: vale per le azioni dopo con la stessa protezione, sulla stessa pagina (T2, Mobile)
-  const ricordaSi = (v, s, azione) => {
+  const ricordaSi = (v, s, azione, bersaglio = null) => {
     const nuovo = { protezione: v.protezione, motivo: v.motivo, origine: origineDi(s), pagina: paginaDi(s), importi: importiDi(s), totale: chiaveTotale(s),
-      destinatario: destinatarioDi(s), sospetto: contesto.sospetto, passo: n, azioni: [tipoDi(azione)] };
+      destinatario: destinatarioDelSi(s), sospetto: contesto.sospetto, passo: n, azioni: [tipoDi(azione)], premeInvia: v.protezione === 'invio' && premeInvia(v.motivo, azione),
+      dove: doveDelSi(v, azione, s, bersaglio) };
     siAttivi.push(nuovo); conferme.push(nuovo);
     return nuovo;
   };
@@ -536,6 +820,36 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
     let v = { ...r.v, zoneDiTalos: zone };
     // gli elementi col centro sotto una finestra di TALOS si segnano: il modello sa che non sono raggiungibili
     if (zone.length && Array.isArray(v.elementi)) v.elementi = v.elementi.map((e) => (e && typeof e === 'object' && nellaZona(zone, centroDi(e)) ? { ...e, coperto: true } : e));
+    // (b) la prima lettura dopo un clic al buio: schermo cambiato ⇒ il clic ha fatto qualcosa, i fallimenti di fila ripartono da zero
+    if (buio !== null) { if (improntaDi(v) !== buio) fallimenti = 0; buio = null; }
+    // giro 3, punto 2: il sì ricordato vale finché le finestre di conferma restano quelle; la prima lettura che le trova diverse lo chiude
+    if (siDialogo && (origineDi(v) !== siDialogo.origine || paginaDi(v) !== siDialogo.pagina || improntaDeiDialoghi(v) !== siDialogo.dialoghi
+      // giro 4: per un pagamento (e un invio dal destinatario illeggibile) il sì vale «finché lo schermo non cambia»: anche se poi torna uguale
+      || (serveLAlbero(siDialogo) && alberoDi(v) !== siDialogo.albero))) siDialogo = null;
+    /* Giro 3 (Performance N1): un «non trovato» nato DOPO un'azione dello stesso lotto (il suggerimento che compare un attimo dopo aver
+       scritto, «Carica altri» che torna quando la pagina ha finito) si perdona se l'elemento è a schermo in una delle catture fino a
+       quella della seconda richiesta al modello dopo lo sbaglio: stava arrivando, non mancava. Un riferimento che non compare mai
+       (un nome sbagliato, vecchio) non si perdona e il tetto del compito resta. Selenium e Playwright fanno lo stesso con l'elemento
+       non ancora pronto: si aspetta e si rilegge prima di chiamarlo errore.
+       Un perdono per SCHERMO: se la cattura che perdonerebbe è uguale (albero letto: nomi e valori, senza riferimenti né immagine) a
+       quella di un perdono già dato, il compito non sta avanzando (un elemento che lampeggia) e lo sbaglio resta. Misurato il
+       10/11/2026: senza questa riga quel giro arrivava a 20 richieste e 41 catture; nelle scene vere (posta a cinque persone, negozio
+       a otto pagine) ogni perdono ha il suo schermo, perché il campo o la lista sono andati avanti. */
+    // cinque cure (8d): i testi semplici contano quando seguono un'azione riuscita che fa avanzare (la pagina del lettore è cambiata),
+    // mai quando lo schermo cambia da solo (l'orologio): il lettore di 16 pagine chiudeva a 4
+    if (dopoRiuscita) { testiDopoAzione = JSON.stringify((Array.isArray(v.elementi) ? v.elementi : []).filter((e) => e?.ruolo === 'testo').map((e) => e?.nome ?? null)); dopoRiuscita = false; }
+    if (daPerdonare.length) {
+      const visti = new Set((Array.isArray(v.elementi) ? v.elementi : []).map((e) => e?.ref));
+      for (let k = daPerdonare.length - 1; k >= 0; k -= 1) {
+        const p = daPerdonare[k];
+        if (misure.richieste > p.richieste + 1) daPerdonare.splice(k, 1);
+        else if (visti.has(p.ref)) {
+          const albero = alberoStabileDi(v) + (p.ref === refRiuscito ? testiDopoAzione : ''); // giro ultimo: solo per l'elemento appena premuto
+          if (!schermiPerdonati.has(albero)) { schermiPerdonati.add(albero); nonTrovati -= 1; } // giro 4: albero senza i testi (8d)
+          daPerdonare.splice(k, 1);
+        }
+      }
+    }
     if (v.sospetto) return v;
     const sospetto = rilevaSospetto(v);
     if (sospetto) v = { ...v, sospetto };
@@ -543,11 +857,17 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
   };
   const copertoDaTalos = (azione, bersaglio, s) => SPAZIALI.has(tipoDi(azione)) && puntiDellAzione(azione, bersaglio, s).some((p) => nellaZona(s?.zoneDiTalos ?? [], p));
   const leggiBersaglio = async (azione, s) => (typeof porte.bersaglio === 'function' ? (await porte.bersaglio(azione, s)) ?? null : null);
-  const annota = (azione, bersaglio, esito, motivo, extra = {}) => {
-    storia.push(`passo ${passi}: ${tipoDi(azione)}${bersaglio?.nome ? ` «${String(bersaglio.nome).slice(0, 40)}»` : ''} → ${esito}${motivo ? ` (${motivo})` : ''}`);
+  // Giro 2 (Telefono D1, Performance R3): il modello legge solo le ultime righe della storia (attrezzo.mjs, `storia.slice(-8)`). Esito,
+  // motivo e suggerimento stanno su UNA riga e il resto di un lotto su UNA riga: col lotto massimo il motivo non esce mai dalla vista.
+  const annota = (azione, bersaglio, esito, motivo, extra = {}, suggerimento = null) => {
+    storia.push(`passo ${passi}: ${tipoDi(azione)}${bersaglio?.nome ? ` «${String(bersaglio.nome).slice(0, 40)}»` : ''} → ${esito}${motivo ? ` (${motivo})` : ''}${suggerimento ? `. ${suggerimento}` : ''}`);
     emetti(EVENTI.passo, { n, fase: 'esito', tipo: tipoDi(azione), esito, motivo: motivo ?? null, modo: MODI.has(extra.modo) ? extra.modo : modo, processo: extra.processo ?? null });
   };
-  const segnaResto = (azioni, da, esito) => { for (let k = da; k < azioni.length; k += 1) storia.push(`passo ${passi}: ${tipoDi(azioni[k])} → ${esito}`); };
+  const segnaResto = (azioni, da, esito) => {
+    const resto = azioni.slice(da);
+    if (resto.length === 1) storia.push(`passo ${passi}: ${tipoDi(resto[0])} → ${esito}`);
+    else if (resto.length > 1) storia.push(`passo ${passi}: azioni ${da + 1}-${azioni.length} del lotto (${tipiInBreve(resto)}) → ${esito}`);
+  };
   const controlloSchermo = (s) => {
     // ⛔ La persona PRIMA di tutto, a ogni lettura: freno non armato = non si parte, freno perso = stop (contratto §7)
     if (s.frenoArmato !== true) return passi === 0 && n === 0 ? 'freno-non-armato' : 'freno-perso';
@@ -668,7 +988,7 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
         const ripreso = typeof porte.attendiRipresa === 'function' ? await aspettandoLaPersona(() => porte.attendiRipresa(s.pausa)) : false;
         if (!ripreso) return chiudi('fermato', 'tetto-tempo', { pausa: s.pausa });
         // O1 (owner 04/11): dopo una pausa (schermo bloccato, persona via) il sì della guardia non vale più
-        statoGuardia = STATO_GUARDIA_VUOTO; siDelCompito = null;
+        statoGuardia = STATO_GUARDIA_VUOTO; siDelCompito = null; siDialogo = null; // giro 3: nemmeno il sì ricordato per una finestra
         continue; // si rilegge lo schermo dopo la pausa
       }
       if (s.sospetto && !contesto.sospetto) {
@@ -694,7 +1014,7 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
       const risposta = await conTetto((segnale) => porte.chiedi({ osservazione: s, storia: [...storia] }, segnale), lim.msPerPasso, lim.msAnnullamento);
       misure.richieste += 1; misure.msModello += adesso() - t0;
       const r = risposta.v;
-      const azioni = r && Array.isArray(r.azioni) ? r.azioni : null;
+      let azioni = r && Array.isArray(r.azioni) ? r.azioni : null;
       if (!r || (!azioni && !r.fine)) {
         fallimenti += 1;
         storia.push(`passo ${passi + 1}: risposta ${risposta.scaduto ? 'scaduta' : 'non utilizzabile'}`);
@@ -706,6 +1026,9 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
       if (azioni.length > perLotto) {
         segnaResto(azioni, perLotto, 'non-eseguita');
         storia.push(`passo ${passi}: al massimo ${perLotto} azioni per volta`);
+        // giro 3 (Performance N3): ciò che sta oltre il lotto è già scritto qui sopra, una volta; da qui il lotto è solo ciò che può
+        // partire, così il resto di un lotto che si ferma («azioni 2-10») non riscrive le azioni 11 e 12
+        azioni = azioni.slice(0, perLotto);
       }
       // il modello guarda senza agire (solo attese): la finestra che sta leggendo, nient'altro (Desktop 05/11)
       {
@@ -720,7 +1043,7 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
       const preRisposte = new Map();
       if (typeof porte.chiediPersona === 'function') {
         // C3 (revisione PR19): la foto porta anche il sospetto di adesso, e ogni voce il suo bersaglio
-        const voci = []; const foto = { origine: origineDi(s), pagina: paginaDi(s), importi: importiDi(s), totale: chiaveTotale(s), sospetto: contesto.sospetto === true };
+        const voci = []; const foto = { origine: origineDi(s), pagina: paginaDi(s), importi: importiDi(s), totale: chiaveTotale(s), sospetto: contesto.sospetto === true, destinatario: destinatarioDelSi(s) };
         const bersagliDelleVoci = new Map();
         // T11: il ponte vale per l'azione subito dopo quella che l'ha aperto; qui si segue come farà il ciclo, azione per azione
         let pv = ponte && ponte.passo === n ? ponte : null;
@@ -733,14 +1056,15 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
           const copre = copertoDalPonte(v0, a, b, s, pv);
           pv = copre === 'metodo' ? { ...pv, metodo: String(b.nome).slice(0, 40) } : null;
           if (copre) continue; // lo coprirà il sì della cassa: non entra nella domanda unica
-          if (v0.decisione !== 'chiedi' || siValido(v0, s, b)) continue;
+          if (v0.decisione !== 'chiedi' || siValido(v0, s, b, a)) continue;
           if (v0.prova === 'scritture-miste') continue; // S-5: il pulsante illeggibile ha la sua carta, col testo e le lettere strane
           if (v0.protezione === 'pagamento' && tetto && contesto.richiesta?.pagare === true) continue; // col tetto il pagamento lo decide il tetto
           voci.push({ id: k, protezione: v0.protezione, prova: v0.prova, ...(v0.protezione === 'pagamento' ? { importo: totaleFinale(s) } : {}) });
           bersagliDelleVoci.set(k, b);
         }
         if (voci.length >= 2) {
-          const r = await aspettandoLaPersona(() => conTetto((segnale) => chiediAllaPersona({ motivo: 'conferme', voci }, segnale), lim.msAttesaPermesso, lim.msAnnullamento));
+          const daMostrare = voci.some((x) => x.protezione === 'invio') ? { destinatario: destinatarioPerLaCarta(s) } : {}; // R4
+          const r = await aspettandoLaPersona(() => conTetto((segnale) => chiediAllaPersona({ motivo: 'conferme', voci, ...daMostrare }, segnale), lim.msAttesaPermesso, lim.msAnnullamento));
           if (r.scaduto) return chiudi('fermato', 'attesa-scaduta');
           if (r.errore) return chiudi('fermato', DOMANDA_NON_MOSTRATA);
           const risp = r.v;
@@ -749,6 +1073,7 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
         }
       }
       let fineNelLotto = null;
+      let fattaNelLotto = false; // un'azione di questo lotto è già partita (giro 3, N1)
       let ultimaNellaGuardia = false; // l'azione appena fatta cambiava qualcosa nella guardia (anche in un riquadro, D3): il lotto si chiude lì
       for (let i = 0; i < Math.min(azioni.length, perLotto); i += 1) {
         if (ultimaNellaGuardia) { segnaResto(azioni, i, 'non-eseguita'); break; }
@@ -764,6 +1089,8 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
           if (ferma) { segnaResto(azioni, i, 'non-eseguita'); return chiudi('fermato', ferma); }
           if (s.sospetto) contesto.sospetto = true;
           if (s.pausa) { segnaResto(azioni, i, 'non-eseguita'); break; } // la pausa si gestisce in cima al giro
+          // finestra bloccata: la finestra del compito è sparita a metà lotto; il modello lo legge in cima, poi la carta se vuole agire
+          if (s.cambioFinestra) { segnaResto(azioni, i, 'non-eseguita'); break; }
           // la guardia tiene il posto aggiornato a ogni lettura; orologio illeggibile o schermo spento: la carta in cima al giro
           if (guardiaAccesa) {
             const g = guardiaDi(s);
@@ -786,6 +1113,28 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
           break;
         }
 
+        /* ⛔ Cura «finestra bloccata» (owner 15/11 11:48, «carta se cambia»): l'ospite non ha letto la finestra che sta davanti (quella del
+           compito è chiusa, ridotta o coperta: `s.cambioFinestra`). Prima di ogni azione che non sia un'attesa parte la carta del luogo
+           nuovo col TITOLO della finestra, anche per la stessa app e anche per un'app con «Consenti sempre» (`luogoNuovo` qui sotto
+           confronta solo il nome dell'app). Col sì l'ospite la aggiunge al compito e si rilegge in cima; senza la porta della carta
+           (Accesso pieno) o senza una finestra da proporre, il compito si ferma: nessuna finestra estranea senza la persona. */
+        if (s.cambioFinestra && tipoDi(azione) !== 'aspetta') {
+          const c = s.cambioFinestra;
+          const siPuoChiedere = typeof porte.consensoDelCompito === 'function' && typeof porte.passaAllaFinestra === 'function'
+            && Number.isFinite(c.pid) && c.window_id !== undefined && c.window_id !== null;
+          if (!siPuoChiedere) { segnaResto(azioni, i, 'non-eseguita'); return chiudi('fermato', 'finestra-cambiata'); }
+          const r = await chiediConsenso({ nuovo: { ...(c.app ? { app: c.app } : {}), finestra: String(c.titolo ?? '') } });
+          if (r !== 'si' && r !== 'sempre') { segnaResto(azioni, i, 'non-eseguita'); return chiudi('fermato', motivoDelNo(r)); }
+          porte.passaAllaFinestra(c);
+          if (c.app) consentiti.app.add(c.app); // una carta sola: il sì della finestra vale anche per la sua app
+          storia.push(`passo ${passi}: la persona ha consentito un'altra finestra`);
+          if (r === 'sempre' && c.app) {
+            decisioni.push({ passo: n, protezione: null, azione: 'consenso', fonte: 'sempre' });
+            await ricorda({ app: [c.app] });
+          }
+          segnaResto(azioni, i, 'non-eseguita');
+          break; // si rilegge lo schermo in cima, ora sulla finestra consentita
+        }
         if (consensoDato) {
           await rileggiRicordati();
           // un luogo consentito solo dal ricordo e tolto adesso dalla persona: la carta torna, poi si rilegge lo schermo in cima al giro
@@ -829,7 +1178,7 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
             if (fermaDopo) { segnaResto(azioni, i, 'non-eseguita'); return chiudi('fermato', fermaDopo); }
             if (dopo.sospetto) contesto.sospetto = true;
             s = dopo;
-            if (luogoNuovo(s)) { segnaResto(azioni, i, 'non-eseguita'); break; } // lo schermo è già altrove: si rilegge in cima
+            if (luogoNuovo(s) || s.cambioFinestra) { segnaResto(azioni, i, 'non-eseguita'); break; } // lo schermo è già altrove: si rilegge in cima
           }
         }
         // T9: il ponte vale solo per l'azione SUBITO dopo quella che ha avviato il pagamento
@@ -892,6 +1241,25 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
         }
         lasciaPagina(s);
         let v = valutaOra(azione, bersaglio, s);
+        // S7 (giudice v1279): «premi» o «scegli» su un elemento che non c'è non chiude il compito: il passo torna al modello col motivo e il
+        // suggerimento (rifiuto al modello come Hermes tool.py:66-67), conta fra i fallimenti di fila e il modello lo rifà, anche per coordinate
+        // Giro 3, punto 5 (CLI): anche «scrivi» e «tasti» che NOMINANO un elemento (`ref`) che a schermo non c'è prendono questa strada.
+        // Prima in Normale facevano una carta «un passo che non so controllare» a ogni giro (20 richieste e 10 carte alternati al clic al
+        // buio) per un'azione che l'ospite poi rifiuta comunque: testo e tasti non vanno mai a un fuoco che nessuno ha valutato
+        // (attrezzo.mjs, `agisci`). «tasti» senza `ref` va alla finestra e «trascina» resta com'era.
+        const nominaUnAssente = (tipoDi(azione) === 'scrivi' || tipoDi(azione) === 'tasti') && azione.ref != null && bersaglio === null && v.protezione !== 'anti-robot';
+        if (nominaUnAssente || (v.prova === 'bersaglio-mancante' && (tipoDi(azione) === 'premi' || tipoDi(azione) === 'scegli'))) {
+          fallimenti += 1; nonTrovati += 1;
+          // N1: perdonabile solo se un'azione di questo lotto è già partita (lo schermo si stava muovendo sotto il modello)
+          if (fattaNelLotto && azione.ref != null) daPerdonare.push({ ref: azione.ref, richieste: misure.richieste });
+          annota(azione, bersaglio, 'non-eseguita', 'elemento-non-trovato', {}, SUGGERIMENTI.elementoNonTrovato);
+          segnaResto(azioni, i + 1, 'non-eseguita');
+          if (fallimenti >= lim.fallimentiDiFila) return chiudi('non-riuscito', 'errori-di-fila');
+          // (a) al terzo del compito si chiude anche se in mezzo qualcosa è riuscito: il giro «premi assente → altro → premi assente» non
+          // arriva più al tetto dei passi (20 richieste al modello e 21-41 catture, misura del revisore Performance del 09/11/2026)
+          if (nonTrovati >= lim.elementiNonTrovati) return chiudi('non-riuscito', 'elemento-non-trovato');
+          break;
+        }
         // T4 (censimento del 02/11): un controllo anti-robot lo risolve la persona; il ciclo la ASPETTA con lo stesso tetto della riga
         // «Posso», poi rilegge schermo e bersaglio. Prima chiudeva il compito mentre la carta prometteva «Fatto, riprendi».
         if (v.decisione === 'ferma' && v.protezione === 'anti-robot' && typeof porte.chiediPersona === 'function') {
@@ -909,7 +1277,7 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
             if (fermaDopo) { segnaResto(azioni, i, 'non-eseguita'); return chiudi('fermato', fermaDopo); }
             if (dopo.sospetto) contesto.sospetto = true;
             const vivo = await leggiBersaglio(azione, dopo);
-            if (!stessoElemento(vivo, bersaglio)) {
+            if (!stessoBersaglio(azione, vivo, bersaglio)) {
               annota(azione, bersaglio, 'non-eseguita', 'elemento-sparito');
               segnaResto(azioni, i + 1, 'non-eseguita');
               salta = true;
@@ -922,13 +1290,22 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
           if (v.protezione !== 'anti-robot') storia.push(`passo ${passi}: la persona ha risolto il controllo, si riparte`);
         }
         // i conti di questa azione (tetto, sì aperti e usati) si fotografano qui: se l'azione alla fine non parte, si disfano (Q, D4-D5)
-        const conti = { speso, ultimoSottoTetto, spese: spese.length, attivi: [...siAttivi], conferme: conferme.length };
+        const conti = { speso, ultimoSottoTetto, riserva, spese: spese.length, attivi: [...siAttivi], conferme: conferme.length, storia: storia.length };
         let siUsato = null;
         const disfaConti = () => {
-          speso = conti.speso; ultimoSottoTetto = conti.ultimoSottoTetto; spese.length = conti.spese;
+          speso = conti.speso; ultimoSottoTetto = conti.ultimoSottoTetto; riserva = conti.riserva; spese.length = conti.spese;
+          // secondo giro (revisore A, 5a): la storia non dice «pagati» per un'azione che non è partita (prima restava «pagati 30 EUR»)
+          for (let k = conti.storia; k < storia.length; k += 1) {
+            if (/^passo \d+: (?:pagati|un passo verso un pagamento di) /u.test(storia[k])) storia[k] = storia[k].replace(/^(passo \d+): .*$/u, '$1: la spesa segnata per questa azione è annullata, l\'azione non è partita');
+          }
           siAttivi.splice(0, siAttivi.length, ...conti.attivi); conferme.length = conti.conferme;
           if (siUsato) siUsato.azioni.pop();
         };
+        let daRicordare = null; // giro 3: il sì per questa finestra, ricordato solo se l'azione parte davvero
+        let usoDelDialogo = null; // giro 4: il sì ricordato usato da questa azione
+        // giro 3: un clic per coordinate senza elemento sotto il punto. Non si sa su quale pulsante cade: non paga mai da solo dentro il
+        // tetto (il conto della spesa segnerebbe un pagamento che forse non c'è stato) e il suo sì ha la regola della finestra, sotto
+        const alBuioOra = tipoDi(azione) === 'clic' && bersaglio === null;
         let daEseguire = azione;
         let sotto = null; // il sì sotto cui si agisce (T2)
         let fonte = null; // chi ha deciso questa azione delicata (Frontend)
@@ -940,7 +1317,28 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
           const chiave = tot ? `${tot.importo}|${tot.valuta}` : null;
           const confermaSotto = ultimoSottoTetto && chiave && ultimoSottoTetto.chiave === chiave && ultimoSottoTetto.origine === origineDi(s)
             && ultimoSottoTetto.pagina === paginaDi(s) && confermaDelloStessoPagamento(bersaglio) && !contesto.sospetto;
-          if (confermaSotto) {
+          const soloUnPasso = v.motivo === 'conferma-in-cassa';
+          if (alBuioOra) {
+            v = { ...v, decisione: 'chiedi' }; // giro 3: al buio il tetto non decide, decide la persona con la carta del totale
+          } else if (!soloUnPasso && riserva && chiave && riserva.chiave === chiave && riserva.origine === origineDi(s) && !contesto.sospetto) {
+            // 5a: l'azione che paga la cifra già riservata: niente carta e niente doppio conto, e ora è pagata
+            riserva = null;
+            const resta = Math.round((tetto.importo - speso) * 100) / 100;
+            ultimoSottoTetto = { chiave, origine: origineDi(s), pagina: paginaDi(s) };
+            spese.push({ passo: n, totale: tot, resta, valuta: tetto.valuta });
+            storia.push(`passo ${passi}: pagati ${tot.importo} ${tot.valuta} dentro il tetto di ${tetto.importo} ${tetto.valuta}, restano ${resta}`);
+            v = { ...v, decisione: 'procedi-e-segna' }; fonte = fonteTetto;
+          } else if (soloUnPasso && riserva && chiave && riserva.chiave === chiave && riserva.origine === origineDi(s) && !contesto.sospetto) {
+            // 5a: un altro passo verso lo stesso pagamento («Avanti», poi «Continua»): la cifra è già riservata
+            v = { ...v, decisione: 'procedi-e-segna' }; fonte = fonteTetto;
+            storia.push(`passo ${passi}: un altro passo verso lo stesso pagamento, già riservato nel tetto`);
+          } else if (soloUnPasso && !contesto.sospetto && tot && tot.valuta === tetto.valuta && !siRinnova(s) && nelPianoDi(s)
+            && speso + tot.importo <= tetto.importo + 1e-9) {
+            speso += tot.importo;
+            riserva = { chiave, origine: origineDi(s) };
+            storia.push(`passo ${passi}: un passo verso un pagamento di ${tot.importo} ${tot.valuta}: riservati dentro il tetto di ${tetto.importo} ${tetto.valuta}, il pagamento non è ancora partito`);
+            v = { ...v, decisione: 'procedi-e-segna' }; fonte = fonteTetto;
+          } else if (confermaSotto) {
             // la conferma dello STESSO pagamento già contato: niente carta e niente doppio conto (Mobile)
             ultimoSottoTetto = null; v = { ...v, decisione: 'procedi-e-segna' }; fonte = fonteTetto;
             storia.push(`passo ${passi}: conferma dello stesso pagamento, già dentro il tetto`);
@@ -964,7 +1362,9 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
           // `codex-rs/core/src/tools/sandboxing.rs:66-97` (si richiede solo se la chiave dell'azione cambia)
           && pre.importi === importiDi(s) && (pre.protezione !== 'pagamento' || pre.totale === chiaveTotale(s))
           // C3: un sospetto nato dopo la domanda, o un altro elemento al posto di quello chiesto, vogliono una carta nuova
-          && !(contesto.sospetto && !pre.sospetto) && stessoElemento(bersaglio, pre.bersaglio)) {
+          && !(contesto.sospetto && !pre.sospetto) && stessoBersaglio(azione, bersaglio, pre.bersaglio)
+          // invii in lotto (B1): un invio che, quando parte, va a un altro destinatario da quello della domanda chiede di nuovo
+          && (pre.protezione !== 'invio' || pre.destinatario === destinatarioDelSi(s))) {
           if (pre.risposta !== 'si') {
             const chiave = chiaveAzione(azione, bersaglio);
             rifiuti.set(chiave, (rifiuti.get(chiave) ?? 0) + 1);
@@ -973,15 +1373,23 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
             if (rifiuti.get(chiave) >= 2) return chiudi('fermato', 'rifiutata-dalla-persona');
             break;
           }
-          sotto = ricordaSi(v, s, azione); fonte = 'si-carta';
+          sotto = ricordaSi(v, s, azione, bersaglio); fonte = 'si-carta';
+          if (v.protezione === 'invio') sotto.daLotto = true; // B1: vale per questa voce sola
           v = { ...v, decisione: 'procedi-e-segna' };
           storia.push(`passo ${passi}: confermata nella domanda unica del gruppo`);
         }
         // T1: col sì della carta iniziale, un invio chiesto nella frase verso un destinatario NOMINATO nella frase e letto a schermo procede
         // (Mobile); un destinatario che non si legge o non nominato chiede. Il pagamento no (owner 02/11), la cancellazione no.
         if (v.decisione === 'chiedi' && consensoDato && v.protezione === 'invio' && contesto.richiesta.inviare && !contesto.sospetto) {
-          const dest = destinatarioDi(s);
-          if (dest && combaciaPerIntero(destinatario, paroleDi(dest), 'uguale')) {
+          /* Secondo giro (revisore B, T1): con dei campi dei destinatari a schermo decidono loro, TUTTI (A, Cc, Ccn, gettoni): ogni voce è il
+             nome della frase. Prima bastava la testata: «manda la mail a Marco Rossi» con la testata «Marco Rossi» copriva un invio ad
+             «A: Tutti i dipendenti» con un Ccn estraneo. Senza campi (una chat) decide la testata, come prima. */
+          const letti = campiLetti(s);
+          const voci = letti.flatMap((c) => c.voci).map((x) => (x.replace(/\s*<[^<>]*>\s*$/u, '').replace(/"/gu, ' ').trim() || x));
+          const dest = letti.length ? voci.join('; ') : destinatarioDi(s);
+          const coperto = letti.length ? voci.length > 0 && voci.every((x) => combaciaPerIntero(destinatario, paroleDi(x), 'uguale'))
+            : Boolean(dest) && combaciaPerIntero(destinatario, paroleDi(dest), 'uguale');
+          if (coperto) {
             v = { ...v, decisione: 'procedi-e-segna' }; fonte = 'si-carta';
             storia.push(`passo ${passi}: invio a «${dest.slice(0, 40)}», nominato nella frase e coperto dalla carta iniziale`);
           }
@@ -1032,14 +1440,27 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
             storia.push(`passo ${passi}: «${cartella.slice(0, 40)}» nominata nella frase: nel cestino, recuperabile`);
           }
         }
-        if (v.decisione === 'chiedi') {
-          const gia = siValido(v, s, bersaglio);
+        // cinque cure (F2): un clic al buio passa solo dal sì della finestra, che ha il tetto d'usi e il destinatario; il sì della pagina
+        // (T2) non ha tetto e copriva 20 invii con una carta
+        if (v.decisione === 'chiedi' && !alBuioOra) {
+          const gia = siValido(v, s, bersaglio, azione);
           if (gia) {
             gia.azioni.push(tipoDi(azione)); siUsato = gia;
             v = { ...v, decisione: 'procedi-e-segna' };
             sotto = gia; fonte = 'serie';
             if (v.protezione === 'pagamento') consumaSi(gia); // la conferma è il clic finale: il sì del pagamento è speso
             storia.push(`passo ${passi}: vale il sì del passo ${gia.passo}`);
+          }
+        }
+        // giro 3, punto 2: il sì già dato a un clic senza bersaglio davanti a QUESTE finestre di conferma vale anche per questo
+        if (v.decisione === 'chiedi' && alBuioOra) {
+          const gia = siDelDialogo(v, s);
+          if (gia) {
+            usoDelDialogo = gia; // giro 4 (F2): l'uso si conta solo se il clic parte davvero
+            gia.voce.azioni.push(tipoDi(azione)); siUsato = gia.voce;
+            v = { ...v, decisione: 'procedi-e-segna' };
+            sotto = gia.voce; fonte = 'serie';
+            storia.push(`passo ${passi}: vale il sì del passo ${gia.passo}, dato davanti a questa stessa finestra`);
           }
         }
         // S-5 (decisione 146): «Non riesco a leggere bene questo pulsante: lo premo?» col testo letto e le lettere strane. Il sì vale
@@ -1072,7 +1493,7 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
           if (ferma) return chiudi('fermato', ferma);
           if (dopo.sospetto) contesto.sospetto = true;
           const vivo = await leggiBersaglio(azione, dopo);
-          if (!stessoElemento(vivo, bersaglio)) {
+          if (!stessoBersaglio(azione, vivo, bersaglio)) {
             annota(azione, bersaglio, 'non-eseguita', 'elemento-sparito');
             segnaResto(azioni, i + 1, 'non-eseguita');
             break;
@@ -1104,6 +1525,7 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
           // variante A: se l'azione chiede anche la guardia, la riga «sito sensibile» entra in QUESTA carta (una domanda sola)
           const gInsieme = guardiaAccesa ? guardiaDaChiedere(guardiaPerAzione(s, bersaglio), azione, bersaglio, v) : null;
           const si = await aspettandoLaPersona(() => chiediAllaPersona({ motivo: 'conferma', protezione: v.protezione, prova: v.prova, azione: tipoDi(azione), ...extraCassa,
+            ...(v.protezione === 'invio' ? { destinatario: destinatarioPerLaCarta(s) } : {}),
             ...(gInsieme ? { guardia: rigaDellaGuardia(gInsieme) } : {}) })).catch(() => ERRORE_DELLA_CARTA);
           if (si === ERRORE_DELLA_CARTA) return chiudi('fermato', DOMANDA_NON_MOSTRATA);
           if (si === 'annulla') return chiudi('fermato', 'pulsante-ferma');
@@ -1123,8 +1545,15 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
           if (ferma) return chiudi('fermato', ferma);
           if (dopo.sospetto) contesto.sospetto = true; // C3 (revisione PR19), come a ogni altra rilettura
           const vivo = await leggiBersaglio(azione, dopo);
-          if (!stessoElemento(vivo, bersaglio)) {
+          if (!stessoBersaglio(azione, vivo, bersaglio)) {
             annota(azione, bersaglio, 'non-eseguita', 'elemento-sparito');
+            segnaResto(azioni, i + 1, 'non-eseguita');
+            break;
+          }
+          // giro 3 (RC-02b; Telefono: «vivo === null più lo stesso testo del dialogo»): senza bersaglio il sì vale per le finestre di
+          // conferma che la carta aveva davanti; se a carta aperta sono cambiate, l'azione non parte e si chiederà di nuovo
+          if (bersaglio === null && !stessaFinestra(dopo, s)) { // giro 4: anche app e titolo
+            annota(azione, bersaglio, 'non-eseguita', 'schermo-cambiato');
             segnaResto(azioni, i + 1, 'non-eseguita');
             break;
           }
@@ -1141,19 +1570,39 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
             segnaResto(azioni, i + 1, 'non-eseguita');
             break;
           }
+          /* Secondo giro (revisore B, R2): come gli importi, i destinatari. La carta ha mostrato «A: marco»; se a carta aperta il campo è
+             diventato «marco; Tutti i dipendenti» l'invio non parte, e la carta dopo mostra i destinatari nuovi (prima partiva, e il sì si
+             ricordava per i nuovi) */
+          if (vPrima.protezione === 'invio' && destinatarioDelSi(dopo) !== destinatarioDelSi(s)) {
+            annota(azione, bersaglio, 'non-eseguita', 'destinatario-cambiato');
+            segnaResto(azioni, i + 1, 'non-eseguita');
+            break;
+          }
           s = dopo; bersaglio = vivo;
           v = valutaOra(azione, bersaglio, s);
           if (v.decisione === 'chiedi') {
             // il sì vale per QUELLA protezione col SUO motivo (verifica del Mobile V1): se la pagina è diventata altro (un invio
             // diventato pagamento) non si agisce, si rilegge e si chiederà di nuovo
-            if (v.protezione !== vPrima.protezione || v.motivo !== vPrima.motivo) {
+            // senza bersaglio anche la prova (il testo che ha fatto chiedere) dev'essere la stessa: il sì vale per QUEL dialogo (RC-02)
+            if (v.protezione !== vPrima.protezione || v.motivo !== vPrima.motivo || (bersaglio === null && v.prova !== vPrima.prova)) {
               annota(azione, bersaglio, 'non-eseguita', 'protezione-cambiata');
               segnaResto(azioni, i + 1, 'non-eseguita');
               break;
             }
             v = { ...v, decisione: 'procedi' };
             // il sì apre un'operazione: vale per le azioni dopo con la stessa protezione, sulla stessa pagina (T2, Mobile)
-            sotto = ricordaSi(v, s, azione); fonte = 'si-carta';
+            sotto = ricordaSi(v, s, azione, bersaglio); fonte = 'si-carta';
+            // giro 3, punto 2: per un clic senza bersaglio il sì si ricorda per queste finestre di conferma. Giro 4: mai per un pagamento,
+            // salvo dove la politica dà UNA carta per pagamento (Accesso pieno, decisione 159), e lì solo per lo stesso pagamento
+            if (alBuioOra && (v.protezione !== 'pagamento' || politicaDi(s)?.unaCartaPerPagamento === true)) {
+              const dialoghi = improntaDeiDialoghi(s);
+              // senza una finestra di conferma a schermo non c'è una «stessa finestra» da riconoscere: niente da ricordare
+              if (dialoghi !== null) {
+                daRicordare = { protezione: v.protezione, motivo: v.motivo, prova: v.prova, origine: origineDi(s), pagina: paginaDi(s), dialoghi,
+                  sospetto: contesto.sospetto === true, passo: n, voce: sotto, usi: 0,
+                  destinatario: destinatarioDelSi(s), albero: alberoDi(s), totale: chiaveTotale(s), importi: importiDi(s) };
+              }
+            }
           }
         }
         if (v.decisione === 'ferma') {
@@ -1187,8 +1636,15 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
             if (fermaDopo) { segnaResto(azioni, i, 'non-eseguita'); return chiudi('fermato', fermaDopo); }
             if (dopo.sospetto) contesto.sospetto = true;
             const vivo = await leggiBersaglio(azione, dopo);
-            if (!stessoElemento(vivo, bersaglio)) {
+            if (!stessoBersaglio(azione, vivo, bersaglio)) {
               annota(azione, bersaglio, 'non-eseguita', 'elemento-sparito');
+              segnaResto(azioni, i + 1, 'non-eseguita');
+              salta = true;
+              break;
+            }
+            // giro 3: senza bersaglio la voce accesa vale per le finestre di conferma che c'erano quando la persona l'ha accesa
+            if (bersaglio === null && !stessaFinestra(dopo, s)) { // giro 4: anche app e titolo
+              annota(azione, bersaglio, 'non-eseguita', 'schermo-cambiato');
               segnaResto(azioni, i + 1, 'non-eseguita');
               salta = true;
               break;
@@ -1285,6 +1741,9 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
           return chiudi('fermato', motivo);
         }
         misure.azioni += 1; misure.msAiutante += adesso() - t1;
+        fattaNelLotto = true;
+        if (daRicordare) siDialogo = daRicordare;
+        if (usoDelDialogo) usoDelDialogo.usi += 1;
         if (fatto.scaduto && !fatto.chiusa) {
           // l'aiutante non ha confermato l'annullamento: potrebbe ancora agire. Nessun'altra azione (Mobile S1-1)
           misure.azioniFallite += 1;
@@ -1293,16 +1752,50 @@ export async function eseguiCompito({ testoDellaPersona, piano = { domini: [], a
           return chiudi('fermato', 'tempo');
         }
         const e = fatto.v && ESITI_AZIONE.includes(fatto.v.esito) ? fatto.v : { esito: 'rifiutata', motivo: fatto.scaduto ? 'tempo' : 'altro' };
-        annota(daEseguire, bersaglio, e.esito, e.motivo, e);
+        // S6: esito, motivo e suggerimento sulla stessa riga, come l'`escalate` di Hermes; un clic per coordinate senza elemento letto non
+        // ha un effetto provato e il modello ricontrolla (Hermes `verify_fresh_state`)
+        const alBuio = tipoDi(daEseguire) === 'clic' && !bersaglio;
+        annota(daEseguire, bersaglio, e.esito, e.motivo, e, FALLIMENTI.has(e.esito) ? SUGGERIMENTI.passoFallito : (alBuio ? SUGGERIMENTI.clicAlBuio : null));
         if (FALLIMENTI.has(e.esito)) {
           misure.azioniFallite += 1;
           fallimenti += 1;
           segnaResto(azioni, i + 1, 'non-eseguita');
           if (fallimenti >= lim.fallimentiDiFila) return chiudi('non-riuscito', 'errori-di-fila');
+          // giro 3 (Performance N2): la stessa azione fallita sullo stesso elemento per la terza volta nel compito lo chiude, anche se in
+          // mezzo altro è riuscito (un clic al buio su uno schermo che si muove, uno scorrimento): prima si arrivava a 20 richieste
+          if (bersaglio?.ref != null) {
+            const chiave = chiaveAzione(daEseguire, bersaglio);
+            // giro 4 (8c): un progresso del compito dopo l'ultimo fallimento di questo elemento fa ripartire il suo conto
+            const prima = falliteSu.get(chiave);
+            /* Cura del rosso (N2, controllore 11/11 12:42, MEDIA): dal giro 3 un compito sano che ritenta un pulsante spento con solo uno
+               scorrimento, un'attesa o un tasto in mezzo (licenza da scorrere, salvataggio in corso, campi riempiti coi tasti: 3-d, 3-e,
+               3-f) si chiudeva a 5 richieste con «non risponde»; il rilascio arrivava in fondo. Se i testi degli elementi (ruolo, nome,
+               valore) sono cambiati dal rifiuto prima, il conto di quell'elemento riparte, UNA volta: uno schermo che cambia solo il
+               titolo, o che cambia a ogni cattura, chiude ancora presto (G4-7, GAV-5). */
+            const testiOra = JSON.stringify((Array.isArray(s?.elementi) ? s.elementi : []).map((x) => [x?.ruolo ?? null, x?.nome ?? null, x?.valore ?? null]));
+            const cambiato = Boolean(prima) && prima.testi !== testiOra && !prima.perdono;
+            const conto = prima && prima.progressi === progressi && !cambiato ? prima.conto + 1 : 1;
+            falliteSu.set(chiave, { conto, progressi, testi: testiOra, perdono: Boolean(prima?.perdono || cambiato) });
+            if (conto >= lim.fallimentiSulloStessoElemento) return chiudi('non-riuscito', 'elemento-non-risponde');
+          }
           break;
         }
+        if (bersaglio?.ref != null) falliteSu.delete(chiaveAzione(daEseguire, bersaglio)); // riuscita su QUELL'elemento: il suo conto riparte
+        // giro 4 (8c): riempire, scegliere o premere un elemento, una cosa mai fatta prima nel compito, è un progresso
+        // cinque cure (8c): la chiave è tipo|ruolo|nome, senza il `ref` (l'aiutante lo rinumera a ogni cattura: lo stesso clic inutile era
+        // ogni volta un progresso, 3-a a 20 richieste); giro ultimo: col testo scritto, ma al più 3 progressi per elemento (una mail corretta
+        // 4-5 volte o 4 codici sconto arrivano in fondo; lo stesso campo riscritto all'infinito chiude a 5 richieste, 3-c); (8d) dopo
+        // un'azione così riuscita i testi della prossima cattura dicono dove è arrivato il compito, solo per QUELL'elemento
+        if (bersaglio?.ref != null && AZIONI_CHE_AVANZANO.has(tipoDi(daEseguire))) {
+          const base1 = `${tipoDi(daEseguire)}|${bersaglio.ruolo ?? ''}|${bersaglio.nome ?? ''}`;
+          const fatto1 = `${base1}|${JSON.stringify(daEseguire.testo ?? daEseguire.valore ?? null)}`;
+          if (!progressiVisti.has(fatto1) && (perElemento.get(base1) ?? 0) < 3) { progressiVisti.add(fatto1); progressi += 1; perElemento.set(base1, (perElemento.get(base1) ?? 0) + 1); }
+          dopoRiuscita = true; refRiuscito = bersaglio.ref;
+        }
         if (e.ritentata === true) misure.azioniRitentate += 1;
-        fallimenti = 0;
+        // (b) un clic al buio da solo non prova niente: i fallimenti di fila si azzerano solo se la lettura dopo trova lo schermo cambiato
+        // (in `guarda`); ogni altra azione riuscita li azzera subito, come prima
+        if (alBuio) buio = improntaDi(s); else { fallimenti = 0; buio = null; }
         if (ordinale !== null && TIPI_CON_ORDINALE.has(tipoDi(azione)) && bersaglio?.inLista) ordinale = null; // rispettato una volta: basta
         // T9: un pagamento AVVIATO col sì della carta, con un totale etichettato, apre il ponte per la conferma dell'azione dopo
         if (v.protezione === 'pagamento' && fonte === 'si-carta' && AVVIA_PAGAMENTO.test(etichetta(bersaglio))) {

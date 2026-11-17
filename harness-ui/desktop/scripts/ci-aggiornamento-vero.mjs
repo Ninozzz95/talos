@@ -146,7 +146,8 @@ async function aspetta(condizione, ms, errore) {
 async function avviaApp(exe, dati) {
   const { _electron } = createRequire(import.meta.url)('../../frontend/node_modules/playwright');
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/KEY|TOKEN|SECRET|PASSWORD|TALOS_|NODE_OPTIONS|ELECTRON_RUN_AS_NODE/i.test(k)));
-  Object.assign(env, { TALOS_DESKTOP_DATA_DIR: dati, TALOS_INTRO: '0' });
+  // Last piece of round 4 (owner 11/11 09:41, «segno obbligatorio nelle prove»): a test launch always carries the explicit mark.
+  Object.assign(env, { TALOS_DESKTOP_DATA_DIR: dati, TALOS_INTRO: '0', TALOS_PROVA_ISOLATA: '1' });
   const app = await _electron.launch({ executablePath: exe, args: [], env, timeout: 60_000 });
   const pagina = await app.firstWindow({ timeout: 60_000 });
   await pagina.waitForURL((u) => u.hostname === '127.0.0.1' && u.pathname === '/', { timeout: 60_000 });

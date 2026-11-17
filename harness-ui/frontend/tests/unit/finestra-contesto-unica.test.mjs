@@ -62,7 +62,7 @@ test('⛔ AL CONTRARIO — senza Context Engine resta il CATALOGO, e si dice che
   assert.equal(senza.finestra, CATALOGO);
   assert.equal(senza.occupato, 11_000, 'il comportamento storico: prompt + completion dell ultimo /usage');
   const colonna = perColonna(senza);
-  assert.equal(colonna.titoloDestra, '1310,7k');
+  assert.equal(colonna.titoloDestra, '1,3M'); // revisore unico 11/11: da un milione in su «M» (prima «1310,7k»)
   assert.deepEqual(riga(colonna, 'Conversazione'), ['Conversazione', '11k · 0,8%'], 'senza profilo la vecchia riga è ancora la verità disponibile');
   assert.match(frasiFinestraContesto(senza), /catalogo del modello/);
 });

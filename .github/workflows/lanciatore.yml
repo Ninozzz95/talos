@@ -1,0 +1,89 @@
+# 12/11/2026 — il lanciatore dei comandi su Windows (decisione 374, R1 dei nipoti staccati; owner, decisione 1037: nostro exe in Rust;
+# forma VERDE del giudice v1629, §10.3: costruito come il binding iroh, sul repo pubblico, con impronta e attestazione).
+#
+# Perché: Node mette ogni figlio in un Job con SILENT_BREAKAWAY_OK (libuv v1.52.1 src/win/process.c:77-96), quindi un programma che un
+# comando lascia acceso non è di nessuno. L'exe parte la shell sospesa in un Job senza breakaway e dice quando esce l'ultimo processo.
+# Nel repo c'è il sorgente (harness-ui/native/lanciatore/, Cargo.lock e toolchain fissati) e il riferimento della corsa
+# (harness-ui/native/lanciatore-binding.json); l'exe lo scarica e lo verifica harness-ui/scripts/scarica-lanciatore.mjs.
+# ⛔ Le Actions del repo privato non partono (fatturazione, misurato il 18/10): questo workflow gira sul pubblico, come iroh-binding.yml.
+name: lanciatore
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'harness-ui/native/lanciatore/**'
+      - '.github/workflows/lanciatore.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  win32-x64:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write # actions/attest v4 lo richiede (come release.yml:41-45)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Rust (la toolchain di rust-toolchain.toml, la stessa del binding iroh)
+        shell: bash
+        run: rustup toolchain install 1.97.1 --profile minimal --target x86_64-pc-windows-msvc
+      - name: Il lock è coerente col codice (niente aggiornamenti in silenzio)
+        shell: bash
+        working-directory: harness-ui/native/lanciatore
+        run: cargo metadata --locked --format-version 1 > /dev/null
+      - name: Prove della crate
+        shell: bash
+        working-directory: harness-ui/native/lanciatore
+        run: cargo test --locked --release --target x86_64-pc-windows-msvc
+      - name: Compila
+        shell: bash
+        working-directory: harness-ui/native/lanciatore
+        run: cargo build --locked --release --target x86_64-pc-windows-msvc
+      # Giro di cura del 12/11/2026 (revisore B): il CRT è statico e il collegatore non scrive la data (`.cargo/config.toml`). Sulla
+      # toolchain msvc non si è potuto provare in locale: la prova di fumo qui sotto è rossa se l'exe chiede VCRUNTIME140.dll, e questo
+      # passo dice se una seconda costruzione da zero dà la stessa impronta (un avviso, non un rosso: il riferimento resta quello di
+      # QUESTA corsa, attestata).
+      - name: Costruzione ripetibile (la seconda da zero deve dare la stessa impronta)
+        shell: bash
+        working-directory: harness-ui/native/lanciatore
+        run: |
+          cargo build --locked --release --target x86_64-pc-windows-msvc --target-dir target-bis
+          prima=$(sha256sum target/x86_64-pc-windows-msvc/release/talos-lanciatore.exe | cut -d' ' -f1)
+          seconda=$(sha256sum target-bis/x86_64-pc-windows-msvc/release/talos-lanciatore.exe | cut -d' ' -f1)
+          echo "prima   $prima"
+          echo "seconda $seconda"
+          if [ "$prima" != "$seconda" ]; then echo "::warning title=Lanciatore::due costruzioni dello stesso commit danno impronte diverse: il riferimento vale solo per questa corsa"; fi
+      - name: Prova di fumo (codice, canale, nipote staccato, Ferma per nome, niente avvio senza canale, niente librerie C++ da cercare)
+        shell: bash
+        working-directory: harness-ui/native/lanciatore
+        run: node prova-fumo.mjs "$(cygpath -w "$PWD/target/x86_64-pc-windows-msvc/release/talos-lanciatore.exe")"
+      - name: Impronta
+        shell: bash
+        working-directory: harness-ui/native/lanciatore
+        run: |
+          mkdir -p uscita
+          cp target/x86_64-pc-windows-msvc/release/talos-lanciatore.exe uscita/
+          cd uscita
+          ls -l talos-lanciatore.exe
+          sha256sum talos-lanciatore.exe | tee talos-lanciatore.exe.sha256
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: harness-ui/native/lanciatore/uscita/talos-lanciatore.exe
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: talos-lanciatore-win32-x64
+          path: |
+            harness-ui/native/lanciatore/uscita/talos-lanciatore.exe
+            harness-ui/native/lanciatore/uscita/talos-lanciatore.exe.sha256
+          if-no-files-found: error

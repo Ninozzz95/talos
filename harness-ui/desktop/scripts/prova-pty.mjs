@@ -4,11 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+// 11/11/2026, round 4: neither Electron nor the PTY needs a provider key — the environment goes on without them.
+import { ambienteSenzaChiavi } from '../tests/ambiente-senza-chiavi.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const require = createRequire(import.meta.url);
 if (!process.versions.electron) {
-  const child = spawn(require('electron'), [fileURLToPath(import.meta.url)], { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, stdio: 'inherit', windowsHide: true });
+  const child = spawn(require('electron'), [fileURLToPath(import.meta.url)], { env: { ...ambienteSenzaChiavi(process.env), ELECTRON_RUN_AS_NODE: '1' }, stdio: 'inherit', windowsHide: true });
   child.on('error', errore => { console.error(errore.code); process.exitCode = 1; });
   child.on('exit', codice => { process.exitCode = codice ?? 1; });
 } else {
@@ -17,7 +19,7 @@ if (!process.versions.electron) {
   try {
     const pty = serverRequire('node-pty');
     esito.caricamento = true;
-    const terminale = pty.spawn(process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe', ['/d', '/q', '/c', 'echo TALOS-R01'], { cwd: root, env: { ...process.env }, cols: 80, rows: 24 });
+    const terminale = pty.spawn(process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe', ['/d', '/q', '/c', 'echo TALOS-R01'], { cwd: root, env: ambienteSenzaChiavi(process.env), cols: 80, rows: 24 });
     let testo = '';
     terminale.onData(d => { testo += d; });
     const uscita = await new Promise((resolve, reject) => {

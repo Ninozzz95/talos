@@ -46,11 +46,11 @@ jobs:
         working-directory: context-engine
 
       - name: regressione Prompt Enhance server
-        run: node --test tests/http-routes-migliora-prompt-provider.test.mjs tests/http-routes-migliora-prompt.test.mjs
+        run: node --test --import=./desktop/tests/gancio-portachiavi.mjs tests/http-routes-migliora-prompt-provider.test.mjs tests/http-routes-migliora-prompt.test.mjs
         working-directory: harness-ui
 
       - name: regressione Prompt Enhance UI
-        run: node --test tests/unit/migliora-prompt.test.mjs tests/unit/bc15-aggancio-enhancer.test.mjs
+        run: node --test --import=../desktop/tests/gancio-portachiavi.mjs tests/unit/migliora-prompt.test.mjs tests/unit/bc15-aggancio-enhancer.test.mjs
         working-directory: harness-ui/frontend
 
       - name: build frontend Desktop

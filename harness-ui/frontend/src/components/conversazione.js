@@ -1385,10 +1385,13 @@ export function segnaEsitoApprovazione(scheda, { approvato = false, altrove = fa
   /* COD-205 (Mobile 30/10/2026): la carta chiusa da uno Stop non è un «Negato» e non viene «da un'altra finestra» */
   const fermata = !approvato && motivo === 'fermato';
   const esito = approvato
-    ? (ambito === 'cartella' ? t('chat.approval.allowedInFolder') : ambito === 'strumento' ? t('chat.approval.allowedForTool') : t('chat.common.approved'))
+    ? (ambito === 'cartella' ? t('chat.approval.allowedInFolder') : ambito === 'strumento' ? t('chat.approval.allowedForTool') : ambito === 'risposta' ? t('chat.approval.group.allowedAll') : t('chat.common.approved'))
     : modificata ? t('chat.approval.editedByYou')
       : fermata ? t('chat.approval.stopped')
-        : (motivo === 'nessuna-interfaccia' ? t('chat.approval.deniedNoOneCanAnswer') : cartaAutomazione ? t('chat.approval.cancelled') : t('chat.approval.youSaidNo'));
+        /* compiti lunghi, A e B (owner 13/11/2026 04:35): il no a tutte le chiamate della carta, e il no allo strumento fino al prossimo messaggio */
+        : !motivo && ambito === 'strumento' ? t('chat.approval.noToToolOutcome')
+          : !motivo && ambito === 'risposta' ? t('chat.approval.group.deniedAll')
+            : (motivo === 'nessuna-interfaccia' ? t('chat.approval.deniedNoOneCanAnswer') : cartaAutomazione ? t('chat.approval.cancelled') : t('chat.approval.youSaidNo'));
   /* Decisione 89 dell'owner (03/11/2026): il no della persona non è un guasto — «Hai detto di no», neutro come la riga del passo
      («non consentito»), anche da un'altra finestra; «Modificata da te» è una sua scelta, neutra anche lei (come il telefono).
      Il no chiuso dal server e lo Stop restano col loro tono.
@@ -1478,26 +1481,55 @@ export function rigaFileToccato({ percorso = '', etichetta = '', aggiunte = 0, r
 
 /* ---------------------------------------------------------------- Artifact */
 
-/** La scheda di un artefatto creato dal modello: titolo, formato, «Apri» e l'anteprima in un iframe isolato. */
-export function creaArtefatto({ titolo = t('chat.artifact.badge'), formato = '', src = '', onApri } = {}, opzioni = {}) {
+/**
+ * La carta di un artefatto creato dal modello (0.2.1-ART D3, bozzetto approvato dall'owner il 09/11/2026 19:55): l'icona, il titolo
+ * UNA volta, una riga sotto (che cos'è, la versione, «aperta a lato») e «⋯». In chat non c'è più un'anteprima: la carta si apre a
+ * lato. Sotto la carta, nascosti finché servono, la nota delle carte vecchie e l'errore con «Riprova». Qui c'è solo la forma: i
+ * gesti, il menu e le richieste stanno in `artifact-card.js`.
+ */
+export function creaArtefatto({ titolo = t('chat.artifact.badge'), sotto = t('chat.artifact.kindPage') } = {}, opzioni = {}) {
   const documentObj = opzioni.document || globalThis.document;
-  const card = el(documentObj, 'div', 'talos-card talos-artifact');
+  const card = el(documentObj, 'div', 'talos-artifact talos-artifact--sola');
   card.setAttribute('data-c', 'ArtifactCard');
-  const testa = el(documentObj, 'div', 'talos-artifact__head');
-  testa.append(el(documentObj, 'span', 'talos-badge talos-badge--accent talos-badge--sm', t('chat.artifact.badge')), el(documentObj, 'span', 'talos-artifact__title talos-grow talos-truncate', titolo));
-  if (formato) testa.append(el(documentObj, 'span', 'talos-mono talos-muted', formato));
-  const apri = el(documentObj, 'button', 'talos-button talos-button--ghost talos-button--sm', t('chat.common.open'));
-  apri.type = 'button';
-  if (typeof onApri === 'function') apri.addEventListener('click', onApri);
-  testa.append(apri);
-  const frame = documentObj.createElement('iframe');
-  frame.className = 'talos-artifact__frame artifact-card-frame';
-  frame.setAttribute('title', titolo);
-  frame.setAttribute('sandbox', 'allow-scripts');
-  frame.setAttribute('referrerpolicy', 'no-referrer');
-  if (src) frame.src = src;
-  card.append(testa, frame);
-  return { card, frame, apri };
+  const box = el(documentObj, 'div', 'talos-artifact__box');
+  const carta = el(documentObj, 'button', 'talos-artifact__carta');
+  carta.type = 'button';
+  carta.setAttribute('aria-expanded', 'false');
+  const icona = el(documentObj, 'span', 'talos-artifact__icona');
+  icona.append(simbolo(documentObj, 'i', 'i-layout'));
+  const testo = el(documentObj, 'span', 'talos-artifact__testo');
+  const nome = el(documentObj, 'span', 'talos-artifact__title talos-truncate', titolo);
+  const riga = el(documentObj, 'span', 'talos-artifact__sotto talos-truncate');
+  testo.append(nome, riga);
+  carta.append(icona, testo);
+  const piu = el(documentObj, 'button', 'talos-icon-button talos-artifact__piu');
+  piu.type = 'button';
+  piu.setAttribute('aria-haspopup', 'menu');
+  piu.setAttribute('aria-expanded', 'false');
+  piu.setAttribute('aria-label', t('chat.artifact.moreActions'));
+  piu.append(simbolo(documentObj, 'i', 'i-more'));
+  box.append(carta, piu);
+  const nota = el(documentObj, 'div', 'talos-artifact__nota');
+  nota.hidden = true;
+  const errore = el(documentObj, 'div', 'talos-artifact__errore');
+  errore.setAttribute('role', 'status');
+  errore.hidden = true;
+  const frase = el(documentObj, 'span', 'talos-artifact__errore-testo');
+  const erroreForte = el(documentObj, 'strong');
+  const erroreDettaglio = el(documentObj, 'span');
+  const riprova = el(documentObj, 'button', 'talos-artifact__riprova', t('chat.common.retry'));
+  riprova.type = 'button';
+  frase.append(erroreForte, ' ', erroreDettaglio, ' ', riprova);
+  errore.append(simbolo(documentObj, 'i i--sm', 'i-alert'), frase);
+  card.append(box, nota, errore);
+  /** La riga sotto il titolo: i pezzi (testo o nodi) uniti dal punto a mezza altezza del bozzetto; `ruota` mette il cerchio che gira. */
+  function scriviSotto(parti, { ruota = false } = {}) {
+    riga.replaceChildren();
+    if (ruota) riga.append(simbolo(documentObj, 'i i--sm', 'i-loader'));
+    parti.filter(Boolean).forEach((parte, i) => { if (i > 0) riga.append(' · '); riga.append(parte); });
+  }
+  scriviSotto([sotto]);
+  return { card, box, carta, piu, titolo: nome, nota, errore, erroreForte, erroreDettaglio, riprova, scriviSotto };
 }
 
 /* ------------------------------------------------------------------ Attesa */

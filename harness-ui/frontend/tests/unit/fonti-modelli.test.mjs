@@ -93,6 +93,14 @@ test('BC50-01 — 8, 12 e 19 fonti restano ordinate, distinte e raggiungibili se
   }
 });
 
+test('PF-UI-01b (0.2.2) — catalogo pubblico spento: la scheda dice «elenco incorporato», non «di riserva»', () => {
+  const incorporata = [{ id: 'openai/gpt-6', nome: 'GPT', catalogo: { fonte: 'riserva', catalogoPubblicoSpento: true } }];
+  const etichetta = fontiDelSelettore({ openrouter: incorporata }).find(f => f.id === 'openrouter').etichetta;
+  assert.match(etichetta, /elenco incorporato/);
+  assert.doesNotMatch(etichetta, /riserva/);
+  assert.match(fontiDelSelettore({ openrouter: [{ ...incorporata[0], catalogo: { fonte: 'riserva' } }] }).find(f => f.id === 'openrouter').etichetta, /elenco di riserva/);
+});
+
 test('PF-UI-01 — riserva riconoscibile nelle schede reali, ritorno al catalogo senza etichetta', () => {
   const riserva = [{ id: 'deepseek:modello', nome: 'Nome umano', catalogo: { fonte: 'riserva' } }];
   const dati = { openrouter: riserva, diretti: { deepseek: riserva } };

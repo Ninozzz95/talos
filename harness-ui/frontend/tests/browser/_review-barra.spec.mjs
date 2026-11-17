@@ -24,79 +24,72 @@ async function apriImpostazioni(page, sezione = 'appearance') {
   await expect(page.locator('#talosAvvio')).toBeHidden({ timeout: 15_000 });
 }
 
+/*
+ * ⛔ 023 cura 1 (11/11/2026): il bottone «Cerca impostazioni» e la sua riga in sidebar sono TOLTI (023 passo 2, una ricerca sola).
+ *   Al loro posto il glifo «Ctrl K» sta DENTRO il campo, e lo spazio che gli si riserva è una sola regola
+ *   (`#schermoImpostazioni .settings-search__input { padding-inline-end: 50px }`). R-A e R-B fanno la stessa domanda di prima — il
+ *   testo del segnaposto e il segno della scorciatoia si pestano? — sul segno che c'è oggi.
+ */
 const STRUMENTO = () => {
   const box = (el) => { if (!el) return null; const r = el.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; };
-  const ell = (el) => { if (!el) return null; const cs = getComputedStyle(el); return { testo: (el.textContent || '').trim(), w: Math.round(el.getBoundingClientRect().width), scrollW: el.scrollWidth, clientW: el.clientWidth, scrollH: el.scrollHeight, clientH: el.clientHeight, ws: cs.whiteSpace, fs: cs.fontSize, troncato: el.scrollWidth > el.clientWidth + 1, righeVisibili: Math.round(el.clientHeight / Number.parseFloat(cs.lineHeight || cs.fontSize)) }; };
   const nav = document.querySelector('.settings-nav');
   const toolbar = document.querySelector('.settings-toolbar');
   const campo = document.querySelector('#settingsSearch');
-  const bottone = document.querySelector('[data-settings-open-search]');
+  const kbd = document.querySelector('[data-settings-shortcut]');
+  const cs = getComputedStyle(campo);
+  const m = document.createElement('span'); m.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${cs.font};`; m.textContent = campo.placeholder; document.body.append(m);
+  const serve = m.getBoundingClientRect().width; m.remove();
+  const utile = campo.clientWidth - Number.parseFloat(cs.paddingLeft) - Number.parseFloat(cs.paddingRight);
+  /* dove finisce il testo che si vede: il segnaposto intero se sta, altrimenti fin dove arrivano i puntini */
+  const fineTesto = campo.getBoundingClientRect().left + Number.parseFloat(cs.paddingLeft) + Math.min(serve, utile);
   return {
-    nav: box(nav), toolbar: box(toolbar), campo: box(campo),
-    bottone: box(bottone),
-    etichettaBottone: ell(bottone?.querySelector('.talos-nav-item__label')),
-    primaVoce: box(document.querySelector('.settings-nav__list [data-settings-tab="appearance"]')),
-    kbd: box(bottone?.querySelector('kbd')),
+    nav: box(nav), toolbar: box(toolbar), campo: box(campo), kbd: box(kbd),
+    serve: Math.round(serve), utile: Math.round(utile), fineTesto: Math.round(fineTesto),
+    pestaIlGlifo: Boolean(kbd && !kbd.hidden && fineTesto > kbd.getBoundingClientRect().left + 0.5),
   };
 };
 
-/** Cancella dal CSSOM le TRE regole che questo commit ha aggiunto per la riga del cercatore:
- *  è la riproduzione fedele dello stato precedente (quelle tre non sostituivano nulla). */
-const RIGHE_PRIMA = () => {
-  const nuovi = [
-    '#schermoImpostazioni .talos-settings__nav .settings-nav__search.talos-nav-item',
-    '#schermoImpostazioni .talos-settings__nav .settings-nav__search .talos-nav-item__label',
-    '#schermoImpostazioni .talos-settings__nav .settings-nav__search .settings-nav__kbd',
-  ];
+/** Cancella dal CSSOM la regola che riserva il posto al glifo dentro il campo: è lo stato «prima» della cura del passo 2. */
+const RISERVA_PRIMA = () => {
   let tolte = 0;
   for (const foglio of document.styleSheets) {
     let regole; try { regole = foglio.cssRules; } catch { continue; }
     if (!regole) continue;
-    for (let i = regole.length - 1; i >= 0; i -= 1) {
-      const sel = regole[i].selectorText;
-      if (sel && nuovi.includes(sel)) { foglio.deleteRule(i); tolte += 1; }
-    }
+    for (let i = regole.length - 1; i >= 0; i -= 1) if (regole[i].selectorText === '#schermoImpostazioni .settings-search__input') { foglio.deleteRule(i); tolte += 1; }
   }
   return tolte;
 };
 
-test('R-A · il segnaposto del campo e l’etichetta del bottone: DENTRO o TRONCATI', async ({ page }) => {
+test('R-A · il segnaposto del campo e il glifo «Ctrl K»: mai uno sopra l’altro, a ogni larghezza', async ({ page }) => {
   await apriImpostazioni(page);
   const campo = page.locator('#settingsSearch');
-  const b = page.locator('[data-settings-open-search]');
+  const misure = [];
   for (const w of [1280, 1100, 1024, 900, 700]) {
     await page.setViewportSize({ width: w, height: 900 });
     await page.waitForTimeout(150);
     const d = await page.evaluate(STRUMENTO);
-    // Quanto serve davvero al segnaposto, misurato nella font vera
-    const serveSegnaposto = await page.evaluate(() => {
-      const c = document.querySelector('#settingsSearch');
-      const cs = getComputedStyle(c);
-      const m = document.createElement('span');
-      m.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${cs.font};`;
-      m.textContent = c.placeholder; document.body.append(m);
-      const w = m.getBoundingClientRect().width; m.remove();
-      const utile = c.clientWidth - Number.parseFloat(cs.paddingLeft) - Number.parseFloat(cs.paddingRight);
-      return { serve: Math.round(w), utile: Math.round(utile), sta: w <= utile };
-    });
-    console.log(`R-A-${w} ` + JSON.stringify({ campo: d.campo.w, etichetta: d.etichettaBottone, bottone: d.bottone, kbd: d.kbd, serveSegnaposto }));
+    console.log(`R-A-${w} ` + JSON.stringify({ campo: d.campo, kbd: d.kbd, serve: d.serve, utile: d.utile, fineTesto: d.fineTesto, pesta: d.pestaIlGlifo }));
+    misure.push({ w, ...d });
   }
   await expect(campo).toBeVisible();
-  await expect(b).toBeVisible();
+  expect(misure.every((m) => m.kbd && m.kbd.w > 0), 'il glifo si vede a ogni larghezza: la prova misura').toBe(true);
+  expect(misure.filter((m) => m.pestaIlGlifo).map((m) => m.w), 'il testo del campo finisce sotto il glifo «Ctrl K»').toEqual([]);
 });
 
-test('R-B · A/B dell’etichetta del cercatore a 1100px: prima (righe cancellate) contro adesso', async ({ page }) => {
+test('R-B · A/B della riserva del glifo a 1100px: prima (regola cancellata) contro adesso', async ({ page }) => {
   await apriImpostazioni(page);
   await page.setViewportSize({ width: 1100, height: 900 });
   await page.waitForTimeout(200);
   const adesso = await page.evaluate(STRUMENTO);
   await page.screenshot({ path: 'artifacts/review-barra/AB-1100-adesso.png' });
-  const tolte = await page.evaluate(RIGHE_PRIMA);
+  const tolte = await page.evaluate(RISERVA_PRIMA);
   await page.waitForTimeout(250);
   const prima = await page.evaluate(STRUMENTO);
   await page.screenshot({ path: 'artifacts/review-barra/AB-1100-prima.png' });
-  console.log('R-B ' + JSON.stringify({ regoleTolte: tolte, adesso: { etichetta: adesso.etichettaBottone, bottone: adesso.bottone, kbd: adesso.kbd }, prima: { etichetta: prima.etichettaBottone, bottone: prima.bottone, kbd: prima.kbd } }, null, 1));
-  expect(tolte, 'le tre regole nuove devono esistere per poterle togliere').toBe(3);
+  console.log('R-B ' + JSON.stringify({ regoleTolte: tolte, adesso: { fineTesto: adesso.fineTesto, kbd: adesso.kbd, pesta: adesso.pestaIlGlifo }, prima: { fineTesto: prima.fineTesto, kbd: prima.kbd, pesta: prima.pestaIlGlifo } }, null, 1));
+  expect(tolte, 'la regola che riserva il posto al glifo deve esistere per poterla togliere').toBe(1);
+  expect(adesso.pestaIlGlifo, 'con la riserva il testo non tocca il glifo').toBe(false);
+  expect(prima.pestaIlGlifo, 'senza la riserva il testo finisce sotto il glifo: R-A morde per la ragione giusta').toBe(true);
 });
 
 test('R-C · il salto della colonna quando compare «Cancella ricerca»', async ({ page }) => {
@@ -199,12 +192,16 @@ test('R-01 · al rimontaggio: nessun doppione, il campo resta VIVO, il filtro mo
   await page.locator('[data-settings-clear]').click();
   await expect(page.locator('#settingsSearchResults')).toBeHidden();
   expect(await page.locator('#settingsSearch').inputValue()).toBe('');
-  // VIVO: Ctrl K con la barra in sidebar apre ancora la palette delle impostazioni
-  await page.locator('.settings-nav__search').focus();
+  /* VIVO: dopo il rimontaggio Ctrl K porta ancora al campo e NON apre la palette dei comandi (023 cura 1). Prima l'ascoltatore della
+     vista stava su `document` in bolla e, rimontato, arrivava DOPO quello globale dell'app: Ctrl K apriva i comandi sopra le
+     Impostazioni e la riga «Ctrl K o / cerca» mentiva. */
+  await page.locator('#schermoImpostazioni [role="tab"]').first().focus();
   await page.keyboard.press('Control+k');
-  await expect(page.locator('dialog.settings-palette')).toBeVisible();
+  await expect(page.locator('#settingsSearch'), 'dopo il ripristino Ctrl K porta al campo').toBeFocused();
+  const comandi = await page.evaluate(() => { const v = document.querySelector('#veloComandi'); return !!v && !v.hidden && v.getClientRects().length > 0; });
+  expect(comandi, 'e la palette dei comandi non si apre sopra le Impostazioni').toBe(false);
   await page.keyboard.press('Escape');
-  await expect(page.locator('dialog.settings-palette')).toBeHidden();
+  await expect(page.locator('#schermoImpostazioni')).toBeVisible();
 });
 
 /** Le TRE asserzioni di INTELAIATURA-06 (righe 139-150 della prova ufficiale), ricopiate

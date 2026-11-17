@@ -23,11 +23,14 @@ import { montaBarraFinestra } from './components/barra-finestra.js';
 import { montaAggiornamenti } from './components/aggiornamenti.js';
 import { montaMotoreContesto } from './components/motore-contesto.js';
 import { montaCartaCompattazione } from './components/carta-compattazione.js';
+import { montaCartaMemoriaModello } from './components/carta-memoria-modello.js'; // owner 11/11/2026 (v1465, punto 5)
+import { montaCartaAssistente } from './components/carta-assistente.js';
 import { montaFinestraPiena } from './components/finestra-piena.js'; // L1 1.3 (26/10/2026)
 import { montaMemoriaConversazioni } from './components/memoria-conversazioni.js'; // 01/11/2026: «Memoria delle conversazioni»
 import { montaDoveGiranoDiSerie } from './components/dove-girano-di-serie.js'; // owner 27/10/2026: dove girano i comandi, di serie
 import { montaPcSveglio } from './components/pc-sveglio-impostazioni.js'; // 01/11/2026: «Tieni sveglio il PC»
 import { montaComputerUseImpostazione } from './components/computer-use-impostazione.js'; // decisione 310 (06/11/2026): «Uso del computer (Anteprima)»
+import { montaCatalogoPubblicoImpostazione } from './components/catalogo-pubblico-impostazione.js'; // 0.2.2 (SignPath): «Catalogo pubblico dei modelli»
 import { montaBlocchiVivi } from './components/blocchi-vivi-impostazione.js';
 import { montaSitiFidati } from './components/siti-fidati.js';
 import { confermaModale } from './components/modale-td.js';
@@ -44,11 +47,14 @@ montaAggiornamenti({ conferma: confermaModale }); // «Riavvia ora» chiede se u
 /* C1 (owner 09/10/2026 sera): «Motore del contesto» nel pannello «Memoria e contesto», che esiste solo dopo il monolite. */
 montaMotoreContesto();
 montaCartaCompattazione(); // FE-053 (owner 01/11/2026): chi scrive le compattazioni e chi lo sostituisce, sotto «Motore del contesto»
+montaCartaMemoriaModello(); // owner 11/11/2026 (v1465, punto 5): la memoria di un modello che TALOS non sa leggere, sotto la compattazione
+montaCartaAssistente(); // l'Assistente (decisione 1645 punto 2, 11/11/2026): con che modello pensa, sotto la compattazione
 montaFinestraPiena();
 montaMemoriaConversazioni(); // dopo la finestra piena: la carta va subito sotto la sua sorella
 montaDoveGiranoDiSerie();
 montaPcSveglio(); // 01/11/2026: «Tieni sveglio il PC»
 montaComputerUseImpostazione(); // decisione 310 (06/11/2026): «Uso del computer (Anteprima)», spento di serie, dopo «Tieni sveglio il PC»
+montaCatalogoPubblicoImpostazione(); // 0.2.2 (SignPath): Sicurezza e privacy, dopo «Link dalla chat»
 /* decisione 140 (04/11/2026): «Blocchi vivi nelle risposte», in Impostazioni → Chat */
 montaBlocchiVivi();
 /* 11/10/2026 (owner: link cliccabili con conferma del sito): i siti che si aprono senza chiedere, in «Sicurezza e privacy». */

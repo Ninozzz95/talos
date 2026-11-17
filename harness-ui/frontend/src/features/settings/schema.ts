@@ -1,6 +1,8 @@
 /** SET-01: presentation metadata only. Values and validation remain with the existing preference owner. */
 import { LINGUA_PSEUDO, linguaCorrenteDiT, t } from '../../components/lingua.js';
 import { TESTI } from '../../i18n/testi/index.js';
+// @ts-ignore -- modulo JS senza dichiarazioni (come i due qui sopra): l'elenco dei codici resta uno solo, quello del selettore
+import { LINGUE_DELLE_RISPOSTE } from '../../components/lingue-delle-risposte.js';
 export type SettingsLanguage = 'it' | 'en';
 export type LocalText = Readonly<{ it: string; en: string; chiave: string }>;
 export type SettingsSection = 'appearance' | 'chat' | 'tools' | 'memoria' | 'privacy' | 'telefoni' | 'models' | 'costi' | 'workspace' | 'account' | 'aggiornamenti';
@@ -126,6 +128,16 @@ export const FIELD_HELP: Readonly<Record<string, LocalText>> = {
 export function normalizeSearch(value: unknown): string {
   return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('it').trim();
 }
+/*
+ * ⭐ 023 cura piccola (owner 11/11/2026 13:50, decisione 10: «la ricerca trova anche dai nomi dei valori», come Claude Code
+ *   `CHANGELOG.md:6646` «/config search now matches option values»). Le etichette delle opzioni ci sono già, nelle due lingue; mancavano i
+ *   valori che a schermo sono NOMI DI LINGUE: «Italiano» ed «English» sono scritti ciascuno nella sua lingua, e la «Lingua delle risposte»
+ *   riempie il selettore da `Intl.DisplayNames` (`lingue-delle-risposte.js`). Qui si aggiungono i nomi in italiano e in inglese di ogni
+ *   lingua del campo: «inglese» trova la Lingua dei menu, «french» la Lingua delle risposte.
+ */
+const LINGUE_DEI_CAMPI: Readonly<Record<string, readonly string[]>> = { uiLanguageSelect: ['it', 'en'], replyLanguageSelect: LINGUE_DELLE_RISPOSTE as readonly string[] };
+const nomeDellaLingua = (codice: string, lingua: string): string => { try { return new Intl.DisplayNames([lingua], { type: 'language' }).of(codice) ?? ''; } catch { return ''; } };
+const nomiDelleLingue = (id: string): string[] => (LINGUE_DEI_CAMPI[id] ?? []).flatMap((codice) => [nomeDellaLingua(codice, 'it'), nomeDellaLingua(codice, 'en')]);
 /** Le due voci di una chiave del dizionario, per la ricerca nelle due lingue (vuoto se la chiave non c'è). */
 const bilingue = (chiave: string): string[] => [TESTI.it[chiave], TESTI.en[chiave]].filter((v): v is string => typeof v === 'string');
 export function buildSettingsIndex(fields: readonly LegacySettingField[], studioIds: readonly string[], language: SettingsLanguage, translate: (value: string) => string): SettingSearchEntry[] {
@@ -139,7 +151,8 @@ export function buildSettingsIndex(fields: readonly LegacySettingField[], studio
         /* 03/10/2026, corsia S2: `titolo` e le etichette delle opzioni sono ora nella lingua CORRENTE (getter sul dizionario):
            la ricerca trova il campo in tutte e due le lingue leggendo le due voci, come per le sezioni qui sopra. */
         ...bilingue(`impostazioni.field.${field.id}.title`),
-        ...(field.opzioni || []).flatMap(option => bilingue(`impostazioni.field.${field.id}.option.${String(option[0]).replace(/[^A-Za-z0-9_]/gu, '_')}`))].join(' ') });
+        ...(field.opzioni || []).flatMap(option => bilingue(`impostazioni.field.${field.id}.option.${String(option[0]).replace(/[^A-Za-z0-9_]/gu, '_')}`)),
+        ...nomiDelleLingue(field.id)].join(' ') });
   }
   entries.push({ id: 'workspaceRestore', section: 'appearance', label: localText(text('impostazioni.search.workspaceRestore.title'), language), description: localText(text('impostazioni.search.workspaceRestore.description'), language), terms: 'Riprendi workspace avvio ripristino sessione restore startup session', kind: 'field', studio: false });
   return entries;

@@ -98,6 +98,55 @@ test('SEGN-UI-05 — le righe della diagnostica, nella lingua dell\'interfaccia;
   impostaLingua('it');
 });
 
+test('SEGN-UI-05b — decisione 374 R1 (§10.6): su Windows la riga «programmi lasciati accesi: seguiti / non seguiti (perché)», inglese e italiano; altrove niente', () => {
+  const base = { versione: '0.2.1', installata: true, sistema: { piattaforma: 'windows', nome: 'Windows 11', arch: 'x64' }, sessione: null, errori: [], motoreLocale: false, remoto: false };
+  impostaLingua('en');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: true, motivo: null } }).at(-1), 'Programs a command leaves running: followed, and stopped with it');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'assente' } }).at(-1), 'Programs a command leaves running: not followed (the helper is not installed)');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'non-fissato' } }).at(-1), 'Programs a command leaves running: not followed (this version has no checked helper)');
+  impostaLingua('it');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: true, motivo: null } }).at(-1), 'Programmi lasciati accesi da un comando: seguiti, e fermati con lui');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'bloccato' } }).at(-1), 'Programmi lasciati accesi da un comando: non seguiti (Windows non ha lasciato partire l’aiutante)');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'qualcosa' } }).at(-1), 'Programmi lasciati accesi da un comando: non seguiti (motivo non noto)');
+  // AL CONTRARIO: senza il campo, o fuori da Windows, la riga non c'è (la diagnostica resta quella di prima)
+  assert.equal(righeDiagnostica(base).length, 4);
+  assert.equal(righeDiagnostica({ ...base, sistema: { piattaforma: 'linux', nome: 'Linux', arch: 'x64' }, nipoti: { seguiti: false, motivo: 'assente' } }).length, 4);
+  // nessun nome tecnico a schermo (§10.6)
+  for (const lingua of ['en', 'it']) {
+    impostaLingua(lingua);
+    for (const motivo of ['assente', 'impronta', 'non-fissato', 'bloccato', 'morto', 'wsl', 'shell', 'job', 'altro']) {
+      const riga = righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo } }).at(-1);
+      assert.doesNotMatch(riga, /launcher|lanciatore|job|exe|hash|wsl|segnala\.diag/iu, riga);
+    }
+  }
+  // giro di cura del 12/11: l'aiutante che parte e muore, e la conversazione che gira in Linux (là i comandi non passano dall'aiutante)
+  impostaLingua('en');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'morto' } }).at(-1), 'Programs a command leaves running: not followed (the helper stopped before the command could start)');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'wsl' } }).at(-1), 'Programs a command leaves running: not followed (this conversation runs its commands in Linux)');
+  impostaLingua('it');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'morto' } }).at(-1), 'Programmi lasciati accesi da un comando: non seguiti (l’aiutante si è fermato prima che il comando partisse)');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'wsl' } }).at(-1), 'Programmi lasciati accesi da un comando: non seguiti (questa conversazione fa girare i comandi in Linux)');
+  impostaLingua('it');
+});
+
+test('SEGN-UI-05c — cure dopo il ripasso del 12/11: l aiutante che non risponde in tempo e quello che si ferma dopo aver annunciato un comando hanno la loro riga, inglese e italiano, senza nomi tecnici', () => {
+  const base = { versione: '0.2.1', installata: true, sistema: { piattaforma: 'windows', nome: 'Windows 11', arch: 'x64' }, sessione: null, errori: [], motoreLocale: false, remoto: false };
+  impostaLingua('en');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'appeso' } }).at(-1), 'Programs a command leaves running: not followed (the helper did not answer in time)');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'incerto' } }).at(-1), 'Programs a command leaves running: not followed (the helper stopped before saying how a command ended)');
+  impostaLingua('it');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'appeso' } }).at(-1), 'Programmi lasciati accesi da un comando: non seguiti (l’aiutante non ha risposto in tempo)');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo: 'incerto' } }).at(-1), 'Programmi lasciati accesi da un comando: non seguiti (l’aiutante si è fermato prima di dire com’è finito un comando)');
+  for (const lingua of ['en', 'it']) {
+    impostaLingua(lingua);
+    for (const motivo of ['appeso', 'incerto']) {
+      const riga = righeDiagnostica({ ...base, nipoti: { seguiti: false, motivo } }).at(-1);
+      assert.doesNotMatch(riga, /launcher|lanciatore|job|exe|hash|wsl|segnala\.diag/iu, riga);
+    }
+  }
+  impostaLingua('it');
+});
+
 /* Un DOM minimo per la carta: elementi con classe, testo, attributi, figli ed eventi (il frontend non ha una libreria DOM per Node). */
 function documentoMinimo() {
   const crea = (tag) => {
@@ -150,4 +199,33 @@ test('SEGN-UI-MODELLO — il modello citato dal pulsante sta nel repo, coi campi
   assert.ok(campi.includes('diagnostica'), `campi: ${campi}`);
   for (const campo of campi) assert.match(modello, new RegExp(`^\\s+id: ${campo}$`, 'mu'), `manca il campo ${campo}`);
   assert.match(modello, /^labels: \[desktop\]$/mu);
+});
+
+test('SEGN-UI-05c — giro piccolo dopo il controllore (12/11): seguiti ma senza l appoggio che Windows ha rifiutato, la riga lo dice, inglese e italiano, senza nomi tecnici; senza il campo resta quella di prima', () => {
+  const base = { versione: '0.2.1', installata: true, sistema: { piattaforma: 'windows', nome: 'Windows 11', arch: 'x64' }, sessione: null, errori: [], motoreLocale: false, remoto: false };
+  impostaLingua('en');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: true, motivo: null, appoggio: false } }).at(-1), 'Programs a command leaves running: followed, and stopped with it; a command stopped in its very first instant may stay paused (Windows refused the safety net)');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: true, motivo: null } }).at(-1), 'Programs a command leaves running: followed, and stopped with it');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: true, motivo: null, appoggio: true } }).at(-1), 'Programs a command leaves running: followed, and stopped with it');
+  impostaLingua('it');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: true, motivo: null, appoggio: false } }).at(-1), 'Programmi lasciati accesi da un comando: seguiti, e fermati con lui; un comando fermato nel suo primissimo istante può restare sospeso (Windows ha rifiutato l’appoggio)');
+  for (const lingua of ['en', 'it']) {
+    impostaLingua(lingua);
+    assert.doesNotMatch(righeDiagnostica({ ...base, nipoti: { seguiti: true, motivo: null, appoggio: false } }).at(-1), /launcher|lanciatore|job|exe|kill|segnala\.diag/iu);
+  }
+  impostaLingua('it');
+});
+
+test('SEGN-UI-05d — giro 3 del lanciatore (13/11): seguiti ma legati all aiutante (Windows non li ha lasciati andare), la riga lo dice, inglese e italiano, senza nomi tecnici; senza il campo resta quella di prima', () => {
+  const base = { versione: '0.2.1', installata: true, sistema: { piattaforma: 'windows', nome: 'Windows 11', arch: 'x64' }, sessione: null, errori: [], motoreLocale: false, remoto: false };
+  impostaLingua('en');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: true, motivo: null, sgancio: false } }).at(-1), 'Programs a command leaves running: followed, and stopped with it; they also stop when TALOS closes or is updated (Windows did not let them go)');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: true, motivo: null, sgancio: true } }).at(-1), 'Programs a command leaves running: followed, and stopped with it');
+  impostaLingua('it');
+  assert.equal(righeDiagnostica({ ...base, nipoti: { seguiti: true, motivo: null, sgancio: false } }).at(-1), 'Programmi lasciati accesi da un comando: seguiti, e fermati con lui; si fermano anche quando TALOS si chiude o si aggiorna (Windows non li ha lasciati andare)');
+  for (const lingua of ['en', 'it']) {
+    impostaLingua(lingua);
+    assert.doesNotMatch(righeDiagnostica({ ...base, nipoti: { seguiti: true, motivo: null, sgancio: false } }).at(-1), /launcher|lanciatore|job|exe|kill|sgancio|segnala\.diag/iu);
+  }
+  impostaLingua('it');
 });

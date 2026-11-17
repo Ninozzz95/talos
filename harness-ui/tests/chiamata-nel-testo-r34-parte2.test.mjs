@@ -228,7 +228,10 @@ test('P2-16 (Desktop, guardia) ogni chiave non ordinaria delle azioni di approva
   const sorgente = readFileSync(new URL('../src/kernel/talosHarness.mjs', import.meta.url), 'utf8')
   /* E1 (decisione 121): `emulata` è ordinaria — è il segno della carta del TESTO stessa (`tipo: 'chiamata-dal-testo'`), che il «sì
      solo» non copre mai, e offre la terza risposta; non apre né toglie nessun'altra carta. */
-  const ORDINARIE = new Set(['tipo', 'toolCallId', 'comando', 'percorso', 'semprePersona', 'nome', 'argomenti', 'azione', 'coordinazione', 'emulata'])
+  /* Port of the long-task cards (16/11/2026): `gruppo` is ordinary — the card of several calls is built only when `nelGruppo`, and
+     `nelGruppo` needs `!domandaConSegnoForzato(domanda)` (talosHarness.mjs, `chiedi`): a forced card never carries the group and
+     asks on its own, so the «yes only» need not know it (AB-A11 in carte-compiti-lunghi-a-b.test.mjs checks that side). */
+  const ORDINARIE = new Set(['tipo', 'toolCallId', 'comando', 'percorso', 'semprePersona', 'nome', 'argomenti', 'azione', 'coordinazione', 'emulata', 'gruppo'])
   const trovate = new Set()
   for (const m of sorgente.matchAll(/chiediApprovazioneFn\(\{/gu)) for (const k of chiaviDiPrimoLivello(sorgente, m.index + 'chiediApprovazioneFn('.length)) trovate.add(k)
   /* E1: anche le carte del testo, che arrivano all'ospite attraverso `verificaChiamataDalTesto` (prima la guardia non le leggeva) */

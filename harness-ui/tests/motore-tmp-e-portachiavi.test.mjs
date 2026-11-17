@@ -29,8 +29,23 @@ test('MOTORE-TMP-01 — il temporaneo delle preferenze ha un nome PER SCRITTURA:
   assert.deepEqual(readdirSync(dir).sort(), ['providers.json', 'providers.json.tmp']);
 });
 
-test('MOTORE-PORTACHIAVI-01 — il portachiavi di sistema: una voce ASSENTE è null e la sua rimozione riesce; un GUASTO vero arriva al chiamante', { skip: process.platform !== 'win32' && 'misurato sul portachiavi di Windows' }, async () => {
-  const portachiavi = await creaAdattatorePortachiaviSistema();
+/* P045 (11/11/2026): this test opened the REAL Windows keychain (an absent entry and a 40 000-character name). A test run never does
+   any more (`src/guardia-portachiavi-prove.mjs`): the contract MEASURED on 14/10 (absent ⇒ getPassword null and deletePassword false,
+   a real fault ⇒ `GenericFailure`) is now played by a fake `@napi-rs/keyring` handed to the adapter, and the adapter's rules are
+   what is checked. `segno: async () => null` stands for «a real user»; the importer is fake, so nothing real is reachable. */
+function keyringCheRispettaIlContratto() {
+  class Entry {
+    constructor(servizio, account) { this.servizio = servizio; this.account = account; }
+    guasto() { if (this.servizio.length > 32_000) throw Object.assign(new Error('name over the platform limit'), { code: 'GenericFailure' }); }
+    getPassword() { this.guasto(); return null; }
+    setPassword() { this.guasto(); }
+    deletePassword() { this.guasto(); return false; }
+  }
+  return { Entry };
+}
+
+test('MOTORE-PORTACHIAVI-01 — il portachiavi di sistema: una voce ASSENTE è null e la sua rimozione riesce; un GUASTO vero arriva al chiamante', async () => {
+  const portachiavi = await creaAdattatorePortachiaviSistema({ segno: async () => null, importa: async () => keyringCheRispettaIlContratto() });
   const servizio = `talos-prova-voce-assente-${process.pid}-${Date.now()}`;
   assert.equal(portachiavi.get(servizio, 'nessuno'), null, 'assente: null, senza lanciare');
   assert.doesNotThrow(() => portachiavi.remove(servizio, 'nessuno'), 'rimuovere un\'assenza non è un errore');

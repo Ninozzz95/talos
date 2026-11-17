@@ -46,7 +46,10 @@ test('PON-02 per forma: nomi sconosciuti, valori non oggetto, rigiocata e canale
 
 test('PON-03 la pagina principale passa ogni evento dal ponte dopo eventoPerLoSchermo, con la rigiocata', () => {
   const app = readFileSync(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
-  assert.match(app, /import \{ creaPonteBolla \} from '\.\.\/components\/computer-use\/ponte-bolla\.js';/u);
+  /* giro 4 (CU-23): il movimento ridotto arriva dallo stesso ponte, unico import del computer use nella pagina principale; e il ponte lo dà davvero */
+  assert.match(app, /import \{ creaPonteBolla, motoRidottoDa \} from '\.\.\/components\/computer-use\/ponte-bolla\.js';/u);
+  const fonte = readFileSync(new URL('../../src/components/computer-use/ponte-bolla.js', import.meta.url), 'utf8');
+  assert.match(fonte, /^export \{ motoRidottoDa \} from '\.\/bolla-messaggi\.js';$/mu);
   const corpo = app.slice(app.indexOf('function handleRealEvent(evento, generation) {'));
   const schermo = corpo.indexOf('evento = eventoPerLoSchermo(evento);');
   const ponte = corpo.indexOf('ponteBolla.evento(evento, { inRigiocata: state.realSession.inRigiocata === true, sessione: state.realSession.id });');
@@ -207,7 +210,7 @@ test('PON-09 il segnale del server viene prima: attivo apre l ascolto (anche per
 
 test('PON-10 la pagina principale collega il ponte: sessione in ogni evento, lascia prima di chiudere lo stream, il segnale dal flusso del remoto, chiudi a pagehide', () => {
   const app = readFileSync(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
-  assert.match(app, /const ponteBolla = creaPonteBolla\(\{ ascolta: apriFlussoComputerUse \}\);/u);
+  assert.match(app, /const ponteBolla = creaPonteBolla\(\{ ascolta: apriFlussoComputerUse, azioni: \{/u); // reperto 2 (13/11): e ascolta la bolla
   assert.match(app, /ponteBolla\.evento\(evento, \{ inRigiocata: state\.realSession\.inRigiocata === true, sessione: state\.realSession\.id \}\);/u);
   assert.match(app, /function apriFlussoComputerUse\(sessionId, dopo, onEvento, onChiuso\) \{[\s\S]{0,600}?\/api\/v1\/sessions\/\$\{encodeURIComponent\(sessionId\)\}\/events/u);
   const cambio = app.slice(app.indexOf('function nuovaGenerazioneSessione('));

@@ -258,6 +258,312 @@ test('ORF-11: fra l\'adozione e «Ferma» il numero è passato a un altro proces
 });
 
 /*
+ * ⛔ Giudice v1763 (13/11/2026), misura chiesta sul lanciatore: `fermaAdottato` dopo un riavvio. La fotografia di un comando partito
+ *   col lanciatore ha in testa il PID del LANCIATORE (6100), poi la shell (6101) e i suoi figli. Il lanciatore muore con TALOS (libuv
+ *   lo mette nel Job del node, controllore del 13/11: vivo dopo 0 volte su 10), quindi al riavvio non è fra i vivi e non si colpisce.
+ *   Il colpo che poteva cadere su un estraneo era un altro: `taskkill /T` sulla shell chiude anche il figlio, e il giro dopo colpiva il
+ *   numero del figlio appena liberato (Windows lo può ridare). Ora l'identità si riprova prima di ogni colpo, come Hermes
+ *   (`process_registry_termination.py:45-49`).
+ */
+test('ORF-15: Windows — dopo il taskkill dell albero il numero di un membro appena chiuso non si colpisce più (passato a un altro: impronta diversa); il lanciatore morto mai', async () => {
+  const store = mkdtempSync(join(tmpdir(), 'orf-15-'));
+  const membri = [{ pid: 6100, impronta: 'win:300' }, { pid: 6101, impronta: 'win:301' }, { pid: 6102, impronta: 'win:302' }];
+  giornaleOrfano(store, { pid: 6100, impronta: 'win:300', gruppo: null, membri });
+  const m = mondo({ piattaforma: 'win32', vivi: { 6101: true, 6102: true }, impronte: { 6101: { impronta: 'win:301', gruppo: null }, 6102: { impronta: 'win:302', gruppo: null } } });
+  // taskkill /T sulla shell chiude anche il figlio; il numero del figlio passa subito a un estraneo (vivo, impronta diversa)
+  m.ospite.fermaAlbero = async (pid) => {
+    m.fatti.alberi.push(pid); m.statoVivi.set(pid, false);
+    if (pid === 6101) m.statoImpronte.set(6102, { impronta: 'win:999', gruppo: null });
+    return true;
+  };
+  const { registro, eventi } = await riavvia(store, m);
+  assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finche(() => m.fatti.alberi.length >= 1);
+  await aspetta(100);
+  assert.deepEqual(m.fatti.alberi, [6101], 'un colpo solo, sulla shell ancora sua: mai sul lanciatore morto, mai sul numero passato ad altri');
+  // cura dei gialli (13/11, mutante S6): l'estraneo vivo col numero del figlio non tiene aperta la riga, che si chiude
+  await finche(() => eventi.some((e) => e.name === 'talos.processo-sfondo'));
+  // al contrario: un membro che dopo il colpo è ancora vivo e ancora suo (un figlio rimasto senza padre) si colpisce
+  const store2 = mkdtempSync(join(tmpdir(), 'orf-15b-'));
+  giornaleOrfano(store2, { pid: 6100, impronta: 'win:300', gruppo: null, membri });
+  const m2 = mondo({ piattaforma: 'win32', vivi: { 6101: true, 6102: true }, impronte: { 6101: { impronta: 'win:301', gruppo: null }, 6102: { impronta: 'win:302', gruppo: null } } });
+  const r2 = await riavvia(store2, m2);
+  assert.equal(r2.registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finche(() => r2.eventi.some((e) => e.name === 'talos.processo-sfondo'));
+  assert.deepEqual(m2.fatti.alberi, [6101, 6102], 'il figlio ancora suo si ferma anche lui');
+});
+
+/*
+ * Unione vera (agente d unione, 14/11/2026, revisore lanc9 punto 5): il mutante K3 (nessun nuovo controllo d identità fra un colpo e
+ *   l altro, `restano = ancoraVivi`) lo uccideva solo ORF-15. Seconda prova con un altra forma: tre membri vivi, il numero che passa a
+ *   un estraneo è quello dell ULTIMO, non del primo figlio, e si guarda anche CHE COSA si rilegge fra un colpo e l altro (solo i vivi).
+ */
+test('ORF-15c: Windows — tre membri: dopo ogni colpo si rilegge l identità dei soli membri ancora vivi, e il numero dell ultimo passato a un estraneo non si colpisce (K3, seconda prova)', async () => {
+  const store = mkdtempSync(join(tmpdir(), 'orf-15c-'));
+  const membri = [{ pid: 6500, impronta: 'win:700' }, { pid: 6501, impronta: 'win:701' }, { pid: 6502, impronta: 'win:702' }, { pid: 6503, impronta: 'win:703' }];
+  giornaleOrfano(store, { pid: 6500, impronta: 'win:700', gruppo: null, membri });
+  const m = mondo({ piattaforma: 'win32', vivi: { 6501: true, 6502: true, 6503: true }, impronte: { 6501: { impronta: 'win:701', gruppo: null }, 6502: { impronta: 'win:702', gruppo: null }, 6503: { impronta: 'win:703', gruppo: null } } });
+  // il primo colpo chiude solo il 6501; il numero del 6503 (uscito nel frattempo) passa subito a un estraneo vivo
+  m.ospite.fermaAlbero = async (pid) => {
+    m.fatti.alberi.push(pid); m.statoVivi.set(pid, false);
+    if (pid === 6501) m.statoImpronte.set(6503, { impronta: 'win:999', gruppo: null });
+    return true;
+  };
+  const { registro, eventi } = await riavvia(store, m);
+  const lettureAllaStop = m.fatti.letture.length;
+  assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finche(() => eventi.some((e) => e.name === 'talos.processo-sfondo'), { volte: 200 });
+  assert.deepEqual(m.fatti.alberi, [6501, 6502], 'colpiti i due ancora suoi, mai il numero passato all estraneo');
+  assert.equal(m.statoVivi.get(6503), true, 'l estraneo resta vivo');
+  const dopo = m.fatti.letture.slice(lettureAllaStop);
+  // la lettura dello Stop (i tre membri vivi), poi UNA rilettura dei due ancora vivi dopo il primo colpo: l estraneo ne esce lì, e dopo
+  // il secondo colpo non resta nessuno da rileggere né da colpire
+  assert.deepEqual(dopo, [[6501, 6502, 6503], [6502, 6503]], 'letture fra un colpo e l altro');
+});
+
+/*
+ * Cura unica dei gialli del lanciatore (13/11/2026). Revisore C, mutante J4 (togliere `colpiti.push`): nessuna prova vedeva la riga di un
+ *   ripreso chiusa SUBITO dopo lo Stop coi suoi programmi ancora vivi (un `taskkill` non chiude all istante). Revisore A, nota (i):
+ *   il numero di un membro GIÀ colpito che Windows ridà a un altro processo teneva la riga «in corso» finché l altro viveva (3 su 3,
+ *   45-51 s): nata ROSSA sulla testa `689e60b68`. Ora i membri colpiti ancora «vivi» si riprovano per ora di partenza (Hermes
+ *   `process_registry_termination.py:45-48`: «start-time mismatch — PID was recycled onto an unrelated process»).
+ */
+function mondoLento(membri) {
+  const vivi = Object.fromEntries(membri.map((m) => [m.pid, true]));
+  const impronte = Object.fromEntries(membri.map((m) => [m.pid, { impronta: m.impronta, gruppo: null }]));
+  const m = mondo({ piattaforma: 'win32', vivi, impronte });
+  m.ospite.fermaAlbero = async (pid) => { m.fatti.alberi.push(pid); return true; }; // il colpo parte, il processo esce DOPO
+  return m;
+}
+const chiusa = (eventi) => eventi.some((e) => e.name === 'talos.processo-sfondo');
+
+test('ORF-16: Windows — dopo lo Stop la riga resta «in corso» finché un membro colpito è ancora vivo, e si chiude alla sua uscita (J4)', async () => {
+  const membri = [{ pid: 6201, impronta: 'win:401' }];
+  const store = mkdtempSync(join(tmpdir(), 'orf-16-'));
+  giornaleOrfano(store, { pid: 6201, impronta: 'win:401', gruppo: null, membri });
+  const m = mondoLento(membri);
+  const { registro, eventi } = await riavvia(store, m);
+  assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finche(() => m.fatti.alberi.length === 1);
+  await aspetta(80);
+  assert.equal(chiusa(eventi), false, 'il membro colpito è ancora vivo (ed è ancora lui): la riga non si chiude');
+  assert.equal(registro.togliProcesso(SESSIONE, 'bg1'), 'in-corso');
+  m.statoVivi.set(6201, false);
+  await finche(() => chiusa(eventi), { volte: 200 });
+  assert.equal(eventi.find((e) => e.name === 'talos.processo-sfondo').value.fermatoDallaPersona, true);
+});
+
+test('ORF-16b: Windows — due membri, colpiti uno dopo l altro e lenti a uscire: la riga aspetta l ultimo (J4, seconda prova)', async () => {
+  const membri = [{ pid: 6301, impronta: 'win:501' }, { pid: 6302, impronta: 'win:502' }];
+  const store = mkdtempSync(join(tmpdir(), 'orf-16b-'));
+  giornaleOrfano(store, { pid: 6301, impronta: 'win:501', gruppo: null, membri });
+  const m = mondoLento(membri);
+  const { registro, eventi } = await riavvia(store, m);
+  assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finche(() => m.fatti.alberi.length === 2);
+  assert.deepEqual(m.fatti.alberi, [6301, 6302]);
+  m.statoVivi.set(6301, false);
+  await aspetta(80);
+  assert.equal(chiusa(eventi), false, 'il secondo è ancora vivo: la riga resta');
+  m.statoVivi.set(6302, false);
+  await finche(() => chiusa(eventi), { volte: 200 });
+});
+
+test('ORF-17: Windows — il numero di un membro GIÀ colpito passa a un altro processo: la riga si chiude lo stesso, senza un secondo colpo (nata ROSSA)', async () => {
+  const membri = [{ pid: 6401, impronta: 'win:601' }];
+  const store = mkdtempSync(join(tmpdir(), 'orf-17-'));
+  giornaleOrfano(store, { pid: 6401, impronta: 'win:601', gruppo: null, membri });
+  const m = mondoLento(membri);
+  m.ospite.fermaAlbero = async (pid) => { m.fatti.alberi.push(pid); m.statoImpronte.set(pid, { impronta: 'win:999', gruppo: null }); return true; }; // uscito, e il numero è subito di un altro
+  m.ospite.ogniMs = 10_000; // la sorveglianza non passa durante la prova: la riga la chiude lo Stop stesso, dopo la sua attesa
+  const { registro, eventi } = await riavvia(store, m);
+  assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finche(() => chiusa(eventi), { volte: 200 });
+  assert.deepEqual(m.fatti.alberi, [6401], 'un colpo solo: mai sull altro processo');
+});
+
+test('ORF-17c: Windows — due membri colpiti, e i numeri di tutti e due passano subito ad altri: lo Stop stesso chiude la riga dopo la sua attesa (seconda prova)', async () => {
+  const membri = [{ pid: 6601, impronta: 'win:801' }, { pid: 6602, impronta: 'win:802' }];
+  const store = mkdtempSync(join(tmpdir(), 'orf-17c-'));
+  giornaleOrfano(store, { pid: 6601, impronta: 'win:801', gruppo: null, membri });
+  const m = mondoLento(membri);
+  m.ospite.fermaAlbero = async (pid) => { m.fatti.alberi.push(pid); m.statoImpronte.set(pid, { impronta: `win:9${pid}`, gruppo: null }); return true; };
+  m.ospite.ogniMs = 10_000;
+  const { registro, eventi } = await riavvia(store, m);
+  assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finche(() => chiusa(eventi), { volte: 200 });
+  assert.deepEqual(m.fatti.alberi, [6601, 6602], 'un colpo per membro, nessun secondo colpo');
+  assert.equal(eventi.find((e) => e.name === 'talos.processo-sfondo').value.fermatoDallaPersona, true);
+});
+
+test('ORF-17d: Windows — due membri lenti: dopo l attesa uno esce, l altro non si legge (la riga resta), poi il suo numero passa a un altro: la sorveglianza chiude la riga', async () => {
+  const membri = [{ pid: 6701, impronta: 'win:901' }, { pid: 6702, impronta: 'win:902' }];
+  const store = mkdtempSync(join(tmpdir(), 'orf-17d-'));
+  giornaleOrfano(store, { pid: 6701, impronta: 'win:901', gruppo: null, membri });
+  const m = mondoLento(membri);
+  const { registro, eventi } = await riavvia(store, m);
+  assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finche(() => m.fatti.alberi.length === 2);
+  await aspetta(600);
+  assert.equal(chiusa(eventi), false, 'premessa: tutti e due ancora suoi');
+  m.statoVivi.set(6701, false);
+  m.statoImpronte.delete(6702);
+  await aspetta(150);
+  assert.equal(chiusa(eventi), false, 'il secondo non si legge: la riga resta');
+  assert.equal(registro.togliProcesso(SESSIONE, 'bg1'), 'in-corso');
+  m.statoImpronte.set(6702, { impronta: 'win:777', gruppo: null });
+  await finche(() => chiusa(eventi), { volte: 200 });
+  assert.deepEqual(m.fatti.alberi, [6701, 6702], 'nessun secondo colpo');
+});
+
+test('ORF-17b: Windows — il numero passa a un altro processo DOPO l attesa dello Stop: la sorveglianza lo vede e chiude la riga; finché l impronta non si legge, la riga resta', async () => {
+  const membri = [{ pid: 6501, impronta: 'win:701' }];
+  const store = mkdtempSync(join(tmpdir(), 'orf-17b-'));
+  giornaleOrfano(store, { pid: 6501, impronta: 'win:701', gruppo: null, membri });
+  const m = mondoLento(membri);
+  const { registro, eventi } = await riavvia(store, m);
+  assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finche(() => m.fatti.alberi.length === 1);
+  await aspetta(600); // oltre l attesa dello Stop (50 giri), il membro è ancora vivo ed è ancora lui
+  assert.equal(chiusa(eventi), false, 'premessa: ancora suo, la riga resta');
+  m.statoImpronte.delete(6501); // l impronta non si legge: non si decide niente
+  await aspetta(150);
+  assert.equal(chiusa(eventi), false, 'impronta illeggibile: la riga resta');
+  m.statoImpronte.set(6501, { impronta: 'win:999', gruppo: null });
+  await finche(() => chiusa(eventi), { volte: 200 });
+  assert.deepEqual(m.fatti.alberi, [6501], 'nessun secondo colpo');
+});
+
+/*
+ * ⛔ Quinto giro sul lanciatore (13/11/2026, revisore dopo la cura unica).
+ *   - RL7-04: un secondo Stop dato MENTRE la sorveglianza rilegge le impronte di una riga già colpita e ancora viva era ignorato 6 volte su
+ *     6 (la sorveglianza teneva `a.fermando`), e `fermaComando` rispondeva lo stesso «fermato». Qui la lettura è trattenuta da un
+ *     cancello: il secondo Stop la aspetta e poi colpisce, e le letture della stessa riga non si sovrappongono mai.
+ *   - J-j: prima di uno Stop la sorveglianza non legge niente (una lettura su Windows è PowerShell, 1,7-3,2 s).
+ *   - Il costo: dopo lo Stop, con un membro colpito vivo e ancora suo, la sorveglianza rileggeva a OGNI giro (ogni 5 s). Ora a passi che
+ *     raddoppiano (1, 2, 4, 8 giri) fino a un tetto di 12 giri (60 s), e mai due letture insieme.
+ */
+/** Lo Stop ha colpito ed è FINITO (la sua attesa e la sua rilettura): la sorveglianza ha già letto almeno una volta dopo di lui. */
+async function finitoLoStop(m) {
+  await finche(() => m.fatti.alberi.length >= 1);
+  const n0 = m.fatti.letture.length;
+  await finche(() => m.fatti.letture.length >= n0 + 2, { volte: 500 });
+}
+function mondoCancello(membri) {
+  const m = mondoLento(membri);
+  const vera = m.ospite.leggiImpronte;
+  m.cancello = null; m.rotta = false; m.inLettura = 0; m.massimo = 0;
+  // ⛔ il registro copia le funzioni dell'ospite alla creazione: il rimando va messo PRIMA di `riavvia`
+  m.ospite.leggiImpronte = async (pids) => {
+    m.inLettura += 1; m.massimo = Math.max(m.massimo, m.inLettura);
+    try { if (m.cancello) await m.cancello.promessa; if (m.rotta) throw new Error('lettura rotta'); return await vera(pids); } finally { m.inLettura -= 1; }
+  };
+  m.chiudiCancello = () => { let apri; m.cancello = { promessa: new Promise((r) => { apri = r; }) }; m.cancello.apri = () => { m.cancello = null; apri(); }; return m.cancello; };
+  return m;
+}
+for (const [id, rotta] of [['18', false], ['18b', true]]) {
+  test(`ORF-${id}: Windows — un secondo Stop dato MENTRE la sorveglianza rilegge le impronte (${rotta ? 'una lettura che fallisce' : 'una lettura lenta'}) aspetta la lettura e poi colpisce; mai due letture insieme (RL7-04, nata ROSSA)`, async () => {
+    const membri = [{ pid: 6801, impronta: 'win:1001' }];
+    const store = mkdtempSync(join(tmpdir(), `orf-${id}-`));
+    giornaleOrfano(store, { pid: 6801, impronta: 'win:1001', gruppo: null, membri });
+    const m = mondoCancello(membri);
+    const { registro, eventi } = await riavvia(store, m);
+    assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+    await finitoLoStop(m);
+    const cancello = m.chiudiCancello();
+    m.rotta = rotta;
+    await finche(() => m.inLettura > 0, { volte: 300 }); // la sorveglianza sta leggendo, trattenuta
+    await aspetta(600); // più del tetto dei passi: anche da sola, la sorveglianza non apre una seconda lettura sopra la prima
+    assert.equal(m.massimo, 1, 'premessa: una lettura alla volta anche senza Stop');
+    assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+    await aspetta(150);
+    assert.equal(m.fatti.alberi.length, 1, 'premessa: mentre la lettura è trattenuta nessun colpo');
+    m.rotta = false;
+    cancello.apri();
+    await finche(() => m.fatti.alberi.length === 2, { volte: 200 });
+    assert.deepEqual(m.fatti.alberi, [6801, 6801], 'il secondo Stop ha colpito il membro ancora suo');
+    assert.equal(m.massimo, 1, 'mai due letture delle impronte insieme');
+    assert.equal(chiusa(eventi), false, 'ancora vivo: la riga resta');
+    m.statoVivi.set(6801, false);
+    await finche(() => chiusa(eventi), { volte: 200 });
+  });
+}
+
+/** Una seconda riga in sottofondo nello stesso giornale (bg2), mai fermata. */
+const secondaRiga = (pid, impronta) => [
+  { type: 'ToolCallStart', toolCallId: 'bg2', toolCallName: 'shell' },
+  { type: 'ToolCallResult', toolCallId: 'bg2', content: 'IN BACKGROUND', inSfondo: true },
+  { type: 'CUSTOM', name: EVENTO_SFONDO_IMPRONTA, value: { toolCallId: 'bg2', pid, gruppo: null, impronta, membri: [{ pid, impronta }], ospite: { pid: 111, impronta: 'proc:boot:5' } } },
+];
+test('ORF-19: Windows — un ripreso vivo e MAI fermato: la sorveglianza non legge nessuna impronta (il costo c è solo dopo lo Stop) (J-j)', async () => {
+  const membri = [{ pid: 6901, impronta: 'win:1101' }];
+  const store = mkdtempSync(join(tmpdir(), 'orf-19-'));
+  giornaleOrfano(store, { pid: 6901, impronta: 'win:1101', gruppo: null, membri });
+  const m = mondoLento(membri);
+  const { esito } = await riavvia(store, m);
+  assert.equal(esito.adottati, 1, 'premessa: adottato');
+  const prima = m.fatti.letture.length;
+  await aspetta(600); // circa 30 giri della sorveglianza
+  assert.equal(m.fatti.letture.length - prima, 0, 'nessuna lettura prima dello Stop');
+  m.statoVivi.set(6901, false);
+});
+test('ORF-19b: Windows — due ripresi, fermato solo il primo: la sorveglianza rilegge solo i membri del primo, mai quelli del secondo (J-j, seconda prova)', async () => {
+  const membri = [{ pid: 6911, impronta: 'win:1111' }];
+  const store = mkdtempSync(join(tmpdir(), 'orf-19b-'));
+  giornaleOrfano(store, { pid: 6911, impronta: 'win:1111', gruppo: null, membri, dopo: secondaRiga(6912, 'win:1112') });
+  const m = mondoLento([...membri, { pid: 6912, impronta: 'win:1112' }]);
+  const { registro, esito } = await riavvia(store, m);
+  assert.equal(esito.adottati, 2, 'premessa: due adottati');
+  const prima = m.fatti.letture.length;
+  assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finitoLoStop(m);
+  await aspetta(300);
+  const lette = m.fatti.letture.slice(prima).flat();
+  assert.ok(lette.includes(6911), 'premessa: il primo, fermato e ancora suo, si rilegge');
+  assert.equal(lette.includes(6912), false, `il secondo, mai fermato, non si legge (${JSON.stringify(m.fatti.letture.slice(prima))})`);
+  m.statoVivi.set(6911, false); m.statoVivi.set(6912, false);
+});
+
+test('ORF-20: Windows — dopo lo Stop, un membro colpito vivo e ancora suo si rilegge a passi che raddoppiano fino al tetto, non a ogni giro (costo della sorveglianza, nata ROSSA)', async () => {
+  const membri = [{ pid: 7001, impronta: 'win:1201' }];
+  const store = mkdtempSync(join(tmpdir(), 'orf-20-'));
+  giornaleOrfano(store, { pid: 7001, impronta: 'win:1201', gruppo: null, membri });
+  const m = mondoLento(membri);
+  const { registro, eventi } = await riavvia(store, m);
+  assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finitoLoStop(m);
+  const prima = m.fatti.letture.length;
+  const t0 = Date.now();
+  await aspetta(3_000);
+  const giri = (Date.now() - t0) / m.ospite.ogniMs;
+  const letture = m.fatti.letture.length - prima;
+  // con passi 1, 2, 4, 8 e poi 12 giri: 12-15 letture in 100-150 giri; a ogni giro sarebbero 100-150; senza tetto 7-8
+  assert.ok(letture >= 9 && letture <= 30, `${letture} letture in circa ${Math.round(giri)} giri della sorveglianza`);
+  assert.equal(chiusa(eventi), false, 'ancora suo: la riga resta');
+  m.statoVivi.set(7001, false);
+  await finche(() => chiusa(eventi), { volte: 200 });
+});
+test('ORF-20b: Windows — col passo già al tetto, un numero passato a un altro processo si vede entro il tetto (12 giri), e la riga si chiude senza un secondo colpo (costo della sorveglianza, seconda prova)', async () => {
+  const membri = [{ pid: 7011, impronta: 'win:1211' }];
+  const store = mkdtempSync(join(tmpdir(), 'orf-20b-'));
+  giornaleOrfano(store, { pid: 7011, impronta: 'win:1211', gruppo: null, membri });
+  const m = mondoLento(membri);
+  const { registro, eventi } = await riavvia(store, m);
+  assert.equal(registro.fermaComando(SESSIONE, 'bg1'), 'fermato');
+  await finitoLoStop(m);
+  const prima = m.fatti.letture.length;
+  await aspetta(3_000); // il passo è arrivato al tetto
+  const letture = m.fatti.letture.length - prima;
+  assert.ok(letture <= 30, `in 3 s ${letture} letture, non una a ogni giro`);
+  m.statoImpronte.set(7011, { impronta: 'win:7777', gruppo: null });
+  const t0 = Date.now();
+  await finche(() => chiusa(eventi), { volte: 150, ms: 10 });
+  const ms = Date.now() - t0;
+  assert.ok(ms <= 12 * m.ospite.ogniMs * 4, `visto in ${ms} ms (tetto: 12 giri da ${m.ospite.ogniMs} ms, con margine per i timer)`);
+  assert.deepEqual(m.fatti.alberi, [7011], 'nessun secondo colpo');
+});
+
+/*
  * ⛔ COI PROCESSI VERI (brief del 17/10: «Su Windows con un processo vero. Su POSIX in WSL»). Un «server» finto (un Node figlio di questa
  *   prova) lancia il comando con le opzioni del kernel (`shell: true`, e su POSIX il gruppo suo come `opzioniGruppoDelComando`), poi
  *   muore DI COLPO (su Windows `TerminateProcess`, cioè `taskkill /F`; su POSIX SIGKILL). Si tocca solo ciò che questa prova ha lanciato.

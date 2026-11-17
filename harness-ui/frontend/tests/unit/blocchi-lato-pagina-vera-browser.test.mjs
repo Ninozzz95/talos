@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname, extname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
-import { chromium } from '@playwright/test';
+import { lanciaBrowserDelleProve } from '../aiuto/lancia-browser-delle-prove.mjs'; // 12/11: senza ambiente fallisce con la causa, mai salta
 import { build } from 'esbuild';
 
 const frontend = fileURLToPath(new URL('../..', import.meta.url));
@@ -63,7 +63,7 @@ test.before(async () => {
     window.gl = { montaPonteLegacy, creaVisteDelBlocco, creaAggancioBlocchi, t };
   `, resolveDir: frontend, sourcefile: 'gl-banco.js' }, tsconfigRaw: {}, bundle: true, write: false, format: 'iife', logLevel: 'silent' });
   script = banco.outputFiles[0].text;
-  browser = await chromium.launch({ channel: 'chrome', headless: true });
+  browser = await lanciaBrowserDelleProve({ channel: 'chrome', headless: true });
 });
 
 async function paginaVera(t) {

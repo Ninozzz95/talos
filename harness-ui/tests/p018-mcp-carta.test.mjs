@@ -245,9 +245,10 @@ test('P018-20: «for this tool» on an MCP card remembers (server, tool) from th
 test('P018-21: «for this tool» with a no, or given by a rule and not a person, remembers nothing', async (t) => {
   const s = await scena(t);
   const no = await domanda(s.registro, s.sessionId, s.input, CARTA_MCP);
-  assert.equal(s.registro.rispondiApprovazione(s.sessionId, no.requestId, false, { ambito: 'strumento' }).code, 'QUERY_INVALID');
-  assert.deepEqual(s.registro.rispondiApprovazione(s.sessionId, no.requestId, false), { ok: true });
-  await no.promessa;
+  /* Long tasks, B (owner 13/11/2026 04:35): a no with this scope is now «No to this tool until your next message» — accepted, marked
+     for the kernel, and it still remembers nothing for the session (the check below) */
+  assert.deepEqual(s.registro.rispondiApprovazione(s.sessionId, no.requestId, false, { ambito: 'strumento' }), { ok: true });
+  assert.deepEqual(await no.promessa, { approvato: false, noAlloStrumento: true });
   const regola = await domanda(s.registro, s.sessionId, s.input, { ...CARTA_MCP, toolCallId: 'c2' });
   s.registro.rispondiApprovazione(s.sessionId, regola.requestId, true, { ambito: 'strumento', motivo: 'regola' });
   if (s.registro.domandaInAttesa(s.sessionId)?.requestId === regola.requestId) s.registro.rispondiApprovazione(s.sessionId, regola.requestId, false);

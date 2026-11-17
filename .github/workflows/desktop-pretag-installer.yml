@@ -26,6 +26,8 @@ jobs:
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       TALOS_R02_BUILDER_NETWORK: '1'
+      # 13/11/2026 (owner via giudice v1816): lo stesso pacchetto del rilascio, col lanciatore dei comandi obbligatorio.
+      TALOS_PACCHETTO_RILASCIO: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -86,6 +88,13 @@ jobs:
         run: |
           node harness-ui/scripts/scarica-aiutante-pc.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Aiutante del PC non pronto.' }
+
+      # 13/11/2026 (owner via giudice v1815-v1816): il lanciatore dei comandi dallo STESSO commit, come nel rilascio.
+      - name: lanciatore dei comandi dallo stesso commit, prova di fumo e impronta
+        timeout-minutes: 15
+        run: |
+          node harness-ui/scripts/costruisci-lanciatore.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Lanciatore dei comandi non pronto.' }
 
       - name: costruisci NSIS e ZIP
         timeout-minutes: 15

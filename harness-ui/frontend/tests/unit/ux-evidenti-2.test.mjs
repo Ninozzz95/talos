@@ -27,20 +27,23 @@ function chatALato() {
     trasforma: async () => ({}), apriSessione: () => {}, quandoCorre: () => {},
     testoConsumo: (u) => `${u.prompt_tokens + u.completion_tokens} token`, testoErrore: (e) => e.message,
   });
-  return { lato, costo: lato.nodo.querySelector('.lato-piede .talos-measure--estimate') };
+  return { lato, costo: lato.nodo.querySelector('.lato-piede .al-conto .talos-mono'), lavoro: lato.nodo.querySelector('.lato-piede .al-lavoro') };
 }
 
-test('UXE-10 — chat a lato vuota: nessuna «~» da sola sotto il campo; il costo si vede solo quando c\'è', async () => {
-  const { lato, costo } = chatALato();
+/* Assistente, scelta 8 (owner 11/11/2026): la spesa si vede SEMPRE, anche a zero. A zero è esatta: niente «~» delle stime; il
+   consumo in token, vuoto, resta nascosto, così nessuna «~» resta sola sotto il campo. */
+test('UXE-10 — Assistente vuoto: «$0.00 in questa chat» esatto, nessuna «~» da sola; il consumo si vede solo quando c\'è', async () => {
+  const { lato, costo, lavoro } = chatALato();
   assert.ok(costo, 'il posto del costo c\'è');
-  assert.equal(costo.textContent, '');
-  // rosso sulla candidata: lo stile delle stime mette la «~» davanti anche a un testo vuoto
-  assert.equal(costo.hidden, true, 'vuoto ⇒ nascosto, così la «~» e il sottolineato a puntini non restano soli');
-  // AL CONTRARIO: dopo una risposta col consumo il costo si vede
+  assert.equal(costo.textContent, '$0.00 in questa chat');
+  assert.equal(costo.hidden, false);
+  assert.equal(costo.classList.contains('talos-measure--estimate'), false, 'a zero non è una stima');
+  assert.equal(lavoro.hidden, true, 'vuoto ⇒ nascosto, così la «~» e il sottolineato a puntini non restano soli');
+  // AL CONTRARIO: dopo una risposta col consumo il consumo si vede
   lato.fai('a che punto sei?');
   await attesa();
-  assert.match(costo.textContent, /120 token/u);
-  assert.equal(costo.hidden, false);
+  assert.match(lavoro.textContent, /120 token/u);
+  assert.equal(lavoro.hidden, false);
 });
 
 /* Le chiavi vere che TALOS scrive nel browser (censimento del 04/11 sul sorgente, più le tre della foto della revisione). */

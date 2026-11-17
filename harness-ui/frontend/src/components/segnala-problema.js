@@ -81,6 +81,8 @@ export function testoDaCopiare({ tipo, titolo, descrizione = '', diagnostica = n
 
 const PERMESSI = Object.freeze({ 'Read only': 'readOnly', Research: 'research', 'On request': 'onRequest', 'Workspace write': 'workspaceWrite', 'Full access': 'fullAccess' });
 const SFORZI = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+/** Il motivo del server (una parola dell'elenco) → la chiave del testo, senza trattino. */
+const MOTIVI_NIPOTI = Object.freeze({ assente: 'assente', impronta: 'impronta', 'non-fissato': 'nonFissato', bloccato: 'bloccato', shell: 'shell', job: 'job', morto: 'morto', appeso: 'appeso', incerto: 'incerto', wsl: 'wsl', altro: 'altro' });
 const acceso = (v) => t(v === true ? 'segnala.diag.on' : v === false ? 'segnala.diag.off' : 'segnala.diag.unknown');
 const ora = (iso) => {
   const d = new Date(iso ?? '');
@@ -116,6 +118,15 @@ export function righeDiagnostica(d) {
     ? t('segnala.diag.errors', { errori: [...gruppi].map(([codice, g]) => `${codice}${g.n > 1 ? ` ×${g.n}` : ''}${g.ore.length ? ` (${g.ore.join(', ')})` : ''}`).join(' · ') })
     : t('segnala.diag.errorsNone'));
   righe.push(t('segnala.diag.services', { motore: acceso(d?.motoreLocale), remoto: acceso(d?.remoto) }));
+  /* decisione 374 R1 (§10.6): su Windows, se i programmi che un comando lascia accesi sono seguiti (e fermati con lui), e se no perché */
+  if (d?.sistema?.piattaforma === 'windows' && typeof d?.nipoti?.seguiti === 'boolean') {
+    /* giro piccolo dopo il controllore (12/11): seguiti, ma Windows ha rifiutato l'appoggio per un comando fermato al primissimo istante;
+       giro 3 (13/11): seguiti, ma Windows non li ha lasciati andare dopo la ripartenza (si fermano anche quando TALOS si chiude) */
+    const seguiti = d.nipoti.sgancio === false ? 'segnala.diag.leftRunningOnTied'
+      : d.nipoti.appoggio === false ? 'segnala.diag.leftRunningOnNoSafety' : 'segnala.diag.leftRunningOn';
+    righe.push(d.nipoti.seguiti ? t(seguiti)
+      : t('segnala.diag.leftRunningOff', { motivo: t(`segnala.diag.leftRunningWhy.${MOTIVI_NIPOTI[d.nipoti.motivo] ?? 'altro'}`) }));
+  }
   return righe;
 }
 

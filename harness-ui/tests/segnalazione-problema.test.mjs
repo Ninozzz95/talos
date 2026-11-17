@@ -60,6 +60,32 @@ test('SEGN-S-03 — la bozza del modello: tipo valido, titolo ≤ 120 e descrizi
   assert.equal(normalizzaBozzaSegnalazione({ kind: 'idea', title: 'ok' }).ok, true, 'la descrizione può mancare')
 })
 
+test('SEGN-S-04b — decisione 374 R1 (§10.6): «nipoti seguiti: sì/no» col motivo, solo se la fonte risponde; un motivo sconosciuto diventa «altro»', async () => {
+  const base = { sistema: { piattaforma: 'win32', release: '10.0.26200', arch: 'x64' } }
+  assert.deepEqual(costruisciDiagnosticaSegnalazione({ ...base, nipoti: { nipoti: true, motivo: null } }, { nomi: NOMI }).nipoti, { seguiti: true, motivo: null })
+  assert.deepEqual(costruisciDiagnosticaSegnalazione({ ...base, nipoti: { nipoti: false, motivo: 'non-fissato' } }, { nomi: NOMI }).nipoti, { seguiti: false, motivo: 'non-fissato' })
+  assert.deepEqual(costruisciDiagnosticaSegnalazione({ ...base, nipoti: { nipoti: false, motivo: 'C:\\Users\\Mario\\x.exe' } }, { nomi: NOMI }).nipoti, { seguiti: false, motivo: 'altro' })
+  assert.equal('nipoti' in costruisciDiagnosticaSegnalazione(base, { nomi: NOMI }), false, 'senza fonte il campo non c è')
+  const raccolta = await raccogliDiagnosticaSegnalazione({ versione: () => ({ versione: '0.2.1', installata: true }), nipoti: () => ({ nipoti: false, motivo: 'assente' }), nomi: NOMI })
+  assert.deepEqual(raccolta.nipoti, { seguiti: false, motivo: 'assente' })
+  const caduta = await raccogliDiagnosticaSegnalazione({ versione: () => ({ versione: '0.2.1', installata: true }), nipoti: () => { throw new Error('x') }, nomi: NOMI })
+  assert.equal('nipoti' in caduta, false, 'una fonte che cade vale «non si sa»')
+})
+
+test('SEGN-S-04c — giro di cura del 12/11: i due motivi nuovi passano col loro nome: «morto» (l aiutante parte e muore) e «wsl» (la conversazione gira in Linux)', () => {
+  const base = { sistema: { piattaforma: 'win32', release: '10.0.26200', arch: 'x64' } }
+  for (const motivo of ['morto', 'wsl']) {
+    assert.deepEqual(costruisciDiagnosticaSegnalazione({ ...base, nipoti: { nipoti: false, motivo } }, { nomi: NOMI }).nipoti, { seguiti: false, motivo })
+  }
+})
+
+test('SEGN-S-04d — cure dopo il ripasso del 12/11: «appeso» (l aiutante non risponde e il comando riparte senza) e «incerto» (l aiutante si ferma dopo aver annunciato il comando) passano col loro nome', () => {
+  const base = { sistema: { piattaforma: 'win32', release: '10.0.26200', arch: 'x64' } }
+  for (const motivo of ['appeso', 'incerto']) {
+    assert.deepEqual(costruisciDiagnosticaSegnalazione({ ...base, nipoti: { nipoti: false, motivo } }, { nomi: NOMI }).nipoti, { seguiti: false, motivo })
+  }
+})
+
 test('SEGN-S-04 — la diagnostica: solo campi noti e valori dalle loro forme; percorsi e nomi dentro un campo non passano', () => {
   const d = costruisciDiagnosticaSegnalazione({
     versione: '0.1.38', installata: true,
@@ -146,4 +172,26 @@ test('SEGN-S-08 (F2) — la chiave di Z.AI (32 esadecimali, un punto, 16+ caratt
   // AL CONTRARIO: un hash git o uno sha256 da solo non è una chiave
   const sha = 'a'.repeat(40)
   assert.equal(ripulisciTestoSegnalazione(`commit ${sha}.`, { nomi: NOMI }), `commit ${sha}.`)
+})
+
+test('SEGN-S-04e — giro piccolo dopo il controllore (12/11): Windows rifiuta l appoggio del Job («muore con me»): la diagnostica lo porta, solo coi nipoti seguiti e solo se è vero; nessun altro valore passa', () => {
+  const base = { sistema: { piattaforma: 'win32', release: '10.0.26200', arch: 'x64' } }
+  assert.deepEqual(costruisciDiagnosticaSegnalazione({ ...base, nipoti: { nipoti: true, motivo: null, appoggio: false } }, { nomi: NOMI }).nipoti, { seguiti: true, motivo: null, appoggio: false })
+  // AL CONTRARIO: con l appoggio c è, o senza il campo, o con un valore storto, la forma resta quella di prima
+  for (const appoggio of [true, undefined, 'no', 0, null]) {
+    assert.deepEqual(costruisciDiagnosticaSegnalazione({ ...base, nipoti: { nipoti: true, motivo: null, appoggio } }, { nomi: NOMI }).nipoti, { seguiti: true, motivo: null }, String(appoggio))
+  }
+  // coi nipoti non seguiti l appoggio non conta (non c è il Job)
+  assert.deepEqual(costruisciDiagnosticaSegnalazione({ ...base, nipoti: { nipoti: false, motivo: 'job', appoggio: false } }, { nomi: NOMI }).nipoti, { seguiti: false, motivo: 'job' })
+})
+
+test('SEGN-S-04f — giro 3 del lanciatore (13/11): Windows rifiuta di togliere l appoggio dopo la ripartenza («sgancio»): la diagnostica lo porta, solo coi nipoti seguiti e solo col valore esatto `false`', () => {
+  const base = { sistema: { piattaforma: 'win32', release: '10.0.26200', arch: 'x64' } }
+  assert.deepEqual(costruisciDiagnosticaSegnalazione({ ...base, nipoti: { nipoti: true, motivo: null, sgancio: false } }, { nomi: NOMI }).nipoti, { seguiti: true, motivo: null, sgancio: false })
+  // AL CONTRARIO: senza il campo, o con un valore storto, la forma resta quella di prima
+  for (const sgancio of [true, undefined, 'no', 0, null]) {
+    assert.deepEqual(costruisciDiagnosticaSegnalazione({ ...base, nipoti: { nipoti: true, motivo: null, sgancio } }, { nomi: NOMI }).nipoti, { seguiti: true, motivo: null }, String(sgancio))
+  }
+  // coi nipoti non seguiti non c'è un Job da tenere legato
+  assert.deepEqual(costruisciDiagnosticaSegnalazione({ ...base, nipoti: { nipoti: false, motivo: 'job', sgancio: false } }, { nomi: NOMI }).nipoti, { seguiti: false, motivo: 'job' })
 })

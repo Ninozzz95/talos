@@ -22,6 +22,16 @@
 .talos-question-card__anteprima-vuota { margin: 0; color: var(--talos-muted); font-size: 12.5px; }
 .talos-question-card__anteprima-testo { margin: 0; white-space: pre-wrap; font-family: var(--talos-font-mono); font-size: 12.5px; }
 .talos-question-card__anteprima-html { display: block; width: 100%; height: 100%; border: 0; background: #fff; border-radius: 6px; }
+/* 11/11/2026, revisore C (5i): la riga che dice che l'anteprima scorre, sotto il riquadro */
+.talos-question-card__anteprima-scorre { margin: 0; padding: 6px 12px; border-top: 1px solid var(--talos-border-subtle); color: var(--talos-muted); font-size: 12px; }
+/* 11/11/2026, owner 17:12: l'elenco intero dietro il pulsante; «Consenti» spento finché non si apre, col motivo sotto */
+.talos-question-card__details-open { margin: 2px 0 8px; }
+.talos-question-card__details { margin: 0 0 8px; border: 1px solid var(--talos-border); border-radius: 10px; background: var(--talos-panel-soft); }
+.talos-question-card__details-text { margin: 0; max-height: 240px; overflow: auto; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--talos-font-mono); font-size: 12.5px; }
+.talos-question-card__details-text:focus-visible { outline: 2px solid var(--talos-accent); outline-offset: -2px; }
+.talos-question-card__details-scroll { margin: 0; padding: 6px 12px; border-top: 1px solid var(--talos-border-subtle); color: var(--talos-muted); font-size: 12px; }
+.talos-question-card__requires-details { display: block; color: var(--talos-muted); font-size: 11.5px; line-height: 1.45; font-style: italic; }
+.talos-question-card__option-row:has(input:disabled) { cursor: not-allowed; }
 .talos-question-card__fieldset legend { margin-bottom: 7px; font-weight: 600; line-height: 1.45; }
 .talos-question-card__fieldset .sheet-toggle-row { margin: 3px 0; }
 .talos-question-card__fieldset > .talos-field__input, .talos-question-card__fieldset > .talos-textarea { display: block; width: 100%; margin-top: 8px; box-sizing: border-box; }

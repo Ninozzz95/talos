@@ -1,0 +1,40 @@
+[package]
+# Il lanciatore nativo dei comandi di TALOS su Windows (decisione 374, R1 dei nipoti staccati; owner 12/11/2026, decisione 1037: nostro
+# exe in Rust). La shell parte SOSPESA in un Job senza breakaway, e il Job dice quando esce l'ultimo processo.
+# Come si collega (CRT statico, niente data nel file): `.cargo/config.toml` qui accanto.
+name = "talos-lanciatore"
+version = "0.1.0"
+edition = "2021"
+publish = false
+rust-version = "1.97"
+
+[[bin]]
+name = "talos-lanciatore"
+path = "src/main.rs"
+
+[features]
+# ⛔ SOLO per le prove (cura unica dei gialli, 13/11/2026): i guasti forzati di `src/main.rs` (`mod guasti`), letti dalla variabile
+# TALOS_LANCIATORE_GUASTI. La build di rilascio (`.github/workflows/lanciatore.yml`) non passa `--features`: lì il codice dei guasti
+# non c'è nemmeno, e la variabile non fa niente (lo prova `tests/lanciatore-guasti-13-11.test.mjs`).
+guasti-di-prova = []
+
+[dependencies]
+# Solo le dichiarazioni delle API di Windows (niente runtime): la crate ufficiale di Microsoft, versione fissata.
+windows-sys = { version = "=0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Console",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Environment",
+  "Win32_System_IO",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

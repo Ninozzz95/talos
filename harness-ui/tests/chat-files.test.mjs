@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import test from 'node:test';
 
 import { creaArchivioAllegati } from '../src/allegati-dati.mjs';
@@ -34,6 +35,19 @@ const toolchain = (() => {
   const versione = `${esito.stdout ?? ''}${esito.stderr ?? ''}`.trim();
   return /^go version go1\.27\.1 windows\/amd64$/u.test(versione) ? versione : null;
 })();
+/* 11/11/2026 (controllore 021-A punto 4a, giudice v1398 C1): su GitHub Actions i workflow danno il Go verificato prima delle
+ * prove (ci.yml e release.yml), quindi lì un Go che manca è un guasto e M1-M4 sono ROSSE, non saltate in silenzio. GitHub mette
+ * sempre `CI=true` e `GITHUB_ACTIONS=true`; `CI` un passo lo può riscrivere, `GITHUB_*` no (doc GitHub «Variables» e «Workflow
+ * commands», lette con ctx7 l'11/11). In locale, senza le due, si salta come prima. Solo su Windows: altrove il helper non c'è.
+ * 11/11/2026, giro 3 (controllore 021-A giro 2, falso rosso BASSO): conta SOLO `GITHUB_ACTIONS=true`, la CI vera. `CI` la mettono
+ * anche i nostri script locali (`frontend/scripts/ripresa-run.mjs` dà `CI: '1'` al banco isolato, che esegue tutto `tests/`): su
+ * un PC senza Go 1.27.1 M1-M4 diventavano rosse. Sul runner GitHub mette sempre `GITHUB_ACTIONS=true` e non la lascia riscrivere
+ * («You can't overwrite the value of the default environment variables named GITHUB_*», doc «Variables», ctx7 11/11). */
+const inCi = process.env.GITHUB_ACTIONS === 'true';
+const senzaGo = (t, motivo) => {
+  if (inCi && process.platform === 'win32') assert.fail(`in CI il Go verificato deve esserci, M1-M4 non si saltano: ${motivo}`);
+  return t.skip(motivo);
+};
 
 const costruisci = () => {
   const esito = spawnSync(process.execPath, [COSTRUISCI], { encoding: 'utf8' });
@@ -180,7 +194,7 @@ test('CHAT-FILES-NEW-CHAT: the file goes to the TALOS data, with no folder and n
  * il mutante che becca e lo dimostra sui file REALI in native/ (ripristini garantiti in finally). */
 
 test('CHAT-FILES-HELPER-BUILD-IDEMPOTENTE (M1): BUG-20 — build con byte identici NON riscrive l\'exe (mtime stabile) e il lock resta combaciante', (t) => {
-  if (!toolchain) return t.skip('serve la toolchain go1.27.1 windows/amd64 (go sul PATH o TALOS_GO_BINARY): senza build non si giudica l\'idempotenza della cura');
+  if (!toolchain) return senzaGo(t, 'serve la toolchain go1.27.1 windows/amd64 (go sul PATH o TALOS_GO_BINARY): senza build non si giudica l\'idempotenza della cura');
   if (!existsSync(ESEGUIBILE)) return t.skip('native/talos-chat-upload.exe assente: la cura si giudica su un albero già dotato del helper');
   costruisci();
   const mtimePrima = statSync(ESEGUIBILE, { bigint: true }).mtimeNs;
@@ -195,7 +209,7 @@ test('CHAT-FILES-HELPER-BUILD-IDEMPOTENTE (M1): BUG-20 — build con byte identi
 });
 
 test('CHAT-FILES-HELPER-HASH-BYTE (M4): BUG-20 — il confronto è sui BYTE: un byte manomesso con --version intatto fa riscrivere, un mtime toccato a parità di byte no', (t) => {
-  if (!toolchain) return t.skip('serve la toolchain go1.27.1 windows/amd64: senza build non si distingue un hash sui byte da uno su mtime/percorso');
+  if (!toolchain) return senzaGo(t, 'serve la toolchain go1.27.1 windows/amd64: senza build non si distingue un hash sui byte da uno su mtime/percorso');
   if (!existsSync(ESEGUIBILE)) return t.skip('native/talos-chat-upload.exe assente: niente byte da manomettere onestamente');
   costruisci();
   const canonico = readFileSync(ESEGUIBILE);
@@ -226,7 +240,7 @@ test('CHAT-FILES-HELPER-HASH-BYTE (M4): BUG-20 — il confronto è sui BYTE: un 
 });
 
 test('CHAT-FILES-HELPER-HASH-CORROTTO (M2): BUG-20 — col lock che porta il digest di un ALTRO file, l\'upload non esegue byte non verificati: ricompila, riverifica e RIPARA il lock', async (t) => {
-  if (!toolchain) return t.skip('la cura risponde al lock corrotto ricompilando: serve go1.27.1 windows/amd64 per la verifica reale');
+  if (!toolchain) return senzaGo(t, 'la cura risponde al lock corrotto ricompilando: serve go1.27.1 windows/amd64 per la verifica reale');
   if (!existsSync(ESEGUIBILE) || !existsSync(LOCK)) return t.skip('exe o lock assenti in native/: niente da corrompere onestamente');
   const lockOriginale = readFileSync(LOCK, 'utf8');
   try {
@@ -248,7 +262,7 @@ test('CHAT-FILES-HELPER-HASH-CORROTTO (M2): BUG-20 — col lock che porta il dig
 });
 
 test('CHAT-FILES-HELPER-SENZA-LOCK (M3): BUG-20 — senza lock l\'exe presente NON viene eseguito tale e quale: ricompilazione + riverifica, l\'upload riesce e il lock torna', async (t) => {
-  if (!toolchain) return t.skip('la cura risponde al lock assente ricompilando: serve go1.27.1 windows/amd64 per la verifica reale');
+  if (!toolchain) return senzaGo(t, 'la cura risponde al lock assente ricompilando: serve go1.27.1 windows/amd64 per la verifica reale');
   if (!existsSync(ESEGUIBILE) || !existsSync(LOCK)) return t.skip('exe o lock assenti in native/: niente da provare');
   const canonico = readFileSync(ESEGUIBILE);
   try {
@@ -272,5 +286,41 @@ test('CHAT-FILES-HELPER-SENZA-LOCK (M3): BUG-20 — senza lock l\'exe presente N
   } finally {
     writeFileSync(ESEGUIBILE, canonico);
     if (existsSync(LOCK)) writeFileSync(LOCK, `${sha256Di(ESEGUIBILE)}\n`);
+  }
+});
+
+/* 11/11/2026 (controllore 021-A, punto 4a; giudice v1398 C1): sul runner un passo nuovo della release poteva togliere il Go
+ * verificato prima di `cancelli`, e M1-M4 saltavano in silenzio con la release che pubblicava. Questa prova lancia le sole M1-M4
+ * in un processo figlio con un Go che non c'è: su GitHub Actions (`GITHUB_ACTIONS=true`, che un passo non può riscrivere)
+ * devono essere ROSSE tutte e quattro; fuori, anche con `CI` messa da un nostro script, saltate come prima.
+ * Giro 3 (11/11): l'uscita del figlio si legge SENZA i codici di colore. Con `FORCE_COLOR=1` nell'ambiente (la sessione di
+ * `frontend/tests/unit/icone-ripiego.test.mjs:121-127` ha `FORCE_COLOR=3`) il reporter colora le righe e `^ℹ tests (\d+)$`
+ * non trovava più niente: rossa senza guasto. `util.stripVTControlCharacters` (doc Node, ctx7 11/11) li toglie tutti. */
+test('CHAT-FILES-GO-IN-CI: on GitHub Actions with no verified Go, M1-M4 are red; elsewhere they are skipped as before', { skip: process.platform !== 'win32' }, () => {
+  const figlio = (aggiunte) => {
+    const env = { ...process.env, TALOS_GO_BINARY: join(tmpdir(), 'talos-go-che-non-esiste', 'go.exe') };
+    delete env.CI;
+    delete env.GITHUB_ACTIONS;
+    delete env.NODE_TEST_CONTEXT; // con questa il figlio crede di essere dentro questa corsa e non esegue il file
+    Object.assign(env, aggiunte);
+    const esito = spawnSync(process.execPath, ['--test', '--test-reporter=spec', '--test-name-pattern=\\(M[1-4]\\)', fileURLToPath(import.meta.url)],
+      { env, encoding: 'utf8', timeout: 120_000, windowsHide: true });
+    const uscita = stripVTControlCharacters(`${esito.stdout ?? ''}${esito.stderr ?? ''}`);
+    const conta = (n) => Number((uscita.match(new RegExp(`^ℹ ${n} (\\d+)$`, 'mu')) ?? [])[1] ?? -1);
+    return { esito: { status: esito.status, tests: conta('tests'), fail: conta('fail'), skipped: conta('skipped') }, uscita };
+  };
+  // Go presente ma sbagliato: node.exe risponde, ma non «go version go1.27.1 windows/amd64».
+  const goSbagliato = { TALOS_GO_BINARY: process.execPath };
+  for (const aggiunte of [{ GITHUB_ACTIONS: 'true' }, { CI: 'true', GITHUB_ACTIONS: 'true' }, { CI: 'false', GITHUB_ACTIONS: 'true' },
+    { CI: '', GITHUB_ACTIONS: 'true' }, { GITHUB_ACTIONS: 'true', ...goSbagliato }]) {
+    const { esito, uscita } = figlio(aggiunte);
+    assert.deepEqual(esito, { status: 1, tests: 4, fail: 4, skipped: 0 }, `${JSON.stringify(aggiunte)} senza Go verificato: M1-M4 rosse, non saltate\n${uscita}`);
+    for (const m of ['M1', 'M2', 'M3', 'M4']) assert.match(uscita, new RegExp(`^✖ CHAT-FILES-HELPER-[A-Z-]+ \\(${m}\\)`, 'mu'), m);
+  }
+  // `CI: '1'` è ciò che mette ripresa-run.mjs; `GITHUB_ACTIONS` diversa da `true` non è il runner.
+  for (const aggiunte of [{}, { CI: 'true' }, { CI: '1' }, { CI: '1', ...goSbagliato }, { CI: 'false' }, { CI: '0' }, { CI: '' },
+    { GITHUB_ACTIONS: 'false' }, { GITHUB_ACTIONS: '' }]) {
+    const { esito, uscita } = figlio(aggiunte);
+    assert.deepEqual(esito, { status: 0, tests: 4, fail: 0, skipped: 4 }, `${JSON.stringify(aggiunte)}: in locale M1-M4 si saltano come prima\n${uscita}`);
   }
 });

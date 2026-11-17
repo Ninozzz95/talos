@@ -89,7 +89,8 @@ export function creaRotteImpostazioni({ servizio }) {
       if (!soloChiavi(c, ['valori']) || !oggetto(c.valori)) return rifiuta(400, 'QUERY_INVALID', 'Expected { valori: { ... } }.');
       try {
         const copia = await servizio.finestra.dallaPersona(c.valori);
-        return copia ? { stato: 200, dati: { revisione: copia.revisione } } : rifiuta(503, 'SETTINGS_UNAVAILABLE', 'The window preferences copy is not available on this server.');
+        /* giro 6 (R-A): se una voce aspetta ancora di essere decisa, la finestra lo sa anche dalla risposta al suo invio (il segno) */
+        return copia ? { stato: 200, dati: { revisione: copia.revisione, ...(oggetto(copia.nonConfermati) ? { nonConfermati: copia.nonConfermati } : {}) } } : rifiuta(503, 'SETTINGS_UNAVAILABLE', 'The window preferences copy is not available on this server.');
       } catch (e) {
         return rifiuta(400, 'QUERY_INVALID', e?.message ?? 'Invalid window preferences.');
       }
