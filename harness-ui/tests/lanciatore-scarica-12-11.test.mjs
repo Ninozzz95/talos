@@ -332,8 +332,10 @@ test('LANC-LIMITI-01 — i limiti noti dell aiutante stanno nel registro delle v
 
 test('LANC-PUBBLICO-01 —ciò che esce sul repo pubblico: le tre righe di .gitignore-pubblico, nessun percorso personale o nome interno, CRT statico e costruzione riproducibile', () => {
   const leggi = (relativo) => readFileSync(new URL(`../../${relativo}`, import.meta.url), 'utf8');
-  const ignora = leggi('.gitignore-pubblico').split(/\r?\n/);
-  for (const riga of ['harness-ui/native/lanciatore-bin/', 'harness-ui/native/lanciatore/target/', 'harness-ui/native/lanciatore/uscita/']) assert.ok(ignora.includes(riga), `.gitignore-pubblico: ${riga}`);
+  /* nel privato `.gitignore-pubblico`; nel repo pubblico l'export lo copia col nome `.gitignore` (prepara-monorepo-pubblico.ps1) */
+  const ignorePubblico = existsSync(new URL('../../.gitignore-pubblico', import.meta.url)) ? '.gitignore-pubblico' : '.gitignore';
+  const ignora = leggi(ignorePubblico).split(/\r?\n/);
+  for (const riga of ['harness-ui/native/lanciatore-bin/', 'harness-ui/native/lanciatore/target/', 'harness-ui/native/lanciatore/uscita/']) assert.ok(ignora.includes(riga), `${ignorePubblico}: ${riga}`);
   assert.doesNotMatch(leggi('harness-ui/native/lanciatore/Cargo.toml'), /Downloads|FORMA-/, 'Cargo.toml: nessun percorso personale');
   assert.doesNotMatch(leggi('harness-ui/src/kernel/lanciatore-windows.mjs'), /FORMA-LANCIATORE|Downloads/, 'il modulo del nucleo: nessun nome di documento interno');
   const cargo = leggi('harness-ui/native/lanciatore/.cargo/config.toml');

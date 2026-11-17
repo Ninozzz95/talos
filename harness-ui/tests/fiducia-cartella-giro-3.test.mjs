@@ -24,7 +24,9 @@ import { creaOperazioni } from '../src/remoto/operazioni.mjs'
 import { iscriviConRigiocata } from '../src/iscrizione-sessione.mjs'
 import { creaFonteFiducia } from '../src/impostazioni/fonti-impostazioni.mjs'
 
-const temp = (p) => realpathSync(mkdtempSync(join(tmpdir(), p)))
+/* il percorso vero come lo dà il sistema (nome lungo, grafia del disco): il realpath JS tiene `RUNNER~1` del runner GitHub, e il
+   consenso la cartella la chiede col percorso vero (fs/promises.realpath, nativo) */
+const temp = (p) => realpathSync.native(mkdtempSync(join(tmpdir(), p)))
 const pausa = (ms = 80) => new Promise((r) => { setTimeout(r, ms) })
 const finito = { esito: 'completato', motivo: 'fine' }
 const TROPPO_LARGA = (e) => e?.code === 'FOLDER_TRUST_TOO_WIDE'

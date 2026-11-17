@@ -19,7 +19,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { bloccataDa, comandoNominaUnaBloccata, credenzialeDellaCasaLetta, motivoDaChiedere, scritturaDiUnaCredenziale } from '../src/path-policy.mjs';
@@ -199,7 +199,15 @@ test('SECONDA-P14 — il posto di sempre che non si sa dire si rifiuta come nell
   const nonSiSa = () => { throw new Error('percorso vero che non si sa dire'); };
   assert.deepEqual(bloccataDa(`src${BS}x.js`, { cartella: f.progetto, bloccati: [f.bloccata], realpathFn: nonSiSa }), { radice: f.bloccata, irrisolvibile: true });
   for (const g of [`//?/${dritte(join(f.altro, 'nota.txt'))}`, `//./${dritte(join(f.altro, 'nota.txt'))}`]) {
-    assert.equal(bloccataDa(g, { cartella: f.progetto, bloccati: [f.bloccata] })?.irrisolvibile, true, `come nella 0.2.1: ${g}`);
+    /* la 0.2.1 dice «irrisolvibile» solo quando `realpathSync` (quello JS) non sa dire il percorso vero della grafia com'è scritta, e
+       questo dipende da Node: v24.18 dà EISDIR su `\\?\C:\…`, v24.22 lo risolve (runner GitHub, PR 96). L'atteso si misura qui. */
+    const scritto = resolve(g);
+    assert.ok(existsSync(scritto), `il file qualunque c è: ${scritto}`);
+    let nonSiSaDire = false;
+    try { realpathSync(scritto); } catch { nonSiSaDire = true; }
+    const esito = bloccataDa(g, { cartella: f.progetto, bloccati: [f.bloccata] });
+    if (nonSiSaDire) assert.equal(esito?.irrisolvibile, true, `come nella 0.2.1: ${g}`);
+    else assert.equal(esito, null, `come nella 0.2.1 su questo Node, che il percorso vero lo sa dire: ${g}`);
   }
   assert.deepEqual(bloccataDa(`//?/${dritte(join(f.bloccata, 'privato.txt'))}`, { cartella: f.progetto, bloccati: [f.bloccata] }), { radice: f.bloccata }, 'la bloccata stessa: rifiutata');
 });

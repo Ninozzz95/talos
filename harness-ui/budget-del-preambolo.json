@@ -1,0 +1,35 @@
+{
+  "_nota": "#48, tetto del preambolo: quanto pesa la PRIMA richiesta al modello, per profilo. La prova tests/budget-del-preambolo.test.mjs vuole i numeri misurati UGUALI a questi. Chi cambia il testo per il modello (sistema o attrezzi) aggiorna qui i numeri nello stesso commit, con la nota: data, motivo, di quanto. Più leggero: si abbassa (cricchetto). Byte = misura principale; tokenStimati = stima del nucleo, accanto.",
+  "profili": {
+    "desktop": {
+      "byteSistema": 2929,
+      "byteNotaDoveSei": 368,
+      "byteAttrezzi": 30170,
+      "nAttrezzi": 25,
+      "tokenStimati": 8470,
+      "nota": "12/11/2026: rimisurati sulla candidata edba3aee8 (recupero P5): sistema +329 byte, attrezzi +289 byte, +156 token stimati in 962 commit dal 3/11. Prima: 3/11/2026: valori di partenza misurati (#48). Registro + ponte acceso come server.mjs:868, negozi vuoti, senza le funzioni dell'ospite (process_output, local_page, view_image)."
+    },
+    "desktop-gemini": {
+      "byteSistema": 2929,
+      "byteNotaDoveSei": 368,
+      "byteAttrezzi": 53347,
+      "nAttrezzi": 51,
+      "tokenStimati": 14465,
+      "nota": "12/11/2026: rimisurati sulla candidata edba3aee8 (recupero P5): sistema +329 byte, attrezzi +333 byte, +166 token stimati. Prima: 3/11/2026: valori di partenza misurati (#48). Fornitore Gemini diretto: il registro spegne il ponte (decisione del 21/10), tutti gli attrezzi in chiaro."
+    },
+    "cli": {
+      "misurataDa": "suite della CLI (decisione della CLI, 30/10: solo la composizione vera della CLI costruisce la sua prima richiesta)",
+      "nota": "3/11/2026: voce riservata; i numeri li scrive la CLI nella sua fase #48, insieme alla riscrittura di R8-N1-01."
+    },
+    "kernel-nudo": {
+      "nAttrezzi": 7,
+      "caratteriSchemi": 9163,
+      "tokenAttrezzi": 2296,
+      "usataDa": [
+        "E-NONENTRA-01 (e-fattore-k-23-10.test.mjs)",
+        "ZK3-01..03 (z-k3-linea-certa-23-10.test.mjs)"
+      ],
+      "nota": "12/11/2026: rimisurati sulla candidata edba3aee8 (recupero P5): +1 carattere, +1 token; E-NONENTRA-01 e ZK3-01 si spostano di 1 token. Prima: 3/11/2026: valori di partenza misurati (#48, PB-06). talosLavora senza registro, come lo chiamano le prove della compattazione: i loro fornitori finti contano stimaDegliAttrezzi. Le due prove si spostano di (tokenAttrezzi - taratura); se questi numeri cambiano, si aggiornano qui e le prove seguono da sole."
+    }
+  }
+}

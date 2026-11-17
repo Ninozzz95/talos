@@ -1352,7 +1352,10 @@ test('LANC-U-28 — il colpo per maniglia, seconde strade: tempo scaduto con «f
  *   niente `OpenJobObjectW` per nome: nessun nome da prendere, nessun gruppo altrui da chiudere (nemmeno nella finestra prima di «avvio»).
  *   Rosse sulla testa `b33573f91`: LANC-U-29…32.
  */
-const lanciNominati = (chiamate) => chiamate.filter((c) => /--ferma|Local\\/u.test(String(c[2]?.argv0 ?? '')) || /taskkill\.exe$/iu.test(String(c[0])))
+/* il percorso dell'exe lanciato (c[0]) si toglie dal testo guardato: sta in tmpdir(), che su un runner è `…\AppData\Local\Temp` e
+   conterrebbe «Local\» senza nessun nome di Job; un `Local\` o un `--ferma` in ogni altro punto della riga resta preso */
+const senzaLExe = (c) => { const riga = String(c[2]?.argv0 ?? ''); const exe = String(c[0] ?? ''); return exe === '' ? riga : riga.replaceAll(exe, ''); };
+const lanciNominati = (chiamate) => chiamate.filter((c) => /--ferma|Local\\/u.test(senzaLExe(c)) || /taskkill\.exe$/iu.test(String(c[0])))
 
 test('LANC-U-29 — «Ferma» dopo «avvio» passa dal lanciatore: «ferma» sulla sua entrata, MAI un exe rilanciato per nome né un taskkill; la risposta decide «gruppo chiuso» o «fermo»', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] })

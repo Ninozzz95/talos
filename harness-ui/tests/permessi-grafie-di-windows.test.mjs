@@ -22,7 +22,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, linkSync, mkdirSync, mkdtempSync, realpathSync, rmdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import { talosLavora, verificaPermessoScrittura } from '../src/kernel/talosHarness.mjs';
 import { bloccataDa, comandoNominaUnaBloccata, credenzialeDellaCasaLetta, motivoDaChiedere, scritturaDiUnaCredenziale } from '../src/path-policy.mjs';
@@ -309,6 +309,15 @@ test('GRAFIE-DS1 — `C:\\\\cartella\\\\…` e `C://cartella//…` sono lo stess
 
 /* ===== I prefissi lunghi e la rete che è questo computer ===== */
 
+/* La 0.2.1 dice «irrisolvibile» a un prefisso di dispositivo verso un file qualunque solo quando `realpathSync` (quello JS) non sa dire
+   il percorso vero della grafia com'è scritta, e questo dipende da Node: v24.18 dà EISDIR su `\\?\C:\…`, v24.22 lo risolve (runner
+   GitHub, PR 96). L'atteso si misura qui, sullo stesso Node e sulla stessa grafia; i rifiuti delle bloccate sopra non ne dipendono. */
+const comeNellaZeroDueUno = (g) => {
+  const scritto = resolve(g);
+  assert.ok(existsSync(scritto), `il file qualunque c è: ${scritto}`);
+  try { realpathSync(scritto); return false; } catch { return true; }
+};
+
 const prefissi = (p) => [`${BS}${BS}?${BS}${p}`, `${BS}${BS}.${BS}${p}`, `${BS}${BS}localhost${BS}${p.slice(0, 1).toLowerCase()}${DOLLARO}${p.slice(2)}`, `${BS}${BS}127.0.0.1${BS}${p.slice(0, 1)}${DOLLARO}${p.slice(2)}`];
 
 test('GRAFIE-PL1 — `\\\\?\\C:\\…`, `\\\\.\\C:\\…`, `\\\\localhost\\c$\\…`: scrivere una credenziale di casa è vietato, una cartella bloccata è rifiutata', { skip: SALTA }, () => {
@@ -326,10 +335,12 @@ test('GRAFIE-PL1 — `\\\\?\\C:\\…`, `\\\\.\\C:\\…`, `\\\\localhost\\c$\\…
   for (const g of prefissi(join(f.altro, 'nota.txt'))) {
     assert.equal(scritturaDiUnaCredenziale(g, { cartella: f.progetto, home: f.casa }), null, g);
     assert.equal(comandoNominaUnaBloccata(`type ${g}`, { cartella: f.progetto, bloccati: [f.bloccata] }), null, `un comando non è rifiutato: ${g}`);
-    /* dall'attrezzo, `\\?\` e `\\.\` verso un file qualunque rispondono «irrisolvibile» come nella 0.2.1 (mai un rifiuto in meno); la rete di questo computer non è bloccata */
+    /* dall'attrezzo, `\\?\` e `\\.\` verso un file qualunque rispondono come nella 0.2.1 sullo stesso Node (mai un rifiuto in meno); la rete di questo computer non è bloccata */
     const esito = bloccataDa(g, { cartella: f.progetto, bloccati: [f.bloccata] });
-    if (/^[\\/]{2}[?.][\\/]/u.test(g)) assert.equal(esito?.irrisolvibile, true, `come nella 0.2.1: ${g}`);
-    else assert.equal(esito, null, g);
+    if (/^[\\/]{2}[?.][\\/]/u.test(g)) {
+      if (comeNellaZeroDueUno(g)) assert.equal(esito?.irrisolvibile, true, `come nella 0.2.1: ${g}`);
+      else assert.equal(esito, null, `come nella 0.2.1 su questo Node, che il percorso vero lo sa dire: ${g}`);
+    } else assert.equal(esito, null, g);
   }
   assert.equal(scritturaDiUnaCredenziale(`${BS}${BS}archivio-di-rete${BS}condivisa${f.casa.slice(2)}${BS}.ssh${BS}authorized_keys`, { cartella: f.progetto, home: f.casa }), null, 'la rete vera non è la casa');
 });

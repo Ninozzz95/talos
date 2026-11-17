@@ -133,7 +133,8 @@ test('ASS-05 dopo una lettura ogni indirizzo chiede la carta, anche pulito e in 
 
 test('ASS-06 percorsi: segreto = rifiuto secco senza carta; fuori dalla cartella solo un file che l\'agente ha già letto', () => {
   const cartella = mkdtempSync(join(tmpdir(), 'talos-assistente-percorsi-'));
-  const fuori = join(tmpdir(), 'talos-assistente-fuori-mai-letto.txt');
+  /* il percorso vero (come lo mette fileGiaLettiDallAgente): la grafia di tmpdir() può essere un nome corto (`RUNNER~1`) o una giunzione */
+  const fuori = join(realpathSync.native(tmpdir()), 'talos-assistente-fuori-mai-letto.txt');
   try {
     const segreto = percorsoPerLAssistente({ percorso: '.env', cartella });
     assert.equal(segreto.ok, false);

@@ -81,8 +81,15 @@ test('PERM-N25 — il primo posto dietro un collegamento verso la rete non ferma
   const cred = (link) => credenzialeDellaCasaLetta({ tipo: 'shell', comando: `cd /d ${w('D:/altro')} && type ${w('ponte/.npmrc')}`, cartella: progetto, home: casa, fsSync: fsFinto(link) });
   assert.equal(cred({ [w('c:/lavori/progetto/ponte')]: `${BS}${BS}server${BS}share`, [w('d:/altro/ponte')]: casa })?.credenzialeDellaCasa, true);
   assert.equal(cred({ [w('c:/lavori/progetto/ponte')]: `${BS}${BS}server${BS}share`, [w('d:/altro/ponte')]: w('C:/lavori/normale') }), null, 'al contrario: verso una cartella normale');
-  const attrezzo = credenzialeDellaCasaLetta({ tipo: 'leggi', percorso: w('/ponte/.npmrc'), cartella: w('D:/progetto'), home: casa, fsSync: fsFinto({ [w('d:/ponte')]: `${BS}${BS}server${BS}share`, [w('c:/ponte')]: casa }) });
-  assert.equal(attrezzo?.credenzialeDellaCasa, true, 'attrezzo dei file: sessione dietro la rete, disco del processo verso la casa');
+  /* il disco del processo si finge (C:): sul runner GitHub il processo sta su D:, il disco della sessione, e la mappa non direbbe più niente */
+  const attrezzoDa = (sulProcesso) => {
+    process.cwd = () => w('C:/programmi/app');
+    try {
+      return credenzialeDellaCasaLetta({ tipo: 'leggi', percorso: w('/ponte/.npmrc'), cartella: w('D:/progetto'), home: casa, fsSync: fsFinto({ [w('d:/ponte')]: `${BS}${BS}server${BS}share`, [w('c:/ponte')]: sulProcesso }) });
+    } finally { process.cwd = cwdVera; }
+  };
+  assert.equal(attrezzoDa(casa)?.credenzialeDellaCasa, true, 'attrezzo dei file: sessione dietro la rete, disco del processo verso la casa');
+  assert.equal(attrezzoDa(w('C:/lavori/normale')), null, 'al contrario: il disco del processo verso una cartella normale');
 });
 
 test('PERM-N34 — bloccata sul disco nominato quando il percorso vero di quel disco non si sa dire (EPERM): si rifiuta lo stesso', { skip: !WINDOWS }, () => {

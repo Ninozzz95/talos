@@ -29,7 +29,7 @@ import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
-import { tmpdir, userInfo } from 'node:os';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
@@ -217,21 +217,40 @@ test('CK-03 the router: no key in its arguments, the key in the file its environ
   assert.equal(Object.hasOwn(opzioni.env, 'LLAMA_API_KEY'), false, 'one way for the router: the file');
 });
 
-/** The access entries icacls lists for one file (its output is localized: only the entry lines are read). */
-function vociAcl(file) {
-  const uscita = execFileSync(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'icacls.exe'), [file], { encoding: 'utf8', windowsHide: true });
-  const blocco = uscita.split(/\r?\n\s*\r?\n/u)[0];
-  return blocco.replace(file, '').split(/\r?\n/u).map((r) => r.trim()).filter(Boolean);
+/**
+ * One file's DACL as SDDL (`icacls <file> /save <out>`: UTF-16LE, line 1 the name, line 2 `D:<flags>(ace)(ace)…`), and this user's SID
+ * (`whoami /user /fo csv /nh`). Both are language independent: the localized icacls listing is not read.
+ */
+function daclDelFile(t, file) {
+  const sistema = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32');
+  const cartella = mkdtempSync(join(tmpdir(), 'ck-sddl-'));
+  t.after(() => rimuoviCartellaDiProva(cartella));
+  const uscita = join(cartella, 'acl.txt');
+  execFileSync(join(sistema, 'icacls.exe'), [file, '/save', uscita], { windowsHide: true });
+  const righe = readFileSync(uscita).toString('utf16le').replace(/^\uFEFF/u, '').split(/\r?\n/u).filter(Boolean);
+  const dacl = /^D:([A-Z]*)((?:\([^()]*\))+)$/u.exec(righe[1] ?? '');
+  assert.ok(dacl, `a DACL in SDDL: ${righe.join(' | ')}`);
+  const voci = [...dacl[2].matchAll(/\(([^()]*)\)/gu)].map((m) => { const [tipo, eredita, diritti, , , sid] = m[1].split(';'); return { tipo, eredita, diritti, sid }; });
+  const chi = execFileSync(join(sistema, 'whoami.exe'), ['/user', '/fo', 'csv', '/nh'], { encoding: 'utf8', windowsHide: true }).trim();
+  const sid = /"(S-1-5-[\d-]+)"$/u.exec(chi)?.[1];
+  assert.ok(sid, `this user's SID: ${chi}`);
+  return { flags: dacl[1], voci, sid, sddl: righe[1] };
 }
 
 test('CK-04 the router\'s key file is readable by this user only (ACL read back with icacls)', { skip: process.platform !== 'win32' && 'Windows ACL' }, async (t) => {
   const p = preparaRouter(t);
   await p.router.start({ modelId: 'mod-a', modelPath: p.a, contextLength: 8_192 });
   const file = p.banco.spawn[0].opzioni.env.LLAMA_ARG_API_KEY_FILE;
-  const voci = vociAcl(file);
-  assert.equal(voci.length, 1, `one entry only: ${voci.join(' | ')}`);
-  assert.match(voci[0], new RegExp(`\\\\${userInfo().username.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')}:\\(F\\)$`, 'iu'));
-  assert.equal(voci.some((v) => v.includes('(I)')), false, 'nothing inherited from the folder');
+  const { flags, voci, sid, sddl } = daclDelFile(t, file);
+  /* the built-in local administrator (RID 500) may be written with its SDDL alias */
+  const mio = (s) => s === sid || (/-500$/u.test(sid) && s === 'LA');
+  assert.match(flags, /P/u, `the folder's ACL is cut (protected DACL): ${sddl}`);
+  assert.equal(voci.some((v) => /ID/u.test(v.eredita)), false, `nothing inherited from the folder: ${sddl}`);
+  assert.ok(voci.some((v) => v.tipo === 'A' && v.eredita === '' && v.diritti === 'FA' && mio(v.sid)), `this user, full control: ${sddl}`);
+  /* a folder that offers nothing to inherit (an administrator's TEMP on a CI runner) gives the new file the token's default DACL:
+     SYSTEM and Administrators stay, as explicit entries; they can read every file anyway. Any other principal is a leak. */
+  const ammessi = new Set(['SY', 'S-1-5-18', 'BA', 'S-1-5-32-544']);
+  assert.deepEqual(voci.filter((v) => !mio(v.sid) && !ammessi.has(v.sid)), [], `only this user, SYSTEM and Administrators: ${sddl}`);
   assert.match(readFileSync(file, 'utf8').trim(), CHIAVE, 'still readable by us');
 });
 
