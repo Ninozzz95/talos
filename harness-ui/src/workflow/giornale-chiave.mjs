@@ -59,6 +59,7 @@ const MAX_DIAGNOSTICS = 100;
 // Lowercase only (Windows folds case), never a device name (con, nul, com1...), never a trailing dot (Windows drops it).
 const WORKFLOW_ID = /^(?!(?:con|prn|aux|nul|com\d|lpt\d)(?:\.|$))[a-z0-9][a-z0-9._-]{0,127}(?<!\.)$/u;
 export const REPAIR_AFTER_MS = 60_000;
+export const MTIME_LEAD_MS = 2_000;
 const TEMPORARY_MAX_AGE_MS = 60 * 60 * 1000;
 const KEY = /^sha256:([0-9a-f]{64})$/u;
 // Review 3, note 4: the path-free form of each diagnostic, for block 2 to hand to the model (message keeps paths, for the log).
@@ -120,8 +121,11 @@ export function createKeyedJournal({ workflowDataRoot, workflowId, maxResultByte
   const repair = async (path, key) => {
     try {
       // Review 3, note 2: an mtime in the future (clock moved back, copied file) is a negative age: old, not young.
+      // 17/11/2026 (PR 96, list item 96): Date.now() is a whole millisecond and the file system keeps the fraction, so a file
+      // written just now is up to ~2 ms "in the future" (measured on NTFS: 1916 of 2000, at most 1.71 ms) and was removed as old
+      // while its writer could still be writing it. A lead of up to MTIME_LEAD_MS is the clock's grain: still young.
       const age = Date.now() - (await stat(path)).mtimeMs;
-      if (age >= 0 && age < REPAIR_AFTER_MS) return false;
+      if (age > -MTIME_LEAD_MS && age < REPAIR_AFTER_MS) return false;
       await unlink(path);
       diagnose('WORKFLOW_REPLAY_REPAIRED', key, `removed a damaged journal file: ${path}`);
       return true;

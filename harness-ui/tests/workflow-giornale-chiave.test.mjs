@@ -200,6 +200,27 @@ test('a damaged index younger than a minute is left alone: it may still be being
   }
 });
 
+// 17/11/2026 (PR 96, list item 96): on the runner the test above went red 2 runs out of 3. Date.now() is a whole millisecond and
+// NTFS keeps the fraction, so the index just written had a negative age and "future = old" removed it. Here the lead is set by
+// hand (1.5 s, inside the 2 s grain) so the order of two clocks does not decide; an hour ahead is still old (review 3, note 2).
+test('a damaged index whose mtime leads the clock by the grain of the file system is young; an hour ahead is still old', async (t) => {
+  const root = rootFor(t);
+  const journal = createKeyedJournal({ workflowDataRoot: root, workflowId: WF });
+  const key = chiaveDellaChiamata('p', {}, 0);
+  await journal.record(key, { value: 'v', runId: 'r' });
+  writeFileSync(indexFile(root, key), '{"sch');
+  const justAhead = (Date.now() + 1500) / 1000;
+  utimesSync(indexFile(root, key), justAhead, justAhead);
+  assert.equal(await journal.lookup(key), null);
+  assert.ok(existsSync(indexFile(root, key)), 'a file written "1.5 s from now" may still be being written: left alone');
+  assert.ok(!journal.diagnostics.some((d) => d.code === 'WORKFLOW_REPLAY_REPAIRED'), JSON.stringify(journal.diagnostics));
+  const anHourAhead = (Date.now() + 60 * 60 * 1000) / 1000;
+  utimesSync(indexFile(root, key), anHourAhead, anHourAhead);
+  assert.equal(await journal.lookup(key), null);
+  assert.ok(!existsSync(indexFile(root, key)), 'an mtime an hour in the future is a moved clock or a copied file: old, removed');
+  assert.ok(journal.diagnostics.some((d) => d.code === 'WORKFLOW_REPLAY_REPAIRED'), JSON.stringify(journal.diagnostics));
+});
+
 test('record() on a valid index written by another run answers already; on a broken index older than a minute it repairs and records', async (t) => {
   const root = rootFor(t);
   const journal = createKeyedJournal({ workflowDataRoot: root, workflowId: WF });
