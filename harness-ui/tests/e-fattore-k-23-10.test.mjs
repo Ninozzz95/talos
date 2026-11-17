@@ -10,6 +10,7 @@
  * Fornitore finto via `fetchDiRete`, cartelle temporanee, nessuna porta.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { talosLavora as talosLavoraVero } from '../src/kernel/talosHarness.desktop-hotfix.mjs';
@@ -294,6 +295,8 @@ test('E-RIFIUTO-01 — sul rifiuto coi numeri S decide se un riassunto pagato pu
 /* Revisione 10 della CLI (23/10/2026, il pavimento di F6): il pavimento col riassunto atteso blocca il PAGAMENTO, in silenzio; «non entra»
    si dice solo se nemmeno il riassunto senza modello entra — qui entra, quindi niente avviso in tutti e due i versi (prima: detto, e poi il
    riassunto senza modello faceva entrare il giro) */
+const KERNEL_NUDO = JSON.parse(readFileSync(new URL('../budget-del-preambolo.json', import.meta.url), 'utf8')).profili['kernel-nudo'];
+const FINESTRA_E_NONENTRA = 5_178 + (KERNEL_NUDO.tokenAttrezzi - 2_295);
 test('E-NONENTRA-01 — S entra nel pavimento che decide se si paga: col riassunto stimato supera la finestra (non si paga, e non si dice: quello senza modello entra), coi riassunti veri brevi no (si paga)', async (t) => {
   const m = scenaConLog(1_800);
   const corsa = async (extra) => {
@@ -301,8 +304,11 @@ test('E-NONENTRA-01 — S entra nel pavimento che decide se si paga: col riassun
     const eventi = [];
     /* 29/10/2026 (R-24/R-25): la descrizione di `cerca` è cresciuta di qualche decina di token (`continua` solo id + `pattern`,
        `dentro` file o cartella) e la finestra stretta di questa scena stava sul bordo basso: misurato, la scena regge da 5.080 a
-       ~5.200 (prima finiva più in basso). 5.140 è il centro della banda nuova: stesso caso, non un'altra prova. */
-    await giro(t, { messaggiIniziali: m, rete, finestraToken: 5_140, onGiro: (e) => { if (e?.tipo === 'compattazione-fine') eventi.push(e); }, ...extra });
+       ~5.200 (prima finiva più in basso). 5.140 è il centro della banda nuova: stesso caso, non un'altra prova.
+       #48 (3/11/2026, OK del Desktop): R-33 del 30/10 ha poi spostato la banda di +65 token e 5.140 stava a 5 token dal bordo
+       (rimisurata con gli schemi del kernel nudo a 2.295 token: regge da 5.135 a 5.220). La finestra ora segue gli schemi: centro
+       5.178 a 2.295 token, più lo spostamento di `kernel-nudo` in `budget-del-preambolo.json` (lo fissa PB-06). Margine ±42. */
+    await giro(t, { messaggiIniziali: m, rete, finestraToken: FINESTRA_E_NONENTRA, onGiro: (e) => { if (e?.tipo === 'compattazione-fine') eventi.push(e); }, ...extra });
     return { riassunti: rete.conti.riassunti, nonEntra: eventi.filter((e) => e.motivo === 'non-entra').length };
   };
   assert.deepEqual(await corsa({}), { riassunti: 0, nonEntra: 0 });

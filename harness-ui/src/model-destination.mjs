@@ -233,7 +233,8 @@ export function risolviDestinazioneModello(modello, { leggiChiave, leggiRuntime,
      * ragionando che «127.0.0.1 non ha autenticazione». Provato dal vivo
      * contro il runtime acceso: **HTTP 401, "Invalid API Key" in 4 ms**.
      * `llama-server-supervisor.mjs` genera `randomBytes(32)` a ogni avvio e
-     * lo passa come `--api-key`; la chiave vive solo lì dentro, e `status()`
+     * lo passa al motore nell'ambiente del figlio (`LLAMA_API_KEY`, dal 12/11/2026;
+     * prima era `--api-key`, visibile nella riga di comando); la chiave vive solo lì dentro, e `status()`
      * NON la espone — giustamente, perché quella risposta finisce nel
      * browser.
      *

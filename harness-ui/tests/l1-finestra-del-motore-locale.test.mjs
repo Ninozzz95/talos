@@ -8,12 +8,14 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { finestraDelMotoreLocale, FINESTRA_PRUDENTE } from '../src/llama-server-supervisor.mjs';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 /* Un percorso ASSOLUTO su ogni sistema (il supervisore rifiuta gli altri): `C:\\m.gguf` su Linux non lo è, e sul Pad (Linux/arm64
    dentro l'app) le prove cadevano con RUNTIME_INVALID (Mobile, K4-A del 20/10). Il file non serve: il processo è finto. */

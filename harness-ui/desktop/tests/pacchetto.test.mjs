@@ -134,6 +134,38 @@ test('R02-ELD (M 28/10/2026 notte): nel pacchetto resta il solo dizionario che i
   assert.match(script, /\n {2}await sfoltisciEld\(join\(backend, 'node_modules'\)\);/u, 'la preparazione del pacchetto sfoltisce eld');
 });
 
+test('R02-QUICKJS (workflow block 1, owner 16/11/2026): only the release-sync Wasm the sandbox loads stays in the package, the import still resolves and QuickJS still runs; without release-sync the package stops', async () => {
+  const { cpSync, readdirSync, existsSync: esiste } = await import('node:fs');
+  const { fileURLToPath, pathToFileURL } = await import('node:url');
+  const { sfoltisciQuickjs, QUICKJS_VARIANTI_DA_SVUOTARE } = await import('../scripts/prepara-pacchetto.mjs');
+  assert.deepEqual([...QUICKJS_VARIANTI_DA_SVUOTARE].sort(), ['quickjs-wasmfile-debug-asyncify', 'quickjs-wasmfile-debug-sync', 'quickjs-wasmfile-release-asyncify']);
+  /* the seven packages npm installs for quickjs-emscripten 0.31.0, copied from the server's node_modules */
+  const sorgente = fileURLToPath(new URL('../../node_modules', import.meta.url));
+  const nodeModules = join(mkdtempSync(join(tmpdir(), 'talos-r02-quickjs-')), 'node_modules');
+  const pacchetti = ['quickjs-emscripten', 'quickjs-emscripten-core', '@jitl/quickjs-ffi-types', '@jitl/quickjs-wasmfile-release-sync', ...[...QUICKJS_VARIANTI_DA_SVUOTARE].map((v) => `@jitl/${v}`)];
+  for (const p of pacchetti) cpSync(join(sorgente, p), join(nodeModules, p), { recursive: true });
+  const wasmUsato = join(nodeModules, '@jitl', 'quickjs-wasmfile-release-sync', 'dist', 'emscripten-module.wasm');
+  const impronta = (f) => createHash('sha256').update(readFileSync(f)).digest('hex');
+  const prima = impronta(wasmUsato);
+  const tolti = await sfoltisciQuickjs(nodeModules);
+  assert.ok(tolti.byte > 9_000_000, `three unused variants emptied: ${tolti.byte} bytes`);
+  assert.equal(impronta(wasmUsato), prima, 'the release-sync Wasm is untouched');
+  for (const v of QUICKJS_VARIANTI_DA_SVUOTARE) {
+    const dist = join(nodeModules, '@jitl', v, 'dist');
+    assert.deepEqual(readdirSync(dist).filter((f) => f.startsWith('emscripten-module')), [], `${v}: no Wasm and no Emscripten glue`);
+    for (const f of ['package.json', 'LICENSE', 'dist/index.mjs', 'dist/index.js']) assert.ok(esiste(join(nodeModules, '@jitl', v, f)), `${v}/${f} stays (static import, licence)`);
+  }
+  /* the sandbox's own import (src/workflow/recinto-lavoratore.mjs:41) resolves against the pruned tree and evaluates */
+  const q = await import(pathToFileURL(join(nodeModules, 'quickjs-emscripten', 'dist', 'index.mjs')).href);
+  const modulo = await q.newQuickJSWASMModule(q.newVariant(q.RELEASE_SYNC, {}));
+  const vm = modulo.newContext();
+  try { assert.equal(vm.dump(vm.unwrapResult(vm.evalCode('6 * 7'))), 42); } finally { vm.dispose(); }
+  await assert.rejects(q.newQuickJSWASMModule(q.DEBUG_SYNC), 'an emptied variant can no longer be instantiated: the bytes really left the package');
+  await assert.rejects(sfoltisciQuickjs(join(tmpdir(), 'talos-r02-niente-quickjs', 'node_modules')), /release-sync/u, 'without the release-sync Wasm the package stops');
+  const script = readFileSync(fileURLToPath(new URL('../scripts/prepara-pacchetto.mjs', import.meta.url)), 'utf8');
+  assert.match(script, /\n {2}await sfoltisciQuickjs\(join\(backend, 'node_modules'\)\);/u, 'the package preparation prunes QuickJS');
+});
+
 test('R02-SFOLTISCI (owner 11/10/2026, aggiornamento lento): via ciò che a runtime non si carica, restano codice, licenze e il binario Windows x64', async () => {
   const nm = mkdtempSync(join(tmpdir(), 'talos-r02-sfoltisci-'));
   const scrivi = (relativo, testo = 'x') => { const p = join(nm, ...relativo.split('/')); mkdirSync(join(p, '..'), { recursive: true }); writeFileSync(p, testo); };

@@ -1,7 +1,7 @@
 /*
  * ⭐ 27/10/2026 — LE BOLLE DELLA PERSONA COME HERMES (owner, con la foto di Hermes desktop):
  *   1. la domanda resta in cima mentre si legge la sua risposta, per tutti e senza impostazione;
- *   2. un'impostazione (spenta di serie) per la bolla a tutta larghezza.
+ *   2. un'impostazione per la bolla a tutta larghezza (spenta di serie fino alla 0.2.1, accesa dal 09/11/2026, owner).
  *   Lo script che sceglie QUALE domanda è appiccicata (una sola alla volta) è `components/domanda-appiccicata.js`: lì il perché.
  *
  * ⛔ Qui niente cambia l'impaginazione. La posizione appiccicata si impagina come quella relativa (la scatola resta al suo posto
@@ -206,7 +206,7 @@
 }
 
 /*
- * ⭐ 2. LA BOLLA A TUTTA LARGHEZZA (impostazione «Domande a tutta larghezza», spenta di serie). Come Hermes, la domanda è un
+ * ⭐ 2. LA BOLLA A TUTTA LARGHEZZA (impostazione «Domande a tutta larghezza», accesa di serie dal 09/11/2026, owner). Come Hermes, la domanda è un
  *   riquadro largo quanto la colonna di lettura (`user-message.tsx:54`, `w-[calc(100%+2rem)]`, e `:77`, `w-full … max-w-full`).
  * ⛔ Spenta, non cambia un pixel: ogni regola qui sotto vive sotto `:root.user-bubble-full-width`.
  * ⛔ Gli angoli restano quelli della casa (la codina in basso a destra, `index.css:663`): il riquadro largo è di Hermes, il

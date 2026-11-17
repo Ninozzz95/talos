@@ -4,7 +4,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname, extname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
-import { chromium } from '@playwright/test';
+import { lanciaBrowserDelleProve } from '../aiuto/lancia-browser-delle-prove.mjs'; // 12/11: senza ambiente fallisce con la causa, mai salta
 import { cartellaFoto } from '../aiuto/cartella-foto.mjs';
 import { build } from 'esbuild';
 
@@ -12,7 +12,7 @@ const frontend = fileURLToPath(new URL('../..', import.meta.url));
 const prove = cartellaFoto('bc12-provider-pool');
 
 test('PH-UI-BROWSER componenti reali: menu, azioni, tastiera, desktop, mobile e moto ridotto', async t => {
-  const browser = await chromium.launch({ channel:'chrome', headless:true });
+  const browser = await lanciaBrowserDelleProve({ channel:'chrome', headless:true });
   t.after(()=>browser.close());
   // Il risolutore di prova legge solo sorgenti frontend; evita la scansione delle
   // directory del profilo Windows, non consentita alla sandbox di esbuild.

@@ -5,6 +5,8 @@ import vm from 'node:vm';
 import { collegaNavigazioneSpina } from '../../src/components/conversazione.js';
 import TESTI_CHAT from '../../src/i18n/testi/chat.js';
 import { bollaPerLaRigiocata } from '../../src/components/bolla-della-persona.js';
+import { EVENTI_DELL_ASSISTENTE } from '../../src/components/pannello/a-lato.js';
+import { leggiAvvisoFileComputerUse } from '../../src/components/avviso-file-computer-use.js';
 
 /*
  * ⭐⭐ BUG-24, 06/10/2026 — IL BANCO DELLA FINESTRA DI REPLAY (Mosse 1 del dossier
@@ -579,6 +581,9 @@ function bancoCambioSessione(b) {
     schedeAccesso: { dimentica: niente }, // D4 di R116: la ripresa armata si dimentica al cambio (prove in rinnovo-accesso-116)
     ripresaDopoLoStop: { dimentica: niente }, // decisione 166 (revisione R-5 del 05/11/2026): «Riprendi» si dimentica al cambio (prove in ux-decisioni-166)
     chatLasciate: [], ponteBolla: { lascia: (id) => { b.chatLasciate.push(id); } }, // FE-071 (05/11/2026): la chat lasciata col computer use la segue il ponte (B24-10b qui sotto, il resto in ponte-bolla)
+    /* 0.2.1-ART D2-D3 (09/11/2026): l'artefatto a lato e le carte in attesa sono della chat che si lascia (B24-10c qui sotto) */
+    artefattiChiusi: [], artefattoALato: { chiudi: (come) => { b.artefattiChiusi.push({ ...come }); } },
+    atteseAzzerate: 0, attesaArtefatti: { azzera: () => { b.atteseAzzerate += 1; } },
     rigaVivaMotore: { chatCambiata: niente }, // FE-050 (01/11/2026): la riga viva del modello locale si dimentica al cambio (prove in riga-viva-motore)
     risorseProcessi: { timer: 0, inVolo: false, letture: 2, vivi: 0, agganciato: true }, // C1 (10/10/2026): CPU e memoria, la lettura riparte al cambio
     $: (selector) => selector === '#conversation' ? b.colonna : null,
@@ -590,7 +595,7 @@ function bancoCambioSessione(b) {
     'cancellaRenderAlberoDifferito', 'smontaStatoVuoto', 'aggiornaSpazioCodaConversazione',
     'programmaSchedeAgente', 'renderizzaBannerCoda', 'resettaSuperficiRealiDedicate',
     'disegnaFasciaPianoRichiesto', 'disegnaFasciaModoRitirato', 'programmaSchedaGithub',
-    'nascondiAvvisoPiano', 'syncRunComposerState',
+    'nascondiAvvisoPiano', 'syncRunComposerState', 'aggiornaInspectorDaStato', // P1 (11/11/2026): la colonna si ridisegna accanto, non più dentro syncRunComposerState
     'azzeraSchedaContesto', // C1 (10/10/2026): la scheda Contesto della sessione di prima si dimentica al cambio
     'renderizzaFasciaObiettivo', // /goal G6 (15/10/2026): la fascia dell'obiettivo si spegne al cambio (prove in obiettivo-fascia)
     'lasciaModalitaVeloce', // FE-047: la scelta veloce si lascia col cambio di sessione (prove in modalita-veloce)
@@ -633,6 +638,22 @@ test('B24-10b BOLLA-CHAT-LASCIATA: al cambio la chat che si lascia passa al pont
   b.state.realSession.id = 'sessione-ripresa';
   nuovaGenerazione({ continua: true });
   assert.deepEqual(b.chatLasciate, ['sessione-lasciata'], 'la ripresa della stessa chat, col suo id, non la lascia');
+});
+
+/* 0.2.1-ART D2-D3 (owner 09/11/2026 19:55): l'artefatto aperto «a lato» è della chat che si lascia. Senza questo, cambiata chat,
+   restava a lato la pagina di prima, e una carta «Sto creando…» rimasta in attesa si prendeva il primo artefatto della chat nuova. */
+test('B24-10c ARTEFATTO-A-LATO-CHAT-LASCIATA: al cambio l artefatto a lato si chiude senza rubare il fuoco e le carte in attesa si dimenticano; la ripresa no', () => {
+  const b = bancoFinestra();
+  const nuovaGenerazione = bancoCambioSessione(b);
+  nuovaGenerazione();
+  assert.deepEqual(b.artefattiChiusi, [{ fuoco: false }], 'chiuso una volta, e il fuoco resta dov è');
+  assert.equal(b.atteseAzzerate, 1);
+  nuovaGenerazione({ continua: true });
+  assert.deepEqual(b.artefattiChiusi, [{ fuoco: false }], 'la ripresa della stessa chat tiene il suo artefatto aperto');
+  assert.equal(b.atteseAzzerate, 1);
+  /* il pannello nasce solo al primo clic su una carta: prima non c'è, e il cambio non deve cadere */
+  b.artefattoALato = null;
+  assert.doesNotThrow(() => nuovaGenerazione());
 });
 
 test('B24-11 ORDINE-TRE-PAGINE: ciascun prepend carica i predecessori contigui, cronologia vecchio→nuovo', () => {
@@ -1116,7 +1137,7 @@ test('B24-39 WHEEL-NON-SCROLLER: visible clip e shadow path non bloccano l inten
  * Il writer e misurato al confine di chiamata: non e un secondo renderer DOM. */
 function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
   const counts = { published: 0, cancelled: 0, stopped: 0, writer: 0 };
-  const bubbles = [], chips = [], actions = [];
+  const bubbles = [], chips = [], actions = [], righeAvvisoCu = [];
   const conversation = { classList: { contains: c => c === 'is-restoring' && restoring },
     querySelectorAll: () => [] };
   const b = {
@@ -1142,6 +1163,8 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     scrollStreamingOutput: () => { counts.writer += 1; },
     eventoPerLoSchermo: event => event, providerRetryUi: { evento() {} },
     ponteBolla: { evento() {} }, // FE-070 (05/11): il ponte verso il canale della bolla ha le sue prove (`ponte-bolla.test.mjs`)
+    // l'Assistente (giro di cura A+B+C, 11/11/2026): i suoi eventi vanno al pannello solo dal vivo (B24-47); il pannello ha le sue prove in `a-lato.test.mjs`
+    EVENTI_DELL_ASSISTENTE, chatALato: { eventi: [], evento(e) { this.eventi.push(e.name); } },
     runRealeAttivo: () => false, interpretaEventoCompattazione: () => null,
     // 17/10/2026 (owner, «Avviso in chat + stato in Estensioni»): il server MCP che non parte, detto dal gestore degli eventi
     EVENTO_MCP_AVVIO: 'talos.mcp-avvio', avvisiMcpDetti: new Map(), nuoviServerNonPartiti: () => [], creaNotaMcpNonPartito: () => null,
@@ -1153,6 +1176,9 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     EVENTO_RIPIEGO_LOCALE: 'talos.ripiego-locale', aggiornaRigaRipiegoLocale: () => null, EVENTO_SCHEDA_LENTA: 'talos.scheda-lenta', aggiornaRigaSchedaLenta: () => null,
     // 29/10/2026 (owner, CONTRATTO-CONTROLLO-SPENTO): la riga del controllo delle scritture spento, nello stesso gestore
     leggiControlloSpento: () => null, aggiornaRigaControlloSpento: () => null,
+    // decisione 374 giro 4 (bug24): la riga delle impostazioni del computer use rimesse; il lettore è quello VERO, la riga si conta al confine
+    leggiAvvisoFileComputerUse, aggiornaRigaAvvisoFileComputerUse: (colonna, valore, o) => { righeAvvisoCu.push({ colonna, valore, sessionId: o?.sessionId }); return null; },
+    document: {}, inserisciRigaCompattazione() {},
     chiamataDeiPassi: () => false, // FE-008 (unione del 03/11): la lista dei Passi ha le sue prove; qui nessun evento è dei Passi
     aggiornaAvvisoSogliaContesto() {}, accendiRagionamentiApertiDopoLaStoria() {},
     disegnaTestiRimastiNellaStoria: () => { counts.testiRimasti = (counts.testiRimasti ?? 0) + 1; }, // TESTO-PERSO: il testo rimasto indietro, al confine
@@ -1165,6 +1191,7 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     aggiornaTestataSessione: () => { counts.testata = (counts.testata ?? 0) + 1; }, // A1-bis 5: il conteggio della Review torna al confine
     aggiornaPiedeChatDaStato: () => { counts.piede = (counts.piede ?? 0) + 1; }, // A1-bis 5: e il chip «Giri»
     reviewDaDisegnareDopoLaStoria: null, renderRealReviewList() {}, renderReviewFile() {}, aggiornaSommarioReviewReale() {}, // B1: la Review rinviata al confine
+    elencoDaRileggereDopoLaStoria: false, aggiornaElencoSessioniReali: () => { counts.elenco = (counts.elenco ?? 0) + 1; }, // P5 (11/11/2026): l'elenco si rilegge al confine solo se la storia l'ha chiesto (prove in rigiocata-consensi-elenco)
     statoFasciaPianoRichiesto: () => ({}),
     spintaDiagrammaDeleghe: null, frameGrafoMadre: null, ultimoEventoGrafoMadre: null,
     caricaCacheSessioneDalRegistro() {}, EVENTI_DELLE_SCHEDE_AGENTE: new Set(),
@@ -1190,14 +1217,19 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     'appendRealTaskStart', 'appendUserFollowUp', 'appendComandoDiretto', 'annotaRichiestaDellaPersona', 'handleRealEvent']) {
     b[name] = funzione(name, b);
   }
-  return { b, counts, bubbles, chips, actions };
+  return { b, counts, bubbles, chips, actions, righeAvvisoCu };
 }
 
 function assertLetturaPreservata(h) {
   assert.equal(h.b.streamingUserScrollHold, true, 'una bolla storica ha tolto la sospensione umana');
   assert.equal(h.b.streamingAutoFollow, false);
   assert.equal(h.b.streamingLastTargetTop, 731);
-  assert.deepEqual(h.counts, { published: 0, cancelled: 0, stopped: 0, writer: 0 });
+  /* P1 (11/11/2026): `syncRunComposerState` non ridisegna più la colonna da sé; i chiamanti che cambiano ciò che la colonna mostra
+     la chiedono accanto (`aggiornaInspectorDaStato`, che durante la storia la segna solo sporca). Prima la stessa chiamata c'era, ma
+     nascosta dentro lo stub di `syncRunComposerState`: qui si conta, al più una per evento, e il resto del contratto resta uguale. */
+  const { inspector = 0, ...resto } = h.counts;
+  assert.ok(inspector <= 1, `colonna chiesta ${inspector} volte per un evento`);
+  assert.deepEqual(resto, { published: 0, cancelled: 0, stopped: 0, writer: 0 });
 }
 
 test('B24-40 TASK-STORICO-NON-RIARMA: testo e allegati restano senza alterare lettura o custode', () => {
@@ -1296,6 +1328,28 @@ test('B24-45 CONFINE-REPLAY-RIPRISTINA-DIRETTA: marker vero dedup e generazione 
   assert.equal(h.counts.published, 1);
   assert.equal(h.counts.stopped, 1);
   assert.equal(h.counts.writer, 1);
+});
+
+test('B24-47 AVVISO-FILE-COMPUTER-USE-IN-RIGIOCATA: l avviso della 374 passa dal lettore vero, una riga, nessun riarmo', () => {
+  for (const differito of [true, false]) {
+    const h = bancoBolleRigiocate({ differito });
+    const colonna = { nome: 'colonna' };
+    h.b.state.realSession.id = 'sessione-1';
+    h.b.colonnaConversazione = () => colonna;
+    const value = { idAvviso: 'a-1', file: ['.computer-use-impostazione.json'], copie: ['x.changed-1'], nonRimessi: [], altreChiavi: [], testo: 'TALOS put back' };
+    h.b.handleRealEvent({ type: 'CUSTOM', name: 'talos.file-computer-use-ripristinati', value, _sequenza: 30 }, 7);
+    assertLetturaPreservata(h);
+    assert.equal(h.righeAvvisoCu.length, 1, 'la riga dell avviso si disegna una volta');
+    assert.equal(h.righeAvvisoCu[0].colonna, colonna);
+    assert.equal(h.righeAvvisoCu[0].sessionId, 'sessione-1');
+    assert.deepEqual([h.righeAvvisoCu[0].valore.idAvviso, h.righeAvvisoCu[0].valore.rimessi, h.righeAvvisoCu[0].valore.copie], ['a-1', true, true]);
+    assert.equal(h.bubbles.length, 0, 'nessuna bolla');
+    /* lo stesso avviso aggiornato (stesso id) arriva di nuovo dalla storia: va alla STESSA riga (la funzione vera la aggiorna, mai doppia) */
+    h.b.handleRealEvent({ type: 'CUSTOM', name: 'talos.file-computer-use-ripristinati', value: { ...value, copie: [] }, _sequenza: 31 }, 7);
+    assertLetturaPreservata(h);
+    assert.equal(h.righeAvvisoCu.length, 2);
+    assert.deepEqual([h.righeAvvisoCu[1].valore.idAvviso, h.righeAvvisoCu[1].valore.copie], ['a-1', false], 'lo stesso id, letto dal lettore vero');
+  }
 });
 
 test('B24-46 RUNSTARTED-STORICO-CONSERVA-CUSTODE: provenienza non dipende dal rendering differito', () => {
@@ -1868,4 +1922,16 @@ test('A1R2-06b IL SILENZIO SI CONTA DALL ULTIMO EVENTO: 10 s di eventi e poi 6 s
   assert.equal(h.b.uscitaVisibile, false, 'solo 6 s di silenzio: il tempo dall apertura non conta');
   h.advance(9_500);
   assert.equal(h.b.uscitaVisibile, true, '15 s di silenzio vero: il pulsante si offre');
+});
+
+test('B24-47 ASSISTENTE-SOLO-DAL-VIVO: in rigiocata la domanda in corso e la carta dell Assistente non arrivano al pannello; dal vivo sì', () => {
+  const h = bancoBolleRigiocate({ differito: true });
+  /* lo scambio salvato prosegue nel resto del gestore (esportazione, storia): il suo «solo dal vivo» è nel banco del pannello */
+  const nomi = [EVENTI_DELL_ASSISTENTE.stato, EVENTI_DELL_ASSISTENTE.carta];
+  for (const name of nomi) h.b.handleRealEvent({ type: 'CUSTOM', name, value: {} }, 7);
+  assert.deepEqual(h.b.chatALato.eventi, [], 'una rigiocata ha riacceso il pannello');
+  h.b.handleRealEvent({ type: 'CUSTOM', name: 'talos.fine-rigiocata' }, 7);
+  for (const name of nomi) h.b.handleRealEvent({ type: 'CUSTOM', name, value: {} }, 7);
+  assert.deepEqual(h.b.chatALato.eventi, nomi);
+  assert.equal(h.bubbles.length, 0, 'lo stato effimero non disegna niente nella chat');
 });

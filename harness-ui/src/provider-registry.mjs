@@ -1612,6 +1612,12 @@ export const REGISTRO_FORNITORI = congela({
     paginaChiavi: null,
     wire: 'locale',
     baseUrl: null,               // un socket dell'app, non un indirizzo
+    /* Decisione 330 (giro 3, punto 6c, la parte del telefono): l'app NON usa llama.rn ma llama.cpp col suo JNI, e il servizio del motore
+       ospite chiede il prompt senza continuazione (`TalosMotoreOspiteServizio.java:289`, `chatPrompt` a tre argomenti ⇒ `continua` falso
+       ⇒ `talos_llama_jni.cpp:3644-3646`, `add_generation_prompt` vero e `continue_final_message` NONE, i valori di serie di
+       `common/chat.h:266-267`). Quindi un assistant in coda non si prosegue: apre un turno nuovo dopo un assistant vuoto. Come Hermes
+       (`agent/turn_request_assembly.py:178-187`) si toglie, e niente continuazione: la scala di oggi. llama-server del PC (`local`) sì. */
+    prefillInCoda: congela({ prosegue: false, fonte: 'https://github.com/ggml-org/llama.cpp/blob/master/common/chat.h', data: '2026-11-12' }),
     indirizzoModificabile: false,
     envIndirizzo: congela([]),
     auth: congela({ tipo: 'effimera', header: 'Authorization', nomeVariabile: congela([]) }),

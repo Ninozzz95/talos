@@ -10,9 +10,11 @@ import test from 'node:test';
 
 import { fotoDelCaricamento } from '../src/apertura-condivisa.mjs';
 import { createLlamaRouterSupervisor } from '../src/llama-router-supervisor.mjs';
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { creaRouterFinto } from './aiuto/router-finto.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 const BIN = 'C:\\talos\\llama-server.exe';
 

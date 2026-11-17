@@ -321,6 +321,8 @@ const ANCORE_FISSE = Object.freeze({
   'tools.webSearchSource': { selettore: '[data-settings-card="tools-search"] .talos-choice-grid', riga: false },
   /* decisione 310 (06/11/2026): la riga «Uso del computer (Anteprima)» non è nel catalogo dei campi (`computer-use-impostazione.js`, RIGA) */
   'tools.computerUse': { selettore: '[data-setting-row="computerUseToggle"]', riga: true },
+  /* 0.2.2 (SignPath): «Catalogo pubblico dei modelli», in Sicurezza e privacy (`catalogo-pubblico-impostazione.js`, RIGA) */
+  'models.publicCatalog': { selettore: '[data-setting-row="publicCatalogToggle"]', riga: true },
 });
 /**
  * Dove si attacca il segno di una voce, o `null`: le voci della conversazione stanno nel foglio della sessione, non nelle Impostazioni.
@@ -559,6 +561,44 @@ export function montaSegniImpostazioni(radice, ricevute, { onAnnulla = null, ade
   return messi;
 }
 
+/*
+ * 0.2.2-DL, giro 6 (owner 10/11/2026 22:51; controllore del giro 5, R-A) — IL SEGNO «non ancora confermata». Dopo l'aggiornamento, se
+ *   il file delle ricevute non si legge, la finestra mostra una voce in un modo e TALOS la legge nell'altro finché qualcuno non la
+ *   decide (`copia-sul-server.js`, `inDisaccordo()`). La persona lo deve vedere dove può rimediare: accanto all'interruttore, con la
+ *   STESSA riga del segno «Cambiata da TALOS» qui sopra (`talos-setting__help talos-impostazione__segno` col pallino, ruolo `status`).
+ *   Niente bottone: l'azione è l'interruttore stesso, e la frase lo dice. D'accordo ⇒ nessun segno.
+ * La finestra parla per CAMPI (`userBubbleFullWidth`), le Impostazioni per voci del catalogo: il catalogo pubblico non porta il nome del
+ *   campo, quindi la mappa sta qui, con le sole voci che una migrazione del server può lasciare in sospeso (oggi una); una prova la
+ *   confronta col catalogo vero (`catalogo-impostazioni.mjs`, `campo`).
+ */
+export const VOCE_DEL_CAMPO_NON_CONFERMATO = Object.freeze({ userBubbleFullWidth: 'appearance.userBubbleFullWidth' });
+/**
+ * Mette (o toglie) i segni «non ancora confermata» nella pagina delle Impostazioni. I vecchi si tolgono prima: lista vuota ⇒ nessun
+ * segno. Non tocca i segni «Cambiata da TALOS». Ritorna quanti ne ha messi.
+ * @param {ParentNode|null} radice `#schermoImpostazioni`
+ * @param {string[]} campi i campi della finestra in disaccordo (`copiaSulServer.inDisaccordo()`)
+ * @param {{ document?: Document }} opzioni
+ */
+export function montaSegniNonConfermate(radice, campi, { document: doc = radice?.ownerDocument ?? globalThis.document } = {}) {
+  if (!radice) return 0;
+  for (const vecchio of radice.querySelectorAll('[data-segno-non-confermata]')) vecchio.remove();
+  let messi = 0;
+  for (const campo of Array.isArray(campi) ? campi : []) {
+    const chiave = Object.hasOwn(VOCE_DEL_CAMPO_NON_CONFERMATO, campo) ? VOCE_DEL_CAMPO_NON_CONFERMATO[campo] : null;
+    const ancora = chiave ? ancoraNelleImpostazioni(chiave) : null;
+    const bersaglio = ancora ? radice.querySelector(ancora.selettore) : null;
+    if (!bersaglio) continue;
+    const segno = el(doc, 'p', 'talos-setting__help talos-impostazione__segno');
+    segno.dataset.segnoNonConfermata = chiave;
+    segno.setAttribute('role', 'status');
+    segno.append(el(doc, 'span', 'talos-dot talos-dot--sm talos-impostazione__punto'), el(doc, 'span', '', t('appSettings.mark.notConfirmed')));
+    if (ancora.riga) (bersaglio.firstElementChild ?? bersaglio).append(segno);
+    else bersaglio.after(segno);
+    messi += 1;
+  }
+  return messi;
+}
+
 /* ───────────────────────── 4. la notifica `impostazioni` ───────────────────────── */
 
 /**
@@ -635,11 +675,24 @@ export function comandoImpostazioniDaApplicare(testo) {
  *   Annullato ⇒ il titolo dice «Annullato…» e l'Annulla sparisce (bozzetto `pc.js:445`). `cambi` è quello della risposta della rotta.
  * ⇒ `{ nodo, annullata(), rifiutata(chiave), riprova() }`, o `null` senza un cambio con un nome.
  */
+/**
+ * Giro 2 della fiducia (giudice v1461, D4): l'Accesso pieno scelto e TRATTENUTO dalla fiducia della cartella. Il server lo dice nel cambio
+ *   (`trattenuto: { motivo, vale }`): la ricevuta resta «prima → dopo» (è la scelta, e l'Annulla la rimette) e sotto dice il modo vero, con
+ *   il nome della pillola. ⇒ la riga, o `null`.
+ */
+export function rigaDelTrattenuto(cambio) {
+  const tr = cambio?.trattenuto;
+  if (!tr || typeof tr !== 'object') return null;
+  const vale = valoreInParole('conversation.permissions', tr.vale ?? 'onRequest');
+  return t(tr.motivo === 'cartella-non-fidata' ? 'appSettings.note.heldNotTrusted' : 'appSettings.note.heldWaiting', { modo: vale });
+}
+
 export function creaNotaImpostazioniDellaPersona(doc, { cambi } = {}, { onAnnulla = null } = {}) {
-  const righe = cambiDi(cambi).map((c) => {
+  const righe = cambiDi(cambi).flatMap((c) => {
     const nome = nomeImpostazione(c.chiave);
     const ambito = parolaAmbito(c.ambito);
-    return nome ? `${nome}: ${valoreInParole(c.chiave, c.prima)} → ${valoreInParole(c.chiave, c.dopo)}${ambito ? ` · ${ambito}` : ''}` : null;
+    const trattenuto = rigaDelTrattenuto(c);
+    return nome ? [`${nome}: ${valoreInParole(c.chiave, c.prima)} → ${valoreInParole(c.chiave, c.dopo)}${ambito ? ` · ${ambito}` : ''}`, ...(trattenuto ? [trattenuto] : [])] : [];
   }).filter(Boolean);
   if (!righe.length) return null;
   const n = cambiDi(cambi).length;

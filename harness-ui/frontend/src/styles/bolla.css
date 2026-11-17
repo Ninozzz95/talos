@@ -6,7 +6,11 @@
 @import './computer-use.css';
 
 :root{--card:var(--talos-panel);--primary:var(--talos-accent);--accent:var(--talos-accent);--foreground:var(--talos-text);--border:var(--talos-border);--muted-foreground:var(--talos-muted);--primary-foreground:var(--talos-background);--destructive:var(--talos-danger);--ring:var(--talos-accent);--background:var(--talos-background);--talos-ui-scale:1;--text-2xs:.6875rem;--text-xs:.75rem;--text-sm:.875rem;--text-md:.9375rem;--text-base:1rem;--talos-touch-target:2.5rem}
-html,body{margin:0;background: transparent}
+/* giro 6: `styles.css` mette html e body alti quanto la finestra (100%): qui alti quanto la bolla, così la misura del contenuto che legge il guscio è la bolla */
+html,body{margin:0;background: transparent;height:auto}
+/* giro 6, la larghezza: Chromium dà al guscio larghezza 0 finché la radice è larga quanto la finestra, e la larghezza vera del contenuto solo se la radice si
+   stringe al contenuto (misurato il 15/11 in Electron 44.3.0: 464 la pillola, 584 con la carta). Con 0 il guscio teneva 480 e la carta da 584 restava tagliata. */
+html{width:max-content}
 :where(.cu-bolla) :where(button){background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer}
 :where(.cu-bolla) :where(p,h2,dl,dd,ul){margin:0}
 .cu-bolla__carta{width:100%;max-width:440px}
@@ -25,6 +29,21 @@ html,body{margin:0;background: transparent}
 /* il trascinamento: la bolla si prende dal suo fondo, i controlli restano cliccabili */
 .pillola{-webkit-app-region:drag}
 .pillola :where(button,textarea){-webkit-app-region:no-drag}
+/*
+ * Giro 6 della bolla (owner 14/11 15:46; ROSSO della prova dal vivo, punto 3): la finestra restava 480×64 DIP con la carta di consenso nel DOM ma invisibile.
+ * Il guscio prende la misura dal contenuto (`enablePreferredSizeMode`, `desktop/bolla-finestra.mjs`), e la misura preferita di Chromium è quella del
+ * contenuto NEL FLUSSO: la scena del telefono qui sotto è `position: fixed; inset: 0`, cioè fuori dal flusso e alta quanto la finestra, e la carta aveva
+ * `max-height` in vh, cioè legata alla finestra stessa. Qui, solo nella pagina della bolla (più specifico della copia sotto): la scena nel flusso, larga quanto
+ * la pillola del bozzetto (440) o la carta (560) più i 12 px per lato, alta quanto serve fino al tetto dello schermo (`--bolla-tetto`, lo scrive `bolla.js`
+ * dalla misura dello schermo: mai oltre il bordo); la carta si stringe e scorre dentro, la pillola resta sempre intera. 12 px trasparenti sopra, come ai lati:
+ * il rimbalzo d'entrata della pillola (`barra-entra`) sale oltre il suo posto e senza margine il bordo della finestra lo tagliava (misurato: 1 px sopra lo 0).
+ */
+.scena.cu-bolla{position:relative;inset:auto;box-sizing:border-box;width:464px;max-height:var(--bolla-tetto,640px);padding-top:12px}
+.scena.cu-bolla:has(>.cu-bolla__carta:not(:empty)){width:584px}
+.cu-bolla>.cu-bolla__carta:not(:empty){display:flex;flex-direction:column;flex:0 1 auto;min-height:0;max-width:560px}
+.cu-bolla>.cu-bolla__carta>:is(.carta,.cs){flex:0 1 auto;min-height:0;max-height:none}
+.cu-bolla>.cu-bolla__carta>.cs{overflow-y:auto}
+.cu-bolla>.pillola{flex:none}
 
 /* TalosBarraRoot.vue, copiato */
 

@@ -425,8 +425,8 @@ test('CTX-REG-POLICY — la sessione espone la stessa soglia verificata usata da
   const { sessionId } = registro.avvia('task-vero');
   assert.equal(finta.ultimoInput.finestraToken, 1_000_000);
   assert.deepEqual(registro.politicaCompattazione(sessionId), {
-    windowTokens: 1_000_000, triggerTokens: 750_000, warningTokens: 600_000,
-    emergencyTokens: 900_000, source: 'route-minimum', modelId: 'z-ai/glm-5.3-flash', inProgress: false,
+    windowTokens: 1_000_000, triggerTokens: 200_000, warningTokens: 160_000, // owner 11/11 17:47: il tetto del motore anche qui
+    emergencyTokens: 240_000, source: 'explicit-cap', engineCeiling: true, modelId: 'z-ai/glm-5.3-flash', inProgress: false,
   });
   finta.concludi({ type: 'RunFinished' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: [] } });
 });

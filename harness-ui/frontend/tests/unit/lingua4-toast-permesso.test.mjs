@@ -22,11 +22,11 @@ function estrai(nome) {
   return APP.slice(inizio, i + 1);
 }
 
-function banco() {
+function banco({ risposta } = {}) {
   const toast = [];
   const contesto = vm.createContext({
     state: { permissions: 'Workspace write' },
-    aggiornaPillolaPermessi() {}, sincronizzaImpostazioniSessione() {},
+    aggiornaPillolaPermessi() {}, sincronizzaImpostazioniSessione: () => risposta,
     toast: (titolo, corpo) => toast.push([titolo, corpo]),
     tr: (k) => k, etichettaPermesso,
   });
@@ -49,9 +49,19 @@ test('LINGUA4-01 il toast dice il nome del permesso nella lingua dell interfacci
   assert.equal(b.toast.at(-1)[1], etichettaPermesso('Workspace write'));
 });
 
-test('LINGUA4-02 un messaggio esplicito vince sul predefinito', () => {
+test('LINGUA4-02 un messaggio esplicito vince sul predefinito', async () => {
   impostaLingua('it');
   const b = banco();
   b.impostaPermesso('Full access', 'Radice impostata');
+  await new Promise((r) => { setTimeout(r, 0); }); // falla del 10/11: l'avviso dell'Accesso pieno arriva dopo il server
   assert.equal(b.toast.at(-1)[1], 'Radice impostata');
+});
+
+test('LINGUA4-03 (falla del 10/11) l\'Accesso pieno trattenuto dal server: l\'avviso dice il modo vero, non quello chiesto', async () => {
+  impostaLingua('en');
+  const b = banco({ risposta: Promise.resolve({ istantanea: { permessi: 'On request' } }) });
+  b.impostaPermesso('Full access');
+  assert.equal(b.toast.length, 0, 'nessun avviso prima della risposta');
+  await new Promise((r) => { setTimeout(r, 0); });
+  assert.equal(b.toast.at(-1)[1], etichettaPermesso('On request'));
 });

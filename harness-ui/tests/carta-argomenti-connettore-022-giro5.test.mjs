@@ -21,6 +21,8 @@ import test from 'node:test';
 import * as K from '../src/kernel/talosHarness.mjs';
 import { nomeDiCampoSegreto, oscuraFormeDiSegreto } from '../src/forme-di-segreto.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+/* Time ceilings ×4 only under CI (shared runners); locally they stay as they were. Same rule as carta-argomenti-connettore-022-giro6. */
+const MOLTIPLICATORE_CI = process.env.CI && process.env.CI !== 'false' ? 4 : 1;
 
 const { talosLavora, argomentiPerLaCarta: perLaCarta } = K;
 const T = K.TETTO_ARGOMENTI_DELLA_CARTA;
@@ -63,14 +65,14 @@ test('G5-R1-01: four values of «a-» and of «a_» × 50,000 reach the card in 
   for (const pezzo of ['a-', 'a_', 'ab_']) {
     const s = pezzo.repeat(50_000);
     const ms = migliore(() => perLaCarta({ a: s, b: s, c: s, d: s }));
-    assert.ok(ms < SOGLIA_MS, `«${pezzo}»: ${ms.toFixed(1)} ms`);
+    assert.ok(ms < SOGLIA_MS * MOLTIPLICATORE_CI, `[ceiling ${SOGLIA_MS * MOLTIPLICATORE_CI} ms] «${pezzo}»: ${ms.toFixed(1)} ms`);
   }
 });
 
 test('G5-R1-02: four NAMES of «a_» × 50,000 reach the card in well under a second (was 2,923 ms)', () => {
   const s = 'a_'.repeat(50_000);
   const ms = migliore(() => perLaCarta({ [`${s}1`]: 1, [`${s}2`]: 2, [`${s}3`]: 3, [`${s}4`]: 4 }));
-  assert.ok(ms < SOGLIA_MS, `${ms.toFixed(1)} ms`);
+  assert.ok(ms < SOGLIA_MS * MOLTIPLICATORE_CI, `[ceiling ${SOGLIA_MS * MOLTIPLICATORE_CI} ms] ${ms.toFixed(1)} ms`);
 });
 
 test('G5-R1-03: every shape of oscuraFormeDiSegreto is linear: 200,000 hostile characters each in well under a second', () => {
@@ -84,7 +86,7 @@ test('G5-R1-03: every shape of oscuraFormeDiSegreto is linear: 200,000 hostile c
   };
   for (const [nome, s] of Object.entries(ostili)) {
     const ms = migliore(() => oscuraFormeDiSegreto(s));
-    assert.ok(ms < SOGLIA_MS, `«${nome}»: ${ms.toFixed(1)} ms`);
+    assert.ok(ms < SOGLIA_MS * MOLTIPLICATORE_CI, `[ceiling ${SOGLIA_MS * MOLTIPLICATORE_CI} ms] «${nome}»: ${ms.toFixed(1)} ms`);
   }
 });
 

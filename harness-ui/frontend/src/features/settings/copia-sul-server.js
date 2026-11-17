@@ -27,11 +27,36 @@ const ROTTA_COPIA = '/api/v1/app-settings/window';
  *   leggiAspetto: () => Record<string, unknown>,       // l'aspetto normalizzato com'è adesso (`leggiImpostazioniDesktop().appearance`)
  *   applicaPatch: (patch: Record<string, unknown>) => void, // `aggiornaAspettoDesktop`, con la densità come la fa il pannello
  *   finestra?: any, memoria?: Storage|null, attesaInvioMs?: number,
+ *   quandoCambianoINonConfermati?: (() => void)|null,  // giro 6: chi disegna il segno «non ancora confermata» si ridisegna
  * }} p
  */
-export function creaCopiaSulServer({ apiGet, apiPost, leggiAspetto, applicaPatch, finestra = globalThis.window, memoria = globalThis.localStorage ?? null, attesaInvioMs = 300 }) {
+export function creaCopiaSulServer({ apiGet, apiPost, leggiAspetto, applicaPatch, finestra = globalThis.window, memoria = globalThis.localStorage ?? null, attesaInvioMs = 300, quandoCambianoINonConfermati = null }) {
   let applicando = false;
   let invioProgrammato = null;
+  /*
+   * 0.2.2-DL, giro 6 (owner 10/11/2026 22:51; controllore del giro 5, R-A) — I CAMPI NON ANCORA CONFERMATI. Finché una migrazione del
+   *   server aspetta (le ricevute non si leggono), la copia letta dalla finestra non porta quel campo (giro 5): la finestra mostra il suo
+   *   valore e il modello ne legge un altro, e nessuno lo diceva. Il server ora li dà a parte, in `nonConfermati` (`{ campo: valore che
+   *   legge il modello }`, nella risposta al GET e a ogni invio; d'accordo ⇒ il campo non c'è). La finestra li TIENE soltanto, non li
+   *   applica (applicarli scriverebbe in locale un valore che nessuno ha scelto): `inDisaccordo()` dice quali mostra diversi, e lì le
+   *   Impostazioni mettono un segno accanto all'interruttore. Un evento del server su quel campo vuol dire che qualcuno ha deciso: la
+   *   finestra lo DIMENTICA (se lo tenesse, il tocco dopo farebbe tornare il segno per un attimo). Una risposta partita prima di
+   *   quell'evento e arrivata dopo non lo rimette (`inVolo`).
+   */
+  let nonConfermati = {};
+  const inVolo = new Set(); // per ogni invio in volo: i campi che un evento ha deciso nel frattempo
+  function tieniNonConfermati(dati, tranne = null) {
+    const nuovi = {};
+    if (dati && typeof dati === 'object' && !Array.isArray(dati)) for (const [campo, valore] of Object.entries(dati)) if (!tranne?.has(campo)) nuovi[campo] = valore;
+    const campi = Object.keys(nuovi);
+    if (campi.length === Object.keys(nonConfermati).length && campi.every((c) => Object.hasOwn(nonConfermati, c) && nonConfermati[c] === nuovi[c])) return;
+    nonConfermati = nuovi;
+    try { quandoCambianoINonConfermati?.(); } catch { /* chi disegna non ferma il canale */ }
+  }
+  function decisiDalServer(campi) {
+    for (const decisi of inVolo) for (const c of campi) decisi.add(c);
+    if (campi.some((c) => Object.hasOwn(nonConfermati, c))) tieniNonConfermati(nonConfermati, new Set(campi));
+  }
   const revisioneVista = () => { try { return Number(memoria?.getItem(CHIAVE_REVISIONE_VISTA)) || 0; } catch { return 0; } };
   const segnaRevisione = (r) => { if (!Number.isSafeInteger(r)) return; try { memoria?.setItem(CHIAVE_REVISIONE_VISTA, String(r)); } catch { /* memoria piena o negata: si rimanda alla prossima volta */ } };
   const daMandare = () => { try { return memoria?.getItem(CHIAVE_DA_MANDARE) === '1'; } catch { return false; } };
@@ -73,13 +98,44 @@ export function creaCopiaSulServer({ apiGet, apiPost, leggiAspetto, applicaPatch
      se i valori che il server tiene sono cambiati davvero dall'ultima volta che finestra e server erano allineati. */
   let ultimiAllineati = null;
   const impronta = () => JSON.stringify(valoriDellaFinestra());
+  /*
+   * giro 6 — ciò che un evento del server ha fatto applicare È ciò che il server tiene: l'ultimo allineamento lo segue, campo per campo
+   *   (l'ordine delle chiavi resta, il confronto è sul testo). Senza, il tocco che RIPORTA la voce al valore di prima dell'evento non
+   *   partiva («niente è cambiato dall'ultimo invio»): il modello la spegneva, la persona la riaccendeva, e il modello la leggeva ancora
+   *   spenta, anche ai riavvii. Valeva per ogni voce cambiata dal modello a finestra aperta; qui è il tocco che disfa una conferma.
+   */
+  function allineaAiDecisi(applicati) {
+    if (ultimiAllineati === null) return;
+    try {
+      const tenuti = JSON.parse(ultimiAllineati);
+      for (const [campo, valore] of Object.entries(applicati)) if (Object.hasOwn(tenuti, campo)) tenuti[campo] = valore;
+      ultimiAllineati = JSON.stringify(tenuti);
+    } catch { /* un'impronta che non si rilegge: resta com'era, e il prossimo cambio parte comunque */ }
+  }
+  function programma(attesa = attesaInvioMs) {
+    segnaDaMandare(true);
+    if (invioProgrammato) clearTimeout(invioProgrammato);
+    invioProgrammato = setTimeout(() => { invioProgrammato = null; manda().catch(() => {}); }, attesa);
+  }
   async function manda() {
     chiediAlGuscioSeSiPuo();
     const inviati = impronta();
-    const risposta = await apiPost(ROTTA_COPIA, { valori: JSON.parse(inviati) });
+    const decisiNelFrattempo = new Set();
+    inVolo.add(decisiNelFrattempo);
+    let risposta;
+    try { risposta = await apiPost(ROTTA_COPIA, { valori: JSON.parse(inviati) }); } finally { inVolo.delete(decisiNelFrattempo); }
     segnaRevisione(risposta?.revisione);
-    segnaDaMandare(false);
     ultimiAllineati = inviati;
+    tieniNonConfermati(risposta?.nonConfermati, decisiNelFrattempo);
+    /*
+     * giro 6 (controllore del giro 5, R-B / M7) — L'INVIO IN VOLO. Mentre questo invio viaggiava un evento del server può aver cambiato
+     *   la finestra (una scelta del modello tenuta dalla migrazione, un suo `set`): il server ha preso DOPO i valori vecchi che l'invio
+     *   portava, e la finestra mostrava spenta mentre il modello leggeva accesa, anche ai riavvii. Se ciò che la finestra mostra non è
+     *   più ciò che ha mandato, rimanda subito (un invio già programmato dalla persona basta). Il segno «da mandare» resta acceso fino
+     *   ad allora: se la finestra si chiude prima, lo fa il prossimo avvio. Hermes rilegge per lo stesso motivo: «A save may have landed
+     *   while the previous snapshot was in flight» (`apps/desktop/src/app/gateway/hooks/use-connections-registry.ts:49`).
+     */
+    if (impronta() !== inviati) { if (!invioProgrammato) programma(0); } else if (!invioProgrammato) segnaDaMandare(false);
     return risposta;
   }
 
@@ -117,6 +173,7 @@ export function creaCopiaSulServer({ apiGet, apiPost, leggiAspetto, applicaPatch
       ultimiAllineati = impronta();
       try {
         const copia = await apiGet(ROTTA_COPIA);
+        tieniNonConfermati(copia?.nonConfermati); // giro 6: solo tenuti, mai applicati
         const revisione = Number(copia?.revisione) || 0;
         if (revisione > revisioneVista() && copia?.valori && typeof copia.valori === 'object') {
           const attuale = valoriDellaFinestra();
@@ -142,16 +199,28 @@ export function creaCopiaSulServer({ apiGet, apiPost, leggiAspetto, applicaPatch
     dopoCambioDellaPersona() {
       if (applicando) return;
       if (!aggiornamentiDaParte && ultimiAllineati !== null && impronta() === ultimiAllineati) return;
-      segnaDaMandare(true);
-      if (invioProgrammato) clearTimeout(invioProgrammato);
-      invioProgrammato = setTimeout(() => { invioProgrammato = null; manda().catch(() => {}); }, attesaInvioMs);
+      programma();
+    },
+    /**
+     * giro 6: i campi che la finestra mostra DIVERSI da ciò che il modello legge, finché il server non li ha confermati (`[]` quando sono
+     * d'accordo, cioè quasi sempre). Si legge l'aspetto di adesso: il tocco della persona lo svuota subito, prima ancora dell'invio.
+     */
+    inDisaccordo() {
+      const campi = Object.keys(nonConfermati);
+      if (!campi.length) return [];
+      const aspetto = leggiAspetto() ?? {};
+      return campi.filter((c) => Object.hasOwn(aspetto, c) && aspetto[c] !== nonConfermati[c]);
     },
     /** Un evento del flusso del PC: solo `talos.impostazioni-finestra` per le finestre del PC; applica e risponde. */
     async suEvento(evento) {
       if (evento?.type !== EVENTO_IMPOSTAZIONI_FINESTRA || evento.destinatario !== DESTINATARIO_FINESTRE_PC || typeof evento.richiestaId !== 'string') return null;
       if (Object.hasOwn(evento.valori ?? {}, CAMPO_AGGIORNAMENTI)) aggiornamentiDaParte = null; // REV8-05: vale il cambio più nuovo
       const { applicati, nonApplicati } = applica(evento.valori);
-      segnaRevisione(evento.revisione);
+      decisiDalServer(Object.keys(evento.valori ?? {})); // giro 6: su quei campi qualcuno ha deciso, il segno se ne va senza ricaricare
+      /* giro 6 (R-B): un evento più VECCHIO dell'ultima revisione vista è arrivato dopo la risposta a un invio che il server ha preso
+         dopo di lui. La revisione vista non torna indietro (al riavvio la copia del server coprirebbe ciò che la finestra ha appena
+         applicato), e la finestra rimanda ciò che mostra: le due porte tornano pari. */
+      if (Number.isSafeInteger(evento.revisione) && evento.revisione < revisioneVista()) { if (!invioProgrammato) programma(0); } else { segnaRevisione(evento.revisione); allineaAiDecisi(applicati); }
       try { await apiPost(`${ROTTA_COPIA}/applied`, { richiestaId: evento.richiestaId, applicati, ...(Object.keys(nonApplicati).length ? { nonApplicati } : {}) }); } catch { /* il server lo dirà come «nessuna finestra ha confermato» */ }
       return { applicati, nonApplicati };
     },

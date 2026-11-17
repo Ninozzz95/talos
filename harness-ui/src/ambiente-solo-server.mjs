@@ -87,6 +87,9 @@ export const VARIABILI_SOLO_DEL_SERVER = Object.freeze([
   'TALOS_HARNESS_UI_DEFAULT_PROJECT',
   /* «Gettone sempre» (02/11/2026): dice al SUO server di leggere il gettone dallo stdin. Ereditato, un TALOS lanciato da un comando resterebbe ad aspettare uno stdin che non arriva. */
   'TALOS_HARNESS_UI_SEGRETI_DA',
+  /* Giudice v1790 (13/11/2026): il guscio dice al SUO server che il segno di TALOS si vede (`desktop/runtime.mjs`). Ereditato, la CLI o un TALOS lanciato
+     dal terminale dell'app spegnerebbe il cursore dell'aiutante senza nessun cursore di TALOS sullo schermo. Si toglie. */
+  'TALOS_SEGNO_ACCESO',
 ]);
 
 /*

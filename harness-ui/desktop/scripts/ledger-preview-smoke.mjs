@@ -20,7 +20,8 @@ const result = { source: process.env.TALOS_BUILD_SOURCE_COMMIT, mockedApis: fals
 const check = (name, value) => { result.checks.push({ name, passed: Boolean(value) }); assert.ok(value, name); };
 const envFor = name => {
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(TALOS_|OPENROUTER_|OPENAI_|ANTHROPIC_|GOOGLE_API_KEY|NODE_OPTIONS|NODE_PATH|ELECTRON_RUN_AS_NODE)/i.test(k)));
-  return { ...env, TALOS_DESKTOP_DATA_DIR: join(dataRoot, name), TALOS_INTRO: '1' };
+  // Last piece of round 4 (owner 11/11 09:41, «segno obbligatorio nelle prove»): a test launch always carries the explicit mark.
+  return { ...env, TALOS_DESKTOP_DATA_DIR: join(dataRoot, name), TALOS_INTRO: '1', TALOS_PROVA_ISOLATA: '1' };
 };
 let preview, stable, page, previewPid, stablePid;
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -93,7 +94,10 @@ try {
   await page.keyboard.type('exit'); await page.keyboard.press('Enter');
   await until(() => controls.some(c => c.evento === 'uscita'));
   // A second normal source shell runs at the same time in its own temporary profile.
-  stable = await _electron.launch({ executablePath: require('electron'), args: [desktop], env: envFor('stable'), timeout: 60000 });
+  /* 11/11/2026 (shell keyring cure, round 3, judge v1401 K7): this source shell gets the `desktop` keyring scope, so without the
+     in-memory keyring its server copied the legacy keys out of the REAL keyring of whoever ran it. The stable shell takes no part in
+     the keyring checks below (those run in the PREVIEW's main process, on purpose against the real native keyring, as does :32). */
+  stable = await _electron.launch({ executablePath: require('electron'), args: [desktop], env: { ...envFor('stable'), TALOS_HARNESS_UI_KEYRING: 'memoria' }, timeout: 60000 });
   const stablePage = await stable.firstWindow({ timeout: 60000 });
   await stablePage.waitForURL(url => url.hostname === '127.0.0.1' && url.pathname === '/' && !url.search, { timeout: 45000 });
   await stablePage.locator('#talosAvvio').waitFor({ state: 'hidden', timeout: 30000 });

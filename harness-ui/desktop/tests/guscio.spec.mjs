@@ -6,7 +6,7 @@ import { once } from 'node:events';
 import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { cpus, totalmem, release, version } from 'node:os';
 import { join } from 'node:path';
-import { root, attendi, preparaRuntime } from './support.mjs';
+import { root, attendi, preparaRuntime, osservaTerminali, righeDelTerminale, controllaPaginaServita, lineeDelGancio, nessunPortachiaviVero, figlioColGancio } from './support.mjs';
 
 const require = createRequire(import.meta.url);
 const { _electron, request } = require('../../frontend/node_modules/playwright');
@@ -20,6 +20,7 @@ async function finche(fn, timeout = 15000) {
 
 test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, seconda istanza e chiusura', { timeout: 120000 }, async t => {
   const prova = preparaRuntime('guscio');
+  const primaDelLancio = lineeDelGancio(); // round 3 (K1): the hook trace is read from here on, after the launches below
   const misure = { data: new Date().toISOString(), macchina: { sistema: version(), release: release(), arch: process.arch, cpu: cpus()[0].model.trim(), processoriLogici: cpus().length, ramByte: totalmem() }, launchPrimaFinestraMs: null, launchPaginaProntaMs: null, riposoMs: 3000, completato: false };
   let electronApp; let pidFiglio;
   const errori = [];
@@ -28,10 +29,18 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
     electronApp = await _electron.launch({ executablePath, args: [root], env: prova.env, timeout: 20000 });
     electronApp.process().stderr.on('data', d => errori.push(String(d).replace(/([?&]token=)[^\s&'"<>]+/g, '$1[omesso]')));
     t.after(async () => { try { await electronApp.close(); } catch {} });
+    /* 11/11/2026 (judge v1364 B2): the live positive check. The shell hands its child its own environment (`main.mjs:263`), so
+       the shell's main process must hold the in-memory test keyring, or the child server opens the owner's real one. */
+    assert.equal(await electronApp.evaluate(() => process.env.TALOS_HARNESS_UI_KEYRING), 'memoria', 'the shell under test must carry the in-memory test keyring');
+    // 11/11/2026 (round 3, K1): the shell's main process loaded the keyring hook too (NODE_OPTIONS from tests/support.mjs).
+    assert.equal(await electronApp.evaluate(() => Boolean(globalThis[Symbol.for('talos.prova.gancioPortachiavi')])), true, 'the shell under test must carry the keyring hook');
     await finche(async () => {
       pidFiglio = await electronApp.evaluate(() => process._getActiveHandles().find(h => h.constructor.name === 'ChildProcess')?.pid);
       return pidFiglio;
     });
+    // round 3 (K1): the server child of the shell wrote that it loaded the hook; nothing reached for the real keyring so far.
+    await finche(() => figlioColGancio(pidFiglio, primaDelLancio), 10000).catch(() => { throw new Error('the server child of the shell does not carry the keyring hook'); });
+    nessunPortachiaviVero(primaDelLancio);
     const pagina = await electronApp.firstWindow({ timeout: 25000 });
     misure.launchPrimaFinestraMs = performance.now() - inizio;
     const erroriPagina = [];
@@ -39,6 +48,11 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
     await pagina.waitForURL(url => url.hostname === '127.0.0.1' && url.pathname === '/' && !url.search, { timeout: 20000 });
     await pagina.locator('body').waitFor({ state: 'visible' });
     misure.launchPaginaProntaMs = performance.now() - inizio;
+    /* 11/11/2026 (judge v1381 B9): a narrow trip wire. A copy that was never built serves the TRACKED page (`harness-ui/public`,
+       frozen on 14/10), which invents the terminal id and gets a silent 403 two minutes later («La shell non ha disegnato il primo
+       prompt»). Here the scripts the window really received are read once and the test stops at once, saying what to do. */
+    controllaPaginaServita(await pagina.evaluate(() => Promise.all([...document.scripts].filter(s => s.src)
+      .map(async s => ({ src: s.src, testo: await (await fetch(s.src)).text() })))));
     // 27/09: il tema di serie è Forge dal 24/09 (owner: «tema default forge»), lo stesso di frontend/src/avvio.js:59.
     assert.equal(await pagina.evaluate(() => document.documentElement.dataset.talosTheme), 'forge');
     const base = new URL(pagina.url()).origin;
@@ -124,19 +138,49 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
     const testata = pagina.locator('#testataGruppoLavoro').first();
     if (await testata.getAttribute('aria-expanded') === 'false') await testata.click();
     await pagina.locator('.talos-sidebar [data-vaia="chat"]').first().click();
+    assert.equal(await osservaTerminali(pagina), true, 'xterm caricato prima di aprire il Terminale');
     await pagina.locator('[data-mode="terminal"]').first().click();
     const tastiera = pagina.locator('.xterm-helper-textarea').first();
     await tastiera.waitFor({ state: 'attached' });
-    await tastiera.focus(); await pagina.keyboard.type('echo TALOS-R01'); await pagina.keyboard.press('Enter');
-    await finche(() => /(^|\n)TALOS-R01\r?\n/.test(uscitaPty.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')));
+    /* 09/11/2026, R01-GUSCIO rosso su main (corsa 42660197808, qui alla riga dell'attesa: «Condizione non raggiunta entro 15000 ms»,
+       e la foto al guasto mostrava già `TALOS-R01`). Due difetti dell'attesa, misurati nel worktree con la PTY vera:
+       1) contava i 15 s da quando si scrive, ma Git Bash `--login` sotto carico disegna il primo prompt dopo più di 15 s (al guasto:
+          flusso fermo al primo fotogramma vuoto della ConPTY, nessuna riga mostrata). Si aspetta l'evento giusto, il PRIMO PROMPT
+          sullo schermo (una riga non vuota), e solo allora si scrive; la misura va in `misure.primoPromptMs`.
+       2) cercava la riga nei byte della PTY togliendo solo le CSI, mentre la ConPTY mette il cambio di titolo (OSC 0) all'inizio di
+          un suo fotogramma, anche davanti alla riga d'uscita. Si legge ciò che il terminale MOSTRA (`support.mjs`). Il comando cambia
+          il titolo come fa il prompt di Git Bash, dopo mezzo secondo, così l'OSC cade davanti alla riga d'uscita a ogni corsa
+          (misurato: `\r\n ESC[?2004l ESC]0;R01 BEL TALOS-R01\r\n`) e la lettura dei byte resterebbe rossa sempre. */
+    /*CURA-R01-INIZIO*/
+    const promptDa = performance.now();
+    await finche(async () => (await righeDelTerminale(pagina)).some(riga => riga.trim()), 60000)
+      // giro 2 (revisione 021-A, reperto H): al guasto anche i controlli del terminale (uscita, errori), come le due attese sotto
+      .catch(errore => { throw new Error(`${errore.message} La shell non ha disegnato il primo prompt. Controlli: ${JSON.stringify(controlli)} Coda del flusso PTY: ${JSON.stringify(uscitaPty.slice(-1200))}`); });
+    misure.primoPromptMs = Math.round(performance.now() - promptDa);
+    await tastiera.focus(); await pagina.keyboard.type(String.raw`sleep 0.5; printf '\e]0;R01\a'; echo TALOS-R01`); await pagina.keyboard.press('Enter');
+    await finche(async () => (await righeDelTerminale(pagina)).some(riga => riga.trim() === 'TALOS-R01')).catch(async errore => {
+      const mostrate = (await righeDelTerminale(pagina).catch(() => [])).filter(riga => riga.trim()).slice(-8);
+      throw new Error(`${errore.message} Righe mostrate: ${JSON.stringify(mostrate)} Coda del flusso PTY: ${JSON.stringify(uscitaPty.slice(-1200))}`);
+    });
+    /*CURA-R01-FINE*/
     await pagina.reload();
     assert.equal(await pagina.evaluate(async () => (await fetch('/api/v1/health')).status), 200);
     // BOOT-03 starts on Home: reach the real conversation before its mode switch.
     await pagina.locator('.talos-sidebar [data-vaia="chat"]').first().click();
+    /* 09/11/2026, gemella della cura sopra: qui `exit` partiva subito dopo il clic, prima che la shell riagganciata fosse sullo
+       schermo. Rossa 2 volte nel worktree (1 su 10 senza carico, 1 su 5 sotto carico) senza diagnosi; 20 corse strumentate senza
+       carico non l'hanno rifatta, quindi la causa NON è misurata. Stesso schema del difetto 1: si aspetta lo schermo della shell
+       (il server rigioca il suo arretrato all'aggancio) e solo allora si scrive; al guasto il messaggio porta righe, flusso e controlli. */
+    assert.equal(await osservaTerminali(pagina), true, 'xterm caricato prima di riaprire il Terminale');
     await pagina.locator('[data-mode="terminal"]').first().click();
+    await finche(async () => (await righeDelTerminale(pagina)).some(riga => riga.trim()), 60000)
+      .catch(errore => { throw new Error(`${errore.message} La shell riagganciata non è comparsa. Controlli: ${JSON.stringify(controlli)}`); });
     await pagina.locator('.xterm-helper-textarea').first().focus();
     await pagina.keyboard.type('exit'); await pagina.keyboard.press('Enter');
-    await finche(() => controlli.some(c => c.evento === 'uscita' && c.codice === 0));
+    await finche(() => controlli.some(c => c.evento === 'uscita' && c.codice === 0)).catch(async errore => {
+      const mostrate = (await righeDelTerminale(pagina).catch(() => [])).filter(riga => riga.trim()).slice(-8);
+      throw new Error(`${errore.message} Righe mostrate: ${JSON.stringify(mostrate)} Controlli: ${JSON.stringify(controlli)} Coda del flusso PTY: ${JSON.stringify(uscitaPty.slice(-1200))}`);
+    });
     await pagina.emulateMedia({ reducedMotion: 'reduce' });
     for (const [modo, nome] of [['light', 'chiaro'], ['dark', 'scuro']]) {
       await pagina.evaluate(modo => {
@@ -171,6 +215,7 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
     const [codice] = await once(seconda, 'exit');
     misure.secondaIstanzaMs = performance.now() - secondoInizio;
     assert.equal(codice, 0);
+    nessunPortachiaviVero(primaDelLancio); // round 3 (K1): the second instance too
     await finche(() => electronApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible() && BrowserWindow.getAllWindows()[0].isFocused()));
     assert.equal(await electronApp.evaluate(() => process._getActiveHandles().filter(h => h.constructor.name === 'ChildProcess').length), 1);
     assert.equal(await electronApp.evaluate(({ Menu }) => { const voce = Menu.getApplicationMenu().getMenuItemById('resta-vassoio'); voce.click(); return voce.checked; }), false);
@@ -179,6 +224,7 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
     await chiusa;
     assert.throws(() => process.kill(pidFiglio, 0), { code: 'ESRCH' });
     assert.deepEqual(erroriPagina, []);
+    nessunPortachiaviVero(primaDelLancio);
     misure.completato = true;
   } catch (errore) {
     misure.errore = errore.message.replace(/([?&]token=)[^\s&'"<>]+/g, '$1[omesso]');
@@ -198,6 +244,7 @@ test('R01-GUSCIO — finestra reale, cookie, Terminale, temi, riavvio, vassoio, 
 
 test('R01-ARRESO — sei avvii reali falliti, dialogo italiano, registro e Riprova', { timeout: 60000 }, async t => {
   const prova = preparaRuntime('guasto');
+  const primaDelLancio = lineeDelGancio(); // round 3 (K1): the hook trace is read from here on, after the launches below
   copyFileSync(join(root, 'tests', 'fixtures', 'figlio-guasto.mjs'), join(prova.runtime, 'server.mjs'));
   const electronApp = await _electron.launch({ executablePath, args: [join(root, 'tests', 'fixtures', 'avvio-guasto.mjs')], env: prova.env, timeout: 15000 });
   t.after(async () => { try { await electronApp.close(); } catch {} });
@@ -210,4 +257,5 @@ test('R01-ARRESO — sei avvii reali falliti, dialogo italiano, registro e Ripro
   copyFileSync(join(root, '..', 'server.mjs'), join(prova.runtime, 'server.mjs'));
   await electronApp.evaluate(() => globalThis.r01Rispondi(0));
   await finche(() => /Stato: pronto/.test(readFileSync(join(prova.dataDir, 'registro.log'), 'utf8')), 20000);
+  nessunPortachiaviVero(primaDelLancio); // round 3 (K1): no process of this test reached for the real keyring
 });

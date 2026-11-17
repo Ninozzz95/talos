@@ -11,9 +11,17 @@ const scrivi = messaggio => {
 const annota = dato => appendFileSync(diario, `${JSON.stringify(dato)}\n`);
 const aggiorna = update => scrivi({ method: 'session/update', params: { sessionId: 'prova', update } });
 let promptId;
-annota({ pid: process.pid, cwd: process.cwd(), ambiente: Object.keys(process.env),
+/* Round k3, 11/11/2026 (judge v1521-v1522): under the keyring hook of the tests (`desktop/tests/gancio-portachiavi.mjs`) every child
+   carries the hook's own walls: its `--import` in NODE_OPTIONS, its trace file, the test mark and the memory keychain. They belong to
+   the test runner, not to what the product hands the agent: the product's environment is the rest, and a NODE_OPTIONS of its own
+   (the parent's `--non-valido`) is still forbidden. Without the hook nothing is removed. */
+const DEL_GANCIO = /^(TALOS_PROVA_GANCIO_REGISTRO|TALOS_PROVA_ISOLATA|TALOS_HARNESS_UI_KEYRING)$/i;
+const gancio = Boolean(globalThis[Symbol.for('talos.prova.gancioPortachiavi')]);
+const opzioniProprie = String(process.env.NODE_OPTIONS ?? '').split(/\s+/).filter(o => o && !(gancio && /^--import=\S*\/desktop\/tests\/gancio-portachiavi\.mjs$/.test(o))).join(' ');
+annota({ pid: process.pid, cwd: process.cwd(),
+  ambiente: Object.keys(process.env).filter(k => !gancio || !(DEL_GANCIO.test(k) || (k.toUpperCase() === 'NODE_OPTIONS' && !opzioniProprie))),
   dichiarata: process.env.PL_CHIAVE_DICHIARATA === 'segreto-finto-pl',
-  vietata: Boolean(process.env.PL_CHIAVE_VIETATA || process.env.NODE_OPTIONS) });
+  vietata: Boolean(process.env.PL_CHIAVE_VIETATA || opzioniProprie) });
 process.stderr.write('stderr-finto-con-segreto-finto-pl\n');
 createInterface({ input: process.stdin }).on('line', linea => {
   const m = JSON.parse(linea);

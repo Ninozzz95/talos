@@ -117,7 +117,7 @@ import { ToolForgeStoreError } from '../src/tool-forge-store.mjs';
 import { attendiScritture, leggiRegistro as leggiRegistroGrezzo, registraIntestazioneSync, registraRiga, registraRigaConfermata, registraRigaSync } from '../src/session-store.mjs';
 import { conVistaDiPrima, vistaNelFormatoDiPrima } from './aiuto/vista-journal-formato-di-prima.mjs';
 import { applicaRecord as applicaRecordCompattazione } from '../src/kernel/compattazione-desktop.mjs';
-import { riassumiPerCompattazione as riassumiPerCompattazioneReale } from '../src/agent-service.mjs';
+import { riassumiPerCompattazione as riassumiPerCompattazioneReale, avviaSessione as avviaSessioneReale } from '../src/agent-service.mjs';
 
 /* 26/09: una compattazione manuale riuscita risponde anche con `at` (la chiave della riga, la stessa dell'evento durevole),
    `annullabile:false` e due stime intere; il resto della forma resta quello di prima. */
@@ -2043,8 +2043,8 @@ test('⭐⭐⭐ W1-13 — il cancello chiede approvazione ANCHE dove il kernel l
 
   const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
   assert.ok(richiesta, 'un file di controllo chiede SEMPRE, anche senza un canale ordinario');
-  assert.deepEqual(richiesta.azione, { tipo: 'scrivi', percorso: 'CLAUDE.md', fileDiControllo: true, [CARTA_SEMPRE]: true }); // giudice 07/11 23:12: carta della persona, un sì automatico non la apre
-  assert.equal(JSON.stringify(richiesta.azione), JSON.stringify({ tipo: 'scrivi', percorso: 'CLAUDE.md', fileDiControllo: true }), 'the symbol never reaches the wire');
+  assert.deepEqual(richiesta.azione, { tipo: 'scrivi', percorso: 'CLAUDE.md', fileDiControllo: true, sempreNonBasta: true, [CARTA_SEMPRE]: true }); // giudice 07/11 23:12: carta della persona, un sì automatico non la apre
+  assert.equal(JSON.stringify(richiesta.azione), JSON.stringify({ tipo: 'scrivi', percorso: 'CLAUDE.md', fileDiControllo: true, sempreNonBasta: true }), 'the symbol never reaches the wire');
 
   registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
   assert.deepEqual(await esitoPromessa, { consentito: true });
@@ -2100,7 +2100,7 @@ test("⛔⛔⛔ PO-12 — file_edit NON e' una porta di servizio: anche una MODI
   const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
   assert.ok(richiesta, "⛔ una MODIFICA di CLAUDE.md deve chiedere quanto una riscrittura: mezza regola riscritta e' una regola riscritta");
   // ⛔ la card nomina l'attrezzo VERO: chiedere «scrivi» per una modifica e' chiedere il consenso per un'altra cosa
-  assert.deepEqual(richiesta.azione, { tipo: 'file_edit', percorso: 'CLAUDE.md', fileDiControllo: true, [CARTA_SEMPRE]: true });
+  assert.deepEqual(richiesta.azione, { tipo: 'file_edit', percorso: 'CLAUDE.md', fileDiControllo: true, sempreNonBasta: true, [CARTA_SEMPRE]: true });
 
   registro.rispondiApprovazione(sessionId, richiesta.requestId, false);
   const esito = await esitoPromessa;
@@ -2143,6 +2143,903 @@ test('⭐⭐⭐ W1-13 — il cancello chiede ANCHE con permessiPerAttrezzo:{scri
   registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
   assert.deepEqual(await esitoPromessa, { consentito: true });
   finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⛔ Decisione 373 dell'owner (07/11/2026, «Prima del rilascio»): fuori dall'Accesso pieno un comando della shell che NOMINA uno dei due
+ *   file del controllo del computer (.computer-use-impostazione.json, .computer-use-luoghi.json) chiede la carta, come Hermes
+ *   (tools/approval_detection.py:24-25: lo stesso file di configurazione scritto dal terminale, «sed -i, tee, >, cp»). In Accesso pieno
+ *   resta libero (decisione 372, come la 155). Prima la scrittura per percorso aveva la carta e la shell no: la porta di servizio.
+ */
+const COMANDI_CHE_NOMINANO_IL_COMPUTER_USE = [
+  String.raw`Set-Content "$env:APPDATA\TALOS\.computer-use-impostazione.json" '{"acceso":true}'`,
+  'echo [] > .computer-use-luoghi.json',
+  String.raw`copy a.json "C:\Users\x\AppData\Roaming\TALOS\.Computer-Use-Luoghi.json"`,
+  'sed -i s/false/true/ .computer-use-impo"stazione".json',
+  "cp x ~/AppData/Roaming/TALOS/.computer-use-'luo'ghi.json",
+  'type nul > .COMPUTER-USE-IMPOSTAZIONE.JSON',
+];
+/* Giro 5 (ridirezione del giudice, 08/11 00:35): queste tre non sono nomi in chiaro (un escape \ a metà nome, due glob). Li prende la
+   374 con l'impronta prima e dopo il comando; qui non si fingono coperti. */
+const COMANDI_DELLA_374_DEL_PRIMO_GIRO = [
+  String.raw`cp x ~/AppData/Roaming/TALOS/.computer-use-impo\stazione.json`,
+  'rm .computer-use-*.json',
+  'del .computer-use-?uoghi.json',
+];
+const COMANDI_CHE_NON_LO_NOMINANO = ['npm test', 'cat docs/computer-use.md', 'git log --grep computer-use', 'grep -rn computer-use docs', 'node scripts/build.mjs'];
+
+test('373 — fuori dall Accesso pieno un comando che nomina un file del computer use chiede la carta; col no non parte', { timeout: 10_000 }, async () => {
+  for (const comando of COMANDI_CHE_NOMINANO_IL_COMPUTER_USE) {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+      caricaHooksFn: async () => ({ hooks: [] }),
+    });
+    const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' });
+    const ricevuti = [];
+    registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+    const esitoPromessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'shell', argomenti: { comando }, giro: 0 });
+    await new Promise((r) => setTimeout(r, 0));
+    const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+    assert.ok(richiesta, `${comando} chiede la carta`);
+    assert.deepEqual(richiesta.azione, { tipo: 'shell', comando, fileDiControllo: true, sempreNonBasta: true });
+    registro.rispondiApprovazione(sessionId, richiesta.requestId, false);
+    const esito = await esitoPromessa;
+    assert.equal(esito.consentito, false, comando);
+    assert.match(esito.motivo, /computer use/);
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  }
+});
+
+test('373 — col sì il comando passa; la chiave «command» conta come «comando»; senza ascoltatori si rifiuta dicendo perché', { timeout: 10_000 }, async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' });
+  const senzaNessuno = await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'shell', argomenti: { command: 'echo [] > .computer-use-luoghi.json' }, giro: 0 });
+  assert.equal(senzaNessuno.consentito, false);
+  assert.match(senzaNessuno.motivo, /no active approval channel/);
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  const esitoPromessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'shell', argomenti: { command: 'echo [] > .computer-use-luoghi.json' }, giro: 0 });
+  await new Promise((r) => setTimeout(r, 0));
+  const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+  assert.ok(richiesta);
+  registro.rispondiApprovazione(sessionId, richiesta.requestId, true);
+  assert.deepEqual(await esitoPromessa, { consentito: true });
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('373 — nessuna carta per i comandi che non nominano i due file, e nessuna in Accesso pieno (decisione 372)', { timeout: 10_000 }, async () => {
+  await ilCancelloEAcceso();
+  for (const [permessiScelto, comandi] of [['Workspace write', COMANDI_CHE_NON_LO_NOMINANO], ['Full access', COMANDI_CHE_NOMINANO_IL_COMPUTER_USE]]) {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+      caricaHooksFn: async () => ({ hooks: [] }),
+    });
+    const { sessionId } = registro.avvia('task-vero', { permessiScelto });
+    const ricevuti = [];
+    registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+    for (const comando of comandi) {
+      assert.deepEqual(await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'shell', argomenti: { comando }, giro: 0 }), { consentito: true }, `${permessiScelto}: ${comando}`);
+    }
+    assert.equal(ricevuti.find((e) => e.type === 'ApprovalRequested'), undefined, `${permessiScelto}: nessuna carta`);
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  }
+});
+
+/*
+ * ⛔ Decisione 373, revisione del giudice (07/11 19:41) e misura del Desktop (19:50):
+ *   - un «no» col suo motivo arriva come `{ approvato: false, motivo }`, un oggetto: per i due cancelli (la shell nuova e quello per
+ *     percorso, W1-13, che c'era già) contava come un SÌ, perché guardavano solo che la risposta fosse «vera». Il kernel approva
+ *     solo `true` (`esitoApprovazione`); qui si accetta `true` o un oggetto con `approvato: true` (il «solo questa volta»).
+ *   - regola 17, una carta per compito: in «On request» lo stesso comando mostrava DUE carte (misurate sul filo vero: quella del
+ *     cancello e quella ordinaria del kernel). Il sì della prima risponde alla seconda, solo se è la carta ORDINARIA dello stesso
+ *     comando (nessun altro segno); come `chiediConUnSiSolo` del kernel per la carta del testo.
+ */
+test('373 — un «no» col suo motivo resta un no, nel cancello della shell e in quello per percorso', { timeout: 10_000 }, async () => {
+  for (const [azione, argomenti] of [['shell', { comando: 'echo [] > .computer-use-luoghi.json' }], ['scrivi', { percorso: '.computer-use-impostazione.json' }], ['scrivi', { percorso: 'CLAUDE.md' }]]) {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+      caricaHooksFn: async () => ({ hooks: [] }),
+    });
+    const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' });
+    const ricevuti = [];
+    registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+    const esitoPromessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione, argomenti, giro: 0 });
+    await new Promise((r) => setTimeout(r, 0));
+    const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+    assert.ok(richiesta, `${azione} ${JSON.stringify(argomenti)} chiede la carta`);
+    registro.rispondiApprovazione(sessionId, richiesta.requestId, false, 'no, lascia stare');
+    const esito = await esitoPromessa;
+    assert.equal(esito.consentito, false, `${azione} ${JSON.stringify(argomenti)}: un no col motivo non apre`);
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  }
+});
+
+/* Giudice 07/11 19:56: la seconda strada. Un sì che non viene dalla persona (una regola, la modalità, il classificatore:
+   MOTIVI_DEL_SI_SENZA_PERSONA, la CLI li passa con automaticApproval) non apre la carta di un file di controllo: quei file SONO la
+   politica di sicurezza (Hermes, tools/approval_detection.py:24). Il sì della persona senza motivo resta un sì (prove sopra). */
+test('373 — una risposta automatica (regola, modalità, classificatore) non apre la carta di un file di controllo', { timeout: 10_000 }, async () => {
+  for (const motivo of ['regola', 'modalita', 'classificatore']) {
+    for (const [azione, argomenti] of [['shell', { comando: 'echo [] > .computer-use-luoghi.json' }], ['scrivi', { percorso: '.computer-use-impostazione.json' }], ['scrivi', { percorso: 'CLAUDE.md' }]]) {
+      const finta = sessioneControllabile();
+      const registro = createSessionRegistry({
+        avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+        caricaHooksFn: async () => ({ hooks: [] }),
+      });
+      const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' });
+      const ricevuti = [];
+      registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+      const esitoPromessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione, argomenti, giro: 0 });
+      await new Promise((r) => setTimeout(r, 0));
+      const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+      assert.ok(richiesta, `${azione} ${JSON.stringify(argomenti)} chiede la carta`);
+      registro.rispondiApprovazione(sessionId, richiesta.requestId, true, { motivo });
+      const esito = await esitoPromessa;
+      assert.equal(esito.consentito, false, `${azione} ${JSON.stringify(argomenti)}: un sì «${motivo}» non è della persona`);
+      finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+    }
+  }
+});
+
+/* Mutanti della cura 373 (07/11 sera): il ponte «una carta sola» (consumaSiDelCancelloShell) e i due «fallisce chiuso» del cancello.
+   Ogni passo qui sotto uccide un mutante che le prove sopra lasciavano vivo: la lista delle chiavi della carta ordinaria, il controllo
+   del toolCallId, lo STESSO comando, il sì consumato una volta, l azzeramento a ogni pre_tool_call. */
+test('373 — il sì del cancello risponde UNA volta alla sola carta ordinaria dello stesso comando', { timeout: 10_000 }, async () => {
+  const comando = 'echo [] > .computer-use-luoghi.json';
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  const carte = () => ricevuti.filter((e) => e.type === 'ApprovalRequested');
+  const siDelCancello = async () => {
+    const prima = carte().length;
+    const esito = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'shell', argomenti: { comando }, giro: 0 });
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(carte().length, prima + 1, 'la carta del cancello');
+    registro.rispondiApprovazione(sessionId, carte().at(-1).requestId, true);
+    assert.equal((await esito).consentito, true);
+  };
+  // true se la carta arriva alla persona (che dice no); false se il ponte risponde da solo
+  const arrivaAllaPersona = async (azione) => {
+    const prima = carte().length;
+    const risposta = finta.ultimoInput.chiediApprovazioneFn(azione);
+    await new Promise((r) => setTimeout(r, 0));
+    const nuova = carte().length > prima;
+    if (nuova) registro.rispondiApprovazione(sessionId, carte().at(-1).requestId, false);
+    const r = await risposta;
+    if (!nuova) assert.equal(r, true, 'senza carta il ponte dice sì');
+    return nuova;
+  };
+  await siDelCancello();
+  assert.equal(await arrivaAllaPersona({ tipo: 'shell', toolCallId: 'c1', comando, wslRoot: true }), true, 'una carta forzata arriva sempre alla persona');
+  assert.equal(await arrivaAllaPersona({ tipo: 'shell', comando }), true, 'senza toolCallId non è la carta ordinaria');
+  assert.equal(await arrivaAllaPersona({ tipo: 'shell', toolCallId: 'c1', comando: 'echo [] > .computer-use-luoghi.json && rm -rf x' }), true, 'un altro comando ha la sua carta');
+  assert.equal(await arrivaAllaPersona({ tipo: 'shell', toolCallId: 'c1', comando }), false, 'la carta ordinaria dello stesso comando non si ripete');
+  assert.equal(await arrivaAllaPersona({ tipo: 'shell', toolCallId: 'c2', comando }), true, 'il sì vale una volta sola');
+  await siDelCancello();
+  const altro = await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'shell', argomenti: { comando: 'ls' }, giro: 0 });
+  assert.equal(altro.consentito, true);
+  assert.equal(await arrivaAllaPersona({ tipo: 'shell', toolCallId: 'c3', comando }), true, 'una chiamata nuova azzera il sì');
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+test('373 — fallisce chiuso: un controllo che lancia chiede la carta, una carta che lancia è un no', { timeout: 10_000 }, async () => {
+  {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+      caricaHooksFn: async () => ({ hooks: [] }),
+    });
+    const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' });
+    const ricevuti = [];
+    registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+    const argomenti = { get comando() { throw new Error('argomenti rotti'); } };
+    const esitoPromessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'shell', argomenti, giro: 0 });
+    await new Promise((r) => setTimeout(r, 0));
+    const richiesta = ricevuti.find((e) => e.type === 'ApprovalRequested');
+    assert.ok(richiesta, 'un controllo che lancia chiede la carta');
+    registro.rispondiApprovazione(sessionId, richiesta.requestId, false);
+    assert.equal((await esitoPromessa).consentito, false);
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  }
+  {
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+      caricaHooksFn: async () => ({ hooks: [] }),
+    });
+    const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'Workspace write' });
+    registro.iscriviti(sessionId, (e) => { if (e.type === 'ApprovalRequested') throw new Error('schermata rotta'); });
+    const esito = await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'shell', argomenti: { comando: 'echo [] > .computer-use-luoghi.json' }, giro: 0 });
+    assert.equal(esito.consentito, false, 'una carta che lancia è un no');
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  }
+});
+
+test('373 — sul filo vero (registro, servizio, kernel) in «On request» un comando che nomina il computer use mostra UNA carta sola', { timeout: 30_000 }, async (t) => {
+  const enc = new TextEncoder();
+  const flusso = (f) => new Response(new ReadableStream({ start(c) { for (const x of f) c.enqueue(enc.encode(`data: ${JSON.stringify(x)}\n\n`)); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }));
+  async function carte(comando, risposta) {
+    const progetto = mkdtempSync(join(tmpdir(), 'talos-373-filo-'));
+    t.after(() => rimuoviCartellaDiProva(progetto));
+    let n = 0;
+    const fetchDiRete = async () => (n++ === 0
+      ? flusso([{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'shell', arguments: JSON.stringify({ comando }) } }] } }] }])
+      : flusso([{ choices: [{ delta: { content: 'fatto' } }] }]));
+    const registro = createSessionRegistry({
+      modello: 'm', chiave: 'k', guardaWorkspaceFn: () => () => {}, caricaHooksFn: async () => ({ hooks: [] }), cartellaEsisteFn: () => true,
+      preparaEsecuzioneFn: (taskId) => ({ cartella: progetto, comandoProva: 'npm test', task: { id: taskId, consegna: 'prova' } }),
+      avviaSessioneFn: (input) => avviaSessioneReale({ ...input, talosLavoraFn: (k) => talosLavoraReale({ ...k, fetchDiRete }) }),
+    });
+    const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+    const azioni = [];
+    const eventi = [];
+    t.after(registro.iscriviti(sessionId, (e) => {
+      eventi.push(e);
+      if (e.type === 'ApprovalRequested') { azioni.push(e.azione); setTimeout(() => registro.rispondiApprovazione(sessionId, e.requestId, risposta), 0); }
+    }));
+    const inizio = Date.now();
+    while (!eventi.some((e) => e.type === 'RunFinished' || e.type === 'RunError') && Date.now() - inizio < 20_000) await new Promise((r) => setTimeout(r, 20));
+    return { azioni, progetto, risultato: eventi.find((e) => e.type === 'ToolCallResult' && e.toolCallId === 'c1') };
+  }
+  /* Giro 2 (revisore «prove e mutanti», punto 5): il no si prova sul disco. Il comando SCRIVE il file nella cartella del progetto:
+     col sì il file c'è (il comando è partito), col no non c'è (il comando non è mai partito). */
+  const scrive = 'echo x> .computer-use-luoghi.json';
+  const nomina = await carte(scrive, true);
+  assert.equal(nomina.azioni.length, 1, `una carta, non due: ${JSON.stringify(nomina.azioni)}`);
+  assert.equal(nomina.azioni[0].fileDiControllo, true, 'ed è quella che dice perché');
+  assert.ok(nomina.risultato && !/REFUSED|not approve/i.test(nomina.risultato.content), `col sì il comando è partito: ${nomina.risultato?.content}`);
+  assert.ok(existsSync(join(nomina.progetto, '.computer-use-luoghi.json')), 'col sì il comando è partito davvero: il file è sul disco');
+  const negato = await carte(scrive, false);
+  assert.equal(negato.azioni.length, 1, 'col no nessuna seconda carta');
+  assert.match(negato.risultato?.content ?? '', /computer use settings file/, `col no il modello legge il perché: ${negato.risultato?.content}`);
+  assert.equal(existsSync(join(negato.progetto, '.computer-use-luoghi.json')), false, 'col no il comando non è mai partito: nessun file sul disco');
+  const qualunque = await carte('echo ciao', true);
+  assert.equal(qualunque.azioni.length, 1, 'un comando qualunque ha la sua carta ordinaria di «On request», come prima');
+  assert.equal(qualunque.azioni[0].fileDiControllo, undefined);
+});
+
+/*
+ * ⛔ Decisione 373, giro 2 (tre revisori avversari del 07/11 sera, tutti ROSSI). Un aiuto solo: un pre_tool_call nel cancello del
+ *   registro vero, la carta (o nessuna) e l'esito, con la risposta data alla carta se c'è.
+ */
+async function cancello373(argomenti, { permessiScelto = 'Workspace write', permessiPerAttrezzoScelto, azione = 'shell', risposta = false, opzioni } = {}) {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto, ...(permessiPerAttrezzoScelto ? { permessiPerAttrezzoScelto } : {}) });
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  const esitoPromessa = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione, argomenti: typeof argomenti === 'string' ? { comando: argomenti } : argomenti, giro: 0 });
+  await new Promise((r) => setTimeout(r, 0));
+  const carte = ricevuti.filter((e) => e.type === 'ApprovalRequested');
+  if (carte.length > 0) registro.rispondiApprovazione(sessionId, carte[0].requestId, risposta, opzioni);
+  const esito = await esitoPromessa;
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  return { carte: carte.map((e) => e.azione), esito, risolte: ricevuti.filter((e) => e.type === 'ApprovalResolved') };
+}
+
+/* Punto 1 (due revisori, MEDIO): la carta del cancello è disegnata dalla pagina come una carta ordinaria, con «Per questa sessione»,
+   che scrive shell: 'sempre'. Il cancello non legge il «sempre» e richiede lo stesso, mentre OGNI altro comando shell della sessione
+   passerebbe senza carta: una promessa falsa (F15) e un allargamento non chiesto. Il server lo dice con `sempreNonBasta`, come per
+   le figlie (C2-a): la pagina toglie il pulsante. Lo stesso per la carta per percorso (W1-13), che aveva lo stesso buco. */
+test('373 G2 — le carte dei file di controllo (shell e percorso) non offrono «Per questa sessione»: il «sempre» non le toglie', { timeout: 10_000 }, async () => {
+  const comando = 'echo [] > .computer-use-luoghi.json';
+  const shell = await cancello373(comando, { permessiScelto: 'On request' });
+  assert.deepEqual(shell.carte, [{ tipo: 'shell', comando, fileDiControllo: true, sempreNonBasta: true }]);
+  const conIlSempre = await cancello373(comando, { permessiScelto: 'On request', permessiPerAttrezzoScelto: { shell: 'sempre' } });
+  assert.equal(conIlSempre.carte.length, 1, 'con shell su «sempre» la carta del cancello c’è lo stesso: il pulsante prometterebbe il falso');
+  assert.equal(conIlSempre.carte[0].sempreNonBasta, true);
+  for (const azione of ['scrivi', 'file_edit']) {
+    const percorso = await cancello373({ percorso: '.computer-use-impostazione.json' }, { azione });
+    assert.deepEqual(percorso.carte, [{ tipo: azione, percorso: '.computer-use-impostazione.json', fileDiControllo: true, sempreNonBasta: true, [CARTA_SEMPRE]: true }]);
+    assert.equal(percorso.esito.consentito, false);
+  }
+});
+
+/* Punti 2 e 3 (revisore del cancello, due MEDI): un jolly UN carattere prima di «.computer-use», le graffe di bash, le virgolette
+   tipografiche di PowerShell e il $'..' di bash nominano il file sulla riga, e ognuno ha sovrascritto la copia finta del file
+   (spawn con shell:true, come il kernel). K8 del giro 1 (un glob a più caratteri) sta qui: `rm .computer-use-lu*.json`. */
+const COMANDI_G2_CHE_NOMINANO = [
+  'for %f in ("%APPDATA%\\TALOS\\.computer-us?-luoghi.json") do @echo {"acceso":true}> %f',
+  'for %f in ("%APPDATA%\\TALOS\\.comp*-impostazione.json") do @echo {"acceso":true}> %f',
+  'powershell -NoProfile -Command "Set-Content -Path $env:APPDATA\\TALOS\\.computer-us[e]-luoghi.json -Value x"',
+  'bash -c "echo {} | tee ~/AppData/Roaming/TALOS/.computer-use-{impostazione,luoghi}.json"',
+  'echo [] | tee .computer-use-luo{ghi,}.json',
+  'echo [] > .computer-use-{luoghi,x}.json',
+  'rm .comp*-luoghi.json',
+  'rm .computer-use-lu*.json',
+  'cp x .computer-use-luoghi.js?n',
+  'echo [] > .computer-use-l{u..u}oghi.json',
+  'del .computer-use-[a-l]uoghi.json',
+  'del .computer-use-[!x]uoghi.json',
+  'Set-Content --path=.comp*-luoghi.json x',
+  "bash -c \"echo x > .computer-use-luog$'hi'.json\"",
+  'bash -c \'echo x > .computer-use-impo$"stazione".json\'',
+  // mutanti vivi del giro 2: M04 (tetto delle graffe), M07 (intervallo [k-m] senza la l), M11 (stella finale), M15 (punto finale di Windows)
+  'echo x > {.computer-use-lu,y}{oghi,z}.json',
+  'del .computer-use-[k-m]uoghi.json',
+  'rm .computer-use-luog?i.json*',
+  'bash -c "echo x > {.computer-use-lu,y}oghi.json."',
+  // un elenco di PowerShell (a,b): la virgola separa due percorsi, ognuno col suo jolly
+  'powershell -NoProfile -Command "Set-Content -Path x,.computer-use-luog[h]i.json -Value y"',
+];
+test('373 G2 — 374: glob, graffe e $\'..\' che nominano i due file', { timeout: 60_000, skip: '374: glob, classi, escape e grafie note solo quando il comando gira li prende l’impronta prima e dopo il comando (ridirezione del giudice, 08/11 00:35)' }, async () => {
+  for (const comando of COMANDI_G2_CHE_NOMINANO) {
+    const { carte, esito } = await cancello373(comando);
+    assert.equal(carte.length, 1, `${comando} chiede la carta`);
+    assert.equal(carte[0].fileDiControllo, true, comando);
+    assert.equal(esito.consentito, false, `${comando}: col no non parte`);
+  }
+});
+
+/* K1 e K2, vivi nel giro 1 (revisore «prove e mutanti»): la forma senza punto e la sola radice. Ognuno di questi comandi si prende
+   SOLO con quella forma (niente nome intero, niente jolly): se la si toglie, la prova diventa rossa. */
+test('373 G2 — un nome spezzato ma visibile: la forma senza punto (K1) e la radice senza .json (K2) chiedono la carta', { timeout: 10_000 }, async () => {
+  const senzaPunto = 'node -e "require(\'fs\').writeFileSync(process.env.APPDATA + \'/TALOS/.\' + \'computer-use-luoghi.json\', \'[]\')"';
+  const soloRadice = 'powershell -NoProfile -Command "Set-Content (\'.computer-use-impostazione\' + \'.json\') x"';
+  for (const comando of [senzaPunto, soloRadice]) {
+    const { carte, esito } = await cancello373(comando);
+    assert.equal(carte.length, 1, `${comando} chiede la carta`);
+    assert.equal(esito.consentito, false, comando);
+  }
+});
+
+/* Il rovescio (regola 17): un jolly che prende QUALUNQUE file (`*`, `*.json`, `.*`) non nomina i due file, e i comandi di ogni giorno
+   non chiedono. Un glob conta solo se prende uno dei due nomi e nessun nome qualunque. */
+test('373 G2 — glob generici, graffe e virgolette tipografiche in un comando qualunque: nessuna carta', { timeout: 10_000 }, async () => {
+  await ilCancelloEAcceso();
+  const qualunque = ['ls *', 'ls *.json', 'cat .*', 'ls src/computer-use/*.mjs', 'node --test tests/computer-use-*.test.mjs', 'echo {a,b}',
+    'prettier --write "**/*.{js,json}"', 'echo [] > dati.json', 'echo “ciao”', 'git log --grep computer-use', 'rm -rf dist/*',
+    'powershell -NoProfile -Command "Remove-Item a.txt,*.tmp"'];
+  for (const comando of qualunque) {
+    const { carte, esito } = await cancello373(comando);
+    assert.deepEqual(carte, [], `${comando}: nessuna carta`);
+    assert.deepEqual(esito, { consentito: true }, comando);
+  }
+});
+
+/* Punto 4 (revisore del ponte, BASSO): il declassamento guardava `approvato === true`, la risoluzione solo la verità: un 1 o un
+   «yes» col motivo «regola» saltava il declassamento e apriva la carta. Ora un sì è solo `true`, in un punto solo. */
+test('373 G2 — solo true è un sì: 1 o «yes», con o senza un motivo automatico, non aprono la carta di un file di controllo', { timeout: 10_000 }, async () => {
+  for (const risposta of [1, 'yes']) {
+    for (const opzioni of [{ motivo: 'regola' }, undefined]) {
+      for (const [azione, argomenti] of [['shell', 'echo [] > .computer-use-luoghi.json'], ['scrivi', { percorso: 'CLAUDE.md' }]]) {
+        const { carte, esito, risolte } = await cancello373(argomenti, { azione, risposta, opzioni });
+        assert.equal(carte.length, 1);
+        assert.equal(esito.consentito, false, `${azione} ${JSON.stringify(risposta)} ${JSON.stringify(opzioni)}`);
+        // anche l'evento: la pagina e le notifiche leggono un no, mai un sì (mutante M27 del giro 2)
+        assert.equal(risolte.length, 1);
+        assert.equal(risolte[0].approvato, false, `evento: ${azione} ${JSON.stringify(risposta)}`);
+      }
+    }
+  }
+});
+
+/* Punto 5 (revisore del ponte, BASSO, oggi latente): `Object.keys` non vede le chiavi simbolo, e CARTA_SEMPRE è un simbolo. Una
+   carta shell con quel segno deve arrivare alla persona anche dopo il sì del cancello. */
+test('373 G2 — il ponte non risponde a una carta shell con un segno simbolo (CARTA_SEMPRE): arriva alla persona', { timeout: 10_000 }, async () => {
+  const comando = 'echo [] > .computer-use-luoghi.json';
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+  const ricevuti = [];
+  registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+  const carte = () => ricevuti.filter((e) => e.type === 'ApprovalRequested');
+  const esito = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'shell', argomenti: { comando }, giro: 0 });
+  await new Promise((r) => setTimeout(r, 0));
+  registro.rispondiApprovazione(sessionId, carte().at(-1).requestId, true);
+  assert.equal((await esito).consentito, true);
+  const risposta = finta.ultimoInput.chiediApprovazioneFn({ tipo: 'shell', toolCallId: 'c1', comando, [Symbol.for('talos.cartaSempre')]: true });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(carte().length, 2, 'la carta col segno simbolo arriva alla persona');
+  registro.rispondiApprovazione(sessionId, carte().at(-1).requestId, false);
+  assert.equal(await risposta, false);
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/* Punto 6 (regola 17, revisore «prove e mutanti»): una carta per un comando che il livello o il «nega» rifiutano comunque è una
+   domanda inutile: la persona dice sì e il comando non parte lo stesso. Il cancello rifiuta subito, senza carta, dicendo perché.
+   Con un permesso per attrezzo che vince sul livello («chiedi» o «sempre» in Sola lettura) il comando può partire: la carta resta. */
+test('373 G2 — nessuna carta quando la shell è negata o la sessione è in sola lettura; con un permesso che vince sul livello sì', { timeout: 10_000 }, async () => {
+  const comando = 'echo [] > .computer-use-luoghi.json';
+  for (const caso of [
+    { permessiScelto: 'Workspace write', permessiPerAttrezzoScelto: { shell: 'nega' } },
+    { permessiScelto: 'On request', permessiPerAttrezzoScelto: { shell: 'nega' } },
+    { permessiScelto: 'Read only' },
+    { permessiScelto: 'Research' },
+  ]) {
+    const { carte, esito } = await cancello373(comando, { ...caso, risposta: true });
+    assert.deepEqual(carte, [], `${JSON.stringify(caso)}: nessuna carta`);
+    assert.equal(esito.consentito, false, JSON.stringify(caso));
+    assert.match(esito.motivo, /shell is not allowed in this session.*Nothing was run/, JSON.stringify(caso));
+  }
+  for (const scelta of ['chiedi', 'sempre']) {
+    const { carte, esito } = await cancello373(comando, { permessiScelto: 'Read only', permessiPerAttrezzoScelto: { shell: scelta }, risposta: true });
+    assert.equal(carte.length, 1, `Sola lettura con shell «${scelta}»: il comando può partire, la carta c’è`);
+    assert.deepEqual(esito, { consentito: true });
+  }
+});
+
+/*
+ * ⛔ Decisione 373, giro 3 (revisori del giro 2, 07/11 sera: cancello ROSSO, prove e mutanti ROSSO). Due giri hanno chiuso grafie una
+ *   per una e ne sono uscite di nuove; ora si chiude la CLASSE (Codex bash.rs:271-272: una parola con { } * ? [ ] \ $ ` non è mai prova
+ *   dell'argv vero). In una parola con un carattere non letterale ogni tratto non letterale vale «qualsiasi sequenza»; se il modello
+ *   così ottenuto può prendere uno dei due nomi e nessun nome di file ordinario, chiede la carta. Eseguiti su una copia finta
+ *   (spawn shell:true, come il kernel): D1, M1, M2, B1, B2 e il punto 13 la sovrascrivono (il `rm …[^x]…` la cancella sotto bash);
+ *   le righe R13, R25, R07 sono la guardia dei mutanti vivi del giro 2 sul confronto, non comandi che scrivono.
+ */
+const BASH_373 = '"C:\\Program Files\\Git\\usr\\bin\\bash.exe"';
+const COMANDI_G3_CHE_NOMINANO = [
+  // D1: `[^x]` è la negazione di bash, non la classe di `^` e `x`
+  `${BASH_373} -c "echo HACK > .computer-use-[^x]uoghi.json"`,
+  'rm .computer-use-luog[^x]i.json',
+  // M1: i jolly DOS `<` e `>` (cmd `dir`, PowerShell 7 `-Filter`)
+  'for /f "delims=" %f in (\'dir /b /a ".computer-use-luog>i.json"\') do @echo {"acceso":true}> %f',
+  'for /f "delims=" %f in (\'dir /b /a ".computer-use-luog<.json"\') do @echo {"acceso":true}> %f',
+  'pwsh -NoProfile -Command "Get-ChildItem -Force -Filter \'.computer-use-luog>i.json\' | ForEach-Object { Set-Content -LiteralPath $_.FullName -Value x }"',
+  // M2: `\` dentro una parola con un jolly, classe POSIX, extglob, ANSI-C esadecimale e ottale, escape di PowerShell
+  `${BASH_373} -c "echo x | tee .comp\\uter-us?-luoghi.json"`,
+  `${BASH_373} -c "echo x | tee .computer-use-luog[[:alpha:]]i.json"`,
+  `${BASH_373} -O extglob -c "echo x | tee .computer-use-luog@(h)i.json"`,
+  `${BASH_373} -O extglob -c "echo x | tee .computer-use-luog+(h)i.json"`,
+  `${BASH_373} -c "echo x | tee .computer-use-luog$'\\x68'i.json"`,
+  `${BASH_373} -c "echo x | tee .computer-use-luog$'\\150'i.json"`,
+  'pwsh -NoProfile -Command "Set-Content -LiteralPath \\".computer-use-luog`u{68}i.json\\" -Value x"',
+  'echo x > .computer-use-luog^hi.json',
+  // B1: graffe oltre il tetto (ogni alternativa è un'esca: prima del giro 3 il ripiego leggeva solo le esche)
+  `${BASH_373} -c "echo x | tee .{computer,computer}-{use,use}-{luoghi,luoghi}.json{,}{,}{,}{,} >/dev/null"`,
+  // B2: un glob stretto che prendeva solo l'esca `.x-x-x.json`, che non è un nome di file ordinario
+  'for %f in (".*-*-*.json") do @echo {"acceso":true}> %f',
+  // R13 (mutante vivo del giro 2): la stella in testa con un pezzo lungo dietro
+  'rm *use-luoghi.json',
+  // R25: graffe annidate; R07: una graffa che non si chiude prima di una che si chiude; R09: `]` in testa a una classe
+  'echo x > .computer-use-{lu{o,x}ghi,y}.json',
+  'echo x > a{/.computer-use-lu{o,x}ghi.json',
+  `${BASH_373} -c "echo x > .computer-use-luog[]h]i.json"`,
+  // punto 13 (giudice 22:00): un commento `#` in coda e la casa `~+` di bash non tolgono la carta
+  `${BASH_373} -c "echo x > ./.computer-use-luog?i.json # nota"`,
+  `${BASH_373} -c "echo x > ~+/.computer-use-luog?i.json"`,
+  // mutanti vivi della prima corsa del giro 3, ognuno con un comando che sovrascrive la copia finta (sonde/candidati.mjs):
+  'for %f in (.computer-use-luo^g?i.json) do @echo x> %f', // G02: `^` di cmd dentro un glob non è un carattere del nome
+  `${BASH_373} -c "h=hi; echo x > .computer-use-luog$h.json"`, // G07: `$h` vale qualsiasi sequenza
+  'for %f in (C:.computer-use-luog?i.json) do @echo x> %f', // G10: `C:` relativo all'unità, dopo un tratto che non prende nulla
+  'for %f in (.computer-use-luog?i.json.) do @echo x> %f', // G11: il punto in coda lo toglie Windows
+  'pwsh -NoProfile -Command "Set-Content -Path \'.computer-use-luog[h|]i.json\' -Value x"', // G16: `|` dentro una classe
+  `${BASH_373} -O extglob -c "echo x | tee .computer-use-luog@(h|x)i.json"`, // G17: `|` dentro un extglob
+  `${BASH_373} -c "echo x > .computer-use-luog[^]x]i.json"`, // G36: `]` subito dopo `^` è dentro la classe
+];
+test('373 G3 — 374: la classe dei caratteri non letterali ([^x], jolly DOS, \\ in un glob, [[:alpha:]], extglob, $\'\\x68\', `u{68}, graffe)', { timeout: 60_000, skip: '374: glob, classi, escape e grafie note solo quando il comando gira li prende l’impronta prima e dopo il comando (ridirezione del giudice, 08/11 00:35)' }, async () => {
+  for (const comando of COMANDI_G3_CHE_NOMINANO) {
+    const { carte, esito } = await cancello373(comando);
+    assert.equal(carte.length, 1, `${comando} chiede la carta`);
+    assert.equal(carte[0].fileDiControllo, true, comando);
+    assert.equal(esito.consentito, false, `${comando}: col no non parte`);
+  }
+});
+
+/* R05 e R06 (mutanti vivi del giro 2): il tetto delle graffe al confine. 64 alternative si leggono una per una (un glob che prende solo
+   esche non chiede); 65 vanno oltre il tetto e la parola si legge con ogni graffa come `*`, senza esche (chiudere, mai aprire). */
+test('373 G4 — 374: graffe al tetto e oltre', { timeout: 60_000, skip: '374: glob, classi, escape e grafie note solo quando il comando gira li prende l’impronta prima e dopo il comando (ridirezione del giudice, 08/11 00:35)' }, async () => {
+  const graffa = (n, primo = []) => `{${[...primo, ...Array.from({ length: n - primo.length }, (_, k) => `a${k}`)].join(',')}}`;
+  assert.deepEqual((await cancello373(`echo ${graffa(64)}*`)).carte, [], '64 alternative: nessuna graffa oltre il tetto, nessuna carta');
+  // (g) del giro 4: oltre il tetto niente carta se nessuna alternativa può nominare un file di controllo (giro 3: sempre carta)
+  assert.deepEqual((await cancello373(`echo ${graffa(65)}*`)).carte, [], '65 alternative che non nominano niente: nessuna carta');
+  assert.deepEqual((await cancello373(`echo x > .computer-use-${graffa(65)}.json`)).carte, [], '.computer-use-a0.json… non è un file di controllo');
+  assert.equal((await cancello373(`echo x > .computer-use-${graffa(65, ['luoghi'])}.json`)).carte.length, 1, 'oltre il tetto: un’alternativa nomina il file ⇒ carta');
+  assert.deepEqual((await cancello373(`ls ${graffa(64, ['.c'])}*`)).carte, [], '64 alternative, una per una: .c* prende anche file ordinari');
+  assert.equal((await cancello373(`ls ${graffa(65, ['.c'])}*`)).carte.length, 1, '65 alternative: oltre il tetto niente esche ⇒ carta');
+});
+
+/* B3 e la regola 17: un glob che prende anche un nome di file ordinario (le esche: package.json, README.md, a.txt…) non chiede, e i
+   comandi di ogni giorno non chiedono. Le esche non imitano più i file di controllo (B2). Misura prima/dopo nel rapporto del giro 3. */
+const COMANDI_G3_SENZA_CARTA = [
+  'ls -d .c*', 'ls -la ~/.co*', 'find . -name "*t*"', 'ls *u*', 'ls ????????????*',
+  'ls', 'git status', 'git diff --stat', 'npm test', 'npm run build -- --watch', 'cat package.json', 'rg foo', 'rg -n "TODO" src',
+  'find . -name "*.js"', 'dir', 'dir /b *.json', 'powershell -NoProfile -Command "Get-ChildItem -Filter *.json"', 'git log --oneline -5',
+  'node --test tests/a.test.mjs', 'echo "hi"', 'git commit -m "fix: use the new path (#12)"', 'curl "https://example.com/a?b=c"',
+  'echo $HOME', 'cd ~', 'cat ~/.bashrc', 'type C:\\Users\\me\\notes.md', 'echo %CD%',
+];
+test('373 G3 — glob che prendono anche file ordinari e comandi di ogni giorno: nessuna carta (regola 17)', { timeout: 30_000 }, async () => {
+  await ilCancelloEAcceso();
+  for (const comando of COMANDI_G3_SENZA_CARTA) {
+    const { carte, esito } = await cancello373(comando);
+    assert.deepEqual(carte, [], `${comando}: nessuna carta`);
+    assert.deepEqual(esito, { consentito: true }, comando);
+  }
+});
+
+/* Punto 6 del giro 3 (revisore «carta e ponte», W1-13): in «On request» `scrivi`/`file_edit` su un file del computer use costavano
+   DUE carte, quella del cancello e quella ordinaria del kernel, e la seconda offriva «Per questa sessione». Il sì del cancello risponde
+   alla carta ordinaria dello STESSO percorso e dello stesso attrezzo, una volta sola, come già per la shell; ogni altra carta per un file
+   di controllo arriva alla persona con `sempreNonBasta`. */
+test('373 G3 — scrivi e file_edit su un file di controllo: il sì del cancello copre la carta ordinaria una volta; le altre portano sempreNonBasta', { timeout: 10_000 }, async () => {
+  for (const azione of ['scrivi', 'file_edit']) {
+    const percorso = '.computer-use-luoghi.json';
+    const finta = sessioneControllabile();
+    const registro = createSessionRegistry({
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+      caricaHooksFn: async () => ({ hooks: [] }),
+    });
+    const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+    const ricevuti = [];
+    registro.iscriviti(sessionId, (e) => ricevuti.push(e));
+    const carte = () => ricevuti.filter((e) => e.type === 'ApprovalRequested');
+    const ordinaria = (p = percorso, tipo = azione) => ({ tipo, toolCallId: 'c1', percorso: p, contenutoPrima: null, contenutoProposto: '[]' });
+    // senza il sì del cancello la carta ordinaria arriva alla persona, e senza «Per questa sessione»
+    const prima = finta.ultimoInput.chiediApprovazioneFn(ordinaria());
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(carte().length, 1);
+    assert.equal(carte()[0].azione.sempreNonBasta, true, `${azione}: la carta ordinaria di un file di controllo non offre «Per questa sessione»`);
+    registro.rispondiApprovazione(sessionId, carte()[0].requestId, false);
+    assert.equal(await prima, false);
+    // il sì del cancello copre la carta ordinaria dello stesso percorso, una volta sola
+    const esito = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione, argomenti: { percorso }, giro: 0 });
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(carte().length, 2);
+    registro.rispondiApprovazione(sessionId, carte()[1].requestId, true);
+    assert.equal((await esito).consentito, true);
+    assert.equal(await finta.ultimoInput.chiediApprovazioneFn(ordinaria()), true, `${azione}: una carta sola`);
+    assert.equal(carte().length, 2, `${azione}: nessuna seconda carta`);
+    const dopo = finta.ultimoInput.chiediApprovazioneFn(ordinaria());
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(carte().length, 3, `${azione}: il sì vale una volta sola`);
+    assert.equal(carte()[2].azione.sempreNonBasta, true);
+    registro.rispondiApprovazione(sessionId, carte()[2].requestId, false);
+    assert.equal(await dopo, false);
+    // al contrario: un altro percorso, un altro attrezzo, o una carta con un segno in più arrivano alla persona
+    for (const [altra, nome] of [[ordinaria('.computer-use-impostazione.json'), 'altro percorso'], [ordinaria(percorso, azione === 'scrivi' ? 'file_edit' : 'scrivi'), 'altro attrezzo'],
+      [{ ...ordinaria(), segreto: 'chiave' }, 'segno in più'],
+      // G31 e G34 (mutanti vivi del giro 3): un segno simbolo (CARTA_SEMPRE) e una carta senza toolCallId non sono la carta ordinaria
+      [{ ...ordinaria(), [Symbol.for('talos.cartaSempre')]: true }, 'segno simbolo'],
+      [{ tipo: azione, percorso, contenutoPrima: null, contenutoProposto: '[]' }, 'senza toolCallId'],
+      // A24 (mutante vivo del giro 3): una carta coi segni del cancello (sempreNonBasta, fileDiControllo) non è la carta ordinaria
+      [{ ...ordinaria(), sempreNonBasta: true }, 'segno sempreNonBasta'], [{ ...ordinaria(), fileDiControllo: true }, 'segno fileDiControllo']]) {
+      const sì = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione, argomenti: { percorso }, giro: 0 });
+      await new Promise((r) => setTimeout(r, 0));
+      registro.rispondiApprovazione(sessionId, carte().at(-1).requestId, true);
+      assert.equal((await sì).consentito, true);
+      const n = carte().length;
+      const risposta = finta.ultimoInput.chiediApprovazioneFn(altra);
+      await new Promise((r) => setTimeout(r, 0));
+      assert.equal(carte().length, n + 1, `${azione}, ${nome}: arriva alla persona`);
+      registro.rispondiApprovazione(sessionId, carte().at(-1).requestId, false);
+      assert.equal(await risposta, false, `${azione}, ${nome}`);
+    }
+    // G27 (mutante vivo del giro 3): il sì vale fino alla prossima chiamata di un attrezzo, anche se quella non è una scrittura
+    {
+      const sì = finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione, argomenti: { percorso }, giro: 0 });
+      await new Promise((r) => setTimeout(r, 0));
+      registro.rispondiApprovazione(sessionId, carte().at(-1).requestId, true);
+      assert.equal((await sì).consentito, true);
+      assert.equal((await finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'leggi', argomenti: { percorso: 'note.txt' }, giro: 0 })).consentito, true);
+      const n = carte().length;
+      const risposta = finta.ultimoInput.chiediApprovazioneFn(ordinaria());
+      await new Promise((r) => setTimeout(r, 0));
+      assert.equal(carte().length, n + 1, `${azione}: dopo un'altra chiamata il sì non copre più la carta ordinaria`);
+      registro.rispondiApprovazione(sessionId, carte().at(-1).requestId, false);
+      assert.equal(await risposta, false);
+    }
+    // un file qualunque: la carta ordinaria resta com'era, senza sempreNonBasta
+    const qualunque = finta.ultimoInput.chiediApprovazioneFn(ordinaria('note.txt'));
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(carte().at(-1).azione.sempreNonBasta, undefined, `${azione}: un file qualunque offre ancora «Per questa sessione»`);
+    registro.rispondiApprovazione(sessionId, carte().at(-1).requestId, false);
+    assert.equal(await qualunque, false);
+    finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+  }
+});
+
+test('373 G3 — sul filo vero (registro, servizio, kernel) in «On request» scrivi sul file del computer use mostra UNA carta; col no niente sul disco', { timeout: 30_000 }, async (t) => {
+  const enc = new TextEncoder();
+  const flusso = (f) => new Response(new ReadableStream({ start(c) { for (const x of f) c.enqueue(enc.encode(`data: ${JSON.stringify(x)}\n\n`)); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }));
+  async function carte(risposta) {
+    const progetto = mkdtempSync(join(tmpdir(), 'talos-373-g3-scrivi-'));
+    t.after(() => rimuoviCartellaDiProva(progetto));
+    let n = 0;
+    const argomenti = { percorso: '.computer-use-luoghi.json', contenuto: '[]' };
+    const fetchDiRete = async () => (n++ === 0
+      ? flusso([{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'c1', function: { name: 'scrivi', arguments: JSON.stringify(argomenti) } }] } }] }])
+      : flusso([{ choices: [{ delta: { content: 'fatto' } }] }]));
+    const registro = createSessionRegistry({
+      modello: 'm', chiave: 'k', guardaWorkspaceFn: () => () => {}, caricaHooksFn: async () => ({ hooks: [] }), cartellaEsisteFn: () => true,
+      preparaEsecuzioneFn: (taskId) => ({ cartella: progetto, comandoProva: 'npm test', task: { id: taskId, consegna: 'prova' } }),
+      avviaSessioneFn: (input) => avviaSessioneReale({ ...input, talosLavoraFn: (k) => talosLavoraReale({ ...k, fetchDiRete }) }),
+    });
+    const { sessionId } = registro.avvia('task-vero', { permessiScelto: 'On request' });
+    const azioni = [];
+    const eventi = [];
+    t.after(registro.iscriviti(sessionId, (e) => {
+      eventi.push(e);
+      if (e.type === 'ApprovalRequested' && !e.rigiocoAttesa) { azioni.push(e.azione); setTimeout(() => registro.rispondiApprovazione(sessionId, e.requestId, risposta), 0); }
+    }));
+    const inizio = Date.now();
+    while (!eventi.some((e) => e.type === 'RunFinished' || e.type === 'RunError') && Date.now() - inizio < 20_000) await new Promise((r) => setTimeout(r, 20));
+    return { azioni, scritto: existsSync(join(progetto, '.computer-use-luoghi.json')) };
+  }
+  const si = await carte(true);
+  assert.equal(si.azioni.length, 1, `una carta, non due: ${JSON.stringify(si.azioni)}`);
+  assert.equal(si.azioni[0].fileDiControllo, true);
+  assert.equal(si.scritto, true, 'col sì il file è sul disco');
+  const no = await carte(false);
+  assert.equal(no.azioni.length, 1);
+  assert.equal(no.scritto, false, 'col no niente sul disco');
+});
+
+/*
+ * ⛔ Decisione 373, giro 4 (revisori del giro 3, 07/11 notte, e le quattro condizioni del giudice). Ogni esempio dei revisori è una prova
+ *   con nome: i buchi eseguiti sulla copia finta, PowerShell 5, i cinque ALTO, i `for` di cmd. Le cure: (a) due letture della riga,
+ *   incollata e spezzata sui separatori; (b) uno stato morto resta morto, un escape vale UN carattere (con un codice, `\x68`, «qualsiasi»),
+ *   i jolly DOS `<` `>` valgono `*`; (c) `[=x=]`, `[.x.]` e `\]` dentro una classe; (d) la ricerca di `:]` ha un tetto e il tempo è lineare;
+ *   (f) barra + a capo si ricompone prima (Hermes approval_detection.py:526-527); (g) oltre 64 alternative la graffa vale l'unione delle
+ *   sue alternative, senza esche: nessuna carta se nessuna alternativa può nominare un file di controllo.
+ */
+const G4_BUCHI_ESEGUI = [
+  "for /f \"delims=\" %f in ('dir /b /a \".computer-use-luog<\"') do @echo {\"acceso\":true}> %f",
+  "for /f \"delims=\" %f in ('dir /b /a \".computer-use-imp<\"') do @echo {\"acceso\":true}> %f",
+  "for /f \"delims=\" %f in ('dir /b /a \".computer-use-luog<<.json\"') do @echo {\"acceso\":true}> %f",
+  "for /f \"delims=\" %f in ('dir /b /a \".computer-use-luog>>.json\"') do @echo {\"acceso\":true}> %f",
+  "for /f \"delims=\" %f in ('dir /b /a \".computer-use-luog<*\"') do @echo {\"acceso\":true}> %f",
+  "for /f \"delims=\" %f in ('dir /b /a \".computer-use-luog>?.json\"') do @echo {\"acceso\":true}> %f",
+  "pwsh -NoProfile -Command \"Get-ChildItem -Force -Filter '.computer-use-luog<<' | ForEach-Object { Set-Content -LiteralPath $_.FullName -Value x }\"",
+  "pwsh -NoProfile -Command \"Get-ChildItem -Force -Filter '.computer-use-luog>>.json' | ForEach-Object { Set-Content -LiteralPath $_.FullName -Value x }\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog$'\\x68\\x69'.json\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog$'\\150\\151'.json\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog$'\\x68'$'\\x69'.json\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog$'\\x68'?.json\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog$'\\x68'*\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog\\h*.json\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-l\\u*\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-imp\\o*\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog\\h?.json\"",
+  "pwsh -NoProfile -Command \"Set-Content -LiteralPath \\\".computer-use-luog`u{68}`u{69}.json\\\" -Value x\"",
+  "pwsh -NoProfile -Command \"Get-ChildItem -Force -Filter \\\".computer-use-luog`u{68}*\\\" | ForEach-Object { Set-Content -LiteralPath $_.FullName -Value x }\"",
+  "pwsh -NoProfile -Command \"Set-Content -Path \\\".computer-use-luog`u{68}?.json\\\" -Value x\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog[[=h=]]i.json\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog[[.h.]]i.json\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog[h\\]]i.json\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog$\\\"h\\\"i.json\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog$'\\x68'$'\\151'.json\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog$'\\x68\\151'.j*\"",
+  "for %f in (.computer-use-luog*i.json,x) do @echo x> %f",
+  "pwsh -NoProfile -Command \"Set-Content -Path .computer-use-luog?i.json,nonce.txt -Value x\"",
+  "powershell -NoProfile -Command \"Set-Content -Path .computer-use-luog?i.json,nonce.txt -Value x\"",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog\\\"h\\\"\\\"i\\\".json\"",
+];
+const G4_PS5 = [
+  "powershell -NoProfile -Command \"Get-ChildItem -Force -Filter \\\".computer-use-luog`h*\\\" | ForEach-Object { Set-Content -LiteralPath $_.FullName -Value x }\"",
+  "powershell -NoProfile -Command \"Set-Content -Path \\\".computer-use-luog`h?.json\\\" -Value x\"",
+  "powershell -NoProfile -Command \"Set-Content -Path \\\".computer-use-lu`o`g`h`i.json\\\" -Value x\"",
+];
+const G4_ALTO_E_FOR_DI_CMD = [
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"(echo HACK>.computer-use-luog?i.json)\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"( (echo HACK>.computer-use-luog?i.json))\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"(echo HACK>.computer-use-luog?i.json)#\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo `(echo HACK>.computer-use-luog?i.json)`\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo $( (echo HACK>.computer-use-luog?i.json))\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo HACK>.computer-use-luog?i.json>>/dev/null\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo HACK>.computer-use-luog?i.json<>x\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo [x>.computer-use-luog?i.json;#]\"",
+  "for %f in (.computer-use-luog?i.json) do (echo x> %f)",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo HACK|tee .computer-use-luog?i.json>/dev/null\"",
+  "for %f in (.computer-use-luog?i.json)do @echo x> %f",
+  "echo x | tee .computer-use-luog?i.json>nul",
+  "echo x | tee .computer-use-luog?i.json 2>/dev/null",
+  "cp a.json .computer-use-luog?i.json&&echo ok",
+  "cmd /c \"copy /y a.json .computer-use-luog?i.json>nul\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"cp a.json .computer-use-luog?i.json 2>/dev/null\"",
+];
+const G4_CLASSI_E_ESCAPE = [
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo [x;{echo,HACK}>.computer-use-luog?i.json;#]\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo [x;echo>.computer-use-luog?i.json;#]\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo [x|tee>.computer-use-luog?i.json;#]\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x^;{echo,HACK}>.computer-use-luog?i.json\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x\\;{echo,HACK}>.computer-use-luog?i.json\"",
+  "echo x>.computer-use-luog?i.json",
+  "echo x > .computer-use-luoghi.jso?",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x > .computer-use-luog?i.json\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo [x&&{echo,HACK}>.computer-use-luog?i.json;#]\"",
+  "pwsh -NoProfile -Command \"Set-Content -Path ‘.computer-use-luog?i.json’ -Value x\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x > .computer-use-luog$@hi.json\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x > .computer-use-luog[!]x]i.json\"",
+  "cmd /v:on /c \"set x=h&& echo x> .computer-use-luog!x!i.json\"",
+  "cmd /c \"set x=h&& call echo x> .computer-use-luog%x%i.json\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x | tee [[=.=]]computer-use-luoghi.json\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x | tee [[...]]computer-use-luoghi.json\"",
+  "echo x | tee .computer[[.-.]]use-luoghi.json",
+  "echo x | tee .computer[[=-=]]use-luoghi.json",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x | tee .computer-use-lu\\og?i.json\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog$'\\u0068'i.json\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog$'\\150'i.json\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x | tee .computer-use-luog$'\\x68\\x69'.json\"",
+  "del %APPDATA%\\TALOS\\.computer-use-luog?i.json",
+  "for %f in (.\\.computer-use-luog?i.json) do @echo x> %f",
+  "del C:\\Users\\me\\AppData\\Roaming\\TALOS\\.computer-use-luog?i.json",
+  "for %f in (\".computer-use-luog?i.json \") do @echo x> %f",
+  "for %f in (.computer-use-luog?i.json.) do @echo x> %f",
+  "type .computer-use-luog?i.json:stream",
+  "echo x > c:.computer-use-luog?i.json",
+  "echo x > .computer-use-luog?i.json(1)",
+  "echo x > (.computer-use-luog?i.json)",
+  "echo x>.computer-use-luog?i.json<nul",
+  "echo x > .computer-use-luog@(h)i.json",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x > .computer-use-luog[haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\]]i.json\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x > .computer-use-luog[haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa[.].]]i.json\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x > .computer-use-luog[haaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa[:alpha:]]i.json\"",
+];
+const G4_A_CAPO = [
+  "echo x | tee .co\\\nmputer-use-luoghi.json",
+  "echo x | tee .computer-use-l\\\nuoghi.json",
+  "echo x | tee .c\\\nomputer-use-impostazione.json",
+  "echo x > .co\\\nmputer-use-luoghi.json",
+  "cp /dev/null .co\\\nmputer-use-luoghi.json",
+  "\"C:\\Program Files\\Git\\bin\\bash.exe\" -c \"echo x | tee .co\\\nmputer-use-luoghi.json\"",
+  "echo x | tee .co\\\r\nmputer-use-luoghi.json",
+  "echo x | tee .co\\\nmputer-use-l\\\nuoghi.json",
+];
+const G4_OLTRE_IL_TETTO = [
+  "echo x > .computer-use-luog{h..h}i.json{,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23,a24,a25,a26,a27,a28,a29,a30,a31,a32,a33,a34,a35,a36,a37,a38,a39,a40,a41,a42,a43,a44,a45,a46,a47,a48,a49,a50,a51,a52,a53,a54,a55,a56,a57,a58,a59,a60,a61,a62,a63}",
+  "echo x > .computer-use-luog{y,h}i.json{,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23,a24,a25,a26,a27,a28,a29,a30,a31,a32,a33,a34,a35,a36,a37,a38,a39,a40,a41,a42,a43,a44,a45,a46,a47,a48,a49,a50,a51,a52,a53,a54,a55,a56,a57,a58,a59,a60,a61,a62,a63}",
+  "powershell -NoProfile -Command \"Set-Content -Path .computer-use-luog?i.json,x{a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23,a24,a25,a26,a27,a28,a29,a30,a31,a32,a33,a34,a35,a36,a37,a38,a39,a40,a41,a42,a43,a44,a45,a46,a47,a48,a49,a50,a51,a52,a53,a54,a55,a56,a57,a58,a59,a60,a61,a62,a63,a64} -Value y\"",
+  "\"C:\\Program Files\\Git\\usr\\bin\\bash.exe\" -c \"echo x | tee .computer-use-lu\\og?i.json{,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10,a11,a12,a13,a14,a15,a16,a17,a18,a19,a20,a21,a22,a23,a24,a25,a26,a27,a28,a29,a30,a31,a32,a33,a34,a35,a36,a37,a38,a39,a40,a41,a42,a43,a44,a45,a46,a47,a48,a49,a50,a51,a52,a53,a54,a55,a56,a57,a58,a59,a60,a61,a62,a63}\"",
+];
+const G4_SENZA_CARTA = [
+  "mkdir -p src/{components,hooks,utils,pages,styles,lib,api,types}/{tests,stories,mocks,fixtures,docs,types,utils,assets,data}",
+  "echo {a,b,c,d}{1,2,3,4}{x,y,z,w}{p,q,r,s}",
+  "powershell -NoProfile -Command \"Copy-Item .\\config\\*.json .\\dist\\\"",
+  "echo x > .computer-use-luog\\hhi.json",
+  "grep -c x a\\|.computer-use-luog<i.json",
+  "echo x > a\\|.computer-use-luog<i.json",
+  "echo a\\&.computer-use-luog<i.json",
+  "echo a\\=.computer-use-luog<i.json",
+  "echo x > .computer-use-luog@(h i).json",
+];
+/* Giro 5 (ridirezione del giudice, punto 5, rumore della 375): un `ls` con un glob generico non nomina i due file, e ora non chiede. */
+const G5_RUMORE_375 = [
+  "ls .*.json",
+  "ls -la .*.json",
+  "ls *-*-*.json",
+  "ls *ione.json",
+  "ls config/*i.json",
+  "dir /a .*.json",
+];
+async function senzaLaCartaAttesa(comandi, attesa) {
+  const sbagliati = [];
+  for (const comando of comandi) {
+    const { carte, esito } = await cancello373(comando);
+    const ok = attesa
+      ? carte.length === 1 && carte[0].fileDiControllo === true && esito.consentito === false
+      : carte.length === 0 && esito.consentito === true;
+    if (!ok) sbagliati.push(comando);
+  }
+  return sbagliati;
+}
+test('373 G4 — 374: gli esempi dei revisori del giro 3 (buchi eseguiti, PowerShell 5, i cinque ALTO, i for di cmd)', { timeout: 60_000, skip: '374: glob, classi, escape e grafie note solo quando il comando gira li prende l’impronta prima e dopo il comando (ridirezione del giudice, 08/11 00:35)' }, async () => {
+  assert.deepEqual(await senzaLaCartaAttesa([...G4_BUCHI_ESEGUI, ...G4_PS5, ...G4_ALTO_E_FOR_DI_CMD], true), [], 'questi comandi passavano senza carta');
+});
+test('373 G4 — 374: classi che attraversano ; | &, [=x=] [.x.] \\], escape di un carattere, $\'\\x68\', :stream, c:, (1)', { timeout: 60_000, skip: '374: glob, classi, escape e grafie note solo quando il comando gira li prende l’impronta prima e dopo il comando (ridirezione del giudice, 08/11 00:35)' }, async () => {
+  assert.deepEqual(await senzaLaCartaAttesa(G4_CLASSI_E_ESCAPE, true), [], 'questi comandi passavano senza carta');
+});
+test('373 G4 — (f) barra + a capo dentro il nome si ricompone prima di leggere: chiede la carta', { timeout: 20_000 }, async () => {
+  assert.deepEqual(await senzaLaCartaAttesa(G4_A_CAPO, true), [], 'questi comandi passavano senza carta');
+});
+test('373 G4 — 374: (g) oltre 64 alternative', { timeout: 60_000, skip: '374: glob, classi, escape e grafie note solo quando il comando gira li prende l’impronta prima e dopo il comando (ridirezione del giudice, 08/11 00:35)' }, async () => {
+  assert.deepEqual(await senzaLaCartaAttesa(G4_OLTRE_IL_TETTO, true), [], 'questi comandi passavano senza carta');
+});
+test('373 G4 — regola 17: graffe di ogni giorno, Copy-Item, \\h di un carattere, escape davanti a | & =, @(h i): nessuna carta', { timeout: 20_000 }, async () => {
+  await ilCancelloEAcceso();
+  assert.deepEqual(await senzaLaCartaAttesa(G4_SENZA_CARTA, false), [], 'questi comandi chiedevano una carta inutile');
+});
+test('373 G5 — rumore 375: ls .*.json, ls -la .*.json e gli altri glob generici non chiedono la carta', { timeout: 20_000 }, async () => {
+  await ilCancelloEAcceso();
+  assert.deepEqual(await senzaLaCartaAttesa(G5_RUMORE_375, false), [], 'questi comandi chiedevano una carta inutile');
+});
+
+/* Condizione 2 del giudice, giro 5: il tempo del cancello INTERO (il pre_tool_call del registro vero), media di 20 corse dopo una di
+   riscaldamento. 4 KB sotto 5 ms e 12 KB sotto 50 ms per `\\`, backtick, `\\`` e `\\"` (nel giro 4 la forma quadratica costava 283 ms a
+   12 KB), e per `[[:` e le graffe. Ogni riga si misura due volte: senza nome (nessuna carta) e col nome in coda. Senza ascoltatori il
+   comando che nomina il file si rifiuta subito, senza carta, sullo stesso cammino: a cancello spento la prova è rossa. */
+test('373 G5 — tempo del cancello intero: 4 KB di \\ e di backtick sotto 5 ms, 12 KB sotto 50 ms, e il nome in coda chiede', { timeout: 60_000 }, async () => {
+  const finta = sessioneControllabile();
+  const registro = createSessionRegistry({
+    avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: 'm', chiave: 'k',
+    caricaHooksFn: async () => ({ hooks: [] }),
+  });
+  registro.avvia('task-vero', { permessiScelto: 'Workspace write' });
+  const media = async (comando, nomina) => {
+    const corsa = () => finta.ultimoInput.hookFn({ tipo: 'pre_tool_call', azione: 'shell', argomenti: { comando }, giro: 0 });
+    const primo = await corsa();
+    if (nomina) {
+      assert.equal(primo.consentito, false, `${comando.slice(0, 20)}… ${comando.slice(-30)}: il nome in coda chiede`);
+      assert.match(primo.motivo, /no active approval channel/);
+    } else {
+      assert.deepEqual(primo, { consentito: true }, `${comando.slice(0, 40)}…: nessuna carta`);
+    }
+    let totale = 0;
+    for (let k = 0; k < 20; k += 1) {
+      const t0 = performance.now();
+      await corsa();
+      totale += performance.now() - t0;
+    }
+    return totale / 20;
+  };
+  const lungo = (pezzo, n) => `echo ${pezzo.repeat(Math.ceil(n / pezzo.length))}`.slice(0, n);
+  for (const pezzo of ['\\', '`', '\\`', '\\"', '[[:', '{a,b}']) {
+    for (const [n, tetto] of [[4096, 5], [12_288, 50]]) {
+      for (const nomina of [false, true]) {
+        const comando = nomina ? `${lungo(pezzo, n - 30)} > .computer-use-luoghi.json` : lungo(pezzo, n);
+        const ms = await media(comando, nomina);
+        assert.ok(ms < tetto, `${n} B di ${pezzo}${nomina ? ' col nome' : ''}: ${ms.toFixed(2)} ms di media, il tetto è ${tetto}`);
+      }
+    }
+  }
+  finta.concludi({ type: 'RunFinished', threadId: 't1', runId: 'r1' });
+});
+
+/*
+ * ⛔ Decisione 373, giro 5: RIDIREZIONE del giudice (08/11/2026 00:35, regola di arresto). Quattro giri di automa sul testo del comando
+ *   hanno lasciato 248 glob veri su 672 senza carta e ogni giro ne ha aperti di nuovi. Il cancello della shell torna ai soli NOMI IN
+ *   CHIARO, come Hermes (tools/approval_detection.py:24-25, il nome del file di configurazione; :529, barra + a capo): il nome letterale,
+ *   dentro virgolette semplici o doppie (anche a metà nome, e quelle tipografiche che PowerShell legge come virgolette), spezzato da
+ *   barra rovescia + a capo, con maiuscole diverse. Glob, classi, escape e grafie note solo quando il comando gira li prende la 374.
+ */
+async function ilCancelloEAcceso() {
+  const { carte, esito } = await cancello373('echo [] > .computer-use-luoghi.json');
+  assert.equal(carte.length, 1, 'controllo: il cancello chiede la carta per un nome in chiaro (a cancello spento questa prova è rossa)');
+  assert.equal(esito.consentito, false);
+}
+const G5_NOMI_IN_CHIARO = [
+  "echo x > '.computer-use-luoghi.json'",
+  'echo x > ".computer-use-impostazione.json"',
+  "echo x > .computer-use-'luo'ghi.json",
+  'echo x > .computer-use-"impo""stazione".json',
+  'echo x > .computer-use-luog""hi.json',
+  "echo x > .computer-use-luog''hi.json",
+  'powershell -NoProfile -Command "Set-Content -LiteralPath .computer-use-luog‘’hi.json -Value x"',
+  'powershell -NoProfile -Command "Set-Content -LiteralPath .computer-use-luog“”hi.json -Value x"',
+  'powershell -NoProfile -Command "Set-Content -LiteralPath .computer-use-luog‚‛hi.json -Value x"',
+  'powershell -NoProfile -Command "Set-Content -LiteralPath .computer-use-impo„„stazione.json -Value x"',
+  'pwsh -NoProfile -Command "Set-Content -LiteralPath ‘.computer-use-impostazione.json’ -Value x"',
+  'echo x > .COMPUTER-USE-LUOGHI.JSON',
+  'Set-Content .Computer-Use-Impostazione.Json x',
+  String.raw`copy /y a.json C:\Users\me\AppData\Roaming\TALOS\.computer-use-luoghi.json`,
+  'echo x > .Computer-Use-\'Luo\'ghi.JSON',
+];
+test('373 G5 — i nomi in chiaro: letterale, dentro virgolette semplici, doppie o tipografiche (anche a metà nome), maiuscole: chiedono la carta; col no non parte', { timeout: 20_000 }, async () => {
+  assert.deepEqual(await senzaLaCartaAttesa(G5_NOMI_IN_CHIARO, true), [], 'questi comandi passavano senza carta');
+});
+/* Al contrario: un nome che NON è uno dei due file non chiede, anche se gli somiglia (prima di tutto il controllo che il cancello è
+   acceso). `.computer-use-luoghi.json.bak` e `.computer-use-luoghi-vecchi.txt` contengono il nome (o la radice senza estensione, che resta
+   un nome come nel primo giro) e chiedono: si dichiara, non si toglie. */
+const G5_SOMIGLIANTI_SENZA_CARTA = [
+  'cat docs/computer-use.md',
+  'echo x > .computer-use-luogo.json',
+  'echo x > .computer-use-impostazioni.json',
+  'echo x > .computer-use.json',
+  'ls computer-use-*',
+  '',
+];
+test('373 G5 — i nomi che somigliano ma non sono i due file non chiedono la carta', { timeout: 20_000 }, async () => {
+  await ilCancelloEAcceso();
+  assert.deepEqual(await senzaLaCartaAttesa(G5_SOMIGLIANTI_SENZA_CARTA, false), [], 'questi comandi chiedevano una carta inutile');
+});
+test('373 G5 — 374: le grafie del primo giro che non sono nomi in chiaro (escape a metà nome, glob)', { timeout: 60_000, skip: '374: glob, classi, escape e grafie note solo quando il comando gira li prende l’impronta prima e dopo il comando (ridirezione del giudice, 08/11 00:35)' }, async () => {
+  assert.deepEqual(await senzaLaCartaAttesa(COMANDI_DELLA_374_DEL_PRIMO_GIRO, true), []);
 });
 
 /*
@@ -10130,6 +11027,7 @@ test('REV-SESSION-READY-21 — la scrittura tardiva di un risultato di figlia ch
   const inScrittura = [];
   let occupato = false;
   const finta = sessioniControllabili();
+  const log = t.mock.method(console, 'error', () => {});
   /* 09/11/2026 (0.2.0, giudice v1254): niente più giri fissi. Prima `for 3 unGiro` e via: su un runner lento passavano più dei 25 ms
      del risveglio da figlia (`session-registry.mjs:4745`), il padre ripartiva da solo e `resume` alla riga sotto veniva rifiutato
      (riprodotto in copia con 60 ms al posto dei 3 giri: stesso `undefined !== id`). Ora il risveglio aspetta l'orologio finto, e si
@@ -10167,17 +11065,82 @@ test('REV-SESSION-READY-21 — la scrittura tardiva di un risultato di figlia ch
     registro.iscriviti(parentId, (e) => { if (e.type === 'RunError' || e.type === 'RunFinished') finali.push(e); }, registro.esporta(parentId).eventi.at(-1)?._sequenza ?? 0);
     for (const rifiuta of rifiuti) rifiuta(new Error('disco pieno'));
     await Promise.allSettled(inScrittura); // le scritture rifiutate sono assestate; poi i loro gestori
-    for (let i = 0; i < 3; i += 1) await unGiro();
-    assert.deepEqual(finali, [], 'nessun RunError sul giro nuovo per una scrittura del giro di prima');
+    /* 0.2.1, giro 2 (revisione 021-A, reperto G): prima 3 giri fissi e poi l'asserzione negativa, che può dare solo falsi verdi (un
+       RunError arrivato al quarto giro non si vedeva). Ora: (1) si aspetta l'evento vero, il guasto della scrittura tardiva gestito
+       e scritto nel log del server (misurato: è la storia finale della FIGLIA, `messaggiFinali not written` col suo id); (2) il giro
+       nuovo del padre è ancora vivo; (3) lo si chiude e si guarda TUTTO ciò che ha detto fino all'assestamento: solo il suo
+       RunFinished, nessun RunError, arrivato quando che sia. */
+    await finché(() => log.mock.calls.some((c) => String(c.arguments[0]).includes('messaggiFinali not written')), 'il guasto della scrittura tardiva è stato gestito');
     assertRifiuto(registro.resume(parentId, 'nel mezzo'), 'SESSION_NOT_READY', 'running-wait-resume'); // il giro nuovo è ancora in corso
     finta.concludi(2, { type: 'RunFinished', runId: 'r3' });
     await registro.attendiAssestamento(parentId);
+    assert.deepEqual(finali.map((e) => e.type), ['RunFinished'], 'nessun RunError sul giro nuovo per una scrittura del giro di prima: solo la sua fine');
   } finally {
     await attendiScritture({ cartellaStore });
     rimuoviCartellaDiProva(cartellaStore);
   }
 });
 
+/* 0.2.1, voce 021-A (giudice v1275, punto 3): la guardia di `persistiMessaggiFinali` (`session-registry.mjs`, `voce.versioneGiro !==
+   versioneGiro` ⇒ solo il log) non aveva una prova sua: REV-21 passa dalla storia di un risultato di figlia, REV-10 dal giro che resta
+   lo stesso. Qui la storia FINALE di un giro resta in coda, a metà attesa parte il giro dopo, poi la scrittura fallisce: il giro nuovo
+   non riceve un RunError che non è suo (lo chiuderebbe), e il guasto resta nel log del server. Il contrario (stesso giro ⇒ RunError
+   SESSION_STORE_WRITE_FAILED) è REV-SESSION-READY-10. */
+test('REV-SESSION-READY-21b — la storia finale di un giro che fallisce DOPO la partenza del giro nuovo va nel log, non in chat', async (t) => {
+  const STORIA = new Set(['messaggi-delta', 'checkpoint', 'messaggi-finali']);
+  const cartellaStore = mkdtempSync(join(tmpdir(), 'talos-rev-ready-21b-'));
+  const rifiuti = [];
+  const inScrittura = [];
+  let occupato = false;
+  const finta = sessioniControllabili();
+  const log = t.mock.method(console, 'error', () => {});
+  const finché = async (condizione, cosa) => {
+    for (let i = 0; i < 1_000 && !condizione(); i += 1) await unGiro();
+    assert.ok(condizione(), cosa);
+  };
+  try {
+    const registro = createSessionRegistry({
+      cartellaStore,
+      registraRigaSyncFn: (argomenti) => { if (occupato && STORIA.has(argomenti.record?.tipo)) throw Object.assign(new Error('occupato'), { code: 'SESSION_STORE_BUSY' }); return registraRigaSync(argomenti); },
+      registraRigaFn: (argomenti) => {
+        if (!(occupato && STORIA.has(argomenti.record?.tipo))) return registraRiga(argomenti);
+        const promessa = new Promise((_, rifiuta) => { rifiuti.push(rifiuta); });
+        inScrittura.push(promessa);
+        return promessa;
+      },
+      avviaSessioneFn: finta.avviaSessioneFn, preparaEsecuzioneFn: preparaEsecuzioneFinta, modello: MODELLO_REV, chiave: 'k', cartellaEsisteFn: () => true,
+    });
+    const { sessionId } = registro.avvia('task-vero');
+    const finali = [];
+    registro.iscriviti(sessionId, (e) => { if (e.type === 'RunError' || e.type === 'RunFinished') finali.push(e.code ?? e.type); });
+    occupato = true; // la storia finale del primo giro trova la coda occupata e resta in attesa
+    t.mock.timers.enable({ apis: ['setTimeout'] }); // il tetto di 10 s sull'attesa della scrittura (REV-SESSION-READY-24) lo muove la prova
+    finta.concludi(0, { type: 'RunFinished', runId: 'r1' }, { ok: true, esito: { comeFinita: 'concluso', messaggiFinali: storiaDelGiro(1) } });
+    await finché(() => rifiuti.length > 0, 'la storia finale del primo giro è in scrittura');
+    occupato = false;
+    assertRifiuto(registro.resume(sessionId, 'troppo presto'), 'SESSION_NOT_READY', 'closing-turn-history-pending');
+    /* a metà attesa scade il tetto, il giro si assesta con la scrittura ancora in volo e parte il giro dopo (la versione del giro
+       cambia); poi la vecchia scrittura fallisce */
+    t.mock.timers.tick(10_000);
+    await finché(() => registro.staChiudendoIlGiro(sessionId) === false, 'scaduto il tetto, il giro di prima è assestato');
+    t.mock.timers.reset();
+    assert.equal(rifiuti.length, inScrittura.length);
+    assert.equal(registro.resume(sessionId, 'domanda 2').sessionId, sessionId);
+    const daQui = finali.length;
+    for (const rifiuta of rifiuti) rifiuta(new Error('disco pieno'));
+    await Promise.allSettled(inScrittura);
+    await finché(() => log.mock.calls.some((c) => String(c.arguments[0]).includes('messaggiFinali not written')), 'il guasto è nel log del server');
+    for (let i = 0; i < 3; i += 1) await unGiro();
+    assert.deepEqual(finali.slice(daQui), [], 'nessun RunError sul giro nuovo per la storia del giro di prima');
+    assertRifiuto(registro.resume(sessionId, 'nel mezzo'), 'SESSION_NOT_READY', 'running-wait-resume'); // il giro nuovo è ancora vivo
+    finta.concludi(1, { type: 'RunFinished', runId: 'r2' });
+    await registro.attendiAssestamento(sessionId);
+    assert.deepEqual(finali.slice(daQui), ['RunFinished'], 'il giro nuovo si chiude col SUO esito');
+  } finally {
+    await attendiScritture({ cartellaStore });
+    rimuoviCartellaDiProva(cartellaStore);
+  }
+});
 
 test('REV-SESSION-READY-22 — l’attesa unica regge SEI finestre di fila (niente 409 alla sesta)', async () => {
   const quante = 6;

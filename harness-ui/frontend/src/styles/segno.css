@@ -17,3 +17,5 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;background:transparent
 .guarda{position:absolute;z-index:4;pointer-events:none;border-radius:11px;box-shadow:0 0 0 3px #c98b32,0 0 26px rgba(201,139,50,.5);animation:guarda 2s ease-in-out infinite}
 @keyframes guarda{50%{box-shadow:0 0 0 3px #c98b32,0 0 8px rgba(201,139,50,.2)}}
 @media (prefers-reduced-motion:reduce){.anello,.guarda{animation:none}}
+/* giro 4 della bolla (13/11): anche col solo «Riduci movimento» di TALOS bordo e anello restano fermi, come dice il bozzetto (la classe la mette `segno.js`) */
+.segno.reduce-motion .anello,.segno.reduce-motion .guarda{animation:none}

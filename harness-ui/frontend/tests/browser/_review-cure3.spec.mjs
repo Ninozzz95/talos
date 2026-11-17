@@ -267,22 +267,34 @@ test('P3 · la soglia della guardia di INTELAIATURA-06 è lo stesso numero della
  * P4 — LA METRICA NUOVA DI INTELAIATURA-10 È CIECA A QUALCOSA D'ALTRO?
  *      La barra NON cambia altezza e la prima voce NON si sposta rispetto alla
  *      barra, ma la colonna salta lo stesso: succede quando a cambiare è un
- *      elemento che sta SOPRA la barra dentro la stessa colonna — e ce n'è uno,
- *      `.settings-nav__search` (il bottone «Cerca impostazioni»), inserito
- *      proprio sopra la barra (`settings-view.ts:582/586`).
+ *      elemento che sta SOPRA la barra dentro la stessa colonna.
+ * ⛔ 023 cura 1 (11/11/2026): il bottone «Cerca impostazioni» che stava lì è tolto (una ricerca sola). Sopra i 660 px oggi
+ *   sopra la barra non c'è niente di visibile, e lo si MISURA; la regressione si inietta con un blocco alto quanto quel
+ *   bottone (42 px) che sparisce cercando. Si provano i due versi: le due metriche vecchie tacciono, la terza
+ *   (`offsetTop` della barra, INTELAIATURA-10) la prende.
  * ══════════════════════════════════════════════════════════════════════════ */
 const STATO_COLONNA = () => {
-  const barra = document.querySelector('#schermoImpostazioni .settings-toolbar').getBoundingClientRect();
+  const nodo = document.querySelector('#schermoImpostazioni .settings-toolbar');
+  const barra = nodo.getBoundingClientRect();
   const voce = document.querySelector('#schermoImpostazioni .settings-nav__list [role="tab"]').getBoundingClientRect();
-  const bottone = document.querySelector('#schermoImpostazioni .settings-nav__search').getBoundingClientRect();
+  const sopra = [];
+  for (let el = nodo.previousElementSibling; el; el = el.previousElementSibling) if (el.getClientRects().length && el.getBoundingClientRect().height > 0) sopra.push(el.className || el.tagName);
   return {
-    altezzaBarra: Math.round(barra.height), barraTop: Math.round(barra.top),
+    altezzaBarra: Math.round(barra.height), barraTop: Math.round(barra.top), barraOffset: nodo.offsetTop,
     relativa: Math.round(voce.top - barra.top), assoluta: Math.round(voce.top),
-    voceVisibile: voce.height > 0, altezzaBottone: Math.round(bottone.height),
+    voceVisibile: voce.height > 0, sopraLaBarra: sopra,
   };
 };
+/** La regressione iniettata: un blocco sopra la barra, nella stessa colonna, che sparisce mentre si cerca. */
+const INIETTA_SOPRA = () => {
+  const nav = document.querySelector('#schermoImpostazioni .settings-nav');
+  const blocco = document.createElement('div'); blocco.dataset.provaSopra = ''; blocco.style.cssText = 'height:42px;flex:none';
+  nav.insertBefore(blocco, document.querySelector('#schermoImpostazioni .settings-toolbar'));
+  const campo = document.getElementById('settingsSearch');
+  campo.addEventListener('input', () => { blocco.style.display = campo.value ? 'none' : ''; });
+};
 
-test('P4 · un salto della colonna che la metrica nuova non vede (sopra i 660 px)', async ({ page }) => {
+test('P4 · un salto della colonna che le due metriche vecchie non vedono e la terza sì (sopra i 660 px)', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await apriLaboratorio(page);
   await page.evaluate(() => window.__talosHarnessUiRuntime?.setSettingsSection?.('appearance', { persist: false }));
@@ -293,35 +305,30 @@ test('P4 · un salto della colonna che la metrica nuova non vede (sopra i 660 px
   await page.waitForTimeout(250);
   const oggi = await page.evaluate(STATO_COLONNA);
   console.log('P4-oggi ' + breve({ sana0, oggi }));
+  expect(sana0.sopraLaBarra, 'sopra i 660 px, sopra la barra della colonna oggi non c’è niente di visibile').toEqual([]);
+  expect(Math.abs(oggi.barraOffset - sana0.barraOffset), 'cercando, la colonna di oggi non salta').toBeLessThanOrEqual(8);
   await page.locator('#settingsSearch').fill('');
   await page.waitForTimeout(200);
 
-  /* LA REGRESSIONE, iniettata a runtime (nessun file toccato): mentre si cerca, il bottone
-     «Cerca impostazioni» — che sta SOPRA la barra nella stessa colonna — sparisce. È la stessa
-     famiglia del difetto del 18/09 (la colonna che salta), con la causa sopra la barra invece
-     che dentro. */
-  await page.addStyleTag({ content: '.settings-nav[data-in-ricerca] .settings-nav__search{display:none}' });
-  await page.evaluate(() => {
-    const nav = document.querySelector('#schermoImpostazioni .settings-nav');
-    const campo = document.getElementById('settingsSearch');
-    campo.addEventListener('input', () => { if (campo.value) nav.setAttribute('data-in-ricerca', ''); else nav.removeAttribute('data-in-ricerca'); });
-  });
+  await page.evaluate(INIETTA_SOPRA);
   const sana = await page.evaluate(STATO_COLONNA);
   await page.locator('#settingsSearch').fill('tema');
   await page.waitForTimeout(250);
   const rotta = await page.evaluate(STATO_COLONNA);
   const salto = Math.abs(rotta.assoluta - sana.assoluta);
-  console.log('P4-regressione ' + breve({ sana, rotta, saltoAssoluto: salto, saltoBarra: Math.abs(rotta.altezzaBarra - sana.altezzaBarra), saltoRelativo: Math.abs(rotta.relativa - sana.relativa) }));
+  console.log('P4-regressione ' + breve({ sana, rotta, saltoAssoluto: salto, saltoBarra: Math.abs(rotta.altezzaBarra - sana.altezzaBarra), saltoRelativo: Math.abs(rotta.relativa - sana.relativa), saltoOffset: Math.abs(rotta.barraOffset - sana.barraOffset) }));
 
-  /* LE DUE ASSERZIONI DI INTELAIATURA-10, ricopiate parola per parola (righe 222-225). */
+  /* LE DUE ASSERZIONI VECCHIE DI INTELAIATURA-10 (altezza della barra, posizione relativa) e la TERZA (offsetTop). */
   const verdeAltezza = Math.abs(rotta.altezzaBarra - sana.altezzaBarra) <= 2;
   const verdeRelativa = Math.abs(rotta.relativa - sana.relativa) <= 8;
-  console.log('P4-INTELAIATURA-10 ' + breve({ verdeAltezza, verdeRelativa }));
+  const verdeOffset = Math.abs(rotta.barraOffset - sana.barraOffset) <= 8;
+  console.log('P4-INTELAIATURA-10 ' + breve({ verdeAltezza, verdeRelativa, verdeOffset }));
   expect(salto, 'la regressione iniettata non fa saltare la colonna: la prova sotto è vacua').toBeGreaterThan(8);
-  expect(verdeAltezza && verdeRelativa, `INTELAIATURA-10 NON morde un salto di ${salto} px: è la cecità dichiarata`).toBe(true);
+  expect(verdeAltezza && verdeRelativa, `le due metriche vecchie NON mordono un salto di ${salto} px: è la cecità dichiarata`).toBe(true);
+  expect(verdeOffset, 'la terza metrica di INTELAIATURA-10 (offsetTop) prende il salto').toBe(false);
 });
 
-test('P4b · lo stesso salto SOTTO i 660 px, dove resta solo l’altezza della barra', async ({ page }) => {
+test('P4b · lo stesso salto SOTTO i 660 px, dove sopra la barra c’è il selettore delle sezioni', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await apriLaboratorio(page);
   await page.evaluate(() => window.__talosHarnessUiRuntime?.setSettingsSection?.('appearance', { persist: false }));
@@ -330,19 +337,22 @@ test('P4b · lo stesso salto SOTTO i 660 px, dove resta solo l’altezza della b
   await page.setViewportSize({ width: 560, height: 900 });
   await page.waitForTimeout(300);
   const stato = () => page.evaluate(() => {
-    const barra = document.querySelector('#schermoImpostazioni .settings-toolbar').getBoundingClientRect();
+    const nodo = document.querySelector('#schermoImpostazioni .settings-toolbar');
+    const barra = nodo.getBoundingClientRect();
     const voce = document.querySelector('#schermoImpostazioni .settings-nav__list [role="tab"]').getBoundingClientRect();
     const mobile = document.querySelector('#schermoImpostazioni .settings-mobile-nav').getBoundingClientRect();
-    const bottone = document.querySelector('#schermoImpostazioni .settings-nav__search').getBoundingClientRect();
     return {
-      altezzaBarra: Math.round(barra.height), barraTop: Math.round(barra.top),
+      altezzaBarra: Math.round(barra.height), barraTop: Math.round(barra.top), barraOffset: nodo.offsetTop,
       relativa: Math.round(voce.top - barra.top), voceVisibile: voce.height > 0,
-      mobileAltezza: Math.round(mobile.height), bottoneTop: Math.round(bottone.top),
-      altezzaBottone: Math.round(bottone.height),
+      mobileAltezza: Math.round(mobile.height), mobileSopra: mobile.bottom <= barra.top + 0.5,
     };
   });
   const sana = await stato();
-  await page.addStyleTag({ content: '.settings-nav[data-in-ricerca] .settings-nav__search{display:none}' });
+  expect(sana.mobileAltezza, 'sotto i 660 px il selettore delle sezioni si vede: la prova misura').toBeGreaterThan(8);
+  expect(sana.mobileSopra, 'e sta sopra la barra').toBe(true);
+  /* LA REGRESSIONE, iniettata a runtime (nessun file toccato): mentre si cerca, il selettore delle sezioni — l'elemento VERO che sta
+     sopra la barra a questa larghezza — sparisce. */
+  await page.addStyleTag({ content: '.settings-nav[data-in-ricerca] .settings-mobile-nav{display:none !important}' });
   await page.evaluate(() => {
     const nav = document.querySelector('#schermoImpostazioni .settings-nav');
     const campo = document.getElementById('settingsSearch');
@@ -352,11 +362,12 @@ test('P4b · lo stesso salto SOTTO i 660 px, dove resta solo l’altezza della b
   await page.waitForTimeout(250);
   const rotta = await stato();
   const saltoBarra = Math.abs(rotta.barraTop - sana.barraTop);
-  console.log('P4b ' + breve({ sana, rotta, saltoBarra: saltoBarra, saltoAltezzaBarra: Math.abs(rotta.altezzaBarra - sana.altezzaBarra), voceVisibile: rotta.voceVisibile }));
-  // INTELAIATURA-10 sotto i 660 px: `voceVisibile` falso ⇒ resta SOLO l'altezza della barra.
+  console.log('P4b ' + breve({ sana, rotta, saltoBarra, saltoAltezzaBarra: Math.abs(rotta.altezzaBarra - sana.altezzaBarra), saltoOffset: Math.abs(rotta.barraOffset - sana.barraOffset), voceVisibile: rotta.voceVisibile }));
+  // INTELAIATURA-10 sotto i 660 px: `voceVisibile` falso ⇒ della parte vecchia resta SOLO l'altezza della barra.
   expect(rotta.voceVisibile, 'sotto i 660 px la voce non è visibile: è il caso che INTELAIATURA-10 sa di non coprire').toBe(false);
-  expect(Math.abs(rotta.altezzaBarra - sana.altezzaBarra) <= 2, `l’unica asserzione che resta è verde mentre la colonna sale di ${saltoBarra} px`).toBe(true);
+  expect(Math.abs(rotta.altezzaBarra - sana.altezzaBarra) <= 2, `l’altezza della barra è verde mentre la colonna sale di ${saltoBarra} px`).toBe(true);
   expect(saltoBarra, 'la regressione non muove la colonna: prova vacua').toBeGreaterThan(8);
+  expect(Math.abs(rotta.barraOffset - sana.barraOffset), 'la terza metrica (offsetTop) prende il salto anche qui').toBeGreaterThan(8);
 });
 
 /* ══════════════════════════════════════════════════════════════════════════

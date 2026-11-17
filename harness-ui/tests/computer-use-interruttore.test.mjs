@@ -66,13 +66,17 @@ test('INTERRUTTORE-01: la funzione è nella versione (decisione 129), la scelta 
   // scritta per intero, e nel codice del server (commenti tolti: «server acceso» vi compare molte volte) non c'è nessuna chiave `acceso`
   const chiamate = srv.match(/porteDelComputerUse\(/gu) ?? [];
   assert.equal(chiamate.length, 1, 'una sola chiamata a porteDelComputerUse');
-  assert.equal(srv.split("porteDelComputerUse({ fileLuoghi: percorsoDatiDesktop('.computer-use-luoghi.json'), acceso: impostazioneComputerUse.acceso })").length - 1, 1,
-    'la chiamata ha il file dei luoghi e la lettura dal vivo della scelta della persona, nient\'altro');
+  /* decisione 374 (07/11): in più il custode dei due file, lo stesso che legge la scelta; nient'altro */
+  assert.equal(srv.split("porteDelComputerUse({ fileLuoghi: percorsoDatiDesktop('.computer-use-luoghi.json'), acceso: impostazioneComputerUse.acceso, custode: custodeFileComputerUse })").length - 1, 1,
+    'la chiamata ha il file dei luoghi, la lettura dal vivo della scelta della persona e il custode, nient\'altro');
   const codiceSrv = srv.replace(/\/\*[\s\S]*?\*\//gu, '').replace(/(^|[^:'"`])\/\/.*$/gmu, '$1');
   /* decisione 310: l'unico `acceso:` del server è la lettura dal vivo; mai un `true` scritto a mano */
-  assert.deepEqual(codiceSrv.match(/\bacceso\s*:[^,}]*/gu), ['acceso: impostazioneComputerUse.acceso '], 'il server non accende il computer use');
-  assert.equal(codiceSrv.split("creaImpostazioneComputerUse({ file: percorsoDatiDesktop('.computer-use-impostazione.json') })").length - 1, 1,
+  assert.deepEqual(codiceSrv.match(/\bacceso\s*:[^,}]*/gu), ['acceso: impostazioneComputerUse.acceso'], 'il server non accende il computer use');
+  assert.equal(codiceSrv.split("creaImpostazioneComputerUse({ file: percorsoDatiDesktop('.computer-use-impostazione.json'), custode: custodeFileComputerUse })").length - 1, 1,
     'la scelta si crea una volta, senza `diSerie`: vale lo spento di serie');
+  /* decisione 374 giro 2 (08/11): in più il portachiavi delle chiavi, dove vive l'impronta approvata */
+  assert.equal(codiceSrv.split("creaCustodeFileComputerUse({ file: [percorsoDatiDesktop('.computer-use-impostazione.json'), percorsoDatiDesktop('.computer-use-luoghi.json')], portachiavi: providerKeyring })").length - 1, 1,
+    'un solo custode, coi due file e il portachiavi, nient\'altro');
   assert.doesNotMatch(srv, /creaRegistroLuoghi|luoghiFn\s*:|\bluoghi\s*:|onLuoghiFn/u, 'nessuna porta del computer use fuori dall\'interruttore');
   // passo 5 (04/11): gli ospiti del nucleo arrivano al registro SOLO da `perNucleo`, una volta; nessun ospite scritto a mano nel server
   assert.equal(codiceSrv.split('...computerUse.perNucleo,').length - 1, 1, 'il registro riceve perNucleo una volta');

@@ -51,11 +51,13 @@ export const NOMI_DAL_DIZIONARIO = Object.freeze({
   "varie.compaction.card.backupLabel": { en: "If it does not answer", it: "Se non risponde" },
   "varie.localWindow.card.title": { en: "When a local model’s window fills up", it: "Quando la finestra di un modello locale si riempie" },
   "varie.commandsDefault.title": { en: "Where commands run · new conversations", it: "Dove girano i comandi · conversazioni nuove" },
+  "modelli.publicCatalog.title": { en: "Public model list", it: "Catalogo pubblico dei modelli" },
   "blocchi.settings.title": { en: "Live blocks in replies", it: "Blocchi vivi nelle risposte" },
   "modello.permissions.useANormalUser": { en: "Use a normal user if the distro has one", it: "Usa un utente normale se la distro ne ha uno" },
   "computer.settings.title": { en: "Computer use", it: "Uso del computer" },
   "modello.frammenti.impostazioni.webSearchSource": { en: "Web search source", it: "Origine della ricerca web" },
   "chat.trust.menuItem": { en: "Trust this folder", it: "Fidati di questa cartella" },
+  "varie.modelMemory.card.title": { en: "Model memory", it: "Memoria del modello" },
 });
 
 /*

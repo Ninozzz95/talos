@@ -61,7 +61,7 @@ test('SET-RIEPILOGO-INTEGRO: leggo i dati e raggiungo Doctor',async({page},info)
     scheda «Provider» del Laboratorio modelli (la card di Ollama Local c'è, il suo stato lo dice la card). */
  await s.locator('[data-settings-tab=models]').click();await s.locator('#modelLabCard [data-lab-scheda=providers]').click();await expect(s.locator('#providerList')).toContainText('OpenAI');await expect(s.locator('#providerList')).toContainText('Ollama Local');await expect(s.locator('[data-settings-tab=providers]')).toHaveCount(0);
  for(const id of ['chat','tools','privacy','workspace','account']){await s.locator('[data-settings-tab='+id+']').click();if(id==='tools'){await expect(s.locator('#settingsToolsFacts')).toContainText('Sessione');await expect(s.locator('#settingsToolsFacts .talos-kv__v').last()).toHaveCSS('white-space','normal');}await foto(page,'app-'+id,info);}
- await s.getByRole('button',{name:'Doctor',exact:true}).click();await expect(page.locator('#schermoDoctor [data-doctor-esito]')).toContainText('controll');
+ await s.getByRole('button',{name:'Doctor',exact:true}).click();await expect(page.locator('#schermoDoctor [data-doctor-tempo]')).toContainText('controll');
 });
 test('SET-MOVIMENTO: regolo un cursore e ripristino il movimento senza perdere il tema',async({page},info)=>{
  /* ⛔ 12/09: tema e cursori si regolano nello studio. La verifica NON cambia soggetto — si

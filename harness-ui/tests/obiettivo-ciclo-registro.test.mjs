@@ -204,6 +204,7 @@ test('G4-REG-05 — la verifica del ciclo RIFIUTATA (un `!` della persona in cor
   await new Promise((r) => setTimeout(r, 60)); // il ciclo prova, trova il `!`, aspetta
   assert.equal(b.chiamate.length, 0, 'nessuna prova mentre il `!` lavora');
   assert.equal(stato(b, sessionId).stato, 'attivo');
+  await aspetta(() => diretti.length >= 1, 'il `!` è partito'); // gemello di COMPACT-ATTIVO-04 (09/11/2026): si libera solo ciò che è già partito
   diretti.shift()({ codice: 0, testo: '' }); // il `!` finisce: al prossimo tentativo le prove partono e il ciclo riparte
   await aspetta(() => b.giri.length === 3, 'il ciclo riparte dopo il `!`');
   assert.equal(b.chiamate.length, 1);

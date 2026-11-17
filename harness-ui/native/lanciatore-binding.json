@@ -1,0 +1,13 @@
+{
+  "nota": "Il lanciatore dei comandi su Windows (decisione 374 R1, owner 1037): nel repo NON c'è l'exe, c'è questo riferimento. Nel RILASCIO questo riferimento non vale: l'exe lo costruisce il flusso stesso dallo stesso commit (scripts/costruisci-lanciatore.mjs) e il pacchetto lo copia solo se la copia ha quell'impronta (desktop/scripts/lanciatore-nel-pacchetto.mjs), con un suo riferimento accanto. Vale solo per una build LOCALE e per il nucleo lanciato dal repo: finché sha256 è null il riferimento NON è fissato, il pacchetto locale esce senza lanciatore e lo dice, e il nucleo fa partire i comandi come prima dicendo «nipoti seguiti: no» (motivo non-fissato). Fissato a mano, l'exe in native/lanciatore-bin/ deve avere quell'impronta (lo può mettere lì, a richiesta, scripts/scarica-lanciatore.mjs da una corsa di lanciatore.yml, con l'attestazione e l'impronta verificate). Fuori da native/lanciatore/ di proposito: là ogni modifica rilancerebbe la compilazione.",
+  "repository": "Ninozzz95/talos",
+  "workflow": ".github/workflows/lanciatore.yml",
+  "runId": null,
+  "artefatto": "talos-lanciatore-win32-x64",
+  "file": "talos-lanciatore.exe",
+  "sha256": null,
+  "byte": null,
+  "commitSorgente": null,
+  "ramoSorgente": "refs/heads/main",
+  "scade": null
+}

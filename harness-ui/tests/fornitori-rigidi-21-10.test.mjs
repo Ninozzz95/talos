@@ -327,3 +327,15 @@ test('RIG-19 (giro 8): la strada vera verso Mistral (router reale, server finto)
   assert.equal(arrivato.messages.at(-1).role, 'user', JSON.stringify(arrivato.messages.at(-1)));
   assert.ok(!JSON.stringify(arrivato).includes('reasoning_details'));
 });
+
+/* Decisione 330, parte del telefono (recupero P4, 12/11/2026): il motore dell'app è llama.cpp col JNI dell'app (non llama.rn), e il
+   servizio del motore ospite chiede il prompt con `add_generation_prompt` vero e nessuna continuazione (`common/chat.h:266-267`): non
+   prosegue l'assistant in coda; llama-server del PC sì (`tools/server/server-common.cpp:1452-1458`). */
+test('RIG-15 (330, c, telefono) verso il motore dell\u2019app (llama.cpp nell app, add_generation_prompt di serie) l\u2019assistant in coda si toglie; il motore del PC lo tiene', () => {
+  assert.equal(REGISTRO_FORNITORI['locale-ospite'].prefillInCoda?.prosegue, false, 'locale-ospite dichiara di non proseguirlo');
+  assert.match(REGISTRO_FORNITORI['locale-ospite'].prefillInCoda.fonte, /^https:\/\/github\.com\/ggml-org\/llama\.cpp\/blob\/[^/]+\/common\/chat\.h$/u, 'fonte nel sorgente di llama.cpp, il motore che l app usa davvero');
+  assert.doesNotThrow(() => verificaRegistro(REGISTRO_FORNITORI));
+  assert.deepEqual(preparaRichiestaCompatibile('locale-ospite', conCoda('qwen3-1.7b', PREFILL)).corpo.messages.at(-1), { role: 'user', content: 'Leggi a.txt.' });
+  assert.equal(REGISTRO_FORNITORI.local.prefillInCoda, undefined, 'il motore del PC non dichiara niente');
+  assert.deepEqual(preparaRichiestaCompatibile('local', conCoda('qwen3-8b', PREFILL)).corpo.messages.at(-1), PREFILL, 'llama-server lo prosegue');
+});

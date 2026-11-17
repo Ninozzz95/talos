@@ -41,3 +41,10 @@ harness-ui/.notifiche.jsonl
 harness-ui/.notifiche.jsonl.*.tmp
 harness-ui/public.prima-del-cutover-*/
 harness-ui/public.nuovo-*/
+# 12/11/2026, rewritten 14/11/2026: the command helper for Windows. The release builds the exe from the same commit
+# (harness-ui/scripts/costruisci-lanciatore.mjs) and the package copies it only if the copy has that fingerprint
+# (harness-ui/desktop/scripts/lanciatore-nel-pacchetto.mjs); the repository carries its source and
+# harness-ui/native/lanciatore-binding.json, never the exe nor a local build.
+harness-ui/native/lanciatore-bin/
+harness-ui/native/lanciatore/target/
+harness-ui/native/lanciatore/uscita/

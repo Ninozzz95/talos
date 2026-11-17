@@ -18,6 +18,10 @@ import { catalogoDiRiservaPer } from './provider-registry.mjs';
 
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const TTL_PREDEFINITO_MS = 10 * 60 * 1000; // 10 minuti — non richiamare OpenRouter a ogni apertura del foglio.
+/* Il tetto ai tentativi (giudice v1559, 11/11/2026): dopo un fallimento una ripetizione a 30 s, poi al più una ogni 10 minuti.
+   PRIVACY.md, le novità e la riga delle Impostazioni dicono questi due numeri (prova C11). */
+export const RIPETIZIONE_DOPO_FALLIMENTO_MS = 30 * 1000;
+export const ATTESA_DOPO_FALLIMENTI_MS = 10 * 60 * 1000;
 
 export class ModelCatalogError extends Error {
   constructor(message, code = 'CATALOG_UNAVAILABLE') {
@@ -70,12 +74,18 @@ function normalizza(modelloGrezzo) {
 }
 
 /**
- * @param {{fetchFn?: typeof fetch, clock?: () => Date, ttlMs?: number, url?: string}} [opts]
+ * @param {{fetchFn?: typeof fetch, clock?: () => Date, ttlMs?: number, url?: string, consentitoFn?: () => boolean}} [opts]
+ *   `consentitoFn` (0.2.2, `catalogo-pubblico.mjs`): letto a OGNI richiesta; `false` ⇒ nessuna richiesta a openrouter.ai, si serve
+ *   la copia già letta o il catalogo incorporato, con `catalogoPubblicoSpento: true`.
  */
 export function createModelCatalog({
-  fetchFn = fetch, clock = () => new Date(), ttlMs = TTL_PREDEFINITO_MS, url = OPENROUTER_MODELS_URL,
+  fetchFn = fetch, clock = () => new Date(), ttlMs = TTL_PREDEFINITO_MS, url = OPENROUTER_MODELS_URL, consentitoFn = () => true,
+  ripetizioneMs = RIPETIZIONE_DOPO_FALLIMENTO_MS, attesaDopoFallimentiMs = ATTESA_DOPO_FALLIMENTI_MS,
 } = {}) {
   let cache = null; // { creatoAlle: number, modelli: Array }
+  let inVolo = null; // la lettura in corso, condivisa da chi chiede insieme
+  let prossimoTentativoAlle = 0; // dopo un fallimento, prima di quest'ora niente rete
+  let ripetizioneUsata = false; // la ripetizione a 30 s vale una volta per serie di fallimenti
 
   /**
    * @param {{forzaAggiornamento?: boolean}} [opts]
@@ -83,10 +93,42 @@ export function createModelCatalog({
    */
   async function ottieni({ forzaAggiornamento = false } = {}) {
     const ora = clock().getTime();
+    /* 0.2.2 (SignPath): spento ⇒ la rete non si tocca, nemmeno con «aggiorna»; prima la copia vera se c'è, poi l'incorporato */
+    let consentito = true;
+    try { consentito = consentitoFn() !== false; } catch { consentito = false; } // un dubbio non apre la rete
+    if (!consentito) {
+      if (cache) return { modelli: structuredClone(cache.modelli), daCache: true, fonte: 'openrouter', aggiornatoAlle: new Date(cache.creatoAlle).toISOString(),
+        etaCacheMs: Math.max(0, ora - cache.creatoAlle), catalogoPubblicoSpento: true };
+      const riserva = catalogoDiRiservaPer('openrouter');
+      if (!riserva) return riserva;
+      /* ogni voce lo dice anche lei: il selettore scrive «catalogo pubblico spento», non «non raggiungibile» (`fonti-modelli.js`) */
+      const segna = (m) => ({ ...m, catalogo: { ...m.catalogo, catalogoPubblicoSpento: true } });
+      return { ...riserva, modelli: riserva.modelli.map(segna), modelliDiRiserva: riserva.modelliDiRiserva.map(segna), catalogoPubblicoSpento: true };
+    }
     if (!forzaAggiornamento && cache && (ora - cache.creatoAlle) < ttlMs) {
       return { modelli: cache.modelli, daCache: true, aggiornatoAlle: new Date(cache.creatoAlle).toISOString() };
     }
+    /* ⛔ IL TETTO AI TENTATIVI (revisore unico, ripasso 11/11/2026 22:01; giudice v1559). Prima una lettura fallita non lasciava
+       traccia e ogni schermata che chiedeva l'elenco ne faceva partire un'altra (20 in 10 minuti col server vero e la rete che
+       rifiuta). Ora: le richieste che arrivano insieme aspettano la stessa lettura in volo; dopo un fallimento, prima della prossima
+       ora buona (30 s la prima volta, poi 10 minuti) si serve la copia o l'elenco incorporato senza toccare la rete, «aggiorna»
+       compreso. Come `compaction-window-source.mjs:49` (attesa dopo un fallimento) e `model-catalog-models-dev.mjs:16` (`RINVIO_MS`). */
+    if (inVolo) return inVolo;
+    if (ora < prossimoTentativoAlle) return ripiego();
+    inVolo = leggi(ora).finally(() => { inVolo = null; });
+    return inVolo;
+  }
 
+  /** Dopo un fallimento: la copia vera se c'è (P-F: ha precedenza), altrimenti l'elenco incorporato; la riserva non entra in cache. */
+  function ripiego() {
+    if (cache) return { modelli: structuredClone(cache.modelli), daCache: true, fonte: 'openrouter',
+      aggiornatoAlle: new Date(cache.creatoAlle).toISOString(),
+      etaCacheMs: Math.max(0, clock().getTime() - cache.creatoAlle), fallbackRete: true,
+      motivo: 'Catalog unreachable: the saved copy is used.' };
+    return catalogoDiRiservaPer('openrouter');
+  }
+
+  async function leggi(ora) {
     try {
       let risposta;
       try {
@@ -114,14 +156,14 @@ export function createModelCatalog({
         .sort((a, b) => a.provider.localeCompare(b.provider) || a.nome.localeCompare(b.nome));
 
       cache = { creatoAlle: ora, modelli };
+      prossimoTentativoAlle = 0; ripetizioneUsata = false; // un successo azzera la serie
       return { modelli, daCache: false, aggiornatoAlle: new Date(ora).toISOString() };
     } catch {
-      // P-F: la copia reale ha precedenza; la riserva non entra mai nella cache del catalogo.
-      if (cache) return { modelli: structuredClone(cache.modelli), daCache: true, fonte: 'openrouter',
-        aggiornatoAlle: new Date(cache.creatoAlle).toISOString(),
-        etaCacheMs: Math.max(0, clock().getTime() - cache.creatoAlle), fallbackRete: true,
-        motivo: 'Catalog unreachable: the saved copy is used.' };
-      return catalogoDiRiservaPer('openrouter');
+      /* un fallimento conta come una lettura: una sola ripetizione dopo 30 s, poi al più una ogni 10 minuti */
+      const adesso = clock().getTime();
+      prossimoTentativoAlle = adesso + (ripetizioneUsata ? attesaDopoFallimentiMs : ripetizioneMs);
+      ripetizioneUsata = true;
+      return ripiego();
     }
   }
 

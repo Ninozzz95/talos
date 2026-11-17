@@ -166,8 +166,9 @@ export function ePercorsoDiControllo(cartella, percorso, { realpathFn = realpath
  * R1 (04/11/2026): ogni segmento perde ciò che segue il primo `:` (il nome dello stream NTFS e il suo tipo), tranne la lettera del
  * disco in testa. Come Hermes, che rifiuta i due punti in ogni componente perché su Windows aprono uno stream alternativo
  * (`tools/skills_hub_models.py:219-222`, clone 01/11). Nessuna lettura del disco: è solo testo.
+ * Esportata per il registro (374, L1 del revisore B del giro 8: il file adottato dopo una carta è quello che il kernel ha scritto).
  */
-function senzaStreamNtfs(percorso) {
+export function senzaStreamNtfs(percorso) {
   let disco = true; // la lettera del disco è il primo pezzo vero, anche dopo `\\?\` o `\\.\`
   return percorso.split(/([\\/])/u).map((pezzo) => {
     if (pezzo === '' || pezzo === '/' || pezzo === '\\' || pezzo === '?' || pezzo === '.') return pezzo;
@@ -294,9 +295,30 @@ function conLaHomeEspansa(grezzo, home) {
   if (t === '') return '';
   if (typeof home === 'string' && home !== '') {
     t = t.replace(/^~(?=$|[\\/])/, home);
+    /* ⛔ Uscita di riparazione, giro 2 (12/11/2026, revisore A, B5): su Windows la casa si scrive anche in due pezzi
+       (`%HOMEDRIVE%%HOMEPATH%`), con le graffe di PowerShell (`${env:USERPROFILE}`) e col solo `%HOMEPATH%` / `$env:HOMEPATH`, che è
+       la casa SENZA il disco: cmd la apre sul disco corrente, che quasi sempre è quello della casa. Si legge come la casa intera:
+       una carta in più se il comando sta su un altro disco, mai una in meno. Prima le conosceva solo la lettura in Accesso pieno. */
+    if (process.platform === 'win32') {
+      t = t.replace(/%HOMEDRIVE%%HOMEPATH%|\$env:HOMEDRIVE\$env:HOMEPATH|\$\{env:HOMEDRIVE\}\$\{env:HOMEPATH\}/giu, () => home);
+      t = t.replace(/%HOMEPATH%|\$\{env:HOMEPATH\}|\$env:HOMEPATH(?![A-Za-z0-9_])/giu, () => home);
+      t = t.replace(/\$\{env:(?:USERPROFILE|HOME)\}|\$env:HOME(?![A-Za-z0-9_])/giu, () => home);
+    }
     t = t.replace(/%USERPROFILE%|%HOME%|\$\{HOME\}|\$env:USERPROFILE|\$HOME(?![A-Za-z0-9_])/gi, home);
   }
-  return t.replace(/\\/g, '/');
+  t = t.replace(/\\/g, '/');
+  /* ⛔ Giro 2 (revisore A, B3): `C:\\Users\\…` e `C://Users//…`, le barre raddoppiate che un modello scrive da sé, sono lo stesso
+     percorso (`path.resolve` le unisce) e non un indirizzo web: una lettera sola non è uno schema. Prima `://` le faceva saltare. */
+  if (process.platform === 'win32') t = t.replace(/^([A-Za-z]):\/{2,}/u, (_, disco) => `${disco}:/`);
+  /* ⛔ Giro piccolo A1 (12/11/2026, owner 22:27 «Sì, rimettila»): dietro il prefisso dello spazio dei nomi (`\\?\`, `\\.\`, `\??\`, e
+     quindi anche `\\?\GLOBALROOT\…` e `\\?\UNC\…`) le barre raddoppiate si uniscono come sopra. `\\?\C:\\Users\\…\\.ssh\\id_ed25519`
+     è la chiave SSH (Node e `Get-Content` la aprono), ma `C://` sembrava un indirizzo web e nessun controllo la guardava. Una carta
+     in più su un file normale scritto così in «Scrive nel progetto» (la forma lunga non sta mai dentro il progetto, come la forma
+     lunga semplice): voluta. Hermes guarda la stringa grezza prima di risolverla (`agent/file_safety.py:387-394`) e rifiuta solo
+     `\??\`, `\\.\`, `\\?\UNC\` e `\\?\GLOBALROOT\` (`:146-162`, messaggio `:165-175`); la forma lunga semplice `\\?\C:\…` la lascia
+     passare (`:135-139`) e va al percorso risolto, dove valgono i suoi controlli di sempre (`:395`). Questa riga unisce solo le barre: i controlli di qui sotto guardano il percorso. */
+  if (process.platform === 'win32') t = t.replace(/^(\/\/[?.]\/|\/\?\?\/)(.*)$/su, (_, prefisso, resto) => `${prefisso}${resto.replace(/\/{2,}/gu, '/')}`);
+  return t;
 }
 
 /** I segmenti veri di un percorso: via i vuoti, via `.` e `..` (che non sono nomi). */
@@ -404,7 +426,7 @@ export const __perLeProve = Object.freeze({ esitiRicordati: () => [...esitiDegli
  *   percorso relativo senza la cartella della sessione. In tutti questi casi resta il comportamento di prima: niente domanda.
  * @returns {null | {classe:'segreto', percorso:string, contenuto:true}}
  */
-function esempioConUnaChiave(pezzo, { cartella, home, leggiTesta }) {
+function esempioConUnaChiave(pezzo, { cartella, home, leggiTesta, luoghi = null }) {
   const grezzo = String(pezzo ?? '').trim().replace(/^["'`]+/, '').replace(/["'`]+$/, '');
   if (grezzo === '' || eDiRete(grezzo)) return null;
   const normalizzato = conLaHomeEspansa(grezzo, home);
@@ -416,11 +438,19 @@ function esempioConUnaChiave(pezzo, { cartella, home, leggiTesta }) {
   if (!assolutoScritto && !conCartella) return null;
   if (conCartella && eDiRete(cartella)) return null;
   try {
-    const assoluto = assolutoScritto ? risolvi(normalizzato) : risolvi(cartella, normalizzato);
-    // le prove passano `leggiTesta` (un testo finto); il disco passa dall'esito ricordato
-    const esito = typeof leggiTesta === 'function' ? leggiTesta(assoluto) : esitoDalDisco(assoluto);
-    const conChiave = esito === NON_CONTROLLABILE || esito === true || (typeof esito === 'string' && Boolean(formaDiSegretoNelTesto(esito)));
-    return conChiave ? { classe: 'segreto', percorso: grezzo, contenuto: true } : null;
+    /* 12/11/2026, giro 2: su Windows ogni posto in cui il percorso può aprirsi (`postiPossibili`: la sessione, il disco del processo
+       come la 0.2.1, i dischi che il comando nomina), e su ognuno si guarda il contenuto. Fuori da Windows la lettura di sempre. */
+    const posti = process.platform === 'win32' ? postiPossibili(normalizzato, { cartella: conCartella ? cartella : undefined, luoghi })
+      : [assolutoScritto ? risolvi(normalizzato) : risolvi(cartella, normalizzato)];
+    for (const assoluto of posti) {
+      // le prove passano `leggiTesta` (un testo finto); il disco passa dall'esito ricordato
+      let esito;
+      /* un posto che non c'è o non si apre non dice niente, e non ferma gli altri (sul primo, come prima: niente domanda) */
+      try { esito = typeof leggiTesta === 'function' ? leggiTesta(assoluto) : esitoDalDisco(assoluto); } catch { continue; }
+      const conChiave = esito === NON_CONTROLLABILE || esito === true || (typeof esito === 'string' && Boolean(formaDiSegretoNelTesto(esito)));
+      if (conChiave) return { classe: 'segreto', percorso: grezzo, contenuto: true };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -1410,8 +1440,9 @@ function bersaglioSegretoDiUnCollegamento(percorso, { cartella, home, fsSync = {
   if (!assolutoScritto && !conCartella) return null;
   /* la cartella della sessione su una condivisione: nessun cammino, la domanda della rete viene prima (RETE-09) */
   if (conCartella && eDiRete(cartella)) return null;
-  try {
-    const assoluto = assolutoScritto ? risolvi(normalizzato) : risolvi(cartella, normalizzato);
+  /* 12/11/2026, giro 2: su Windows la cartella della sessione (dove l'attrezzo apre) e il disco del processo, come la 0.2.1
+     (`postiPossibili` per un attrezzo dei file); fuori da Windows la lettura di sempre. Su ogni posto lo stesso controllo. */
+  const diUnPosto = (assoluto) => {
     const reale = percorsoVeroAParole(assoluto, fsSync);
     if (reale === null) return null;
     if (reale === OLTRE_IL_TETTO) return oltreIlTetto(grezzo);
@@ -1425,6 +1456,16 @@ function bersaglioSegretoDiUnCollegamento(percorso, { cartella, home, fsSync = {
     if (daClassificare === '') return null;
     const classe = classeDelPezzo(daClassificare, home);
     return classe ? { classe, percorso: `${grezzo} → ${reale}` } : null;
+  };
+  try {
+    const posti = process.platform === 'win32' ? postiPossibili(normalizzato, { cartella: conCartella ? cartella : undefined })
+      : [assolutoScritto ? risolvi(normalizzato) : risolvi(cartella, normalizzato)];
+    for (const assoluto of posti) {
+      let esito = null;
+      try { esito = diUnPosto(assoluto); } catch { /* un posto che non si cammina non dice niente */ }
+      if (esito) return esito;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -1440,18 +1481,22 @@ function bersaglioSegretoDiUnCollegamento(percorso, { cartella, home, fsSync = {
  *   progetto, la casa (le sue credenziali e le cartelle `.ssh`, `.aws`… un livello sotto). Un `.env` in un'altra sottocartella
  *   resta fuori, dichiarato dall'owner. Mai un'eccezione da un cancello: un `stat` che fallisce vale «non lo so» = `null`.
  */
-function segretoDiUnCollegamentoFisico(percorso, { cartella, home, statFn = statSyncNativa, elencaFn = elencaSync, fsSync, memoria = {} } = {}) {
+function segretoDiUnCollegamentoFisico(percorso, { cartella, home, statFn = statSyncNativa, elencaFn = elencaSync, fsSync, memoria = {}, luoghi = null } = {}) {
   const grezzo = String(percorso ?? '').trim();
-  if (grezzo === '' || eDiRete(grezzo)) return null;
-  const normalizzato = conLaHomeEspansa(grezzo, home);
+  /* giro 2 (revisore A, B4): su Windows `\\?\C:\…`, `\\.\C:\…` e `\\localhost\C$\…` sono lo stesso disco scritto per esteso, e si
+     riportano a `C:\…` come fa da sempre la lettura delle credenziali: prima il secondo nome di un `.env` scritto così passava. */
+  const locale = process.platform === 'win32' ? comeDiscoLocale(grezzo.replace(/^["'`]+|["'`]+$/gu, ''), home) : grezzo;
+  if (grezzo === '' || eDiRete(locale)) return null;
+  const normalizzato = conLaHomeEspansa(locale, home);
   if (normalizzato === '' || normalizzato.includes('://') || normalizzato.startsWith('//')) return null;
   const assolutoScritto = /^[A-Za-z]:\//u.test(normalizzato) || normalizzato.startsWith('/');
   const conCartella = typeof cartella === 'string' && cartella !== '' && !eDiRete(cartella);
   /* Senza radice un percorso relativo non si controlla (il ponte del telefono): lo stesso limite, dichiarato, di `esempioConUnaChiave`. */
   if (!assolutoScritto && !conCartella) return null;
   const fs = fsSync?.lstatSync ? fsSync : { lstatSync: lstatSyncNativa, readlinkSync: readlinkSyncNativa };
-  try {
-    const assoluto = assolutoScritto ? risolvi(normalizzato) : risolvi(cartella, normalizzato);
+  /* 12/11/2026, giro 2: su Windows ogni posto in cui il percorso può aprirsi (`postiPossibili`: la sessione, il disco del processo
+     come la 0.2.1, i dischi che il comando nomina), e su ognuno il controllo intero. Fuori da Windows la lettura di sempre. */
+  const diUnPosto = (assoluto) => {
     /*
      * ⛔ RETE-10: prima di ogni `stat` il percorso VERO a parole (`lstat`/`readlink`, mai aperto): un collegamento verso una
      *   condivisione dà `null` e qui non si tocca niente — la domanda della rete viene prima.
@@ -1496,6 +1541,16 @@ function segretoDiUnCollegamentoFisico(percorso, { cartella, home, statFn = stat
     if (typeof home === 'string' && home !== '') {
       const trovato = identitaDellaCasa(home, { statFn, elencaFn, memoria }).get(`${info.dev}:${info.ino}`);
       if (trovato && !stessoNome(trovato)) return { classe: classeDelPezzo(trovato.replace(/\\/gu, '/'), home) ?? 'segreto', percorso: `${grezzo} = ${trovato}` };
+    }
+    return null;
+  };
+  try {
+    const posti = process.platform === 'win32' ? postiPossibili(normalizzato, { cartella: conCartella ? cartella : undefined, luoghi })
+      : [assolutoScritto ? risolvi(normalizzato) : risolvi(cartella, normalizzato)];
+    for (const assoluto of posti) {
+      let esito = null;
+      try { esito = diUnPosto(assoluto); } catch { /* un posto che non c'è: niente da confrontare */ }
+      if (esito) return esito;
     }
     return null;
   } catch {
@@ -1897,11 +1952,21 @@ const ESITO_DEI_BIGLIETTI = Symbol('esitoDeiBiglietti');
 export function scritturaDiUnaCredenziale(percorso, { cartella, home = homeDiSistema(), realpathFn = realpathSyncNativa } = {}) {
   if (typeof percorso !== 'string' || percorso.trim() === '' || typeof home !== 'string' || home === '') return null;
   const reale = (p) => { try { return percorsoRealeAncheSeManca(p, realpathFn); } catch { return p; } };
-  let assoluto;
-  if (isAbsolute(percorso)) assoluto = risolvi(percorso);
-  else if (typeof cartella === 'string' && cartella !== '') assoluto = risolvi(cartella, percorso);
+  /* ⛔ 12/11/2026, giro 2: su Windows i posti di `postiPossibili` per un attrezzo dei file: la cartella della sessione (è lì che
+     `scrivi` e `file_edit` aprono, anche `\cartella\file` senza disco e `X:file`) e il disco del processo, come la 0.2.1. Le grafie
+     dello stesso disco scritte per esteso (`\\?\C:\…`, `\\.\C:\…`, `\\localhost\C$\…`) si riportano a `C:\…` come fa da sempre la
+     lettura: prima passavano. Su ogni posto il percorso vero. Fuori da Windows la lettura è una, quella di sempre. */
+  let posti;
+  if (process.platform === 'win32') posti = postiPossibili(comeDiscoLocale(percorso), { cartella });
+  else if (isAbsolute(percorso)) posti = [risolvi(percorso)];
+  else if (typeof cartella === 'string' && cartella !== '') posti = [risolvi(cartella, percorso)];
   else return null;
-  return credenzialeSottoLaCasa(reale(assoluto), reale(risolvi(home))) ? { percorso: reale(assoluto) } : null;
+  const casa = reale(risolvi(home));
+  for (const candidato of posti) {
+    const vero = reale(candidato);
+    if (credenzialeSottoLaCasa(vero, casa)) return { percorso: vero };
+  }
+  return null;
 }
 
 /** Il confronto a parole con l'elenco: `assoluto` sta sotto `casa` e nomina una credenziale (mai `.ssh/config`)? */
@@ -1950,17 +2015,141 @@ function comeDiscoLocale(testo, home) {
     t = t.replace(/\$\{env:(?:USERPROFILE|HOME)\}|\$env:HOME(?![A-Za-z0-9_])/giu, home);
   }
   const b = t.replace(/\//gu, '\\');
-  const esteso = /^\\\\[?.]\\([A-Za-z]:(?:\\.*)?)$/su.exec(b);
+  /* giro piccolo A1 (12/11/2026): anche `\??\C:\…` (lo spazio dei nomi NT scritto da sé: cmd `type` lo apre) e `GLOBALROOT\??\` dopo
+     un prefisso (`\\?\GLOBALROOT\??\C:\…`: Node lo apre), anche con le barre raddoppiate dopo il prefisso e dopo GLOBALROOT
+     (`\\?\\C:\\…`, Node apre anche quelle). Prima in Accesso pieno la chiave della casa scritta così non chiedeva. */
+  const esteso = /^(?:\\\\[?.]\\+|\\\?\?\\+)(?:GLOBALROOT\\+\?\?\\+)?([A-Za-z]:(?:\\.*)?)$/isu.exec(b);
   if (esteso) return esteso[1];
   const amministrativa = QUESTA_MACCHINA.exec(b);
   if (amministrativa) return `${amministrativa[1]}:${amministrativa[2] ?? '\\'}`;
-  const relativoAlDisco = /^([A-Za-z]):(?![\\/])(.+)$/su.exec(t);
+  /* giro 2 (12/11/2026): su Windows `X:rel` resta com'è, e le sue DUE letture le dà `postiPossibili` (la cartella corrente di quel
+     disco, e la radice). Prima c'era solo la radice: `type C:..\..\.ssh\id_ed25519`, col progetto sotto la casa, non chiedeva. */
+  const relativoAlDisco = process.platform === 'win32' ? null : /^([A-Za-z]):(?![\\/])(.+)$/su.exec(t);
   if (relativoAlDisco) return `${relativoAlDisco[1]}:/${relativoAlDisco[2]}`;
-  if (process.platform === 'win32') {
-    const unix = /^\/(?:mnt\/)?([A-Za-z])(\/.*)?$/su.exec(t);
-    if (unix) return `${unix[1]}:${unix[2] ?? '/'}`;
-  }
   return t;
+}
+/*
+ * ⛔ Uscita di riparazione (owner 12/11/2026): `/x/…` e `/mnt/x/…`, con UNA lettera, su Windows hanno DUE letture, e qui si rendono
+ *   tutte e due. Per un programma nativo (PowerShell, cmd, curl, node, python) è la cartella `\x` del disco corrente; per Git Bash e
+ *   per WSL è il disco `x:`. Prima c'era solo la seconda: con la casa in `C:\T\casa`, `Get-Content /T/casa/.ssh/id_ed25519` leggeva
+ *   la chiave senza carta in Accesso pieno, perché il controllo guardava un disco `T:` che non c'è. La lettura del sistema viene
+ *   prima; chi chiama le guarda tutte e chiede se UNA tocca una credenziale: una carta in più in un caso raro, mai una in meno.
+ *   Fonti (lette il 12/11/2026): nodejs.org/api/path.html, `path.resolve`; msys2.org/docs/filesystem-paths (la conversione vale
+ *   solo per gli argomenti passati DA una shell MSYS2); Claude Code, note di rilascio («Windows: Fixed `rm -rf /c/Users/<name>` in
+ *   Git Bash not asking in bypass permissions mode»: la lettura di Git Bash serve, e resta).
+ */
+function lettureDelDisco(t) {
+  const unix = process.platform === 'win32' ? /^\/(?:mnt\/)?([A-Za-z])(\/.*)?$/su.exec(t) : null;
+  return unix ? [t, `${unix[1]}:${unix[2] ?? '/'}`] : [t];
+}
+/*
+ * ⛔ Uscita di riparazione, giro 2 (12/11/2026, dopo i tre revisori; giudice v1686). SOLO su Windows: fuori, chi chiama tiene la
+ *   lettura di sempre. Un percorso può non dire tutto: `\cartella\file` non dice il disco, `X:file` non dice la cartella, `file`
+ *   dipende da dove il comando si è spostato. Lo apre il sistema, e il cancello non sa quale lettura varrà: le rende TUTTE, e chi
+ *   chiama fa su ognuna il controllo INTERO (nome, percorso vero, collegamento fisico, contenuto). Una carta in più in un caso raro,
+ *   mai una in meno. La prima cura guardava gli altri dischi solo per nome, e toglieva il disco del processo: cinque carte perse.
+ *   - senza disco: il disco della cartella della sessione (dove aprono gli attrezzi, e la shell appena parte); il disco del
+ *     processo, come la 0.2.1 (niente di ciò che chiedeva smette di chiedere); per un comando, i dischi che il comando NOMINA
+ *     (`X: && …`, `cd /d X:\`, `pushd`, `Set-Location`, una variabile che vale `X:\…`): è lì che può essersi spostato. Per le
+ *     credenziali chi chiama aggiunge sempre il disco della casa (`casa`).
+ *   - `X:rel`: la cartella corrente di quel disco (per il disco della sessione la sua cartella: cmd, PowerShell, Node) e la radice
+ *     (Git Bash, e ogni disco che non è quello della sessione).
+ *   - relativo, per chi segue il `cd` dello stesso comando (`seguiIlCd`): anche dalle cartelle in cui il comando si sposta.
+ *   Fonti (lette il 12/11/2026): learn.microsoft.com/en-us/dotnet/standard/io/file-path-formats («If the path starts with a drive
+ *   letter, volume separator, and no component separator, the last current directory set from the command shell for the specified
+ *   drive is applied. If the last current directory wasn’t set, the drive alone is applied»); nodejs.org/api/path.html, `path.resolve`; Codex
+ *   `codex-rs/utils/absolute-path/src/absolutize.rs:156-170` (senza disco: sul prefisso della base; `D:path`: sulla coda della base).
+ */
+const NESSUN_LUOGO = Object.freeze({ dischi: Object.freeze([]), cartelle: Object.freeze([]), troppe: false });
+/** Oltre queste cartelle visitate in un comando solo non si segue più: chi chiama chiede «troppo complesso» (si fallisce chiusi). */
+const TETTO_DEGLI_SPOSTAMENTI = 16;
+const COMANDO_CHE_SPOSTA = /^(?:cd|chdir|pushd|sl|set-location|push-location)$/iu;
+const OPZIONE_DELLO_SPOSTAMENTO = /^(?:\/d|--|-(?:path|literalpath|lp|pspath|passthru))$/iu;
+/** Le parole che spostano o tornano indietro: per la carta non sono un percorso (vedi `credenzialeDellaCasaLetta`). */
+const PAROLA_DELLO_SPOSTAMENTO = /^(?:cd|chdir|pushd|popd|sl|set-location|push-location|pop-location)$/iu;
+const VARIABILE_DI_WINDOWS = /%([A-Za-z_][\w()]*)%|\$\{env:([A-Za-z_]\w*)\}|\$env:([A-Za-z_]\w*)/giu;
+const discoDi = (p) => /^([A-Za-z]):/u.exec(String(p ?? ''))?.[1]?.toLowerCase() ?? null;
+
+/**
+ * Che cosa un comando dice dei posti in cui aprirà i suoi percorsi: i dischi che nomina (lettere minuscole) e le cartelle in cui
+ * si sposta, in catena. A parole, senza toccare il disco. ⛔ Non è un parser: un disco raggiunto con un calcolo fatto mentre il
+ * comando gira (`for`, una sostituzione) non si vede, ed è un limite dichiarato.
+ */
+function luoghiDelComando(comando, { cartella, home } = {}) {
+  if (process.platform !== 'win32' || typeof comando !== 'string' || comando === '') return NESSUN_LUOGO;
+  const dischi = new Set();
+  for (const m of comando.matchAll(/(?<![A-Za-z0-9_])([A-Za-z]):/gu)) dischi.add(m[1].toLowerCase());
+  if (home === undefined) home = homeDiSistema(); // chi non ha una casa da dare (le cartelle bloccate) usa quella del sistema
+  const conCasa = typeof home === 'string' && home !== '';
+  const discoDellaCasa = conCasa && discoDi(home) ? `${discoDi(home)}:` : null;
+  const valoreDi = (nome) => {
+    if (/^(?:USERPROFILE|HOME|HOMEDRIVE|HOMEPATH)$/iu.test(nome)) return conCasa ? home : null;
+    const valore = process.env[nome];
+    return typeof valore === 'string' && valore !== '' ? valore : null;
+  };
+  for (const m of comando.matchAll(VARIABILE_DI_WINDOWS)) { const disco = discoDi(valoreDi(m[1] ?? m[2] ?? m[3])); if (disco) dischi.add(disco); }
+  if (conCasa && /(?:^|[\s;|&<>()`"'=,])~(?=$|[\\/\s;|&<>()`"'=,])|\$HOME(?![A-Za-z0-9_])|\$\{HOME\}/u.test(comando)) { const disco = discoDi(home); if (disco) dischi.add(disco); }
+  const cartelle = [];
+  let troppe = false;
+  let spostamenti = 0;
+  let correnti = typeof cartella === 'string' && cartella !== '' && !eDiRete(cartella) ? [risolvi(cartella)] : [];
+  const parole = pezziDelComando(comando);
+  for (let i = 0; i < parole.length && !troppe; i += 1) {
+    if (!COMANDO_CHE_SPOSTA.test(parole[i])) continue;
+    let j = i + 1;
+    while (j < parole.length && OPZIONE_DELLO_SPOSTAMENTO.test(parole[j])) j += 1;
+    if (j >= parole.length) continue;
+    /* la casa in due pezzi (`%HOMEDRIVE%%HOMEPATH%`) è UNA casa: si legge prima delle variabili prese una per una, sennò la casa
+       finisce scritta due volte e lo spostamento non si segue; `%HOMEDRIVE%` da solo è il disco della casa */
+    const conIValori = comeDiscoLocale(parole[j], home).replace(VARIABILE_DI_WINDOWS, (tutto, a, b, c) => (/^HOMEDRIVE$/iu.test(a ?? b ?? c) ? discoDellaCasa : valoreDi(a ?? b ?? c)) ?? tutto);
+    const scritto = conLaHomeEspansa(comeDiscoLocale(conIValori, home), home);
+    /* una variabile che non si sa, un glob, la rete: non si segue (resta la cartella di prima) */
+    if (scritto === '' || scritto.startsWith('//') || /[%$*?]/u.test(scritto)) continue;
+    const nuove = [];
+    for (const lettura of lettureDelDisco(scritto)) {
+      if (/^[A-Za-z]:\//u.test(lettura)) nuove.push(risolvi(lettura));
+      else for (const da of correnti) nuove.push(risolvi(da, lettura));
+    }
+    const uniche = [...new Map(nuove.map((p) => [p.toLowerCase(), p])).values()];
+    if (uniche.length === 0) continue;
+    correnti = uniche;
+    /* giro unico (revisore C): il tetto conta gli SPOSTAMENTI verso un posto nuovo, non le letture: `cd /c/x` di Git Bash ha due
+       letture (il disco `c:` e la cartella `\c\x`) e contava due, così bastavano nove `cd`. Col progetto su un altro disco ogni
+       `cd /c/…` dopo il primo ne ha tre (`\c\…` sui due dischi correnti, e `c:`): le cartelle restano al massimo QUATTRO per
+       spostamento, perché il lavoro di chi chiama (un posto per cartella) non cresca senza fine. */
+    const mai = uniche.filter((p) => !cartelle.some((q) => q.toLowerCase() === p.toLowerCase()));
+    if (mai.length === 0) continue;
+    if (spostamenti >= TETTO_DEGLI_SPOSTAMENTI || cartelle.length + mai.length > 4 * TETTO_DEGLI_SPOSTAMENTI) { troppe = true; break; }
+    spostamenti += 1;
+    for (const p of mai) {
+      cartelle.push(p);
+      const disco = discoDi(p);
+      if (disco) dischi.add(disco);
+    }
+  }
+  return { dischi: [...dischi], cartelle, troppe };
+}
+
+/** I posti (assoluti, senza doppioni) in cui Windows può aprire `scritto`: vedi il commento qui sopra. Il primo è la cartella della sessione. */
+function postiPossibili(scritto, { cartella, luoghi = null, casa = null, seguiIlCd = false, radiceDelDisco = luoghi !== null } = {}) {
+  const conCartella = typeof cartella === 'string' && cartella !== '';
+  const senzaDisco = /^[\\/](?![\\/])/u.test(scritto);
+  const relativoAlDisco = /^([A-Za-z]):(?![\\/])(.*)$/su.exec(scritto);
+  const posti = [];
+  const metti = (p) => { const chiave = p.toLowerCase(); if (!posti.some((q) => q.toLowerCase() === chiave)) posti.push(p); };
+  if (conCartella) metti(risolvi(cartella, scritto));
+  else if (!relativoAlDisco && isAbsolute(scritto)) metti(risolvi(scritto));
+  else if (!relativoAlDisco) return posti;
+  if (senzaDisco) {
+    metti(risolvi(scritto));
+    if (luoghi) for (const disco of [discoDi(casa), ...luoghi.dischi]) if (disco) metti(risolvi(`${disco}:\\`, scritto));
+  }
+  /* `X:rel` dalla radice: per un comando (Git Bash, e un disco che non è quello della sessione). Un attrezzo dei file ha UNA
+     lettura, `resolve(cartella, percorso)`, già messa qui sopra; chi la vuole lo stesso (la lettura delle credenziali, che nella
+     0.2.1 leggeva `X:rel` solo così: mai una carta in meno) lo dice con `radiceDelDisco`. */
+  if (relativoAlDisco && radiceDelDisco) metti(risolvi(`${relativoAlDisco[1]}:\\`, relativoAlDisco[2] === '' ? '.' : relativoAlDisco[2]));
+  if (luoghi && seguiIlCd && !/^[A-Za-z]:[\\/]/u.test(scritto) && !/^[\\/]{2}/u.test(scritto)) for (const da of luoghi.cartelle) metti(risolvi(da, scritto));
+  return posti;
 }
 
 /*
@@ -2046,20 +2235,44 @@ export function credenzialeDellaCasaLetta({ tipo, percorso, comando, cartella, h
   /** Dove il pezzo tocca una credenziale della casa (la descrizione per la carta), `OLTRE_IL_TETTO` se il cammino non arriva in fondo, o `null`. */
   const dentro = (pezzo) => {
     const scritto = String(pezzo ?? '').trim();
-    const pulito = comeDiscoLocale(scritto.replace(/^["'`]+|["'`]+$/gu, ''), home);
+    /* tutte le letture di `/x/…` (`lettureDelDisco`): la prima che tocca una credenziale decide */
+    for (const pulito of lettureDelDisco(comeDiscoLocale(scritto.replace(/^["'`]+|["'`]+$/gu, ''), home))) {
+      const toccata = dentroUnaLettura(scritto, pulito);
+      if (toccata !== null) return toccata;
+    }
+    return null;
+  };
+  const dentroUnaLettura = (scritto, pulito) => {
     if (pulito === '' || eDiRete(pulito)) return null;
     const espanso = conLaHomeEspansa(pulito, home);
     if (espanso === '' || espanso.includes('://') || espanso.startsWith('//')) return null;
-    const assoluto = /^[A-Za-z]:\//u.test(espanso) || espanso.startsWith('/') ? risolvi(espanso)
-      : typeof cartella === 'string' && cartella !== '' ? risolvi(cartella, espanso) : null;
-    if (assoluto === null) return null;
-    if (credenziale(assoluto)) return scritto;
-    const vero = veroDelPezzo(assoluto);
-    if (vero === null || vero === OLTRE_IL_TETTO) return vero;
-    if (vero !== assoluto && credenziale(vero)) return `${scritto} → ${vero}`;
-    const trovato = stessoFileDiUnaCredenziale(vero);
-    return trovato ? `${scritto} = ${trovato}` : null;
+    /* ⛔ 12/11/2026, giro 2: su Windows tutti i posti in cui il percorso può aprirsi (`postiPossibili`): la cartella della sessione,
+       il disco del processo come la 0.2.1, e per un comando il disco della casa, i dischi che nomina e le cartelle in cui si
+       sposta (`cd /d <casa> && type .ssh\id_ed25519`). Su OGNUNO il controllo intero: il nome, poi il percorso vero e il
+       collegamento fisico. Fuori da Windows la lettura è una, quella di sempre. */
+    let posti;
+    /* giro unico (revisore C): la parola che sposta (`cd`, `chdir`, `sl`, `pushd`…) e le sue opzioni (`/d`, `-Path`) non sono un
+       file: guardate anche nelle cartelle in cui il comando si sposta, finivano sulla carta al posto della credenziale («chdir»). */
+    const seguiIlCd = !PAROLA_DELLO_SPOSTAMENTO.test(scritto) && !OPZIONE_DELLO_SPOSTAMENTO.test(scritto);
+    if (process.platform === 'win32') posti = postiPossibili(espanso, { cartella, luoghi, casa, seguiIlCd, radiceDelDisco: true });
+    else {
+      const assoluto = /^[A-Za-z]:\//u.test(espanso) || espanso.startsWith('/') ? risolvi(espanso)
+        : typeof cartella === 'string' && cartella !== '' ? risolvi(cartella, espanso) : null;
+      posti = assoluto === null ? [] : [assoluto];
+    }
+    for (const assoluto of posti) if (credenziale(assoluto)) return scritto;
+    for (const assoluto of posti) {
+      const vero = veroDelPezzo(assoluto);
+      if (vero === null) continue;
+      if (vero === OLTRE_IL_TETTO) return vero;
+      if (vero !== assoluto && credenziale(vero)) return `${scritto} → ${vero}`;
+      const trovato = stessoFileDiUnaCredenziale(vero);
+      if (trovato) return `${scritto} = ${trovato}`;
+    }
+    return null;
   };
+  /* i dischi che il comando nomina e le cartelle in cui si sposta: una volta per comando; un attrezzo dei file non ne ha */
+  const luoghi = tipo === 'shell' ? luoghiDelComando(comando, { cartella, home }) : null;
   /*
    * ⛔ Decisione 155 dell'owner (04/11/2026, aggiornamento 17:02 del brief): questa funzione la chiama SOLO l'Accesso pieno, e lì la guardia
    *   dei biglietti (il comando, «troppo complesso», le parole con `.chiave`) non fa più carte: come Claude Code in `bypassPermissions`. Resta
@@ -2074,6 +2287,11 @@ export function credenzialeDellaCasaLetta({ tipo, percorso, comando, cartella, h
   if (tipo === 'shell' && guardiaDetta === 'nomina' && nominaLaCartellaDeiBiglietti(comando)) {
     const segnalazione = segnalazioneDeiBiglietti('nomina');
     return { ...segnalazione, ...frasePerLaPersona(segnalazione, tipo), credenzialeDellaCasa: true };
+  }
+  /* giro 2: un comando che si sposta in più cartelle di quante se ne seguono non si sa dove legge: si chiede, col perché dei tetti */
+  if (luoghi?.troppe) {
+    const oltre = oltreIlTetto(String(comando).trim().slice(0, 80));
+    return { ...oltre, ...frasePerLaPersona(oltre, tipo), credenzialeDellaCasa: true };
   }
   /* blocco dopo (punto 5): lo stesso pezzo una volta sola, nell'ordine in cui compare (stessa risposta, un cammino del disco per pezzo diverso) */
   const pezzi = LETTURE.has(tipo) ? [percorso] : tipo === 'shell' ? [...new Set(pezziDelComando(comando))] : [];
@@ -2120,9 +2338,11 @@ export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = hom
    */
   const pezziUnici = perPercorso ? [testo] : [...new Set(pezziDelComando(testo))];
   const memoriaDelComando = {};
+  /* giro 2: i dischi che il comando nomina (`X: && …`, `cd /d X:\`), per i due inneschi che camminano il disco */
+  const luoghi = perPercorso ? null : luoghiDelComando(testo, { cartella, home });
   if (tipo !== 'elenca') {
     for (const pezzo of pezziUnici) {
-      const fisico = segretoDiUnCollegamentoFisico(pezzo, { cartella, home, memoria: memoriaDelComando, ...(fsSync?.statSync ? { statFn: fsSync.statSync } : {}), ...(fsSync?.lstatSync ? { fsSync } : {}) });
+      const fisico = segretoDiUnCollegamentoFisico(pezzo, { cartella, home, luoghi, memoria: memoriaDelComando,...(fsSync?.statSync ? { statFn: fsSync.statSync } : {}), ...(fsSync?.lstatSync ? { fsSync } : {}) });
       if (fisico) return { ...fisico, ...frasePerLaPersona(fisico, tipo) };
     }
   }
@@ -2130,7 +2350,7 @@ export function motivoDaChiedere({ tipo, comando, percorso, cartella, home = hom
   /* 14/10/2026: un file d'esempio nominato da una lettura o da un comando, con una chiave vera dentro (un elenco non apre i file). */
   if (tipo !== 'elenca') {
     for (const pezzo of pezziUnici) {
-      const esempio = esempioConUnaChiave(pezzo, { cartella, home, ...(leggiTesta ? { leggiTesta } : {}) });
+      const esempio = esempioConUnaChiave(pezzo, { cartella, home, luoghi, ...(leggiTesta ? { leggiTesta } : {}) });
       if (esempio) return { ...esempio, ...frasePerLaPersona(esempio, tipo) };
     }
   }
@@ -2301,6 +2521,10 @@ export function indiceDeiNomi(nomi) {
  * `{ radice, irrisolvibile: true }` se il percorso vero non si sa dire, oppure `null`. Senza blocchi, `null` senza toccare il disco.
  */
 export function bloccataDa(percorso, { cartella, bloccati, realpathFn = realpathSyncNativa } = {}) {
+  return bloccataDaUnPezzo(percorso, { cartella, bloccati, realpathFn }, null);
+}
+/** `luoghi`: per il pezzo di un comando, i dischi che il comando nomina (`luoghiDelComando`); `null` per un attrezzo dei file. */
+function bloccataDaUnPezzo(percorso, { cartella, bloccati, realpathFn }, luoghi) {
   if (!Array.isArray(bloccati)) return null;
   const radici = bloccati.filter((b) => typeof b === 'string' && b !== '');
   if (radici.length === 0) return null;
@@ -2309,7 +2533,7 @@ export function bloccataDa(percorso, { cartella, bloccati, realpathFn = realpath
      guardava un'altra cartella. Node non toglie niente (ENOENT su «segreta./k.txt», misurato), ma un comando sì: cmd e PowerShell passano
      dalle regole di Win32, che tolgono punti e spazi da ogni pezzo. Si guardano tutte le forme, e ogni forma fa nome e percorso vero. */
   for (const forma of new Set([intero.trim(), intero, ...(process.platform === 'win32' ? [senzaCodeDiWindows(intero.trim())] : [])])) {
-    const esito = bloccataInUnaForma(forma, { cartella, radici, realpathFn });
+    const esito = bloccataInUnaForma(forma, { cartella, radici, realpathFn, luoghi });
     if (esito) return esito;
   }
   return null;
@@ -2321,20 +2545,50 @@ const senzaCodeDiWindows = (forma) => forma.split(/([\\/])/u).map((pezzo, i) => 
   return disco + pezzo.slice(disco.length).replace(/:.*$/su, '').replace(/[. ]+$/u, '');
 }).join('');
 
-function bloccataInUnaForma(forma, { cartella, radici, realpathFn }) {
+function bloccataInUnaForma(forma, { cartella, radici, realpathFn, luoghi = null }) {
   const grezzo = percorsoLinuxNormalizzato(forma);
   const linux = /^\/mnt\/[A-Za-z](\/|$)/u.test(grezzo);
-  let assoluto;
-  if (linux || isAbsolute(grezzo)) assoluto = linux ? grezzo : risolvi(grezzo);
-  else if (typeof cartella === 'string' && cartella !== '') assoluto = risolvi(cartella, grezzo);
+  const conCartella = typeof cartella === 'string' && cartella !== '';
+  /* ⛔ 12/11/2026, giro 2: su Windows tutti i posti in cui la forma può aprirsi (`postiPossibili`), e su OGNUNO nome e percorso
+     vero. `\cartella\file` senza disco: la cartella della sessione, il disco del processo come la 0.2.1 e, per un comando, i dischi
+     che il comando nomina (NON il disco di ogni cartella bloccata, sempre: con `D:\` bloccata rifiutava `dir /s` e ogni `/c/…`).
+     `/c/…` ha anche la lettura di Git Bash (`c:\…`, `lettureDelDisco`): prima `bash -c "cat /c/…/bloccata/…"` passava. E le
+     grafie dello stesso disco scritte per esteso (`\\?\C:\…`, `\\localhost\C$\…`) si riportano a `C:\…`. Senza la cartella (il
+     servente della casa Linux, il remoto) vale l'assoluto com'è. Fuori da Windows la lettura è una, quella di sempre. */
+  let posti;
+  /* `\\?\…` e `\\.\…`: la 0.2.1 non sapeva dire dove portano e rispondeva «irrisolvibile» (un attrezzo dei file è rifiutato). Ora
+     il posto si riconosce (un comando che nomina così una cartella bloccata è rifiutato), ma dove non si trova niente la risposta
+     resta quella: mai un rifiuto in meno della 0.2.1. */
+  const prefissoDiDispositivo = process.platform === 'win32' && /^[\\/]{2}[?.][\\/]/u.test(grezzo);
+  if (linux) posti = [grezzo];
+  else if (process.platform === 'win32') {
+    posti = [];
+    for (const lettura of lettureDelDisco(comeDiscoLocale(grezzo))) {
+      const diQuesta = postiPossibili(lettura, { cartella, luoghi });
+      if (diQuesta.length === 0) return { radice: radici[0], irrisolvibile: true };
+      for (const p of diQuesta) if (!posti.includes(p)) posti.push(p);
+    }
+  } else if (isAbsolute(grezzo)) posti = [risolvi(grezzo)];
+  else if (conCartella) posti = [risolvi(cartella, grezzo)];
   else return { radice: radici[0], irrisolvibile: true };
-  const perNome = radici.find((r) => dentroOUguale(assoluto, r));
+  const perNome = radici.find((r) => posti.some((p) => dentroOUguale(p, r)));
   if (perNome) return { radice: perNome };
   if (linux) return null; // a parole soltanto, come la casa Linux fa per la rete
-  let vero;
-  try { vero = percorsoRealeAncheSeManca(assoluto, realpathFn); } catch { return { radice: radici[0], irrisolvibile: true }; }
-  const perVero = radici.find((r) => dentroOUguale(vero, r));
-  return perVero ? { radice: perVero } : null;
+  for (const [indice, assoluto] of posti.entries()) {
+    let vero;
+    /* il primo posto è quello di sempre: se il suo percorso vero non si sa dire si rifiuta; un posto in più che non si risolve si salta */
+    try { vero = percorsoRealeAncheSeManca(assoluto, realpathFn); } catch { if (indice === 0) return { radice: radici[0], irrisolvibile: true }; continue; }
+    const perVero = radici.find((r) => dentroOUguale(vero, r));
+    if (perVero) return { radice: perVero };
+  }
+  if (prefissoDiDispositivo) {
+    /* la domanda della 0.2.1, tale e quale, sulla grafia com'è scritta */
+    let vero;
+    try { vero = percorsoRealeAncheSeManca(risolvi(grezzo), realpathFn); } catch { return { radice: radici[0], irrisolvibile: true }; }
+    const perVero = radici.find((r) => dentroOUguale(vero, r));
+    if (perVero) return { radice: perVero };
+  }
+  return null;
 }
 
 /**
@@ -2344,10 +2598,12 @@ function bloccataInUnaForma(forma, { cartella, radici, realpathFn }) {
  */
 export function comandoNominaUnaBloccata(comando, { cartella, bloccati, realpathFn = realpathSyncNativa } = {}) {
   if (!Array.isArray(bloccati) || !bloccati.some((b) => typeof b === 'string' && b !== '')) return null;
+  /* giro 2: i dischi che il comando nomina (`X: && …`, `cd /d X:\`, `pushd`, `Set-Location`), una volta per comando */
+  const luoghi = luoghiDelComando(comando, { cartella });
   for (const pezzo of pezziDelComando(comando)) {
     if (pezzo.startsWith('-') && !pezzo.includes('=')) continue;
     if (!/[\\/.]|^[A-Za-z]:/u.test(pezzo) && !(typeof cartella === 'string' && esisteSync(risolvi(cartella, pezzo)))) continue;
-    const esito = bloccataDa(pezzo, { cartella, bloccati, realpathFn });
+    const esito = bloccataDaUnPezzo(pezzo, { cartella, bloccati, realpathFn }, luoghi);
     if (esito && !esito.irrisolvibile) return { radice: esito.radice };
   }
   return null;

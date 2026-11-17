@@ -70,10 +70,11 @@ const CLASSE_B = new Map([
   ['frontend/tests/parity/forge-backend-fixture.mjs', 'la fixture tiene un server HTTP in ascolto'],
 ]);
 
-/** I due file che la cura non riguarda, e il perche'. Anche questi vengono verificati, non esentati. */
+/** I file che la cura non riguarda, e il perche'. Anche questi vengono verificati, non esentati. */
 const FUORI_CURA = new Map([
   ['tests/aiuto/rimuovi-cartella-di-prova.mjs', 'e l aiuto stesso: la rimozione nuda e la cosa che implementa, non un difetto'],
   ['tests/aiuto-rimozione-ritentativi.test.mjs', 'la sua prova tiene viva una premessa apposta e la smonta a mano, coi ritentativi in chiaro'],
+  ['tests/aiuto/taglie-base/cancello.mjs', 'attrezzo vero del cricchetto, non una prova: il comando e la coda ne estraggono dalla base SOLO la cartella taglie-base/ e lanciano quella copia, che non puo importare l aiuto di prova; il suo unico figlio e uno spawnSync gia uscito prima del finally'],
 ]);
 
 /*

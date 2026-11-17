@@ -5,7 +5,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve, isAbsolute } from 'node:path';
 import { cpus, totalmem, version, release } from 'node:os';
-import { root, attendi } from './support.mjs';
+import { root, attendi, osservaTerminali, righeDelTerminale } from './support.mjs';
 import { inventario, verificaImpronta } from '../scripts/prepara-pacchetto.mjs';
 import { nomiArtefatti } from '../scripts/release-assets.mjs';
 import { MOTORE_FISSATO } from '../../src/motore-fissato.mjs';
@@ -58,7 +58,8 @@ test('R02-INSTALLER — installazione reale, cookie, PTY incluso, motori, persis
   mkdirSync(join(root, '.prove'), { recursive: true });
   const dataDir = mkdtempSync(join(root, '.prove', 'installato-'));
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/KEY|TOKEN|SECRET|PASSWORD|TALOS_|NODE_OPTIONS|ELECTRON_RUN_AS_NODE/i.test(k)));
-  Object.assign(env, { TALOS_DESKTOP_DATA_DIR: dataDir, TALOS_INTRO: '0' });
+  // Last piece of round 4 (owner 11/11 09:41, «segno obbligatorio nelle prove»): a test launch always carries the explicit mark.
+  Object.assign(env, { TALOS_DESKTOP_DATA_DIR: dataDir, TALOS_INTRO: '0', TALOS_PROVA_ISOLATA: '1' });
   writeFileSync(join(dataDir, 'da-conservare.txt'), 'Dati utente da conservare dopo la disinstallazione.');
   const misure = { data: new Date().toISOString(), macchina: { sistema: version(), release: release(), arch: process.arch, cpu: cpus()[0].model.trim(), processoriLogici: cpus().length, ramByte: totalmem() }, installazione: destinazione, dati: dataDir, overrideDestinazione: Boolean(process.env.TALOS_R02_INSTALL_DIR), exeByte: statSync(installer).size, zipByte: statSync(zip).size, completato: false };
   let app;
@@ -79,6 +80,9 @@ test('R02-INSTALLER — installazione reale, cookie, PTY incluso, motori, persis
     for (const file of manifest.files) await verificaImpronta(join(risorse, file.path), file.sha256);
     assert.equal(iniziale.some(f => /\.gguf$/i.test(f.path)), false);
     misure.manifestFile = manifest.files.length;
+    // 13/11/2026 (owner via giudice v1815-v1816): the installed app carries the command helper, checked by fingerprint, and its kernel finds it
+    const { controllaLanciatoreInstallato } = await import('../scripts/lanciatore-nel-pacchetto.mjs');
+    misure.lanciatore = await controllaLanciatoreInstallato({ risorse });
     const inizio = performance.now();
     app = await _electron.launch({ executablePath: exe, args: [], env, timeout: 30000 });
     const pagina = await app.firstWindow({ timeout: 30000 });
@@ -94,6 +98,8 @@ test('R02-INSTALLER — installazione reale, cookie, PTY incluso, motori, persis
     assert.notEqual(new URL(base).port, '4174'); misure.porta = Number(new URL(base).port);
     assert.equal((await fetch(base + '/api/v1/health')).status, 401);
     assert.equal(await pagina.evaluate(async () => (await fetch('/api/v1/health')).status), 200);
+    // 13/11/2026: the running installed server follows commands through the packaged helper (diagnostics of «Report a problem»)
+    if (misure.lanciatore.incluso) assert.equal(await pagina.evaluate(async () => { const j = await (await fetch('/api/v1/diagnostica-segnalazione')).json(); return (j.data ?? j).nipoti?.seguiti ?? null; }), true, 'The installed server does not follow commands through the helper.');
     assert.ok((await app.context().cookies()).find(c => c.name === 'talos_token')?.httpOnly);
     pidFiglio = await app.evaluate(() => process._getActiveHandles().find(h => h.constructor.name === 'ChildProcess')?.pid);
     assert.ok(pidFiglio);
@@ -119,16 +125,31 @@ test('R02-INSTALLER — installazione reale, cookie, PTY incluso, motori, persis
       if (frame[0] === 0) output += frame.subarray(1).toString();
       if (frame[0] === 1) { try { controlli.push(JSON.parse(frame.subarray(1).toString())); } catch {} }
     }));
+    // 09/11/2026: gemella di R01-GUSCIO (corsa 42660197808, il perché in guscio.spec.mjs): si scrive dopo il primo prompt mostrato
+    // e si legge ciò che il terminale mostra, non i byte della PTY (`support.mjs`)
+    assert.equal(await osservaTerminali(pagina), true, 'xterm caricato prima di aprire il Terminale');
     await pagina.locator('[data-mode="terminal"]').first().click();
+    await finche(async () => (await righeDelTerminale(pagina)).some(riga => riga.trim()), 60000)
+      .catch(errore => { throw new Error(`${errore.message} La shell non ha disegnato il primo prompt. Coda del flusso PTY: ${JSON.stringify(output.slice(-1200))}`); });
     await pagina.locator('.xterm-helper-textarea').first().focus();
-    await pagina.keyboard.type('echo TALOS-R02-INSTALLATO'); await pagina.keyboard.press('Enter');
-    await finche(() => /(^|\n)TALOS-R02-INSTALLATO\r?\n/.test(output.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')));
+    await pagina.keyboard.type(String.raw`sleep 0.5; printf '\e]0;R02\a'; echo TALOS-R02-INSTALLATO`); await pagina.keyboard.press('Enter');
+    await finche(async () => (await righeDelTerminale(pagina)).some(riga => riga.trim() === 'TALOS-R02-INSTALLATO')).catch(async errore => {
+      const mostrate = (await righeDelTerminale(pagina).catch(() => [])).filter(riga => riga.trim()).slice(-8);
+      throw new Error(`${errore.message} Righe mostrate: ${JSON.stringify(mostrate)} Coda del flusso PTY: ${JSON.stringify(output.slice(-1200))}`);
+    });
     await pagina.reload();
     assert.equal(await pagina.evaluate(async () => (await fetch('/api/v1/health')).status), 200);
+    // gemella dell'attesa dopo il ricaricamento in guscio.spec.mjs: `exit` solo con la shell riagganciata sullo schermo
+    assert.equal(await osservaTerminali(pagina), true, 'xterm caricato prima di riaprire il Terminale');
     await pagina.locator('[data-mode="terminal"]').first().click();
+    await finche(async () => (await righeDelTerminale(pagina)).some(riga => riga.trim()), 60000)
+      .catch(errore => { throw new Error(`${errore.message} La shell riagganciata non è comparsa. Controlli: ${JSON.stringify(controlli)}`); });
     await pagina.locator('.xterm-helper-textarea').first().focus();
     await pagina.keyboard.type('exit'); await pagina.keyboard.press('Enter');
-    await finche(() => controlli.some(c => c.evento === 'uscita' && c.codice === 0));
+    await finche(() => controlli.some(c => c.evento === 'uscita' && c.codice === 0)).catch(async errore => {
+      const mostrate = (await righeDelTerminale(pagina).catch(() => [])).filter(riga => riga.trim()).slice(-8);
+      throw new Error(`${errore.message} Righe mostrate: ${JSON.stringify(mostrate)} Controlli: ${JSON.stringify(controlli)} Coda del flusso PTY: ${JSON.stringify(output.slice(-1200))}`);
+    });
     misure.pty = { marker: 'TALOS-R02-INSTALLATO', uscita: 0 };
     await pagina.emulateMedia({ reducedMotion: 'reduce' });
     for (const [modo, nome] of [['light', 'chiaro'], ['dark', 'scuro']]) {

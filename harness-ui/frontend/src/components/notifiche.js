@@ -22,9 +22,9 @@ import { testoErroreServer } from './errori.js';
 import { fraseDellaNotificaImpostazioni } from './impostazioni-dalla-chat.js'; // fase 8 (02/11/2026): la riga del fatto `impostazioni`
 
 /** I fatti che aspettano la persona: solo loro entrano in «Da fare» e nel numero (contratto, `FATTI_CHE_ASPETTANO` del server). */
-export const FATTI_DA_FARE = Object.freeze(new Set(['approvazione', 'domanda']));
+export const FATTI_DA_FARE = Object.freeze(new Set(['approvazione', 'domanda', 'fiducia-cartella'])); // giro 2: «Mi fido di questa cartella» aspetta la persona
 /** I fatti che fanno partire la notifica di sistema (contratto, «Avviso di sistema»): mai `azione-persona`. */
-export const FATTI_CHE_AVVISANO = Object.freeze(new Set(['approvazione', 'domanda', 'fine', 'interrotta', 'errore', 'giro-finito', 'giro-fallito', 'giro-saltato']));
+export const FATTI_CHE_AVVISANO = Object.freeze(new Set(['approvazione', 'domanda', 'fiducia-cartella', 'fine', 'interrotta', 'errore', 'giro-finito', 'giro-fallito', 'giro-saltato']));
 /* Revisione avversaria della fase 8, REV8-07 (01/11/2026 notte): i fatti che il registro scrive già ma la cui riga non è ancora disegnata.
    Senza, cadevano nella riga generica «sconosciuto» col campanello, una per ogni cambio. Restano fuori dall'elenco finché la riga non c'è.
    02/11/2026: `impostazioni` (D6) ha la sua riga dal bozzetto chiuso (FE-055) ed esce di qui: entra in «Tutto», mai in «Da fare» né nel
@@ -70,6 +70,10 @@ export function fraseDellaVoce(voce) {
     }
     case 'domanda':
       return conDato(traduci('sezioni.notifications.fact.question'), 'i-question', { tono: daVedere ? 'accento' : null });
+    /* giro 2 della fiducia (owner 11/11 13:08, «Avviso con Mi fido»): un'automazione in Accesso pieno trattenuta su una cartella mai chiesta.
+       La riga apre la conversazione del giro, dove c'è la carta «Sì, mi fido di questa cartella»; il dato è il nome della cartella. */
+    case 'fiducia-cartella':
+      return { frase: traduci('sezioni.notifications.fact.folderTrust'), dato: testoDel(dato) ? dato : null, glifo: 'i-shield', tono: daVedere ? 'accento' : null, traccia: false };
     case 'fine':
       return { frase: traduci('sezioni.notifications.fact.finished'), dato: null, glifo: 'i-circle-check', tono: null, traccia: false };
     case 'interrotta':

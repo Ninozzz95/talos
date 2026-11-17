@@ -153,6 +153,8 @@ function norma(v) {
   if (memo) { if (MEMO_NORMA.size >= 4096) MEMO_NORMA.clear(); MEMO_NORMA.set(v, n); }
   return n;
 }
+/** La stessa forma per il ciclo, che lega il sì di un invio all'elemento (giro di cura dopo i revisori, B1): la `prova` di un verdetto è in questa forma. */
+export const nomeConfrontabile = (v) => norma(v);
 /** Forma leggera per scorrere TUTTA la schermata (anti-robot, cookie, cassa): niente NFKC, che è la parte cara. */
 function normaLeggera(v) { return grezzo(v).replace(INVISIBILI, '').toLowerCase().replace(APOSTROFI, "'").replace(SPAZI, ' '); }
 /** Testo per i numeri (carte, IBAN): NFKC (cifre a larghezza piena), niente invisibili, spazi uniformi; maiuscole conservate. */
@@ -246,7 +248,7 @@ function scrittureMiste(n, v) {
 }
 
 /** Parole intere su testo già normalizzato: i confini valgono anche per le lettere accentate (`\b` di JS è solo ASCII). */
-const parole = (alternative) => new RegExp(`(?<![\\p{L}\\p{N}])(?:${alternative})(?![\\p{L}\\p{N}])`, 'u');
+const parole = (alternative, prima = '') => new RegExp(`${prima ? `${prima}|` : ''}(?<![\\p{L}\\p{N}])(?:${alternative})(?![\\p{L}\\p{N}])`, 'u');
 const intero = (alternative) => new RegExp(`^(?:${alternative})$`, 'u');
 
 // ---------- credenziali ----------
@@ -304,7 +306,14 @@ const SI_PREMONO = new Set(['pulsante', 'collegamento', 'voce', 'scheda']);
 const CAMPO_CARTA = parole("numero (?:della |di )?carta|card number|cvv2?|cvc2?|codice di sicurezza|security code|scadenza della carta|card expiry|mm ?/ ?aa|mm ?/ ?yy|titolare della carta|cardholder|name on card");
 const CAMPO_SCADENZA = parole("scadenza|expiry|expiration date|valid thru|data di scadenza");
 const CAMPO_CARTA_DEBOLE = parole("titolare|cardholder|carta|card|intestatario");
-const TITOLO_CASSA = parole("checkout|secure checkout|pagamento|pagamento sicuro|payment|riepilogo (?:dell')?ordine|order summary|order review|rivedi (?:il tuo )?ordine|review (?:your )?order|conferma (?:l')?ordine|place (?:your )?order|completa (?:l')?acquisto|kasse|zur kasse|paiement|caisse|finalizar compra");
+// limite 2 (giudice v1484): «Cassa» è il titolo di una cassa solo quando sta da solo prima di un separatore o in fondo («Cassa - Negozio»,
+// «Alla cassa», «La tua cassa: riepilogo»), mai «Cassa integrazione» o «Cassa di Risparmio»
+/* Secondo giro (revisore A, 5c; giudice v1498): «Cassa» conta solo IN TESTA al titolo, la prima cosa che la pagina dice di sé: «Cassa -
+   Negozio», «Cassa / Negozio», «Cassa sicura - …», «Cassa (2 articoli) - …», «Alla cassa», «La tua cassa: riepilogo». In fondo o dopo
+   un'altra parola è il nome di qualcos'altro: «Registratore di cassa - Wikipedia», «Fondo cassa», «Libro cassa | Excel», «INPS - Cassa»
+   (prima lì anche «Cerca» chiedeva la carta di pagamento). */
+const TITOLO_CASSA_IN_TESTA = "^(?:(?:vai |procedi )?alla |(?:la )?tua |la mia )?cassa(?: sicura)?(?= *(?:[-|–—:·•/>(]|$))";
+const TITOLO_CASSA = parole("checkout|secure checkout|pagamento|pagamento sicuro|payment|riepilogo (?:dell')?ordine|order summary|order review|rivedi (?:il tuo )?ordine|review (?:your )?order|conferma (?:l')?ordine|place (?:your )?order|completa (?:l')?acquisto|kasse|zur kasse|paiement|caisse|finalizar compra", TITOLO_CASSA_IN_TESTA);
 const PREZZO = /(?:[€$£]\s?\d|\d[\d.,]*\s?(?:€|eur|euro|usd|\$|£|chf)(?!\p{L}))/u;
 
 // ---------- consensi ----------
@@ -329,8 +338,39 @@ const ANTI_ROBOT_INVISIBILE = /size=invisible/iu; // reCAPTCHA v3/invisibile: ne
 const RUOLI_NON_WIDGET = new Set(['testo', 'collegamento']);
 
 // ---------- cancellazioni ----------
-const NOME_CANCELLAZIONE = parole("(?:elimina|eliminare|cancella|cancellare|rimuovi) (?:definitivamente|per sempre)|svuota (?:il )?cestino|(?:elimina|chiudi|disattiva|cancella|rimuovi) (?:il |l'|questo |il mio |l'intero )?account|delete (?:permanently|forever)|permanently delete|empty (?:the )?(?:recycle bin|trash|bin)|empty trash|(?:delete|close|deactivate|remove) (?:my |the |this )?account|(?:elimina|cancella) tutto|cancella tutti i dati|elimina tutti i (?:dati|messaggi|file)|delete all(?: data| messages| files)?|erase all(?: data| content)?|ripristin[ao] (?:i )?dati di fabbrica|factory (?:reset|data reset)|elimina per tutti|delete for everyone|elimina (?:la |questa )?(?:chat|conversazione)|delete (?:this )?(?:chat|conversation)|delete (?:this )?repository|elimina (?:questo )?repository|formatta|format disk|format drive|endgültig löschen|papierkorb leeren|supprimer définitivement|vider la corbeille|eliminar definitivamente|vaciar (?:la )?papelera");
-const TESTO_IRREVERSIBILE = parole("definitivamente|per sempre|forever|non (?:si )?(?:pu[òo]|potr[àa]) (?:essere )?annull\\p{L}*|non potrai (?:pi[ùu] )?(?:recuperar|annullar)\\p{L}*|non sar[àa] (?:pi[ùu] )?possibile (?:recuperar|ripristinar|annullar)\\p{L}*|irreversibil\\p{L}*|non reversibile|cannot be (?:undone|recovered|restored|reversed)|can'?t be (?:undone|recovered|restored)|can not be undone|will be (?:permanently )?(?:lost|deleted forever)|permanently|permanent|this action is final|nicht rückgängig|endgültig|unwiderruflich|irréversible|définitivement|ne peut pas être annul\\p{L}*|no se puede deshacer|permanentemente");
+/* C1 (revisione del blocco computer use del 04/11/2026, R-ALTO-1; riscritta sulla testa il 10/11/2026): il vero dialogo di Windows 11 in
+   italiano dice «Rimuovere in modo definitivo il file?» (letto dal vero cua-driver il 04/11 alle 19:35), non «definitivamente»: è
+   «permanently» delle linee guida Microsoft («Confirmations», Win32 UX: «use the term permanently to indicate that an action can't be
+   undone») tradotto. Vale nel nome di un pulsante (qui) e nel testo di una finestra (TESTO_IRREVERSIBILE). */
+const NOME_CANCELLAZIONE = parole("(?:elimina|eliminare|cancella|cancellare|rimuovi|rimuovere) (?:definitivamente|per sempre|in modo definitivo)|svuota (?:il )?cestino|(?:elimina|chiudi|disattiva|cancella|rimuovi) (?:il |l'|questo |il mio |l'intero )?account|delete (?:permanently|forever)|permanently delete|empty (?:the )?(?:recycle bin|trash|bin)|empty trash|(?:delete|close|deactivate|remove) (?:my |the |this )?account|(?:elimina|cancella) tutto|cancella tutti i dati|elimina tutti i (?:dati|messaggi|file)|delete all(?: data| messages| files)?|erase all(?: data| content)?|ripristin[ao] (?:i )?dati di fabbrica|factory (?:reset|data reset)|elimina per tutti|delete for everyone|elimina (?:la |questa )?(?:chat|conversazione)|delete (?:this )?(?:chat|conversation)|delete (?:this )?repository|elimina (?:questo )?repository|formatta|format disk|format drive|endgültig löschen|papierkorb leeren|supprimer définitivement|vider la corbeille|eliminar definitivamente|vaciar (?:la )?papelera");
+/* Giro 3 della 0.2.2-CU (10/11/2026; revisori CLI N3, Telefono R3, Performance N4): il testo di una finestra che dice «non si torna
+   indietro». Misurati senza carta sulla testa 07b9bd3de e aggiunti: l'italiano di Windows 11 («in modo definitivo», «in modo
+   permanente», «non potrà essere recuperato», «non è reversibile», «non potrai tornare indietro»), l'inglese «there is no undo»,
+   «can't be reversed», «won't be able to recover it», «gone for good», lo spagnolo «de forma permanente», e le frasi di portoghese,
+   olandese, polacco e russo; giapponese e cinese stanno in TESTO_IRREVERSIBILE_CJK (non hanno spazi: i confini di parola non valgono).
+   Falsi allarmi tolti, con la loro prova: «permanent» e «forever» nudi («Permanent marker settings», «Keep forever?») contano solo
+   accanto a ciò che si perde («deleted forever», «this action is permanent», «permanent deletion»); «permanently» resta da solo.
+   ⚠ Le frasi delle lingue nuove sono quelle misurate dai revisori, non lette da un Windows in quella lingua (lo dice il rapporto).
+   Hermes non legge i dialoghi: chiede per tipo d'azione (tools/computer_use/tool.py:336-341). */
+const TESTO_IRREVERSIBILE = parole([
+  "in modo definitivo|in maniera definitiva|in modo permanente|definitivamente|per sempre",
+  "non (?:si )?(?:pu[òo]|potr[àa]|possono|potranno) (?:pi[ùu] )?(?:essere )?(?:annull|recuper|ripristin)\\p{L}*",
+  "non potrai (?:pi[ùu] )?(?:recuperar|annullar|ripristinar)\\p{L}*|non sar[àa] (?:pi[ùu] )?possibile (?:recuperar|ripristinar|annullar)\\p{L}*",
+  "irr[eé]vers\\p{L}*|non (?:[èe] |sono )?reversibil[ei]|non (?:si )?(?:pu[òo]|potr[àa]|puoi|potrai) (?:pi[ùu] )?tornare indietro",
+  "cannot be (?:undone|recovered|restored|reversed)|can'?t be (?:undone|recovered|restored|reversed)|can not be (?:undone|reversed)",
+  "there(?: is|'s) no undo|no way to undo|(?:won'?t|will not) be able to (?:undo|recover|restore)|gone for good",
+  "will be (?:permanently )?(?:lost|deleted forever)|permanently|(?:is|are|be) permanent|permanent (?:delet|remov|eras|loss)\\p{L}*",
+  "(?:delet|remov|eras|destroy|wip)\\p{L}*(?: [\\p{L}']+){0,3} forever|(?:lost|gone) forever|forever (?:delet|remov|eras|lost|gone)\\p{L}*",
+  "this action is final|nicht rückgängig|endgültig|unwiderruflich|définitivement|ne peut pas être annul\\p{L}*",
+  "no se puede deshacer|permanentemente|de (?:forma|manera) permanente",
+  "não (?:pode|poderá|podem) ser (?:desfeit|revertid|recuperad)\\p{L}*|não é possível (?:desfazer|reverter|recuperar)",
+  "(?:kan|kunnen) niet ongedaan (?:worden )?gemaakt|niet ongedaan (?:te )?maken|onomkeerbaar|definitief|permanent (?:[\\p{L}']+ ){0,2}(?:verwijder|wis)\\p{L}*",
+  "nie można (?:tego |jej |go |ich )?(?:cofnąć|odwrócić|przywrócić)|nie da się (?:tego |jej |go )?cofnąć|nieodwracaln\\p{L}*|trwale|bezpowrotnie",
+  "нельзя (?:будет )?(?:отменить|восстановить)|невозможно (?:будет )?(?:отменить|восстановить)|необратим\\p{L}*|безвозвратно|навсегда",
+].join('|'));
+// giapponese e cinese: «non si può annullare», «non si può ripristinare», «eliminare del tutto»; solo le forme NEGATIVE («元に戻せます» no)
+const TESTO_IRREVERSIBILE_CJK = /元に戻せ(?:ません|ない)|元に戻すこと[はが]できません|取り消せ(?:ません|ない)|取り消すこと[はが]できません|復元でき(?:ません|ない)|完全に削除|无法撤[消销]|不[可能]撤[消销]|无法恢复|不可恢复|无法还原|無法復原|無法還原|永久(?:性地?)?[删刪]除|彻底删除|徹底刪除|不可逆/u;
+const eIrreversibile = (testo) => TESTO_IRREVERSIBILE.test(testo) || TESTO_IRREVERSIBILE_CJK.test(testo);
 /* Decisioni 167 e 170 (owner 04/11 17:49 e 18:16): un «Elimina», «Delete» o «Rimuovi» NUDO dentro una finestra di conferma modale è una
    cancellazione: è il pulsante di «Eliminare 1 file?», che spesso non dice che non si torna indietro. Nudo = il nome intero, tolti segni e
    simboli ai bordi («Elimina…», «🗑 Elimina»), con al più un «Sì,» / «Yes,» davanti. Vale solo con le politiche che lo dichiarano
@@ -339,7 +379,81 @@ const TESTO_IRREVERSIBILE = parole("definitivamente|per sempre|forever|non (?:si
 const ELIMINA_NUDO = intero("(?:(?:sì|si|yes|ok),? )?(?:elimina|elimina per tutti|elimina per me|delete|delete for everyone|delete for me|rimuovi|remove|cancella|löschen|supprimer|eliminar|borrar)");
 const BORDI_NON_PAROLA = /^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu;
 const eliminaNudo = (nome) => ELIMINA_NUDO.test(nome.replace(BORDI_NON_PAROLA, ''));
-const NOME_USCITA_DIALOGO = intero("annulla|cancel|no|chiudi|close|indietro|back|mantieni|keep|non ora|not now|esci|x|×|torna indietro|go back|torna al carrello|back to cart|abbrechen|annuler|cancelar");
+/* Le uscite di un dialogo: premerle è sempre libero. Decisione 204 (owner 04/11/2026 20:57): «Non eliminare», «Don't delete», «Nicht
+   löschen» sono uscite, mai una conferma di cancellazione. Giro 3 (10/11/2026, decisione 375: una carta su «Annulla» è solo rumore): le
+   uscite delle lingue il cui testo irreversibile ora si riconosce (portoghese, olandese, polacco, giapponese, cinese, russo, e «Nein»,
+   «Non»). Il russo si scrive com'è e passa da `norma`, come il nome letto a schermo (che porta le lettere sosia al latino). */
+const USCITE_IN_CIRILLICO = ['отмена', 'нет', 'закрыть', 'назад', 'не удалять'].map((u) => norma(u)); // solo lettere e spazi: niente da proteggere nella regex
+const NOME_USCITA_DIALOGO = intero(["annulla|cancel|no|chiudi|close|indietro|back|mantieni|keep|non ora|not now|esci|x|×|torna indietro|go back|torna al carrello|back to cart|abbrechen|annuler|cancelar",
+  "(?:non|don't|do not|nicht|ne pas|no|não) (?:elimin\\p{L}*|cancell\\p{L}*|rimuover\\p{L}*|scartar\\p{L}*|delete|remove|erase|discard|löschen|entfernen|supprimer|borrar|excluir)(?: [\\p{L}' ]{1,30})?",
+  "nein|non|não|nao|fechar|voltar|annuleren|nee|sluiten|terug|anuluj|nie|zamknij|wstecz|キャンセル|いいえ|閉じる|戻る|取消|否|关闭|關閉|返回",
+  ...USCITE_IN_CIRILLICO].join('|'));
+/* C3, decisione 195 (owner 04/11/2026 19:51), stretta dalla 204 (owner 04/11 20:57; revisione delle cure, RC-03 e RC-04): una finestra
+   di conferma CHIEDE di cancellare solo con una PAROLA DI CANCELLAZIONE più UNA COSA CHE SI PERDE (file, cartella, elementi, dati,
+   messaggi, account, cronologia…) nella stessa frase. Via i falsi allarmi «Rimuovere il filtro?», «Rimuovere dai preferiti?»,
+   «Scartare questa carta?», «Remove device safely?». Le radici inglesi e iberiche hanno il confine (`remove|removing`, `erase|erasing`;
+   «borrar», «excluir», mai «borr»/«exclu» da sole: «Borrow», «exclusive», «Removable», «eraser» non sono cancellazioni). Un participio
+   passato non chiede («Il file è stato eliminato, vuoi annullare?», «Eliminati 3 file!»), salvo dopo un ausiliare del futuro («Il file
+   verrà eliminato.», «will be deleted»). Il nome fra virgolette («Verbale n. 3.docx») è UNA cosa e non spezza la frase; il verbo sta al
+   più a ~260 caratteri dal «?» (MAX_PATH di Windows). Una domanda NUDA, che non nomina una cosa («Sei sicuro?», «Continuare?»), più una
+   frase che cancella («Il file verrà eliminato.», o il titolo «Elimina file») chiede come la domanda sola; una domanda che nomina la SUA
+   cosa («Spostare questo file nel Cestino?» sotto il titolo «Elimina file») si giudica da sola. Banco vero del 04/11: le stringhe di
+   Esplora risorse in C:/Windows/System32/{it-IT,en-US}/shell32.dll.mui. Fonte: Microsoft Learn, «Confirmations» (Win32 UX): una
+   conferma è una finestra modale con UNA domanda e risposte Sì/No o «… anyway». Le lingue oltre it/en/de/fr/es/pt le decide l'owner
+   (registro, 204: «le lingue in più: prima una RICERCA»). Hermes non legge i dialoghi, chiede per tipo d'azione (`tool.py:336-341`). */
+const VERBO_DI_CANCELLAZIONE = /(?<![\p{L}\p{N}])(?:(?:elimin|cancell|rimuov|rimoss|rimozion|svuot|scart|delet|discard|lösch|gelösch|supprim)\p{L}*|remov(?:e[sd]?|ing|al)|eras(?:e[sd]?|ing|ure)|empty(?:ing)?(?= (?:the |your |this |all )?(?:recycle bin|trash|bin))|leeren|vider|vaciar|esvaziar|borr(?:ar|a|as|e|en|es|o|ando|ad[oa]s?)|exclu(?:ir|a|am|em|i|indo|íd[oa]s?|são|sões))(?![\p{L}\p{N}])/gu;
+// participio passato: una cancellazione già fatta, non chiesta
+const PARTICIPIO_PASSATO = /^(?:(?:elimin|cancell|svuot|scart)at[oaie]|rimoss[oaie]|(?:delet|remov|eras|discard)ed|gelöscht|supprimé(?:e|s|es)?|(?:elimin|borr)ad[oa]s?|excluíd[oa]s?)$/u;
+const FUTURO_PRIMA = /(?:^|[^\p{L}])(?:verrà|verranno|sarà|saranno|viene|vengono|andrà|andranno|will be|would be|to be|be|essere|wird|werden|sera|seront|será|serán|vai ser|vão ser|serão)(?: [\p{L}']+){0,2} $/u;
+const COSA_CHE_SI_PERDE = parole([
+  "file|cartell[ae]|element[oi]|dati|messagg[io]|account|cronologia|foto|fotografi[ae]|immagin[ei]|document[oi]|contatt[oi]|chat|conversazion[ei]|e-?mail|mail|post[ae]|not[ae]|event[oi]|appuntament[oi]|bozz[ae]|modifiche|video|registrazion[ei]|allegat[oi]|collegament[oi]|icon[ae]|version[ei]|impostazioni|cestino|disco|unità|partizion[ei]|volume|profilo|progetto|repository|backup|tutto|selezionat[oaie]",
+  "files?|folders?|director(?:y|ies)|items?|data|messages?|accounts?|history|photos?|pictures?|images?|documents?|contacts?|chats?|conversations?|e-?mails?|notes?|events?|drafts?|changes|videos?|recordings?|attachments?|shortcuts?|icons?|versions?|settings|trash|recycle bin|disc|disk|drive|partition|volume|profile|project|repository|repo|backup|everything|selected",
+  "datei(?:en)?|ordner|elemente?|daten|nachrichten?|konto|verlauf|fotos|bilder?|dokumente?|kontakte?|entwurf|änderungen|verknüpfung(?:en)?|einstellungen|papierkorb|alles|ausgewählt\\p{L}*",
+  "fichiers?|dossiers?|éléments?|données|comptes?|historique|brouillon|modifications|raccourcis?|paramètres|corbeille|tout|sélectionné\\p{L}*",
+  "archivos?|carpetas?|elementos?|datos|mensajes?|cuenta|historial|fotos?|imágenes|documentos?|contactos?|borrador|cambios|accesos? directos?|configuración|papelera|todo|seleccionad\\p{L}*",
+  "arquivos?|ficheiros?|pastas?|itens|dados|mensagens?|conta|histórico|rascunho|alterações|atalhos?|configurações|lixeira|selecionad\\p{L}*",
+].join('|'));
+// la cosa detta col pronome: «eliminarlo», «volerli eliminare», «delete it?», «remove them?»
+const COSA_COL_PRONOME = /\p{L}(?:ar|er|ir)l[oaie](?!\p{L})|(?:delet|remov|eras|discard)\p{L}* (?:it|them|this|these|those)\s*\?/u;
+const NOME_DI_FILE = /[\p{L}\p{N}_-]\.\p{L}[\p{L}\p{N}]{0,5}(?![\p{L}\p{N}])/u;
+const NOME_FRA_VIRGOLETTE = /«[^«»\n]{1,260}»|"[^"\n]{1,260}"|“[^”\n]{1,260}”/gu;
+const SEGNAPOSTO_NOME = ' «nome» ';
+const VERBO_MAX_DAL_FONDO = 260;
+const LETTERA_O_CIFRA = /[\p{L}\p{N}]/u;
+/** Le frasi di un testo: un «?» chiude una domanda; un punto o un «!» chiudono la frase solo se non li segue subito una lettera o una
+ *  cifra («prova.txt», «v1.2», «urgente!v2» restano dentro). Gli a capo arrivano già spianati in spazi (`normaLeggera`). */
+function frasiDi(testo) {
+  const t = testo.replace(NOME_FRA_VIRGOLETTE, SEGNAPOSTO_NOME);
+  const frasi = []; let da = 0;
+  for (let i = 0; i < t.length; i += 1) {
+    const c = t[i];
+    if (c === '?' || ((c === '.' || c === '!') && !LETTERA_O_CIFRA.test(t[i + 1] ?? ''))) {
+      frasi.push({ testo: t.slice(da, i + 1), domanda: c === '?' }); da = i + 1;
+    }
+  }
+  if (da < t.length) frasi.push({ testo: t.slice(da), domanda: false });
+  return frasi;
+}
+const nominaUnaCosa = (s) => COSA_CHE_SI_PERDE.test(s) || s.includes('«nome»') || NOME_DI_FILE.test(s) || COSA_COL_PRONOME.test(s);
+/** La frase cancella una cosa? Un verbo di cancellazione (non un participio passato, salvo dopo un futuro) a ≤260 caratteri dal fondo
+ *  e una cosa che si perde nella stessa frase. */
+function fraseCheCancella(s) {
+  if (!nominaUnaCosa(s)) return false;
+  for (const m of s.matchAll(VERBO_DI_CANCELLAZIONE)) {
+    if (s.length - m.index > VERBO_MAX_DAL_FONDO) continue;
+    if (PARTICIPIO_PASSATO.test(m[0]) && !FUTURO_PRIMA.test(s.slice(0, m.index))) continue;
+    return true;
+  }
+  return false;
+}
+/** C3 (decisioni 195 e 204): i testi di UNA finestra (titolo e testi) chiedono di cancellare una cosa? O una domanda cancella da sé, o
+ *  una domanda nuda conferma una frase che cancella. */
+function chiedeDiCancellare(testi) {
+  const frasi = testi.flatMap(frasiDi);
+  const domande = frasi.filter((f) => f.domanda);
+  if (domande.some((f) => fraseCheCancella(f.testo))) return true;
+  return domande.some((f) => !nominaUnaCosa(f.testo)) && frasi.some((f) => !f.domanda && fraseCheCancella(f.testo));
+}
 
 // ---------- pagamento e invio: parole FORTI ovunque, DEBOLI solo in cassa, accanto a un prezzo o dentro una finestra modale ----------
 // «F24», «bollettino», «pagoPA» sono NOMI di documenti di pagamento: da soli pagano (un pulsante «F24» in un'app bancaria), ma non
@@ -460,6 +574,8 @@ const eConfermaTastiera = (s) => ((s.has('enter') || s.has('space')) && ![...s].
  *  in sottofondo il modificatore si perde (Q2-A1, Q3-A) e l'ospite le scarta. La politica, più larga, le legge come conferme. */
 const eConfermaCheArriva = (s) => uguale(s, 'enter') || uguale(s, 'space') || eInvioTastiera(s);
 export const eTastiDiConferma = (combinazione) => eConfermaCheArriva(insiemeTasti(combinazione));
+/** Ctrl+Invio, Cmd+Invio, Alt+S: la scorciatoia d'invio di una finestra di scrittura, cioè il suo «Invia» premuto da tastiera (cura del rosso, R1). */
+export const eScorciatoiaDInvio = (combinazione) => eInvioTastiera(insiemeTasti(combinazione));
 // Azioni che si ALLONTANANO da un controllo anti-robot (rilievo del Mobile): Esc, chiudi finestra/scheda, indietro.
 const eUscitaTastiera = (s) => uguale(s, 'escape') || uguale(s, 'alt', 'f4') || uguale(s, 'ctrl', 'w') || uguale(s, 'ctrl', 'f4') || uguale(s, 'alt', 'left') || uguale(s, 'browserback') || uguale(s, 'meta', 'w');
 const TASTI_DI_SPOSTAMENTO = new Set(['tab', 'left', 'right', 'up', 'down', 'arrowright', 'arrowup', 'arrowdown', 'home', 'end', 'pageup', 'pagedown', 'shift', 'escape']);
@@ -667,24 +783,77 @@ const testoElemento = (el) => normaLeggera(`${grezzo(el?.nome)} ${grezzo(el?.val
 
 /** Le finestre della schermata, lette UNA volta per chiamata: modali, titoli, testi per finestra (niente costo modali × elementi). */
 function leggiFinestre(elementi) {
-  const modali = new Map(); const titoli = []; const testiPer = new Map();
+  const modali = new Map(); const titoli = []; const testiPer = new Map(); const pulsantiPer = new Map(); let conFinestra = false;
   for (const el of elementi) {
     if (!visibile(el)) continue;
     if (el.ruolo === 'finestra') { titoli.push({ ref: el.ref, testo: testoElemento(el), grezzo: grezzo(el.nome) }); if (eModale(el)) modali.set(el.ref, el); }
-    if (el.finestra != null) { const t = testoElemento(el); const a = testiPer.get(el.finestra); if (a) a.push(t); else testiPer.set(el.finestra, [t]); }
+    if (el.finestra != null) {
+      conFinestra = true; const t = testoElemento(el); const a = testiPer.get(el.finestra); if (a) a.push(t); else testiPer.set(el.finestra, [t]);
+      // RC-01 (C3 per i tasti): i pulsanti di ogni finestra, per sapere quale pulsante preme un mnemonico
+      // (i nomi grezzi: si normalizzano solo quando serve davvero una lettera, non a ogni azione)
+      if (el.ruolo === 'pulsante' || el.ruolo === 'collegamento') { const p = pulsantiPer.get(el.finestra); if (p) p.push(el.nome); else pulsantiPer.set(el.finestra, [el.nome]); }
+    }
   }
-  return { modali, titoli, testiPer };
+  // conFinestra: lo schermo dice in quale finestra sta ogni elemento (l'ospite del PC lo segna per i dialoghi, Q2-F1)
+  // irreversibili, chiedono: ciò che si legge di ogni finestra modale, UNA volta per chiamata (il clic senza bersaglio e Invio in un modulo
+  // guardano ogni pulsante della finestra: rileggere i testi per ciascuno costerebbe pulsanti × testi)
+  return { modali, titoli, testiPer, pulsantiPer, conFinestra, irreversibili: new Map(), chiedono: new Map() };
 }
-/** Testi della finestra MODALE che conta: quella del bersaglio se si sa, altrimenti ogni finestra modale aperta. Nessuna modale ⇒ nulla. */
-function testiDelDialogo(bersaglio, f) {
+/** Le finestre MODALI che contano: quella del bersaglio se si sa, altrimenti ogni finestra modale aperta. Nessuna modale ⇒ nessuna. */
+function modaliDelBersaglio(bersaglio, f) {
   if (f.modali.size === 0) return [];
-  const dove = bersaglio?.finestra;
-  const refs = dove != null && f.modali.has(dove) ? [dove] : [...f.modali.keys()];
-  const testi = [];
-  for (const r of refs) { testi.push(testoElemento(f.modali.get(r))); for (const t of f.testiPer.get(r) ?? []) testi.push(t); }
-  return testi;
+  // la finestra stessa come bersaglio (Invio col fuoco sulla finestra preme il pulsante di serie) si giudica coi SUOI testi
+  const dove = bersaglio?.finestra ?? (bersaglio?.ruolo === 'finestra' ? bersaglio.ref : undefined);
+  // C2 (revisione del blocco computer use del 04/11, R-MEDIO-1): se lo schermo segna le finestre, un bersaglio senza finestra è FUORI dai
+  // dialoghi e non si giudica coi loro testi («Aggiorna» nell'app, sotto un avviso aperto, non è una cancellazione). Senza bersaglio («s»,
+  // Invio senza ref, un clic senza elemento sotto il punto) vale OGNI finestra modale aperta: non si sa quale riceve il gesto.
+  if (bersaglio && dove == null && f.conFinestra) return [];
+  return dove != null && f.modali.has(dove) ? [dove] : [...f.modali.keys()];
+}
+const testiDellaModale = (r, f) => [testoElemento(f.modali.get(r)), ...(f.testiPer.get(r) ?? [])];
+/** Il primo testo irreversibile di UNA finestra modale (titolo e testi), o null: letto una volta per chiamata. */
+function irreversibileDellaModale(r, f) {
+  let t = f.irreversibili.get(r);
+  if (t === undefined) { t = testiDellaModale(r, f).find(eIrreversibile) ?? null; f.irreversibili.set(r, t); }
+  return t;
+}
+/** UNA finestra modale chiede di cancellare una cosa (C3, decisioni 195 e 204)? Letto una volta per chiamata. */
+function chiedeLaModale(r, f) {
+  let c = f.chiedono.get(r);
+  if (c === undefined) { c = chiedeDiCancellare(testiDellaModale(r, f)); f.chiedono.set(r, c); }
+  return c;
+}
+/** Testi della finestra MODALE che conta (vedi `modaliDelBersaglio`). */
+function testiDelDialogo(bersaglio, f) {
+  return modaliDelBersaglio(bersaglio, f).flatMap((r) => testiDellaModale(r, f));
 }
 const dentroModale = (bersaglio, f) => bersaglio?.finestra != null && f.modali.has(bersaglio.finestra);
+/* RC-01 (C3 anche per i tasti, revisione delle cure del 04/11): in una finestra di dialogo la lettera sottolineata di un pulsante, da sola
+   o con Alt, lo preme (Microsoft Learn, «Dialog Box Programming Considerations», sezione Mnemonics: «the user can press the mnemonic key
+   alone or with ALT»). L'albero non dice quale lettera è sottolineata: si prende l'iniziale del nome. Il tasto è libero solo se TUTTI i
+   pulsanti con quell'iniziale sono uscite («n» con «Sì/No», «n» con «Non eliminare»); una lettera che nessun pulsante porta resta una
+   cancellazione (il verso sicuro: non si sa cosa prema). */
+const iniziale = (nome) => /\p{L}/u.exec(nome.normalize('NFD').replace(/\p{M}/gu, ''))?.[0] ?? '';
+function letteraDelMnemonico(tasti) {
+  const k = [...tasti].filter((t) => t !== 'alt');
+  if (k.length !== 1) return null; // tolto Alt resta UN tasto: «s», «alt+s»; «ctrl+s», «shift+s» no
+  return /^\p{L}$/u.test(k[0]) ? k[0].normalize('NFD').replace(/\p{M}/gu, '') : null;
+}
+/** C3 senza un pulsante letto: una finestra modale che chiede di cancellare, e il gesto (Invio, spazio, una lettera, un clic senza
+ *  elemento sotto il punto) può premerne una conferma. */
+function domandaPerTasto(bersaglio, f, lettera) {
+  if (!f.eliminaNudo) return null; // decisione 170: la regola la accende la politica
+  for (const r of modaliDelBersaglio(bersaglio, f)) {
+    if (!chiedeLaModale(r, f)) continue;
+    const testi = testiDellaModale(r, f);
+    if (lettera) {
+      const conLettera = (f.pulsantiPer.get(r) ?? []).map((n) => norma(n ?? '')).filter((n) => iniziale(n) === lettera);
+      if (conLettera.length > 0 && conLettera.every((n) => NOME_USCITA_DIALOGO.test(n))) continue;
+    }
+    return { protezione: 'cancellazione', motivo: 'pulsante-in-finestra', prova: (testi.find((t) => chiedeDiCancellare([t])) ?? testi[0]).slice(0, 80) };
+  }
+  return null;
+}
 
 // Spia economica (una regex senza sguardi indietro) prima delle due complete: tiene il p95 sotto 1 ms su una schermata nuova.
 const SPIA_ANTI_ROBOT = /robot|human|umano|captcha|turnstile|arkose|geetest|datadome|hold|premuto|immagini|images|squares|caselle|verif|traffic|sicurezza|security/u;
@@ -725,7 +894,8 @@ function titoloDiCassa(bersaglio, schermata, f) {
  * testo di messaggi o liste. Invariata con la decisione 145: il restringimento vale solo per la guardia (`ragioneDellaCassa`).
  */
 function paginaDiCassa(bersaglio, elementi, schermata, f) {
-  return campiDellaCarta(elementi) || titoloDiCassa(bersaglio, schermata, f);
+  if (f.campiCarta === undefined) f.campiCarta = campiDellaCarta(elementi); // i campi della carta sono della schermata: una lettura per chiamata
+  return f.campiCarta || titoloDiCassa(bersaglio, schermata, f);
 }
 // Il TOTALE FINALE etichettato a schermo (tetto di spesa, carta della cassa, guardia): un'etichetta «Totale» con un importo solo, e un
 // totale solo; altrimenti null. Spostato qui da ciclo.mjs (04/11, identico) perché la guardia lo legge per riconoscere la cassa.
@@ -743,6 +913,33 @@ export function totaleFinale(s) {
 }
 /** Un tasto che paga, visibile e che conferma (non un campo, un collegamento o un testo). */
 const tastoPaga = (elementi) => elementi.some((el) => visibile(el) && !RUOLI_NON_CONFERMA.has(el.ruolo) && pagamentoForte(norma(el.nome)));
+/* Limite 1 (giudice v1484): per il clic senza bersaglio paga anche un collegamento, un testo o un'immagine («Acquista ora» come <a> o
+   come <div> cliccabile), ma solo quando il NOME INTERO è un comando di pagare: «Checkout», «PayPal», «Come pagare», «Buy» o «Paga in 3
+   rate» nel menu o nel piè di pagina di ogni negozio non pagano e non fanno carte (decisione 375). */
+/* Secondo giro (revisore A, 5b; giudice v1498): anche un CAMPO che si chiama «Paga ora» (il ruolo lo sceglie la pagina, come al clic
+   mirato), e il nome si legge senza le decorazioni che ogni negozio ci mette: frecce, punti esclamativi, il prezzo in fondo («Paga ora →»,
+   «Pay $49.99», «Acquista ora - 499,00 €»). «Checkout» da solo resta fuori: è il collegamento alla cassa di ogni pagina. */
+const RUOLI_PAGA_SENZA_PULSANTE = new Set(['collegamento', 'testo', 'immagine', 'campo']);
+const PREZZO_IN_FONDO = /(?:\s+(?:[$€£]\s?\d[\d.,]*|\d[\d.,]*\s?(?:[$€£]|eur|euro|usd|chf)(?![\p{L}])))+\s*$/u;
+const senzaDecorazioni = (n) => n.replace(/[^\p{L}\p{N}\s'$€£.,]/gu, ' ').replace(/\s+/gu, ' ').trim().replace(PREZZO_IN_FONDO, '').replace(/[\s.,]+$/u, '').trim();
+const PAGA_COMANDO = intero("paga|pay|checkout now|jetzt bestellen|buy with [\\p{L} ]{2,20}|prenota e paga|book and pay|paga in sicurezza|pay securely|(?:paga|acquista|compra|ordina) (?:ora|adesso|subito)|(?:pay|buy|buy it|order|purchase) now|paga con [\\p{L} ]{2,20}|pay with [\\p{L} ]{2,20}|procedi al pagamento|proceed to payment|conferma e paga|confirm and pay|ordina e paga|place (?:your |the )?order|complete (?:your |the )?(?:purchase|order)|completa (?:l'|il )?(?:acquisto|ordine|pagamento)|conferma (?:l'|il )?(?:acquisto|ordine|pagamento)|jetzt kaufen|jetzt bezahlen|zahlungspflichtig bestellen|payer maintenant|pagar ahora|comprar ahora");
+/* Giro di cura dopo il secondo passaggio (giudice v1570 e v1577): «Paga» o «Pay» DA SOLO conta solo se si può premere: un pulsante, un
+   collegamento, o un elemento (o un suo antenato stretto) che il lettore dello schermo dice premibile (`premibile`: in Chromium un div o
+   uno span con un gestore del clic è esposto con l'azione «invoke», cua uia/mod.rs:987-989 e 1024; `attrezzo.mjs` lo porta). Il testo
+   che non si preme dà 0 carte, accanto e al buio. Accanto = entro VICINO_A_PAGA_PX dal suo riquadro, lo stesso numero del caso già
+   curato (5 px). tabindex e cursor:pointer non arrivano dal lettore: contano solo se la pagina li espone come «invoke». */
+const VICINO_A_PAGA_PX = 5;
+const PAGA_DA_SOLO = /^(?:paga|pay)$/u;
+const soloPagaSenzaPrezzo = (el) => PAGA_DA_SOLO.test(norma(el.nome ?? '').replace(/[^\p{L}\p{N}\s]/gu, ' ').trim());
+const strettoIn = (r, q) => numeri(r) && numeri(q) && dentroDi(r, q)
+  && r.x - q.x <= VICINO_A_PAGA_PX && r.y - q.y <= VICINO_A_PAGA_PX
+  && (q.x + q.w) - (r.x + r.w) <= VICINO_A_PAGA_PX && (q.y + q.h) - (r.y + r.h) <= VICINO_A_PAGA_PX;
+const padrePremibile = (el, elementi) => (el.genitore == null ? null : elementi.find((p) => p && p !== el && p.ref === el.genitore
+  && p.premibile === true && visibile(p) && strettoIn(el.rettangolo, p.rettangolo)) ?? null);
+const siPreme = (el, elementi) => el.ruolo === 'pulsante' || el.ruolo === 'collegamento' || el.premibile === true || padrePremibile(el, elementi) !== null;
+const elementoCheFaPagare = (el, _k, elementi = []) => visibile(el)
+  && (RUOLI_PAGA_SENZA_PULSANTE.has(el.ruolo) ? PAGA_COMANDO.test(senzaDecorazioni(norma(el.nome))) : !RUOLI_NON_CONFERMA.has(el.ruolo) && pagamentoForte(norma(el.nome)))
+  && (!soloPagaSenzaPrezzo(el) || siPreme(el, elementi));
 /**
  * Perché la schermata è una cassa PER LA GUARDIA (decisione 145, owner 04/11): 'campi' (i campi della carta), 'titolo-totale-paga'
  * (titolo di cassa + totale finale etichettato + tasto che paga), 'errore' (la lettura fallisce: chi non riesce a valutare nega);
@@ -843,12 +1040,20 @@ function riconosciConferma(bersaglio, elementi, schermata, f, viaTastiera, extra
   if (irreversibile) return irreversibile;
   // Decisioni 167 e 170: «Elimina», «Delete», «Rimuovi» nudi (anche a link) dentro una finestra di conferma modale sono una cancellazione
   if (f.eliminaNudo && (conferma || ruolo === 'collegamento') && eliminaNudo(nome) && dentroModale(bersaglio, f)) return { protezione: 'cancellazione', motivo: 'pulsante-in-finestra', prova };
+  // C3, decisioni 195 e 204: un pulsante o un collegamento qualsiasi che non è un'uscita («Sì», «OK», «Elimina file», «Elimina comunque»),
+  // dentro una finestra modale il cui titolo o testo chiede di cancellare una cosa, è una cancellazione. Caselle, voci e schede no (la
+  // regola la accende la politica, come per l'«Elimina» nudo)
+  if (f.eliminaNudo && (ruolo === 'pulsante' || ruolo === 'collegamento') && dentroModale(bersaglio, f)
+    && chiedeLaModale(bersaglio.finestra, f)) return { protezione: 'cancellazione', motivo: 'pulsante-in-finestra', prova };
   return null;
 }
 /** Dentro una finestra modale che parla di qualcosa di irreversibile, ogni conferma è una cancellazione; uscire («Annulla») no. */
 function dialogoIrreversibile(nome, bersaglio, f) {
   if (NOME_USCITA_DIALOGO.test(nome)) return null;
-  for (const t of testiDelDialogo(bersaglio, f)) if (TESTO_IRREVERSIBILE.test(t)) return { protezione: 'cancellazione', motivo: 'dialogo', prova: t.slice(0, 80) };
+  for (const r of modaliDelBersaglio(bersaglio, f)) {
+    const t = irreversibileDellaModale(r, f);
+    if (t !== null) return { protezione: 'cancellazione', motivo: 'dialogo', prova: t.slice(0, 80) };
+  }
   return null;
 }
 /* Terzo giro, T-R4 e N5 (05/11): Invio in un campo di testo invia il modulo, cioè preme il suo pulsante predefinito (WHATWG HTML,
@@ -875,10 +1080,91 @@ function invioImplicito(bersaglio, elementi, schermata, f) {
 }
 /** Invio (o un a capo scritto) sul bersaglio: la sua lettura come conferma, e per un campo il modulo che invia. */
 const confermaDaInvio = (bersaglio, elementi, schermata, f) => riconosciConferma(bersaglio, elementi, schermata, f, true) ?? invioImplicito(bersaglio, elementi, schermata, f);
+/* Giro 3 della 0.2.2-CU, punti 4 e 6 (giudice v1314; revisori CLI N3 e R4, Telefono R3, Performance N4; 10/11/2026). Un clic per
+   COORDINATE senza elemento leggibile sotto il punto non si sa dove cade. Davanti a una finestra di conferma decide ciò che la finestra
+   può fare di più grave, come `invioImplicito` fa per Invio in un modulo:
+   0. (giro 4) un pulsante delle finestre modali che PAGA decide prima di tutto: pagamento, mai cancellazione;
+   1. il testo irreversibile di OGNI finestra modale aperta (anche la seconda: col bersaglio nullo non si sa quale riceve il clic);
+   2. la domanda di cancellazione (C3, decisioni 195 e 204) di ogni finestra modale;
+   3. il pulsante più forte delle finestre modali, letto come al clic (pagamento > cancellazione > invio): così decide anche un dialogo
+      in una lingua che il vocabolario non conosce, se il suo pulsante si legge («Elimina», «Paga ora»);
+   4. una finestra NON modale con la forma di una conferma (da 1 a 5 pulsanti suoi) e un testo irreversibile: una conferma che lo schermo
+      non ha segnato come modale. Un testo fuori da ogni finestra («i messaggi si eliminano definitivamente dopo 7 giorni», in una pagina
+      di impostazioni) non conta: 0 carte in più dove una finestra di conferma non c'è.
+   Solo il PC ha il clic (TIPI_PER_PIATTAFORMA). Hermes chiede a ogni azione che cambia qualcosa, senza leggere i dialoghi
+   (tools/computer_use/tool.py:336-341); Claude in Chrome e la demo Anthropic mandano il clic com'è (computer.py:220-226). */
+const PULSANTI_DI_UNA_CONFERMA = 5; // come l'ospite del PC (attrezzo.mjs, PULSANTI_DI_UN_DIALOGO)
+function clicSenzaBersaglio(elementi, schermata, f) {
+  let scelto = null;
+  const pulsantiFuori = new Map(); // finestra non modale → quanti pulsanti suoi
+  for (const el of elementi) {
+    if (!visibile(el) || el.ruolo !== 'pulsante' || el.finestra == null) continue;
+    if (!f.modali.has(el.finestra)) { pulsantiFuori.set(el.finestra, (pulsantiFuori.get(el.finestra) ?? 0) + 1); continue; }
+    if (el.stato?.attivo === false) continue;
+    const r = riconosciConferma(el, elementi, schermata, f, false);
+    if ((FORZA_NEL_MODULO[r?.protezione] ?? 0) > (FORZA_NEL_MODULO[scelto?.protezione] ?? 0)) scelto = { protezione: r.protezione, motivo: 'clic-senza-bersaglio', prova: r.prova };
+  }
+  /* Giro 4, F1 (controllore del giro 3, ALTA): prima si leggeva il testo irreversibile, e «Conferma acquisto» con «Questa operazione non
+     può essere annullata.» e [Paga ora, Annulla] faceva UNA carta «cancellazione», il cui sì si ricordava (il ciclo esclude solo il
+     pagamento) e il tetto di spesa non si leggeva. Il pulsante che paga vince su tutto: la carta è di pagamento, col totale e il tetto.
+     Un'approvazione è legata a ordine, esercente e importo, non al testo che la finestra mette accanto (NHI journal, FAQ sui pagamenti
+     degli agenti, letto l'11/11/2026). */
+  if (scelto?.protezione === 'pagamento') return scelto;
+  /* Decisione dell'owner 11/11 14:02-14:10 (giudice v1464 e v1472): un clic per coordinate vicino a «Paga ora» chiede SEMPRE la carta.
+     Un tasto che paga dentro una pagina non ha finestra e il giro sopra non lo guarda: il clic partiva senza carta, mentre la 0.2.1
+     lo chiedeva («non valutabile»). Ogni tasto che paga a schermo, dentro o fuori da una cassa, con o senza una finestra modale aperta
+     (un banner dei cookie non basta a lasciarlo passare): la carta di pagamento, in Normale e in Accesso pieno. Come Hermes, dove
+     ogni clic, anche per coordinate, passa dalla domanda (tools/computer_use/tool.py:460). Limite 1: anche un collegamento, un testo
+     o un'immagine che paga (`elementoCheFaPagare`). */
+  const paga = elementi.find(elementoCheFaPagare);
+  if (paga) return { protezione: 'pagamento', motivo: 'clic-senza-bersaglio', prova: String(paga.nome).slice(0, 80) };
+  const dialogo = dialogoIrreversibile('', null, f) ?? domandaPerTasto(null, f, null);
+  if (dialogo) return dialogo;
+  if (scelto) return scelto;
+  for (const t of f.titoli) {
+    if (f.modali.has(t.ref)) continue;
+    const n = pulsantiFuori.get(t.ref) ?? 0;
+    if (n < 1 || n > PULSANTI_DI_UNA_CONFERMA) continue;
+    const testo = [t.testo, ...(f.testiPer.get(t.ref) ?? [])].find(eIrreversibile);
+    if (testo) return { protezione: 'cancellazione', motivo: 'dialogo', prova: testo.slice(0, 80) };
+  }
+  return null;
+}
+/**
+ * Giro 3, punto 2 (decisione 375): le finestre di conferma che un clic senza bersaglio guarda, in una stringa. Il ciclo ricorda il sì
+ * della persona per «la stessa finestra» = la stessa stringa: i titoli e i testi (nomi e valori di ogni elemento, pulsanti compresi)
+ * di ogni finestra modale aperta e di ogni finestra non modale coi suoi elementi, nell'ordine dello schermo. I riferimenti (`ref`)
+ * non contano: un albero rinumerato non è un'altra finestra. null = nessuna finestra di conferma a schermo.
+ */
+export function improntaDeiDialoghi(schermata) {
+  try {
+    const elementi = Array.isArray(schermata?.elementi) ? schermata.elementi : [];
+    const f = leggiFinestre(elementi);
+    const finestre = f.titoli.filter((t) => f.modali.has(t.ref) || f.testiPer.has(t.ref));
+    if (finestre.length === 0) return null;
+    return JSON.stringify(finestre.map((t) => [f.modali.has(t.ref) ? 'm' : 'n', t.testo, f.testiPer.get(t.ref) ?? []]));
+  } catch { return null; } // una schermata che non si legge non ha una finestra da ricordare: si chiede
+}
 
 // ---------- riconoscimento: quale protezione scatta, con quale motivo e quale prova ----------
 function nonValutabile(prova) { return { protezione: null, motivo: NON_VALUTABILE, prova }; }
 const senzaBersaglio = (b) => b === null || typeof b !== 'object' || Array.isArray(b);
+// un riquadro che ne contiene interamente un altro visibile: il Document della pagina, un gruppo, un pannello (punto 1 del revisore A)
+const numeri = (r) => Boolean(r) && [r.x, r.y, r.w, r.h].every(Number.isFinite);
+const dentroDi = (r, q) => r.x >= q.x && r.y >= q.y && r.x + r.w <= q.x + q.w && r.y + r.h <= q.y + q.h;
+const contenitore = (b, elementi) => numeri(b?.rettangolo) && b.ruolo !== 'pulsante'
+  && elementi.some((e) => e !== b && visibile(e) && numeri(e.rettangolo) && dentroDi(e.rettangolo, b.rettangolo));
+/* Giro di cura dopo i revisori (punto aperto; giudice v1560, decisione dell'owner 11/11 18:50): un pulsante o un collegamento che dice
+   solo «Paga» o «Pay» chiede SEMPRE la carta, anche al buio accanto. In un browser vero il clic accanto cade sul Document, e fuori dalla
+   cassa partiva senza carta (lo stesso clic col bersaglio nullo chiedeva). Con uno di loro a schermo, il Document o un contenitore sotto
+   il punto è un clic al buio su ogni pagina. «Acquista ora» fuori dalla cassa resta com'era (decisione 375). */
+/* Giudice v1570 (revisori A e B, secondo passaggio): con un solo «Pay» nel menu OGNI clic sul Document o su un contenitore chiedeva la
+   carta, anche lontano (5 clic lontani = 5 carte; una mail con «Pay» nel menu 3 carte invece di 1). Ora solo entro VICINO_A_PAGA_PX dal
+   riquadro dell'elemento che si preme (o del suo antenato stretto premibile); più lontano il clic parte come prima. */
+const distanteAlPiu = (r, x, y) => numeri(r) && Number.isFinite(x) && Number.isFinite(y)
+  && Math.max(r.x - x, x - (r.x + r.w), 0) <= VICINO_A_PAGA_PX && Math.max(r.y - y, y - (r.y + r.h), 0) <= VICINO_A_PAGA_PX;
+const pagaDaSoloVicino = (elementi, x, y) => elementi.some((el) => visibile(el) && PAGA_DA_SOLO.test(senzaDecorazioni(norma(el.nome ?? '')))
+  && siPreme(el, elementi) && (distanteAlPiu(el.rettangolo, x, y) || distanteAlPiu(padrePremibile(el, elementi)?.rettangolo, x, y)));
 
 function riconosci(azione, bersaglio, schermata, contesto, tipiAmmessi, eliminaNudoInFinestra = false) {
   if (azione === null || typeof azione !== 'object') return nonValutabile('azione-mancante');
@@ -943,15 +1229,23 @@ function riconosci(azione, bersaglio, schermata, contesto, tipiAmmessi, eliminaN
         return { protezione: 'credenziale', motivo: eIncolla(tasti) ? 'incolla' : 'tasti-in-campo-sensibile', prova: [...tasti].join('+') };
       }
       if ((tasti.has('enter') || tasti.has('space')) && [...tasti].some(tastoCheScrive)) return nonValutabile('combinazione-malformata'); // M2
+      // RC-01 (C3 per i tasti): la lettera di un mnemonico, da sola o con Alt («s», «y», «alt+y», anche «alt+s»)
+      const lettera = letteraDelMnemonico(tasti);
+      const b = senzaBersaglio(bersaglio) ? null : bersaglio;
       if (eConfermaTastiera(tasti)) {
-        if (senzaBersaglio(bersaglio)) return dialogoIrreversibile('', null, f) ?? nonValutabile('bersaglio-mancante');
+        // Invio o spazio senza bersaglio premono il pulsante di serie o quello col fuoco della modale: come il clic (C3, RC-01)
+        if (b === null) return dialogoIrreversibile('', null, f) ?? domandaPerTasto(null, f, lettera) ?? nonValutabile('bersaglio-mancante');
+        const mnemonico = lettera ? domandaPerTasto(b, f, lettera) : null; // Alt+S col fuoco in un punto qualsiasi del dialogo preme «Sì»
+        if (mnemonico) return mnemonico;
         // lo spazio in un campo scrive uno spazio: il modulo lo invia solo Invio
-        const r = tasti.has('enter') ? confermaDaInvio(bersaglio, elementi, schermata, f) : riconosciConferma(bersaglio, elementi, schermata, f, true);
+        const r = tasti.has('enter') ? confermaDaInvio(b, elementi, schermata, f) : riconosciConferma(b, elementi, schermata, f, true);
         if (r) return r;
+        // Invio col fuoco sulla finestra modale stessa preme il suo pulsante di serie
+        if (b.ruolo === 'finestra') { const d = domandaPerTasto(b, f, null); if (d) return d; }
         return eInvioTastiera(tasti) ? { protezione: 'invio', motivo: 'tasti-invio', prova: [...tasti].join('+') } : null;
       }
-      // «s», «y», spazio dentro un dialogo irreversibile: rispondono «sì»
-      if (tastoSingolo(tasti)) return dialogoIrreversibile('', senzaBersaglio(bersaglio) ? null : bersaglio, f);
+      // «s», «y», spazio dentro un dialogo irreversibile: rispondono «sì»; la lettera con Alt fa lo stesso (Mnemonics, RC-01)
+      if (tastoSingolo(tasti) || lettera) return dialogoIrreversibile('', b, f) ?? (lettera ? domandaPerTasto(b, f, lettera) : null);
       return null;
     }
     case 'apri': {
@@ -959,7 +1253,27 @@ function riconosci(azione, bersaglio, schermata, contesto, tipiAmmessi, eliminaN
       return m ? { protezione: 'invio', motivo: m, prova: 'indirizzo' } : null;
     }
     case 'premi': case 'scegli': case 'clic': {
-      if (senzaBersaglio(bersaglio)) return nonValutabile('bersaglio-mancante');
+      // 0.2.1-CU (owner 09/11/2026, giudice v1278-v1279, S1): un clic per COORDINATE senza elemento leggibile sotto il punto parte, come in
+      // Hermes (cua_backend_input.py:105-108, `{x, y}` così com'è) e nella demo Anthropic (computer.py:220-226, solo i numeri si controllano):
+      // un albero vuoto non prova che il punto sia vuoto (cua-driver get_window_state.rs:599-607 raccomanda proprio `px`). I blocchi duri
+      // (anti-robot, sopra) e il permesso per app (carta del compito e dei luoghi) restano; un elemento trovato sotto il punto arma ancora
+      // pagamento, cancellazione, invio, credenziale e consenso qui sotto (Hermes tool.py:336-341, permesso solo al distruttivo). Il
+      // telefono non ha il clic (TIPI_AMMESSI.telefono). «premi» e «scegli» nominano un elemento: senza, restano non valutabili (S7).
+      // Giro 2 (revisione CLI, reperto 1, 09/11/2026): una finestra di conferma irreversibile riguarda tutto lo schermo, come l'anti-robot.
+      // Senza elemento sotto il punto non si sa se il clic cade su «Elimina» o su «Annulla»: il clic la guarda come fanno già i tasti
+      // (sopra, `eConfermaTastiera`) e la decisione porta il testo del dialogo. Hermes chiede a ogni azione che cambia qualcosa
+      // (tools/computer_use/tool.py:336-341); qui solo dove la finestra dice che non si torna indietro, 0 carte in più altrove.
+      // Giro 3: oltre al testo irreversibile decide la domanda di cancellazione e il pulsante più forte della finestra (`clicSenzaBersaglio`).
+      if (senzaBersaglio(bersaglio)) return tipo === 'clic' ? clicSenzaBersaglio(elementi, schermata, f) : nonValutabile('bersaglio-mancante');
+      /* Secondo giro (revisore A, punto 1; giudice v1498, opzione A): in un browser vero sotto ogni punto della pagina c'è il Document
+         (cua uia/mod.rs:1012-1017, ruolo 'campo' in attrezzo.mjs), e l'ospite sceglie il riquadro più piccolo che contiene il punto: un
+         clic per coordinate 5 px accanto a «Paga ora» cadeva sul Document e partiva senza carta. Su una pagina di cassa un clic per
+         coordinate che cade sul Document o su un contenitore (un riquadro che ne contiene altri) è un clic al buio: decide
+         `clicSenzaBersaglio`. Fuori dalla cassa resta com'era (0 carte in più sui compiti tipici, decisione 375). */
+      if (tipo === 'clic' && (azione.ref == null || azione.ref === '') && contenitore(bersaglio, elementi) && (paginaDiCassa(null, elementi, schermata, f) || pagaDaSoloVicino(elementi, azione.x, azione.y))) {
+        const alBuio = clicSenzaBersaglio(elementi, schermata, f);
+        if (alBuio) return alBuio;
+      }
       if (azione.uscita === true) return { protezione: 'invio', motivo: 'azione-di-uscita', prova: norma(bersaglio.nome).slice(0, 80) };
       // riempimento automatico del browser: una voce con cifre mascherate o dei pallini è un segreto salvato
       const voce = norma(`${grezzo(bersaglio.nome)} ${grezzo(azione.valore)}`);
@@ -1085,6 +1399,10 @@ export const POLITICHE = Object.freeze({
         default: return 'ferma';
       }
     },
+    /* Giro 4, punto 6 (decisione 159; giudice v1394, N1): UNA carta per pagamento, non una per clic. Il ciclo ricorda il sì dato a un clic
+       al buio davanti allo STESSO pagamento (stessa finestra, stesso pulsante, stessa cifra, stesso destinatario, schermo immutato);
+       un altro pagamento o un altro compito chiedono di nuovo. Solo qui: in Normale il sì a un pagamento non si ricorda mai. */
+    unaCartaPerPagamento: true,
   }),
   /* Decisione 239 (owner 05/11, R1 della revisione del terzo giro): nel luogo ricordato con «Consenti sempre» salta la carta SOLO la
      cancellazione chiesta dalla persona (decisione 149). Tutto il resto è il permesso Normale: il segreto del portachiavi, quello dettato

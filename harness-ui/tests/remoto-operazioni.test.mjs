@@ -76,7 +76,11 @@ test('OPS-04 elenco chiuso: operazioni fuori elenco e id di sessione che cercano
   }
   await assert.rejects(b.operazioni.esegui('session.send', { sessionId: 's-1', corpo: [1] }, b.contesto), { code: 'BAD_MESSAGE' });
   assert.deepEqual(b.sessionRegistry.chiamate, []);
-  assert.ok(!b.operazioni.elenco().some((o) => /trust|fid/i.test(o)), 'rendere fidati MCP, hook e plugin resta solo dal PC (ELENCO-AZIONI §7.3)');
+  /* giro 2 della fiducia (owner 11/11 13:30, «Mi fido» anche dal telefono): una sola eccezione, la risposta alla domanda APERTA sulla
+     cartella di una conversazione, che non riaccende niente (su una cartella mai chiesta istruzioni, ganci e strumenti sono già accesi)
+     e non cambia mai un «No» già dato (`soloSeMaiChiesta`, sempre) */
+  assert.deepEqual(b.operazioni.elenco().filter((o) => /trust|fid/i.test(o)), ['session.folder-trust'], 'rendere fidati MCP, hook e plugin resta solo dal PC (ELENCO-AZIONI §7.3)');
+  assert.equal(OPERAZIONI_HTTP['session.folder-trust'].corpo({ sessionId: 's-1', fidata: true }).soloSeMaiChiesta, true, 'dal telefono solo la domanda aperta');
   assert.ok(Object.values(OPERAZIONI_HTTP).every((v) => typeof v.percorso === 'function' && /^(GET|POST|PATCH|DELETE)$/.test(v.metodo)));
   /* owner 27/10/2026 («il dispositivo cambia tutte le impostazioni»): il primo PATCH, le impostazioni del motore del contesto. Il cancello del
      consenso del server guarda ogni metodo che non sia GET/HEAD (`http-app.mjs`), quindi anche questo; l'elenco dei PATCH è chiuso qui */

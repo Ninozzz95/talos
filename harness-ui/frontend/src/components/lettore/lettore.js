@@ -26,6 +26,7 @@ import { renderizzaMarkdown } from '../markdown.js';
 import { dimensioneLeggibile, righeCsv, separatoreDi } from '../libreria-anteprima.js';
 import { apriMenuContestuale, creaMenuContestuale } from '../schede.js';
 import { tipoDaNome, tipoDelFile } from './tipo-file.js';
+import { guardaAnteprima } from '../anteprime-cadute.js';
 
 /* I numeri seguono la lingua dell'interfaccia (italiano → it-IT, inglese → en-US), letta a ogni uso. */
 const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
@@ -398,6 +399,24 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     stato.nodoOffice = null;
   }
 
+  /* 0.2.2, giro di sicurezza 3 (N1): la cornice della pagina HTML resa e la sua guardia. Nel guscio del PC, se il processo della pagina
+     cade, la si ridisegna UNA volta da sola (lasciapassare nuovo); alla seconda resta «Pagina non caricata.» con «Riprova», la stessa
+     carta dell'errore di sempre. Il conto lo azzera solo «Riprova» (`anteprime-cadute.js`). */
+  let corniceHtml = null;
+  let guardiaHtml = null;
+  function paginaNonCaricata() {
+    corniceHtml = null;
+    const box = crea(doc, 'div', 'talos-lettore__fuori');
+    const frase = crea(doc, 'p', '', traduci('varie.reader.html.notLoaded'));
+    frase.setAttribute('role', 'alert');
+    box.append(frase, bottoneTesto(doc, traduci('varie.reader.retry'), () => { guardiaHtml?.azzera(); void disegna(); }));
+    corpo.replaceChildren(box);
+  }
+  function guardaHtml() {
+    guardiaHtml ??= guardaAnteprima({ finestra, indirizzo: () => (corniceHtml?.isConnected ? corniceHtml.src : null),
+      ricarica: () => { void disegna(); }, arresa: paginaNonCaricata });
+  }
+
   let disegnoCorrente = 0;
   async function disegna() {
     const mio = ++disegnoCorrente;
@@ -480,6 +499,8 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
           cornice.setAttribute('referrerpolicy', 'no-referrer');
           cornice.setAttribute('allow', '');
           cornice.src = assoluto.href;
+          corniceHtml = cornice;
+          guardaHtml();
           pezzi.push(cornice);
         }
       } else if (['documento', 'foglio', 'presentazione'].includes(tipo)) {
@@ -578,6 +599,8 @@ export function creaLettore({ doc = globalThis.document, finestra = globalThis, 
     },
     distruggi() {
       disegnoCorrente += 1;
+      guardiaHtml?.ferma();
+      guardiaHtml = null;
       chiudiMenu();
       menu.remove();
       smontaOffice();

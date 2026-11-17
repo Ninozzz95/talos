@@ -246,7 +246,8 @@ export function montaAggiornamenti({ documento = globalThis.document, finestra =
     scheda.versione.textContent = stato.versioneAttuale ? `TALOS ${stato.versioneAttuale}` : 'TALOS';
     scheda.stato.textContent = fraseStato(stato, adesso());
     scheda.etichetta.textContent = t("varie.updates.card.autoLabel");
-    scheda.aiuto.textContent = t("varie.updates.card.autoHelp");
+    /* 0.2.2 (SignPath): `TALOS_DESKTOP_AGGIORNAMENTI=off` vale come l'interruttore spento e lo tiene fermo; la riga lo dice senza nomi tecnici */
+    scheda.aiuto.textContent = stato.spentiDallAmbiente === true ? t("varie.updates.card.autoForcedOff") : t("varie.updates.card.autoHelp");
     scheda.controlla.textContent = t("varie.updates.checkNow");
     scheda.riavvia.textContent = t("varie.updates.restartNow");
     const lavora = stato.stato === 'controllo' || stato.stato === 'scaricamento';
@@ -256,6 +257,7 @@ export function montaAggiornamenti({ documento = globalThis.document, finestra =
     scheda.riavvia.disabled = riavvio.stato !== 'libero';
     scheda.rigaAutomatici.hidden = !stato.attivo;
     scheda.interruttore.checked = stato.automatici !== false;
+    scheda.interruttore.disabled = stato.spentiDallAmbiente === true;
   }
 
   function disegna() {

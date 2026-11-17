@@ -1,0 +1,33 @@
+<?xml version="1.0" ?>
+<!-- P045 (11/11/2026): the ancestry of ONE process for `guardia-portachiavi-prove.mjs`, read-only, through WMI from the Windows
+     Script Host. One light query (pid, parent pid, creation date of every process), the walk up from the pid given as argument,
+     then the command line of the ANCESTORS only (one keyed query each): no other process's command line is ever read. Output: one
+     record per process of the chain (the process itself first), records split by RS (30), fields by US (31); characters outside
+     printable ASCII become «?» (StdOut refuses what the console code page cannot write, measured 11/11: one accented command line
+     anywhere made the whole read fail). cscript instead of PowerShell: about 120-600 ms against 1200-1900 ms, measured on 11/11. -->
+<job>
+<script language="JScript">
+<![CDATA[
+var servizio = GetObject("winmgmts:{impersonationLevel=impersonate}!\\\\.\\root\\cimv2");
+var pid = parseInt(WScript.Arguments(0), 10);
+var padre = {}, nato = {};
+for (var e = new Enumerator(servizio.ExecQuery("SELECT ProcessId,ParentProcessId,CreationDate FROM Win32_Process")); !e.atEnd(); e.moveNext()) {
+  var p = e.item();
+  padre[p.ProcessId] = p.ParentProcessId;
+  nato[p.ProcessId] = String(p.CreationDate || "");
+}
+var campo = String.fromCharCode(31), righe = [], visti = {};
+for (var livello = 0; livello < 64 && pid > 0 && nato[pid] !== undefined && !visti[pid]; livello++) {
+  visti[pid] = true;
+  var riga = "";
+  if (livello > 0) {
+    var c = new Enumerator(servizio.ExecQuery("SELECT CommandLine FROM Win32_Process WHERE ProcessId=" + pid));
+    if (!c.atEnd()) riga = String(c.item().CommandLine || "");
+  }
+  righe.push((pid + campo + padre[pid] + campo + nato[pid] + campo + riga).replace(/[^\x20-\x7e\x1e\x1f]/g, "?"));
+  pid = padre[pid];
+}
+WScript.StdOut.Write(righe.join(String.fromCharCode(30)));
+]]>
+</script>
+</job>

@@ -93,6 +93,16 @@ async function apriChat(page) {
  *    ed è la ragione per cui convivono le due forme — l'etichetta è dell'interfaccia, il valore è
  *    del contratto.
  */
+/*
+ * 09/11/2026 (owner 19:33, 0.2.2): «Domande a tutta larghezza» è ACCESA di serie, e allarga le bolle della persona da sola. Le prove
+ *   di «Chat a tutta larghezza» misurano l'effetto di QUESTO interruttore sulla bolla stretta: la spengono prima di aprire la pagina
+ *   (solo se l'archivio è vuoto, così la ricarica trova ciò che la pagina ha salvato).
+ */
+async function bolleStrette(page) {
+  await page.addInitScript(() => {
+    try { if (!localStorage.getItem('talos.harness.desktop.settings.v1')) localStorage.setItem('talos.harness.desktop.settings.v1', JSON.stringify({ version: 1, appearance: { userBubbleFullWidth: false } })); } catch { /* storage assente */ }
+  });
+}
 const toggleFullWidth = (page) => page.locator('#chatFullWidthToggle');
 const facciaFullWidth = (page) => page.locator('#chatFullWidthToggle--calm');
 async function accendiFullWidth(page) {
@@ -2702,6 +2712,7 @@ test('SETTINGS-VIEW-ISOLATION-01 — impostazioni non lasciano trasparire chat e
 
 test('CHAT-FULL-WIDTH-01 — allarga solo messaggi e bolle, mai il composer', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
+  await bolleStrette(page);
   await apriChat(page);
 
   const preparaMessaggi = async () => {
@@ -2880,6 +2891,7 @@ test('COMPOSER-LAYOUT-01 — Standard leggibile, multilinea e altezza stabile al
 
 test('CHAT-FULL-WIDTH-SHORT-BUBBLE-01 — una domanda breve non viene stirata', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
+  await bolleStrette(page);
   await apriChat(page);
 
   const preparaDomandaBreve = async () => {

@@ -34,15 +34,15 @@
  * azioni.vaiAlGiro(n)    = ⚠️ CABLAGGIO NUOVO: porta la chat al giro `n` (`.talos-turn-spine__n`), oggi l'indice non è cliccabile
  * azioni.apriMenu(voci, dove) = `apriMenuAzioniLibreria` (legacy/app.js:21359)
  */
-import { t, tn } from '../lingua.js';
+import { t, tn, linguaCorrenteDiT } from '../lingua.js';
 import { pausaComeInChat } from '../context-separator.js'; // revisore 06/11, punto 5: la pausa con le parole della chat
 import { sceltaModelloDalContesto } from '../contesto-automatica.js';
 import { limiteCheAgisce, ripartizioneSulLimite, compattazioniDellaConversazione, CHIAVI_CATEGORIA } from './fonti.js';
 import {
-  el, icona, bottone, statoUi, disegnaScheda, testa, sezione, riga, piega, vuoto, scheletro, kilo, oraBreve, chiediConferma,
-  eseguiNellaRiga, bloccoDiTesta, perSessione, cifra,
+  el, icona, bottone, statoUi, disegnaScheda, testa, sezione, riga, piega, vuoto, scheletro, kilo as kiloNelLocale, oraBreve, chiediConferma,
+  eseguiNellaRiga, bloccoDiTesta, perSessione,
 } from './comune.js';
-import { costoDelRiassunto, costoDeiRiassunti, testoCosto, contoTestataRiassunti } from '../spesa-riassunti.js'; // spesa dei riassunti (owner 30/10 sera)
+import { costoDelRiassunto, testoCosto, spesaDelMotore, testoSpesaDelMotore } from '../spesa-riassunti.js'; // spesa dei riassunti (owner 30/10 sera; S1-b 11/11)
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SOGLIA_AVVISO = 85; // Zed `thread_view.rs:4719` `if ratio >= 0.85`
@@ -100,7 +100,7 @@ export function modelloContesto(dati = {}) {
     numeroRiassunti: comp?.numero ?? riassunti.length,
     ultimoRiassunto: comp?.ultimaAl ? Date.parse(comp.ultimaAl) : null,
     riassunti, storia, invio,
-    costoRiassunti: costoDeiRiassunti(dati.spesaRiassunti), // la testata: anche i pagati e mai applicati (sono spesi)
+    spesaMotore: spesaDelMotore(dati.spesaRiassunti), // S1-b (11/11): la riga sotto la testata, con le chiamate e (se dichiarata) la cache
     invioVicino: Boolean(invio?.tetto && invio.giri / invio.tetto >= 0.8), // la regola di tono della pillola dei giri (`statoGiri`)
     attenzione: percentuale !== null && percentuale >= SOGLIA_AVVISO,
     /* Pannello calmo (owner 06/11 14:50): la compattazione automatica è accesa ⇒ oltre la soglia si compatta da sola, niente «Richiede
@@ -134,7 +134,13 @@ export function contoContesto(dati = {}) {
   return { anello: m.percentuale, attenzione: (m.attenzione && !m.automatica) || m.pausa ? 1 : 0, descrizione: t('pannello.contesto.contoScheda', { p: formatta(m.percentuale) }) };
 }
 
-const formatta = (p) => new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(p);
+/* ⛔ Ultimo giro (GIALLO della 0.2.1, owner 11/11 10:48): i numeri nella lingua dell'INTERFACCIA, non in quella del sistema. Su un Windows
+   italiano con l'interfaccia in inglese si leggeva «26,6% of the limit used» e «~4,2k tokens». Come `cifra` (`pannello/comune.js:95`) e
+   `allegati.js:31`. ⛔ Codex fa il contrario, per scelta nostra non lo seguiamo: prende la lingua del SISTEMA
+   (`codex-rs/protocol/src/num_format.rs:9`, `sys_locale::get_locale()`, ripiego su en-US); noi quella dell'interfaccia. */
+const localeUI = () => (linguaCorrenteDiT() === 'en' ? 'en-US' : 'it-IT');
+const kilo = (n) => kiloNelLocale(n, localeUI());
+const formatta = (p) => new Intl.NumberFormat(localeUI(), { maximumFractionDigits: 1 }).format(p);
 
 /**
  * `solo` (Context Manager variante B, owner 31/10/2026 notte): le parti da mostrare, cioè le chiavi delle sezioni (`tempo`, `categorie`,
@@ -311,7 +317,8 @@ function costruisci(d, ui, dati, azioni) {
       menu: azioni.cosaHaTenuto ? () => [{ chiave: 'tenuto', etichetta: t('pannello.contesto.cosaHaTenuto'), icona: 'i-list', aziona: () => azioni.cosaHaTenuto() }, ...(azioni.vaiAlGiro ? [{ chiave: 'giro', etichetta: t('pannello.contesto.vaiAlGiro'), icona: 'i-arrow-left', aziona: () => azioni.vaiAlGiro(x.giro) }] : [])] : null,
     }))
     : m.numeroRiassunti ? [riga(d, ui, { chiave: 'riassunti', tono: 'ok', icona: 'i-compatta', nome: tn('pannello.contesto.riassuntiOne', 'pannello.contesto.riassuntiMany', m.numeroRiassunti), sotto: m.ultimoRiassunto ? t('pannello.contesto.ultimoAlle', { ora: oraBreve(m.ultimoRiassunto) }) : '', primaria: () => azioni.cosaHaTenuto?.() })] : [];
-  pezzi.push(sezione(d, { ui, chiave: 'riassunti', titolo: t('pannello.contesto.riassunti'), conto: contoTestataRiassunti(m.numeroRiassunti, m.costoRiassunti, kilo, cifra), spina: true }, righeRiassunti));
+  /* S1-b (owner 11/11): «Compattazioni N» da sola; la spesa su una riga sua sotto (il numero conta i riassunti, la spesa le chiamate) */
+  pezzi.push(sezione(d, { ui, chiave: 'riassunti', titolo: t('pannello.contesto.riassunti'), conto: m.numeroRiassunti, spina: true, nota: testoSpesaDelMotore(m.spesaMotore, kilo) }, righeRiassunti));
 
   pezzi.push(...pieghePerDettagli(d, ui, dati));
   return pezziDopoIDettagli(d, ui, m, azioni, pezzi);
@@ -323,7 +330,7 @@ function pieghePerDettagli(d, ui, dati) {
   const det = dati.dettagli ?? null;
   if (det?.finestra?.length) {
     pezzi.push(piega(d, ui, {
-      chiave: 'dettagli-finestra', titolo: t('modello.inspector.contextWindow'), sotto: det.perche || '',
+      chiave: 'dettagli-finestra', titolo: t('modello.inspector.contextWindow'), sotto: det.perche || '', sottoSoloDaChiusa: true,
       contenuto: () => {
         const righe = det.finestra.map((r) => kvDiOggi(d, r));
         if (det.perche) { const p = el(d, 'p', 'talos-inspector__hint', det.perche); p.dataset.contestoPerche = ''; righe.push(p); }

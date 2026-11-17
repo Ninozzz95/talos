@@ -10,8 +10,10 @@ import { createLlamaServerRuntime } from '../src/local-runtime-llama-server.mjs'
 import { createLocalModelStore } from '../src/local-model-store.mjs';
 import { createLocalRuntimeProbe } from '../src/local-runtime-probe.mjs';
 import { createOpenAiCompatibleRuntime } from '../src/openai-compatible-runtime.mjs';
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 const OBSERVED_AT = '2026-08-31T15:00:00.000Z';
 

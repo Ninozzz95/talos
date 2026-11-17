@@ -1,0 +1,4 @@
+# La stessa toolchain fissata del binding iroh (.github/workflows/iroh-binding.yml): la costruzione è ripetibile.
+[toolchain]
+channel = "1.97.1"
+profile = "minimal"

@@ -73,7 +73,9 @@ test('NOTIF-PC-02 AL CONTRARIO: a permission with a new action does not show the
 });
 
 test('NOTIF-PC-03 «Da fare» counts only unresolved permissions and questions; the person\'s actions and the automation turns never', () => {
-  assert.deepEqual([...FATTI_DA_FARE].sort(), ['approvazione', 'domanda']);
+  /* giro 2 della fiducia (owner 11/11 13:08): anche «Mi fido di questa cartella» di un'automazione trattenuta aspetta la persona */
+  assert.deepEqual([...FATTI_DA_FARE].sort(), ['approvazione', 'domanda', 'fiducia-cartella']);
+  assert.deepEqual(vociDaFare([voce('fiducia-cartella', { id: 'g' }), voce('fiducia-cartella', { id: 'h', stato: { visto: true, risolto: true } })]).map((v) => v.id), ['g'], 'the trust notice waits until answered');
   const voci = [
     voce('approvazione', { id: 'a', seq: 1 }), voce('domanda', { id: 'b', seq: 5 }), voce('approvazione', { id: 'c', seq: 3, stato: { visto: true, risolto: true } }),
     voce('azione-persona', { id: 'd', seq: 4, stato: { visto: true, risolto: true } }), voce('giro-finito', { id: 'e', seq: 2 }), voce('fine', { id: 'f', seq: 6 }),

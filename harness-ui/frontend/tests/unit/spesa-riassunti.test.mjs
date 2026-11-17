@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { impostaLingua } from '../../src/components/lingua.js';
 import {
-  nuovaSpesa, registraSpesa, tokenDellaRiga, costoDelRiassunto, costoDeiRiassunti, tokenDiServizio, testoCosto, contoTestataRiassunti, idDellaFine,
+  nuovaSpesa, registraSpesa, tokenDellaRiga, costoDelRiassunto, costoDeiRiassunti, tokenDiServizio, testoCosto, spesaDelMotore, testoSpesaDelMotore, idDellaFine,
 } from '../../src/components/spesa-riassunti.js';
 import { modelloContesto } from '../../src/components/pannello/contesto.js';
 import { testiUsage, kilo as kiloDelPiede } from '../../src/components/chat-foot.js';
@@ -88,18 +88,18 @@ test('SPESA-RIAS-03 (Mobile 1) — «nessun costo» SOLO senza righe; un ripiego
   assert.equal(testoCosto(null, kiloIt), null);
 });
 
-test('SPESA-RIAS-04 (Mobile 2) — uso sconosciuto: tutte senza ⇒ «non misurato», alcune ⇒ «almeno»; anche in testata', () => {
+test('SPESA-RIAS-04 (Mobile 2) — uso sconosciuto: tutte senza ⇒ «non misurato», alcune ⇒ «almeno»; anche nella riga della spesa', () => {
   impostaLingua('it');
   const tutte = nuovaSpesa();
   registraSpesa(tutte, riga('riassunto', null, { idRiassunto: 'rias-x-1' }), 1);
   assert.equal(testoCosto(costoDelRiassunto(tutte, ['rias-x-1']), kiloIt), 'costo non misurato');
-  assert.equal(contoTestataRiassunti(1, costoDeiRiassunti(tutte), kiloIt), '1 · non misurato');
+  assert.equal(testoSpesaDelMotore(spesaDelMotore(tutte), kiloIt, 'it-IT'), 'Spesa delle compattazioni: non misurata, 1 chiamata');
   assert.equal(tokenDiServizio(tutte), 0, 'nel piede un uso ignoto resta fuori, non diventa zero «misurato»');
   const alcune = nuovaSpesa();
   registraSpesa(alcune, riga('riassunto', uso(1000, 100), { idRiassunto: 'rias-y-1' }), 1);
   registraSpesa(alcune, riga('riassunto', null, { idRiassunto: 'rias-y-1' }), 2);
   assert.equal(testoCosto(costoDelRiassunto(alcune, ['rias-y-1']), kiloIt), 'almeno 1,1k token');
-  assert.equal(contoTestataRiassunti(3, costoDeiRiassunti(alcune), kiloIt), '3 · almeno 1,1k token');
+  assert.equal(testoSpesaDelMotore(spesaDelMotore(alcune), kiloIt, 'it-IT'), 'Spesa delle compattazioni: almeno 1,1k token in 2 chiamate');
   impostaLingua('en');
   assert.equal(testoCosto(costoDelRiassunto(alcune, ['rias-y-1']), kiloEn), 'at least 1.1k tokens'); // il kilo con la lingua esplicita
   assert.equal(testoCosto(costoDelRiassunto(tutte, ['rias-x-1']), kiloEn), 'spent, not measured');
@@ -115,19 +115,20 @@ test('SPESA-RIAS-05 (Mobile 3) — dopo `migliora` la riga somma i due id, e la 
   assert.deepEqual(costoDeiRiassunti(s), { stato: 'misurato', token: 1600 });
 });
 
-test('SPESA-RIAS-06 — la testata come nel bozzetto («3 · 2,2k token»); senza nessun riassunto pagato resta il numero', () => {
+/* S1-b e ultimo giro (11/11): la testata dice il numero da solo (la «3 · 2,2k token» del bozzetto del 30/10 è tolta), la spesa sta sotto */
+test('SPESA-RIAS-06 — la riga della spesa sotto la testata; senza nessun riassunto pagato non c\'è', () => {
   impostaLingua('it');
   const s = nuovaSpesa();
-  assert.equal(contoTestataRiassunti(3, costoDeiRiassunti(s), kiloIt), 3, 'nessuna riga: il solo numero, come prima');
+  assert.equal(spesaDelMotore(s), null, 'nessuna riga pagata: nessuna riga');
   registraSpesa(s, riga('riassunto', uso(1000, 100), { idRiassunto: 'a' }), 1);
   registraSpesa(s, riga('riassunto', uso(1000, 100), { idRiassunto: 'b' }), 2);
-  assert.equal(contoTestataRiassunti(3, costoDeiRiassunti(s), kiloIt), '3 · 2,2k token');
+  assert.equal(testoSpesaDelMotore(spesaDelMotore(s), kiloIt, 'it-IT'), 'Spesa delle compattazioni: 2,2k token in 2 chiamate');
   impostaLingua('en');
-  assert.equal(contoTestataRiassunti(3, costoDeiRiassunti(s), kiloEn), '3 · 2.2k tokens');
+  assert.equal(testoSpesaDelMotore(spesaDelMotore(s), kiloEn, 'en-US'), 'Compaction spend: 2.2k tokens in 2 calls');
   impostaLingua('it');
 });
 
-test('SPESA-RIAS-07 — la scheda Contesto: ogni riga col suo costo, i riassunti di prima senza; la testata col totale', () => {
+test('SPESA-RIAS-07 — la scheda Contesto: ogni riga col suo costo, i riassunti di prima senza; sotto la testata il totale', () => {
   impostaLingua('it');
   const spesa = nuovaSpesa();
   registraSpesa(spesa, riga('riassunto', uso(1000, 100), { idRiassunto: 'rias-m-9' }), 1);
@@ -138,8 +139,8 @@ test('SPESA-RIAS-07 — la scheda Contesto: ogni riga col suo costo, i riassunti
   ];
   const m = modelloContesto({ storiaContesto, spesaRiassunti: spesa });
   assert.deepEqual(m.riassunti.map((x) => [x.giro, x.costo?.stato ?? null]), [[11, 'nessuno'], [9, 'misurato'], [4, null]]);
-  assert.deepEqual(m.costoRiassunti, { stato: 'misurato', token: 1100 });
-  assert.equal(modelloContesto({ storiaContesto }).costoRiassunti, null, 'senza dati di spesa: niente, come prima');
+  assert.deepEqual(m.spesaMotore, { stato: 'misurato', token: 1100, chiamate: 1, cache: null });
+  assert.equal(modelloContesto({ storiaContesto }).spesaMotore, null, 'senza dati di spesa: niente, come prima');
 });
 
 test('SPESA-RIAS-08 — il piede: cambia solo il numero dei token, la cache resta quella della chat', () => {

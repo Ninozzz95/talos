@@ -27,14 +27,15 @@ const SPRITE_SEZIONE: Record<string, string> = {
  * ⛔ B3 (09/10/2026, streaming di una risposta dopo 200 giri, 4176) — `:root:has(dialog.settings-palette[open]:modal)` e il gemello
  *   di `settings-add-dialog` costavano ~350 ms di ricalcolo degli stili ogni 11 s di streaming: un `:has()` sulla radice si
  *   rivaluta percorrendo il documento intero, e il documento cresce con la conversazione. Stesso effetto, senza `:has()`: la
- *   classe sulla radice la mettono e la tolgono le due finestre, dopo `showModal()` e a ogni `close` (anche Esc), chiedendo
- *   ogni volta al DOM se una delle due è davvero aperta e modale. Il CSS di `settings.css` resta quello del mockup.
+ *   classe sulla radice la mettono e la tolgono le finestre, dopo `showModal()` e a ogni `close` (anche Esc), chiedendo
+ *   ogni volta al DOM se una è davvero aperta e modale. Il CSS di `settings.css` resta quello del mockup.
+ * ⛔ 023 cura 1 (11/11/2026): la palette delle impostazioni è tolta dal passo 2 (una ricerca sola); resta la finestra «Aggiungi modello».
  */
 export const CLASSE_MODALE_IMPOSTAZIONI = 'talos-impostazioni-modale-aperta';
 export function segnaModaleImpostazioni(doc: Document | null) {
   if (!doc) return;
   doc.documentElement.classList.toggle(CLASSE_MODALE_IMPOSTAZIONI,
-    doc.querySelector('dialog.settings-palette[open]:modal, dialog.settings-add-dialog[open]:modal') !== null);
+    doc.querySelector('dialog.settings-add-dialog[open]:modal') !== null);
 }
 /** Un segno del progetto, per nome di sprite: nessun disegno nuovo, una sola fabbrica. */
 function iconaSprite(sprite: string, className: string): SVGElement {
@@ -85,22 +86,21 @@ const words = {
   saved: localTextKey('impostazioni.view.words.saved'),
   unsaved: localTextKey('impostazioni.view.words.unsaved'),
   chatGroup: localTextKey('impostazioni.view.words.chatGroup'),
+  chatNewGroup: localTextKey('impostazioni.view.words.chatNewGroup'), // 023 passo 2: «Sessioni nuove», primo gruppo della Chat
   chatHelp: localTextKey('impostazioni.view.words.chatHelp'),
   advanced: localTextKey('impostazioni.view.words.advanced'),
   advancedHelp: localTextKey('impostazioni.view.words.advancedHelp'),
   currentSession: localTextKey('impostazioni.view.words.currentSession'),
   currentSessionHelp: localTextKey('impostazioni.view.words.currentSessionHelp'),
   appearanceLink: localTextKey('impostazioni.view.words.appearanceLink'),
-  /* ⭐ 18/09/2026 — IL CERCATORE DEL MOCKUP (FASE 1b). Il mockup lo ha in SIDEBAR, con la
-     scorciatoia e i risultati in una modale; l'app lo aveva solo come campo in alto. */
-  openSearch: localTextKey('impostazioni.view.words.openSearch'),
-  paletteTitle: localTextKey('impostazioni.view.words.paletteTitle'),
-  palettePlaceholder: localTextKey('impostazioni.view.words.palettePlaceholder'),
-  paletteClose: localTextKey('impostazioni.view.words.paletteClose'),
+  /* Il glifo della scorciatoia dentro il campo. Non si annuncia: per chi ascolta lo dice `aria-keyshortcuts` sul campo.
+     (023 cura 1: le parole del bottone e della finestra della palette, tolti dal passo 2, sono uscite dal dizionario.) */
   shortcut: localTextKey('impostazioni.view.words.shortcut'),
-  /* Il glifo della scorciatoia non si annuncia: «Ctrl K» letto da uno screen reader è
-     «Control K», e va detto a parole invece che lasciato al caso. */
-  shortcutSpoken: localTextKey('impostazioni.view.words.shortcutSpoken'),
+  /* 023 passo 2 (bozzetto approvato il 10/11/2026): le parole del campo unico e dei suoi risultati. */
+  resultSection: localTextKey('impostazioni.view.words.resultSection'),
+  resultOpen: localTextKey('impostazioni.view.words.resultOpen'),
+  resultGo: localTextKey('impostazioni.view.words.resultGo'),
+  keysHint: localTextKey('impostazioni.view.words.keysHint'),
   /* ⭐⭐ 18/09/2026 — LA STRUTTURA DEL MOCKUP NELLA SEZIONE ASPETTO (i cinque gruppi, la banda
      del tema, la pastiglia contata, «Aggiungi modello»). */
   bandEyebrow: localTextKey('impostazioni.view.words.bandEyebrow'),
@@ -180,6 +180,7 @@ const GRUPPI: ReadonlyArray<readonly [string, { it: string; en: string }]> = [
  * ⛔ L'ordine è quello del documento, ma nessuno ci conta: la ricerca è per chiave.
  */
 const TESTATE_CARTA: ReadonlyArray<readonly [string, { it: string; en: string }]> = [
+  ['chat-new', words.chatNewGroup],
   ['chat-read', words.chatGroup],
   ['chat-facts', words.currentSession],
   ['tools-policy', words.cartaPolicy],
@@ -351,10 +352,29 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   const searchWrap = node('label', 'settings-search'); searchWrap.htmlFor = 'settingsSearch';
   const searchName = node('span', 'workspace-sr');
   search.id = 'settingsSearch'; search.type = 'search'; search.className = 'settings-search__input';
-  search.setAttribute('aria-controls', 'settingsSearchResults');
+  /*
+   * ⭐⭐ 023 passo 2 (owner 10/11/2026 21:47, bozzetto approvato, ricerca variante B): UNA SOLA RICERCA. Il campo è un combobox
+   *   con l'elenco dei risultati (W3C APG, «Editable Combobox With List Autocomplete», letto l'11/11/2026): il fuoco del DOM resta
+   *   nel campo, `aria-activedescendant` dice quale risultato è segnato, Freccia giù/su lo spostano girando, Invio lo apre, Esc
+   *   svuota. Ctrl K e «/» portano il fuoco qui; la finestra «Trova un'impostazione» e il bottone «Cerca impostazioni» sono tolti
+   *   (facevano la stessa ricerca in un secondo posto: punto 3 dei punti critici).
+   */
+  search.setAttribute('aria-controls', 'settingsSearchResultList');
+  search.setAttribute('role', 'combobox'); search.setAttribute('aria-autocomplete', 'list'); search.setAttribute('aria-expanded', 'false');
+  /*
+   * ⭐ 023 cura 1 (11/11/2026, axe `nested-interactive` ×21 del controllore): i risultati sono una GRIGLIA, non un listbox. Un'opzione
+   *   ha i figli presentazionali (ARIA 1.2), quindi l'interruttore, la tendina o il cursore ospitati dentro un `option` possono non
+   *   essere annunciati. La forma del W3C APG per un campo che apre righe con controlli dentro è «Editable Combobox With Grid Popup»:
+   *   `aria-haspopup="grid"`, righe `row`, figli `gridcell`, `aria-activedescendant` sulla CELLA segnata e `aria-selected` su di
+   *   lei. Il fuoco del DOM resta nel campo e i tasti non cambiano; niente cambia a schermo (solo ruoli).
+   */
+  search.setAttribute('aria-haspopup', 'grid');
+  search.setAttribute('aria-keyshortcuts', 'Control+K /'); search.autocomplete = 'off'; search.spellcheck = false;
   const clear = node('button', 'settings-search__clear'); clear.type = 'button'; clear.dataset.settingsClear = '';
   clear.append(iconaSprite('x', 'settings-search__clear-icon'));
-  searchWrap.append(searchName, search); campoRicerca.append(searchWrap, clear); toolbar.append(campoRicerca);
+  // Il glifo della scorciatoia sta DENTRO il campo, come nel bozzetto, e sparisce quando c'è la ×; per chi ascolta lo dice `aria-keyshortcuts`.
+  const cercaTasto = node('kbd', 'settings-search__kbd'); cercaTasto.setAttribute('aria-hidden', 'true'); cercaTasto.dataset.settingsShortcut = '';
+  searchWrap.append(searchName, search); campoRicerca.append(searchWrap, cercaTasto, clear); toolbar.append(campoRicerca);
   page.insertBefore(header, layout);
   nav.replaceChildren(); nav.className = 'talos-settings__nav settings-nav';
   const list = node('div', 'settings-nav__list'); list.setAttribute('role', 'tablist'); list.setAttribute('aria-orientation', 'vertical');
@@ -428,7 +448,10 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
   const results = node('section', 'settings-search-results'); results.dataset.settingsChrome = ''; results.id = 'settingsSearchResults'; results.setAttribute('role', 'region');
   const resultTitle = node('h2'); const status = q<HTMLElement>('[data-settings-results]') || node('p');
   status.dataset.settingsResults = ''; status.className = 'settings-result-count'; status.setAttribute('role', 'status'); status.setAttribute('aria-atomic', 'true');
-  const resultList = node('ul', 'settings-result-list'); const noResults = node('div', 'settings-empty');
+  /* 023 cura 1: `div`, non `ul`/`li`: un elenco HTML non può essere una griglia (ARIA in HTML, axe `aria-allowed-role`). L'aspetto è lo
+     stesso: le regole dei `li` dello schermo valgono anche per queste righe (`settings.css`, «LE RIGHE DELLA GRIGLIA»). */
+  const resultList = node('div', 'settings-result-list'); resultList.id = 'settingsSearchResultList'; resultList.setAttribute('role', 'grid');
+  const noResults = node('div', 'settings-empty');
   const emptyTitle = node('h3'); const emptyHelp = node('p'); noResults.append(emptyTitle, emptyHelp); results.append(resultTitle, status, resultList, noResults);
   content.prepend(breadcrumb, heading, results);
   /* ══════════════════════════════════════════════════════════════════════════════
@@ -622,116 +645,204 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
    *   focusabile e il dialogo si apre SCORRATO IN FONDO (W3C H102).
    * ⛔ Il click sullo sfondo NON è nativo: si ascolta `event.target === dialog`. E `closedby`
    *   non è Baseline (Safari non ce l'ha): per questo c'è un bottone di chiusura VISIBILE.
+   * ⛔⛔ 023 passo 2 (owner 10/11/2026 21:47): la finestra e il suo bottone sono TOLTI — la nota sopra resta come storia. Il gesto del
+   *   mockup (Ctrl K) porta ora il fuoco sul campo unico; `vaiAllaRiga` resta il solo salto, per Invio e per il clic sul risultato.
    */
   function vaiAllaRiga(entry: { id: string; section: SettingsSection; studio: boolean }) {
+    restituisciOspiti();
     choose(entry.section);
     if (entry.studio) { options.openStudio(entry.id); return; }
     const row = q<HTMLElement>('[data-setting-row="' + entry.id + '"]');
     for (let ancestor: HTMLElement | null = row; ancestor; ancestor = ancestor.parentElement) if (ancestor instanceof HTMLDetailsElement) ancestor.open = true;
-    const control = row?.querySelector<HTMLElement>('input,select,textarea,button') || h2;
+    // a segmenti il fuoco va alla scelta accesa (il `select` vero è nascosto e non prende il fuoco)
+    const control = row?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') || row?.querySelector<HTMLElement>('input,select:not([hidden]),textarea,button') || h2;
     screen.querySelector('[data-settings-hit]')?.removeAttribute('data-settings-hit');
     if (row) row.dataset.settingsHit = '';
     control.focus({ preventScroll: true }); control.scrollIntoView({ block: 'center', behavior: 'instant' });
   }
 
-  const palette = node('dialog', 'settings-palette'); palette.dataset.settingsChrome = '';
-  const paletteBox = node('div', 'settings-palette__box');
-  const paletteHead = node('div', 'settings-palette__head');
-  const paletteTitle = node('h2', 'settings-palette__title'); paletteTitle.id = 'settingsPaletteTitle';
-  const paletteClose = node('button', 'talos-button talos-button--ghost settings-palette__close'); paletteClose.type = 'button';
-  paletteHead.append(paletteTitle, paletteClose);
-  const paletteField = node('div', 'settings-palette__field');
-  const paletteQuery = node('input', 'settings-palette__input'); paletteQuery.type = 'search'; paletteQuery.id = 'settingsPaletteQuery';
-  paletteQuery.setAttribute('aria-controls', 'settingsPaletteResults');
-  const paletteStatus = node('p', 'settings-palette__count'); paletteStatus.setAttribute('role', 'status'); paletteStatus.setAttribute('aria-live', 'polite');
-  const paletteList = node('ul', 'settings-palette__results'); paletteList.id = 'settingsPaletteResults';
-  const paletteEmpty = node('p', 'settings-palette__empty');
-  const paletteIcona = iconaSprite('search', 'settings-palette__icon');
-  paletteField.append(paletteIcona, paletteQuery);
-  paletteBox.append(paletteHead, paletteField, paletteStatus, paletteList, paletteEmpty);
-  palette.append(paletteBox);
-  palette.setAttribute('aria-labelledby', paletteTitle.id);
-  screen.append(palette);
-
-  /** Un risultato, uguale in pagina e nella palette: nessuna copia della logica di salto. */
-  function bottoneRisultato(entry: { id: string; section: SettingsSection; label: string; description: string; studio: boolean }, dentroPalette: boolean) {
-    const button = node('button', 'settings-result'); button.type = 'button'; button.dataset.settingsResult = entry.id;
-    const trail = node('span', 'settings-result__path', localText(SETTINGS_SECTIONS[entry.section].title, options.language()));
-    button.append(trail, node('strong', '', entry.label), node('span', 'settings-result__help', entry.description));
-    if (entry.studio) button.append(node('span', 'settings-result__destination', tx('studio')));
-    button.addEventListener('click', () => { if (dentroPalette) palette.close(); vaiAllaRiga(entry); });
-    return button;
+  /*
+   * ⭐⭐ 023 passo 2 — IL RISULTATO PORTA IL SUO CONTROLLO (variante B, approvata dall'owner il 10/11/2026 21:47).
+   * ⛔ Nessuna copia del valore: il risultato OSPITA il nodo vero del controllo della riga (`.settings-field-control`, con
+   *   l'interruttore, la tendina o il cursore E il suo «↶»), spostato e poi rimesso al suo posto — la regola di casa «Reuses the
+   *   actual input» di `creaSettingRow` (`components/impostazioni.js:24`). Gli ascoltatori che salvano restano attaccati, perché
+   *   il nodo è lo stesso. Al posto del nodo, nella riga, resta un segnaposto nascosto: `restituisciOspiti()` lo rimpiazza col
+   *   nodo a ogni nuovo disegno dei risultati, quando la ricerca si svuota, prima di un salto e allo smontaggio.
+   * ⛔ Il nome del controllo nel risultato: la sua etichetta `for` resta nella riga nascosta, quindi mentre è ospite il controllo
+   *   prende `aria-labelledby` dal nome del risultato, e lo rende com'era quando torna a casa.
+   */
+  type Ospite = { nodo: HTMLElement; segnaposto: HTMLElement; etichettati: Array<[HTMLElement, string | null]>; prestati: Array<[string, string | null]> };
+  /** Ciò che il risultato presta al controllo ospitato — è una cella della griglia, col suo id per `aria-activedescendant` e la sua
+   *  scelta — e che a casa torna com'era (ultimo giro: a casa una «cella» fuori da una griglia è un errore critico di axe). */
+  const PRESTATI = ['role', 'id', 'aria-selected'];
+  let ospiti: Ospite[] = [];
+  function restituisciOspiti() {
+    for (const { nodo, segnaposto, etichettati, prestati } of ospiti) {
+      for (const [controllo, prima] of etichettati) { if (prima === null) controllo.removeAttribute('aria-labelledby'); else controllo.setAttribute('aria-labelledby', prima); }
+      for (const [nome, prima] of prestati) { if (prima === null) nodo.removeAttribute(nome); else nodo.setAttribute(nome, prima); } // a casa non è più una cella della griglia
+      if (segnaposto.isConnected) segnaposto.replaceWith(nodo); else nodo.remove();
+    }
+    ospiti = [];
   }
-  /** L'indice è lo stesso della ricerca in pagina: una sola fonte, due porte. */
+  function ospita(entry: { id: string; studio: boolean; kind: string }, nome: HTMLElement): HTMLElement | null {
+    if (entry.kind !== 'field' || entry.studio) return null;
+    const riga = q<HTMLElement>('[data-setting-row="' + entry.id + '"]');
+    const nodo = riga?.querySelector<HTMLElement>('.settings-field-control');
+    if (!riga || !nodo) return null;
+    const segnaposto = node('span'); segnaposto.hidden = true; segnaposto.dataset.settingsHostedFrom = entry.id;
+    nodo.replaceWith(segnaposto);
+    const etichettati: Array<[HTMLElement, string | null]> = [];
+    for (const controllo of nodo.querySelectorAll<HTMLElement>('input, select, textarea')) {
+      etichettati.push([controllo, controllo.getAttribute('aria-labelledby')]); controllo.setAttribute('aria-labelledby', nome.id);
+    }
+    const prestati = PRESTATI.map((nome): [string, string | null] => [nome, nodo.getAttribute(nome)]); nodo.setAttribute('role', 'gridcell'); // ospite, è la seconda cella della riga
+    ospiti.push({ nodo, segnaposto, etichettati, prestati });
+    return nodo;
+  }
+  /** L'indice resta dietro questa sola funzione (pezzo B: il cambio di fonte sarà questa riga). */
   const risultati = (termine: string) => searchSettings(buildSettingsIndex(options.fields, options.studioIds, options.language(), options.translate), termine)
     .filter((voce) => sezioneVisibile(voce.section)); // una sezione «solo nell'app» non si trova nel browser
-
-  function disegnaPalette() {
-    /* ⛔ 09/10/2026 (bugfixer, foto del 4174) — a campo VUOTO la palette diceva «0 risultati · Nessuna impostazione trovata»
-       prima che la persona scrivesse una lettera: un fallimento dichiarato su una ricerca mai fatta. Come Hermes, che dice
-       «nessun risultato» solo quando c'è una ricerca (`apps/desktop/src/app/command-center/index.tsx:411`,
-       `debouncedQuery ? cc.noResults : cc.noSessions`, clone 2026-10-07): a campo vuoto niente conteggio e niente «vuoto». */
-    const cercato = paletteQuery.value.trim() !== '';
-    const matches = cercato ? risultati(paletteQuery.value) : [];
-    paletteStatus.textContent = !cercato ? '' : options.language() === 'en' ? `${matches.length} ${matches.length === 1 ? 'result' : 'results'}` : `${matches.length} ${matches.length === 1 ? 'risultato' : 'risultati'}`;
-    paletteEmpty.hidden = !cercato || matches.length > 0;
-    paletteList.replaceChildren(...matches.map(entry => { const li = node('li'); li.append(bottoneRisultato(entry, true)); return li; }));
+  let trovati: ReturnType<typeof risultati> = [];
+  let attivo = 0;
+  /* ⭐ ultimo giro (reperto 6 del controllore; W3C APG «Editable Combobox With Grid Popup», letta l'11/11): la cella scelta nella riga
+     (0 = il testo, 1 = il controllo o la destinazione) e se le frecce laterali sono della griglia o del testo del campo. */
+  let colonna = 0;
+  let nellaGriglia = false;
+  /** Un risultato: una riga della griglia, con la cella del testo (percorso, nome, aiuto) e — per un campo — la cella del controllo vero. */
+  function opzioneRisultato(entry: (typeof trovati)[number], i: number) {
+    const li = node('div', 'settings-result'); li.id = 'settingsResultRow-' + i; li.setAttribute('role', 'row'); li.dataset.settingsResult = entry.id;
+    const testo = node('div', 'settings-result__text'); testo.id = 'settingsResult-' + i; testo.setAttribute('role', 'gridcell'); // la cella che il campo segna
+    const nome = node('strong', 'settings-result__name', entry.label); nome.id = 'settingsResultName-' + i;
+    testo.append(node('span', 'settings-result__path', entry.kind === 'section' ? tx('resultSection') : localText(SETTINGS_SECTIONS[entry.section].title, options.language())), nome);
+    if (entry.description) testo.append(node('span', 'settings-result__help', entry.description));
+    li.append(testo);
+    const controllo = ospita(entry, nome);
+    if (controllo) { controllo.id = 'settingsResultCell-' + i; li.append(controllo); }
+    else { const meta = node('span', 'settings-result__destination', entry.studio ? tx('studio') : entry.kind === 'section' ? tx('resultOpen') : tx('resultGo')); meta.id = 'settingsResultCell-' + i; meta.setAttribute('role', 'gridcell'); li.append(meta); }
+    li.addEventListener('click', (event) => {
+      /* si sta cambiando il valore, non si salta. ⛔ 023 cura 1: TUTTO il controllo ospitato, non un elenco di tag — il cursore è uno
+         `span role="slider"` (`calm-controls.js`) e il suo clic, prima, portava alla riga e chiudeva la ricerca. */
+      if ((event.target as Element).closest('.settings-field-control, input, select, textarea, button, label, [role="radio"], [role="slider"]')) return;
+      vaiAllaRiga(entry);
+    });
+    li.addEventListener('mousemove', () => { if (attivo !== i) { attivo = i; colonna = 0; segnaAttivo(); } });
+    return li;
   }
-  function apriPalette() {
-    if (palette.open) return;
-    disegnaPalette();
-    palette.showModal();
-    segnaModaleImpostazioni(palette.ownerDocument);
-    // ⛔ Il fuoco si mette a mano: `autofocus` non è affidabile su tutti i browser desktop.
-    paletteQuery.select(); paletteQuery.focus({ preventScroll: true });
+  /** Le celle di una riga dei risultati: il testo, poi il controllo ospitato (o la destinazione). */
+  const celleDi = (riga: Element | null | undefined) => (riga ? [...riga.children].filter((c) => c.getAttribute('role') === 'gridcell') as HTMLElement[] : []);
+  function segnaAttivo() {
+    const righe = [...resultList.children] as HTMLElement[];
+    colonna = Math.min(colonna, Math.max(0, celleDi(righe[attivo]).length - 1));
+    righe.forEach((li, i) => { li.classList.toggle('is-active', i === attivo); celleDi(li).forEach((c, j) => c.setAttribute('aria-selected', String(i === attivo && j === colonna))); });
+    const scelto = righe[attivo];
+    const cella = celleDi(scelto)[colonna];
+    if (scelto && cella) { search!.setAttribute('aria-activedescendant', cella.id); scelto.scrollIntoView?.({ block: 'nearest' }); }
+    else search!.removeAttribute('aria-activedescendant');
   }
-  paletteClose.addEventListener('click', () => palette.close(), { signal });
-  paletteQuery.addEventListener('input', disegnaPalette, { signal });
-  palette.addEventListener('click', event => { if (event.target === palette) palette.close(); }, { signal });
-  palette.addEventListener('close', () => { paletteQuery.value = ''; segnaModaleImpostazioni(palette.ownerDocument); }, { signal });
-
-  const cercaBottone = node('button', 'settings-nav__search talos-nav-item'); cercaBottone.type = 'button'; cercaBottone.dataset.settingsOpenSearch = '';
-  const cercaEtichetta = node('span', 'talos-nav-item__label');
-  const cercaTasto = node('kbd', 'settings-nav__kbd'); cercaTasto.setAttribute('aria-hidden', 'true');
-  const cercaDetto = node('span', 'workspace-sr');
-  const cercaIcona = iconaSprite('search', 'talos-nav-item__icon');
-  cercaBottone.append(cercaIcona, cercaEtichetta, cercaDetto, cercaTasto);
-  cercaBottone.addEventListener('click', () => apriPalette(), { signal });
-  nav.insertBefore(cercaBottone, list);
   /*
-   * ⛔ E QUI LA BARRA SCENDE IN SIDEBAR (owner, 18/09/2026: «sposta la barra»). Sta sotto il
-   *   bottone del mockup e sopra l'elenco delle sezioni — `insertBefore(list)` la mette come
-   *   ULTIMA prima della lista, quindi dopo `cercaBottone`, che è già stato inserito lì sopra.
-   *   Nessun altro posto del file la inserisce: questo è l'unico punto che decide dove vive.
-   */
-  nav.insertBefore(toolbar, list);
-  /*
-   * ⛔ LA SCORCIATOIA È GLOBALE MA GUARDATA: Ctrl K non deve rubare il tasto a chi sta SCRIVENDO —
-   *   il composer della chat è a un passo da qui. Fonte: le linee guida sulla command palette
-   *   lette il 18/09/2026 («guard the global hotkey so it doesn't fire while the user is typing
-   *   in an input/textarea/contenteditable»). Ctrl K resta raggiungibile dal bottone in sidebar.
+   * ⛔ LA SCORCIATOIA È GLOBALE MA GUARDATA: Ctrl K e «/» non rubano il tasto a chi sta SCRIVENDO — il composer della chat è a un
+   *   passo da qui. Fonte: le linee guida sulla command palette lette il 18/09/2026 («guard the global hotkey so it doesn't fire
+   *   while the user is typing in an input/textarea/contenteditable»).
+   * ⛔ CTRL K FUORI DALLE IMPOSTAZIONI resta alla palette dei COMANDI dell'app (`#veloComandi`), come prima: qui vale solo con lo
+   *   schermo Impostazioni attivo. Dentro, porta il fuoco sul campo unico e ne seleziona il testo (anche dal campo stesso).
    */
   const scrive = (target: EventTarget | null) => {
     const el = target as HTMLElement | null; if (!el || !el.tagName) return false;
     return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable;
   };
+  const alCampo = () => { search!.focus({ preventScroll: true }); search!.select(); };
+  /** Uno strato aperto sopra la pagina: il fuoco ci sta dentro, oppure uno strato fuori dalle Impostazioni si vede (la pagina tiene nel DOM
+   *  anche gli strati chiusi, `hidden` o in un velo nascosto: contano solo quelli con una forma a schermo). */
+  const STRATI_SOPRA = '[role="dialog"], [role="alertdialog"], [role="menu"]';
+  const siVede = (el: Element) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
+  const stratoApertoSopra = (bersaglio: Element | null) => Boolean(bersaglio?.closest?.(STRATI_SOPRA))
+    || [...doc.querySelectorAll(STRATI_SOPRA)].some((el) => !screen.contains(el) && siVede(el));
+  /** Metodo d'immissione (giapponese, cinese, coreano): il tasto è suo finché compone. `keyCode 229` per i motori senza `isComposing`. */
+  const compone = (event: KeyboardEvent) => event.isComposing || event.keyCode === 229;
+  /*
+   * ⛔ 023 cura 1 (11/11/2026, reperto S3/R17 del controllore) — IN CATTURA, non in bolla. L'ascoltatore stava su `document` in bolla,
+   *   come quello globale dell'app (`legacy/app.js`, `ROOT().addEventListener('keydown', …)` → `riconosci`, che rinuncia se
+   *   `defaultPrevented`): vinceva solo se registrato PRIMA. Al primo montaggio sì; dopo un rimontaggio della vista («Ripristina tutto
+   *   l'aspetto», import, ripristino) arrivava dopo, e Ctrl K apriva i comandi sopra le Impostazioni. In cattura passa sempre prima di
+   *   ogni ascoltatore in bolla, qualunque sia l'ordine dei montaggi (DeepSeek fa lo stesso: `shortcuts/src/client/dom.ts:99`).
+   * ⛔ Chi sta SCRIVENDO in un campo delle Impostazioni tiene il campo: la «/» si scrive, e Ctrl K non lo porta via e non apre i comandi
+   *   sopra la pagina (reperto S2, preesistente). Un campo che scrive FUORI dalle Impostazioni (la palette dei comandi) resta suo.
+   * ⛔ Uno strato sopra (finestra modale, palette dei comandi, tendina aperta) ha i suoi tasti: qui non si tocca niente.
+   */
   doc.addEventListener('keydown', event => {
-    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 'k') return;
-    /*
-     * ⛔ CTRL K È GIÀ PRESO, e l'ho scoperto misurando: l'app ha una sua palette dei COMANDI
-     *   (`#veloComandi`, con `#cercaComando` e `#risultatiComandi`) e il suo piè di pagina
-     *   dichiara proprio «Ctrl K». Un secondo Ctrl K globale non apre due cose: ne ruba una.
-     * ⛔ La cura non è togliere la scorciatoia a chi ce l'ha: è DARLE UN AMBITO. Dentro lo
-     *   schermo Impostazioni vince il cercatore delle impostazioni — è quello che il mockup
-     *   mette lì, ed è il contesto in cui l'utente sta lavorando; fuori, Ctrl K resta ai
-     *   comandi, esattamente come prima. Nessuna funzione persa in nessuno dei due posti.
-     *   Fonte: le linee guida sulla command palette lette il 18/09/2026 — «treat it as global,
-     *   don't reuse the binding for any in-page filter input».
-     */
-    if (!screen.classList.contains('active')) return;
-    if (scrive(event.target)) return;
-    event.preventDefault(); apriPalette();
+    if (!screen.classList.contains('active') || event.altKey || compone(event)) return;
+    const ctrlK = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k';
+    const barra = event.key === '/' && !event.ctrlKey && !event.metaKey;
+    if (!ctrlK && !barra) return;
+    const bersaglio = event.target as Element | null;
+    if (doc.querySelector('dialog:modal') || bersaglio?.closest?.('[aria-modal="true"], dialog[open], [data-calm-popup]')) return;
+    /* la tendina ospitata APERTA tiene il fuoco sul suo bottone, non nel menu: senza questa riga «/» portava il fuoco al campo e
+       lasciava il menu aperto, orfano (sonda dell'11/11). Ctrl K non apre nemmeno i comandi: si chiude prima la tendina con Esc. */
+    if (bersaglio !== search && bersaglio?.closest?.('[aria-haspopup][aria-expanded="true"]')) { if (ctrlK) event.preventDefault(); return; }
+    /* ⛔ ultimo giro (reperto 3 del controllore, nato nel passo 2): un pannello NON modale aperto sopra — le notifiche, un menu — tiene i
+       suoi tasti come la tendina. «/» e Ctrl K portavano il fuoco al campo che sta SOTTO il pannello, e il pannello restava aperto: si
+       scriveva in un campo che non si vede. Qui il tasto non agisce (Ctrl K non apre nemmeno i comandi); Esc chiude il pannello, e dopo
+       il tasto torna a fare il suo. Come Codex, dove la vista aperta sopra prende il tasto e il campo sotto no
+       (`codex-rs/tui/src/bottom_pane/mod.rs:933`). */
+    /* 023 cura piccola (giudice v1477 e v1490): OGNI strato aperto sopra le Impostazioni, modale o no — le notifiche, il pannello del
+       piano ChatGPT, il menu «⋯» di una conversazione nella barra — prende il tasto per primo, col fuoco dentro o tornato nella pagina.
+       Una definizione sola (`stratoApertoSopra`), come Hermes (`OVERLAY_SURFACE`, `apps/desktop/src/lib/keybinds/combo.ts:265-269`) e
+       Codex (`codex-rs/tui/src/bottom_pane/mod.rs:1933`). */
+    if (stratoApertoSopra(bersaglio)) { if (ctrlK) event.preventDefault(); return; }
+    if (event.target !== search && scrive(event.target)) {
+      if (ctrlK && bersaglio && screen.contains(bersaglio)) event.preventDefault(); // resta a chi scrive, e i comandi non si aprono qui sopra
+      return;
+    }
+    if (barra && event.target === search) return; // nel campo la «/» si scrive
+    event.preventDefault(); alCampo();
+  }, { signal, capture: true });
+  search.addEventListener('keydown', event => {
+    if (compone(event)) return; // l'Invio che conferma le lettere composte non apre la riga (reperto 7 del controllore)
+    const cercando = Boolean(search.value.trim());
+    if (cercando && trovati.length && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault(); attivo = (attivo + (event.key === 'ArrowDown' ? 1 : -1) + trovati.length) % trovati.length; segnaAttivo();
+    } else if (cercando && trovati.length && (event.key === 'ArrowRight' || event.key === 'ArrowLeft') && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      /* ⭐ ultimo giro (W3C APG, griglia): Destra e Sinistra passano da una cella all'altra, e dall'ultima cella alla prima della riga dopo
+         (all'indietro uguale). Finché nessuna cella è scelta le frecce laterali sono del testo; Destra col cursore in fondo, dove il testo
+         non ha più dove andare, entra nella griglia, e Sinistra dalla prima cella della prima riga ne esce e torna a muovere il cursore. */
+      const inFondo = search.selectionStart === search.value.length && search.selectionEnd === search.value.length;
+      if (event.key === 'ArrowRight' ? !(nellaGriglia || inFondo) : !nellaGriglia) return;
+      if (event.key === 'ArrowLeft' && attivo === 0 && colonna === 0) { nellaGriglia = false; return; }
+      event.preventDefault(); nellaGriglia = true;
+      const quante = (r: number) => celleDi(resultList.children[r]).length;
+      if (event.key === 'ArrowRight') { if (colonna + 1 < quante(attivo)) colonna += 1; else { attivo = (attivo + 1) % trovati.length; colonna = 0; } }
+      else if (colonna > 0) colonna -= 1;
+      else { attivo = (attivo - 1 + trovati.length) % trovati.length; colonna = Math.max(0, quante(attivo) - 1); }
+      segnaAttivo();
+    } else if (cercando && event.key === 'Enter') {
+      event.preventDefault(); const voce = trovati[attivo]; if (!voce) return;
+      /* Invio sulla cella del controllo porta il fuoco nel controllo (la scelta accesa di un gruppo a segmenti, come `vaiAllaRiga`): la
+         ricerca resta aperta. Sulla cella del testo o della destinazione Invio apre la riga, come prima. */
+      const cella = colonna > 0 ? celleDi(resultList.children[attivo])[colonna] : null;
+      const comando = cella?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') || cella?.querySelector<HTMLElement>('input:not([type="hidden"]):not([hidden]), select:not([hidden]), textarea, button, [role="slider"], [tabindex]:not([tabindex="-1"])');
+      if (comando) { comando.focus({ preventScroll: true }); return; }
+      vaiAllaRiga(voce);
+    }
   }, { signal });
+  /*
+   * ⛔ LA BARRA SCENDE IN SIDEBAR (owner, 18/09/2026: «sposta la barra»): sopra l'elenco delle sezioni. È l'unico punto che decide
+   *   dove vive. Sotto l'elenco, come nel bozzetto, la riga dei tasti (`p.tasti`): i tasti fra parentesi quadre del testo sono `kbd`.
+   */
+  nav.insertBefore(toolbar, list);
+  const tasti = node('p', 'settings-keys'); tasti.dataset.settingsKeys = ''; nav.append(tasti);
+  /*
+   * ⛔ 023 cura 1 (11/11/2026, foto 1920×1080): la riga andava a capo fra [Esc] e «esce», e «esce» restava da sola sulla terza riga. Il
+   *   tasto e la sua parola stanno insieme (spazio che non va a capo dopo un tasto), e il «·» resta attaccato alla parola prima: si va a
+   *   capo solo DOPO un «·» o dentro una frase, mai fra un tasto e ciò che fa.
+   */
+  function scriviTasti() {
+    const pezzi = tx('keysHint').split(/(\[[^\]]+\])/u).filter(Boolean);
+    tasti.replaceChildren(...pezzi.map((pezzo, i) => {
+      if (pezzo.startsWith('[')) return node('kbd', '', pezzo.slice(1, -1));
+      const dopoUnTasto = i > 0 && pezzi[i - 1]!.startsWith('[');
+      return doc.createTextNode((dopoUnTasto ? pezzo.replace(/^ /u, '\u00a0') : pezzo).replace(/ ·/gu, '\u00a0·'));
+    }));
+  }
 
   const restore = q<HTMLInputElement>('[data-workspace-restore]');
   if (restore && !restore.closest('.settings-field-control')) {
@@ -744,7 +855,50 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     if (!group) { group = node('section', 'talos-card talos-settings__section'); group.dataset.settingsChatControls = ''; group.append(node('h3'), node('p')); chat.prepend(group); }
     group.dataset.settingsCard = 'chat-read';
     for (const id of CHAT_FIELDS) { const row = q<HTMLElement>('[data-setting-row="' + id + '"]'); if (row) group.append(row); }
+    /*
+     * ⭐ 023 passo 2 (bozzetto approvato, punto 6 dei punti critici): «Come si apre Nuova sessione» sale nel PRIMO gruppo della
+     *   sezione, «Sessioni nuove», e si sceglie a segmenti (Finestra · Cielo): un clic invece di quattro. Il nodo è lo stesso di prima.
+     */
+    let nuove = chat.querySelector<HTMLElement>('[data-settings-card="chat-new"]');
+    if (!nuove) { nuove = node('section', 'talos-card talos-settings__section'); nuove.dataset.settingsCard = 'chat-new'; nuove.append(node('h3')); group.before(nuove); }
+    const vistaNuova = q<HTMLElement>('[data-setting-row="newSessionViewSelect"]');
+    if (vistaNuova) nuove.append(vistaNuova);
   }
+  /*
+   * ⭐ 023 passo 2 — LA SCELTA A SEGMENTI (bozzetto `segmentato`, righe 307-315; Hermes `DESIGN.md:261`, «SegmentedControl — the choice
+   *   control for small mutually-exclusive sets»). Qui solo «Come si apre Nuova sessione», come chiede il brief.
+   * ⛔ Il `select` vero RESTA nel DOM, nascosto: è la sorgente del valore e ha già i suoi ascoltatori che salvano. I segmenti sono radio
+   *   (W3C APG «Radio Group»: frecce che spostano e scelgono, un solo tasto nel giro di Tab) e scrivono nel `select` col suo evento.
+   * ⛔ Un valore cambiato da fuori senza evento (import, «Ripristina») si riallinea a ogni disegno della vista (`allineaSegmenti`).
+   */
+  const SEGMENTATI = ['newSessionViewSelect'];
+  const segmenti: Array<() => void> = [];
+  for (const id of SEGMENTATI) {
+    const sorgente = q<HTMLSelectElement>('[data-setting-row="' + id + '"] select');
+    if (!sorgente) continue;
+    const vecchio = sorgente.previousElementSibling; if (vecchio?.matches('[data-settings-segmented]')) vecchio.remove(); // un rimontaggio non ne lascia due
+    const etichetta = sorgente.labels?.[0]; if (etichetta && !etichetta.id) etichetta.id = 'settingsLabel-' + id;
+    const gruppo = node('div', 'settings-segmented'); gruppo.dataset.settingsSegmented = id; gruppo.setAttribute('role', 'radiogroup');
+    if (etichetta) gruppo.setAttribute('aria-labelledby', etichetta.id);
+    const bottoni = [...sorgente.options].map((opzione) => {
+      const b = node('button', 'settings-segmented__option', opzione.textContent || opzione.value); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.value = opzione.value;
+      b.addEventListener('click', () => { if (sorgente.value !== opzione.value) { sorgente.value = opzione.value; sorgente.dispatchEvent(new Event('change', { bubbles: true })); } allinea(); }, { signal });
+      return b;
+    });
+    const allinea = () => bottoni.forEach((b, i) => {
+      b.textContent = sorgente.options[i]?.textContent || b.dataset.value || '';
+      const su = b.dataset.value === sorgente.value; b.setAttribute('aria-checked', String(su)); b.tabIndex = su ? 0 : -1;
+    });
+    gruppo.addEventListener('keydown', (event) => {
+      const passo = ({ ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 } as Record<string, number>)[event.key]; if (!passo) return;
+      const i = bottoni.indexOf(doc.activeElement as HTMLButtonElement); if (i < 0) return;
+      event.preventDefault(); const prossimo = bottoni[(i + passo + bottoni.length) % bottoni.length]!; prossimo.focus(); prossimo.click();
+    }, { signal });
+    sorgente.addEventListener('change', allinea, { signal });
+    gruppo.append(...bottoni); sorgente.before(gruppo); sorgente.hidden = true; sorgente.dataset.settingsSegmentedSource = '';
+    allinea(); segmenti.push(allinea);
+  }
+  const allineaSegmenti = () => segmenti.forEach((allinea) => allinea());
   /* ══════════════════════════════════════════════════════════════════════════════
    * ⭐⭐ 18/09/2026 — LE OTTO SEZIONI NON DI QUESTA FASE, COL VOCABOLARIO DEL MOCKUP.
    *
@@ -834,7 +988,20 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     if (!preserveSearch) search!.value = '';
     render();
   }
+  /*
+   * ⭐ 023 cura 1 (11/11/2026, reperto ALTO 2 del controllore: Lingua cambiata DAL risultato → fuoco sul `BODY` 9 volte su 10). Il
+   *   ridisegno rimette a casa i controlli ospitati e li ospita di nuovo: spostare il nodo che ha il fuoco lo fa cadere sul `BODY`, e chi
+   *   usa la tastiera o il lettore di schermo si ritrova in cima alla pagina senza saperlo. Si ricorda chi lo aveva e lo si rimette:
+   *   sullo stesso controllo se è di nuovo nei risultati, altrimenti sul campo (la ricerca è il posto da cui si era partiti).
+   */
   function render() {
+    const fuoco = doc.activeElement instanceof HTMLElement && resultList.contains(doc.activeElement) ? doc.activeElement : null;
+    disegna();
+    if (!fuoco || doc.activeElement === fuoco) return;
+    if (fuoco.isConnected && resultList.contains(fuoco)) fuoco.focus({ preventScroll: true });
+    else if (screen.classList.contains('active')) search!.focus({ preventScroll: true });
+  }
+  function disegna() {
     localizeSettingsCopy(screen, options.language());
     const searching = Boolean(search!.value.trim());
     for (const [id, button] of buttons) {
@@ -873,16 +1040,21 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
        sezioni resta nascosto, invece di mostrare una parola inventata per simmetria. */
     if (metadata.eyebrow) { eyebrow.textContent = localText(metadata.eyebrow, options.language()); eyebrow.hidden = false; }
     else { eyebrow.textContent = ''; eyebrow.hidden = true; }
-    if (!searching) { resultList.replaceChildren(); status.textContent = ''; return; }
-    const matches = risultati(search!.value);
+    cercaTasto.hidden = searching; allineaSegmenti();
+    // ⛔ I controlli ospiti tornano a casa PRIMA di svuotare l'elenco: un nodo spostato dentro un `li` tolto sparirebbe con lui.
+    restituisciOspiti();
+    search!.setAttribute('aria-expanded', String(searching));
+    if (!searching) { trovati = []; resultList.replaceChildren(); status.textContent = ''; search!.removeAttribute('aria-activedescendant'); return; }
+    const matches = trovati = risultati(search!.value);
+    attivo = Math.min(attivo, Math.max(0, matches.length - 1));
     status.hidden = false; status.textContent = options.language() === 'en' ? `${matches.length} ${matches.length === 1 ? 'result' : 'results'}` : `${matches.length} ${matches.length === 1 ? 'risultato' : 'risultati'}`;
-    noResults.hidden = matches.length > 0;
-    /* Una sola fabbrica di risultati per la pagina e per la palette: la logica di salto sta in
-       `vaiAllaRiga`, non duplicata in due gestori. */
-    resultList.replaceChildren(...matches.map(entry => { const li = node('li'); li.append(bottoneRisultato(entry, false)); return li; }));
+    noResults.hidden = matches.length > 0; resultList.hidden = matches.length === 0;
+    /* Una sola fabbrica di risultati: la logica di salto sta in `vaiAllaRiga`, non duplicata in due gestori. */
+    resultList.replaceChildren(...matches.map((entry, i) => opzioneRisultato(entry, i)));
+    segnaAttivo();
   }
   function refresh() {
-    title.textContent = tx('title'); subtitle.textContent = tx('subtitle'); searchName.textContent = tx('search'); search!.setAttribute('aria-label', tx('search')); search!.placeholder = tx('placeholder');
+    title.textContent = tx('title'); subtitle.textContent = tx('subtitle'); searchName.textContent = tx('search'); search!.setAttribute('aria-label', tx('search')); search!.placeholder = tx('search'); // il segnaposto del bozzetto: «Cerca un’impostazione»
     // La regione di ricerca porta il suo nome: è quella che si sente nell'elenco dei landmark.
     toolbar.setAttribute('aria-label', tx('search'));
     // ⛔ `aria-label` e NON `textContent`: il bottone ora è una × dentro il campo, e scrivergli
@@ -893,12 +1065,8 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     for (const [id, button] of buttons) { button.querySelector('span')!.textContent = localText(SETTINGS_SECTIONS[id].title, options.language()); const option = mobile.querySelector('option[value="' + id + '"]'); if (option) option.textContent = button.textContent; }
     for (const field of options.fields) { const help = q<HTMLElement>('[data-setting-help="' + field.id + '"]'); if (help && FIELD_HELP[field.id]) help.textContent = localText(FIELD_HELP[field.id]!, options.language()); }
     resultTitle.textContent = tx('results'); results.setAttribute('aria-label', tx('results')); emptyTitle.textContent = tx('empty'); emptyHelp.textContent = tx('emptyHelp');
-    // Il cercatore del mockup (FASE 1b): bottone in sidebar, palette, e il glifo della scorciatoia.
-    cercaEtichetta.textContent = tx('openSearch'); cercaBottone.setAttribute('aria-label', tx('openSearch'));
-    cercaTasto.textContent = tx('shortcut'); cercaDetto.textContent = tx('shortcutSpoken');
-    paletteTitle.textContent = tx('paletteTitle'); paletteQuery.placeholder = tx('palettePlaceholder');
-    paletteQuery.setAttribute('aria-label', tx('paletteTitle')); paletteClose.textContent = tx('paletteClose');
-    paletteEmpty.textContent = tx('empty'); paletteList.setAttribute('aria-label', tx('results'));
+    // 023 passo 2: il glifo della scorciatoia nel campo unico, l'elenco dei risultati col suo nome, la riga dei tasti.
+    cercaTasto.textContent = tx('shortcut'); resultList.setAttribute('aria-label', tx('results')); scriviTasti();
     if (!save.dataset.state) save.textContent = tx('appearanceAuto'); else save.textContent = tx(save.dataset.state === 'saved' ? 'saved' : 'unsaved');
     const chatGroup = q<HTMLElement>('[data-settings-chat-controls]'); if (chatGroup) { chatGroup.querySelector('p')!.textContent = tx('chatHelp'); }
     /*
@@ -965,8 +1133,17 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
     render();
   }
   mobile.addEventListener('change', () => choose(mobile.value as SettingsSection), { signal });
-  search.addEventListener('input', render, { signal });
-  search.addEventListener('keydown', event => { if (event.key === 'Escape' && search.value) { event.stopPropagation(); search.value = ''; render(); } }, { signal });
+  search.addEventListener('input', () => { attivo = 0; colonna = 0; nellaGriglia = false; render(); }, { signal });
+  search.addEventListener('keydown', event => { if (event.key === 'Escape' && search.value && !compone(event)) { event.stopPropagation(); search.value = ''; render(); } }, { signal });
+  /*
+   * ⭐ 023 cura 1 (reperto 6 del controllore): Esc col fuoco DENTRO un controllo ospitato fa ciò che dice la riga dei tasti («Esc esce»):
+   *   svuota la ricerca, i controlli tornano a casa e il fuoco torna al campo. Con la tendina aperta Esc è suo e chiude solo lei
+   *   (`calm-controls.js` lo ferma in cattura): lo strato più interno per primo (W3C APG).
+   */
+  resultList.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || event.defaultPrevented || !search.value || compone(event)) return;
+    event.preventDefault(); event.stopPropagation(); search.value = ''; render(); search.focus({ preventScroll: true });
+  }, { signal });
   clear.addEventListener('click', () => { search.value = ''; render(); search.focus(); }, { signal });
   list.addEventListener('keydown', event => {
     const target = (event.target as Element).closest<HTMLButtonElement>('[data-settings-tab]'); if (!target) return;
@@ -987,7 +1164,7 @@ export function createSettingsView(screen: HTMLElement, options: SettingsViewOpt
          ascoltatori muoiono con `controller.abort()`: smontata la vista con una finestra aperta, la radice restava
          `overflow: hidden` per sempre (la vecchia regola `:has()` non poteva incastrarsi). Le finestre di QUESTA vista si
          chiudono qui, e la classe si ricalcola dal DOM. */
-      if (palette.open) palette.close();
+      restituisciOspiti(); // un controllo ospite torna nella sua riga prima che il telaio sia rimontato
       const aggiuntaAperta = q<HTMLDialogElement>('#settingsAddModel');
       if (aggiuntaAperta?.open) aggiuntaAperta.close();
       segnaModaleImpostazioni(doc);

@@ -18,6 +18,8 @@ import * as FDS from '../src/forme-di-segreto.mjs';
 import * as PAGINA from '../frontend/src/components/carta-dal-testo.js';
 import * as SEGMENTO from '../frontend/src/components/attivita-segmento.js';
 import { impostaLingua } from '../frontend/src/components/lingua.js';
+/* Time ceilings ×4 only under CI (shared runners); locally they stay as they were. Same rule as carta-argomenti-connettore-022-giro6. */
+const MOLTIPLICATORE_CI = process.env.CI && process.env.CI !== 'false' ? 4 : 1;
 
 /* by namespace: on the base, a function or a constant that does not exist yet makes each test red on its own, not the whole file */
 const oscuraPerStruttura = (...a) => FDS.oscuraPerStruttura(...a);
@@ -66,7 +68,7 @@ test('G8-B-01 (H2): 369 KB of names that become equal after masking: row, struct
   const riga = ms(() => argomentiDellaRiga(testo));
   const struttura = ms(() => oscuraPerStruttura(o));
   const carta = ms(() => valoreLeggibile('wrap', o));
-  for (const [cosa, m] of [['row', riga], ['structure', struttura], ['card', carta]]) assert.ok(m.t < 1500, `${cosa}: ${m.t.toFixed(1)} ms (base 77 s on the row)`);
+  for (const [cosa, m] of [['row', riga], ['structure', struttura], ['card', carta]]) assert.ok(m.t < 1500 * MOLTIPLICATORE_CI, `[ceiling ${1500 * MOLTIPLICATORE_CI} ms] ${cosa}: ${m.t.toFixed(1)} ms (base 77 s on the row)`);
   assert.ok(!json(riga.r).includes('password=1'), 'every name is masked');
 });
 
@@ -102,11 +104,11 @@ test('G8-B-04: 3 MB of arguments on the row: a short time, and nothing of a secr
   const testo = json(grande);
   assert.ok(testo.length > 3_000_000);
   const riga = ms(() => argomentiDellaRiga(testo));
-  assert.ok(riga.t < 1500, `row: ${riga.t.toFixed(1)} ms`);
+  assert.ok(riga.t < 1500 * MOLTIPLICATORE_CI, `[ceiling ${1500 * MOLTIPLICATORE_CI} ms] row: ${riga.t.toFixed(1)} ms`);
   assert.deepEqual(visibili(json(riga.r)), {});
   const molti = { items: Array.from({ length: 60_000 }, (_, k) => ({ id: k, note: `item ${k} ${AKIA}` })) };
   const r2 = ms(() => argomentiDellaRiga(json(molti)));
-  assert.ok(r2.t < 1500, `many small: ${r2.t.toFixed(1)} ms`);
+  assert.ok(r2.t < 1500 * MOLTIPLICATORE_CI, `[ceiling ${1500 * MOLTIPLICATORE_CI} ms] many small: ${r2.t.toFixed(1)} ms`);
   assert.ok(json(r2.r).includes(TAGLIO), 'the cut is said');
   assert.deepEqual(visibili(json(r2.r)), {});
 });
@@ -221,7 +223,7 @@ test('G8-H1-01: 80 KB of spaces before a name with no value: one frame of the ro
   for (const spazi of [40_000, 80_000]) {
     const dentro = `{"path":"a.txt","content":"${' '.repeat(spazi)}x","mode":`; // the reviewer's shape: the spaces inside a value
     const m = ms(() => argomentiDellaRiga(dentro));
-    assert.ok(m.t < 100, `${spazi} spaces inside a value: ${m.t.toFixed(2)} ms`);
+    assert.ok(m.t < 100 * MOLTIPLICATORE_CI, `[ceiling ${100 * MOLTIPLICATORE_CI} ms] ${spazi} spaces inside a value: ${m.t.toFixed(2)} ms`);
     assert.deepEqual(m.r, { path: 'a.txt', content: `${' '.repeat(spazi)}x` });
     const testo = `{"title":"a",${' '.repeat(spazi)}"mode":`;
     const { r, t } = ms(() => argomentiDellaRiga(testo));

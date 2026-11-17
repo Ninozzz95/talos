@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { chromium } from '@playwright/test';
+import { lanciaBrowserDelleProve } from '../aiuto/lancia-browser-delle-prove.mjs'; // 12/11: senza ambiente fallisce con la causa, mai salta
 import { build } from 'esbuild';
 
 const pacchetto = (await build({ entryPoints: [fileURLToPath(new URL('../../src/components/calm-controls.js', import.meta.url))], bundle: true, format: 'iife', globalName: '__calm', write: false, logLevel: 'silent' })).outputFiles[0].text;
@@ -34,7 +34,7 @@ const CASI = [
 ];
 
 let browser;
-test.before(async () => { browser = await chromium.launch({ headless: true }); });
+test.before(async () => { browser = await lanciaBrowserDelleProve({ headless: true }); });
 test.after(() => browser?.close());
 
 for (const [nome, mutazione, atteso] of CASI) {

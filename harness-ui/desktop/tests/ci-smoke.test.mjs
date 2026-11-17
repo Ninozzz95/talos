@@ -5,10 +5,12 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ambienteSenzaChiavi } from './ambiente-senza-chiavi.mjs';
 
 const script = fileURLToPath(new URL('../scripts/ci-smoke.ps1', import.meta.url));
 const windows = process.platform === 'win32';
-const esegui = args => spawnSync('pwsh.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', ...args], { encoding: 'utf8', windowsHide: true, timeout: 20000 });
+// 11/11/2026, round 4: PowerShell needs no provider key — the runner's environment goes without them (`ambiente-senza-chiavi.mjs`).
+const esegui = args => spawnSync('pwsh.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', ...args], { env: ambienteSenzaChiavi(process.env), encoding: 'utf8', windowsHide: true, timeout: 20000 });
 
 test('R04-POWERSHELL — script interpretabile da PowerShell 7', { skip: !windows }, () => {
   const programma = `$erroriPS = $null; $tokenPS = $null; [void][Management.Automation.Language.Parser]::ParseFile('${script.replaceAll("'", "''")}', [ref]$tokenPS, [ref]$erroriPS); if ($erroriPS.Count) { $erroriPS | ForEach-Object { Write-Output $_.Message }; exit 1 }`;

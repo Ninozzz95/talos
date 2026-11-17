@@ -240,8 +240,10 @@ export function eFonteDiretta(fonte) {
  * @returns {Array<{id:string, etichetta:string, conto:number|null, collegato:boolean}>}
  */
 export function fontiDelSelettore({ openrouter = null, locali = null, diretti = null } = {}) {
-  const etichetta = (nome, modelli) => modelli?.some(m => m.catalogo?.fonte === 'riserva')
-    ? t('modelli.sources.reserveList', { name: nome }) : nome;
+  /* 0.2.2 (SignPath): con il catalogo pubblico spento la lista è quella incorporata per scelta, non «di riserva» per un guasto */
+  const etichetta = (nome, modelli) => !modelli?.some(m => m.catalogo?.fonte === 'riserva') ? nome
+    : modelli.some(m => m.catalogo?.catalogoPubblicoSpento === true) ? t('modelli.sources.builtInList', { name: nome })
+      : t('modelli.sources.reserveList', { name: nome });
   const fonti = [
     { id: 'openrouter', etichetta: etichetta('OpenRouter', openrouter), conto: contaOppureNull(openrouter), collegato: true },
     { id: 'locali', etichetta: t('modelli.sources.localModels'), conto: contaOppureNull(locali), collegato: true },
@@ -325,7 +327,9 @@ export function descrizioneModelloSelettore(modello = {}) {
   if (modello.catalogo?.fonte === 'riserva') {
     const data = modello.catalogo.dataRiserva;
     const parti = typeof data === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/u.exec(data);
-    dettagli.unshift(t('modelli.sources.reserveCatalog', { date: parti ? t('modelli.sources.reserveDate', { date: `${parti[3]}/${parti[2]}/${parti[1]}` }) : '' }));
+    /* 0.2.2 (SignPath): spento dalla persona non è «non raggiungibile» (`catalogo-pubblico.mjs`, `model-catalog.mjs`) */
+    const chiaveRiserva = modello.catalogo.catalogoPubblicoSpento === true ? 'modelli.sources.reserveCatalogOff' : 'modelli.sources.reserveCatalog';
+    dettagli.unshift(t(chiaveRiserva, { date: parti ? t('modelli.sources.reserveDate', { date: `${parti[3]}/${parti[2]}/${parti[1]}` }) : '' }));
     if (modello.catalogo.avvisi?.some(a => a.codice === 'CATALOG_CACHE_CORRUPT')) dettagli.push(t('modelli.sources.corruptCacheRejected'));
     return dettagli.join(' · ');
   }

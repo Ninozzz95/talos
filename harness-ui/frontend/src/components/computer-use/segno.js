@@ -96,16 +96,45 @@ export function riduciSegno(stato, m) {
 const trasla = (x, y) => `translate(${x}px, ${y}px)`;
 
 /**
- * La pagina del segno. `anima(el, fotogrammi, opzioni)` è `el.animate` nel browser; `ridotto` è `prefers-reduced-motion`. Senza schermo valido non disegna e non ascolta.
+ * Giro 5 della bolla (owner 14/11): il battito al guscio. Parte solo dopo che il segno è nella pagina E il browser ha disegnato un fotogramma: `fotogramma` è
+ * `requestAnimationFrame`, la cui richiamata arriva PRIMA del disegno del fotogramma dopo, quindi due di fila = un fotogramma disegnato (HTML, «update the
+ * rendering»). Poi ogni `ms`, e ogni volta si ricontrolla che il segno sia nella pagina e non nascosto (schermo non valido: non disegna). Uno script che
+ * manca o si rompe prima, o una pagina bloccata, non batte: il guscio rimette il cursore dell'aiutante.
+ * Giro 6 della bolla (owner 14/11 15:46, prova dal vivo): nella finestra del segno MAI mostrata i fotogrammi non arrivano, e il guscio la mostra solo al primo
+ * battito: aspettarli voleva dire non battere mai. Il primo battito parte quindi al secondo fotogramma OPPURE dopo `ms` dai timer, quello che arriva prima
+ * (con `backgroundThrottling: false` i timer corrono anche a finestra nascosta); un ritmo solo, poi come prima. Una pagina bloccata non batte comunque: i timer
+ * stanno sullo stesso filo dello script.
+ */
+export function creaBattito({ nodo, batti, fotogramma, timer, ms }) {
+  let vivo = true; let id = null; let attesa = null;
+  const uno = () => { if (vivo && nodo.isConnected && !nodo.hidden) batti(); };
+  const parti = () => {
+    if (!vivo || id !== null) return; // già partito dall'altra strada: un ritmo solo
+    timer.clearTimeout(attesa); attesa = null;
+    uno(); id = timer.setInterval(uno, ms);
+  };
+  fotogramma(() => fotogramma(parti));
+  attesa = timer.setTimeout(parti, ms);
+  return { ferma() { vivo = false; timer.clearTimeout(attesa); attesa = null; if (id !== null) timer.clearInterval(id); id = null; } };
+}
+
+/**
+ * La pagina del segno. `anima(el, fotogrammi, opzioni)` è `el.animate` nel browser; `ridotto` è il movimento ridotto (Windows O «Riduci movimento» di TALOS,
+ * `motoRidottoDa`). Senza schermo valido non disegna e non ascolta.
  * `chiedi()` (FE-074) chiede al guscio la posizione vera del mouse: nel browser è `window.open(INDIRIZZO_RIPIEGO)`, che il guscio nega e a cui risponde con `segno-ripiego`.
+ * Giro 4 della bolla (13/11): col movimento ridotto il segno porta la classe `reduce-motion` (la stessa della pagina principale), e il suo foglio ferma anche bordo e
+ * anello, non solo con la preferenza di Windows. `moto(ridotto)` lo cambia a pagina già caricata (la persona lo cambia con TALOS aperto).
  */
 export function creaSegno({ document, canale, schermo, adesso, timer, anima, ridotto = false, chiedi = () => {} }) {
   const nodo = document.createElement('div');
   nodo.className = 'segno';
   nodo.setAttribute('aria-hidden', 'true');
+  let fermo = false;
+  const moto = (r) => { fermo = r === true; nodo.classList.toggle('reduce-motion', fermo); };
+  moto(ridotto);
   if (!schermo) {
     nodo.hidden = true;
-    return { nodo, stato: () => STATO_INIZIALE_SEGNO, ripiego() {}, chiudi() {} };
+    return { nodo, stato: () => STATO_INIZIALE_SEGNO, ripiego() {}, chiudi() {}, moto };
   }
   let stato = STATO_INIZIALE_SEGNO;
   let cursore = null, mio = null, bordo = null, animazione = null, attesaAnello = null;
@@ -141,7 +170,7 @@ export function creaSegno({ document, canale, schermo, adesso, timer, anima, rid
     nodo.append(a);
     anelli.set(a, timer.setTimeout(() => togliAnello(a), DURATA_ANELLO - gia));
   }
-  const inizio = (a) => (ridotto ? 0 : inizioAnello(a.durata));
+  const inizio = (a) => (fermo ? 0 : inizioAnello(a.durata));
   const curvaInCorso = () => Boolean(stato.annuncio) && adesso() - stato.annuncio.t0 < inizio(stato.annuncio) + DURATA_ANELLO;
 
   function fermaCurva() {
@@ -166,7 +195,7 @@ export function creaSegno({ document, canale, schermo, adesso, timer, anima, rid
     const verso = (p) => { const l = inLocale(p, schermo); return trasla(l.x - punta.x, l.y - punta.y); };
     const trascorso = adesso() - a.t0;
     el.style.transform = verso(a.punto);
-    if (a.da && !ridotto && trascorso < a.durata) {
+    if (a.da && !fermo && trascorso < a.durata) {
       animazione = anima(el, [{ transform: verso(a.da) }, { transform: verso(a.punto) }], { duration: a.durata, easing: ANDAMENTO_CURSORE, fill: 'forwards' });
       animazione.currentTime = Math.max(0, trascorso);
     }
@@ -216,5 +245,6 @@ export function creaSegno({ document, canale, schermo, adesso, timer, anima, rid
     stato: () => stato,
     ripiego(m) { const r = leggiRipiego(m); if (r && !curvaInCorso()) anello(r.punto); },
     chiudi() { canale.onmessage = null; spegni(); stato = STATO_INIZIALE_SEGNO; },
+    moto,
   };
 }

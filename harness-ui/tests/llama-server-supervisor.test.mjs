@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import test from 'node:test';
-import { createLlamaServerSupervisor, decidiTipoKvCache, leggiNglDalFitter, percorsoFitter, supportaSpeculativaNgram } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero, decidiTipoKvCache, leggiNglDalFitter, percorsoFitter, supportaSpeculativaNgram } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 function childProcess() {
   const child = new EventEmitter();
@@ -35,7 +37,9 @@ test('starts llama-server on loopback without shell and reaches ready after heal
   const status = await supervisor.start({ modelPath: 'C:\\models\\model.gguf' });
 
   assert.equal(status.state, 'ready');
-  assert.deepEqual(spawnCall[1], ['-m', 'C:\\models\\model.gguf', '--host', '127.0.0.1', '--port', '18080', '--api-key', spawnCall[1][7], '-np', '1', '--jinja', '--metrics', '--props']);
+  // 12/11/2026: the key is no longer on the command line, it is in the child's environment (`chiave-motore-fuori-dalla-riga.test.mjs`)
+  assert.deepEqual(spawnCall[1], ['-m', 'C:\\models\\model.gguf', '--host', '127.0.0.1', '--port', '18080', '-np', '1', '--jinja', '--metrics', '--props']);
+  assert.match(spawnCall[2].env.LLAMA_API_KEY, /^[a-f0-9]{64}$/);
   assert.equal(spawnCall[2].shell, false);
   assert.deepEqual(spawnCall[2].stdio, ['ignore', 'pipe', 'pipe']);
   assert.equal(Object.hasOwn(status, 'apiKey'), false);
@@ -80,7 +84,7 @@ test('con un backend GPU attivo aggiunge flash-attention e KV cache quantizzata 
   await supervisor.start({ modelPath: 'C:\\models\\model.gguf' });
   const argv = spawnCall[1];
   assert.deepEqual(argv, [
-    '-m', 'C:\\models\\model.gguf', '--host', '127.0.0.1', '--port', '18081', '--api-key', argv[7],
+    '-m', 'C:\\models\\model.gguf', '--host', '127.0.0.1', '--port', '18081', // 12/11: the key in the environment, not here
     // ⛔⛔⛔ 03/9 — QUESTA PROVA È PASSATA PER 'auto' NELLO STESSO GIORNO, a
     // metà mattina: un modello giocattolo che ci sta comunque in VRAM aveva
     // nascosto che un 27B vero (16,46 GB contro 16,3 GB di scheda) con

@@ -45,6 +45,7 @@ export function statoPerLaPagina(stato, { attivo, motivoSpento = null, gettone, 
     versioneAttuale: stato?.versioneAttuale ?? null,
     stato: stato?.stato ?? 'fermo',
     automatici: stato?.automatici !== false,
+    spentiDallAmbiente: stato?.spentiDallAmbiente === true, // 0.2.2: `TALOS_DESKTOP_AGGIORNAMENTI=off`
     ultimoControllo: stato?.ultimoControllo ?? null,
     pronto: stato?.pronto ?? null,
     errore: stato?.errore ?? null,

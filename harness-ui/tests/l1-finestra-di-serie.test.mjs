@@ -12,8 +12,10 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createLlamaServerSupervisor, decidiTipoKvCache, finestraDiSerie, FINESTRA_DI_SERIE } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero, decidiTipoKvCache, finestraDiSerie, FINESTRA_DI_SERIE } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 const RISERVA = 16_384; // la banda che `server.mjs` dà con la scheda, per un modello da 128K
 

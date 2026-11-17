@@ -51,7 +51,7 @@ test('AIUT-03: impronta giusta ⇒ parte in modo mcp, risponde agli strumenti, s
   t.after(() => a.chiudi());
   assert.deepEqual(await a.apri(), { ok: true });
   assert.equal(chiamate.length, 1);
-  assert.deepEqual(chiamate[0].args, ['mcp']);
+  assert.deepEqual(chiamate[0].args, ['mcp']); // giudice v1790 (13/11): nessun guscio ha detto il segno di TALOS acceso ⇒ il cursore dell'aiutante resta
   const eco = await a.chiama('list_windows', { on_screen_only: true });
   assert.equal(eco.ok, true);
   assert.deepEqual(eco.dati, { nome: 'list_windows', argomenti: { on_screen_only: true } });

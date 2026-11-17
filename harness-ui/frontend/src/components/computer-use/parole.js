@@ -12,8 +12,16 @@ const FINE = Object.freeze({
   impossibile: 'computer.end.impossible', 'senza-esito': 'computer.end.noOutcome', 'errore-interno': 'computer.end.internal', 'freno-perso': 'computer.end.brakeLost',
   // revisione O, nota 7 (04/11/2026): i due motivi nuovi del passo 5 hanno la loro frase, non quella generica
   'permesso-ridotto': 'computer.end.permissionLowered', 'domanda-non-mostrata': 'computer.end.questionNotShown',
+  // 0.2.1-CU, giro 2 (09/11/2026): il terzo elemento cercato e non trovato nel compito chiude con la sua frase, non con quella generica
+  'elemento-non-trovato': 'computer.end.notFound',
+  // 0.2.2-CU, giro 3 (10/11/2026): la stessa cosa provata tre volte senza risposta chiude con la sua frase
+  'elemento-non-risponde': 'computer.end.notResponding',
+  // 0.2.3, cura «finestra bloccata»: la finestra del compito chiusa, ridotta o coperta e nessuna carta possibile (Accesso pieno)
+  'finestra-cambiata': 'computer.end.windowChanged',
 });
-const AIUTANTE = Object.freeze({ binario: 'computer.end.helperMissing', 'non-windows': 'computer.end.helperNotWindows', 'senza-schermo': 'computer.end.helperNoScreen', spento: 'computer.end.helperOff' });
+const AIUTANTE = Object.freeze({ binario: 'computer.end.helperMissing', 'non-windows': 'computer.end.helperNotWindows', 'senza-schermo': 'computer.end.helperNoScreen', spento: 'computer.end.helperOff',
+  // giudice v1794 (13/11): il cursore di TALOS non si vede più e l'aiutante non è ripartito col suo (`ciclo.mjs`, assenza `cursore`)
+  cursore: 'computer.end.helperCursorLost' });
 const VOCE_DELLA_PROTEZIONE = Object.freeze({ pagamento: 'pay', invio: 'send', cancellazione: 'delete' });
 const CAUSE = Object.freeze({ 'non-chiesto': 'notAsked', sospetto: 'suspicious', politica: 'policy' });
 const NOMI_PROTEZIONE = Object.freeze({ pagamento: 'payment', invio: 'send', cancellazione: 'delete', credenziale: 'password', consenso: 'consent', termini: 'terms', cookie: 'cookies' });

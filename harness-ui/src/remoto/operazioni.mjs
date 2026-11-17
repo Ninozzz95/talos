@@ -27,6 +27,7 @@ import { applicaToccaLaConversazione, voceCheVuoleIlPc, fraseDelPcPerIlDispositi
 import { PREFISSO_ROTTE_LUOGHI, creaRotteLuoghi } from '../computer-use/luoghi-rotte.mjs';
 import { bloccataDa, indiceDeiNomi, isPathInside } from '../path-policy.mjs';
 import { eventiDentroIlTetto } from './evento-dentro-il-tetto.mjs';
+import { allineaSessioneDaFuori } from '../iscrizione-sessione.mjs'; // S3: la stessa porta dell'apertura HTTP
 import { testoSfondoPerGliEventi } from '../kernel/talosHarness.mjs'; // revisione del blocco 26 (R26-1/2): ogni forma del percorso, non solo quella esatta
 import { D, FILTRI_GIT, FILTRI_LIBRERIA, FILTRI_RICERCA, FILTRO_CARICAMENTO, OFFERTA, anteprimaAnnullaPerIlDispositivo, esitoAnnullaPerIlDispositivo, pesoSulFilo, rifiutoPerIlDispositivo, testoDentroIByte, tieni } from './lista-bianca.mjs';
 
@@ -128,6 +129,30 @@ const corpoOggetto = (args) => {
  *   decisione dell'owner). La rotta lo rifiuta di nuovo per l'origine remota (`http-app.mjs`): due cancelli, il secondo è il vero.
  */
 const CAMPI_CARTELLA_SOLO_DAL_PC = Object.freeze(['cartellaLibera', 'workspaceLaunchId']);
+/*
+ * Giro 2 della fiducia, D2 (giudice v1461; owner 11/11 13:30: «Mi fido» anche dal telefono). Il telefono risponde alla domanda sulla
+ *   fiducia della cartella di UNA conversazione: solo `sessionId` e `fidata` (sì o no), mai un percorso, mai «togli la risposta». La rotta
+ *   è quella della finestra (`/api/v1/folder-trust`, `riapplicaFiducia`); la risposta torna senza il percorso della cartella (il dispositivo
+ *   non riceve percorsi del PC). Come pi (`project-trust.ts:73-96`: la decisione salvata vale ovunque si apra il progetto).
+ * ⛔ Solo la domanda APERTA (`soloSeMaiChiesta`, sempre): un «No» già dato lo cambia soltanto il PC, perché il «Sì» dopo un «No»
+ *   riaccende istruzioni, ganci e strumenti della cartella, e rendere fidati ganci e strumenti resta solo dal PC (ELENCO-AZIONI §7.3,
+ *   OPS-04). Su una cartella mai chiesta sono già accesi: il «Sì» del telefono toglie solo il trattenuto dell'Accesso pieno.
+ */
+const corpoFiduciaDalTelefono = (args) => {
+  const a = args && typeof args === 'object' && !Array.isArray(args) ? args : {};
+  /* giro 3-bis (owner 11/11 16:35): la terza scelta, `soloPerLaConversazione: true`, su un disco intero o sulla casa: la stessa della carta
+     del PC (vale per quella conversazione sola, in memoria). Senza, su quelle cartelle la rotta risponde FOLDER_TRUST_TOO_WIDE con la frase. */
+  if (!Object.keys(a).every((k) => k === 'sessionId' || k === 'fidata' || k === 'soloPerLaConversazione') || (a.fidata !== true && a.fidata !== false)
+    || (Object.hasOwn(a, 'soloPerLaConversazione') && a.soloPerLaConversazione !== true)) {
+    throw errore('BAD_MESSAGE', 'Folder trust from the device takes only the conversation and yes or no.');
+  }
+  return { sessionId: a.sessionId, fidata: a.fidata, soloSeMaiChiesta: true, ...(a.soloPerLaConversazione === true ? { soloPerLaConversazione: true } : {}) };
+};
+/* Giro 3 (controllore G2-b, aggiunta 4 del giudice): al telefono `cambiate` porta solo la conversazione chiesta (o niente), mai gli id delle
+   altre conversazioni della stessa cartella: la stessa forma di prima, una lista, con al più un elemento. */
+const fiduciaPerIlTelefono = (dati, _vista, args) => ({ fidata: typeof dati?.fidata === 'boolean' ? dati.fidata : null,
+  cambiate: Array.isArray(dati?.cambiate) && dati.cambiate.includes(args?.sessionId) ? [args.sessionId] : [],
+  ...(dati?.soloPerLaConversazione === true ? { soloPerLaConversazione: true } : {}) });
 const corpoAvvioDalTelefono = (args) => {
   const c = corpoOggetto(args);
   /* revisione del 21/10 (S4): lo stesso 403 della rotta, o il telefono (RA-04) leggerebbe «esito incerto» e la carta resterebbe ferma */
@@ -366,6 +391,8 @@ export const OPERAZIONI_HTTP = Object.freeze({
   'session.answer': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/question`, corpo: corpoOggetto },
   'session.plan': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/plan-decision`, corpo: corpoOggetto },
   'session.settings': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/settings`, corpo: corpoOggetto },
+  /* giro 2 della fiducia, D2: «Mi fido di questa cartella» dal telefono, per la cartella di quella conversazione */
+  'session.folder-trust': { metodo: 'POST', percorso: (a) => { idSessione(a); return '/api/v1/folder-trust'; }, corpo: corpoFiduciaDalTelefono, filtra: fiduciaPerIlTelefono },
   'session.rename': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/rename`, corpo: corpoOggetto },
   'session.pin': { metodo: 'POST', percorso: (a) => `/api/v1/sessions/${idSessione(a)}/pin`, corpo: corpoOggetto }, // decisione 69 (03/11), ritocco del Mobile
   /* R5.11 (owner 18/10/2026, «Come Hermes, PC e telefono»): annullare le modifiche ai file dal telefono, con l'anteprima prima */
@@ -523,6 +550,7 @@ const SCRITTURE_DI_SESSIONE = new Set(['session.side', 'session.side.transform',
   'session.queue.send', 'session.queue.cancel', 'session.compact.skip', 'session.compact.undo', 'session.fork', 'session.retry', 'session.delete',
   'session.delegation.resume', 'session.delegation.retry', 'session.process.remove', 'session.process.background',
   'session.message.delete', // parità, punto 4
+  'session.folder-trust', // giro 2 della fiducia, D2: una risposta che cambia il modo della conversazione vuole il consenso della sua cartella
   'session.commands-location', 'session.commands-in-chat', 'session.goal.set', 'session.goal.action', 'session.context.settings', 'session.undo.preview',
   'session.context.job.start', 'session.context.job.resume', 'session.context.version.restore', 'session.context.fact.upsert', 'session.context.fact.remove', 'session.context.fact.resolve', 'session.last-request', 'session.last-request.message', 'session.export', 'session.export.piece', // Context Manager dal dispositivo
   /* revisione del blocco 25, R2: una fonte dell'archivio del motore (`message-<n>`) porta gli stessi messaggi dell'ultima richiesta. Consenso qui, prima di chiamare la rotta */
@@ -936,7 +964,7 @@ export function creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, c
         if (voce.copie) file?.togliDati?.(args.sessionId, voce.copie(args));
         /* punto 4: `invia` ha trovato il PC cambiato dopo la carta, e non ha inviato niente */
         if (op === 'session.git.push' && dati?.cambiato) throw conStato(Object.assign(errore('GIT_PUSH_CHANGED', 'The branch changed on the computer after the confirmation.'), { reason: 'push-changed', params: dati.cambiato }), 409);
-        const filtrati = voce.filtra ? voce.filtra(dati, vista) : dati;
+        const filtrati = voce.filtra ? voce.filtra(dati, vista, args) : dati;
         if (voce.metodo !== 'GET' && VOCI_DEL_CONTRATTO.has(op) && pesoSulFilo(filtrati) > TETTO_RISPOSTA_BYTE) {
           return { ok: filtrati?.ok !== false, ridotta: true, ...tieni(filtrati, { motivo: D, turno: D }), ...(typeof filtrati?.messaggio === 'string' ? { messaggio: testoDentroIByte(filtrati.messaggio) } : {}) }; // N12: §4 promette `messaggio`, tagliato se serve
         }
@@ -963,8 +991,23 @@ export function creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, c
         const sub = typeof args?.sub === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(args.sub) ? args.sub : null;
         if (!sub) throw errore('BAD_MESSAGE', 'A subscription needs a short id chosen by the device.');
         if (!sessionRegistry.esiste(id)) throw errore('NOT_FOUND', 'Session not found.');
-        /* La stessa iscrizione due volte (il telefono la richiede dopo una «Riprova»): la vecchia si chiude prima. */
+        /* La stessa iscrizione due volte (il telefono la richiede dopo una «Riprova»): la vecchia si chiude prima, e PRIMA dell'attesa qui
+           sotto (revisore 12/11, punto 3): ancora viva durante la rilettura riceveva la coda nuova dal vivo, e poi la rigiocata la
+           rimandava, ogni numero due volte sul filo. Come Hermes, un'iscrizione sola per sessione e cliente (`gateway/session_controls.py:673`) */
         contesto.iscrizioni.get(sub)?.();
+        /* S3 (Tester 06/11/2026): una chat continuata altrove (la CLI, un'altra finestra) si rilegge dal disco prima della rigiocata, con
+           la STESSA funzione del cancello HTTP (`allineaSessioneDaFuori`, il perché e Hermes lì). Per leggere: niente affitto. L'attesa sta
+           QUI, prima di iscriversi: `iscriviConRigiocata` resta sincrona (condizione 1 della CLI) */
+        const allineamento = allineaSessioneDaFuori(sessionRegistry, id, { scrivere: false });
+        if (allineamento) {
+          await allineamento;
+          /* Revisore 12/11, punto 4: durante l'attesa la chat può uscire dal registro (cancellata qui: finché la cancellazione è in volo
+             il registro risponde «non trovata» a ogni porta, anche se poi viene rifiutata e la chat torna). Iscriversi lo stesso dava
+             un'apertura «riuscita» con zero eventi e nessun ascolto: si risponde come per una chat che non c'è, e la sigla chiusa qui
+             sopra non resta sulla connessione. Come Hermes, che ricontrolla la sessione dopo una cancellazione
+             (`gateway/session_controls.py:942-948`: «Deletion may already have evicted a subscribed session») */
+          if (!sessionRegistry.esiste(id)) { contesto.iscrizioni.delete(sub); throw errore('NOT_FOUND', 'Session not found.'); }
+        }
         if (contesto.iscrizioni.size >= ISCRIZIONI_MASSIME && !contesto.iscrizioni.has(sub)) throw errore('RATE_LIMITED', 'Too many subscriptions on this connection.');
         let disiscrivi = null;
         const mandaSulFilo = contesto.iscrivi(sub, () => disiscrivi?.());

@@ -1090,6 +1090,7 @@ export default {
     'approval.wantsReadFile': 'Vuole leggere questo file:',
     'approval.wantsListFolder': 'Vuole vedere i file di questa cartella:',
     'approval.wantsRunCommand': 'Vuole eseguire questo comando nel terminale:',
+    'approval.wantsRunCommandControlFile': 'Vuole eseguire un comando che tocca le impostazioni di Uso del computer (cosa TALOS può fare su questo computer). Solo tu puoi consentirlo, una volta:',
     'approval.wantsUseConnectorTool': 'Vuole usare uno strumento di un connettore:', // P018, 11/11/2026
     'approval.wantsUsePluginTool': 'Vuole usare uno strumento di un plugin:', // P018 giro 2, 11/11/2026
     'approval.wantsUseForgeTool': 'Vuole usare uno strumento di Tool Forge:', // P018 giro 2
@@ -1171,6 +1172,8 @@ export default {
     'transcript.reasoningEffort': '- **Ragionamento:** {effort}',
     'transcript.turnPermissions': '- **Permessi del giro:** {permessi}',
     'transcript.assistant': '**Assistente:**',
+    'transcript.sideQuestion': '**Assistente — domanda:**', // l’Assistente (11/11/2026): una domanda a parte, esportata a righe
+    'transcript.sideAnswer': '**Assistente — risposta:**',
     'transcript.reasoningSummary': '💭 Ragionamento',
     'transcript.unknown': '(sconosciuto)',
     'transcript.arguments': 'Argomenti:',
@@ -2852,6 +2855,7 @@ export default {
     'approval.wantsReadFile': 'It wants to read this file:',
     'approval.wantsListFolder': 'It wants to see the files in this folder:',
     'approval.wantsRunCommand': 'It wants to run this command in the terminal:',
+    'approval.wantsRunCommandControlFile': 'It wants to run a command that touches the Computer use settings (what TALOS may do on this computer). Only you can allow it, one time:',
     'approval.wantsUseConnectorTool': 'It wants to use a tool of a connector:', // P018, 11/11/2026
     'approval.wantsUsePluginTool': 'It wants to use a tool of a plugin:', // P018 round 2, 11/11/2026
     'approval.wantsUseForgeTool': 'It wants to use a Tool Forge tool:', // P018 round 2
@@ -2933,6 +2937,8 @@ export default {
     'transcript.reasoningEffort': '- **Reasoning:** {effort}',
     'transcript.turnPermissions': '- **Turn permissions:** {permessi}',
     'transcript.assistant': '**Assistant:**',
+    'transcript.sideQuestion': '**Assistant — question:**',
+    'transcript.sideAnswer': '**Assistant — answer:**',
     'transcript.reasoningSummary': '💭 Reasoning',
     'transcript.unknown': '(unknown)',
     'transcript.arguments': 'Arguments:',

@@ -258,6 +258,39 @@ test('CUR-11: dall\'attrezzo: la finestra letta dall\'aiutante arriva nell\'annu
   }
 });
 
+/* Giro 4 della bolla (controllore CU, 13/11, mutanti M2 e M2b): la porta del moto ridotto arriva dal registro come FUNZIONE (`session-registry.mjs`,
+   `motoRidotto: () => voce.motoRidotto === true`). L'attrezzo la deve chiamare: con `true` CUR-11 non lo vedeva. */
+test('CUR-11b: dall\'attrezzo, la porta del moto ridotto in forma di funzione: vera toglie il volo, falsa o che lancia lo lascia', async () => {
+  const FIN = { window_id: 101, pid: 4242, app_name: 'Notepad.exe', title: 'Senza titolo - Blocco note', bounds: { x: 0, y: 0, width: 1280, height: 720 }, z_index: 5, is_on_screen: true, minimized: false };
+  const stato = { window_title: FIN.title, app_name: FIN.app_name, window_bounds: FIN.bounds, screenshot_width: 1280, screenshot_height: 720,
+    elements: [{ element_index: 1, element_token: 't1', role: 'Document', label: 'Editor di testo', frame: { x: 10, y: 60, w: 1200, h: 600 } }] };
+  const aiutante = {
+    async apri() { return { ok: true }; },
+    compito() { return () => {}; },
+    async chiama(nome) {
+      if (nome === 'list_windows') return { ok: true, dati: { windows: [FIN] }, immagine: null, errore: null };
+      if (nome === 'get_window_state') return { ok: true, dati: stato, immagine: null, errore: null };
+      return { ok: true, dati: {}, immagine: null, errore: null };
+    },
+  };
+  const durata = async (motoRidotto) => {
+    const eventi = []; let n = 0;
+    const risposte = [{ actions: [{ type: 'type', ref: 'e1', text: 'ciao' }] }, { done: { success: true, note: 'typed' } }];
+    const valore = { testoDellaPersona: 'Apri il Blocco note e scrivi ciao', motoRidotto,
+      chiediModello: async () => ({ testo: JSON.stringify(risposte[Math.min(n++, 1)]), usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+      chiediDomanda: async (qs) => ({ status: 'answered', answers: Object.fromEntries(qs.map((q) => [q.id, 'Allow'])) }),
+      emetti: (nome, dati) => eventi.push({ nome, dati }) };
+    const r = await creaOspiteComputerUse({ aiutante })(NOME_COMPUTER_USE, { task: 'type hello in Notepad' },
+      { fase: 'esegui', toolCallId: 'call-1b', segnale: new AbortController().signal, livelloAccesso: 'scrittura-progetto', sessione: valore });
+    assert.equal(r.ok, true, r.testo);
+    return eventi.filter((e) => e.nome === EVENTI.annuncio).map((e) => e.dati.durata);
+  };
+  assert.deepEqual(await durata(() => true), [0], 'la funzione vera: niente volo');
+  assert.deepEqual(await durata(() => false), [850]);
+  assert.deepEqual(await durata(() => 'true'), [850], 'solo il vero true');
+  assert.deepEqual(await durata(() => { throw new Error('porta rotta'); }), [850], 'una porta che lancia vale «no», il compito va avanti');
+});
+
 /*
  * Il modo in ogni esito (Desktop 05/11/2026 18:34): la bolla (FE-074) disegna l'anello di ripiego solo quando il mouse è di TALOS
  * ('preso'); in 'sottofondo' il mouse è della persona. Un `modo` nullo la lasciava senza risposta. Fonti: Hermes

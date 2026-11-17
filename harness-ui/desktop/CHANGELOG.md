@@ -4,6 +4,1582 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
+## desktop-v0.2.3 — 2026-11-17
+
+### Added
+
+- **Privacy: on its own, TALOS Desktop goes online only for what you leave on.** The public model list from OpenRouter is
+  now off by default: TALOS reads it only after you pick an OpenRouter model, add an OpenRouter key or turn it on in Settings →
+  Security and privacy → Public model list. While it is off, the model picker uses the list built into TALOS and says so
+  («built-in list»); with the switch off, picking an OpenRouter model or adding its key is your choice to use OpenRouter, and
+  TALOS reads the list again (one request when the window opens). If a read fails, TALOS tries once more after 30 seconds, then at most once every 10 minutes. The assistant can change it too, always with a card. An
+  administrator can keep it off for the whole computer with `TALOS_HARNESS_UI_CATALOGO_PUBBLICO=off`: then there is no request
+  for the list at all, even with an OpenRouter key and an OpenRouter model chosen. The automatic update check (Settings →
+  Updates → Automatic updates) can be kept off the same way with `TALOS_DESKTOP_AGGIORNAMENTI=off`. A setup tool can turn both
+  off with a `preferenze-iniziali.json` file in the TALOS data folder, read at the first start that finds it (shape in
+  `harness-ui/desktop/PREFERENZE-INIZIALI.md`). What TALOS Desktop sends on its own, and to whom, is in the privacy policy,
+  PRIVACY.md at the root of the repository; it does not cover the TALOS CLI or the phone app yet.
+- **Doctor: «Test the local engine».** A new row of the Doctor sends the local model one minimal request (a single token)
+  and says whether it answered and in how long, or that it did not answer within 30 s. The test goes only to the model that
+  is already loaded and awake: with models installed but none loaded it says «No model loaded» and does not load one; when
+  the loaded model is asleep after a pause it says so and does not send the test, because it would wake the model up (only
+  one local read of the model list, GET /models, goes to the engine at the click, and it neither loads nor wakes the model);
+  with no local model installed it says so, downloads nothing and leads to the models you can download. It runs only from
+  the PC window, never from the phone.
+- **Settings: the search also finds the names of the choices.** Typing «English» or «Italian» finds the menu language,
+  «French» or «Japanese» the reply language; the names work in English and in Italian whatever the language of the menus.
+- Outside Full access, a shell command that names the computer use settings files now asks you first. The assistant's
+  file tools (write and edit) ask you first for these two files at every permission level, Full access included.
+- **Outside Full access, TALOS puts back the computer use settings if a command changes them.** Shell commands and test
+  runs are both checked before and after they run. A change is moved aside next to the file (never deleted), the approved
+  version comes back, and you get one line in the chat of that command. The approved version is also remembered in the
+  system keychain, and TALOS checks the files every time it starts: a change made while TALOS was closed is moved aside
+  then. If no approved version is saved yet (for example right after updating from an older version), the files are moved
+  aside and computer use stays off, with one notice, until you turn it on once more. If the keychain can't be read or
+  saved, computer use stays off. In Full access TALOS does not step in on a command: what the command leaves becomes the
+  approved version, with no copy and no notice; a change made between two commands is still put back before the next one.
+  Two exceptions keep Full access to its own conversation. First: if a command in another conversation, not in Full
+  access, is running when the Full access command ends, the change is moved aside and put back and the notice goes to
+  that other conversation, never to the one in Full access. A command left running in the background counts as running
+  until its own process exits, also after TALOS restarts; when it exits, TALOS checks the files again as at the end of
+  any command. Second: while computer use is off because no approved version is saved yet or the keychain can't be read
+  or saved, a command in Full access does not turn it back on: only you do, in Settings or on a card. With no approved
+  version saved, a file that a command in Full access writes is moved aside, with its copy and one notice in that chat.
+  This counts for each file on its own, also when its approved version is «no file»: if you turned computer use on but the
+  remembered places file was never created, a command in Full access that creates it has it moved aside (one copy, one
+  notice in that chat) and computer use stays on.
+  TALOS keeps the last 10 changed versions of each file, never removing the newest.
+  Computer use always works from the approved version, never from the file on disk.
+- **«No to this tool until your next message».** In the «⋯» menu of the question of a connector, plugin or Tool Forge
+  tool (or with a right click on it): the assistant cannot use that tool again, with any details, until you write to it
+  or answer one of its questions, and it is told that you said no. It allows nothing and does not change your
+  permission mode. A no that does not come from you (a rule or an automatic answer) never turns it on.
+
+### Changed
+
+- **The «A lato» tab is now the «Assistant».** It answers questions about the chat while the agent works, and it can only
+  read: files of the chat folder, the command outputs and the transcript, the git status, diff and history, the context and
+  the spend (when the chat has no tools loaded on demand, it answers from the conversation and says so). It cannot write,
+  run commands or change anything. Its answers look like the chat's (tables, code, bold), and a
+  `file:lines` reference opens a peek of those lines; in the chat the same reference opens the file in «Files». Three ready
+  questions are under the field, one click asks. Questions and answers are now saved with the chat and come back after a
+  restart. Under the field you always see what the Assistant spent in this chat and in all chats, also at $0.00. Secret
+  files recognised by name (keys, credentials, `.env`) are refused and never shown, and files outside the chat folder only
+  if the agent already read them, judged on the real path (a link or a short name that leads outside counts as outside).
+  Because it reads the chat, every web address it wants to open first shows you a card with the full address, also in Full
+  access, and says when the address seems to carry text it read: with a no nothing is sent. An address longer than the card
+  can show (4,000 characters) is refused and the list of what it did says why. After two no's the question stops with one
+  line, like the chat. Without a web search provider the Assistant does not search the web at all, and no card asks you
+  about it. The panel says «I read this chat and its files only when you ask», keeps its «Read-only» pill at every width,
+  and counts the files it read the same way in the header and in «Last turn checked». The panel has its own Stop, and
+  the chat's Stop ends its question too. A question asked from another window shows up in the panel while it runs. What it
+  read is listed in plain words with your local time («read src/a.js, lines 1-60»), each answer has references to the
+  message, the step or the file it looked at, and «Last turn checked» says what the last question read. It uses the chat's
+  model by default: you can pick another one, in the cloud or on this PC, from the panel or from Settings, Memory and
+  context, Assistant; a model on this PC waits for the turn to end. An exported chat writes its questions and answers as
+  text. Wide answer tables wrap or scroll inside their box.
+- **«Full-width questions» is now on by default.** The questions you send in the chat take the full width of the chat, like
+  the replies. If you never changed it, the update turns it on. If TALOS has a record that you chose «off» (you asked the
+  assistant, you used `/settings`, or you undid a change that had turned it on), it stays off. Turning it off with the
+  switch in Settings of an older version left no record, just like the old default, so it turns on: turn it off again in
+  Settings, and from this version on the choice stays.
+- **Computer use: a click by coordinates on a confirmation window now goes, after a card.** In 0.2.1 a click on a point with
+  no readable button under it was not carried out: in Normal it asked a card and then did nothing, in Full access it stopped
+  the task. Now TALOS judges it by the strongest button of the window (send, payment, deletion), asks the card that button
+  needs, and clicks. Whenever something that pays shows on the screen, a click by coordinates with nothing under it asks the
+  payment card, inside or outside a checkout and even with another window open (a cookie banner), in Normal and in Full
+  access; on a checkout page the same holds when only the page itself or a container is under the point (a click 5 px beside
+  «Paga ora»). A button, or a link, a text, a picture or a field whose whole name is a command to pay («Acquista ora», «Paga
+  ora →», «Pay $49.99», «Buy with Google Pay») counts; «Checkout», «PayPal» or «Come pagare» in the menu of a shop do not, and
+  the 20 typical computer-use tasks (19 without a payment) ask the same cards as before. Outside a checkout a click on the
+  page beside a button that pays still goes without a card, as in 0.2.1. A button or a link named only «Paga» or «Pay» is
+  the exception you chose on 11/11: a click on it, or on the page within 5 px of it, asks the payment card, in Full access
+  too; farther away the click goes as before. Only buttons, links and whatever behaves like one count (an element the screen
+  reader reports as pressable, such as a clickable box): «Paga» written as plain text asks nothing, beside it or with nothing
+  under the point. A page whose title starts with «Cassa» («Cassa - Negozio», «Cassa / Negozio», «Alla cassa») counts as a
+  checkout, as «Checkout» and «Pagamento» did; «Registratore di cassa - Wikipedia», «INPS - Cassa» or «Cassa integrazione»
+  do not. Over 10 typical payment tasks: 10 payment cards in Normal and 8 in Full access, plus 7 and 8 questions of the
+  checkout guard, 17 and 16 questions in all (0.2.1: 17 and 10, when 6 of the 10 tasks stopped halfway). Under a spending
+  limit, a step on a checkout that does not say it pays («Avanti») only reserves its sum in the limit; the button that pays
+  the same sum on the same site is not asked again, and the log says «paid» only when that button goes.
+- **Computer use: at most 3 sends for each yes, beyond the one you approved.** In 0.2.1 one yes to a send covered every later
+  send on the same page: 20 sends asked once. Now a yes covers at most 3 more sends to the same recipient, then TALOS asks
+  again: 20 sends ask 5 times, whether the model clicks «Send», «Submit» or a button that shows only an icon, presses Enter
+  or Ctrl+Enter in the message, or clicks by coordinates on a confirmation window. A yes covers the place where you gave it:
+  the same button (also pressed with Enter, by a click on its confirmation window, or with the window's own shortcut such as
+  Alt+S), or Ctrl+Enter in the same message or chat field. Another button such as «Publish», Ctrl+Enter or Enter in another
+  field, opening an address that carries your data, dropping a file on an upload area, a program that goes on the network or
+  an exit action ask their own card.
+- **Computer use: the recipients are read whole, and a change asks again.** In 0.2.1 the recipient was read only from the
+  title of the conversation, so six different addresses in the «To» field asked once. Now TALOS also reads the «To», «Cc»,
+  «Bcc» and «Recipients» fields (also «Cc recipients», «Bcc recipients», «Cc/Bcc» and drop-down lists), every entry in them,
+  and the name tags shown next to an empty «To» field: six addresses ask six times, and a name or a group next to the same
+  address («Tutti i dipendenti», «and 3 more») or a recipient moved from Bcc to To asks again. Recipients that change while
+  the card is open stop the send, and the next card shows the new ones. The same address written another way (capitals,
+  spaces, a «;», a final dot, a name before it, «Rossi, Mario <…>») and the same names in another order are still the same
+  recipient. A send to a person named in your words goes without a card only when every recipient on the screen is that
+  person.
+- **Computer use: the card of a send says who it goes to.** In 0.2.1 the card said only «a send or submit». Now it lists
+  every recipient field with all the names read on the screen, never «and N more»; a list too long for the card is shown
+  whole next to the choices, and the panel says when it scrolls. Past 2,000 characters or 20 lines of names the card says
+  the true number of recipients, counted on the whole field, and that it does not show them all; a button opens the whole
+  list, and «Allow», chosen or written in «Other», goes only after the list has been opened on the PC. When the recipient
+  cannot be read, or the screen itself shortens the list, the card says so; the heading of a new-message window («New
+  message», «Nuovo messaggio») is not shown as the recipient.
+- **Computer use: when the model asks several sends at once, your yes covers exactly the sends you saw.** In 0.2.1 one
+  answer to the list of a group of sends covered all the sends after it: 40 sends in groups of 10 asked once. Now each send
+  in the list goes once, to the recipient the question showed, and anything else asks again: 40 sends in groups of 10 ask
+  4 times. This costs more questions when the model sends in small groups: 20 sends in groups of 2 ask 10 times (once in
+  0.2.1). When the model writes a different recipient into each send of a group, every send asks its own card after the
+  question of the group: 20 invitations in groups of 5, each to another address, ask 21 times (once in 0.2.1).
+- **Computer use: fewer loops that run to the step limit.** A model that keeps rewriting the same field while «Save» is
+  refused is stopped at its 5th request; a click that does nothing, repeated in front of a refused button, at the 6th (both
+  ran to the step limit, 20, in 0.2.1). A button that appears a moment late inside a group of actions no longer stops the
+  task: a reader of 16 pages reaches the end (0.2.1 stopped at page 1).
+- **The computer use settings ask you even in Full access.** Writing or editing `.computer-use-impostazione.json` or
+  `.computer-use-luoghi.json` with the assistant's file tools now shows the card in Full access too, and only your yes
+  counts (up to 0.2.1 included, Full access wrote them without a card). The other control files keep no card in Full access.
+- **When the assistant calls the same tool of a connector, plugin or Tool Forge several times in one answer, you get
+  one question instead of one for each call.** The question shows how many calls it covers («8 calls in this reply»)
+  and lists every call, numbered, with all its details; past three calls, the rest opens with «Show all». «Allow all»
+  and «Deny all» answer for all of them at once. A call with more details than the question can show whole (more than
+  12, one longer than 300 characters, or one whose name is longer than 64 characters; lengths count UTF-16 code units,
+  so an emoji or a rare character counts as two) never shares a question: then
+  every call of that tool asks on its own, and if a list ever leaves details out it says how many («+2 fields»). A long
+  name of a detail goes on more lines and never hides its value, on this question and on the question of a call the
+  assistant wrote as text; the same wrapping applies to the questions of the automations. A call that needs your
+  attention on its own (for example when your data could leave the PC) still asks on its own question. These questions never cover several calls:
+  a connector tool that its connector does not declare as not destructive (a tool declared only «read-only» included),
+  the deletes that always ask, computer use, and a reply in which two calls carry the same identifier. On the phone and
+  in the command line each call of these tools asks on its own question (up to 0.2.1 the tools of a connector, a
+  plugin or Tool Forge did not ask at all).
+
+### Fixed
+
+- **Typing in a long chat is lighter.** In chats with thousands of turns every letter typed in the message box redrew
+  the whole right column (turns, tool events, agent tree), and every key searched the whole page for an open dialog. Now a
+  letter only grows the box; the box and its buttons are updated when the text goes from empty to written or back, or
+  starts or stops with `!` or `/`, and the column is redrawn by the events that change it. Measured on a chat of 3000
+  turns with a turn running (3 commands, 2 agents, Processes tab open, CPU slowed down 4 times): 60 letters drew the column
+  61 times before and 3 times now (once for each 5-second reading of the commands' CPU and memory), and the 95th percentile
+  from key to painted frame went from 1376 ms to 208 ms. It is not yet under 16 ms, and no key gets there yet: every key
+  still costs the browser's own style and layout work on a page of 70,000 elements, and while agents or commands are
+  running each of their events still redraws the whole column (with them, the 95th percentile stays about the same,
+  above one second). Both come with the next block (the column redrawn by difference, and a cap on the turns kept on the page).
+- **The Processes and Agents tabs no longer rebuild themselves when nothing changed.** A redraw with the same data now
+  leaves the tab as it is: 200 equal redraws went from 4400 and 10600 rebuilt parts to 0. The «running for» time of a
+  running command keeps counting.
+- **Opening a long chat no longer reads the chat list once for each permission request.** While the history of a chat
+  loads, each permission request, question or MCP request in it, and each answer, asked the server for the whole chat
+  list again: a chat of 200 turns with 400 such events made 403 reads. Now the list is read once when the history ends (4
+  reads in all), a request during a live turn still reads it, and requests made while a read is running share it.
+- **The activity clock no longer searches the whole page every second.** It keeps the places it updates: from 3-4 searches
+  of the whole page every 3.5 seconds to 0.
+- **A web page made by the model can no longer take the others down with it.** Each page shown beside the chat, in the file
+  reader or in its own window now runs on its own. If one stops working, the others keep going, and TALOS reloads it once by
+  itself. If it stops again, the page leaves its place and you see «Page not loaded.» with «Try again» (under the artifact card,
+  or in the reader). A page in its own window that stops twice stays open and says «Page not loaded.», «It stopped working
+  twice. Try again, or open it again from its card in the chat.», with «Try again». Nothing leaves the PC in the meantime.
+  To do this, each page now opens on a local address of its own, used only by TALOS on this PC and never looked up on the
+  network. TALOS refuses any call that such a page makes to the rest of the app.
+- **A page in its own window whose pass has expired no longer shows a raw error.** It says «Page not loaded.», «It could not
+  be loaded. Try again, or open it again from its card in the chat.», with «Try again».
+- **A page beside the chat that was idle for more than half an hour comes back when it reloads.** Its reload now asks for a
+  fresh pass to the page, like the file reader already did, instead of reusing one that had expired.
+- **The same network protection when the app address is written another way.** A page made by the model and opened through
+  `localhost` or `[::1]` instead of `127.0.0.1` gets the same block on the network as the others.
+
+- **Settings: «/» and Ctrl K wait while a panel or menu is open over the page.** With the ChatGPT plan panel or the «⋯»
+  menu of a conversation open over Settings and the focus back in Settings, «/» moved the focus to the search under it
+  and Ctrl K opened the commands: now they do nothing until it is closed, as with the notifications panel.
+- **Doctor: «Export» writes each rechecked row once.** After «Check this one again» the file carried the whole new check for
+  every rechecked row (30, then 62, then 94 KB, with values of rows the page does not show). Now a rechecked row carries
+  only the data of that row and its own time, once: a small row adds about 0.1 KB, the providers row about 29 KB, and
+  checking the same row again does not make the file grow.
+- **Doctor: the result of a rechecked row is written in lower case inside the sentence** («Check run again: now failure.»,
+  not «now Failure.»).
+- Saying No with a reason on a control file card, or an automatic answer from a rule or a mode, no longer lets the write through.
+- **From the phone, a chat continued somewhere else opens with what was written there.** If the chat was continued in
+  another TALOS window or in the terminal, the phone now opens it with that new part and stays in step; before, it showed
+  only what this PC had in memory. Reopening after the last event the phone saw brings only the part written elsewhere.
+- **From the phone, a chat opened again gets every event once.** When the phone asked again for a chat that had changed
+  elsewhere, the same events could arrive twice (measured: events 1 to 7, then 3 to 7 again); now each one arrives once.
+- **From the phone, a chat deleted while it opens answers «not found».** Before, the phone opened it empty and silent.
+  The app on the phone (0.1.48) shows «The session no longer exists» and does not retry by itself.
+- **The engine on the phone no longer continues a half-written reply of the Assistant.** The phone engine does not resume
+  an unfinished reply, so TALOS no longer sends it one to resume and asks for a new reply instead; the engine on the PC
+  still continues it.
+- **Computer use: what you do in the bubble now reaches TALOS.** «Stop» in the bubble stops the task (it did nothing);
+  a message written in the bubble goes to the running task, like one written in the chat while TALOS works (it was lost);
+  the computer use card also shows in the bubble, with the same question and choices as in the chat, on purpose: you
+  answer where you are looking, one answer is enough, and it closes the card in both places (until now a card answered in
+  the bubble was lost, and the task waited up to ten minutes). A choice that needs the full list opened first («Allow» in front of a long list of recipients) stays in the
+  chat; the bubble shows the other choices and «Open in TALOS». A message written in the bubble when no task has run yet
+  goes nowhere.
+- **Computer use: the bubble says which element TALOS is about to use.** Before a step the bubble showed «[object Object]»;
+  it now shows the element's name («Save»), and keeps the sentence it had when the step has no named element.
+- **Computer use: only one cursor on the screen.** The PC helper turns its own cursor off only while the TALOS cursor is
+  shown, so it can no longer draw a second cursor next to the TALOS one. The page of the TALOS cursor now tells TALOS,
+  twice a second, that it has drawn the cursor, and TALOS counts its cursor as shown only after that signal has come from
+  every screen (before, it counted it as shown even before the page loaded, so a page that loaded but drew nothing, or
+  froze, left no cursor at all until TALOS restarted). If the signal stops for 2 seconds, Windows says the page is not
+  responding, or the page's process ends, TALOS hides its cursor and the helper takes its own cursor back as soon as the
+  action in progress ends (an action is never cut in half), before the next step. If the page is missing, does not load,
+  or sends no first signal within 15 seconds, the TALOS cursor stays off until TALOS restarts and the helper keeps its own
+  cursor. If the signal comes back, the TALOS cursor comes back only after the helper running with its own cursor has
+  closed (five minutes after TALOS last used it), never while it runs: there are never two cursors. While the TALOS cursor
+  is not shown (see «Known limits», or on a Windows 10 older than version 2004), the helper's cursor stays, as in 0.2.1, so
+  you see where TALOS is about to click. If the TALOS cursor stops showing while the helper is starting, the task goes on
+  in the same way (before, it ended with «computer use is not available on this computer»). If the helper cannot restart,
+  the task stops and the chat says why, instead of going on without a cursor.
+- **Computer use: reduced motion is respected.** With «Reduce motion» on in TALOS, or reduced motion asked by Windows, the
+  TALOS cursor no longer flies to the next click, the border of the window TALOS is watching no longer pulses, the ring
+  of the click no longer grows, and TALOS no longer waits for the flight before clicking (up to 0.85 s each step). Before,
+  the wait always happened, and the cursor, the border and the ring followed only the Windows setting. A change of
+  «Reduce motion» reaches the TALOS cursor and border while TALOS is open, without a restart; the wait follows it from
+  your next message.
+- **Computer use: no more seconds without a cursor between two slow steps.** When the TALOS cursor stopped during a task,
+  the helper's cursor came back only with TALOS's next action, so with slow steps the screen showed no cursor for up to
+  about 8.6 seconds. Now the helper starts again at once and draws its cursor where the TALOS cursor last was, without
+  waiting for the next action. It moves only the drawn cursor, never your mouse.
+- **Computer use: the page of the TALOS cursor also starts while its window is still hidden.** Its window is shown only
+  after the page says it has drawn, but a window never shown did not let the page draw, so the TALOS cursor and the
+  border of the watched window could stay off for the whole session. The page now gives its first signal within half a
+  second even while hidden.
+- **Computer use: the bubble grows with what it shows.** The bubble stayed a thin strip: the computer use card was there
+  but could not be seen or clicked, the message field could not be reached, and the top of the bar was cut. The bubble
+  now takes the height of its content, up to 24 points from the edge of the screen; a long card scrolls inside it and the
+  bar at the bottom always stays whole. It also takes the width of its content: before, the card and the bar were cut on
+  the right, because the bubble never learned how wide they were.
+- **Computer use: one «Using the computer…» row in the chat.** After you answered a computer use card, the live row under
+  the card (with its seconds and Stop) did not come back, and the heading of the group above it said «Using the
+  computer…» again. Now the live row comes back under the card, and the heading names the same step without «…».
+- **Computer use stays on the window of the task, and stops when you use the PC (was a known limit of 0.2.1 and 0.2.2).**
+  The first window computer use picks is the window of the task: later it reads only that window, and the windows the task
+  itself opens (a «Save as» dialog, a window of an app the task started). If another window covers it, or the task window
+  is closed or minimized, TALOS reads nothing else and sends nothing of the other window to the model; before any action it
+  asks you with the card of a new place, which names the window in front, also when that window belongs to the same app or
+  to an app you gave «Always allow». In Full access, where there are no cards, the task stops. If the task was asked to
+  use an app and no window of that app is open, TALOS no longer reads the window on top: it opens the app. When you move
+  the mouse or type during a task, the task stops with «You took the computer», and nothing more is done; what the helper
+  types or clicks itself does not stop it, and neither does your click on a card. On 10 typical tasks this costs no card
+  more for a task in one window, or with the windows the task opens itself; a card more only when another window comes in
+  front and the model wants to act. The limit that is left: TALOS tells your input apart from the helper's by time (an
+  input during an action of the helper counts as the helper's), so a movement of yours in that fraction of a second is
+  seen only at your next movement.
+- **Computer use: an app name that names two programs follows only the new windows of the first one.** When the task
+  opens an app with a name in which TALOS recognizes two or more programs, only the new windows of the program written
+  first become windows of the task; if the first one cannot be told, none do. Before, a new window of the second program
+  became a window of the task too, so TALOS could read it.
+
+### Known limits
+
+- **«Writes to the project»: a command that deletes or changes a folder outside the project does not ask, unless the place is a
+  sensitive one.** File tools ask before they write outside the session folder; shell commands ask only for sensitive places (home,
+  the project and the folder above it, the phone's folders). The card of the level now says so. It has been this way since the level
+  exists; asking for every write outside the project from a command is planned for 0.2.4.
+- Search does not find the Assistant's questions and answers yet.
+- Secret files whose name TALOS does not recognise yet (for example `terraform.tfstate`, `.htpasswd`, `wp-config.php`) are
+  read by the Assistant like other files; the shared rule for the whole app will learn them separately.
+- From the phone (app 0.1.48) the Assistant does not open web pages after a read, because the phone cannot show the card
+  yet: it says so and asks you to open the PC. On the phone an exported chat still shows the Assistant's exchanges as raw
+  data. A question from the phone gets at most 105 seconds, so the PC answers before the phone stops waiting. The Assistant
+  has no switch of its own to turn the network off: it follows the chat's permissions and your cards.
+- **From the phone, a chat continued elsewhere can open first with its older part.** If a deletion on the PC starts while
+  the phone opens the chat and is refused (because the chat changed elsewhere), and the chat is already back when the
+  phone's open checks again, the open is not empty but it is not whole either: it shows only what this PC had (in the
+  test, 2 events of 7, without the part written elsewhere). The phone keeps listening, and the other 5 events arrive once
+  at the next realignment of that chat, for example the next time it is opened. In the same case, if the chat is not back
+  yet, the phone says «The session no longer exists» of a chat that is still there; opening it again from the list brings
+  it back whole (7 events of 7 in the test).
+- **Going back to an older version and then updating again can lose your choice for «Full-width questions».** Versions
+  before this one (v0.2.1 and earlier) do not keep the mark that says your choice was already carried over. If you install
+  one of them again and change any setting there (appearance, language, updates): if you had turned «Full-width questions»
+  off with the switch in Settings, the next update to this version turns it back on. Going back to an older version is not
+  supported: turn it off again in Settings.
+- **«Full-width questions» can wait to be confirmed after the update.** To carry your choice over, TALOS reads the file
+  that records the settings it changed for you. If that file is there but cannot be read (an antivirus or a sync program
+  is holding it, or it cannot be opened), TALOS does not guess: the switch in Settings shows «on», while the assistant
+  still reads the setting as «off». A line under the switch says so, and goes away as soon as the two agree. Flip the
+  switch once and they agree («off»); flip it once more to keep it on. When the file can be read again, it settles the next
+  time a setting changes or the next time TALOS starts, not before. If the file can never be read, it stays this way until
+  one of you decides: you with the switch or with `/settings`, or the assistant when you ask it. If the assistant sets it to
+  «off», the switch turns off, and like any change the assistant makes it shows «Changed by TALOS» with «Undo».
+- A page made by the model that uses live calls between browsers (WebRTC) inside a frame of its own does not work: it stops,
+  is reloaded once and then shows «Page not loaded.» with «Try again». Nothing leaves the PC.
+- Memory: each open page made by the model now has a process of its own, about 23 MB of its own memory each (measured with a
+  small page: 1 page 23 MB, 5 pages 116 MB, 20 pages 484 MB, against 26, 26 and 38 MB before). Today the app shows one page
+  beside the chat, plus the reader and up to 8 windows. Websites in the Browser panel are not affected: a site with 20 closed
+  frames stays in one process, 37 MB, as before.
+- If TALOS restarts on a new address while a page window from before is still open, that old window stops loading new pages:
+  close it and open the page again from its card.
+
+- Settings search, arrows in the results: Left from the first cell of the first row leaves the results and moves the
+  cursor in the field instead of going to the last cell; after Home or End the arrows still move between cells; Down with
+  the cursor in the middle of the text marks a row but Right still moves the cursor. The W3C pattern for this kind of list
+  does the opposite in all three cases.
+- Doctor, local engine: at the click the Doctor first reads the model list from the local engine (one GET /models, which
+  neither loads nor wakes a model) and does not send the test if the model is asleep or if the engine does not answer
+  within 3 s. If the model falls asleep or is closed in the instant between
+  that question and the test, the test wakes it up or loads it again.
+- The ChatGPT plan panel stays open over Settings when you reach Settings with Ctrl K; it closes with Esc or a click
+  outside.
+- Computer use: a task that has to retry a button that stays disabled while it only scrolls, waits or presses keys in between
+  (a licence to scroll to the end, a document still loading) reaches the end when the button gives way by the 4th try, as in
+  0.2.1; a 4th refusal closes it (in 0.2.1 it went on).
+- Computer use: send buttons named in other languages (such as «Verzenden», «Wyślij», «送信») or with no name are not
+  recognised as sends and ask no card, as in 0.2.1.
+- Computer use: name tags of recipients are read only next to an empty «To» field; tags next to a field that still holds
+  typed text are not read.
+- Computer use: on the phone the card of a send shows no list of recipients: the list the PC shows next to the choices is
+  not shown there, and «Allow» goes; on a list too long for the card «Allow» is refused, the card says in English to open
+  the list on the PC, and the question stays open; «Don't allow» and «Stop» still work from the phone (phone app 0.1.48).
+- Computer use: a click by coordinates on an empty point of the page goes without the payment card when the only thing on
+  the screen named «Paga» or «Pay» is a tab (84 of 1,764 cases in the test; your choice of 11/11 names buttons and links);
+  a click on the tab itself asks the card.
+- Computer use: a program connected to TALOS that falsely says it has shown the whole list of recipients can allow the
+  send without it; the model cannot do this.
+- Computer use: a button or a link named only «Paga» or «Pay» (the menu of a bank) asks the payment card for a click on it
+  or within 5 px of it, in Full access too and also on a page that does not pay (your choice of 11/11: a payment never goes
+  without you). Something else counts as a button only when the screen reader reports it as pressable: a box that shows
+  a hand pointer or can be reached with Tab, but is not reported as pressable, counts as plain text and asks nothing.
+- Computer use: «can be pressed» means a button, a link, or an element the screen reader reports as pressable; plain text
+  «Paga» or «Pay» asks nothing beside it or with nothing under the point, but a click right on the word still asks the
+  payment card, because the screen reader may not say that it can be pressed.
+- Computer use: two chat windows on the same page, each with the same message field, that swap places after a send share
+  one yes (1 card for 2 sends) when the screen does not name the frame of each chat; with named frames each chat asks its
+  own card.
+- Computer use: a clock or counter that is not plain text (a progress bar, a picture, a «Resend in 0:nn» button, the window
+  title) lets the model retry a blinking button up to the step limit.
+- Computer use: when the amount changes only in the picture and not in the readable text, Full access keeps one card for the
+  payment. On the PC the payment card never shows the total, in any case.
+- Computer use: the same site with the same window title in another browser (Chrome, then Edge) counts as the same window for a
+  yes you already gave.
+- **A change made in Full access while another conversation runs a command is not kept.** If a command in Full access
+  changes the computer use settings while a command in another conversation is running, TALOS can't tell which of the
+  two made the change: it moves the change aside next to the file, puts the approved version back and tells the other
+  conversation, not the one in Full access. This happens when the other conversation is not in Full access and its
+  command is still running when the Full access command ends, and also when a command of another conversation, at any
+  permission level, starts while the Full access command runs, because every command checks the files first. A command
+  left in the background counts until its own process exits. To keep the change, make it again when no other command is
+  running, in the foreground or in the background; the copy moved aside is next to the file.
+- **Some programs started by a command don't count.** A program that a command starts and leaves running after the
+  command's own process exits (for example with `start "" /b`, or a program that detaches itself) is not followed: if it
+  writes the computer use settings while a command in Full access runs in another conversation, the change becomes the
+  approved version. This was already so in 0.2.1, where TALOS did not check these files at all. A command you run
+  yourself with «!» is yours: it never counts as a command of another conversation, also after a restart.
+- **A command you approved that names the computer use settings keeps whatever is in the file when it ends.** If another
+  program writes the same file while that command runs, that write becomes part of the approved version too. A command
+  left in the background ends when its process exits.
+- **If you leave Full access while a command started in Full access runs, that command still ends as in Full access:**
+  what it leaves becomes the approved version, with no copy and no notice.
+- **A file you approve on a card counts at once, also while computer use is off.** If you approve the card of the
+  assistant writing or editing the settings file (at any permission level), or of a shell command that names it, the file
+  becomes the approved version right away: computer use follows it, and is on if the file says on, even if it was off
+  because no approved version was saved or the keychain entry could not be read. After a restart it stays so, unless
+  there is no keychain at all.
+- **After a restart, some commands that are still running no longer count.** TALOS takes back the background commands
+  that survived a restart only when it can recognise their process again, which it can't for a command run inside WSL
+  (nor on macOS); a command that was still running in the foreground when TALOS closed, even with a normal close, is not
+  taken back either. If such a command writes the computer use settings while a command in Full access runs in another
+  conversation, the change becomes the approved version.
+- **After the update, a command left in the background by the previous version no longer counts.** Its record from the
+  previous version does not say that the assistant started it, so after the restart that installs this version it no
+  longer holds the change of a command in Full access in another conversation: if it writes the computer use settings,
+  the change becomes the approved version.
+- **Programs a command leaves running on Windows: the limits of the new helper.** On Windows a command now starts through
+  a small helper that keeps together every program the command starts. A program the command leaves running (a server
+  started with `start`, a detached process) still belongs to it: the command counts as running until the last of them
+  exits, and Stop closes them all. What it does not do, or does not do yet:
+  - A program a command leaves running stays tied to it: Stop or closing the conversation also closes it, and while it
+    runs the row of its command cannot be removed from the list (TALOS answers that the command is still running).
+  - A one-shot run (also from the terminal) does not exit until the programs its commands left running have exited:
+    measured, a run whose command left a program running for seven seconds ended after 7.4 seconds instead of 0.2.
+  - Commands that run in Linux (WSL) do not go through the helper: there a program left running is not followed, as
+    before. *Report a problem* says so for a conversation set to run its commands in Linux; for a conversation that
+    picks the place command by command, that line speaks of the commands that run in Windows.
+  - The helper is checked against its fingerprint before every command (about one thousandth of a second each time,
+    measured on a file of 276,992 bytes), so a helper replaced or damaged while TALOS is open is not started. Stop
+    starts no file at all: it asks the helper that is already running, the only one that holds the group of the
+    command, to close that group. The fingerprint is kept in a file next to the helper: a program
+    that can write in the TALOS folder can replace both,
+    or change the helper in the instant between the check and the start, and this check does not stop it.
+  - If the helper is missing, does not match, is not allowed to start, or stops before the command could start, the
+    command runs as before and the programs it leaves running are not followed; *Report a problem* says which of these
+    happened. A helper that starts and then does not answer is closed after ten seconds: the command then runs as
+    before, ten seconds late, and the programs it leaves running are not followed (Stop during that wait stops at
+    once). If the helper announces the command in the very instant it is being closed, the command is not started a
+    second time: its result says that it may not have run. If the helper stops right after announcing the command,
+    TALOS does not start that command a second time: it may have run or not (the helper can stop just before the
+    command starts or while it runs), and TALOS cannot know which. The result of the command says that it may not
+    have run, and *Report a problem* says that the helper stopped before saying how a command ended. A command that
+    was already sent to the background when this happens gets no such note: its result had already been given. It
+    keeps running on its own, and the log says that TALOS no longer sees when it ends and that Stop no longer reaches
+    it (before this change the log said that it may not have run, 10 times out of 10).
+  - While a command runs in the foreground, the helper keeps its group tied to itself, as Codex does: if the helper
+    stops (it crashes or is closed, or TALOS closes), the command and every program it started stop with it. Measured
+    on 10 commands with the helper stopped while they ran: before this change the command, a program it had started
+    and a program started with `start` kept running 10 times out of 10, no longer followed; with this change 0 times
+    out of 10. Closing TALOS during such a command: the same, 10 out of 10 before and 0 out of 10 now. The tie is
+    removed once, when the shell of the command exits or when the command is sent to the background: from then on the
+    programs it left running, and a background command, keep running if the helper or TALOS stops (10 out of 10 in
+    each case, as before). So a program started with `start` while the command still runs in the foreground stops too
+    if the helper stops before the command ends (10 out of 10 in the same measure): send the command to the
+    background, or let it end, before closing TALOS. The same holds for every way of starting a program from a command
+    in the foreground: `start`, `start /b`, `cmd /c start`, PowerShell's `Start-Process` and a dev server such as
+    `npm run dev` (0 out of 10 left running for each, with the helper or TALOS stopped).
+  - The group of a command has no name: no other program can take it first or open it, and Stop reaches the command
+    and every program it left running through the helper. Before this change a name already taken by another program
+    left the command outside the group: Stop reached it 0 times out of 5 (the command and a program it had left
+    running stayed alive), and a Stop given before the command started closed the group of the other program 5 times
+    out of 5. With this change, on the same commands, Stop reaches both 5 times out of 5 and the other program is
+    never touched. If Windows refuses to create the group, the command starts outside it, as before: the programs it
+    leaves running are not followed, and *Report a problem* says that Windows did not allow it. Outside the group Stop
+    closes the shell of the command and the programs it started, found in a list of the running programs and each
+    checked by its start time (a program that started before its parent has a number Windows gave again, and is not
+    touched): with that refusal forced on purpose, nothing was left running 5 times out of 5; before this change 4
+    programs out of 4 kept running and Stop waited more than eight seconds, 5 times out of 5. A program started in the instant between the list and the
+    stop can be missed, so the log still says that the programs of the command may keep running until they end.
+    A program whose parent has already exited is not found outside the group: with the refusal forced on purpose such
+    a program kept running after Stop 5 times out of 5 (inside the group 0 times out of 5). If
+    Windows does not let the helper close the group, the helper ties the group to itself again and exits, and Windows
+    closes the group with it: forced on purpose, nothing left running 5 times out of 5 (before, 4 programs out of 4
+    kept running and Stop waited more than eight seconds, 5 times out of 5). If Windows refuses that too, the helper
+    closes one by one the programs that Windows confirms are in the group, as Codex does: with both refusals forced on
+    purpose, nothing left running 10 times out of 10, for a command in the foreground and 10 out of 10 in the
+    background (before, the helper answered that it could not in all 10 tries, 5 in the foreground and 5 in the
+    background, and the programs of a command in the background kept running). If TALOS can no longer write to the helper,
+    it closes the helper, and while the command runs in the foreground the group closes with it: 5 times out of 5
+    nothing left running and Stop over at once (before, 4 programs out of 4 kept running and Stop waited more than
+    eight seconds, 5 times out of 5); for a command already sent to the background its programs keep running, and the
+    log says so. If TALOS can no longer write to the helper when the command is sent to the background, the command
+    still stops if the helper or TALOS stops, and the log now says so (before, it said nothing). Outside the group there is also no safety net for the very first instant: if the
+    helper is closed right then, the command can stay paused without ever running. The same happens inside the group
+    if Windows refuses that safety net, and then *Report a problem* says so. Then the tie of the foreground is missing
+    too: a command in the foreground keeps running if the helper or TALOS stops, and the log says so.
+  - Two rare races are not closed, and neither was seen in our tries. If Windows refuses to close the group at Stop in
+    the very instant the shell of the command exits, the group can keep running while Stop says that it closed it
+    (Codex orders the two with a lock). Outside the group, if Windows gives the number of a program of the command, in
+    the instant between the list and the stop, to a program started after the shell, that program can be stopped.
+  - A Stop given just before a command that ends at once has started does not prevent it: the command still runs, as
+    it did before the helper existed.
+  - TALOS never stops the helper by its number. It closes the group of a command through the helper (Windows closes
+    every program of the group at once), and the helper itself only through the link to it that TALOS has held since
+    it started: while that link is held Windows does not give that number to another program, and once the helper has
+    exited the link stops nothing. Before this change a forced stop by number took 70 to 100 thousandths of a second
+    to act, and the helper often exited by itself in that time: when the helper is closed because it did not answer
+    in time, 24 of 54 forced stops found the number already free (82 commands), so Windows could have given it to
+    another program. TALOS sees an exit 0.86 thousandths of a second after it happens in the middle, 3.39 at most (200
+    commands): that window no longer matters, because a link cannot point at another program. With this change, on
+    the same 82 commands, no stop by number. A command that runs without the helper (see above) is still stopped by
+    its number, as before the helper existed.
+  - If you update or close TALOS while a command runs in the foreground, the command and the programs it started stop
+    (see above). If you update TALOS while programs a finished command left running are still running, they keep
+    running and are no longer followed: after the update Stop does not reach them. A command sent to the background
+    keeps running too, and after the restart TALOS takes it back and Stop reaches it again, checking each of its
+    programs by its start time before every stop (the helper itself has stopped with TALOS and is never among them).
+    Measured on 20 background commands with TALOS stopped at once and started again: 20 taken back, one stop each,
+    never on the helper nor on a program of someone else, nothing left running after Stop. If Windows gives the number
+    of a program already stopped to another program while TALOS waits for it to exit, TALOS checks its start time
+    again and closes the row, without a second stop (before, the row stayed in progress until that other program
+    exited, 45 to 51 seconds, 3 times out of 3).
+    If Windows refuses to let the programs go when the command ends or goes to the background, they stop when TALOS
+    closes or is updated instead, and *Report a problem* says so (Windows has not refused it on the PC where this was
+    tried). Stop still reaches them then: with that refusal forced on purpose, 5 times out of 5.
+  - The release builds the helper itself, from the same commit as the app, runs the helper's own smoke test on it and
+    takes its fingerprint there; the package copies the helper only if the copy has that fingerprint, with the licences
+    of the Rust crates it contains, and the release stops if the fingerprint is missing or does not match: no release
+    goes out without the helper. Nothing is written by hand and no separate build is needed. The installed app checks
+    the helper against that fingerprint before every command (see above).
+  - A package built on a PC without a fixed fingerprint carries no helper and says so in its build log and in its
+    manifest: there every command runs as before, and *Report a problem* says that this version has no checked helper.
+    The terminal version of TALOS does not carry the helper in its package, so for whoever uses it nothing changes.
+  - The messages between TALOS and the helper carry no version number: the two always travel in the same package.
+    The terminal version of TALOS carries the part of TALOS that talks to the helper but not the helper, so there the
+    helper is never started and commands run as before.
+  - After Stop on a command in the background taken back after a restart, while one of its programs is still running
+    and is still the same program, TALOS checks again now and then whether Windows has given that number to another
+    program. Each check reads the start times of the programs and takes 1.7 to 2.1 seconds (15 checks measured on our
+    PC with the processor 23 to 37% busy). Before this change it ran every 5 seconds for as long as that program lived
+    (11 checks in 50 seconds, 22.8 seconds spent checking); now the checks grow further apart, after 5, 10, 20 and 40
+    seconds and then once a minute (13 checks in the first ten minutes instead of 120). The limit that is left: a
+    number given to another program is seen about a minute late (60 seconds, 3 times out of 3 with the processor 23 to
+    37% busy), and later when the PC is busy (73 seconds, once, with the processor 56% busy); until then the row stays
+    in progress. A second Stop given while a check runs now waits for it and then stops
+    the program (before, it was ignored 6 times out of 6 while TALOS answered that it had stopped it). When the
+    program really exits, the row closes within 5 seconds as before.
+  - Inside the installed app the helper has not been tried yet on a PC without the Microsoft C++ libraries, and its
+    release build has not been timed: with the build made on our PC a command starts about 12 thousandths of a
+    second later (33 against 22, the middle value of 30 commands).
+- **Computer use: the TALOS cursor, the border of the watched window and the bubble are still not shown.** The notes of
+  0.2.0 said they were; they are not, even with computer use on. The fixes above prepare them, and they will be turned
+  on in a later version. While TALOS uses the computer, its cards and Stop are in the chat.
+- **Computer use: when the TALOS cursor stops, the helper's cursor takes up to about 2 seconds, plus the end of the action
+  in progress, to come back.** During that time the screen may show no moving cursor. If the screens change (one added,
+  removed, or rescaled) during a task, the helper's cursor is used for the rest of that task.
+
+### In italiano
+
+#### Aggiunto
+
+- **Privacy: di sua iniziativa TALOS Desktop va in rete solo per ciò che lasci acceso.** L'elenco pubblico dei modelli di
+  OpenRouter ora è spento di serie: TALOS lo legge solo dopo che scegli un modello di OpenRouter, aggiungi una sua chiave o lo
+  accendi in Impostazioni → Sicurezza e privacy → Catalogo pubblico dei modelli. Finché è spento, il selettore dei modelli usa
+  l'elenco incorporato in TALOS e lo dice («elenco incorporato»); con l'interruttore spento, scegliere un modello di OpenRouter
+  o aggiungere una sua chiave è una tua scelta di usare OpenRouter, e TALOS torna a leggere l'elenco (una richiesta all'apertura
+  della finestra). Se la lettura non riesce, TALOS riprova una volta dopo 30 secondi, poi al più una volta ogni 10 minuti. Può cambiarlo anche l'assistente, sempre con una carta. Un amministratore può tenerlo spento per tutto il
+  computer con `TALOS_HARNESS_UI_CATALOGO_PUBBLICO=off`: allora nessuna richiesta per l'elenco, anche con una chiave di
+  OpenRouter e un modello di OpenRouter scelto. Il controllo automatico degli aggiornamenti (Impostazioni → Aggiornamenti →
+  Aggiornamenti automatici) si tiene spento allo stesso modo con `TALOS_DESKTOP_AGGIORNAMENTI=off`. Un programma d'installazione
+  può spegnerli tutti e due con un file `preferenze-iniziali.json` nella cartella dei dati di TALOS, letto al primo avvio che lo
+  trova (forma in `harness-ui/desktop/PREFERENZE-INIZIALI.md`). Cosa manda TALOS Desktop da solo, e a chi, è nell'informativa
+  sulla privacy, PRIVACY.md alla radice del repository; non copre ancora la CLI di TALOS né l'app del telefono.
+- **«No a questo strumento fino al tuo prossimo messaggio».** Nel menu «⋯» della domanda di uno strumento di un
+  connettore, di un plugin o di Tool Forge (o col tasto destro sulla domanda): l'assistente non può più usare quello
+  strumento, con nessun dettaglio, finché non gli scrivi o non rispondi a una sua domanda, e gli si dice che hai detto
+  di no. Non consente niente e non cambia il tuo permesso. Un no che non viene da te (una regola o una risposta
+  automatica) non lo accende mai.
+
+#### Cambiato
+
+- **La scheda «A lato» ora è l'«Assistente».** Risponde a domande sulla chat mentre l'agente lavora, e può solo leggere: i
+  file della cartella della chat, le uscite dei comandi e il trascritto, lo stato, le differenze e la storia di git, il
+  contesto e la spesa (se la chat non ha attrezzi caricati a richiesta, risponde dalla conversazione e lo dice). Non può
+  scrivere, lanciare comandi né cambiare niente. Le risposte si vedono come in chat (tabelle,
+  codice, grassetto), e un riferimento `file:righe` apre una sbirciata di quelle righe; in chat lo stesso riferimento apre il
+  file in «File». Sotto il campo ci sono tre domande pronte: un clic e parte. Domande e risposte ora si salvano con la chat e
+  tornano dopo un riavvio. Sotto il campo vedi sempre quanto ha speso l'Assistente in questa chat e in tutte, anche a $0.00.
+  I file segreti riconosciuti dal nome (chiavi, credenziali, `.env`) si rifiutano e non si mostrano mai, e i file fuori
+  dalla cartella della chat solo se l'agente li ha già letti, giudicati sul percorso vero (un collegamento o un nome corto
+  che porta fuori conta come fuori). Siccome legge la chat, ogni indirizzo web che vuole aprire ti mostra prima una carta
+  con l'indirizzo intero, anche in Accesso pieno, e dice se l'indirizzo sembra portare testo letto: con un no non parte
+  niente. Un indirizzo più lungo di quanto la carta sa mostrare (4.000 caratteri) si rifiuta, e l'elenco di ciò che ha
+  fatto dice perché. Dopo due no la domanda si ferma con una riga, come la chat. Senza un fornitore della ricerca web
+  l'Assistente non cerca sul web, e nessuna carta te lo chiede. Il pannello dice «Leggo questa chat e i suoi file solo
+  quando mi chiedi», tiene la pillola «Sola lettura» a ogni larghezza e conta i file letti allo stesso modo nella testata
+  e in «Ultimo giro guardato». Il pannello ha il suo Stop, e lo Stop della chat ferma anche la sua domanda. Una domanda fatta da un'altra
+  finestra si vede nel pannello mentre corre. Ciò che ha letto è elencato a parole semplici con la tua ora («ha letto
+  src/a.js, righe 1-60»), ogni risposta ha i riferimenti al messaggio, al passo o al file che ha guardato, e «Ultimo giro
+  guardato» dice cosa ha letto l'ultima domanda. Di serie usa il modello della chat: puoi sceglierne un altro, in cloud o su
+  questo PC, dal pannello o da Impostazioni, Memoria e contesto, Assistente; un modello su questo PC aspetta che il giro
+  finisca. Una chat esportata scrive le sue domande e risposte come testo. Le tabelle larghe delle risposte vanno a capo o
+  scorrono dentro la loro casella.
+- **«Domande a tutta larghezza» ora è accesa di serie.** Le domande che mandi in chat prendono tutta la larghezza della
+  chat, come le risposte. Se non l'avevi mai cambiata, l'aggiornamento la accende. Se TALOS ha traccia che l'avevi scelta
+  spenta (l'hai chiesto all'assistente, hai usato `/settings`, o hai annullato un cambio che l'aveva accesa), resta spenta.
+  Spegnerla con l'interruttore delle Impostazioni di una versione precedente non lasciava traccia, proprio come il vecchio
+  valore di serie, quindi si accende: spegnila di nuovo nelle Impostazioni, e da questa versione in poi la scelta resta.
+- **Uso del computer: un clic per coordinate su una finestra di conferma ora parte, dopo una carta.** Nella 0.2.1 un clic su
+  un punto senza un pulsante leggibile sotto non partiva: in Normale chiedeva una carta e poi non faceva nulla, in Accesso
+  pieno fermava il compito. Ora TALOS lo giudica dal pulsante più forte della finestra (invio, pagamento, cancellazione),
+  chiede la carta che quel pulsante vuole e fa il clic. Quando sullo schermo c'è qualcosa che paga, un clic per coordinate
+  senza niente sotto chiede la carta di pagamento, dentro o fuori da una cassa e anche con un'altra finestra aperta (un banner
+  dei cookie), in Normale e in Accesso pieno; in una pagina di cassa vale anche quando sotto il punto c'è solo la pagina o un
+  contenitore (un clic 5 px accanto a «Paga ora»). Conta un pulsante, o un collegamento, un testo, un'immagine o un campo il
+  cui nome intero è un comando di pagare («Acquista ora», «Paga ora →», «Pay $49.99», «Buy with Google Pay»); «Checkout»,
+  «PayPal» o «Come pagare» nel menu di un negozio no, e i 20 compiti tipici (19 senza pagamento) chiedono le stesse carte di
+  prima. Fuori da una cassa un clic sulla pagina accanto a un pulsante che paga parte ancora senza carta, come nella 0.2.1.
+  Fa eccezione, per tua scelta dell'11/11, un pulsante o un collegamento che si chiama solo «Paga» o «Pay»: un clic su di
+  esso, o sulla pagina entro 5 px, chiede la carta di pagamento, anche in Accesso pieno; più lontano il clic parte come prima.
+  Contano solo pulsanti, collegamenti e ciò che si comporta come tale (un elemento che il lettore dello schermo dice
+  premibile, come un riquadro cliccabile): «Paga» scritto come testo semplice non chiede nulla, né accanto né senza niente
+  sotto il punto. Una pagina il cui titolo comincia con «Cassa» («Cassa - Negozio», «Cassa / Negozio», «Alla cassa») conta
+  come una cassa, come «Checkout» e «Pagamento»; «Registratore di cassa - Wikipedia», «INPS - Cassa» o «Cassa integrazione»
+  no. Su 10 pagamenti tipici: 10 carte di pagamento in Normale e 8 in Accesso pieno, più 7 e 8 domande della guardia della
+  cassa, 17 e 16 domande in tutto (0.2.1: 17 e 10, quando 6 compiti su 10 si fermavano a metà). Con un tetto di spesa, un
+  passo in cassa che non dice di pagare («Avanti») riserva soltanto la sua cifra nel tetto; il pulsante che paga la stessa
+  cifra sullo stesso sito non chiede di nuovo, e la storia dice «pagati» solo quando quel pulsante parte.
+- **Uso del computer: al più 3 invii per ogni sì, oltre a quello che hai approvato.** Nella 0.2.1 un sì a un invio copriva
+  tutti gli invii dopo sulla stessa pagina: 20 invii chiedevano una volta. Ora un sì copre al più altri 3 invii allo stesso
+  destinatario, poi TALOS chiede di nuovo: 20 invii chiedono 5 volte, che il modello faccia clic su «Invia», «Submit» o su un
+  pulsante che mostra solo un'icona, prema Invio o Ctrl+Invio nel messaggio, o faccia clic per coordinate su una finestra di
+  conferma. Un sì copre il posto in cui l'hai dato: lo stesso pulsante (anche premuto con Invio, con un clic sulla sua
+  finestra di conferma o con la scorciatoia della finestra, come Alt+S), o Ctrl+Invio nello stesso campo del messaggio o
+  della chat. Un altro pulsante come «Pubblica», Ctrl+Invio o Invio in un altro campo, aprire un indirizzo che porta i tuoi
+  dati, trascinare un file in un'area di caricamento, un programma che va in rete o un'azione di uscita chiedono la loro carta.
+- **Uso del computer: i destinatari si leggono interi, e un cambio chiede di nuovo.** Nella 0.2.1 il destinatario si leggeva
+  solo dal titolo della conversazione, e sei indirizzi diversi nel campo «A» chiedevano una volta. Ora TALOS legge anche i
+  campi «A», «Cc», «Ccn», «Destinatario» e «Destinatari» (anche «Cc recipients», «Bcc recipients», «Cc/Ccn» e gli elenchi a
+  discesa), ogni voce che contengono e le etichette coi nomi accanto a un campo «A» vuoto: sei indirizzi chiedono sei volte, e
+  un nome o un gruppo accanto allo stesso indirizzo («Tutti i dipendenti», «e altri 3») o un destinatario spostato da Ccn ad A
+  chiedono di nuovo. Destinatari che cambiano mentre la carta è aperta fermano l'invio, e la carta dopo mostra quelli nuovi.
+  Lo stesso indirizzo scritto in un altro modo (maiuscole, spazi, un «;», un punto in fondo, un nome davanti, «Rossi, Mario
+  <…>») e gli stessi nomi in un altro ordine restano lo stesso destinatario. Un invio a una persona nominata nelle tue parole
+  parte senza carta solo se ogni destinatario sullo schermo è quella persona.
+- **Uso del computer: la carta di un invio dice a chi va.** Nella 0.2.1 la carta diceva solo «un invio». Ora elenca ogni campo
+  dei destinatari con tutti i nomi letti sullo schermo, mai «e altri N»; un elenco troppo lungo per la carta si vede intero
+  accanto alle scelte, e il riquadro dice quando scorre. Oltre 2000 caratteri o 20 righe di nomi la carta dice il numero vero
+  dei destinatari, contato sul campo intero, e che non li mostra tutti; un pulsante apre l'elenco intero, e «Consenti», scelto
+  o scritto in «Altro», parte solo dopo che l'elenco è stato aperto sul PC. Se il destinatario non si legge, o è lo schermo
+  stesso ad accorciare l'elenco, la carta lo dice; la testata di una finestra di nuovo messaggio («Nuovo messaggio», «New
+  message») non compare come destinatario.
+- **Uso del computer: quando il modello chiede più invii insieme, il tuo sì copre esattamente gli invii che hai visto.** Nella
+  0.2.1 una risposta all'elenco di un gruppo di invii copriva tutti gli invii dopo: 40 invii a gruppi di 10 chiedevano una
+  volta. Ora ogni invio dell'elenco parte una volta, al destinatario che la domanda mostrava, e tutto il resto chiede di nuovo:
+  40 invii a gruppi di 10 chiedono 4 volte. Costa più domande quando il modello manda a gruppi piccoli: 20 invii a gruppi di
+  2 chiedono 10 volte (una nella 0.2.1). Quando il modello scrive un destinatario diverso in ogni invio del gruppo, ogni invio
+  chiede la sua carta dopo la domanda del gruppo: 20 inviti a gruppi di 5, ognuno a un altro indirizzo, chiedono 21 volte
+  (una nella 0.2.1).
+- **Uso del computer: meno giri a vuoto fino al tetto dei passi.** Un modello che riscrive sempre lo stesso campo mentre
+  «Salva» viene rifiutato si ferma alla 5ª richiesta; un clic che non fa nulla, ripetuto davanti a un pulsante rifiutato,
+  alla 6ª (nella 0.2.1 arrivavano entrambi al tetto dei passi, 20). Un pulsante che compare un attimo dopo dentro un gruppo
+  di azioni non ferma più il compito: un lettore di 16 pagine arriva in fondo (la 0.2.1 si fermava alla pagina 1).
+- **Le impostazioni dell'uso del computer chiedono anche in Accesso pieno.** Scrivere o modificare
+  `.computer-use-impostazione.json` o `.computer-use-luoghi.json` con gli attrezzi dei file dell'assistente ora mostra la
+  carta anche in Accesso pieno, e conta solo il tuo sì (fino alla 0.2.1 compresa l'Accesso pieno li scriveva senza carta). Gli altri
+  file di controllo restano senza carta in Accesso pieno.
+- **Quando l'assistente usa più volte lo stesso strumento di un connettore, di un plugin o di Tool Forge in una sola
+  risposta, ricevi una domanda sola invece di una per ogni chiamata.** La domanda dice quante chiamate copre («8
+  chiamate in questa risposta») ed elenca ogni chiamata, numerata, con tutti i suoi dettagli; oltre tre chiamate, le
+  altre si aprono con «Mostra tutte». «Consenti tutte» e «Nega tutte» rispondono per tutte insieme. Una chiamata con più
+  dettagli di quanti la domanda ne possa mostrare interi (più di 12, uno più lungo di 300 caratteri, o uno con un nome
+  più lungo di 64 caratteri; le lunghezze contano le unità UTF-16, quindi un'emoji o un carattere raro vale due) non
+  condivide mai una domanda: allora ogni chiamata di quello strumento chiede da sola, e se
+  un elenco lascia fuori dei dettagli dice quanti («+2 campi»). Il nome lungo di un dettaglio va su più righe e non
+  nasconde mai il suo valore, in questa domanda e in quella di una chiamata che l'assistente ha scritto come testo; lo stesso a
+  capo vale per le domande delle automazioni. Una chiamata che ha bisogno della tua attenzione da sola (per esempio
+  quando i tuoi dati potrebbero uscire dal PC) chiede comunque con la sua domanda. Queste domande non coprono mai più
+  chiamate: uno strumento di un connettore che il connettore non dichiara non distruttivo (compreso uno dichiarato solo «di sola
+  lettura»), le cancellazioni che chiedono sempre, l'uso del computer, e una risposta in cui due chiamate portano lo
+  stesso identificativo. Sul telefono e nella riga di comando ogni chiamata di questi strumenti chiede con la
+  sua domanda (fino alla 0.2.1 gli strumenti di un connettore, di un plugin o di Tool Forge non chiedevano affatto).
+
+#### Corretto
+
+- **L'uso del computer resta sulla finestra del compito, e si ferma quando usi il PC (era un limite noto della 0.2.1 e
+  della 0.2.2).** La prima finestra che sceglie è la finestra del compito: dopo legge solo quella, e le finestre che il
+  compito apre da sé (una finestra «Salva con nome», la finestra di un'app avviata dal compito). Se un'altra finestra la
+  copre, o la finestra del compito viene chiusa o ridotta, TALOS non legge altro e non manda niente dell'altra finestra al
+  modello; prima di ogni azione ti chiede con la carta del luogo nuovo, che dice il nome della finestra davanti, anche
+  quando quella finestra è della stessa app o di un'app a cui hai dato «Consenti sempre». In Accesso pieno, dove le carte
+  non ci sono, il compito si ferma. Se il compito doveva usare un'app e nessuna sua finestra è aperta, TALOS non legge più
+  la finestra in cima: apre l'app. Quando muovi il mouse o scrivi durante un compito, il compito si ferma con «Hai preso il
+  computer» e non fa più niente; ciò che l'aiutante scrive o clicca da sé non lo ferma, e nemmeno il tuo clic su una carta.
+  Su 10 compiti tipici non costa nessuna carta in più per un compito in una finestra sola, o con le finestre che il compito
+  apre da sé; una carta in più solo quando un'altra finestra passa davanti e il modello vuole agire. Il limite che resta:
+  TALOS distingue il tuo input da quello dell'aiutante per tempo (un input durante un'azione dell'aiutante conta come suo),
+  quindi un tuo movimento in quella frazione di secondo si vede solo al tuo movimento successivo.
+- **Uso del computer: il nome di un'app che nomina due programmi segue solo le finestre nuove del primo.** Quando il
+  compito apre un'app con un nome in cui TALOS riconosce due o più programmi, diventano finestre del compito solo le
+  finestre nuove del programma scritto per primo; se il primo non si può stabilire, nessuna. Prima diventava finestra del
+  compito anche una finestra nuova del secondo programma, e TALOS poteva leggerla.
+- **Scrivere in una chat lunga è più leggero.** Nelle chat con migliaia di giri ogni lettera scritta nella casella del
+  messaggio ridisegnava tutta la colonna di destra (giri, eventi degli attrezzi, albero degli agenti), e ogni tasto cercava
+  in tutta la pagina una finestra aperta. Ora una lettera fa solo crescere la casella; la casella e i suoi pulsanti si
+  aggiornano quando il testo passa da vuoto a scritto o al contrario, o comincia o smette di cominciare con `!` o `/`, e
+  la colonna la ridisegnano gli eventi che la cambiano. Misurato su una chat da 3000 giri con un giro in corso (3 comandi, 2
+  agenti, scheda Processi aperta, CPU rallentata 4 volte): 60 lettere disegnavano la colonna 61 volte, ora 3 (una per ogni
+  lettura di CPU e memoria dei comandi, ogni 5 secondi), e il 95° percentile dal tasto al fotogramma dipinto è passato da
+  1376 ms a 208 ms. Non è ancora sotto i 16 ms, e nessun tasto ci arriva ancora: ogni tasto costa ancora al browser stile e
+  impaginazione su una pagina da 70.000 elementi, e mentre agenti o comandi lavorano ogni loro evento ridisegna ancora tutta
+  la colonna (con loro il 95° percentile resta circa lo stesso, oltre un secondo). Arrivano col blocco dopo (la colonna per
+  differenza e il tetto dei giri sulla pagina).
+- **Le schede Processi e Agenti non si rifanno più quando non è cambiato niente.** Un ridisegno con gli stessi dati lascia
+  la scheda com'è: 200 ridisegni uguali sono passati da 4400 e 10600 parti rifatte a 0. Il tempo «da quanto» di un comando
+  acceso continua a contare.
+- **Aprire una chat lunga non rilegge più l'elenco delle chat a ogni richiesta di permesso.** Mentre si carica la storia
+  di una chat, ogni richiesta di permesso, domanda o richiesta MCP, e ogni risposta, chiedeva di nuovo al server l'elenco
+  intero: una chat da 200 giri con 400 eventi così faceva 403 letture. Ora l'elenco si legge una volta a fine storia (4
+  letture in tutto), una richiesta durante un giro dal vivo lo rilegge ancora, e le richieste fatte mentre una lettura è in
+  corso la condividono.
+- **L'orologio dell'attività non cerca più in tutta la pagina ogni secondo.** Tiene i posti che aggiorna: da 3-4 ricerche
+  in tutta la pagina ogni 3,5 secondi a 0.
+- **Una pagina web fatta dal modello non può più far cadere le altre.** Ogni pagina accanto alla chat, nel lettore dei file o
+  in una finestra sua gira da sola. Se una smette di funzionare le altre vanno avanti, e TALOS la ricarica una volta da sé. Se
+  si ferma di nuovo, la pagina lascia il suo posto e compare «Pagina non caricata.» con «Riprova» (sotto la carta
+  dell'artefatto, o nel lettore). Una pagina nella sua finestra che si ferma due volte resta aperta e dice «Pagina non
+  caricata.», «Si è fermata due volte. Riprova, oppure riaprila dalla sua carta nella chat.», con «Riprova». Intanto dal PC non
+  esce niente. Per farlo ogni pagina si apre ora su un indirizzo locale suo, usato solo da TALOS su questo PC e mai cercato in
+  rete. TALOS rifiuta ogni chiamata che una di queste pagine fa al resto dell'app.
+- **Una pagina nella sua finestra col lasciapassare scaduto non mostra più un errore grezzo.** Dice «Pagina non caricata.», «Non
+  si è potuta caricare. Riprova, oppure riaprila dalla sua carta nella chat.», con «Riprova».
+- **Una pagina accanto alla chat ferma da più di mezz'ora torna quando si ricarica:** la ricarica chiede un lasciapassare
+  nuovo, come già faceva il lettore, invece di riusare quello scaduto.
+- **La stessa protezione di rete quando l'indirizzo dell'app è scritto in un altro modo** (`localhost` o `[::1]`).
+- **Dal telefono, una chat continuata altrove si apre con ciò che è stato scritto lì.** Se la chat è stata continuata in
+  un'altra finestra di TALOS o nel terminale, ora il telefono la apre con quella parte nuova e resta al passo; prima mostrava
+  solo ciò che questo PC aveva in memoria. Riaprendola dopo l'ultimo evento visto, il telefono riceve solo la parte scritta
+  altrove.
+- **Dal telefono, una chat riaperta riceve ogni evento una volta.** Quando il telefono chiedeva di nuovo una chat cambiata
+  altrove, gli stessi eventi potevano arrivare due volte (misurato: eventi da 1 a 7, poi di nuovo da 3 a 7); ora ognuno arriva
+  una volta.
+- **Dal telefono, una chat cancellata mentre si apre risponde «non trovata».** Prima il telefono la apriva vuota e muta.
+  L'app del telefono (0.1.48) mostra «The session no longer exists» e non riprova da sola.
+- **Il motore del telefono non prosegue più una risposta dell'Assistente lasciata a metà.** Il motore del telefono non
+  riprende una risposta incompiuta, quindi TALOS non gliene manda più una da proseguire e chiede una risposta nuova; il motore
+  del PC continua a proseguirla.
+- **Computer use: ciò che fai nella bolla ora arriva a TALOS.** «Ferma» nella bolla ferma il compito (non faceva niente);
+  un messaggio scritto nella bolla va al compito in corso, come uno scritto nella chat mentre TALOS lavora (andava perso);
+  la carta del computer use compare anche nella bolla, con la stessa domanda e le stesse scelte della chat, apposta: rispondi
+  dove stai guardando, basta una risposta, e chiude la carta in tutti e due i posti (finora una carta risposta nella bolla
+  andava persa, e il compito aspettava fino a dieci minuti). Una scelta che vuole prima l'elenco intero aperto («Consenti» davanti a un lungo elenco di
+  destinatari) resta nella chat; la bolla mostra le altre scelte e «Apri in TALOS». Un messaggio scritto nella bolla quando
+  nessun compito è ancora partito non va da nessuna parte.
+- **Computer use: la bolla dice quale elemento TALOS sta per usare.** Prima di un passo la bolla mostrava «[object Object]»;
+  ora mostra il nome dell'elemento («Salva»), e tiene la frase di prima quando il passo non ha un elemento con un nome.
+- **Computer use: un cursore solo sullo schermo.** L'aiutante del PC spegne il suo cursore solo mentre il cursore di TALOS si
+  vede, così non può più disegnare un secondo cursore accanto a quello di TALOS. La pagina del cursore di TALOS ora dice a
+  TALOS, due volte al secondo, che ha disegnato il cursore, e TALOS conta il suo cursore come visibile solo dopo che quel
+  segnale è arrivato da ogni schermo (prima lo contava visibile già prima che la pagina si caricasse, così una pagina
+  caricata che non disegnava niente, o bloccata, lasciava senza nessun cursore fino al riavvio di TALOS). Se il segnale si
+  ferma per 2 secondi, Windows dice che la pagina non risponde, o il processo della pagina finisce, TALOS nasconde il suo
+  cursore e l'aiutante riprende il suo appena finisce l'azione in corso (un'azione non si taglia mai a metà), prima del
+  passo dopo. Se la pagina manca, non si carica o non manda il primo segnale entro 15 secondi, il cursore di TALOS resta
+  spento fino al prossimo avvio di TALOS e l'aiutante tiene il suo cursore. Se il segnale torna, il cursore di TALOS torna
+  solo dopo che l'aiutante col suo cursore si è chiuso (cinque minuti dopo l'ultima volta che TALOS l'ha usato), mai
+  mentre è acceso: due cursori insieme non ci sono mai. Finché il cursore di TALOS non si vede (vedi «Limiti noti», o su un
+  Windows 10 più vecchio della versione 2004), il cursore dell'aiutante resta, come nella 0.2.1, così vedi dove TALOS sta
+  per cliccare. Se il cursore di TALOS smette di vedersi mentre l'aiutante sta partendo, il compito continua allo stesso
+  modo (prima si chiudeva con «il computer use non è disponibile su questo computer»). Se l'aiutante non riesce a
+  ripartire, il compito si ferma e la chat dice perché, invece di andare avanti senza un cursore.
+- **Computer use: il movimento ridotto è rispettato.** Con «Riduci movimento» acceso in TALOS, o col movimento ridotto
+  chiesto da Windows, il cursore di TALOS non vola più verso il clic dopo, il bordo della finestra che TALOS guarda non
+  pulsa più, l'anello del clic non si allarga più, e TALOS non aspetta più il volo prima di cliccare (fino a 0,85 s a ogni
+  passo). Prima l'attesa c'era sempre, e cursore, bordo e anello seguivano solo l'impostazione di Windows. Se cambi
+  «Riduci movimento» con TALOS aperto, cursore e bordo seguono la scelta nuova subito, senza riavviare; l'attesa la segue
+  dal tuo prossimo messaggio.
+- **Computer use: niente più secondi senza cursore fra due passi lenti.** Quando il cursore di TALOS si fermava durante un
+  compito, il cursore dell'aiutante tornava solo con l'azione dopo di TALOS, così coi passi lenti lo schermo restava senza
+  cursore fino a circa 8,6 secondi. Ora l'aiutante riparte subito e disegna il suo cursore dove era l'ultima volta il
+  cursore di TALOS, senza aspettare l'azione dopo. Muove solo il cursore disegnato, mai il tuo mouse.
+- **Computer use: la pagina del cursore di TALOS parte anche con la finestra ancora nascosta.** La sua finestra si mostra solo
+  dopo che la pagina dice di aver disegnato, ma una finestra mai mostrata non lasciava disegnare la pagina, così il cursore
+  di TALOS e il bordo della finestra guardata potevano restare spenti per tutta la sessione. Ora la pagina dà il primo
+  segnale entro mezzo secondo anche da nascosta.
+- **Computer use: la bolla cresce con ciò che mostra.** La bolla restava una striscia sottile: la carta del computer use
+  c'era ma non si vedeva e non si cliccava, il campo del messaggio non si raggiungeva e la barra era tagliata in alto. Ora
+  la bolla prende l'altezza del suo contenuto, fino a 24 punti dal bordo dello schermo; una carta lunga scorre al suo
+  interno e la barra in basso resta sempre intera. Prende anche la larghezza del suo contenuto: prima la carta e la barra
+  erano tagliate a destra, perché la bolla non sapeva quanto fossero larghe.
+- **Computer use: una sola riga «Uso del computer…» nella chat.** Dopo la risposta a una carta del computer use, la riga
+  viva sotto la carta (coi secondi e Ferma) non tornava, e la testa del gruppo sopra ripeteva «Uso del computer…». Ora la
+  riga viva torna sotto la carta, e la testa nomina lo stesso passo senza «…».
+
+#### Limiti noti
+
+- **«Scrive nel progetto»: un comando che cancella o cambia una cartella fuori dal progetto non chiede, se il posto non è
+  delicato.** Gli attrezzi dei file chiedono prima di scrivere fuori dalla cartella della sessione; i comandi chiedono solo per i posti
+  delicati (la casa, il progetto e la cartella sopra, le cartelle del telefono). La scheda del livello ora lo dice. È così da quando
+  il livello esiste; chiedere per ogni scrittura fuori dal progetto fatta da un comando è in programma per la 0.2.4.
+- La ricerca non trova ancora le domande e le risposte dell'Assistente.
+- I file segreti con un nome che TALOS non riconosce ancora (per esempio `terraform.tfstate`, `.htpasswd`, `wp-config.php`)
+  l'Assistente li legge come gli altri; la regola comune di tutta l'app li imparerà a parte.
+- Dal telefono (app 0.1.48) l'Assistente non apre pagine web dopo una lettura, perché il telefono non sa ancora mostrare la
+  carta: lo dice e ti chiede di aprire il PC. Sul telefono una chat esportata mostra ancora gli scambi dell'Assistente come
+  dati grezzi. Una domanda dal telefono ha al più 105 secondi, così il PC risponde prima che il telefono smetta di
+  aspettare. L'Assistente non ha un interruttore suo per spegnere la rete: segue i permessi della chat e le tue carte.
+- **Dal telefono, una chat continuata altrove può aprirsi prima con la sua parte vecchia.** Se una cancellazione sul PC parte
+  mentre il telefono apre la chat e viene rifiutata (perché la chat è cambiata altrove), e la chat è già tornata quando
+  l'apertura del telefono ricontrolla, l'apertura non è vuota ma non è nemmeno intera: mostra solo ciò che aveva questo PC
+  (nella prova, 2 eventi su 7, senza la parte scritta altrove). Il telefono resta in ascolto, e gli altri 5 eventi arrivano
+  una volta al riallineamento successivo di quella chat, per esempio alla prossima apertura. Nello stesso caso, se la chat non
+  è ancora tornata, il telefono dice «The session no longer exists» di una chat che c'è ancora; riaprendola dall'elenco torna
+  intera (7 eventi su 7 nella prova).
+- **Tornare a una versione precedente e poi aggiornare di nuovo può perdere la tua scelta per «Domande a tutta
+  larghezza».** Le versioni prima di questa (v0.2.1 e precedenti) non tengono il segno che dice che la tua scelta è già
+  stata riportata. Se ne installi di nuovo una e lì cambi un'impostazione qualunque (aspetto, lingua, aggiornamenti): se
+  l'avevi spenta con l'interruttore delle Impostazioni, l'aggiornamento dopo a questa versione la riaccende. Tornare a una
+  versione precedente non è previsto: spegnila di nuovo nelle Impostazioni.
+- **«Domande a tutta larghezza» può restare da confermare dopo l'aggiornamento.** Per riportare la tua scelta, TALOS legge
+  il file che tiene le impostazioni cambiate per te. Se quel file c'è ma non si legge (lo tiene un antivirus o un programma
+  di sincronizzazione, o non si apre), TALOS non tira a indovinare: l'interruttore nelle Impostazioni mostra «accesa»,
+  mentre l'assistente la legge ancora «spenta». Una riga sotto l'interruttore lo dice, e va via appena i due sono
+  d'accordo. Tocca l'interruttore una volta e sono d'accordo («spenta»); toccalo un'altra volta per tenerla accesa. Quando
+  il file torna leggibile, si sistema al prossimo cambio di un'impostazione o al prossimo avvio di TALOS, non prima. Se il
+  file non si legge mai, resta così finché uno dei due non decide: tu con l'interruttore o con `/settings`, o l'assistente
+  quando glielo chiedi. Se l'assistente la mette «spenta», l'interruttore si spegne e, come ogni cambio dell'assistente,
+  mostra «Cambiata da TALOS» con «Annulla».
+- Una pagina del modello che usa le chiamate dal vivo fra browser (WebRTC) dentro una sua cornice non funziona: si
+  ferma, si ricarica una volta e poi mostra «Pagina non caricata.» con «Riprova»; dal PC non esce niente.
+- Memoria: ogni pagina del modello aperta ha ora un processo suo, circa 23 MB di memoria propria ciascuna (misurato con una
+  pagina piccola: 1 pagina 23 MB, 5 pagine 116 MB, 20 pagine 484 MB, contro 26, 26 e 38 MB di prima). Oggi l'app mostra una
+  pagina accanto alla chat, più il lettore e al massimo 8 finestre. I siti nel pannello Browser non cambiano: un sito con 20
+  cornici chiuse resta in un processo solo, 37 MB, come prima.
+- Se TALOS riparte su un indirizzo nuovo mentre una finestra di pagina di prima è ancora aperta, quella finestra non carica più
+  pagine nuove: chiudila e riapri la pagina dalla sua carta.
+- Limiti noti dell'uso del computer:
+  - un compito che deve ritentare un pulsante che resta spento mentre in mezzo scorre, aspetta o preme tasti (una licenza da
+    scorrere fino in fondo, un documento che sta caricando) arriva in fondo se il pulsante cede entro il 4° tentativo, come
+    nella 0.2.1; un 4° rifiuto lo chiude (nella 0.2.1 andava avanti);
+  - i pulsanti d'invio con nomi in altre lingue (come «Verzenden», «Wyślij», «送信») o senza nome non si riconoscono come
+    invii e non chiedono carta, come nella 0.2.1;
+  - le etichette coi nomi dei destinatari si leggono solo accanto a un campo «A» vuoto; accanto a un campo che contiene ancora
+    testo scritto no;
+  - sul telefono la carta di un invio non mostra l'elenco dei destinatari: quello che il PC mostra accanto alle scelte lì non si
+    vede, e «Consenti» parte; su un elenco troppo lungo per la carta «Consenti» si rifiuta, la carta dice in inglese di aprire
+    l'elenco sul PC e la domanda resta aperta; «Non consentire» e «Ferma» funzionano ancora dal telefono (app del telefono 0.1.48);
+  - un clic per coordinate su un punto vuoto della pagina parte senza la carta di pagamento quando l'unica cosa sullo schermo che
+    si chiama «Paga» o «Pay» è una scheda (84 casi su 1764 nella prova; la tua scelta dell'11/11 parla di pulsanti e
+    collegamenti); un clic sulla scheda stessa chiede la carta;
+  - un programma collegato a TALOS che dichiara il falso, cioè di aver mostrato l'elenco intero dei destinatari, può consentire
+    l'invio senza averlo mostrato; il modello non può farlo;
+  - un pulsante o un collegamento che si chiama solo «Paga» o «Pay» (il menu di una banca) chiede la carta di pagamento per un
+    clic su di esso o entro 5 px, anche in Accesso pieno e in una pagina che non paga (tua scelta dell'11/11: nessun
+    pagamento parte senza di te). Altro conta come un pulsante solo se il lettore dello schermo lo dice premibile: un riquadro
+    che mostra la manina o si raggiunge col Tab, ma non è detto premibile, vale come testo semplice e non chiede nulla;
+  - «si preme» vuol dire un pulsante, un collegamento o un elemento che il lettore dello schermo dice premibile; il testo
+    semplice «Paga» o «Pay» non chiede nulla accanto né senza niente sotto il punto, ma un clic proprio sulla parola chiede
+    ancora la carta di pagamento, perché il lettore dello schermo può non dire che si preme;
+  - due finestrelle di chat sulla stessa pagina, ognuna con lo stesso campo del messaggio, che si scambiano di posto dopo un
+    invio condividono un sì (1 carta per 2 invii) quando lo schermo non dà un nome al riquadro di ogni chat; coi riquadri
+    col nome ogni chat chiede la sua carta;
+  - un orologio o un contatore che non è testo semplice (una barra di avanzamento, un'immagine, un pulsante «Reinvia fra
+    0:nn», il titolo della finestra) lascia ritentare un pulsante che lampeggia fino al tetto dei passi;
+  - se la cifra cambia solo nell'immagine e non nel testo, in Accesso pieno resta una carta per il pagamento; sul PC la carta
+    di pagamento non mostra mai il totale, in nessun caso;
+  - lo stesso sito con lo stesso titolo in un altro browser (Chrome, poi Edge) conta come la stessa finestra per un sì già dato.
+- **Programmi lasciati accesi da un comando su Windows: i limiti del nuovo aiutante.** Su Windows un comando parte ora
+  attraverso un piccolo aiutante che tiene insieme tutti i programmi che il comando avvia. Un programma che il comando
+  lascia acceso (un server partito con `start`, un processo staccato) resta suo: il comando conta come «in corso» finché
+  l'ultimo esce, e Stop li chiude tutti. Che cosa non fa, o non fa ancora:
+  - Un programma lasciato acceso da un comando resta legato a lui: Stop o la chiusura della conversazione chiudono anche
+    lui, e finché gira la riga del suo comando non si può togliere dall'elenco (TALOS risponde che il comando è ancora
+    in corso).
+  - Una corsa a colpo singolo (anche dal terminale) non esce finché i programmi lasciati accesi dai suoi comandi non sono
+    usciti: misurato, una corsa il cui comando lasciava acceso un programma per sette secondi è finita dopo 7,4 secondi
+    invece di 0,2.
+  - I comandi che girano in Linux (WSL) non passano dall'aiutante: lì un programma lasciato acceso non è seguito, come
+    prima. *Segnala un problema* lo dice per una conversazione impostata per far girare i comandi in Linux; per una
+    conversazione che sceglie il posto comando per comando, quella riga parla dei comandi che girano in Windows.
+  - L'aiutante si controlla con la sua impronta prima di ogni comando (circa un millesimo di secondo ogni volta,
+    misurato su un file di 276.992 byte), così un aiutante sostituito o rovinato mentre TALOS è aperto non parte. Stop
+    non avvia nessun file: chiede all'aiutante che sta già girando, il solo che tiene il gruppo del comando, di
+    chiudere quel gruppo. L'impronta sta in un file accanto
+    all'aiutante: un programma che può scrivere nella cartella di
+    TALOS può sostituirli tutti e due, o cambiare l'aiutante nell'istante fra il controllo e la partenza, e questo
+    controllo non lo ferma.
+  - Se l'aiutante manca, non corrisponde, non viene lasciato partire, o si ferma prima che il comando parta, il comando
+    gira come prima e i programmi che lascia accesi non sono seguiti; *Segnala un problema* dice quale di questi casi è
+    successo. Un aiutante che parte e poi non risponde viene chiuso dopo dieci secondi: il comando gira allora come
+    prima, con dieci secondi di ritardo, e i programmi che lascia accesi non sono seguiti (Stop durante quell'attesa
+    ferma subito). Se l'aiutante annuncia il comando proprio nell'istante in cui viene chiuso, il comando non viene
+    fatto partire una seconda volta: il suo esito dice che può non essere girato. Se l'aiutante si ferma subito dopo
+    aver annunciato il comando, TALOS non fa partire quel comando una seconda volta: può essere girato o no (l'aiutante
+    può fermarsi appena prima che il comando parta o mentre gira), e TALOS non può sapere quale dei due. L'esito del
+    comando dice che può non essere girato, e *Segnala un problema* dice che l'aiutante si è fermato prima di dire
+    com'è finito un comando. Un comando già mandato in sottofondo quando succede non riceve questa nota: il suo esito
+    era già stato dato. Continua da solo, e il log dice che TALOS non vede più quando finisce e che Stop non lo
+    raggiunge più (prima di questa modifica il log diceva che poteva non essere girato, 10 volte su 10).
+  - Mentre un comando gira in primo piano, l'aiutante tiene il suo gruppo legato a sé, come fa Codex: se l'aiutante si
+    ferma (si guasta o viene chiuso, o TALOS si chiude), il comando e ogni programma che ha avviato si fermano con lui.
+    Misurato su 10 comandi con l'aiutante fermato mentre giravano: prima di questa modifica il comando, un programma
+    che aveva avviato e un programma partito con `start` restavano accesi 10 volte su 10, senza più essere seguiti; con
+    questa modifica 0 volte su 10. Chiudendo TALOS durante un comando così: lo stesso, 10 su 10 prima e 0 su 10 ora. Il
+    legame si toglie una volta, quando la shell del comando esce o quando il comando va in sottofondo: da lì i
+    programmi che ha lasciato accesi, e un comando in sottofondo, restano accesi se l'aiutante o TALOS si fermano (10 su
+    10 in ogni caso, come prima). Quindi anche un programma partito con `start` mentre il comando gira ancora in primo
+    piano si ferma se l'aiutante si ferma prima che il comando finisca (10 su 10 nella stessa misura): manda il comando
+    in sottofondo, o lascialo finire, prima di chiudere TALOS. Lo stesso vale per ogni modo di far partire un programma
+    da un comando in primo piano: `start`, `start /b`, `cmd /c start`, `Start-Process` di PowerShell e un server di
+    sviluppo come `npm run dev` (0 su 10 rimasti accesi per ciascuno, con l'aiutante o TALOS fermati).
+  - Il gruppo di un comando non ha un nome: nessun altro programma può prenderlo prima o aprirlo, e Stop raggiunge il
+    comando e ogni programma che ha lasciato acceso attraverso l'aiutante. Prima di questa modifica un nome già preso da
+    un altro programma lasciava il comando fuori dal gruppo: Stop lo raggiungeva 0 volte su 5 (il comando e un
+    programma che aveva lasciato acceso restavano vivi), e uno Stop dato prima che il comando partisse chiudeva il
+    gruppo dell'altro programma 5 volte su 5. Con questa modifica, sugli stessi comandi, Stop li raggiunge tutti e due 5
+    volte su 5 e l'altro programma non viene mai toccato. Se Windows rifiuta di creare il gruppo, il comando parte fuori
+    dal gruppo, come prima: i programmi che lascia accesi non sono seguiti, e *Segnala un problema* dice che Windows non
+    lo ha permesso. Fuori dal gruppo Stop chiude la shell del comando e i programmi che ha avviato, trovati in un elenco
+    dei programmi accesi e controllati uno per uno con l'ora in cui sono partiti (un programma partito prima del suo
+    padre ha un numero che Windows ha ridato, e non si tocca): con quel rifiuto forzato apposta, niente è rimasto
+    acceso 5 volte su 5; prima di questa modifica 4 programmi su 4 restavano accesi e Stop aspettava più di otto
+    secondi, 5 volte su 5. Un programma partito nell'istante fra l'elenco e l'arresto può sfuggire, e per questo il log
+    dice ancora che i programmi del comando possono restare accesi finché non finiscono. Fuori dal gruppo un programma
+    il cui padre è già uscito non si trova: con il rifiuto forzato apposta un programma così è rimasto acceso dopo Stop
+    5 volte su 5 (dentro il gruppo 0 volte su 5). Se Windows non lascia
+    all'aiutante chiudere il gruppo, l'aiutante lo rilega a sé ed esce, e Windows chiude il gruppo con lui: forzato
+    apposta, niente acceso 5 volte su 5 (prima 4 programmi su 4 restavano accesi e Stop aspettava più di otto secondi, 5
+    volte su 5). Se Windows rifiuta anche questo, l'aiutante chiude uno per uno i programmi che Windows conferma nel
+    gruppo, come fa Codex: con tutti e due i rifiuti forzati apposta, niente acceso 10 volte su 10 per un comando in
+    primo piano e 10 su 10 in sottofondo (prima l'aiutante rispondeva che non ci riusciva in tutte e 10 le prove, 5 in primo piano e 5 in sottofondo, e i programmi di un comando in
+    sottofondo restavano accesi). Se TALOS non può più scrivere all'aiutante, lo chiude, e mentre il comando gira in primo piano il
+    gruppo si chiude con lui: 5 volte su 5 niente acceso e Stop finito subito (prima 4 programmi su 4 restavano accesi
+    e Stop aspettava più di otto secondi, 5 volte su 5); per un comando già mandato in sottofondo i suoi programmi
+    restano accesi, e il log lo dice. Se TALOS non può più scrivere all'aiutante quando il comando va in sottofondo, il
+    comando si ferma lo stesso se l'aiutante o TALOS si fermano, e ora il log lo dice (prima non diceva niente). Fuori dal gruppo manca anche l'appoggio
+    per il primissimo istante: se l'aiutante viene chiuso proprio allora, il comando può restare sospeso senza mai
+    girare. Lo stesso succede dentro il gruppo se Windows rifiuta quell'appoggio, e allora *Segnala un problema* lo
+    dice. Allora manca anche il legame del primo piano: un comando in primo piano resta acceso se l'aiutante o TALOS si
+    fermano, e il log lo dice.
+  - Due gare rare non sono chiuse, e nessuna delle due si è vista nelle nostre prove. Se Windows rifiuta di chiudere il
+    gruppo allo Stop proprio nell'istante in cui la shell del comando esce, il gruppo può restare acceso mentre Stop
+    dice di averlo chiuso (Codex mette in fila le due cose con un lucchetto). Fuori dal gruppo, se Windows dà il numero
+    di un programma del comando, nell'istante fra l'elenco e l'arresto, a un programma partito dopo la shell, quel
+    programma può essere fermato.
+  - Uno Stop dato appena prima che parta un comando che finisce subito non lo ferma: il comando gira lo stesso, come
+    prima che l'aiutante esistesse.
+  - TALOS non ferma mai l'aiutante per numero. Chiude il gruppo di un comando attraverso l'aiutante (Windows chiude
+    tutti i programmi del gruppo insieme), e l'aiutante stesso solo dal collegamento che TALOS tiene con lui da quando
+    è partito: finché quel collegamento è tenuto Windows non dà quel numero a un altro programma, e uscito l'aiutante
+    il collegamento non ferma più niente. Prima di questa modifica un arresto forzato per numero agiva dopo 70-100
+    millesimi di secondo, e l'aiutante spesso usciva da solo in quel tempo: quando l'aiutante viene chiuso perché non
+    ha risposto in tempo, 24 arresti forzati su 54 hanno trovato il numero già libero (82 comandi), quindi Windows
+    poteva averlo dato a un altro programma. TALOS vede un'uscita 0,86 millesimi di secondo dopo che è successa il
+    valore di mezzo, 3,39 al massimo (200 comandi): quella finestra non conta più, perché un collegamento non può
+    indicare un altro programma. Con questa modifica, sugli stessi 82 comandi, nessun arresto per numero. Un comando
+    che gira senza l'aiutante (vedi sopra) si ferma ancora per numero, come prima che l'aiutante esistesse.
+  - Se aggiorni o chiudi TALOS mentre un comando gira in primo piano, il comando e i programmi che ha avviato si
+    fermano (vedi sopra). Se aggiorni TALOS mentre programmi lasciati accesi da un comando finito sono ancora accesi,
+    restano accesi e non sono più seguiti: dopo l'aggiornamento Stop non li raggiunge. Anche un comando mandato in
+    sottofondo resta acceso, e dopo la ripartenza TALOS lo riprende e Stop lo raggiunge di nuovo, controllando ognuno
+    dei suoi programmi con l'ora in cui è partito prima di ogni arresto (l'aiutante stesso si è fermato con TALOS e non
+    è mai fra loro). Misurato su 20 comandi in sottofondo con TALOS fermato di colpo e fatto ripartire: 20 ripresi, un
+    arresto ciascuno, mai sull'aiutante né su un programma di altri, niente acceso dopo Stop. Se Windows dà il numero di
+    un programma già fermato a un altro programma mentre TALOS aspetta che esca, TALOS ricontrolla l'ora in cui è
+    partito e chiude la riga, senza un secondo arresto (prima la riga restava in corso finché quell'altro programma non
+    usciva, da 45 a 51 secondi, 3 volte su 3). Se Windows rifiuta di
+    lasciare andare i programmi quando il comando finisce o va in sottofondo, si fermano invece quando TALOS si chiude
+    o si aggiorna, e *Segnala un problema* lo dice (Windows non lo ha rifiutato sul PC dove è stato provato). Stop li raggiunge anche allora: con quel rifiuto forzato apposta, 5 volte su 5.
+  - Il rilascio costruisce l'aiutante da sé, dallo stesso commit dell'app, gli fa la prova di fumo dell'aiutante e ne
+    prende l'impronta lì; il pacchetto copia l'aiutante solo se la copia ha quell'impronta, con le licenze delle crate Rust
+    che contiene, e il rilascio si ferma se l'impronta manca o non torna: nessun rilascio esce senza l'aiutante. Niente si
+    scrive a mano e non serve una costruzione a parte. L'app installata controlla l'aiutante con quell'impronta prima di
+    ogni comando (vedi sopra).
+  - Un pacchetto costruito su un PC senza un'impronta fissata non porta l'aiutante e lo dice nel log della costruzione e
+    nel suo manifesto: lì ogni comando gira come prima, e *Segnala un problema* dice che questa versione non ha un aiutante
+    verificato. La versione di TALOS per il terminale non porta l'aiutante nel suo pacchetto, quindi per chi la usa non
+    cambia niente.
+  - I messaggi fra TALOS e l'aiutante non portano un numero di versione: i due viaggiano sempre nello stesso pacchetto.
+    La versione di TALOS per il terminale porta la parte di TALOS che parla con l'aiutante ma non l'aiutante, quindi lì
+    l'aiutante non parte mai e i comandi girano come prima.
+  - Dopo Stop su un comando in sottofondo ripreso dopo una ripartenza, finché uno dei suoi programmi è ancora acceso ed è
+    ancora lo stesso programma, TALOS ricontrolla ogni tanto se Windows ha dato quel numero a un altro programma. Ogni
+    controllo legge l'ora in cui sono partiti i programmi e dura da 1,7 a 2,1 secondi (15 controlli misurati sul nostro
+    PC col processore occupato dal 23 al 37%). Prima di questa modifica girava ogni 5 secondi per tutta la vita di quel
+    programma (11 controlli in 50 secondi, 22,8 secondi passati a controllare); ora i controlli si distanziano, dopo 5,
+    10, 20 e 40 secondi e poi uno al minuto (13 controlli nei primi dieci minuti invece di 120). Il limite che resta: un
+    numero dato a un altro programma si vede circa un minuto più tardi (60 secondi, 3 volte su 3 col processore occupato
+    dal 23 al 37%), e più tardi ancora se il PC è carico (73 secondi, una volta, col processore occupato al 56%); fino ad
+    allora la riga resta in corso. Uno Stop dato di nuovo mentre un controllo gira ora lo aspetta e poi ferma il
+    programma (prima veniva ignorato 6 volte su 6 mentre TALOS rispondeva di averlo fermato). Quando il programma esce
+    davvero, la riga si chiude entro 5 secondi come prima.
+  - Dentro l'app installata l'aiutante non è ancora stato provato su un PC senza le librerie C++ di Microsoft, e la sua
+    costruzione di rilascio non è stata cronometrata: con la costruzione fatta sul nostro PC un comando parte
+    circa 12 millesimi di secondo più tardi (33 contro 22, il valore di mezzo di 30 comandi).
+- **Computer use: il cursore di TALOS, il bordo della finestra guardata e la bolla non si vedono ancora.** Le note della
+  0.2.0 dicevano che c'erano; non ci sono, nemmeno col computer use acceso. Le cure qui sopra li preparano, e si
+  accenderanno in una versione successiva. Mentre TALOS usa il computer, le sue carte e Ferma sono nella chat.
+- **Computer use: quando il cursore di TALOS si ferma, il cursore dell'aiutante ci mette fino a circa 2 secondi, più la
+  fine dell'azione in corso, a tornare.** In quel tempo sullo schermo può non esserci un cursore che si muove. Se gli
+  schermi cambiano durante un compito (uno aggiunto, tolto o ridimensionato), per il resto di quel compito si usa il
+  cursore dell'aiutante.
+
+#### Impostazioni e Doctor
+
+- **Doctor: «Prova il motore locale».** Una riga nuova del Doctor manda al modello locale una richiesta minima (un token
+  solo) e dice se ha risposto e in quanto tempo, oppure che non ha risposto entro 30 s. La prova va solo al modello già
+  caricato e sveglio: con modelli installati ma nessuno caricato dice «Nessun modello caricato» e non ne carica uno; quando
+  il modello caricato dorme dopo una pausa lo dice e non manda la prova, perché lo sveglierebbe (al clic parte solo una
+  lettura locale dell'elenco dei modelli, GET /models, che non carica e non sveglia il modello); senza modelli locali
+  installati lo dice, non scarica nulla e porta ai modelli da scaricare. Parte solo dalla finestra del PC, mai dal telefono.
+- **Impostazioni: la ricerca trova anche i nomi delle scelte.** «inglese» o «italiano» trova la lingua dei menu,
+  «francese» o «giapponese» la lingua delle risposte; i nomi valgono in italiano e in inglese, qualunque sia la lingua dei
+  menu.
+- **Impostazioni: «/» e Ctrl K aspettano mentre sopra la pagina è aperto un pannello o un menu.** Col pannello del piano
+  ChatGPT o col menu «⋯» di una conversazione aperto sopra le Impostazioni e il fuoco tornato nelle Impostazioni, «/»
+  portava il fuoco nella ricerca lì sotto e Ctrl K apriva i comandi: ora non fanno nulla finché non si chiude, come col
+  pannello delle notifiche.
+- **Doctor: «Esporta» scrive ogni riga ricontrollata una volta.** Dopo «Ricontrolla solo questo» il file portava il
+  controllo intero nuovo per ogni riga ricontrollata (30, poi 62, poi 94 KB, con valori di righe che la pagina non mostra).
+  Ora una riga ricontrollata porta solo i dati di quella riga e la sua ora, una volta: una riga piccola aggiunge circa
+  0,1 KB, quella dei fornitori circa 29 KB, e ricontrollare di nuovo la stessa riga non fa crescere il file.
+- **Doctor: l'esito di una riga ricontrollata è scritto in minuscolo dentro la frase** («Controllo rifatto: ora
+  guasto.», non «ora Guasto.»).
+- Limiti noti. Ricerca delle Impostazioni, frecce nei risultati: Sinistra dalla prima cella della prima riga esce dai
+  risultati e muove il cursore nel campo invece di andare all'ultima cella; dopo Inizio o Fine le frecce muovono ancora fra
+  le celle; Giù col cursore in mezzo al testo segna una riga ma Destra muove ancora il cursore. Lo schema W3C per questo
+  tipo di elenco fa il contrario in tutti e tre i casi. Doctor, motore locale: al clic il Doctor legge prima l'elenco dei
+  modelli dal motore locale (una GET /models, che non carica e non sveglia un modello) e non manda la prova se il modello
+  dorme o se il motore non risponde entro 3 s; se il modello si
+  addormenta o viene chiuso nell'istante fra quella domanda e la prova, la prova lo sveglia o lo ricarica. Il pannello
+  del piano ChatGPT resta aperto sopra le Impostazioni quando ci si arriva con Ctrl K; si chiude con Esc o un clic fuori.
+
+#### Uso del computer: i file delle impostazioni
+
+- Fuori da Accesso pieno, un comando di shell che nomina i file delle impostazioni dell'uso del computer ora chiede prima.
+  Gli attrezzi dei file dell'assistente (scrivere e modificare) chiedono prima per questi due file a ogni livello di
+  permessi, anche in Accesso pieno.
+- **Fuori da Accesso pieno, TALOS rimette le impostazioni dell'uso del computer se un comando le cambia.** I comandi di shell
+  e le prove si controllano prima e dopo. Un cambio si mette da parte accanto al file (mai cancellato), torna la versione
+  approvata e compare una riga nella chat di quel comando. La versione approvata è ricordata anche nel portachiavi del
+  sistema, e TALOS controlla i file a ogni avvio: un cambio fatto mentre TALOS era chiuso si mette da parte allora. Se non
+  c'è ancora una versione approvata salvata (per esempio subito dopo l'aggiornamento da una versione precedente), i file si
+  mettono da parte e l'uso del computer resta spento, con un avviso, finché non lo riaccendi una volta. Se il portachiavi
+  non si può leggere o salvare, l'uso del computer resta spento. In Accesso pieno TALOS non interviene su un comando: ciò
+  che il comando lascia diventa la versione approvata, senza copia e senza avviso; un cambio fatto fra due comandi si
+  rimette comunque prima del comando dopo. Due eccezioni tengono l'Accesso pieno nella sua conversazione. La prima: se
+  quando il comando in Accesso pieno finisce è in corso un comando di un'altra conversazione, non in Accesso pieno, il
+  cambio si mette da parte e si rimette e l'avviso va a quell'altra conversazione, mai a quella in Accesso pieno. Un
+  comando lasciato in sottofondo conta come in corso finché non esce il suo processo, anche dopo un riavvio di TALOS;
+  quando esce, TALOS ricontrolla i file come alla fine di ogni comando. La seconda: mentre l'uso del computer è spento
+  perché non c'è ancora una versione approvata salvata o il portachiavi non si può leggere o salvare, un comando in
+  Accesso pieno non lo riaccende: lo riaccendi solo tu, nelle Impostazioni o su una carta. Senza una versione approvata
+  salvata, il file che un comando in Accesso pieno scrive si mette da parte, con la copia e un avviso in quella chat.
+  Vale per ogni file da solo, anche quando la sua versione approvata è «nessun file»: se hai acceso l'uso del computer ma il
+  file dei luoghi ricordati non è mai stato creato, un comando in Accesso pieno che lo crea lo vede messo da parte (una
+  copia, un avviso in quella chat) e l'uso del computer resta acceso.
+  TALOS tiene le ultime 10 versioni cambiate di ogni file, senza mai togliere la più nuova. L'uso del
+  computer lavora sempre dalla versione approvata, mai dal file sul disco.
+- Corretto: dire No con un motivo sulla carta di un file di controllo, o una risposta automatica di una regola o di una
+  modalità, non lascia più passare la scrittura.
+- Limiti noti. **Un cambio fatto in Accesso pieno mentre un'altra conversazione ha un comando in corso non resta.** Se un
+  comando in Accesso pieno cambia le impostazioni dell'uso del computer mentre è in corso un comando di un'altra
+  conversazione, TALOS non sa dire quale dei due ha fatto il cambio: lo mette da parte accanto al file, rimette la
+  versione approvata e lo dice all'altra conversazione, non a quella in Accesso pieno. Succede quando l'altra
+  conversazione non è in Accesso pieno e il suo comando è ancora in corso quando finisce quello in Accesso pieno, e anche
+  quando un comando di un'altra conversazione, a qualunque livello di permessi, parte mentre gira quello in Accesso
+  pieno, perché ogni comando controlla prima i file. Un comando lasciato in sottofondo conta finché non esce il suo
+  processo. Per tenere il cambio, rifallo quando non c'è nessun altro comando in corso, né in primo piano né in
+  sottofondo; la copia messa da parte è accanto al file. **Alcuni programmi lanciati da un comando non contano.** Un
+  programma che un comando lancia e lascia acceso dopo che il processo del comando è uscito (per esempio con
+  `start "" /b`, o un programma che si stacca da solo) non è seguito: se scrive le impostazioni dell'uso del computer
+  mentre in un'altra conversazione gira un comando in Accesso pieno, il cambio diventa la versione approvata. Era già
+  così nella 0.2.1, dove TALOS non controllava affatto questi file. Un comando che lanci tu con «!» è tuo: non conta mai
+  come comando di un'altra conversazione, nemmeno dopo un riavvio. **Un comando che hai approvato e che nomina le
+  impostazioni dell'uso del computer tiene ciò che c'è nel file quando finisce.** Se un altro programma scrive lo stesso
+  file mentre quel comando gira, anche quella scrittura entra nella versione approvata. Un comando lasciato in sottofondo
+  finisce quando esce il suo processo. **Se esci dall'Accesso pieno mentre gira un comando partito in Accesso pieno, quel
+  comando finisce comunque come in Accesso pieno:** ciò che lascia diventa la versione approvata, senza copia e senza
+  avviso. **Un file che approvi su una carta conta subito, anche mentre l'uso del computer è spento.** Se approvi la carta
+  dell'assistente che scrive o modifica il file delle impostazioni (a qualunque livello di permessi), o di un comando di
+  shell che lo nomina, il file diventa subito la versione approvata: l'uso del computer lo segue, ed è acceso se il file
+  dice acceso, anche se era spento perché non c'era una versione approvata salvata o la voce del portachiavi non si
+  leggeva. Dopo un riavvio resta così, a meno che non ci sia nessun portachiavi. **Dopo un riavvio, alcuni comandi ancora
+  in corso non contano più.** TALOS riprende i comandi in sottofondo sopravvissuti a un riavvio solo se riconosce di nuovo
+  il loro processo, e per un comando lanciato dentro WSL (o su macOS) non può; non riprende nemmeno un comando che era
+  ancora in primo piano quando TALOS si è chiuso, anche con una chiusura normale. Se un comando così scrive le
+  impostazioni dell'uso del computer mentre in un'altra conversazione gira un comando in Accesso pieno, il cambio diventa
+  la versione approvata. **Dopo l'aggiornamento, un comando lasciato in sottofondo dalla versione precedente non conta
+  più.** Ciò che la versione precedente ha registrato non dice che l'ha lanciato l'assistente, quindi dopo il riavvio che
+  installa questa versione non tiene più il cambio di un comando in Accesso pieno in un'altra conversazione: se scrive le
+  impostazioni dell'uso del computer, il cambio diventa la versione approvata.
+
+### Permissions repair: spellings of a disk and deletions (this branch)
+
+> PROVVISORIO: testo da approvare. PROVISIONAL: this text is waiting for approval.
+
+#### Fixed
+- A delete command that names the home or the project with a negated set (`rm -rf ../[!P]rogetto`, `rm -rf /Users/[![:upper:]]izio`) now asks on Windows, macOS and the phone's shared storage. Before, it passed with no card.
+
+- **Everywhere: a delete that starts from an empty or missing variable now asks.** When the target of a delete begins with
+  a variable that is empty or not set, followed by a slash (for example a folder variable that was never filled in), the
+  shell reads it from the root of the disk, but TALOS did not see it, so in Full access it could run with no card (in 0.2.1
+  too). Now TALOS reads it the way the shell does and shows the usual card for the root, in every permission mode, for
+  bash, cmd and PowerShell. A variable with a value, one TALOS cannot know (filled by `read`, a loop or a command), and the
+  names the system always sets are read as before. Cost, measured on the five groups of everyday commands (74 commands,
+  both permission levels, Windows, Linux, Android and macOS, also with only the home folder in the environment): no extra
+  card. On 10,000 generated delete commands (160,000 checks) every card of 0.2.1 is still shown (measured on part of the round).
+- **Ovunque: una cancellazione che parte da una variabile vuota o che non c'è ora chiede.** Quando il bersaglio di una
+  cancellazione comincia con una variabile vuota o non impostata, seguita da una barra (per esempio la variabile di una
+  cartella mai riempita), la shell lo legge dalla radice del disco, ma TALOS non lo vedeva, quindi in Accesso pieno poteva
+  partire senza carta (anche nella 0.2.1). Ora TALOS lo legge come la shell e mostra la solita carta della radice, con
+  qualsiasi permesso, per bash, cmd e PowerShell. Una variabile con un valore, una che TALOS non può conoscere (riempita da
+  `read`, da un ciclo o da un comando) e i nomi che il sistema mette sempre si leggono come prima. Costo, misurato sui
+  cinque gruppi di comandi di ogni giorno (74 comandi, nei due livelli di permesso, su Windows, Linux, Android e macOS, anche
+  con la sola cartella utente nell'ambiente): nessuna carta in più. Su 10.000 comandi di cancellazione generati (160.000 controlli) ogni carta della 0.2.1 resta (misurato su una parte del giro).
+
+### Permissions repair: earlier rounds
+
+> PROVVISORIO: testo da approvare. PROVISIONAL: this text is waiting for approval.
+
+#### Fixed
+
+- **Everywhere: a command too complex to read could pass without a card; now it always asks.** In 0.2.1 (measured) and in the
+  test builds of this repair, when the permission check could not read a command to the end it answered as if the command
+  deleted nothing critical, so a delete of your home, of the root or of the project written in the same command could run
+  with no card, in Full access and in Workspace write. Update to this version. Now a command the check cannot read to the end
+  always asks, with its own card («too complex to read before it runs»), in every permission mode. The check also has a fixed
+  limit, a number and not a time, on how much text the variables of one command may add while it is read (4 MiB): past it,
+  the same card. No honest command we measured comes near it: at most 43,513 characters in the 25,644 commands of the
+  reviewers, the five groups of honest commands and the phone commands. When this check has asked, the decision of 0.2.1 that
+  travels inside TALOS is not consulted again, so a short command that kept the whole check busy 1.6-4.3 s now asks in
+  2-7 ms (four runs with the CPU under 50 %); when this check does not ask, that decision is consulted as before, so no card of 0.2.1 is lost (compared on
+  the same 25,644 commands, in both permission levels, on Windows, Linux, Android and macOS). Some ways of writing a name
+  pattern were read as a different name, so they gave no card (already in 0.2.1): now this check understands them or asks.
+  It reads each pattern once, and all its work on patterns, each entry of a bracket set it tries and each letter of the names
+  it compares included, counts against a fixed limit, a number and not a time (262,144 steps per command): past it, the same
+  card. A bracket set answers once for each letter in a command, so a set of thousands of entries no longer slows it down.
+  Measured on this repair through the whole check (three runs with the CPU at 28-36 % on average and every sample under
+  50 %, this version and 0.2.1 taking turns, on Windows, Linux, Android and macOS): a command that compares a bracket set of
+  4,000 entries 1,000 times takes 134-198 ms (0.2.1: 199-276 ms) and its variants 74-229 ms (0.2.1: 107-381 ms); the
+  commands that reach the limit ask in 9-193 ms; the three long commands take 190-371 ms, 10-20 ms and 11-20 ms (0.2.1:
+  0.55-1.01 s, 1.05-1.80 s and 0.79-1.42 s), and the short command that multiplies asks in 3-11 ms (0.2.1: 0.44-1.03 s). On
+  the first call a 642-character command full of open brackets takes 39-50 ms, and a 578-character one 24-32 ms (0.2.1 on
+  the same machine: 37-55 ms and 22-24 ms; CPU at 16-49 %).
+- **Ovunque: un comando troppo complesso da leggere poteva passare senza carta; ora chiede sempre.** Nella 0.2.1 (misurato) e nelle
+  versioni di prova di questa riparazione, quando il controllo dei permessi non riusciva a leggere un comando fino in fondo
+  rispondeva come se il comando non cancellasse niente di critico, quindi una cancellazione della tua cartella utente, della
+  radice o del progetto scritta nello stesso comando poteva partire senza carta, in Accesso pieno e in Scrive nel progetto.
+  Aggiorna a questa versione. Ora un comando che il controllo non sa leggere fino in fondo chiede sempre, con la sua carta
+  («troppo complesso per essere letto prima che parta»), con qualsiasi permesso. Il controllo ha anche un limite fisso, un
+  numero e non un tempo, su quanto testo le variabili di un comando possono aggiungere mentre lo si legge (4 MiB): oltre, la
+  stessa carta. Nessun comando onesto che abbiamo misurato ci si avvicina: al massimo 43.513 caratteri nei 25.644 comandi dei
+  revisori, nei cinque gruppi di comandi onesti e nei comandi del telefono. Quando questo controllo ha chiesto, la decisione
+  della 0.2.1 che viaggia dentro TALOS non si consulta di nuovo, quindi un comando corto che teneva occupato il controllo
+  intero 1,6-4,3 s ora chiede in 2-7 ms (quattro corse con la CPU sotto il 50 %); quando questo controllo non chiede, quella decisione si consulta come prima,
+  quindi nessuna carta della 0.2.1 si perde (confrontato sugli stessi 25.644 comandi, nei due livelli di permesso, su
+  Windows, Linux, Android e macOS). Alcuni modi di scrivere un nome con un modello venivano letti come un nome diverso, quindi
+  non davano la carta (già nella 0.2.1): ora questo controllo li capisce o chiede. Legge ogni modello una volta sola, e tutto il suo
+  lavoro sui modelli, comprese le voci provate di un insieme fra parentesi quadre e le lettere dei nomi che confronta, si conta
+  contro un limite fisso, un numero e non un tempo (262.144 passi per comando): oltre, la stessa carta. Un insieme fra
+  parentesi quadre risponde una volta per lettera in un comando, quindi un insieme di migliaia di voci non lo rallenta più.
+  Misurato in questa riparazione nel controllo intero (tre corse con la CPU al 28-36 % in media e ogni campione sotto il
+  50 %, questa versione e la 0.2.1 a turno, su Windows, Linux, Android e macOS): un comando che confronta 1.000 volte un
+  insieme di 4.000 voci ci mette 134-198 ms (0.2.1: 199-276 ms) e le sue varianti 74-229 ms (0.2.1: 107-381 ms); i comandi
+  che arrivano al limite chiedono in 9-193 ms; i tre comandi lunghi ci mettono 190-371 ms, 10-20 ms e 11-20 ms (0.2.1:
+  0,55-1,01 s, 1,05-1,80 s e 0,79-1,42 s), e il comando corto che moltiplica chiede in 3-11 ms (0.2.1: 0,44-1,03 s). Alla
+  prima chiamata un comando di 642 caratteri pieno di parentesi quadre aperte ci mette 39-50 ms, e uno di 578 caratteri
+  24-32 ms (0.2.1 sulla stessa macchina: 37-55 ms e 22-24 ms; CPU al 16-49 %).
+- **macOS: a delete of your home or of the project written in another way had no card.** The disk of a Mac does not tell
+  capitals apart, nor an accented letter typed as one character from the same letter typed as two, nor `ß` from `SS`; the
+  check compared the names letter by letter and gave no card (already in 0.2.1, in Full access and Workspace write). Update
+  to this version. Now on macOS names are compared as the disk compares them: the same form for accented letters, and
+  without regard to capitals, `ß` and `SS` included, also inside name patterns. No honest command we measured gets a new
+  card (the five groups of honest commands and the phone commands, on Windows, Linux, Android and macOS).
+- **macOS: una cancellazione della tua cartella utente o del progetto scritta in un altro modo non aveva la carta.** Il disco
+  di un Mac non distingue le maiuscole, né una lettera accentata scritta come un carattere solo dalla stessa lettera scritta
+  come due, né `ß` da `SS`; il controllo confrontava i nomi lettera per lettera e non dava la carta (già nella 0.2.1, in
+  Accesso pieno e in Scrive nel progetto). Aggiorna a questa versione. Ora su macOS i nomi si confrontano come li confronta
+  il disco: la stessa forma per le lettere accentate, e senza badare alle maiuscole, `ß` e `SS` compresi, anche dentro i nomi
+  scritti come modello. Nessun comando onesto che abbiamo misurato riceve una carta nuova (i cinque gruppi di comandi onesti e
+  i comandi del telefono, su Windows, Linux, Android e macOS).
+- **Android: in the shared storage of the phone a name pattern written with other capitals had no card.** The shared
+  storage does not tell capitals apart, and the check already knew it for plain names, but not for name patterns: a delete of
+  the projects folder written as a pattern with capitals gave no card (already in 0.2.1, in Full access and Workspace write).
+  Update to this version. Now patterns follow the same rule as names there; outside the shared storage capitals still count.
+  None of the 13 phone commands gets a new card.
+- **Android: nella memoria condivisa del telefono un nome scritto come modello con altre maiuscole non aveva la carta.** La
+  memoria condivisa non distingue le maiuscole, e il controllo lo sapeva già per i nomi scritti per intero, ma non per i nomi
+  scritti come modello: una cancellazione della cartella dei progetti scritta come modello con le maiuscole non dava la carta
+  (già nella 0.2.1, in Accesso pieno e in Scrive nel progetto). Aggiorna a questa versione. Ora lì i modelli seguono la stessa
+  regola dei nomi; fuori dalla memoria condivisa le maiuscole contano ancora. Nessuno dei 13 comandi del telefono riceve una
+  carta nuova.
+- **Windows: three ways of writing a path made TALOS check a different place from the one the system opened.** The protection
+  looked somewhere else, so it did not see the protected file or folder. It could happen only if the model wrote the path in
+  one of these forms:
+  1. **A folder at the top of the disk whose name is one letter** (your home or your project under it), named with forward
+     slashes and no drive letter: it was read as a path on another drive. Affected: the card of a critical delete (the whole
+     project or the home) in **Full access** and **Workspace write**, 0.2.0 to 0.2.1; reading a credential file of your home
+     from a command in **Full access**, 0.1.33 to 0.2.1; a folder you **blocked for a device** named by a command, at every
+     access level, 0.2.0 to 0.2.1.
+  2. **A path with no drive letter, with TALOS started from one disk and the project on another:** it was checked on the disk
+     of TALOS and opened on the disk of the project. Affected: writing or changing a credential file of your home at every
+     access level, 0.1.31 to 0.2.1; reading one in **Full access**, 0.1.33 to 0.2.1; a folder blocked for a device read,
+     written, changed or printed at every access level (or asked with an ordinary card where it must be refused), 0.2.0 to
+     0.2.1; the secrets of the project behind a link (0.1.24 to 0.2.1), a second name of the same file (0.1.33 to 0.2.1) or
+     an example file (0.1.31 to 0.2.1), read with no card; and a critical delete after the command moved to
+     the other disk with the bare drive letter, 0.2.0 to 0.2.1.
+  3. **A drive letter followed by a path with no slash** (relative to the current folder of that drive). This one needs one
+     disk only. Affected: reading a credential file of your home in **Full access**, from a command and from the file tools,
+     0.1.33 to 0.2.1; a folder blocked for a device, at every access level, 0.2.0 to 0.2.1.
+
+  Windows only. **What to do: update.**
+
+- **Windows: tre modi di scrivere un percorso facevano controllare a TALOS un posto diverso da quello che il sistema apriva.**
+  La protezione guardava altrove, e non vedeva il file o la cartella protetti. Poteva succedere solo se il modello scriveva il
+  percorso in una di queste forme:
+  1. **Una cartella in cima al disco col nome di una sola lettera** (la tua casa o il tuo progetto lì sotto), nominata con le
+     barre dritte e senza la lettera del disco: veniva letta come un percorso di un altro disco. Che cosa toccava: la carta
+     della cancellazione critica (tutto il progetto o la casa) in **Accesso pieno** e in **Scrive nel progetto**, dalla 0.2.0
+     alla 0.2.1; la lettura di un file di credenziali della tua casa da un comando in **Accesso pieno**, dalla 0.1.33 alla
+     0.2.1; una cartella che hai **bloccato per un dispositivo** nominata da un comando, a ogni livello di accesso, dalla
+     0.2.0 alla 0.2.1.
+  2. **Un percorso senza la lettera del disco, con TALOS avviato da un disco e il progetto su un altro:** veniva controllato
+     sul disco di TALOS e aperto sul disco del progetto. Che cosa toccava: scrivere o cambiare un file di credenziali della tua
+     casa a ogni livello di accesso, dalla 0.1.31 alla 0.2.1; leggerlo in **Accesso pieno**, dalla 0.1.33 alla 0.2.1; una
+     cartella bloccata per un dispositivo letta, scritta, cambiata o stampata a ogni livello di accesso (oppure chiesta con
+     una carta qualunque dove va rifiutata), dalla 0.2.0 alla 0.2.1; i segreti del progetto dietro un collegamento (dalla
+     0.1.24 alla 0.2.1), un secondo nome dello stesso file (dalla 0.1.33 alla 0.2.1) o un file di esempio (dalla 0.1.31 alla
+     0.2.1), letti senza carta; e una cancellazione critica dopo che il comando era passato all'altro disco con la sola
+     lettera, dalla 0.2.0 alla 0.2.1.
+  3. **La lettera del disco seguita da un percorso senza barra** (relativo alla cartella corrente di quel disco). Qui basta un
+     disco solo. Che cosa toccava: la lettura di un file di credenziali della tua casa in **Accesso pieno**, da un comando e
+     dagli attrezzi dei file, dalla 0.1.33 alla 0.2.1; una cartella bloccata per un dispositivo, a ogni livello di accesso,
+     dalla 0.2.0 alla 0.2.1.
+
+  Solo Windows. **Che cosa fare: aggiornare.**
+
+- **Windows: more spellings of the same protected places are recognised.** Slashes doubled after the drive letter were taken
+  for a web address: a credential file of your home was read with no card at every access level, a secret file of the project
+  was read or changed with no card, and a critical delete was not seen (from 0.1.14, the first version that read them so,
+  to 0.2.1, each protection from the version it came in). The long form of a path and this computer's own network name are
+  now read as the disk they are also when writing a credential file, for blocked folders and for a second name of a secret
+  file. The other ways Windows has of naming your home in a command (the home without its drive, also after a drive letter
+  as in `C:%HOMEPATH%`, the home in two pieces, the PowerShell form with braces) are read as the home: reading a credential
+  file through the first one asks in Full access, and at the other access levels a file that is secret for what it contains
+  is recognised through all of them. A command that first moves into a folder with `cd`, `chdir`, `pushd`, `sl`,
+  `Set-Location` or `Push-Location` and then reads a credential file there by a relative name asks in Full access. A folder
+  blocked for a device named by a command the way Git Bash writes a drive is refused. In cmd a critical delete is judged
+  from the folder each drive was left in (a `cd` to another drive without `/d` does not move there); inside
+  `powershell -Command` or `bash -c` a `cd` to another drive does move, and is read that way.
+- **Windows: più grafie degli stessi posti protetti vengono riconosciute.** Le barre raddoppiate dopo la lettera del disco
+  erano prese per un indirizzo web: un file di credenziali della tua casa veniva letto senza carta a ogni livello di accesso,
+  un file segreto del progetto veniva letto o cambiato senza carta, e una cancellazione critica non veniva vista (dalla
+  0.1.14, la prima versione che le leggeva così, alla 0.2.1, ogni protezione dalla versione in cui è arrivata). La forma
+  lunga di un percorso e il nome di rete di questo stesso computer ora sono letti come il disco che sono anche per chi scrive
+  un file di credenziali, per le cartelle bloccate e per un secondo nome di un file segreto. Gli altri modi che Windows ha di
+  nominare la tua casa in un comando (la casa senza il suo disco, anche dopo una lettera di disco come in `C:%HOMEPATH%`, la
+  casa in due pezzi, la forma di PowerShell con le graffe) sono letti come la casa: leggere un file di credenziali attraverso
+  il primo chiede in Accesso pieno, e agli altri livelli di accesso un file che è segreto per ciò che contiene viene
+  riconosciuto attraverso tutti. Un comando che prima si sposta in una cartella con `cd`, `chdir`, `pushd`, `sl`,
+  `Set-Location` o `Push-Location` e poi lì legge un file di credenziali col nome relativo chiede in Accesso pieno. Una
+  cartella bloccata per un dispositivo nominata da un comando come Git Bash scrive un disco viene rifiutata. In cmd una
+  cancellazione critica viene giudicata dalla cartella in cui ogni disco è stato lasciato (un `cd` verso un altro disco
+  senza `/d` non ci si sposta); dentro `powershell -Command` o `bash -c` un `cd` verso un altro disco si sposta davvero, e
+  così viene letto.
+
+- **Windows: the long form of a path with doubled slashes is recognised.** A credential file of your home or a secret file of
+  the project written as `\\?\C:\\Users\\…` (the long form, with the slashes doubled after the drive letter) was read by the
+  file tools with no card in Workspace write and in On request with only the ordinary card of a read, and the credential file
+  also in Full access up to 0.2.1 (from 0.1.14, the first version that read doubled slashes, to 0.2.1). The same doubled
+  slashes after `\\.\`, `\??\`, `\\?\GLOBALROOT\` and `\\?\UNC\` are joined too: a command such as
+  `Get-Content '\\.\C:\\Users\\…'` that reads a credential file or a secret file of the project now asks in Workspace write,
+  where it passed with no card. In Full access a credential file of your home written as `\??\C:\…` or
+  `\\?\GLOBALROOT\??\C:\…`, also with the slashes doubled after the prefix, now asks, from a command and from the file tools.
+- **Windows: la forma lunga di un percorso con le barre raddoppiate viene riconosciuta.** Un file di credenziali della tua casa
+  o un file segreto del progetto scritto come `\\?\C:\\Users\\…` (la forma lunga, con le barre raddoppiate dopo la lettera del
+  disco) veniva letto dagli attrezzi dei file senza carta in Scrive nel progetto e in Su richiesta con la sola carta di sempre
+  di una lettura, e il file di credenziali fino alla 0.2.1 anche in Accesso pieno (dalla 0.1.14, la prima versione che leggeva
+  le barre raddoppiate, alla 0.2.1). Si uniscono anche le stesse barre raddoppiate dopo `\\.\`, `\??\`, `\\?\GLOBALROOT\` e
+  `\\?\UNC\`: un comando come `Get-Content '\\.\C:\\Users\\…'` che legge un file di credenziali o un file segreto del progetto
+  ora chiede in Scrive nel progetto, dove passava senza carta. In Accesso pieno un file di credenziali della tua casa scritto
+  come `\??\C:\…` o `\\?\GLOBALROOT\??\C:\…`, anche con le barre raddoppiate dopo il prefisso, ora chiede, da un comando e
+  dagli attrezzi dei file.
+
+- **The card of a critical delete names the place the system will delete.** For a path with a one-letter folder and no drive
+  letter the card could show a drive that does not exist.
+- **La carta della cancellazione critica nomina il posto che il sistema cancellerà.** Per un percorso con una cartella di una
+  lettera e senza la lettera del disco la carta poteva mostrare un disco che non esiste.
+- **Windows: a `cd` that does not stay no longer moves the commands after it.** In bash a `cd` sent to the background with
+  `&`, closed in a subshell `( … )` or put in a pipe (also inside a group in braces, `{ cd x; } | true`) runs in a child
+  process: the commands after it still run where they were, so `bash -c "cd /d/build & rm -rf *"` deletes the project. Inside
+  a command given to bash with `bash -c`, `sh -c`, `bash <<<` or `echo … | bash` (not with `bash -s <<EOF`: see Known limits),
+  and for a Git Bash `cd /x/…` sent to the background at the start of a command, such a `cd` no longer moves: the critical
+  delete after it now asks, in Full access and in Workspace write. Up to 0.2.1 it passed with no card (measured). An `&`
+  inside a subshell or a group sends only what is inside it to the background: `bash -c "cd src; cd .. && (npm run dev &) ;
+  rm -rf *"` asks, as in 0.2.1.
+- **Everywhere: before deleting a critical folder, TALOS asks at least every time 0.2.1 asked.** This version carries the
+  check of 0.2.1 unchanged (its file, byte for byte; a test fails if one byte changes) next to the new one, and asks if
+  either of the two asks; the reason on the card is the new check's when it asks. The new check also reads more: wherever
+  it thinks a `cd` does not stay (sent to the background, in a subshell, in a pipe), it also reads the case where the `cd`
+  stays, in every combination; a variable set inside `eval` keeps the values of every case (`cd src; eval 'cd .. && echo
+  ${x/\}/&}; X=$PWD'; rm -rf "$X"` deletes the project in bash, and it asks); and an `&` inside `${…}` no longer splits the
+  command (`echo ${x/\}/&} cd project && rm -rf "$PWD"` is a single `echo` for bash, and the delete after it asks). Before
+  this, two forms like these passed with no card in the test builds of this repair (measured), while 0.2.1 asked. Measured
+  against 0.2.1 taken from its own commit, with the whole permission check in Full access and in Workspace write, on 4,000
+  random commands from two generators and on every form of the four reviews, on Windows, Linux, Android and macOS: no card of
+  0.2.1 is missing. When only the check of 0.2.1 asks, the card is the one 0.2.1 showed: on 3,200,000 random commands this
+  happened once (a Windows command too nested to follow). The 20 typical commands, 12 common ones, 14 Linux, 13 phone and 15
+  macOS commands still get no card.
+- **Windows: un `cd` che non resta non sposta più i comandi dopo di lui.** In bash un `cd` mandato in sottofondo con `&`,
+  chiuso in una sottoshell `( … )` o messo in una pipe (anche dentro un gruppo fra graffe, `{ cd x; } | true`) gira in un
+  processo figlio: i comandi dopo di lui girano ancora dov'erano, quindi `bash -c "cd /d/build & rm -rf *"` cancella il
+  progetto. Dentro un comando dato a bash con `bash -c`, `sh -c`, `bash <<<` o `echo … | bash` (non con `bash -s <<EOF`: vedi
+  Limiti noti), e per un `cd /x/…` di Git Bash mandato in sottofondo all'inizio di un comando, un `cd` così non sposta più:
+  la cancellazione critica dopo di lui ora chiede, in Accesso pieno e in Scrive nel progetto. Fino alla 0.2.1 passava senza
+  carta (misurato). Un `&` dentro una sottoshell o un gruppo manda in sottofondo solo ciò che sta dentro: `bash -c "cd src;
+  cd .. && (npm run dev &) ; rm -rf *"` chiede, come nella 0.2.1.
+- **Ovunque: prima di cancellare una cartella critica TALOS chiede almeno tutte le volte che chiedeva la 0.2.1.** Questa
+  versione porta il controllo della 0.2.1 tale e quale (il suo file, byte per byte; una prova fallisce se cambia un byte)
+  accanto a quello nuovo, e chiede se chiede uno dei due; il motivo sulla carta è quello del controllo nuovo quando chiede.
+  Anche il controllo nuovo legge di più: dove pensa che un `cd` non resti (mandato in sottofondo, in una sottoshell, in una
+  pipe), legge anche il caso in cui il `cd` resta, in ogni combinazione; una variabile scritta dentro `eval` tiene i valori di
+  tutti i casi (`cd src; eval 'cd .. && echo ${x/\}/&}; X=$PWD'; rm -rf "$X"` in bash cancella il progetto, e chiede); e un `&`
+  dentro `${…}` non spezza più il comando (`echo ${x/\}/&} cd progetto && rm -rf "$PWD"` per bash è un solo `echo`, e la
+  cancellazione dopo chiede). Prima di questo, due forme come queste passavano senza carta nelle versioni di prova di questa
+  riparazione (misurato), mentre la 0.2.1 chiedeva. Misurato contro la 0.2.1 presa dal suo commit, col controllo dei permessi
+  intero in Accesso pieno e in Scrive nel progetto, su 4.000 comandi a caso di due generatori e su ogni forma delle quattro
+  revisioni, su Windows, Linux, Android e macOS: non manca nessuna carta della 0.2.1. Quando chiede solo il controllo della
+  0.2.1, la carta è quella che mostrava la 0.2.1: su 3.200.000 comandi a caso è successo una volta (un comando di Windows
+  troppo annidato per seguirlo). I 20 comandi tipici, i 12 comuni, i 14 di Linux, i 13 del telefono e i 15 di macOS
+  continuano a non avere carte.
+- **Everywhere: two fixed ceilings on the work of checking one command.** The new check reads every `cd` that may not stay
+  in both cases, and every reading goes over all the targets again, once for every value of a `for`; in the permission check a
+  target ending with a slash also asks the disk for its real path. In the test builds of this repair the ceiling held for each
+  level, so cases inside cases multiplied (eight `(cd x && npm i)` and eight more inside a `bash -c` took 2.8-3.8 s; with a
+  third level more than 100 s), and the next test build, with a ceiling of 300 readings, still let an honest command of 551
+  characters (eight `(cd packages/x && npm ci)` and a `for` of 16 packages with six folders each) keep the check busy for
+  0.9-1.8 s, and one of 864 characters for 10-14 s, while TALOS waited (measured by the reviewer). Now each command has two
+  fixed numbers, not times, summed over every level, every case, every Windows pass and every reading: at most 300 readings,
+  and at most 10,000 units of work (a reading is 2 units plus one every 64 characters, a command 1, a target 3, a real path
+  asked of the disk 12; a target counts once for each value of a `for` and each choice of braces). Past either ceiling it asks
+  «too nested» instead of reading on. Measured with the whole permission check, CPU under 50 %: the commands of 551 and 864
+  characters now ask in 40-64 ms on Windows, Linux, Android and macOS (0.2.1, which reads them less, 29-33 ms and 245-265 ms);
+  eight and eight 21-33 ms, eight, eight and eight 12-18 ms; the 20 typical commands take as long as before (0.99-1.04 times
+  the previous test build). The check of a command right under the ceiling takes at most about 60 ms. The slowest whole
+  permission checks the reviewers found did not come from this ceiling: the decision of 0.2.1, which travels inside TALOS,
+  read the whole environment again for every variable of the command and, for the project folders, for every target. One
+  word made of an unknown variable repeated (`rm -rf "$a$a…$a"/x`, 16,011 characters, far under the ceiling) kept the check
+  busy 1.2-1.9 s, in 0.2.1 too, and a delete of 3,237 folders (18,318 characters, right at the ceiling) 0.62-1.27 s. Now that
+  decision reads the environment once for each command, never kept for the next one, with the same results (compared on
+  15,558 commands with four sets of variables on Windows, Linux, Android and macOS: no difference). Measured with the whole
+  permission check, four runs with the CPU of the machine under 50 % for the whole run (sampled every 10 s), on Windows,
+  Linux, Android and macOS: the 16,011-character word 8.5-23 ms (0.2.1: 1.03-1.89 s), 12,021 characters inside `bash -c` on
+  Windows 11-18 ms (0.2.1: 0.79-1.34 s), the 3,237 folders 0.21-0.45 s (0.2.1: 0.58-1.17 s). Why 10,000: no
+  honest command we measured needs more than 6,528 units (the 23,272 random commands of the reviewers, the five groups of
+  honest commands, the forms of the reviews), and the slowest thing it counts, a real path asked of the disk, costs about
+  40 µs on Windows.
+- **Ovunque: due tetti fissi sul lavoro del controllo di un comando.** Il controllo nuovo legge ogni `cd` che può non
+  restare nei due casi, e ogni lettura ripassa tutti i bersagli, una volta per ogni valore di un `for`; nel controllo dei
+  permessi un bersaglio con la barra in coda chiede anche al disco il suo percorso vero. Nelle versioni di prova di questa
+  riparazione il tetto valeva per ogni livello, quindi i casi dentro i casi si moltiplicavano (otto `(cd x && npm i)` e altri
+  otto dentro un `bash -c` chiedevano 2,8-3,8 s; con un terzo livello più di 100 s), e la versione di prova dopo, col tetto di
+  300 letture, lasciava ancora un comando onesto di 551 caratteri (otto `(cd packages/x && npm ci)` e un `for` di 16 pacchetti
+  con sei cartelle ciascuno) tenere occupato il controllo per 0,9-1,8 s, e uno di 864 caratteri per 10-14 s, mentre TALOS
+  aspettava (misurato dal revisore). Ora ogni comando ha due numeri fissi, non tempi, sommati su ogni livello, ogni caso, ogni
+  giro di Windows e ogni lettura: al massimo 300 letture, e al massimo 10.000 unità di lavoro (una lettura vale 2 unità più una
+  ogni 64 caratteri, un comando 1, un bersaglio 3, un percorso vero chiesto al disco 12; un bersaglio conta una volta per ogni
+  valore di un `for` e ogni scelta delle graffe). Oltre uno dei due tetti chiede «troppo annidato» invece di continuare a
+  leggere. Misurato col controllo dei permessi intero, CPU sotto il 50 %: i comandi di 551 e 864 caratteri ora chiedono in
+  40-64 ms su Windows, Linux, Android e macOS (la 0.2.1, che li legge meno, 29-33 ms e 245-265 ms); otto e otto 21-33 ms, otto,
+  otto e otto 12-18 ms; i 20 comandi tipici ci mettono quanto prima (0,99-1,04 volte la versione di prova precedente). Il
+  controllo di un comando appena sotto il tetto ci mette al massimo circa 60 ms. I controlli dei permessi interi più lenti
+  trovati dai revisori non venivano da questo tetto: la decisione della 0.2.1, che viaggia dentro TALOS, rileggeva tutto
+  l'ambiente per ogni variabile del comando e, per le cartelle dei progetti, per ogni bersaglio. Una parola fatta di una
+  variabile sconosciuta ripetuta (`rm -rf "$a$a…$a"/x`, 16.011 caratteri, lontanissima dal tetto) teneva occupato il controllo
+  1,2-1,9 s, anche nella 0.2.1, e una cancellazione di 3.237 cartelle (18.318 caratteri, proprio al tetto) 0,62-1,27 s. Ora
+  quella decisione legge l'ambiente una volta per ogni comando, mai tenuto per il comando dopo, con gli stessi risultati
+  (confrontati su 15.558 comandi con quattro insiemi di variabili su Windows, Linux, Android e macOS: nessuna differenza).
+  Misurato col controllo dei permessi intero, quattro corse con la CPU della macchina sotto il 50 % per tutta la corsa
+  (un campione ogni 10 s), su Windows, Linux, Android e macOS: la parola di 16.011 caratteri 8,5-23 ms (la 0.2.1: 1,03-1,89 s),
+  12.021 caratteri dentro `bash -c` su Windows 11-18 ms (la 0.2.1: 0,79-1,34 s), le 3.237 cartelle 0,21-0,45 s (la 0.2.1:
+  0,58-1,17 s). Perché 10.000: nessun
+  comando onesto che abbiamo misurato ha bisogno di più di 6.528 unità (i 23.272 comandi a caso dei revisori, i cinque gruppi di
+  comandi onesti, le forme delle revisioni), e la cosa più lenta che conta, un percorso vero chiesto al disco, costa circa 40 µs
+  su Windows.
+- **Linux, Android and macOS: a `cd` that does not stay no longer moves the commands after it.** There a POSIX shell runs
+  the command, so the same rule of bash now holds: `cd /srv/dati/build & rm -rf *`, `(cd /srv/dati/build); rm -rf *`,
+  `cd /srv/dati/build | true; rm -rf *` and `{ cd /srv/dati/build; } | tee log; rm -rf *`, at the start of a command or
+  inside `bash -c` and `sh -c`, delete the folder of the command: the critical delete after them now asks, in Full access and
+  in Workspace write. Up to 0.2.1 they passed with no card off Windows (measured). Honest commands such as `cd
+  /srv/dati/build && rm -rf *` or `(cd src && npm run build) && rm -rf dist` still pass with no card. A compound command in a
+  pipe (`if … fi | cat`, `while … done | cat`, `case … esac | cat`) also runs in a subshell: `if true; then cd /srv/x; fi |
+  cat; rm -rf *` asks. The known limits of this rule are the ones listed below for a command given to bash by name (`CDPATH`,
+  `pushd -n`, a group with a redirection before the pipe, a `)` in quotes inside `$( … )`, a function, a `cd` that fails, `\;&`);
+  `bash -s <<EOF` is followed here.
+- **Linux, Android e macOS: un `cd` che non resta non sposta più i comandi dopo di lui.** Lì il comando lo esegue una shell
+  POSIX, quindi ora vale la stessa regola di bash: `cd /srv/dati/build & rm -rf *`, `(cd /srv/dati/build); rm -rf *`, `cd
+  /srv/dati/build | true; rm -rf *` e `{ cd /srv/dati/build; } | tee log; rm -rf *`, all'inizio di un comando o dentro `bash
+  -c` e `sh -c`, cancellano la cartella del comando: la cancellazione critica dopo di loro ora chiede, in Accesso pieno e in
+  Scrive nel progetto. Fino alla 0.2.1 passavano senza carta fuori da Windows (misurato). I comandi onesti come `cd
+  /srv/dati/build && rm -rf *` o `(cd src && npm run build) && rm -rf dist` passano ancora senza carta. Anche un comando
+  composto in una pipe (`if … fi | cat`, `while … done | cat`, `case … esac | cat`) gira in una sottoshell: `if true; then cd
+  /srv/x; fi | cat; rm -rf *` chiede. I limiti noti di questa regola sono quelli elencati sotto per un comando dato a bash per
+  nome (`CDPATH`, `pushd -n`, un gruppo con una redirezione prima della pipe, una `)` fra virgolette dentro `$( … )`, una
+  funzione, un `cd` che fallisce, `\;&`); `bash -s <<EOF` qui viene seguito.
+- **Windows: a command given to bash inside WSL is read like bash.** `wsl bash -c "rm -rf *"`, `wsl -e bash -c …` and
+  `wsl sh -c …` (also with `-d`, `-u`, `--shell-type` or `--cd`) start in the folder of the command, so they delete the
+  project: the critical delete now asks, in Full access and in Workspace write. Up to 0.2.1 it passed with no card
+  (measured, on the text of the command only).
+- **Windows: un comando dato a bash dentro WSL viene letto come bash.** `wsl bash -c "rm -rf *"`, `wsl -e bash -c …` e
+  `wsl sh -c …` (anche con `-d`, `-u`, `--shell-type` o `--cd`) partono nella cartella del comando, quindi cancellano il
+  progetto: la cancellazione critica ora chiede, in Accesso pieno e in Scrive nel progetto. Fino alla 0.2.1 passava senza
+  carta (misurato, solo sul testo del comando).
+- **Windows: `%ComSpec% /c` is read as cmd also when the variable is missing from the environment TALOS started with.** A
+  `cd` without `/d` inside it does not move, and the critical delete after it asks.
+- **Windows: `%ComSpec% /c` viene letto come cmd anche quando la variabile manca dall'ambiente con cui TALOS è partito.** Un
+  `cd` senza `/d` lì dentro non sposta, e la cancellazione critica dopo di lui chiede.
+
+#### Known limits
+
+- The check reads the command, it does not run it: a script that builds the path while it runs is not seen, and a credential
+  read by a later command, after an earlier one moved to another folder, is judged from the folder of the session. A command
+  that changes folder more than sixteen times asks instead of guessing, also in Full access (a Git Bash path like `/c/…`
+  counts as one move); when every move goes to a different drive with a Git Bash path it asks at the tenth move (see below).
+- Il controllo legge il comando, non lo esegue: uno script che costruisce il percorso mentre gira non si vede, e una
+  credenziale letta da un comando successivo, dopo che uno precedente si è spostato in un'altra cartella, viene giudicata
+  dalla cartella della sessione. Un comando che cambia cartella più di sedici volte chiede invece di tirare a indovinare,
+  anche in Accesso pieno (un percorso di Git Bash come `/c/…` conta come uno spostamento); quando ogni spostamento va su un
+  disco diverso con un percorso di Git Bash chiede al decimo spostamento (vedi sotto).
+- When every `cd` goes to a different drive with a Git Bash path (`cd /a/…`, then `cd /b/…`, then `cd /d/…`) the ceiling of
+  the folders a command can be followed through comes at the tenth move instead of the seventeenth: in Full access the
+  command then asks, also when it is honest. With two drives that alternate (`cd /a/…`, `cd /b/…`, `cd /a/…`), as on one
+  drive, it asks at the seventeenth move. New in this version: 0.2.1 had no ceiling and did not follow these moves (measured).
+- Quando ogni `cd` va su un disco diverso con un percorso di Git Bash (`cd /a/…`, poi `cd /b/…`, poi `cd /d/…`) il tetto
+  delle cartelle in cui un comando si può seguire arriva al decimo spostamento invece che al diciassettesimo: in Accesso pieno
+  il comando allora chiede, anche quando è onesto. Con due dischi che si alternano (`cd /a/…`, `cd /b/…`, `cd /a/…`), come su
+  un disco solo, chiede al diciassettesimo spostamento. Nuovo in questa versione: la 0.2.1 non aveva il tetto e non seguiva
+  questi spostamenti (misurato).
+- A `cd` that does not stay is still followed in these cases: at the start of a command not given to bash by name, a
+  subshell, a pipe, a group in braces or a list sent to the background (for example `(cd build) && rm -rf *` or
+  `{ cd x; } & rm -rf *`); and PowerShell's `Start-Job { cd … }`. A critical delete after it can pass with no card, as in
+  0.2.1 (measured by the checker). The same inside `bash -s <<EOF` (its text is not read with the rule of bash), after
+  `CDPATH=…` (a `cd` to a relative name can land in another folder), after `pushd -n` (it does not change folder) and for a
+  group in braces with a redirection before the pipe (`{ cd x && make; } 2>&1 | tee log`): as in 0.2.1 (measured).
+- Un `cd` che non resta viene ancora seguito in questi casi: all'inizio di un comando non dato a bash per nome, una
+  sottoshell, una pipe, un gruppo fra graffe o una lista mandata in sottofondo (per esempio `(cd build) && rm -rf *` o
+  `{ cd x; } & rm -rf *`); e `Start-Job { cd … }` di PowerShell. Una cancellazione critica dopo di lui può passare senza
+  carta, come nella 0.2.1 (misurato dal controllore). Lo stesso dentro `bash -s <<EOF` (il suo testo non viene letto con la
+  regola di bash), dopo `CDPATH=…` (un `cd` verso un nome relativo può finire in un'altra cartella), dopo `pushd -n` (non
+  cambia cartella) e per un gruppo fra graffe con una redirezione prima della pipe (`{ cd x && make; } 2>&1 | tee log`): come
+  nella 0.2.1 (misurato).
+- The price of reading both cases: a `cd` that really does not stay, but would fall in a critical folder if it stayed, still
+  asks when the command is honest, as in 0.2.1 (for example `bash -c "cd src; cd .. | true; rm -rf *"` or `bash -c "cd src;
+  (cd .. && make); rm -rf *"`, where bash deletes inside `src`). Measured on the 368 forms of the reviews: 12 such cards (10 on
+  Windows) that the previous test build did not show, all of them also in 0.2.1; none on the 20 typical commands, the 12
+  common ones, 14 Linux and 13 phone commands.
+- Four cards are new compared with 0.2.1. The check reads a `}` after a backslash both ways, also as closing `${`, so an `&`
+  after it can look like a background: `bash -c 'cd /d/work/build && echo ${x/\}/&}; rm -rf *'` asks naming the project, while
+  bash deletes inside `build`; and after an `eval` a variable keeps the values of both readings: `cd src; eval 'echo ${x/\}/&}
+  cd ..; X=$PWD'; rm -rf "$X"` asks naming the project, while bash deletes `src` (measured). On Windows, inside `bash -c "…"`,
+  a quote written `\"` keeps its backslash in the path, which then reads as a network path: `bash -c "X=/k/data/out; echo
+  \${x/a/&}; rm -rf \"\$X\"/*"` asks naming the top-level folder `\\k\data\out`, while bash deletes inside `K:\data\out`;
+  0.2.1 already asked the same for the form with the path written out (`rm -rf \"/k/data/out\"/*`), and the new one asks only
+  with an `&` inside `${…}` (measured). The real reader of the shell will fix all three. And inside bash (off Windows, or in a
+  command given to bash with `bash -c` on Windows) more than eight `cd` that may or may not stay in one command (for example
+  nine `(cd x && npm i)` in a row, then `rm -rf dist`) ask instead of being followed, also when honest; at the first level of a
+  Windows command they are not read this way (cmd has no subshells) and do not ask.
+- The price of the ceiling of 300 readings: an honest command that would need more asks «too nested». Eight `(cd x && npm i)`
+  with eight more inside a `bash -c` (also seven and seven, five and five, three levels of three or of four), eight `(cd x &&
+  …)` and one `$(…)`, seven and two, six and four, 300 `$(…)` in one command (150 inside a `bash -c`), and on Windows a `cd` to
+  another drive without `/d` with 100 `$(…)`. Measured on 13 such commands on Windows, Linux, Android and macOS: 11 ask on
+  Windows and 10 on the others, where the previous test build asked for none (and took seconds for the first one); none of
+  the 20 typical commands, the 12 common ones, 14 Linux, 13 phone and 15 macOS commands, and none of the 18,000 random commands
+  of the reviewer.
+- The price of the ceiling of 10,000 units of work: an honest command with a lot of work asks «too nested». Eight `(cd x &&
+  …)` followed by `rm -rf dist/ build/` (two targets with a slash, read in 256 cases), four and four `(cd x && …)` with `rm -rf
+  dist/ build/` inside a `bash -c`, a monorepo cleanup with eight `(cd packages/x && npm ci)` and a `for` over 8 to 16 packages
+  with two to six folders each, a `for` of 16 values with 42 folders each, one `rm -rf` of 700 folders with a slash (3,500
+  without), on Windows `rd /s /q` of 700 folders or `Remove-Item` of 700 folders. Measured on 23 such commands on Windows,
+  Linux, Android and macOS: 12 ask on Windows and 10 on the others, where the previous test build asked for none (and took
+  seconds for the monorepo ones); eight `(cd x && …)` with `rm -rf dist/`, with six folders without a slash, or with a `for` of
+  16 values and six folders without `cd`, still pass. None of the 20 typical commands, the 12 common ones, 14 Linux, 13 phone
+  and 15 macOS commands, and none of the 23,272 random commands of the reviewers, asks for this.
+- Il prezzo della lettura dei due casi: un `cd` che davvero non resta, ma che se restasse cadrebbe in una cartella critica,
+  chiede ancora quando il comando è onesto, come nella 0.2.1 (per esempio `bash -c "cd src; cd .. | true; rm -rf *"` o
+  `bash -c "cd src; (cd .. && make); rm -rf *"`, dove bash cancella dentro `src`). Misurato sulle 368 forme delle revisioni:
+  12 carte così (10 su Windows) che la versione di prova precedente non mostrava, tutte presenti anche nella 0.2.1; nessuna sui
+  20 comandi tipici, sui 12 comuni, su 14 comandi di Linux e 13 del telefono.
+- Quattro carte sono nuove rispetto alla 0.2.1. Il controllo legge una `}` dopo una barra rovescia nei due modi, anche come
+  fine di `${`, quindi un `&` dopo di lei può sembrare un sottofondo: `bash -c 'cd /d/work/build && echo ${x/\}/&}; rm -rf *'`
+  chiede nominando il progetto, mentre bash cancella dentro `build`; e dopo un `eval` una variabile tiene i valori delle due
+  letture: `cd src; eval 'echo ${x/\}/&} cd ..; X=$PWD'; rm -rf "$X"` chiede nominando il progetto, mentre bash cancella `src`
+  (misurato). Su Windows, dentro `bash -c "…"`, una virgoletta scritta `\"` lascia la sua barra nel percorso, che allora si
+  legge come un percorso di rete: `bash -c "X=/k/data/out; echo \${x/a/&}; rm -rf \"\$X\"/*"` chiede nominando la cartella di
+  primo livello `\\k\data\out`, mentre bash cancella dentro `K:\data\out`; la 0.2.1 chiedeva già lo stesso per la forma col
+  percorso scritto (`rm -rf \"/k/data/out\"/*`), e quella nuova chiede solo con un `&` dentro `${…}` (misurato). Le sistemerà
+  tutte e tre il lettore vero della shell. E dentro bash (fuori da Windows, o in un comando dato a bash con `bash -c` su
+  Windows) più di otto `cd` che possono restare o no in un comando solo (per esempio nove `(cd x && npm i)` di fila, poi `rm
+  -rf dist`) chiedono invece di essere seguiti, anche quando sono onesti; al primo livello di un comando di Windows non si
+  leggono così (cmd non ha sottoshell) e non chiedono.
+- Il prezzo del tetto di 300 letture: un comando onesto che ne chiederebbe di più chiede «troppo annidato». Otto `(cd x && npm
+  i)` con altri otto dentro un `bash -c` (anche sette e sette, cinque e cinque, tre livelli da tre o da quattro), otto `(cd x
+  && …)` e un `$(…)`, sette e due, sei e quattro, 300 `$(…)` in un comando (150 dentro un `bash -c`), e su Windows un `cd`
+  verso un altro disco senza `/d` con 100 `$(…)`. Misurato su 13 comandi così su Windows, Linux, Android e macOS: ne chiedono
+  11 su Windows e 10 sugli altri, dove la versione di prova precedente non ne chiedeva nessuno (e per il primo ci metteva
+  secondi); nessuno fra i 20 comandi tipici, i 12 comuni, i 14 di Linux, i 13 del telefono e i 15 di macOS, e nessuno dei
+  18.000 comandi a caso del revisore.
+- Il prezzo del tetto di 10.000 unità di lavoro: un comando onesto con tanto lavoro chiede «troppo annidato». Otto `(cd x &&
+  …)` seguiti da `rm -rf dist/ build/` (due bersagli con la barra, letti in 256 casi), quattro e quattro `(cd x && …)` con `rm
+  -rf dist/ build/` dentro un `bash -c`, una pulizia di monorepo con otto `(cd packages/x && npm ci)` e un `for` su 8-16
+  pacchetti con da due a sei cartelle ciascuno, un `for` di 16 valori con 42 cartelle ciascuno, un `rm -rf` di 700 cartelle con
+  la barra (3.500 senza), su Windows `rd /s /q` di 700 cartelle o `Remove-Item` di 700 cartelle. Misurato su 23 comandi così su
+  Windows, Linux, Android e macOS: ne chiedono 12 su Windows e 10 sugli altri, dove la versione di prova precedente non ne
+  chiedeva nessuno (e per quelli del monorepo ci metteva secondi); otto `(cd x && …)` con `rm -rf dist/`, con sei cartelle senza
+  barra, o un `for` di 16 valori e sei cartelle senza `cd`, passano ancora. Nessuno fra i 20 comandi tipici, i 12 comuni, i 14
+  di Linux, i 13 del telefono e i 15 di macOS, e nessuno dei 23.272 comandi a caso dei revisori, chiede per questo.
+- Three cases are not followed, as in 0.2.1 (measured): a `)` in quotes inside `$( … )` hides the commands after it (`bash -c
+  'x=$(echo ")"); rm -rf *'`), a `cd` inside a function (`function f { cd ..; }; cd src; f; rm -rf *`), and a `cd` that fails
+  (`cd nonesiste; rm -rf *`: bash stays where it was). A critical delete after them can pass with no card.
+- Tre casi non vengono seguiti, come nella 0.2.1 (misurato): una `)` fra virgolette dentro `$( … )` nasconde i comandi dopo di
+  lei (`bash -c 'x=$(echo ")"); rm -rf *'`), un `cd` dentro una funzione (`function f { cd ..; }; cd src; f; rm -rf *`), e un
+  `cd` che fallisce (`cd nonesiste; rm -rf *`: bash resta dov'era). Una cancellazione critica dopo di loro può passare senza
+  carta.
+- An `&` right after `\;` or after a backslash at the end of a line is not seen as a background, as in 0.2.1 (measured): in
+  `bash -c "cd /d/work/build && find . -exec ls {} \;& rm -rf *"` the `cd` goes to the background and `rm -rf *` deletes the
+  project, with no card.
+- Un `&` subito dopo `\;` o dopo una barra rovescia in fondo alla riga non viene visto come sottofondo, come nella 0.2.1
+  (misurato): in `bash -c "cd /d/work/build && find . -exec ls {} \;& rm -rf *"` il `cd` va in sottofondo e `rm -rf *` cancella il
+  progetto, senza carta.
+- Inside WSL `~` is the Linux home: `wsl sh -c "rm -rf ~"` asks naming your Windows home, and `wsl ~ bash -c "rm -rf *"`
+  (which starts in the Linux home) passes with no card, as in 0.2.1 (measured, on the text of the command only).
+- Dentro WSL `~` è la casa di Linux: `wsl sh -c "rm -rf ~"` chiede nominando la tua casa di Windows, e `wsl ~ bash -c
+  "rm -rf *"` (che parte nella casa di Linux) passa senza carta, come nella 0.2.1 (misurato, solo sul testo del comando).
+- An example file (such as `.env.example`) that holds a real key, read by a relative name after a `cd` or `pushd` to another
+  folder, is judged from the folder of the session: in Full access and Workspace write it passes with no card, as in 0.2.1
+  (measured by the checker). The same file named with its full path asks.
+- Un file d'esempio (come `.env.example`) che contiene una chiave vera, letto col nome relativo dopo un `cd` o un `pushd` verso
+  un'altra cartella, viene giudicato dalla cartella della sessione: in Accesso pieno e in Scrive nel progetto passa senza carta,
+  come nella 0.2.1 (misurato dal controllore). Lo stesso file nominato col percorso intero chiede.
+- In Full access, a command that moves into your home without `cd`, `pushd` or `Set-Location` (a variable set in the same
+  command, `cd..` written together, `git -C`, `start /d`, `Start-Process -WorkingDirectory`, `env -C`, or `cd C:%HOMEPATH%`)
+  and then reads a credential file by a relative name is judged from the folder of the session, as in 0.2.1.
+- In Accesso pieno, un comando che entra nella tua casa senza `cd`, `pushd` o `Set-Location` (una variabile assegnata nello
+  stesso comando, `cd..` scritto attaccato, `git -C`, `start /d`, `Start-Process -WorkingDirectory`, `env -C`, oppure
+  `cd C:%HOMEPATH%`) e poi legge un file di credenziali col nome relativo viene giudicato dalla cartella della sessione, come
+  nella 0.2.1.
+- In Full access a credential file of your home can still be read with no card after a bare drive letter followed by a
+  relative path or a `cd` with no drive, after `cd/d` with no space, after `start /d`, or after moving with a PowerShell
+  variable.
+- In Accesso pieno un file di credenziali della tua casa si può ancora leggere senza carta dopo la sola lettera del disco
+  seguita da un percorso relativo o da un `cd` senza disco, dopo `cd/d` senza spazio, dopo `start /d`, o dopo uno
+  spostamento con una variabile di PowerShell.
+- A `cd` to a folder written with a wildcard (`cd C:\Users\you\*`, `cd C:\Users\you\Doc*`) is not followed: a read after it
+  is judged from the folder the command was in before, as in 0.2.1.
+- Un `cd` verso una cartella scritta con un carattere jolly (`cd C:\Users\tu\*`, `cd C:\Users\tu\Doc*`) non viene seguito:
+  una lettura dopo di lui viene giudicata dalla cartella in cui il comando era prima, come nella 0.2.1.
+- A folder blocked for a device can still be read, at every access level, by a command that first moves next to it and then
+  names it with a relative path (for example `cd ..` then `type blocked\file`).
+- Una cartella bloccata per un dispositivo si può ancora leggere, a ogni livello di accesso, con un comando che prima si
+  sposta accanto a lei e poi la nomina con un percorso relativo (per esempio `cd ..` e poi `type bloccata\file`).
+- A command that first moves into the folder above a folder blocked for a device and then reads inside it is not refused
+  (as in 0.2.0 and 0.2.1).
+- Un comando che prima si sposta nella cartella sopra una cartella bloccata per un dispositivo e poi ci legge dentro non
+  viene rifiutato (come nella 0.2.0 e nella 0.2.1).
+- In Full access `git clean -fdx`, which also deletes ignored files such as `.env`, passes with no card, and so does a change
+  to an `.env.example` file by the file tools (`robocopy /MIR` onto the project or the home is seen as a critical delete).
+- In Accesso pieno `git clean -fdx`, che cancella anche i file ignorati come `.env`, passa senza carta, e così una modifica a
+  un file `.env.example` dagli attrezzi dei file (`robocopy /MIR` sul progetto o sulla casa viene visto come cancellazione
+  critica).
+- Known limits on Windows: a drive letter that is an alias of a folder and a project opened through this computer's own
+  network path are not always recognised as the protected place. A path written relative to a drive's current folder is read
+  from the folder of the session and from the top of that drive, not from a folder an earlier command moved to.
+- Limiti noti su Windows: una lettera di disco che è il nome di comodo di una cartella e un progetto aperto dal percorso di
+  rete di questo stesso computer non sempre vengono riconosciuti come il posto protetto. Un percorso relativo alla cartella
+  corrente di un disco viene letto dalla cartella della sessione e dalla cima di quel disco, non da una cartella in cui un
+  comando precedente si era spostato.
+- Known limits on Windows: a protected path written through an unusual alias (a file:// address, a prefix glued to the path,
+  a variable other than the home ones, an NTFS stream on a folder, a Git Bash special folder) is not always recognised.
+- Limiti noti su Windows: un percorso protetto scritto con un alias insolito (un indirizzo file://, un prefisso incollato al
+  percorso, una variabile diversa da quelle della casa, un flusso NTFS su una cartella, una cartella speciale di Git Bash) non
+  sempre è riconosciuto.
+- A path that names the disk by its volume identifier, by this computer's network address, or with slashes doubled after
+  this computer's name is not always recognised as the protected place: in Full access a credential file can be read or
+  written with no card, a critical delete can go unseen, and a folder blocked for a device can be read (as in 0.2.1).
+- Un percorso che nomina il disco col suo identificativo di volume, con l'indirizzo di rete di questo computer o con le barre
+  raddoppiate dopo il nome di questo computer non sempre è riconosciuto come il posto protetto: in Accesso pieno un file di
+  credenziali può essere letto o scritto senza carta, una cancellazione critica può passare non vista, e una cartella
+  bloccata per un dispositivo può essere letta (come nella 0.2.1).
+- In Workspace write, reading an ordinary file of the project written in the long form with doubled slashes
+  (`\\?\C:\\…\\notes.txt`) now shows one card, "outside the working folder", where it showed none. A path in
+  the long form is never read as inside the project: the long form without doubled slashes already asked the same way, and
+  joining the slashes is what makes a credential written that way ask. Full access shows no card, On request its usual one;
+  the same file written the normal way does not change.
+- In Scrive nel progetto, leggere un file qualunque del progetto scritto nella forma lunga con le barre raddoppiate
+  (`\\?\C:\\…\\note.txt`) ora mostra una carta, «fuori dalla cartella di lavoro», dove prima non ne mostrava. Un
+  percorso nella forma lunga non viene mai letto come dentro il progetto: la forma lunga senza barre raddoppiate chiedeva già
+  così, e unire le barre è ciò che fa chiedere una credenziale scritta in quel modo. In Accesso pieno nessuna carta, in Su
+  richiesta la sua di sempre; lo stesso file scritto in modo normale non cambia.
+- In Full access, the home written as its drive and its path with a slash between them, or with the system drive in place of
+  the home drive, is not read as the home (as in 0.2.1).
+- In Accesso pieno la casa scritta come il suo disco e il suo percorso con una barra in mezzo, o col disco di sistema al posto
+  del disco della casa, non viene letta come la casa (come nella 0.2.1).
+- In Full access these still pass with no card: the home, or a folder above it, written with a dot right after its name;
+  quotes around the folder part only of a path; and, for a critical delete, a backtick or a backslash in the middle of the
+  name.
+- In Accesso pieno questi passano ancora senza carta: la casa, o una cartella sopra di lei, scritta con un punto subito dopo
+  il nome; le virgolette attorno alla sola parte della cartella di un percorso; e, per una cancellazione critica, un accento
+  grave o una barra rovescia in mezzo al nome.
+- A drive-less path that is spelled like a protected one may ask or be refused even when it points to another disk: a command
+  is also read on the disk of TALOS, on the disk of your home and on every disk it names; the file tools read it on the disk
+  of the project and on the disk of TALOS.
+- Un percorso senza disco scritto come uno protetto può chiedere o essere rifiutato anche se porta su un altro disco: un
+  comando viene letto anche sul disco di TALOS, sul disco della tua casa e su ogni disco che nomina; gli attrezzi dei file lo
+  leggono sul disco del progetto e sul disco di TALOS.
+- With WSL installed and «Automatic», a command whose program also exists in Linux runs there, where the same path means
+  another place: the card can show for a file that command would not have reached.
+- Con WSL installato e «Automatico», un comando il cui programma esiste anche in Linux gira lì, dove lo stesso percorso
+  indica un altro posto: la carta può comparire per un file che quel comando non avrebbe raggiunto.
 ## desktop-v0.2.2 — 2026-11-15
 
 ### Security
@@ -237,7 +1813,7 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   as CSV, image or text from their «⋯» menu or a right-click. On by default; «Live blocks in replies» in Settings turns them off.
 - **Computer use (Preview).** When you turn it on, the model can see and use apps and the browser on this PC: a TALOS cursor
   shows where it clicks, the window it watches gets a border, and a small bubble says what it is doing. It asks before steps
-  that change things, watches more closely on sensitive sites and apps, and remembers the places you allow. See Known limits.
+  that change things and remembers the places you allow. See Known limits.
 - **A side chat.** Ask a question about the conversation while TALOS works: it reads the chat, writes nothing to it, does not
   interrupt the turn and is not saved. It shows the estimated cost in dollars when the model's price is known.
 - **Change TALOS settings from the chat.** Ask the model, or type `/settings`: every change shows a card with what changes and
@@ -245,8 +1821,9 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   change pushed by a suspicious reason is shown in a danger box.
 - **A notification centre on the PC.** «To do» and «All» list cards waiting for you, finished chats, automations and changes,
   shared with your paired devices: what you mark as seen on one is seen everywhere.
-- **Deep research from the composer.** Start it from the «+» menu, `/research` or the Research section, choose how deep it
-  goes; when the model proposes one, you get a card where you can edit the question and see the depth and estimated cost.
+- **Deep research.** Start it with «New research» at the top of the Deep research section, or ask the model for one, and
+  choose how deep it goes; when the model proposes one, you get a card where you can edit the question and see the depth and
+  estimated cost.
 - **A list of steps above the live row.** The model can keep a short plan of the turn; the chat shows the current step with its
   seconds, and a revised plan replaces the old one, which folds into a row.
 - **Allow all.** With two or more requests waiting, a bar above the composer lists them all in full and allows them in one press.

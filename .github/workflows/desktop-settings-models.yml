@@ -37,7 +37,7 @@ jobs:
           npm --prefix harness-ui/frontend run build
           node harness-ui/node_modules/typescript/bin/tsc -p harness-ui/frontend/tsconfig.refactor.json
           mkdir -p harness-ui/frontend/test-results/settings-models
-          node --test harness-ui/frontend/tests/refactor/*.test.mjs harness-ui/frontend/tests/unit/impostazioni.test.mjs > harness-ui/frontend/test-results/settings-models/focused-tests.log 2>&1 || { tail -100 harness-ui/frontend/test-results/settings-models/focused-tests.log; exit 1; }
+          node --test --import=./harness-ui/desktop/tests/gancio-portachiavi.mjs harness-ui/frontend/tests/refactor/*.test.mjs harness-ui/frontend/tests/unit/impostazioni.test.mjs > harness-ui/frontend/test-results/settings-models/focused-tests.log 2>&1 || { tail -100 harness-ui/frontend/test-results/settings-models/focused-tests.log; exit 1; }
       - name: Complete frontend suite
         id: unit
         continue-on-error: true

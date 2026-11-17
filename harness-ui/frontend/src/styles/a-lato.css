@@ -7,3 +7,185 @@
 .lato-campo input{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--talos-border);border-radius:9px;background:var(--talos-panel-soft);color:var(--talos-text);font:inherit;font-size:13px}
 .lato-piede{display:flex;align-items:center;gap:8px;min-height:32px}
 .lato-piede [hidden]{display:none}
+
+/* ⭐ L'Assistente (owner 11/11/2026, bozzetto firmato `giudice/corsie/bozzetto-assistente-laterale/index.html`, righe 162-303): testa con stato,
+   flusso che scorre, piede fermo. Solo gettoni del tema (`tokens.css`): nessun colore nuovo, chiaro e scuro dalle stesse regole.
+   La colonna scorre dentro il pannello, non il corpo della scheda: il piede (campo, spesa) resta in vista. */
+#railLato:not([hidden]):not(.talos-inspector__body--artefatto){padding:0;overflow:hidden;display:flex;flex-direction:column}
+.lato.al{gap:0;position:relative;min-height:0;flex:1 1 auto}
+/* misurato a 280 px (11/11): il nome «Guardo questa chat» restava «Guar…» accanto alla pastiglia; sotto 330 px la pastiglia lascia il posto
+   (la riga sotto dice già «Non scrive, non esegue») */
+.lato.al{container-type:inline-size}
+/* giudice v1596 punto 8: la pastiglia «Sola lettura» si vede anche alla larghezza di serie (340 px). Sotto 420 px la riga diventa una griglia:
+   il nome va a capo sopra (tre righe al più: a 280 px la frase intera ne vuole tre), la pastiglia sta sotto il nome, segno e interruttore ai lati */
+@container (max-width: 420px){
+  .al .al-testa > .al-riga{display:grid;grid-template-columns:30px minmax(0,1fr) auto;column-gap:10px;row-gap:6px;align-items:center}
+  .al .al-testa > .al-riga > .al-segno{grid-row:1 / span 2;align-self:start}
+  .al .al-testa > .al-riga > .al-nomi{grid-column:2;grid-row:1}
+  .al .al-testa > .al-riga > .al-sola{grid-column:2;grid-row:2;justify-self:start}
+  .al .al-testa > .al-riga > .talos-switch{grid-column:3;grid-row:1 / span 2;align-self:start}
+}
+.al .al-nomi b{white-space:normal;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;line-clamp:3}
+.al [hidden]{display:none!important}
+.al-testa{flex:none;padding:12px 12px 10px;border-bottom:1px solid var(--talos-border)}
+.al-riga{display:flex;align-items:center;gap:10px}
+.al-segno{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--talos-accent-soft);color:var(--talos-accent-text);flex:none}
+.al-segno svg{width:16px;height:16px}
+.al-nomi{flex:1;min-width:0}
+.al-nomi b{display:block;font-size:13.5px;font-weight:600;color:var(--talos-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.al-nomi small{display:block;font-size:12px;color:var(--talos-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.al-sola{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border:1px solid var(--talos-accent-border);border-radius:999px;color:var(--talos-accent-text);font:600 11.5px/1.3 var(--talos-font-ui);white-space:nowrap;flex:none}
+.al-sola::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.al-regola{margin:9px 0 0;font-size:12.5px;font-weight:600;color:var(--talos-text)}
+.al-legge{margin-top:2px;padding:0;font-size:12.5px;color:var(--talos-muted);text-decoration:underline dotted;text-underline-offset:3px;text-align:left;cursor:pointer}
+.al-legge:hover{color:var(--talos-text)}
+.al > .talos-inspector__hint{margin:12px 12px 0}
+.al-flusso{flex:1;min-height:0;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.al-flusso > .lato-filo{flex:none;overflow:visible}
+.al-indietro{align-self:flex-start}
+.al-vista{display:flex;flex-direction:column;gap:10px}
+.al-quieto{padding:14px 12px;border:1px dashed var(--talos-border);border-radius:12px;font-size:13px;color:var(--talos-assistant-text)}
+.al-quieto p{margin:0}
+.al-quieto p + p{margin-top:4px;color:var(--talos-muted);font-size:12.5px}
+.al-onesta{margin:auto 0 0;padding:2px 0 0 9px;border-left:2px solid var(--talos-border-strong);font-size:12px;line-height:1.5;color:var(--talos-muted)}
+.al-nota{margin:0;font-size:12.5px;color:var(--talos-muted)}
+.al-link{align-self:flex-start;padding:0;font-size:12px;color:var(--talos-muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.al-link:hover{color:var(--talos-text)}
+.carta-al{border:1px solid var(--talos-border);border-radius:12px;background:var(--talos-panel);padding:10px 12px;display:flex;flex-direction:column;gap:7px;flex:none}
+.carta-al h3{margin:0;font-size:13.5px;font-weight:600;line-height:1.4;color:var(--talos-text)}
+.carta-al p{margin:0}
+.al-primo .al-riga p{font-size:13px;color:var(--talos-text)}
+/* la risposta: il Markdown della chat (`renderizzaMarkdownSemplice`), un po' più piccolo nella colonna; tabelle e codice lunghi scorrono dentro */
+.lato-msg .al-md{font-size:13.5px;line-height:1.65;color:var(--talos-assistant-text);overflow-wrap:anywhere;min-width:0;max-width:100%}
+.lato-msg .al-md p{white-space:normal;color:var(--talos-assistant-text)}
+.lato-msg .al-md > :first-child{margin-top:2px}
+.lato-msg .al-md > :last-child{margin-bottom:0}
+.lato-msg .al-md pre{max-width:100%;overflow-x:auto}
+/* misurato a 280 px (11/11): le celle andavano a capo lettera per lettera («src/a.js» in tre righe). Revisore C e giudice v1564 (11/11 sera): a 280,
+   340 e 1200 px le tabelle risultavano TAGLIATE a destra («What it does righ»): le intestazioni non andavano mai a capo (index.css, th nowrap)
+   e la tabella scorreva senza un bordo che lo dicesse. Ora le celle vanno a capo fra le parole (mai a metà parola, salvo una parola più larga
+   della colonna), e ciò che resta più largo scorre DENTRO una casella col bordo, con l'ombra sul lato che continua (sfondi local e scroll). */
+.lato-msg .al-md .md-table-wrap{margin:8px 0;max-width:100%;overflow-x:auto;border:1px solid var(--talos-border);border-radius:9px;padding:0 10px;
+  background:linear-gradient(to right,var(--talos-panel) 40%,transparent) left/22px 100% no-repeat local,linear-gradient(to left,var(--talos-panel) 40%,transparent) right/22px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%,var(--talos-border-strong),transparent) left/9px 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,var(--talos-border-strong),transparent) right/9px 100% no-repeat scroll}
+.lato-msg .al-md .md-table-wrap .md-table{display:table;width:100%;margin:0}
+.lato-msg .al-md th,.lato-msg .al-md td{white-space:normal;overflow-wrap:break-word;word-break:normal;hyphens:auto;min-width:0;max-width:24ch}
+.lato-msg .al-md .md-table tr:last-child td{border-bottom:0}
+.lato-msg--tu p{color:var(--talos-text)}
+.attesa{display:flex;align-items:center;gap:6px}
+.attesa::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--talos-accent);animation:talos-al-pulsa 1.4s ease-in-out infinite}
+@keyframes talos-al-pulsa{0%,100%{opacity:.35}50%{opacity:1}}
+@media (prefers-reduced-motion: reduce){.attesa::before{animation:none}}
+/* il riferimento a un file (`percorso:righe`): in chat apre la scheda File, qui una sbirciata */
+.talos-link-file{display:inline;padding:0;border:0;background:none;cursor:pointer;text-align:left;font:inherit}
+.talos-link-file > code{color:var(--talos-accent-text);background:var(--talos-accent-soft);border:1px solid var(--talos-accent-border);border-radius:5px;padding:0 5px;overflow-wrap:anywhere}
+.talos-link-file:hover > code{border-color:var(--talos-accent)}
+.talos-link-file:focus-visible{outline:var(--talos-focus-width,2px) solid var(--talos-ring);outline-offset:1px;border-radius:5px}
+.lato-piede.al-piede{flex:none;flex-direction:column;align-items:stretch;border-top:1px solid var(--talos-border);padding:10px 12px 12px;gap:8px}
+.al-pronte{display:flex;flex-wrap:wrap;gap:5px}
+.al-pronte button{padding:4px 9px;border:1px solid var(--talos-border);border-radius:999px;font-size:12px;color:var(--talos-muted);background:none;cursor:pointer}
+.al-pronte button:hover:not(:disabled){color:var(--talos-text);border-color:var(--talos-border-strong)}
+.al-pronte button:disabled{opacity:.55;cursor:default}
+.al-conto{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--talos-muted)}
+.al-conto .talos-mono{font-size:11.5px}
+.al-mod{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border:1px solid var(--talos-border);border-radius:8px;font-size:12px;color:var(--talos-text);background:none;cursor:pointer}
+.al-mod:hover{border-color:var(--talos-border-strong)}
+.al-azioni-piede{display:flex;gap:6px;justify-content:flex-end}
+.al-azioni-piede:not(:has(> :not([hidden]))){display:none}
+.al-accendi{display:flex;flex-direction:column;gap:10px;margin:12px 12px 0;padding:12px;border:1px solid var(--talos-border);border-radius:12px;background:var(--talos-panel)}
+.al-accendi .al-riga p{margin:0;font-size:13px;color:var(--talos-text)}
+.al-accendi .talos-button{align-self:flex-start}
+/* «Cosa può leggere» e «Privacy e spesa» */
+.strum{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.strum li{display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid var(--talos-border-subtle);font-size:13px;color:var(--talos-text)}
+.strum li:last-child{border-bottom:0}
+.strum .ok{color:var(--talos-success);flex:none}
+.strum .no{color:var(--talos-muted);flex:none}
+.strum .nome{flex:1;min-width:0}
+.strum .nome small{display:block;font-size:12px;color:var(--talos-muted)}
+.strum .quante{font:11.5px var(--talos-font-mono);color:var(--talos-muted);white-space:nowrap}
+.diario li{font-size:12.5px;color:var(--talos-assistant-text);overflow-wrap:anywhere}
+.diario time{font:11.5px var(--talos-font-mono);color:var(--talos-muted);margin-right:6px}
+.regola-grande{padding:12px;border:1px solid var(--talos-accent-border);border-radius:12px;background:var(--talos-accent-soft);color:var(--talos-accent-text)}
+.regola-grande b{display:block;font-size:14px}
+.regola-grande span{display:block;margin-top:3px;font-size:12.5px;color:var(--talos-text)}
+.priv h4{font-size:12.5px;font-weight:600;color:var(--talos-text);margin:2px 0 4px}
+.priv p{font-size:12.5px;color:var(--talos-assistant-text)}
+.cifre{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cifre div{padding:8px 10px;border:1px solid var(--talos-border);border-radius:10px}
+.cifre b{display:block;font:500 18px/1.2 var(--talos-font-mono);color:var(--talos-text)}
+.cifre span{font-size:11.5px;color:var(--talos-muted)}
+/* la sbirciata di un file, sola lettura, sopra il pannello */
+.sbircia{position:absolute;left:0;right:0;bottom:0;height:72%;display:flex;flex-direction:column;background:var(--talos-panel);border-top:1px solid var(--talos-border-strong);box-shadow:0 -18px 40px rgb(0 0 0 / 28%);z-index:3}
+.sbircia-testa{display:flex;align-items:center;gap:8px;padding:9px 10px 9px 12px;border-bottom:1px solid var(--talos-border)}
+.sbircia-testa b{flex:1;min-width:0;font:500 12px var(--talos-font-mono);color:var(--talos-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sbircia-testa .chiudi{width:28px;height:28px;border-radius:8px;color:var(--talos-muted);display:grid;place-items:center;background:none;cursor:pointer}
+.sbircia-testa .chiudi:hover{background:var(--talos-panel-soft);color:var(--talos-text)}
+.sbircia pre{margin:0;flex:1;overflow:auto;padding:8px 0;background:var(--talos-window-bg);font:12px/1.65 var(--talos-font-mono);color:var(--talos-text)}
+.riga-f{display:inline-flex;min-width:100%;padding:0 12px 0 0;white-space:pre}
+.riga-f i{font-style:normal;width:40px;flex:none;text-align:right;padding-right:12px;color:var(--talos-muted);user-select:none}
+.riga-f--hl{background:var(--talos-accent-soft)}
+.riga-f--hl i{color:var(--talos-accent-text)}
+/* sotto un artefatto aperto resta la domanda di oggi: niente testa, righe di riposo né domande pronte */
+.talos-inspector__body--artefatto .al-testa,.talos-inspector__body--artefatto .al-quieto,.talos-inspector__body--artefatto .al-primo,
+.talos-inspector__body--artefatto .al-onesta,.talos-inspector__body--artefatto .al-pronte,.talos-inspector__body--artefatto .al-accendi{display:none!important}
+.talos-inspector__body--artefatto .al-flusso{padding:0}
+.talos-inspector__body--artefatto .lato-piede.al-piede{border-top:0;padding:8px 0 0}
+
+/* 0.2.1-ART D2 (owner 09/11/2026 19:55, bozzetto approvato, righe 124-145): l'artefatto nella scheda «A lato». Sopra la testa
+   (titolo, ✕, i tre pulsanti sempre in vista), in mezzo la pagina che prende tutto lo spazio, in fondo la domanda a parte.
+   La larghezza è quella della colonna: la sceglie la maniglia che c'è già (`.talos-resizer--inspector`, 280–720 px). */
+.lato-art{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.lato-art[hidden]{display:none}
+.lato-art__testa{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 10px 10px 14px;border-bottom:1px solid var(--talos-border)}
+.lato-art__nomi{order:1;flex:1;min-width:0}
+.lato-art__titolo{font-weight:600;font-size:13.5px;line-height:1.35;color:var(--talos-text)}
+.lato-art__sotto{display:block;font-size:12px;color:var(--talos-muted)}
+.lato-art__sotto[hidden]{display:none}
+.lato-art__testa .lato-art__chiudi{order:2;width:30px;min-width:30px;height:30px;min-height:30px;border-radius:8px;color:var(--talos-muted);cursor:pointer}
+.lato-art__testa .lato-art__chiudi:hover{background:var(--talos-panel-soft);color:var(--talos-text)}
+.lato-art__azioni{order:3;flex-basis:100%;display:flex;flex-wrap:wrap;gap:6px}
+.lato-art__azioni .talos-button{min-height:30px;padding:0 10px;font-size:12.5px;cursor:pointer}
+.lato-art__cornice{flex:1 1 auto;min-height:0;width:100%;border:0;background:var(--talos-window-bg)}
+/* con un artefatto aperto il corpo della scheda non scorre e non ha margini: scorre la pagina, e il filo della domanda a parte */
+.talos-inspector__body--artefatto:not([hidden]){display:flex;flex-direction:column;padding:0;overflow:hidden}
+.talos-inspector__body--artefatto .lato{flex:none;height:auto;max-height:45%;padding:10px 12px;border-top:1px solid var(--talos-border)}
+.talos-inspector__body--artefatto .lato > .talos-inspector__hint{display:none}
+.talos-inspector__body--artefatto .lato-filo:empty{display:none}
+.talos-inspector__body--artefatto .lato-piede:not(:has(> :not([hidden]):not(.talos-grow))){display:none}
+/* la linguetta dice che di là c'è un artefatto aperto, anche quando si guarda un'altra scheda. Il pallino sta sull'angolo, fuori dal
+   flusso (come il punto di stato di Hermes, `screen-portal.tsx:197`): in fila allargava la linguetta e a 340 px la riga scorreva e
+   tagliava «Context» (foto del 09/11/2026 23:30). */
+#railTabs [data-rail="lato"][data-con-artefatto]{position:relative}
+#railTabs [data-rail="lato"][data-con-artefatto]::after{content:"";position:absolute;top:5px;right:0;width:6px;height:6px;border-radius:50%;background:var(--talos-accent);pointer-events:none}
+
+/* ⭐ Giro di cura A+B+C (11/11/2026 sera). Gettoni del tema, chiaro e scuro dalle stesse regole; forme prese dal bozzetto firmato
+   (`bozzetto-assistente-laterale/index.html`, righe 133-134 `.evid`, 216-220 `.rif`, 268-273 `.scelte-mod`). */
+/* la carta di un indirizzo (owner 21:40): l'indirizzo INTERO, che va a capo dove serve e non si taglia mai */
+.al-carta{border:1px solid var(--talos-accent-border);border-radius:12px;background:var(--talos-accent-soft);padding:10px 12px;display:flex;flex-direction:column;gap:7px}
+.al-carta-titolo{font-size:13px;font-weight:600;color:var(--talos-text)}
+.al-carta-indirizzo{display:block;padding:7px 9px;border-radius:8px;background:var(--talos-panel);border:1px solid var(--talos-border);font:12px/1.5 var(--talos-font-mono);color:var(--talos-text);overflow-wrap:anywhere;word-break:break-all;white-space:pre-wrap;max-height:9em;overflow:auto}
+.al-carta-avviso{margin:0;font-size:12.5px;font-weight:600;color:var(--talos-warning)}
+.al-carta-azioni{display:flex;gap:8px;flex-wrap:wrap}
+/* lo Stop prende il posto di «Chiedi» */
+.lato-campo .al-ferma{flex:none}
+/* i riferimenti sotto la risposta */
+.rifs{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.rif{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border:1px solid var(--talos-border);border-radius:999px;background:var(--talos-card-subtle, var(--talos-panel-soft));font-size:12px;color:var(--talos-assistant-text);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.rif--f{font-family:var(--talos-font-mono);font-size:11.5px;color:var(--talos-accent-text);border-color:var(--talos-accent-border)}
+.rif:hover{background:var(--talos-card-hover, var(--talos-panel));border-color:var(--talos-border-strong)}
+/* il messaggio o il passo citato lampeggia una volta nella chat; col movimento ridotto resta il solo contorno */
+.al-evidenziato{outline:2px solid var(--talos-accent);outline-offset:4px;border-radius:12px;animation:talos-al-evid 1.8s ease-out}
+@keyframes talos-al-evid{0%{background:var(--talos-accent-soft)}100%{background:transparent}}
+@media (prefers-reduced-motion: reduce){.al-evidenziato{animation:none}}
+.interface-motion-off .al-evidenziato{animation:none}
+/* «Ultimo giro guardato» */
+.al-ultimo{margin:0;font-size:12.5px;color:var(--talos-muted)}
+/* «Con che modello pensa»: tre scelte, come il bozzetto */
+.scelte-mod{display:flex;flex-direction:column;gap:5px}
+.scelte-mod button{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--talos-border);border-radius:9px;font-size:13px;text-align:left;color:var(--talos-text);cursor:pointer;min-width:0}
+.scelte-mod button::before{content:"";width:12px;height:12px;border-radius:50%;border:2px solid var(--talos-border-strong);flex:none}
+.scelte-mod button[aria-checked="true"]{border-color:var(--talos-accent-border);background:var(--talos-accent-soft)}
+.scelte-mod button[aria-checked="true"]::before{border-color:var(--talos-accent);background:radial-gradient(var(--talos-accent) 45%,transparent 50%)}
+.scelte-mod button:hover{border-color:var(--talos-border-strong)}
+.scelte-mod small{margin-left:auto;font-size:11.5px;color:var(--talos-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}

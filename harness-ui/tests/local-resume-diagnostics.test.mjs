@@ -6,7 +6,9 @@ import { join } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { createLocalResumeDiagnostics, createResumeRecorder, createBoundedResumeSink, RESUME_LIMITS } from '../src/local-resume-diagnostics.mjs';
 import { createLlamaServerRuntime } from '../src/local-runtime-llama-server.mjs';
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 const enc = new TextEncoder();
 const raw = 'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n';
 const response = () => new Response(new ReadableStream({ start(c) { c.enqueue(enc.encode(raw)); c.close(); } }), { headers: { 'content-type': 'text/event-stream' } });
@@ -103,10 +105,10 @@ test('real supervisor receives identical launch args; process closure is distinc
   })));
   await supervisor.start({ modelId: 'SECRET-model', modelPath: join(tmpdir(), 'SECRET-model.gguf'), contextLength: 8192 });
   await supervisor.stop();
-  assert.equal(calls.length, 1); assert.equal(calls[0][2].shell, false); assert.ok(calls[0][1].includes('--api-key'));
+  assert.equal(calls.length, 1); assert.equal(calls[0][2].shell, false); assert.ok(!calls[0][1].includes('--api-key')); assert.match(calls[0][2].env.LLAMA_API_KEY, /^[a-f0-9]{64}$/u); // 12/11: the key in the environment
   const spawnRecord = sink.records.find(e => e.type === 'process-spawn'); assert.equal(spawnRecord.process.pid, 456); assert.equal(spawnRecord.flags['-c'], '8192');
   assert.ok(sink.records.some(e => e.type === 'process-close')); assert.ok(sink.records.some(e => e.type === 'stop-end'));
-  assert.ok(!JSON.stringify(sink.records).includes('SECRET-model')); assert.ok(!JSON.stringify(sink.records).includes(calls[0][1][calls[0][1].indexOf('--api-key') + 1]));
+  assert.ok(!JSON.stringify(sink.records).includes('SECRET-model')); assert.ok(!JSON.stringify(sink.records).includes(calls[0][2].env.LLAMA_API_KEY));
 });
 
 test('agent callback original event and return value preserved; bodies and tool args excluded', () => {

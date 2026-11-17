@@ -27,6 +27,7 @@
  */
 
 import { nomeDalDizionario } from './nomi-impostazioni.mjs';
+import { controllaFinestraScritta } from '../finestra-di-ripiego.mjs';
 
 export const SCHEMA_CATALOGO_IMPOSTAZIONI ='talos.app-settings.catalog.v1';
 export const GRUPPI_IMPOSTAZIONI = Object.freeze(['sicurezza', 'costo', 'aggiornamenti']);
@@ -58,7 +59,7 @@ export const CATALOGO_IMPOSTAZIONI = Object.freeze([
   finestra('appearance.messageStyle', 'appearance', 'messageStyle', { tipo: 'scelta', valori: ['sections', 'bubbles'], diSerie: 'sections', testo: 'impostazioni.field.messageStyleSelect.title' }),
   finestra('appearance.streamingAnimation', 'appearance', 'streamingAnimation', { tipo: 'scelta', valori: ['fade', 'typewriter'], diSerie: 'fade', testo: 'impostazioni.field.streamingAnimationSelect.title' }),
   finestra('appearance.chatFullWidth', 'appearance', 'chatFullWidth', { ...sino, diSerie: false, testo: 'impostazioni.field.chatFullWidthToggle.title' }),
-  finestra('appearance.userBubbleFullWidth', 'appearance', 'userBubbleFullWidth', { ...sino, diSerie: false, testo: 'impostazioni.field.userBubbleFullWidthToggle.title' }),
+  finestra('appearance.userBubbleFullWidth', 'appearance', 'userBubbleFullWidth', { ...sino, diSerie: true, testo: 'impostazioni.field.userBubbleFullWidthToggle.title' }),
   finestra('appearance.immersiveHeader', 'appearance', 'immersiveHeader', { ...sino, diSerie: false, testo: 'impostazioni.field.immersiveHeaderToggle.title' }),
   /* Lingua */
   finestra('language.interface', 'language', 'uiLanguage', { tipo: 'scelta', valori: ['system', 'en', 'it'], interni: { system: 'sistema' }, diSerie: 'system', testo: 'impostazioni.field.uiLanguageSelect.title' }),
@@ -94,12 +95,22 @@ export const CATALOGO_IMPOSTAZIONI = Object.freeze([
     tipo: 'scelta', valori: ['trusted', 'notTrusted'], interni: { trusted: true, notTrusted: false }, gruppo: 'sicurezza', testo: 'chat.trust.menuItem' }),
   sessione('conversation.commandShell', 'dove', { tipo: 'scelta', valori: ['auto', 'windows', 'wsl2'], interni: { auto: null }, testo: 'app.sheets.permissions.whereCommandsRun' }),
   sessione('conversation.bangCommandsInChat', 'comandiNellaConversazione', { ...sino, testo: 'app.sheets.permissions.commandOutputAriaList' }),
+  /* 11/11/2026 (owner 13:50, v1465, punto 5, «Sì, come Hermes»; seconda porta del campo di Impostazioni → Memoria e contesto): la memoria
+     (la finestra, in token) del modello di QUESTA conversazione, quando TALOS non la sa leggere. Scrive la stessa fonte del campo
+     (`impostazioni-contesto.mjs`, `finestreDeiModelli`) e vale per quel modello in ogni conversazione; `null` = di nuovo automatica.
+     Nessun gruppo: dietro la carta dei permessi fuori dall'Accesso pieno, come `chat.liveBlocks`. */
+  voce({ chiave: 'conversation.modelMemory', sezione: 'conversation', ambito: 'conversazione', dove: 'server', fonte: 'memoriaModello', campo: 'finestra',
+    tipo: 'memoria', nullo: true, testo: 'varie.modelMemory.card.title' }),
 
   /* Server, tutta l'app o le conversazioni nuove */
   server('context.engine', 'context', 'contesto', 'motore', { tipo: 'scelta', valori: ['engine', 'legacy'], testo: 'varie.contextEngine.card.title' }),
   server('context.summaryModel', 'context', 'contesto', 'modelloDelRiassunto', { tipo: 'modello', nullo: true, gruppo: 'costo', testo: 'varie.compaction.card.modelLabel' }),
   server('context.summaryFallback', 'context', 'contesto', 'riservaDelRiassunto', { tipo: 'modello', nullo: true, ancheConversazione: true, gruppo: 'costo', testo: ['varie.compaction.card.modelLabel', 'varie.compaction.card.backupLabel'] /* forma §5: composto, la pagina non cambia */ }),
   server('models.localWindowFull', 'models', 'finestraLocale', 'scelta', { tipo: 'scelta', valori: ['enlarge', 'summarize', 'ask'], interni: { enlarge: 'allarga', summarize: 'riassumi', ask: 'chiedi' }, testo: 'varie.localWindow.card.title' }),
+  /* 0.2.2 (SignPath, brief «rete spegnibile»): «Catalogo pubblico dei modelli» (`catalogo-pubblico.mjs`), in Impostazioni → Sicurezza e
+     privacy. Gruppo sicurezza ⇒ la carta c'è SEMPRE, anche in Accesso pieno: il modello non riapre da solo una richiesta che la persona ha
+     spento. Il valore di serie non sta qui (`CATALOGO_PUBBLICO_DI_SERIE`). */
+  server('models.publicCatalog', 'models', 'catalogoPubblico', 'acceso', { ...sino, gruppo: 'sicurezza', testo: 'modelli.publicCatalog.title' }),
   server('tools.defaultCommandShell', 'tools', 'comandi', 'doveDiSerie', { tipo: 'scelta', valori: ['auto', 'windows', 'wsl2'], interni: { auto: null }, testo: 'varie.commandsDefault.title' }),
   server('tools.wslNormalUser', 'tools', 'wsl', 'usaUtenteNormale', { ...sino, gruppo: 'sicurezza', testo: 'modello.permissions.useANormalUser' }),
   /* Decisione 310 (06/11/2026), la seconda porta del computer use («Anteprima», spento di serie). Gruppo sicurezza ⇒ la carta c'è SEMPRE,
@@ -153,6 +164,11 @@ export function controllaValore(v, grezzo) {
     if (typeof grezzo === 'boolean') return { ok: true, valore: grezzo };
     if (grezzo === 'true' || grezzo === 'false') return { ok: true, valore: grezzo === 'true' };
     return { ok: false, motivo: `${v.chiave} is true or false.` };
+  }
+  /* 11/11/2026: un numero di token fra i limiti della memoria scritta (`finestra-di-ripiego.mjs`), o null per tornare automatica */
+  if (v.tipo === 'memoria') {
+    const controllo = controllaFinestraScritta(grezzo);
+    return controllo.ok ? controllo : { ok: false, motivo: `${v.chiave}: ${controllo.motivo}` };
   }
   if (v.tipo === 'modello') {
     if (grezzo === null && v.nullo) return { ok: true, valore: null };

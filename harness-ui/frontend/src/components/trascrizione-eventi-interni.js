@@ -3,6 +3,7 @@ import { fineMuta, interpretaEventoCompattazione, testoRigaCompattazione } from 
 import { EVENTO_MODELLO_INUTILIZZABILE } from './motivi-compattazione.js';
 import { EVENTO_MCP_AVVIO, motivoMcp, nuoviServerNonPartiti } from './avviso-mcp.js';
 import { leggiControlloSpento, testiControlloSpento } from './avviso-controllo-spento.js';
+import { leggiAvvisoFileComputerUse, testiAvvisoFileComputerUse } from './avviso-file-computer-use.js';
 import { t } from './lingua.js';
 import { suUnaRiga } from './testo-a-schermo.js';
 
@@ -64,6 +65,16 @@ export function trascriviEventoInterno(evento, contesto = creaContestoTrascrizio
      nel trascritto col loro JSON. La riga che conta (rapido, migliorato) è già nell'evento `talos.compattazione`. */
   if (evento.name === 'talos.compattazione-preparata') return { omesso: true };
   if (evento.name === 'talos.blocco.azione.v1') return { omesso: true }; // il gesto è già il messaggio della persona
+  /* L'Assistente (revisore B, GIALLO-1, 11/11/2026): una domanda a parte salvata con la chat esce a righe leggibili, come i messaggi
+     («Assistente — domanda» / «Assistente — risposta»), mai col suo JSON. Il diario e la spesa restano nell'esportazione JSON. Come Claude Code,
+     `CHANGELOG.md:5580` (/btw: «c to copy» dà il Markdown grezzo della risposta). */
+  if (evento.name === 'assistente-scambio') {
+    const v = evento.value;
+    if (!v || typeof v.domanda !== 'string' || typeof v.risposta !== 'string') return null;
+    /* due no (giudice v1584 punto 2): la riga dell'arresto, come nel pannello */
+    const risposta = v.fermataDaiNo === true ? [v.risposta, t('sezioni.aLato.stoppedAfterNo')].filter((r) => r.trim()).join('\n\n') : v.risposta;
+    return { righe: [t('app.transcript.sideQuestion'), '', v.domanda, '', t('app.transcript.sideAnswer'), '', risposta, ''] };
+  }
   if (evento.name === 'talos.risultati-accorciati') return { omesso: true }; // la riga vive sotto la risposta: nel trascritto esportato sarebbe contabilità
   if (evento.name === 'talos.context') {
     const valore = evento.value;
@@ -97,6 +108,9 @@ export function trascriviEventoInterno(evento, contesto = creaContestoTrascrizio
   /* owner 29/10/2026: il controllo delle scritture spento — la stessa riga che la chat mostra */
   const controlloSpento = leggiControlloSpento(evento);
   if (controlloSpento) return { testo: testiControlloSpento(controlloSpento).riga };
+  /* decisione 374, giro 2, punto 9: le impostazioni del computer use cambiate fuori da TALOS — la stessa riga che la chat mostra */
+  const avvisoFileComputerUse = leggiAvvisoFileComputerUse(evento);
+  if (avvisoFileComputerUse) return { testo: testiAvvisoFileComputerUse(avvisoFileComputerUse).riga };
   if (evento.name === EVENTO_MCP_AVVIO) {
     if (!Array.isArray(evento.value?.esiti)) return null;
     const nuovi = nuoviServerNonPartiti(contesto.ricordoMcp, 'trascritto', evento.value);

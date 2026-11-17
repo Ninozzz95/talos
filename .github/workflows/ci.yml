@@ -269,7 +269,10 @@ jobs:
   #   pacchetto e guscio Windows              test:puri + test:guscio
   desktop:
     runs-on: windows-latest
-    timeout-minutes: 30
+    # 09/11/2026 (revisione 021-A; owner 09/11 ~23:06): 30 → 40. Misurato: corsa 42621048338 su ebf82467, 28 min 33 s (server
+    # 22 min 13 s), e lavori verdi a 27:50, 28:39, 28:42; ora il server esegue anche le 4 CHAT-FILES-HELPER M1-M4 (~10 s nella
+    # release 0.2.0). 40 come `cancelli` di release.yml.
+    timeout-minutes: 40
     defaults:
       run:
         shell: pwsh
@@ -331,12 +334,15 @@ jobs:
           Expand-Archive -LiteralPath $archive -DestinationPath $directory
           $go = Join-Path $directory 'go/bin/go.exe'
           $env:TALOS_GO_BINARY = $go
+          # 09/11/2026 (revisione 021-A reperto A): come release.yml e desktop-pretag-installer.yml, anche ai passi DOPO.
+          # Senza, il passo server saltava le 4 CHAT-FILES-HELPER M1-M4 (130 saltate contro le 127 della release 0.2.0).
+          "TALOS_GO_BINARY=$go" >> $env:GITHUB_ENV
           npm --prefix harness-ui run build:chat-upload
           if ($LASTEXITCODE -ne 0) { throw 'Build helper upload fallita.' }
 
       - if: steps.dove.outputs.ci == 'si'
         name: server
-        run: node --test tests/*.test.mjs
+        run: node --test --import=./desktop/tests/gancio-portachiavi.mjs tests/*.test.mjs
         working-directory: harness-ui
 
       # ⛔ Il kernel ha la sua suite (538 prove) e fino al 07/9 in questo repo non la lanciava

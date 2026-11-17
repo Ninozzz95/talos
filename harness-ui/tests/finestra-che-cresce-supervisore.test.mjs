@@ -13,11 +13,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { createLlamaServerRuntime } from '../src/local-runtime-llama-server.mjs';
 import { creaFinestraCheCresce } from '../src/finestra-che-cresce.mjs';
 import { readGgufHeader } from '../src/gguf-header.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 function gguf(cartella, { addestrata, esperti } = {}) {
   const parti = [];

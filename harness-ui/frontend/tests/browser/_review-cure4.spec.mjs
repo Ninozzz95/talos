@@ -253,7 +253,12 @@ test('C4-C · la posizione assoluta della barra: falsi rossi su codice sano', as
   const stato = () => page.evaluate(() => {
     const barra = document.querySelector('#schermoImpostazioni .settings-toolbar').getBoundingClientRect();
     const voce = document.querySelector('#schermoImpostazioni .settings-nav__list [role="tab"]').getBoundingClientRect();
-    const bottone = document.querySelector('#schermoImpostazioni .settings-nav__search')?.getBoundingClientRect();
+    /* ⛔ 023 cura 1 (11/11/2026): il bottone «Cerca impostazioni» è tolto; nella barra c'è il glifo «Ctrl K» che CERCANDO lascia il posto
+       alla × che svuota. È lo scambio che può muovere la barra: si misura quello (prima `altezzaBottone` leggeva `null` con `?.` e la
+       prova era verde vuota). */
+    const kbd = document.querySelector('#schermoImpostazioni [data-settings-shortcut]');
+    const pulisci = document.querySelector('#schermoImpostazioni [data-settings-clear]');
+    const vista = (el) => Boolean(el && !el.hidden && el.getClientRects().length && el.getBoundingClientRect().width > 0);
     const pagina = document.querySelector('#schermoImpostazioni .talos-page');
     const nav = document.querySelector('#schermoImpostazioni .settings-nav');
     /*
@@ -272,7 +277,7 @@ test('C4-C · la posizione assoluta della barra: falsi rossi su codice sano', as
       barraOffset: nodoBarra.offsetTop,
       altezzaBarra: Math.round(barra.height), barraTop: Math.round(barra.top),
       relativa: Math.round(voce.top - barra.top), voceVisibile: voce.height > 0,
-      altezzaBottone: bottone ? Math.round(bottone.height) : null,
+      glifo: vista(kbd), croce: vista(pulisci),
       scrollPagina: Math.round(pagina.scrollTop),
       docTop: Math.round(barra.top + pagina.getBoundingClientRect().top + pagina.scrollTop * 0),
       barraTopNelContenuto: Math.round(barra.top + pagina.scrollTop - pagina.getBoundingClientRect().top),
@@ -287,6 +292,10 @@ test('C4-C · la posizione assoluta della barra: falsi rossi su codice sano', as
   await page.waitForTimeout(250);
   const durante = await stato();
   console.log('C4-C-cerca ' + breve({ sana0, durante }));
+  expect([sana0.glifo, sana0.croce], 'a campo vuoto si vede il glifo «Ctrl K», non la ×').toEqual([true, false]);
+  expect([durante.glifo, durante.croce], 'cercando la × prende il posto del glifo').toEqual([false, true]);
+  expect(sana0.barraDentroNav, 'la barra sta nella colonna delle sezioni').toBe(true);
+  expect(Math.abs(durante.altezzaBarra - sana0.altezzaBarra), 'lo scambio glifo ↔ × non cambia l’altezza della barra').toBeLessThanOrEqual(2);
   await page.locator('#settingsSearch').fill('');
   await page.waitForTimeout(250);
 

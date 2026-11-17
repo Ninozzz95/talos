@@ -25,17 +25,31 @@ test.use({ viewport: { width: 1280, height: 860 } });
 
 test('LATO-CHAT-01 Ctrl ; apre la scheda, una domanda torna nel filo e la conversazione non cambia', async ({ page }) => {
   await apri(page);
+  /* 12/11/2026 (cura del secondo blocco del nucleo, giudice v1692): su questo indirizzo passano DUE richieste. Dall'Assistente (eb043e295:
+     `a-lato.js`, `carica`; `app.js`, `carica: (id) => apiGet(…'a-lato')`) la scheda, appena nasce, LEGGE le domande salvate con una GET allo
+     stesso indirizzo della domanda. La prova prendeva «la prima richiesta» senza guardare il metodo: era la GET, che non ha corpo (`null`),
+     e le rispondeva con la risposta di una domanda. La domanda è la POST: il corpo si legge solo da lei, e la GET va al server vero, che
+     per questa conversazione finta non ha niente di salvato. */
+  const metodi = [];
   const corpi = [];
-  await page.route(`**/api/v1/sessions/${ID}/a-lato`, (r) => { corpi.push(r.request().postDataJSON()); return r.fulfill(risposta({ ok: true, data: { risposta: 'Sta confrontando i numeri.', usage: { prompt_tokens: 100, completion_tokens: 20 } } })); });
+  await page.route(`**/api/v1/sessions/${ID}/a-lato`, (r) => {
+    const metodo = r.request().method();
+    metodi.push(metodo);
+    if (metodo !== 'POST') return r.continue();
+    corpi.push(r.request().postDataJSON());
+    return r.fulfill(risposta({ ok: true, data: { risposta: 'Sta confrontando i numeri.', usage: { prompt_tokens: 100, completion_tokens: 20 } } }));
+  });
   const prima = await page.locator('#conversation').innerText();
   await page.keyboard.press('Control+;');
   await expect(page.locator('#railLato')).toBeVisible();
   await page.locator('#railLato input').fill('com\'e messo il cnfronto?');
   await page.keyboard.press('Enter');
   await expect(page.locator('#railLato .lato-filo')).toContainText('Sta confrontando i numeri.');
-  await expect(page.locator('#railLato .lato-piede')).toContainText('sommati alla sessione');
+  await expect(page.locator('#railLato .lato-piede')).toContainText('in questa chat');
   await expect(page.locator('#railLato')).toContainText('Trasforma in conversazione');
-  expect(corpi[0]).toEqual({ domanda: 'com\'e messo il cnfronto?', filo: [] });
+  // UNA domanda sola è partita, con questo corpo; e prima di lei la scheda ha letto le domande salvate (la GET)
+  expect(corpi).toEqual([{ domanda: 'com\'e messo il cnfronto?', filo: [] }]);
+  expect(metodi[0], `la prima richiesta della scheda è la lettura delle domande salvate (metodi visti: ${metodi.join(', ')})`).toBe('GET');
   expect(await page.locator('#conversation').innerText()).toBe(prima);
   await page.keyboard.press('Control+;');
   await expect(page.locator('#railLato')).toBeHidden();

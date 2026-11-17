@@ -162,6 +162,13 @@ export function cartaCassa({ totale = null, dominio = '', metodo = null, tetto =
     rigaAzione(doc, t('computer.checkout.dontPay'), t('computer.checkout.stopHere'), () => alRisposta?.('no')));
 }
 
+/** Reperto 2 (13/11): la carta del computer use com'è nella chat, con le parole e le scelte del server; la risposta è l'etichetta scelta, come nella chat. */
+export function cartaDomanda({ testo = '', opzioni = [] }, { document: doc, alRisposta }) {
+  const scelte = (Array.isArray(opzioni) ? opzioni : []).filter((o) => typeof o?.label === 'string' && o.label);
+  return scheda(doc, nodo(doc, 'p', 'talos-domanda', testo),
+    ...scelte.map((o) => rigaAzione(doc, o.label, typeof o.descrizione === 'string' ? o.descrizione : null, () => alRisposta?.(o.label))));
+}
+
 /** La mano alla persona: mentre è sua TALOS non guarda (`pausa`, motivo 'persona'); solo 'fatto' riprende. */
 export function cartaMano({ motivo, ancheIlClic = false }, { document: doc, alRisposta }) {
   const FRASI = {

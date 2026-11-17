@@ -235,11 +235,13 @@ test('155 (a) — `cancellazioneCritica` su Windows: radice, primo livello, casa
     ['pwsh -c Remove-Item -Recurse C:\\', 'radice'], ['bash -c "rm -rf /c/Users"', 'primo-livello'], ['echo $(rm -rf /c/)', 'radice'],
     ['sudo rm -rf C:/', 'radice'], ['Remove-Item -Path a,C:\\ -Recurse', 'radice'], ['rm -rf -- C:\\Users', 'primo-livello'],
     ['rm -rf "$(mktemp -d)"', 'sostituzione'],
+    /* 0.2.3: una variabile che non c'è vale vuota, e `/x` in Git Bash è la radice del disco X: (prima era nel lavoro di ogni giorno) */
+    ['rm -rf $TMPDIR_FINTO/x', 'radice'],
   ];
   for (const [comando, perche] of casi) assert.equal(cancellazioneCritica(comando, w)?.perche, perche, comando);
   /* AL CONTRARIO: il lavoro di ogni giorno non chiede */
   for (const comando of ['rm -rf node_modules', 'rm -rf dist build', 'Remove-Item -Recurse -Force .\\dist', 'rd /s /q build', 'rmdir /s /q build', 'del /q *.log',
-    'rm -f "$(mktemp)"', 'rm -rf $TMPDIR_FINTO/x', 'rm -rf C:\\Users\\nino\\lavoro\\progetto\\out', 'git rm -r --cached x', 'npm run rm', 'echo "rm -rf C:\\"',
+    'rm -f "$(mktemp)"', 'TMPDIR_FINTO=$(mktemp -d); rm -rf $TMPDIR_FINTO/x','rm -rf C:\\Users\\nino\\lavoro\\progetto\\out', 'git rm -r --cached x', 'npm run rm', 'echo "rm -rf C:\\"',
     'rm -rf C:\\Users\\nino\\Downloads\\vecchio', 'rm -rf C:\\Users\\nino\\lavoro\\altro', 'Remove-Item x -ErrorAction SilentlyContinue', 'rm -rf build > C:\\log.txt 2>&1',
     'mv C:\\Users x', 'ls C:\\', 'grep -r "rm -rf /" .', '# rm -rf C:\\']) {
     assert.equal(cancellazioneCritica(comando, w), null, comando);

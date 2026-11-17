@@ -542,3 +542,157 @@ test('D29-03: al contrario, una carta montata senza il lettore degli allegati (i
   dock.aggiornaAllegati();
   assert.equal(view.all('p').find((node) => node.className === 'talos-question-card__notice').hidden, true);
 });
+
+/* Owner 11/11/2026 17:12 (judge v1499), computer use: a list of recipients the card cannot show whole. The card says the true number and
+   that it does not show them all; a button opens the WHOLE list; «Allow» can be pressed only after the list has been opened, and until
+   then the card says why. Like Codex (approval_overlay clipping_tests.rs:56, «⌃g view all» opens the complete command) and Claude Code
+   (CHANGELOG.md:4206, «don't ask again» withheld when the contents cannot be fully displayed). */
+const conElenco = {
+  sessionId: 's-cu', requestId: 'r-cu',
+  questions: [{ id: 'computer_use', header: 'Computer', question: 'TALOS is about to do a send or submit. 151 recipients: this card does not show them all.',
+    details: { label: 'Show all 151 recipients', text: 'To: persona1@esempio.it; persona2@esempio.it\n\nCc: capo@esempio.it' },
+    options: [{ label: 'Allow', description: 'TALOS does this now.', requiresDetails: true }, { label: "Don't allow", description: 'TALOS skips this action.' }, { label: 'Stop', description: 'TALOS stops.' }] }],
+};
+
+test('CU-DETAILS: «Allow» stays disabled with its reason until the whole list is opened; the key 1 cannot pick it; the button opens the list and unlocks it', () => {
+  const view = fixture();
+  const submitted = [];
+  const controller = mountUserQuestionDock({ ...view, question: conElenco, onSubmit: (body) => { submitted.push(body); } });
+  const card = view.root.children[0];
+  const [allow, skip] = view.all('input');
+  const motivo = () => view.all('p').concat(view.all('small')).find((n) => String(n.className).includes('talos-question-card__requires-details'));
+  const elenco = () => view.all('pre').concat(view.all('div')).find((n) => String(n.className).includes('talos-question-card__details-text'));
+  assert.equal(allow.disabled, true, '«Allow» is locked before the list is opened');
+  assert.ok(motivo() && motivo().hidden !== true, 'the card says why «Allow» is locked');
+  assert.equal(elenco(), undefined, 'the whole list is not on the card until it is opened');
+  card.dispatch('keydown', { key: '1', target: card });
+  assert.equal(allow.checked, false);
+  assert.deepEqual(submitted, []);
+  controller.render();
+  assert.equal(allow.disabled, true, 'a render does not unlock it');
+  view.button('Show all 151 recipients').click();
+  assert.ok(elenco(), 'the button opens the whole list');
+  assert.match(elenco().textContent, /persona2@esempio\.it[\s\S]*Cc: capo@esempio\.it/u);
+  assert.equal(allow.disabled, false, '«Allow» unlocks once the list is open');
+  assert.equal(motivo()?.hidden ?? true, true, 'the reason goes away');
+  controller.render();
+  assert.equal(allow.disabled, false, 'and stays unlocked across renders');
+  assert.equal(skip.disabled, false);
+  card.dispatch('keydown', { key: '1', target: card });
+  assert.equal(allow.checked, true);
+  // judge v1525 (owner 17:12 on today's phone): the PC dock says it shows the whole list; the server refuses «Allow» without it
+  assert.deepEqual(submitted, [{ requestId: 'r-cu', status: 'answered', answers: { computer_use: 'Allow' }, showsDetails: true }]);
+});
+
+test('CU-DETAILS: a draft saved with «Allow» before the list was opened does not come back picked; the other choices never wait', () => {
+  const view = fixture();
+  mountUserQuestionDock({ ...view, question: conElenco, onSubmit: () => {} });
+  const [allow, skip, stop] = view.all('input');
+  assert.deepEqual([allow.disabled, skip.disabled, stop.disabled], [true, false, false]);
+  const again = fixture();
+  for (const [k, v] of view.saved) again.saved.set(k, v);
+  again.saved.set('talos.ask-draft.v1:s-cu:r-cu', JSON.stringify({ signature: JSON.stringify(conElenco.questions), answers: { computer_use: 'Allow' } }));
+  const controller = mountUserQuestionDock({ ...again, question: conElenco, onSubmit: () => {} });
+  assert.deepEqual(controller.readDraft(), {}, 'a locked choice is never part of the answer');
+  const [allowAgain] = again.all('input');
+  assert.equal(allowAgain.checked, false, 'the restored draft does not tick the locked «Allow»');
+  again.button('Show all 151 recipients').click();
+  assert.equal(allowAgain.disabled, false);
+  assert.equal(allowAgain.checked, false, 'opening the list does not pick «Allow» for the person: they still choose it');
+  assert.deepEqual(controller.readDraft(), {});
+});
+
+/* Cure round after the reviewers (A, R1; judge v1544): «Allow» written in «Other» went without opening the list, and the dock declared
+   `showsDetails` for every card with a list, opened or not. Now a text equal to a locked choice (any spaces, any capitals) is not an
+   answer while the list is closed, and `showsDetails` goes only when the list was really opened. Like Claude Code, no yes to a call that
+   is not read whole (CHANGELOG.md:150). */
+test('CU-DETAILS-OTHER: «Allow» written in «Other» does not go before the list is opened, with any spaces or capitals; after opening it goes', () => {
+  for (const scritto of ['Allow', ' Allow ', 'allow', 'ALLOW', 'Al low', 'A L L O W']) {
+    const view = fixture();
+    const submitted = [];
+    const controller = mountUserQuestionDock({ ...view, question: conElenco, onSubmit: (body) => { submitted.push(body); } });
+    const other = view.all('input').find((i) => i.type === 'text');
+    other.value = scritto; other.dispatch('input');
+    assert.deepEqual(controller.readDraft(), {}, `«${scritto}» is not an answer while the list is closed`);
+    view.button('Rivedi risposte')?.click();
+    view.button('Conferma e invia')?.click();
+    assert.deepEqual(submitted, [], `«${scritto}» is not sent`);
+    controller.render({ stage: 'answer' });
+    view.button('Show all 151 recipients').click();
+    assert.deepEqual(controller.readDraft(), { computer_use: scritto.trim() }, `«${scritto}» is an answer once the list is open`);
+    view.button('Rivedi risposte').click();
+    view.button('Conferma e invia').click();
+    assert.deepEqual(submitted, [{ requestId: 'r-cu', status: 'answered', answers: { computer_use: scritto.trim() }, showsDetails: true }], scritto);
+  }
+  // a text that is not a locked choice is an answer as before, and says nothing about the list
+  const view = fixture();
+  const submitted = [];
+  mountUserQuestionDock({ ...view, question: conElenco, onSubmit: (body) => { submitted.push(body); } });
+  const other = view.all('input').find((i) => i.type === 'text');
+  other.value = 'Allow only Marco'; other.dispatch('input');
+  view.button('Rivedi risposte').click();
+  view.button('Conferma e invia').click();
+  assert.deepEqual(submitted, [{ requestId: 'r-cu', status: 'answered', answers: { computer_use: 'Allow only Marco' } }]);
+});
+
+test('CU-DETAILS-DECLARE: «Don\'t allow» and «Stop» from a card whose list was never opened do not say the list was shown', () => {
+  for (const k of [1, 2]) {
+    const view = fixture();
+    const submitted = [];
+    mountUserQuestionDock({ ...view, question: conElenco, onSubmit: (body) => { submitted.push(body); } });
+    scegli(view.all('input')[k], 'puntatore');
+    assert.deepEqual(submitted, [{ requestId: 'r-cu', status: 'answered', answers: { computer_use: conElenco.questions[0].options[k].label } }]);
+  }
+  // opened and then «Don't allow»: the list was shown, the declaration is true
+  const view = fixture();
+  const submitted = [];
+  mountUserQuestionDock({ ...view, question: conElenco, onSubmit: (body) => { submitted.push(body); } });
+  view.button('Show all 151 recipients').click();
+  scegli(view.all('input')[1], 'puntatore');
+  assert.deepEqual(submitted, [{ requestId: 'r-cu', status: 'answered', answers: { computer_use: "Don't allow" }, showsDetails: true }]);
+});
+
+/* Cure round (A, R1 note; B, phone red): a refusal of the server left the card busy («not verified») and nothing could be pressed again.
+   A 403 or a 422 is a clear refusal: the card is free again, says why, and another choice can be sent. */
+test('CU-DETAILS-REFUSED: after a 403 or a 422 the card is free again, says the reason, and «Don\'t allow» can still be sent', async () => {
+  for (const status of [403, 422]) {
+    const view = fixture();
+    const submitted = [];
+    let volta = 0;
+    mountUserQuestionDock({ ...view, question: conElenco, onSubmit: async (body) => {
+      submitted.push(body); volta += 1;
+      if (volta === 1) throw Object.assign(new Error('Apri l’elenco intero sul PC per consentire: questo dispositivo non lo mostra'), { status });
+    } });
+    view.button('Show all 151 recipients').click();
+    const [allow, skip] = view.all('input');
+    scegli(allow, 'puntatore');
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(skip.disabled, false, `${status}: the card is free again`);
+    const testi = view.all('p').map((n) => String(n.textContent ?? '')).join(' | ');
+    assert.match(testi, /Apri l’elenco intero sul PC per consentire: questo dispositivo non lo mostra\. Puoi/u, `${status}: the reason is on the card, one period`);
+    allow.checked = false; // a radio group: choosing another option unticks it (the fake element does not)
+    scegli(skip, 'puntatore');
+    await new Promise((r) => setTimeout(r, 0));
+    assert.deepEqual(submitted.map((b) => b.answers.computer_use), ['Allow', "Don't allow"], `${status}`);
+  }
+});
+
+/* 11/11/2026, axe on the photos of the computer-use card (scrollable-region-focusable, serious): a preview of 60 recipients scrolls,
+   and a keyboard could not reach it. When the preview is taller than its box it takes the focus (tabIndex 0) and is a named region;
+   when it fits it stays out of the Tab order. Like the whole list behind «Show all» (a <pre> with tabIndex 0). */
+test('CU-PREVIEW-FOCUS: a preview that scrolls can be reached with the keyboard and says what it is; one that fits stays out of the Tab order', async () => {
+  const conAnteprima = (alto) => ({ sessionId: 's-p', requestId: `r-${alto}`, questions: [{ id: 'computer_use', question: 'TALOS is about to do a send or submit.',
+    options: [{ label: 'Allow', description: 'TALOS does this now.', preview: 'To: a@esempio.it; b@esempio.it' }, { label: 'Stop', description: 'TALOS stops.', preview: 'To: a@esempio.it' }] }] });
+  for (const [alto, atteso] of [[900, 0], [80, -1]]) {
+    const view = fixture();
+    mountUserQuestionDock({ ...view, question: conAnteprima(alto), onSubmit: () => {},
+      rendiAnteprima: (testo, corpo) => { corpo.scrollHeight = alto; corpo.clientHeight = 100; corpo.textContent = testo; } });
+    await new Promise((ok) => setTimeout(ok, 0));
+    const corpo = view.all('div').find((n) => String(n.className).includes('talos-question-card__anteprima-corpo'));
+    assert.equal(corpo.tabIndex, atteso, `a preview ${alto} px tall in a 100 px box`);
+    if (atteso === 0) {
+      assert.equal(corpo.getAttribute('role'), 'region');
+      assert.match(String(corpo.getAttribute('aria-label')), /Allow/u, 'the region is named after the choice it previews');
+    }
+  }
+});

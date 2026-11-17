@@ -35,6 +35,7 @@ export default {
     'mark.on': 'Changed by TALOS on {date} at {time}',
     'mark.atFromDevice': 'Changed by TALOS from a device at {time}',
     'mark.onFromDevice': 'Changed by TALOS from a device on {date} at {time}',
+    'mark.notConfirmed': 'Not confirmed yet: TALOS still reads this the other way. Flip the switch once to settle it, and once more to keep it as it is now.',
     'notification.changedOne': 'Changed 1 setting:',
     'notification.changedMany': 'Changed {n} settings:',
     'notification.changedFromDeviceOne': 'Changed 1 setting from a device:',
@@ -49,6 +50,8 @@ export default {
     'command.noSetting': 'No setting is called “{key}”.',
     /* 02/11/2026: `/settings` scritto dalla persona, la nota nella chat (bozzetto `dati.js` `daTe`, variante A) */
     'note.youChangedOne': 'You changed 1 setting',
+    'note.heldWaiting': 'Full access requested, waiting for your answer about trusting this folder: for now {modo}.', // round 2 of folder trust (D4)
+    'note.heldNotTrusted': 'This folder isn’t trusted: here Full access works as {modo}.',
     'note.youChangedMany': 'You changed {n} settings',
     /* 02/11/2026, giro 2 delle cure: la persona dal dispositivo (voce 2, parole dell'elenco del Desktop) e il valore già uguale (voce 3,
        parole del Desktop: il bozzetto non ha questo caso; le conferma il Frontend) */
@@ -105,6 +108,7 @@ export default {
     'mark.on': 'Cambiata da TALOS il {date} alle {time}',
     'mark.atFromDevice': 'Cambiata da TALOS da un dispositivo alle {time}',
     'mark.onFromDevice': 'Cambiata da TALOS da un dispositivo il {date} alle {time}',
+    'mark.notConfirmed': 'Non ancora confermata: TALOS la legge ancora al contrario. Tocca l’interruttore una volta per fissarla, e un’altra per tenerla com’è adesso.',
     'notification.changedOne': 'Ha cambiato 1 impostazione:',
     'notification.changedMany': 'Ha cambiato {n} impostazioni:',
     'notification.changedFromDeviceOne': 'Ha cambiato 1 impostazione da un dispositivo:',
@@ -118,6 +122,8 @@ export default {
     'command.badValue': '«{value}» non va bene per {setting}. Valori ammessi: {allowed}.',
     'command.noSetting': 'Nessuna impostazione si chiama «{key}».',
     'note.youChangedOne': 'Hai cambiato 1 impostazione',
+    'note.heldWaiting': 'Accesso pieno chiesto, in attesa della tua risposta sulla fiducia di questa cartella: per ora {modo}.', // giro 2 della fiducia (D4)
+    'note.heldNotTrusted': 'Questa cartella non è fidata: qui l’Accesso pieno lavora come {modo}.',
     'note.youChangedMany': 'Hai cambiato {n} impostazioni',
     'notification.fromYourDeviceOne': 'Cambiata dal tuo dispositivo:',
     'notification.fromYourDeviceMany': 'Cambiate dal tuo dispositivo ({n} impostazioni):',

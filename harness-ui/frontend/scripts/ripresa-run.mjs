@@ -6,6 +6,8 @@ import { join, resolve, dirname, relative, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const frontend = fileURLToPath(new URL('..', import.meta.url));
+/* Round (k), 11/11/2026 (owner «aggancio in OGNI node --test»): the backend and unit runs preload the keyring hook of the desktop tests. */
+const GANCIO_PORTACHIAVI = '--import=' + pathToFileURL(join(frontend, '..', 'desktop', 'tests', 'gancio-portachiavi.mjs')).href;
 const repo = resolve(frontend, '../..');
 const preload = new URL('../tests/fixtures/ripresa-keyring-preload.mjs', import.meta.url).href;
 const json = (file, value) => writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, { flag: 'wx' });
@@ -128,6 +130,8 @@ export function creaAmbienteIsolato(run, source = process.env) {
     TALOS_DESKTOP_DATA_DIR: run.data, TALOS_HARNESS_UI_SESSIONS_DIR: join(run.data, 'sessions'),
     TALOS_HARNESS_UI_PROJECT_DIRS: run.workspace,
     TALOS_HARNESS_UI_KEYRING_SCOPE: run.kind === 'browser-release' ? 'desktop' : 'desktop-preview',
+    // Round k4 (judge v1542, road A): the bench DECLARES its test keychain; the product guard (P045) stops the system adapter in a test run.
+    TALOS_HARNESS_UI_KEYRING: 'memoria',
     TALOS_HARNESS_UI_PORT: '4186', TALOS_HARNESS_UI_PUBLIC_DIR: run.bundle,
     // Playwright browser binaries are executables, not the owner's browser profile.
     PLAYWRIGHT_BROWSERS_PATH: source.PLAYWRIGHT_BROWSERS_PATH || join(source.LOCALAPPDATA || '', 'ms-playwright'),
@@ -247,7 +251,7 @@ async function eseguiNelloStato(run, kind, args) {
       return join('../tests', file);
     }) : elencaTestBackend();
     json(join(run.output, 'test-files.json'), files);
-    return child(run, 'backend', ['--test', '--test-concurrency=1', '--test-reporter=tap', ...files], env);
+    return child(run, 'backend', ['--test', GANCIO_PORTACHIAVI, '--test-concurrency=1', '--test-reporter=tap', ...files], env);
   }
   if (kind === 'unit') {
     const build = `const {buildProduction}=await import('./scripts/build.mjs'); await buildProduction({outputDir:process.env.TALOS_RIPRESA_BUNDLE});`;
@@ -258,7 +262,7 @@ async function eseguiNelloStato(run, kind, args) {
   if (kind === 'unit') {
     const files = readdirSync(join(frontend, 'tests'), { recursive: true }).filter(file => file.endsWith('.test.mjs')).map(file => join('tests', file));
     json(join(run.output, 'test-files.json'), files);
-    return child(run, 'unit', ['--test', '--test-concurrency=1', '--test-reporter=tap', ...files], env);
+    return child(run, 'unit', ['--test', GANCIO_PORTACHIAVI, '--test-concurrency=1', '--test-reporter=tap', ...files], env);
   }
   if (kind !== 'list') {
     const build = `const {buildProduction}=await import('./scripts/build.mjs'); await buildProduction({outputDir:process.env.TALOS_RIPRESA_BUNDLE});`;

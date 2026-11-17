@@ -111,26 +111,40 @@ export function cicla(lista, attiva, direzione) {
  * si veda tutta. Adattata da Hermes, `tab-strip-scroll.ts` (`tabStripScrollLeft`): se è già in vista si resta dove si è; se esce a
  * sinistra si porta il suo inizio al bordo, se esce a destra la sua fine; mai oltre lo scorrimento possibile. (Il caso «ultima scheda
  * → fino in fondo» di Hermes serve al loro «+» in coda, che qui non c'è.) `inizio`/`fine` sono misurati dall'inizio del contenuto.
+ * ⭐ 12/11/2026 (giudice v1608, revisore C dell'Assistente: «ntesto» tagliato a metà senza segno) — `margine`: la fila sfuma dove
+ *   continua (`SFUMATURA_FILA_PX`, index.css), e la scheda scelta va portata in vista FUORI da quella fascia, non sotto. Come DeepSeek
+ *   (`ui-dockkit/src/components/TabPanel.tsx:177-195`, «with the fade band (24px) cleared so the chip is not under it») e il
+ *   `autoScrollOffset` dei TabsScrollArea di Coinbase. Ai due capi la fila non sfuma, e lo zero e il massimo tagliano il margine da
+ *   soli; una scheda più larga dello spazio fra le due fasce prende tutto quello che c'è (il margine scende alla metà del libero).
  */
-export function scorrimentoFilaSchede({ larghezza, scorrimento, contenuto, inizio, fine }) {
+export function scorrimentoFilaSchede({ larghezza, scorrimento, contenuto, inizio, fine, margine = 0 }) {
   const massimo = Math.max(0, contenuto - larghezza);
-  if (inizio < scorrimento) return Math.max(0, Math.min(inizio, massimo));
-  if (fine > scorrimento + larghezza) return Math.max(0, Math.min(fine - larghezza, massimo));
+  const m = Math.max(0, Math.min(margine, (larghezza - (fine - inizio)) / 2));
+  if (inizio - m < scorrimento) return Math.max(0, Math.min(inizio - m, massimo));
+  if (fine + m > scorrimento + larghezza) return Math.max(0, Math.min(fine + m - larghezza, massimo));
   return Math.max(0, Math.min(scorrimento, massimo));
 }
+
+/** Quanto sfuma la fila delle schede della colonna dove continua (index.css, `.talos-inspector__tabs .talos-tabs__list[data-taglio]`). */
+export const SFUMATURA_FILA_PX = 24;
 
 /**
  * La stessa cosa sul DOM: si scrive lo `scrollLeft` della fila e basta — mai `scrollIntoView`, che sposterebbe anche la colonna o la
  * pagina. Rettangoli e non `offsetLeft`, come Hermes (`tab-strip-scroll.ts`): la fila non è il genitore posizionato della scheda.
+ * Lo scorrimento è un salto, non un'animazione: niente `scroll-behavior:smooth`, quindi il movimento ridotto è rispettato da sé.
  */
-export function tieniInVistaScheda(scheda) {
+export function tieniInVistaScheda(scheda, { margine = SFUMATURA_FILA_PX } = {}) {
   const fila = scheda?.parentElement;
   if (!fila || fila.scrollWidth <= fila.clientWidth) return;
   const vista = fila.getBoundingClientRect();
   const r = scheda.getBoundingClientRect();
   const inizio = r.left - vista.left + fila.scrollLeft;
-  const prossimo = scorrimentoFilaSchede({ larghezza: fila.clientWidth, scorrimento: fila.scrollLeft, contenuto: fila.scrollWidth, inizio, fine: inizio + r.width });
+  const prossimo = scorrimentoFilaSchede({ larghezza: fila.clientWidth, scorrimento: fila.scrollLeft, contenuto: fila.scrollWidth, inizio, fine: inizio + r.width, margine });
   if (prossimo !== fila.scrollLeft) fila.scrollLeft = prossimo;
+  /* ⭐ 12/11/2026 (giudice v1622, revisore D1) — il lato che sfuma si rimisura SUBITO, non all'evento `scroll` del fotogramma dopo:
+     nello stesso compito `scrollLeft` era già nuovo e `data-taglio` ancora il vecchio (`strisciaScorrevole`, inspector.js). Anche
+     quando qui non si sposta niente: con le frecce `focus()` di Chrome ha già fatto scorrere la fila verso la scheda nascosta. */
+  fila.__talosRimisura?.();
 }
 
 export function nomeSchedaValido(nome) {

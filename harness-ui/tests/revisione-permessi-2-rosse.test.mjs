@@ -150,9 +150,12 @@ test('R2-F1 ROSSA — 173: fidata all\'avvio, poi «No»: il giro dopo resta in 
   assert.equal(b.corse.at(-1).livelloAccesso, 'su-richiesta', '173: con «No» in quella cartella si lavora come in Normale')
 })
 
-test('R2-F2 — 173: «non ancora chiesta» (null) vale fidata: la domanda deve arrivare PRIMA che il modo si scelga (documenta il contratto)', async (t) => {
+/* Contratto cambiato dalla falla del 10/11 (reperto 1, owner 11/11 12:18): la domanda arrivava solo alla nascita, e un cambio di modo
+   dopo la saltava. Ora «non ancora chiesta» trattiene l'Accesso pieno finché la persona risponde, per ogni via. */
+test('R2-F2 — 173: «non ancora chiesta» (null) NON vale fidata: l\'Accesso pieno resta trattenuto finché la persona risponde', async (t) => {
   const b = banco(t, { fiduciaDellaCartellaFn: () => null })
-  b.registro.avvia('a', { permessiScelto: 'Full access' })
+  const { sessionId } = b.registro.avvia('a', { permessiScelto: 'Full access' })
   await pausa()
-  assert.equal(b.corse[0].livelloAccesso, 'accesso-pieno')
+  assert.equal(b.corse[0].livelloAccesso, 'su-richiesta')
+  assert.equal(b.registro.impostazioniCorrenti(sessionId).fiduciaDaChiedere, true)
 })

@@ -72,7 +72,7 @@
 #schermoImpostazioni[data-settings-ui="v3"] .talos-settings { display: grid; grid-template-columns: 220px minmax(0, 1fr); align-items: start; gap: 28px; }
 #schermoImpostazioni .settings-nav { position: sticky; top: 0; border: 0; border-inline-end: 1px solid var(--talos-border); border-radius: 0; box-shadow: none; background: transparent; padding: 0 16px 12px 0; min-width: 0; }
 .settings-nav__list { display: grid; gap: 4px; }
-.settings-nav__group { display: block; margin: 22px 10px 6px; color: var(--talos-muted); text-transform: uppercase; font-size: .6875rem; letter-spacing: .11em; font-weight: 600; }
+.settings-nav__group { display: block; margin: 22px 10px 6px; color: var(--talos-muted); text-transform: uppercase; font-size: .75rem; /* 023 passo 2: 12 px come il bozzetto (`.sezioni .gr`), era 11 */ letter-spacing: .11em; font-weight: 600; }
 .settings-nav__group:first-child { margin-block-start: 0; }
 #schermoImpostazioni .settings-nav__item { min-height: 42px; width: 100%; padding: 10px 12px; border: 1px solid transparent; border-radius: 8px; text-align: start; background: transparent; color: var(--talos-muted); font-size: .8125rem; line-height: 1.4; }
 #schermoImpostazioni .settings-nav__item .talos-nav-item__label { white-space: normal; }
@@ -121,85 +121,14 @@
 .settings-breadcrumb [aria-current="page"] { color: var(--talos-text); }
 
 /*
- * ⭐⭐ 18/09/2026 — IL CERCATORE DEL MOCKUP (FASE 1b): il bottone in sidebar e la sua palette.
- * ⛔ LE MISURE SONO DEL MOCKUP, prese dal suo DOM vivo il 18/09/2026 e non stimate:
- *   dialog 600×852 a `y:24`, `border-radius:16px`, ombra `0 32px 90px rgba(0,0,0,.3)`,
- *   fondo `rgb(247,244,238)`; campo 546×48, `font-size:16px`, `padding:9px 12px 9px 38px`
- *   (il posto dell'icona), `border-radius:9px`, fondo trasparente, bordo del testo;
- *   risultato 546×64, `font-size:14px`, `padding:12px 4px`, `border-radius:5px`, `gap:12px`;
- *   scrim `rgba(31,29,25,.45)`.
- * ⛔ `padding:0` sul dialog e 27px per lato dentro: 600 − 54 = 546, che è la larghezza misurata
- *   del campo e dei risultati. Non è un numero scelto a occhio, è la differenza che avanza.
- * ⛔ LO SCROLL DELLA PAGINA NON SI BLOCCA DA SOLO quando un `<dialog>` modale è aperto:
- *   `:has(dialog[open]:modal)` è il modo che non richiede JavaScript (fonte: linee guida sui
- *   dialog nativi lette il 18/09/2026). `scrollbar-gutter:stable` evita il salto di 15px.
+ * ⛔ 023 cura 1 (11/11/2026): il bottone «Cerca impostazioni» in sidebar e la sua palette sono tolti dal passo 2 (una ricerca sola,
+ *   il campo nella colonna col glifo «Ctrl K» dentro). Le loro regole (`.settings-palette*`, `.settings-nav__search`,
+ *   `.settings-nav__kbd`) sono uscite con loro: nessun nodo le usava più (grep su src, prove, CLI e telefono).
+ * B3 09/10/2026: era `:root:has(dialog.settings-palette[open]:modal)` — stesso effetto, la classe la mette `segnaModaleImpostazioni`
+ *   (settings-view.ts): un `:has()` sulla radice si rivalutava sul documento intero durante lo streaming (~350 ms ogni 11 s). Oggi
+ *   la mette solo la finestra «Aggiungi modello».
  */
-.settings-palette { width: 600px; max-width: calc(100vw - 32px); max-height: min(852px, calc(100dvh - 48px)); margin: 24px auto; padding: 0; border: 1px solid var(--talos-border); border-radius: 16px; background: var(--talos-card, #f7f4ee); color: var(--talos-text); box-shadow: 0 32px 90px rgba(0, 0, 0, .3); overflow: hidden; }
-.settings-palette::backdrop { background: rgba(31, 29, 25, .45); }
-.settings-palette__box { display: flex; flex-direction: column; gap: 12px; max-height: inherit; padding: 24px 27px; overflow: auto; }
-.settings-palette__head { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
-.settings-palette__title { margin: 0; font-size: 1.125rem; font-weight: 600; letter-spacing: -.01em; }
-.settings-palette__field { position: relative; display: flex; align-items: center; }
-/* L'icona dentro il campo è decorativa: il campo ha il suo nome accessibile.
-   ⛔ Un `<svg><use>` vero e non una maschera CSS: lo sprite del progetto è fatto di `<symbol>`,
-   e un `<symbol>` non è una `<mask>` valida — la maschera non avrebbe reso niente. */
-.settings-palette__icon { position: absolute; inset-inline-start: 12px; width: 17px; height: 17px; color: var(--talos-muted); pointer-events: none; }
-.settings-palette__input { width: 100%; min-height: 48px; padding: 9px 12px 9px 38px; border: 1px solid var(--talos-border-strong, var(--talos-border)); border-radius: 9px; background: transparent; color: inherit; font-size: 16px; font-family: inherit; }
-.settings-palette__input::placeholder { color: var(--talos-muted); }
-.settings-palette__count { margin: 0; color: var(--talos-muted); font-size: .75rem; }
-.settings-palette__results { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.settings-palette__results .settings-result { display: flex; flex-direction: column; gap: 2px; width: 100%; min-height: 64px; padding: 12px 4px; border: 0; border-radius: 5px; background: transparent; color: inherit; font: inherit; text-align: start; cursor: pointer; }
-.settings-palette__results .settings-result:hover { background: var(--talos-card-hover, rgba(255, 255, 255, .06)); }
-.settings-palette__results .settings-result__path { color: var(--talos-muted); font-size: .6875rem; }
-.settings-palette__results .settings-result strong { font-size: .875rem; font-weight: 550; }
-.settings-palette__results .settings-result__help { color: var(--talos-muted); font-size: .75rem; }
-.settings-palette__empty { margin: 0; padding: 12px 4px; color: var(--talos-muted); font-size: .8125rem; }
-/* B3 09/10/2026: era `:root:has(dialog.settings-palette[open]:modal)` — stesso effetto, la classe la mette `segnaModaleImpostazioni`
-   (settings-view.ts): un `:has()` sulla radice si rivalutava sul documento intero durante lo streaming (~350 ms ogni 11 s). */
 :root.talos-impostazioni-modale-aperta { overflow: hidden; scrollbar-gutter: stable; }
-
-/* Il bottone in sidebar: la voce del mockup (`#open-settings-search`) con la sua scorciatoia. */
-.settings-nav__search { justify-content: flex-start; }
-/*
- * ⛔ `white-space:nowrap` NON È UN DETTAGLIO: senza, il chip della scorciatoia va A CAPO su due
- *   righe — «Ctrl» sopra «K», dentro un quadratino — e non assomiglia più a un tasto.
- *   Trovato dalla corsia B il 18/09/2026 **guardando una foto** del 4174, non leggendo il CSS:
- *   foto `artifacts/anteprima-tema/4174-zoom-chip.png`.
- *   Misure del mockup, prese dal suo DOM vivo: **40×20, una riga sola, font 9px, riga 13,5px**.
- *   ⇒ 13,5 + 2 di bordo + 4 di padding = 19,5 ≈ 20 di altezza, che è quello che si vede.
- */
-.settings-nav__kbd { margin-inline-start: auto; padding: 2px 6px; border: 1px solid var(--talos-border); border-radius: 5px; color: var(--talos-muted); font-family: inherit; font-size: 9px; line-height: 13.5px; white-space: nowrap; }
-/*
- * ⛔ LA RIGA DEL CERCATORE STA SU UNA RIGA SOLA — trovato dalla foto del 4174 del 18/09/2026,
- *   non leggendo il CSS: l'etichetta andava a capo e la colonna mostrava «Cerca / impostazioni»
- *   con il chip «Ctrl K» appeso a metà altezza. Il mockup la tiene su UNA riga e lo dichiara nel
- *   suo stesso CSS: `.settings-search > span, .settings-search > kbd { white-space: nowrap }`.
- * ⛔ Solo per QUESTA riga: le voci delle sezioni DEVONO poter andare a capo («Strumenti agente e
- *   permessi», «Account, Doctor e backup») e infatti la regola generale lo permette
- *   (`settings.css:29`). Qui il capo è un difetto, lì è la norma.
- * ⛔ Misurato: icona 17 + gap 11 + etichetta 104 + chip ~38 + padding 24 = 194 nei 204 utili.
- */
-/* ⛔ L'`#id` NON È UN GUSTO: senza, questa regola PERDE contro
-   `#schermoImpostazioni .settings-nav__item .talos-nav-item__label { white-space: normal }`
-   (riga 29 di questo stesso file), che ha un id di specificità in più. Provata: la prima
-   stesura, senza id, è arrivata INERTE — la foto mostrava ancora «Cerca / impostazioni».
- * ⛔ E LE MISURE SONO QUELLE DEL MOCKUP PER QUESTA RIGA, non un aggiustamento per farla stare:
-   nel mockup il cercatore NON è una voce di navigazione e ha un blocco suo —
-   `.settings-search{...gap:8px;padding:10px 11px;font-size:.75rem}` e
-   `.settings-search kbd{font-size:.5625rem;padding:2px 4px}` (`TALOS-Calm-Lab-04.html`).
-   Noi gli diamo la classe delle voci, quindi ereditava gap 11, padding 12, 13 px e un chip più
-   largo: **212 px di contenuto in 204 disponibili**, cioè l'etichetta si troncava a
-   «Cerca impostazi…» (visto in foto). Con le misure del mockup ne servono ~194 e ci sta intera. */
-/* ⛔ `.talos-nav-item` IN FONDO AL SELETTORE, e non per stile: è ciò che fa VINCERE la regola.
-   Il `gap` era rimasto 11 px con la prima stesura, perché `#schermoImpostazioni
-   .talos-settings__nav .talos-nav-item { gap: 11px }` (in `index.css`) ha un id e due classi
-   contro l'id e una classe della stesura precedente. Misurato col DOM vivo, non dedotto.
- * ⛔ E `min-height: 42px` NON è cosmetico: senza, questa riga è alta **22 px** — sotto la soglia
-   di tocco di 24×24 di WCAG 2.5.8, che il cancello `baseline-shell` misura. Il mockup le dà 42. */
-#schermoImpostazioni .talos-settings__nav .settings-nav__search.talos-nav-item { gap: 8px; min-height: 42px; padding: 10px 11px; }
-#schermoImpostazioni .talos-settings__nav .settings-nav__search .talos-nav-item__label { white-space: nowrap; font-size: .75rem; }
-#schermoImpostazioni .talos-settings__nav .settings-nav__search .settings-nav__kbd { padding: 2px 4px; }
-:root[data-sidebar="icone"] .settings-nav__search .settings-nav__kbd { display: none; }
 /*
  * ════════════════════════════════════════════════════════════════════════════════════════════════
  * ⭐⭐ FASE 2 · CORSIA 1 — IL VESTITO DELLE DIECI SEZIONI (18/09/2026)
@@ -320,9 +249,21 @@
 #schermoImpostazioni[data-settings-ui="v3"] .talos-setting > :not(:first-child) { flex: 0 0 auto; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-setting__label { display: block; font-size: .875rem; line-height: 1.5; font-weight: 550; }
 #schermoImpostazioni[data-settings-ui="v3"] .talos-setting__help { margin: 6px 0 0; color: var(--talos-muted); font-size: .75rem; line-height: 1.7; max-width: 49ch; }
+/* 11/11/2026, passaggio dopo il revisore unico della soglia (punto 2 e foto 4): nella carta «Memoria del modello» il menu ha
+   il nome intero del modello («OpenRouter · deepseek/deepseek-v3.2»), quindi la colonna va oltre i 230 px; la riga «in uso» è una
+   frase lunga e non va a capo a 49ch. Nel foglio e non in `style=`: la CSP `style-src 'self'` (http-app.mjs:1194) spegne gli attributi. */
+#schermoImpostazioni[data-settings-ui="v3"] [data-settings-card="memoria-modello"] .talos-setting > .settings-field-control { max-width: min(100%, 440px); width: 55%; }
+#schermoImpostazioni[data-settings-ui="v3"] [data-settings-card="memoria-modello"] [data-memoria-modello-in-uso] { max-width: none; }
 .settings-field-control { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
 .settings-field-control > select { flex: 1; min-width: 0; width: 100%; }
 #schermoImpostazioni .settings-field-control .talos-setting__control { flex: 1; min-width: 0; grid-template-columns: minmax(60px, 1fr) auto; }
+/* 023 passo 2 (foto del risultato «Intensità UI», 11/11): il cursore mostrava il numero due volte, «65» della faccia calma e
+   «65%» della misura, e la misura andava a capo (il contenitore non era una griglia). Una riga sola, un numero solo — la
+   stessa regola di `.td-slider` in `calm-controls.css:49`. Vale nella riga e nel risultato: il nodo è lo stesso. */
+#schermoImpostazioni .settings-field-control .talos-setting__control { display: flex; align-items: center; gap: 10px; }
+#schermoImpostazioni .settings-field-control .calm-range__value { display: none; }
+/* la faccia calma chiede 190 px (`calm-controls.css:35`): con la misura accanto usciva di 16 px dal risultato */
+#schermoImpostazioni .settings-field-control .calm-control--range { flex: 1; min-width: 0; }
 .settings-field-control input[type="range"] { width: 100%; min-width: 0; }
 .settings-reset { flex: 0 0 32px; width: 32px; height: 32px; border: 1px solid var(--talos-border); border-radius: 7px; background: transparent; color: var(--talos-muted); font: inherit; font-size: 1.125rem; cursor: pointer; }
 .settings-reset:hover { color: var(--talos-text); background: var(--talos-card-hover); }
@@ -567,3 +508,45 @@
 }
 
 #schermoImpostazioni[data-settings-ui="v3"] [hidden] { display: none !important; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+ * 023 passo 2 (owner 10/11/2026 21:47, bozzetto approvato, ricerca variante B): IL CAMPO UNICO E I SUOI RISULTATI.
+ * Misure del bozzetto (`bozzetto-impostazioni-dottore-023/bozzetto.html:88-94, :130-136`): il glifo «Ctrl K» dentro il campo a destra,
+ * risultati a righe (testo a sinistra, il controllo vero o «Vai ↵» a destra), la riga segnata con il fondo d'accento tenue.
+ * ⛔ Nessun testo sotto 12 px: il percorso del risultato era 11 px (`.6875rem`), qui sale a 12.
+ * ══════════════════════════════════════════════════════════════════════════════ */
+#schermoImpostazioni .settings-search__input { padding-inline-end: 50px; }
+.settings-search__kbd { position: absolute; inset-inline-end: 6px; top: 50%; transform: translateY(-50%); padding: 1px 5px; border: 1px solid var(--talos-border-strong); border-radius: 4px; background: var(--talos-panel); color: var(--talos-muted); font: 12px/1.4 var(--talos-font-ui, inherit); white-space: nowrap; pointer-events: none; }
+.settings-search__kbd[hidden] { display: none; }
+.settings-keys { margin: 14px 4px 0; color: var(--talos-muted); font-size: 12px; line-height: 1.9; }
+.settings-keys kbd { padding: 1px 5px; border: 1px solid var(--talos-border-strong); border-radius: 4px; background: var(--talos-panel); color: var(--talos-text); font: 12px/1.4 var(--talos-font-ui, inherit); }
+#schermoImpostazioni .settings-result-list { display: block; }
+#schermoImpostazioni .settings-result-list[hidden] { display: none; }
+/*
+ * ⛔ LE RIGHE DELLA GRIGLIA (023 cura 1, 11/11/2026): i risultati sono `div` con i ruoli grid/row/gridcell, perché un `ul`/`li` non può
+ *   portarli. Le regole generali dei `li` dello schermo (`styles/index.css`: `#schermoImpostazioni li` corpo 13 px e a capo ovunque,
+ *   `#schermoImpostazioni li strong` nome in blocco) si riportano qui UGUALI, con `:where()` per non pesare più di loro: a schermo non
+ *   cambia niente (foto prima/dopo confrontate pixel per pixel). Le regole sotto valgono per le due forme.
+ */
+#schermoImpostazioni :where(div.settings-result) { padding: 10px 0; border-top: 1px solid var(--talos-border-subtle); font-size: 13px; overflow-wrap: anywhere; }
+#schermoImpostazioni :where(div.settings-result) strong { display: block; margin-bottom: 4px; }
+#schermoImpostazioni li.settings-result, #schermoImpostazioni div.settings-result { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; min-height: 56px; margin: 0; padding: 11px 12px; border: 1px solid transparent; border-bottom-color: var(--talos-border); border-radius: 8px; background: transparent; cursor: pointer; }
+#schermoImpostazioni li.settings-result:hover, #schermoImpostazioni div.settings-result:hover { background: transparent; }
+#schermoImpostazioni li.settings-result.is-active, #schermoImpostazioni div.settings-result.is-active { background: var(--talos-accent-soft); border-color: var(--talos-border-strong); }
+/* ultimo giro della 023: la cella scelta con Destra (W3C APG, griglia) si vede con l'anello del fuoco dei segmenti. A riposo è scelta la
+   prima cella, e la prima cella non ha anello: la riga accesa basta, e a schermo non cambia niente finché non si usa la freccia. */
+#schermoImpostazioni div.settings-result > [role="gridcell"][aria-selected="true"]:not(:first-child) { outline: 2px solid var(--talos-ring); outline-offset: 3px; border-radius: 6px; }
+#schermoImpostazioni .settings-result__text { display: grid; gap: 2px; min-width: 0; }
+#schermoImpostazioni .settings-result__name { font-size: .9375rem; font-weight: 600; }
+#schermoImpostazioni .settings-result__path { color: var(--talos-muted); font-size: 12px; }
+#schermoImpostazioni .settings-result__help { color: var(--talos-muted); font-size: 13px; line-height: 1.5; }
+#schermoImpostazioni .settings-result__destination { justify-self: end; margin: 0; color: var(--talos-muted); font-size: 12px; white-space: nowrap; }
+/* il controllo ospite tiene la larghezza che ha nella riga (190-230 px): il cursore e il suo «65%» restano sulla stessa linea */
+#schermoImpostazioni li.settings-result > .settings-field-control, #schermoImpostazioni div.settings-result > .settings-field-control { justify-self: end; width: clamp(190px, 30vw, 230px); }
+/* 023 passo 2: la scelta a segmenti (bozzetto `.seg`), per «Come si apre Nuova sessione». Il `select` vero resta nascosto. */
+.settings-segmented { display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--talos-border-strong); border-radius: 9px; background: var(--talos-panel); }
+.settings-segmented__option { min-height: 30px; padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--talos-muted); font: 600 13px/1.2 var(--talos-font-ui, inherit); cursor: pointer; white-space: nowrap; }
+.settings-segmented__option:hover { color: var(--talos-text); }
+.settings-segmented__option[aria-checked="true"] { background: var(--talos-accent-soft); color: var(--talos-text); box-shadow: inset 0 0 0 1px var(--talos-border-strong); }
+.settings-segmented__option:focus-visible { outline: 2px solid var(--talos-ring); outline-offset: 1px; }
+select[data-settings-segmented-source][hidden] { display: none; }

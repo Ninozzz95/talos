@@ -218,20 +218,33 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
    * altrove (è ancora nella scheda, o è caduto sul body).
    */
   let fuocoNellaSchedaAllInvio = false;
+  /*
+   * ⛔ 11/11/2026, decisione dell'owner delle 17:12 (giudice v1499), computer use: un elenco che la carta non può mostrare intero
+   *   (`details`) si apre tutto con un pulsante, e una scelta con `requiresDetails` («Consenti») resta spenta, col motivo scritto,
+   *   finché l'elenco non è stato aperto. Come Codex («⌃g view all», approval_overlay/clipping_tests.rs:56) e Claude Code
+   *   (CHANGELOG.md:4206, «don't ask again» negato quando il contenuto non si mostra tutto). Una scelta spenta non entra mai nella
+   *   risposta, nemmeno da una bozza salvata.
+   */
+  const bloccata = (field, input) => field.bloccate?.has(input) === true && field.elencoAperto !== true;
+  /* Giro di cura dopo i revisori (A, R1; giudice v1544): «Allow»/«Consenti» scritto nel campo «Altro» partiva senza aprire l'elenco.
+     Un testo uguale a una scelta spenta (con o senza spazi, con o senza maiuscole) non è una risposta finché l'elenco è chiuso. */
+  const compatto = (testo) => String(testo).normalize('NFKC').toLowerCase().replace(/\s+/gu, '');
+  const altroBloccato = (field, testo) => testo !== '' && [...(field.bloccate ?? [])].some((input) => bloccata(field, input) && compatto(input.value) === compatto(testo));
 
   function readDraft() {
     const answers = {};
     for (const field of fields) {
-      const custom = field.other?.value.trim() || '';
+      const scritto = field.other?.value.trim() || '';
+      const custom = altroBloccato(field, scritto) ? '' : scritto;
       if (field.options.length === 0) {
         const value = field.textarea.value.trim();
         if (value) answers[field.id] = value;
       } else if (field.multi) {
-        const selected = field.options.filter((input) => input.checked).map((input) => input.value);
+        const selected = field.options.filter((input) => input.checked && !bloccata(field, input)).map((input) => input.value);
         const values = [...selected, ...(custom ? [custom] : [])];
         if (values.length) answers[field.id] = values;
       } else {
-        const value = custom || field.options.find((input) => input.checked)?.value || '';
+        const value = custom || field.options.find((input) => input.checked && !bloccata(field, input))?.value || '';
         if (value) answers[field.id] = value;
       }
     }
@@ -261,14 +274,14 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
       }
       if (field.multi) {
         if (!Array.isArray(value)) continue;
-        for (const option of field.options) option.checked = value.includes(option.value);
+        for (const option of field.options) option.checked = value.includes(option.value) && !bloccata(field, option);
         if (field.other) field.other.value = value.find((entry) =>
           typeof entry === 'string' && !field.options.some((option) => option.value === entry)) || '';
         continue;
       }
       if (typeof value !== 'string') continue;
       const option = field.options.find((entry) => entry.value === value);
-      if (option) option.checked = true;
+      if (option) option.checked = !bloccata(field, option);
       else if (field.other) field.other.value = value;
     }
   }
@@ -296,6 +309,32 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
     const perche = typeof prompt.why === 'string' ? prompt.why.trim() : '';
     if (perche) fieldset.append(make('p', 'talos-question-card__why', t('chat.question.whyItMatters', { perche })));
     const field = { id, prompt, multi: prompt.multiSelect === true, options: [], other: null, textarea: null, fieldset };
+    // owner 11/11 17:12: l'elenco intero si apre col pulsante; prima le scelte che lo chiedono restano spente, col motivo
+    const elencoIntero = prompt.details && typeof prompt.details.label === 'string' && prompt.details.label.trim()
+      && typeof prompt.details.text === 'string' && prompt.details.text.trim() ? prompt.details : null;
+    if (elencoIntero) {
+      field.bloccate = new Set();
+      field.motivi = [];
+      field.elencoAperto = false;
+      const apri = button(elencoIntero.label, 'talos-button talos-button--secondary talos-button--sm talos-question-card__details-open');
+      apri.setAttribute('aria-expanded', 'false');
+      const riquadro = make('div', 'talos-question-card__details');
+      riquadro.hidden = true;
+      apri.addEventListener('click', () => {
+        if (!field.elencoAperto) {
+          // l'elenco com'è, in un riquadro che scorre e lo dice; raggiungibile con la tastiera (WCAG 2.1.1, regione scorrevole)
+          const intero = make('pre', 'talos-question-card__details-text', elencoIntero.text);
+          intero.tabIndex = 0;
+          intero.setAttribute('aria-label', elencoIntero.label);
+          riquadro.replaceChildren(intero, make('p', 'talos-question-card__details-scroll', t('chat.question.detailsScroll')));
+          field.elencoAperto = true;
+        }
+        riquadro.hidden = false;
+        apri.setAttribute('aria-expanded', 'true');
+        render();
+      });
+      fieldset.append(apri, riquadro);
+    }
     if (Array.isArray(prompt.options) && prompt.options.length) {
       /*
        * ⭐ ANTEPRIMA AFFIANCATA (owner 29/10/2026, bozzetto https://claude.ai/artifact/8Xchqr6NpKmAAainYtmeuK, «la prima opzione, ma fai
@@ -316,7 +355,22 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
         pannello.setAttribute('aria-live', 'polite');
         const testaAnteprima = make('p', 'talos-question-card__anteprima-testa');
         const corpoAnteprima = make('div', 'talos-question-card__anteprima-corpo');
-        pannello.append(testaAnteprima, corpoAnteprima);
+        /* 11/11/2026, revisore C (5i): nella foto l'anteprima di 60 destinatari ne mostrava 18 e la diciannovesima riga a metà, senza
+           nulla che dicesse che il riquadro scorre. Quando il contenuto è più alto del riquadro, una riga sotto lo dice. */
+        const segnoScorre = make('p', 'talos-question-card__anteprima-scorre', t('chat.question.previewScrolls'));
+        segnoScorre.hidden = true;
+        pannello.append(testaAnteprima, corpoAnteprima, segnoScorre);
+        /* 11/11/2026, axe sulle foto (scrollable-region-focusable, grave): un'anteprima che scorre la raggiunge la tastiera ed è una
+           regione col nome della scelta; una che ci sta resta fuori dal giro del Tab (come l'elenco intero dietro «Mostra tutti»). */
+        const misuraScorre = () => {
+          const scorre = Number(corpoAnteprima.scrollHeight) > Number(corpoAnteprima.clientHeight) + 1;
+          segnoScorre.hidden = !scorre;
+          corpoAnteprima.tabIndex = scorre ? 0 : -1;
+          if (scorre) {
+            corpoAnteprima.setAttribute('role', 'region');
+            corpoAnteprima.setAttribute('aria-label', testaAnteprima.textContent);
+          }
+        };
         griglia.append(contenitoreScelte, pannello);
         fieldset.append(griglia);
         let mostrata = -1;
@@ -336,10 +390,14 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
           const testo = typeof scelta?.preview === 'string' ? scelta.preview : '';
           if (!testo.trim()) {
             corpoAnteprima.append(make('p', 'talos-question-card__anteprima-vuota', t('chat.question.noPreview')));
+            segnoScorre.hidden = true;
+            corpoAnteprima.tabIndex = -1;
             return;
           }
           try { smonta = rendiAnteprima(testo, corpoAnteprima, { doc }) || null; }
           catch { corpoAnteprima.replaceChildren(make('pre', 'talos-question-card__anteprima-testo', testo)); }
+          const prossimo = doc.defaultView?.requestAnimationFrame;
+          if (typeof prossimo === 'function') prossimo.call(doc.defaultView, misuraScorre); else misuraScorre();
         };
         queueMicrotask(() => mostraAnteprima(Math.max(0, prompt.options.findIndex((o) => o?.recommended === true))));
       }
@@ -374,6 +432,14 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
           dettaglio.id = suffisso + '-descrizione';
           description.append(dettaglio);
           descritta.push(dettaglio.id);
+        }
+        if (elencoIntero && option.requiresDetails === true) {
+          field.bloccate.add(input);
+          const motivo = make('small', 'talos-question-card__requires-details', t('chat.question.requiresDetails'));
+          motivo.id = suffisso + '-blocco';
+          description.append(motivo);
+          descritta.push(motivo.id);
+          field.motivi.push(motivo);
         }
         if (descritta.length) input.setAttribute('aria-describedby', descritta.join(' '));
         /* Il tasto che la sceglie: 1-9 (decisione owner 11). Il numero è l'ordine vero dell'opzione, non un ornamento. */
@@ -518,8 +584,9 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
     for (const control of [backButton, nextButton, reviewButton, editButton, sendButton, skipButton, confirmSkipButton]) control.disabled = busy;
     for (const field of fields) {
       for (const control of [...field.options, field.other, field.textarea]) {
-        if (control) control.disabled = busy || stage === 'stale';
+        if (control) control.disabled = busy || stage === 'stale' || bloccata(field, control);
       }
+      for (const motivo of field.motivi ?? []) motivo.hidden = field.elencoAperto === true;
     }
     if (stage === 'review') {
       const draft = readDraft();
@@ -553,14 +620,21 @@ export function mountUserQuestionDock({ root, composer, question, onSubmit, annu
     busy = true;
     render();
     try {
-      await onSubmit({ requestId: question.requestId, status, ...(status === 'answered' ? { answers } : {}) });
+      /* giudice v1525: questa casella mostra l'elenco intero dietro «Mostra tutti» e lo dichiara; il server rifiuta «Consenti» con
+         `requiresDetails` da un cliente che non lo dice (il telefono di oggi). Giro di cura (A, R1): lo dichiara solo quando l'elenco
+         è stato aperto davvero, in ogni domanda che ne ha uno. */
+      const conElenco = fields.filter((field) => field.bloccate);
+      const mostraDettagli = status === 'answered' && conElenco.length > 0 && conElenco.every((field) => field.elencoAperto === true);
+      await onSubmit({ requestId: question.requestId, status, ...(status === 'answered' ? { answers } : {}), ...(mostraDettagli ? { showsDetails: true } : {}) });
       if (!resolved && !destroyed) render({ message: t('chat.question.submit.received') });
     } catch (error) {
       if (resolved || destroyed) return;
       if ([404, 409, 410].includes(error?.status)) {
         busy = false;
         render({ stage: 'stale', message: t('chat.question.submit.stale', { errore: error.message }) });
-      } else if ([400, 422].includes(error?.status)) {
+      } else if ([400, 403, 422].includes(error?.status)) {
+        /* giro di cura (A, R1; B, rosso del telefono): anche un 403 è un rifiuto chiaro, la domanda resta aperta; prima la carta
+           restava occupata su «Esito non verificato» e non si poteva più premere nulla */
         busy = false;
         render({ message: t('chat.question.submit.failed', { errore: error.message }) });
       } else {

@@ -7,7 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { createLlamaRouterSupervisor } from '../src/llama-router-supervisor.mjs';
 import { creaAperturaCondivisa } from '../src/apertura-condivisa.mjs';
 import { creaCambioDiModello } from '../src/attesa-turno.mjs';
@@ -17,6 +18,7 @@ import { giroSulModelloLocale } from '../src/session-registry.mjs';
 import { FILTRO_CARICAMENTO } from '../src/remoto/lista-bianca.mjs';
 import { creaRouterFinto } from './aiuto/router-finto.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 const ms = (n) => new Promise((r) => setTimeout(r, n));
 const MODELLO = 'C:\\models\\a.gguf';

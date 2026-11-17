@@ -12,8 +12,17 @@
  * Gli indicatori si leggono anche dalla storia (una chat aperta a metà giro), ma dalla storia non si inoltra niente. Ogni sequenza passa una volta sola per sessione:
  * la stessa può arrivare dalla pagina principale e dall'ascolto del ponte. Mai più di un ascolto in più (6 collegamenti per origine in HTTP/1.1).
  * La bolla riceve `{tipo:'sessione'}` prima del primo evento di una sessione diversa: le sue risposte vanno alla chat che usa il computer, non a quella visibile.
+ *
+ * Reperto 2 (giudice v1470, v1472 correzioni 2-3; 13/11): il ponte ASCOLTA anche la bolla. `ferma`, `messaggio` e `risposta` diventano le `azioni` della pagina
+ * principale (Stop del giro, coda, risposta alla carta), come i suoi pulsanti. La carta del computer use (`id` 'computer_use' sul canale delle domande) va alla
+ * bolla con le scelte vere, e si chiude da tutte e due le parti quando il server la risolve (Codex `serverRequest/resolved`, app-server-protocol common.rs:2071).
+ * ⛔ Una pagina della stessa origine può scrivere sul canale: una risposta vale solo per una carta che il ponte ha mostrato e non è chiusa, con una delle sue
+ *   scelte; Ferma e messaggio solo per la sessione detta alla bolla o una che il ponte segue. Una scelta che vuole l'elenco aperto resta nella chat.
  */
 import { CANALE_BOLLA, leggiMessaggio } from './bolla-protocollo.js';
+/* Giro 4 della bolla (13/11, CU-23): la pagina principale monta del computer use SOLO questo ponte (FE-070). Il movimento ridotto che dice al server (reperto 17)
+   passa di qui, non da un secondo import della regia. */
+export { motoRidottoDa } from './bolla-messaggi.js';
 
 const SEGNALE = 'talos.computer-use-sessione';
 const FINE_STORIA = 'talos.fine-rigiocata';
@@ -28,10 +37,21 @@ function messaggioComputerUse(evento) {
   return leggiMessaggio({ tipo: 'evento', evento: { name: evento.name, value: evento.value } });
 }
 
-export function creaPonteBolla({ apri = (nome) => new BroadcastChannel(nome), ascolta = null } = {}) {
+/** La carta del computer use (`attrezzo.mjs`, `domanda`: una domanda sola, id 'computer_use'), con le scelte che si possono dare fuori dalla chat; o null. */
+function cartaComputerUse(evento) {
+  const q = Array.isArray(evento.questions) && evento.questions.length === 1 ? evento.questions[0] : null;
+  if (!testoPieno(evento.requestId) || q?.id !== 'computer_use' || !testoPieno(q.question) || !Array.isArray(q.options)) return null;
+  const opzioni = q.options.filter((o) => testoPieno(o?.label) && o.requiresDetails !== true)
+    .map((o) => ({ label: o.label, ...(testoPieno(o.description) ? { descrizione: o.description } : {}) }));
+  return opzioni.length ? { chiave: q.id, testo: q.question, opzioni } : null;
+}
+
+export function creaPonteBolla({ apri = (nome) => new BroadcastChannel(nome), ascolta = null, azioni = null } = {}) {
   let canale = null;
   let assente = false;
   let sessioneDellaBolla = null;
+  /** requestId → { sessione, chiave, scelte }: le carte mostrate alla bolla e non ancora risolte */
+  const carte = new Map();
   /** id → { ultima: sequenza più alta vista o null, giro, computerUse, caduta: l'ascolto è caduto e non si riapre finché non si rivede dal vivo, lasciata: orologio } */
   const chat = new Map();
   /** id → ultima sequenza vista, delle chat dimenticate più di recente: al massimo RICORDO_MASSIMO, in ordine d'inserimento (MDN `Map`). */
@@ -52,16 +72,45 @@ export function creaPonteBolla({ apri = (nome) => new BroadcastChannel(nome), as
     return s;
   };
 
+  const fai = (f, ...a) => { try { f?.(...a); } catch { /* l'azione dice da sé il suo errore */ } };
+  function dallaBolla(m) {
+    if (!azioni || !m || typeof m !== 'object') return;
+    if (m.tipo === 'risposta') {
+      const c = testoPieno(m.id) ? carte.get(m.id) : null;
+      if (!c || typeof m.valore !== 'string' || !c.scelte.has(m.valore)) return;
+      carte.delete(m.id);
+      fai(azioni.risposta, c.sessione, { requestId: m.id, status: 'answered', answers: { [c.chiave]: m.valore } });
+      return;
+    }
+    const sessione = testoPieno(m.sessionId) ? m.sessionId : sessioneDellaBolla;
+    if (sessione === null || (sessione !== sessioneDellaBolla && !chat.has(sessione))) return;
+    if (m.tipo === 'ferma') fai(azioni.ferma, sessione);
+    else if (m.tipo === 'messaggio' && typeof m.testo === 'string' && m.testo.trim()) fai(azioni.messaggio, sessione, m.testo.trim());
+  }
+
   function manda(messaggio, sessione) {
     if (assente) return;
     if (!canale) {
       try { canale = apri(CANALE_BOLLA); } catch { assente = true; return; }
+      canale.onmessage = (e) => dallaBolla(e?.data);
     }
     if (testoPieno(sessione) && sessione !== sessioneDellaBolla) {
       sessioneDellaBolla = sessione;
       canale.postMessage({ tipo: 'sessione', sessionId: sessione });
     }
     canale.postMessage(messaggio);
+  }
+
+  /** Dal vivo verso la bolla: il computer use, e la sua carta finché il server non la risolve (risolta da qui, dalla chat o da un altro schermo). */
+  function inoltra(evento, sessione) {
+    const m = messaggioComputerUse(evento);
+    if (m) { manda(m, sessione); return; }
+    const c = evento.type === 'UserQuestionRequested' ? cartaComputerUse(evento) : null;
+    if (c) {
+      carte.set(evento.requestId, { sessione, chiave: c.chiave, scelte: new Set(c.opzioni.map((o) => o.label)) });
+      manda({ tipo: 'domanda', id: evento.requestId, porta: 'domanda', dati: { testo: c.testo, opzioni: c.opzioni } }, sessione);
+    } else if (evento.type === 'UserQuestionResolved' && carte.delete(evento.requestId)) manda({ tipo: 'chiudi-domanda', id: evento.requestId }, sessione);
+    else if (evento.type === 'RunFinished' || evento.type === 'RunError') for (const [id, k] of carte) if (k.sessione === sessione) carte.delete(id);
   }
 
   /** Aggiorna gli indicatori della sessione. Falso se la sequenza è già passata (doppione da non inoltrare). */
@@ -115,10 +164,7 @@ export function creaPonteBolla({ apri = (nome) => new BroadcastChannel(nome), as
     if (mio.inStoria) {
       if (evento.type === 'CUSTOM' && evento.name === FINE_STORIA) { mio.inStoria = false; return; }
       annota(s, evento);
-    } else if (annota(s, evento)) {
-      const m = messaggioComputerUse(evento);
-      if (m) manda(m, mio.sessione);
-    }
+    } else if (annota(s, evento)) inoltra(evento, mio.sessione);
     scegli();
     if (evento.type === 'RunFinished' || evento.type === 'RunError') dimentica(mio.sessione);
   }
@@ -149,8 +195,7 @@ export function creaPonteBolla({ apri = (nome) => new BroadcastChannel(nome), as
     evento(evento, { inRigiocata = false, sessione = null } = {}) {
       if (!evento || typeof evento !== 'object') return;
       if (!testoPieno(sessione)) {
-        const m = inRigiocata ? null : messaggioComputerUse(evento);
-        if (m) manda(m, null);
+        if (!inRigiocata) inoltra(evento, null);
         return;
       }
       visibile = sessione;
@@ -159,10 +204,7 @@ export function creaPonteBolla({ apri = (nome) => new BroadcastChannel(nome), as
         s.caduta = false;
         if (ascolto?.sessione === sessione) stacca();
       }
-      if (annota(s, evento) && !inRigiocata) {
-        const m = messaggioComputerUse(evento);
-        if (m) manda(m, sessione);
-      }
+      if (annota(s, evento) && !inRigiocata) inoltra(evento, sessione);
       scegli();
     },
     /** La pagina principale lascia la chat visibile (cambio di chat): da qui in poi la segue, se serve, l'ascolto del ponte. */

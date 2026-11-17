@@ -161,7 +161,10 @@ test('R2-05 (decisione 170): nudo anche con segni ai bordi, con «Sì,» davanti
 test('R2-05b (decisione 170, verso contrario): uscire, un nome che non è nudo, una finestra non modale e una politica senza la regola non cambiano', () => {
   const sch = finestra('Eliminare 1 file?', 'Eliminare 1 file?', ['Annulla', 'Elimina file', 'Elimina']);
   assert.equal(decisioneSu(sch, 'Annulla', SEMPRE, false).protezione, null);
-  assert.equal(decisioneSu(sch, 'Elimina file', SEMPRE, false).protezione, null); // fuori dalla decisione: resta aperto nel rapporto
+  // decisione 195 (owner 04/11 19:51, cura C3, portata sulla testa il 10/11): «Elimina file» sotto la domanda «Eliminare 1 file?» ora È una
+  // cancellazione (era il buco che questa riga documentava); non chiesta, in Consenti sempre chiede
+  assert.equal(decisioneSu(sch, 'Elimina file', SEMPRE, false).protezione, 'cancellazione');
+  assert.equal(decisioneSu(sch, 'Elimina file', SEMPRE, false).decisione, 'chiedi');
   const nonModale = { ...sch, elementi: sch.elementi.map((e) => (e.ruolo === 'finestra' ? { ...e, modale: false } : e)) };
   assert.equal(decisioneSu(nonModale, 'Elimina', SEMPRE, false).protezione, null);
   const senzaRegola = { ...PIENO, eliminaNudoInFinestra: undefined };

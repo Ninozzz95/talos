@@ -113,13 +113,13 @@ test('REV5-12 (difetto 1b): la carta di conferma dice la cosa in parole semplici
   await esegui(creaOspiteComputerUse({ aiutante: aiutanteFinto({ stato: statoPosta(ETICHETTA) }) }), en);
   const carte = en.domande.map((q) => q[0].question);
   assert.equal(carte.length, 2, carte.join(' | '));
-  assert.equal(carte[1], 'TALOS is about to do a send or submit. Allow it?');
+  assert.equal(carte[1], 'TALOS is about to do a send or submit. The recipient cannot be read on the screen. Allow it?');
   for (const c of carte) { assert.doesNotMatch(c, /XYZQ|invio|pulsante|indirizzo/u, c); }
   const it = sessione({ testoDellaPersona: 'Apri il Blocco note e scrivi ciao', rispostaCarta: ['Consenti', 'Consenti'],
     risposte: [{ actions: [{ type: 'press', ref: 'e2' }] }, { done: { success: true } }] });
   it.valore.lingua = 'it';
   await esegui(creaOspiteComputerUse({ aiutante: aiutanteFinto({ stato: statoPosta(ETICHETTA) }) }), it);
-  assert.equal(it.domande[1][0].question, 'TALOS sta per fare un invio. Lo consenti?');
+  assert.equal(it.domande[1][0].question, 'TALOS sta per fare un invio. Il destinatario non si legge sullo schermo. Lo consenti?');
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------

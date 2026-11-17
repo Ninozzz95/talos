@@ -22,6 +22,7 @@
 import { statSync } from 'node:fs';
 import { isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { segnoDiProva } from './guardia-portachiavi-prove.mjs';
 
 /** Scope Desktop e Preview isolati; oltre all'assenza: qualunque altro valore è un errore d'avvio, non un default silenzioso. */
 export const SCOPE_DESKTOP = 'desktop';
@@ -74,9 +75,17 @@ export function avvolgiAdattatoreKeyring(keyring, scope) {
  *     diventava «nessuna chiave» (segnalato da Nino2, CLI, 14/10: `system-keyring.ts` aveva la stessa forma), e un `remove`
  *     fallito risultava riuscito mentre la chiave RESTAVA nel portachiavi. I chiamanti hanno già il loro `try/catch` e il loro
  *     codice (`PROVIDER_STORE_UNAVAILABLE`, `SEARCH_STORE_UNAVAILABLE`, «not readable from the keychain», la pulizia li elenca).
+ * ⛔⛔ P045 (11/11/2026): a TEST RUN never gets here. Before the import, `guardia-portachiavi-prove.mjs` looks for the explicit mark
+ *   (a test variable, the test hook, or a test-runner ancestor; never a folder): with a mark the real module is NOT imported and the
+ *   caller gets `KEYRING_TEST_PROFILE` (the server logs one line and runs without a keychain). `segno` and `importa` are for the tests.
  */
-export async function creaAdattatorePortachiaviSistema() {
-  const { Entry } = await import('@napi-rs/keyring');
+export async function creaAdattatorePortachiaviSistema({ env = process.env, segno = segnoDiProva, importa = () => import('@napi-rs/keyring') } = {}) {
+  const visto = await segno({ env });
+  if (visto) {
+    throw Object.assign(new Error(`TALOS_HARNESS_UI_KEYRING: a test run (${visto.tipo} ${visto.nome}) never opens the real system keychain.`),
+      { code: 'KEYRING_TEST_PROFILE', segno: visto });
+  }
+  const { Entry } = await importa();
   return {
     get: (servizio, account) => new Entry(servizio, account).getPassword() || null,
     set: (servizio, account, valore) => new Entry(servizio, account).setPassword(valore),
@@ -200,5 +209,5 @@ export async function creaAdattatorePortachiavi(env = process.env, { segreti = O
   const scelta = leggiSceltaPortachiavi(env);
   if (scelta === PORTACHIAVI_MEMORIA) return creaAdattatorePortachiaviInMemoria();
   if (scelta?.modulo) return creaAdattatorePortachiaviDaModulo(scelta.modulo, env, { segreti });
-  return creaAdattatorePortachiaviSistema();
+  return creaAdattatorePortachiaviSistema({ env });
 }

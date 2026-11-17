@@ -10,7 +10,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname, relative } from 'node:path';
 import { tmpdir } from 'node:os';
-import { chromium } from '@playwright/test';
+import { lanciaBrowserDelleProve } from '../aiuto/lancia-browser-delle-prove.mjs'; // 12/11: senza ambiente fallisce con la causa, mai salta
 import { build } from 'esbuild';
 
 const frontend = fileURLToPath(new URL('../..', import.meta.url));
@@ -38,7 +38,7 @@ const CASI = {
 };
 
 let browser;
-test.before(async () => { browser = await chromium.launch({ headless: true }); });
+test.before(async () => { browser = await lanciaBrowserDelleProve({ headless: true }); });
 test.after(() => browser?.close());
 
 test('LETTORE-OUTPUT-STILE: dentro la chat le righe di stato sono piccole e attenuate; l’avviso del segno di fine è in parole e solo quando serve', async (t) => {

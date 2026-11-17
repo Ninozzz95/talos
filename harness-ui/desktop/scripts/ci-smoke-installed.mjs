@@ -11,7 +11,8 @@ const attendi = ms => new Promise(r => setTimeout(r, ms));
 export async function provaInstallato({ executablePath, dataDir }) {
   const { _electron } = createRequire(import.meta.url)('../../frontend/node_modules/playwright');
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => !/KEY|TOKEN|SECRET|PASSWORD|TALOS_|NODE_OPTIONS|ELECTRON_RUN_AS_NODE/i.test(k)));
-  Object.assign(env, { TALOS_DESKTOP_DATA_DIR: resolve(dataDir), TALOS_INTRO: '0' });
+  // Last piece of round 4 (owner 11/11 09:41, «segno obbligatorio nelle prove»): a test launch always carries the explicit mark.
+  Object.assign(env, { TALOS_DESKTOP_DATA_DIR: resolve(dataDir), TALOS_INTRO: '0', TALOS_PROVA_ISOLATA: '1' });
   let app;
   let pidFiglio;
   const inizio = performance.now();
@@ -35,6 +36,10 @@ export async function provaInstallato({ executablePath, dataDir }) {
     const improntaHelper = createHash('sha256').update(readFileSync(helperInstallato)).digest('hex');
     assert.equal(readFileSync(`${helperInstallato}.sha256`, 'utf8').trim().split(/\s+/u)[0].toLowerCase(), improntaHelper, 'Lock dell\'helper degli allegati assente o diverso nell\'app installata.');
     misure.helperAllegati = { lock: true };
+    /* 13/11/2026 (owner via giudice v1815-v1816): the installed app carries the command helper, checked by fingerprint, and its kernel
+       finds it; in a release (TALOS_PACCHETTO_RILASCIO) a package without it fails here. */
+    const { controllaLanciatoreInstallato } = await import('./lanciatore-nel-pacchetto.mjs');
+    misure.lanciatore = await controllaLanciatoreInstallato({ risorse: percorsi.risorse });
     pidFiglio = await app.evaluate(() => process._getActiveHandles().find(h => h.constructor.name === 'ChildProcess')?.pid);
     assert.ok(pidFiglio, 'Backend figlio assente.');
     misure.pidFiglio = pidFiglio;
@@ -47,6 +52,11 @@ export async function provaInstallato({ executablePath, dataDir }) {
     assert.equal(misure.healthSenzaCookie, 401);
     misure.healthConCookie = await pagina.evaluate(async () => (await fetch('/api/v1/health', { signal: AbortSignal.timeout(5000) })).status);
     assert.equal(misure.healthConCookie, 200);
+    /* 13/11/2026: the running installed server follows commands through the packaged helper (diagnostics of «Report a problem») */
+    if (misure.lanciatore.incluso) {
+      misure.lanciatore.seguiti = await pagina.evaluate(async () => { const j = await (await fetch('/api/v1/diagnostica-segnalazione', { signal: AbortSignal.timeout(5000) })).json(); return (j.data ?? j).nipoti?.seguiti ?? null; });
+      assert.equal(misure.lanciatore.seguiti, true, 'The installed server does not follow commands through the helper.');
+    }
     /* Centro assistenza (owner 01/11/2026): la guida del sito nell'app installata, letta col modulo VERO dell'installato (lo stesso
        che usa `talos_help`), con una domanda vera. Prende il posto della prova di `POST /api/v1/assistenza`, uscita col suo corpus. */
     const backendInstallato = join(percorsi.risorse, 'harness-ui');

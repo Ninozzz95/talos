@@ -10,6 +10,7 @@ import { PIENO_PRIMA_159 } from './computer-use-pieno-prima-159.mjs';
 import {
   valutaAzione, intenzioniDallaFrase, POLITICHE, DECISIONI, PROTEZIONI, importiNelTesto, tettoDallaFrase, PROVE_INTERNE,
 } from '../src/computer-use/protezioni.mjs';
+import { eseguiCompito } from '../src/computer-use/ciclo.mjs';
 
 // Tetti di TEMPO ×4 solo in CI (runner condivisi: la PR #95 è caduta due volte sul tempo con ogni prova di comportamento verde);
 // in locale restano quelli di prima. Ogni misura si stampa col tetto usato.
@@ -326,7 +327,8 @@ test('PROT-22: fallisce CHIUSO — azione, tipo, bersaglio o schermata che non s
   const pagaOra = pulsante('Paga ora');
   const casi = [
     { azione: undefined, bersaglio: pagaOra }, { azione: null, bersaglio: pagaOra }, { azione: { tipo: 'click' }, bersaglio: pagaOra },
-    { azione: { tipo: 'PREMI' }, bersaglio: pagaOra }, { azione: { tipo: 'clic', x: 1, y: 1 }, bersaglio: null },
+    { azione: { tipo: 'PREMI' }, bersaglio: pagaOra }, { azione: { tipo: 'premi', ref: 'e1' }, bersaglio: null },
+    { azione: { tipo: 'scegli', ref: 'e1', valore: 'x' }, bersaglio: null },
     { azione: { tipo: 'premi' }, bersaglio: pagaOra, schermata: { elementi: {} } },
     { azione: { tipo: 'premi' }, bersaglio: { ruolo: 'pulsante', nome: { toString() { throw new Error('ostile'); } } } },
   ];
@@ -335,6 +337,14 @@ test('PROT-22: fallisce CHIUSO — azione, tipo, bersaglio o schermata che non s
     assert.equal(r.decisione, 'ferma', JSON.stringify(c.azione)); assert.equal(r.motivo, 'non-valutabile');
     assert.equal(valutaAzione({ schermata: vuota, ...c, politica: NORMALE, contesto: ctx() }).decisione, 'chiedi');
   }
+  // 0.2.1-CU (owner 09/11/2026, giudice v1279, S1): un clic per COORDINATE senza elemento sotto il punto non è più «non valutabile»: parte,
+  // come in Hermes (cua_backend_input.py:105-108) e nella demo Anthropic (computer.py:220-226); l'anti-robot lo ferma ancora
+  for (const politica of [PIENO, NORMALE]) {
+    const r = valutaAzione({ azione: { tipo: 'clic', x: 1, y: 1 }, bersaglio: null, schermata: vuota, politica, contesto: ctx() });
+    assert.equal(r.decisione, 'procedi', politica.nome); assert.notEqual(r.motivo, 'non-valutabile');
+  }
+  const robot = { elementi: [{ ruolo: 'casella', nome: "I'm not a robot" }] };
+  assert.equal(valutaAzione({ azione: { tipo: 'clic', x: 1, y: 1 }, bersaglio: null, schermata: robot, politica: PIENO, contesto: ctx() }).protezione, 'anti-robot');
   // una politica senza la sua regola per il non valutabile non procede mai
   assert.equal(valutaAzione({ azione: null, politica: { nome: 'x', decidi: () => 'procedi', nonValutabile: 'procedi' } }).decisione, 'ferma');
   // «"false"» come stringa non è una richiesta
@@ -742,4 +752,69 @@ test("PROT-37-ASSISTENTE (V2-R2): le domande all'assistente e le cose che non so
 
 test('PROT-37-QUESTO (V2-R3, testimone del mutante vivo V-R10): «rispondi a questo messaggio» resta fuori come «questa»', () => {
   assert.equal(intenzioniDallaFrase('rispondi a questo messaggio').inviare, false);
+});
+
+// 0.2.1-CU, giro 2 (revisione CLI, reperto 1, 09/11/2026): una finestra di conferma irreversibile riguarda TUTTO lo schermo, come l'anti-robot.
+// Un clic per coordinate senza elemento sotto il punto la guarda come fanno già i tasti; Hermes chiede il permesso a ogni azione che
+// cambia qualcosa (tools/computer_use/tool.py:336-341), noi solo dove la finestra dice che non si torna indietro.
+test('PROT-38: finestra irreversibile aperta + clic per coordinate senza elemento ⇒ cancellazione che NOMINA il dialogo, e dopo il sì il clic PARTE; senza quella finestra il clic parte', async () => {
+  const clic = { tipo: 'clic', x: 10, y: 10 };
+  const irreversibile = { elementi: [{ ref: 'd1', ruolo: 'finestra', nome: 'Conferma', modale: true },
+    { ruolo: 'testo', nome: 'Eliminare definitivamente questo file? L\'operazione non si può annullare.', finestra: 'd1' }] };
+  const normale = valutaAzione({ azione: clic, bersaglio: null, schermata: irreversibile, politica: NORMALE, contesto: ctx() });
+  assert.deepEqual({ d: normale.decisione, p: normale.protezione, m: normale.motivo }, { d: 'chiedi', p: 'cancellazione', m: 'dialogo' });
+  assert.match(String(normale.prova), /eliminare definitivamente questo file/u, 'la decisione porta il testo del dialogo');
+  // come «tasti enter» sulla stessa schermata: stessa protezione, stesso motivo, stessa prova
+  const invio = valutaAzione({ azione: { tipo: 'tasti', combinazione: 'enter' }, bersaglio: null, schermata: irreversibile, politica: NORMALE, contesto: ctx() });
+  assert.deepEqual([normale.protezione, normale.motivo, normale.prova], [invio.protezione, invio.motivo, invio.prova]);
+  // Accesso pieno (decisione 159): la cancellazione passa e si SEGNA; col sospetto acceso chiede
+  const pieno = valutaAzione({ azione: clic, bersaglio: null, schermata: irreversibile, politica: POLITICHE.pcAccessoPieno, contesto: ctx() });
+  assert.deepEqual({ d: pieno.decisione, p: pieno.protezione, m: pieno.motivo }, { d: 'procedi-e-segna', p: 'cancellazione', m: 'dialogo' });
+  assert.equal(valutaAzione({ azione: clic, bersaglio: null, schermata: irreversibile, politica: POLITICHE.pcAccessoPieno, contesto: ctx({ sospetto: true }) }).decisione, 'chiedi');
+  assert.equal(valutaAzione({ azione: clic, bersaglio: null, schermata: irreversibile, politica: SEMPRE, contesto: ctx() }).decisione, 'chiedi');
+  // due finestre modali, una sola irreversibile: senza elemento sotto il punto non si sa quale riceve il clic ⇒ vale
+  const due = { elementi: [{ ref: 'a', ruolo: 'finestra', nome: 'Elimina definitivamente?', modale: true }, { ref: 'b', ruolo: 'finestra', nome: 'Salva le modifiche?', stato: 'modale' }] };
+  assert.equal(valutaAzione({ azione: clic, bersaglio: null, schermata: due, politica: NORMALE, contesto: ctx() }).protezione, 'cancellazione');
+  // giro 3 (revisione CLI, mutante R4 rimasto vivo): la finestra irreversibile per SECONDA, e detta dal suo testo, non dal titolo
+  const seconda = { elementi: [{ ref: 'b', ruolo: 'finestra', nome: 'Salva le modifiche?', modale: true }, { ref: 'bt', ruolo: 'testo', nome: 'Il documento è stato modificato.', finestra: 'b' },
+    { ref: 'a', ruolo: 'finestra', nome: 'Conferma', modale: true }, { ref: 'at', ruolo: 'testo', nome: 'Eliminare definitivamente questo file? L\'operazione non si può annullare.', finestra: 'a' }] };
+  const rSeconda = valutaAzione({ azione: clic, bersaglio: null, schermata: seconda, politica: NORMALE, contesto: ctx() });
+  assert.deepEqual([rSeconda.decisione, rSeconda.protezione, rSeconda.motivo], ['chiedi', 'cancellazione', 'dialogo']);
+  assert.match(String(rSeconda.prova), /eliminare definitivamente questo file/u);
+  // giro 3 (revisione CLI R1, Telefono R1): la carta non basta, dopo «Consenti» il clic deve PARTIRE. Prima il ciclo scartava il sì
+  // come «elemento sparito» (due bersagli nulli non erano mai «lo stesso»): 1 carta, 0 clic, e così a ogni giro
+  for (const schermata of [irreversibile, seconda]) {
+    const eseguite = []; const domande = []; let k = 0; let t = 0;
+    const r = await eseguiCompito({ testoDellaPersona: 'riordina la cartella', politica: NORMALE, porte: {
+      guarda: async () => ({ frenoArmato: true, app: 'explorer', titolo: 'Download', ...schermata }),
+      chiedi: async () => (k++ === 0 ? { azioni: [clic] } : { fine: { riuscito: true } }),
+      agisci: async (azione) => { eseguite.push(azione.tipo); return { esito: 'non-verificabile' }; },
+      bersaglio: () => null, chiediPersona: async (q) => { domande.push(q.protezione); return 'si'; },
+      attendi: async () => {}, emetti: () => {}, adesso: () => { t += 10; return t; } } });
+    assert.deepEqual([r.esito, domande, eseguite], ['riuscito', ['cancellazione'], ['clic']]);
+  }
+  // 0 carte in più dove la finestra irreversibile non c'è: finestra che si può annullare, testo fuori da una modale, schermo vuoto
+  const salva = { elementi: [{ ref: 's', ruolo: 'finestra', nome: 'Salvare le modifiche a Senza titolo?', modale: true }] };
+  const impostazioni = { elementi: [{ ruolo: 'testo', nome: 'I messaggi verranno eliminati definitivamente dopo 7 giorni' }] };
+  for (const schermata of [salva, impostazioni, vuota, { elementi: null }]) {
+    for (const politica of [NORMALE, POLITICHE.pcAccessoPieno, SEMPRE]) {
+      const r = valutaAzione({ azione: clic, bersaglio: null, schermata, politica, contesto: ctx() });
+      assert.deepEqual([r.decisione, r.protezione], ['procedi', null], `${politica.nome} ${JSON.stringify(schermata).slice(0, 60)}`);
+    }
+  }
+  // «premi» e «scegli» senza elemento restano non valutabili anche davanti al dialogo (S7: tornano al modello)
+  for (const azione of [{ tipo: 'premi', ref: 'e9' }, { tipo: 'scegli', ref: 'e9', valore: 'x' }]) {
+    const r = valutaAzione({ azione, bersaglio: null, schermata: irreversibile, politica: NORMALE, contesto: ctx() });
+    assert.deepEqual([r.motivo, r.prova], ['non-valutabile', 'bersaglio-mancante'], azione.tipo);
+  }
+});
+
+test('PROT-39 (revisione Telefono, MT2): il telefono non ha il clic per coordinate; resta rifiutato come tipo fuori vocabolario, con e senza elemento', () => {
+  const irreversibile = { elementi: [{ ref: 'd1', ruolo: 'finestra', nome: 'Elimina definitivamente?', modale: true }] };
+  for (const politica of [TELEFONO, POLITICHE.telefonoAccessoPieno]) {
+    for (const [bersaglio, schermata] of [[null, vuota], [pulsante('Avanti'), vuota], [null, irreversibile]]) {
+      const r = valutaAzione({ azione: { tipo: 'clic', x: 10, y: 10 }, bersaglio, schermata, politica, contesto: ctx() });
+      assert.deepEqual([r.decisione, r.protezione, r.motivo, r.prova], ['ferma', null, 'non-valutabile', 'tipo-fuori-vocabolario'], politica.nome);
+    }
+  }
 });

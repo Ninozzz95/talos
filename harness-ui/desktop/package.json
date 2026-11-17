@@ -1,6 +1,6 @@
 {
   "name": "talos-desktop",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Il guscio desktop di TALOS, con il runtime Node incluso in Electron.",
   "license": "AGPL-3.0-only",
@@ -9,13 +9,13 @@
   "scripts": {
     "start": "electron .",
     "test": "npm run test:puri && npm run test:guscio",
-    "test:puri": "node --test tests/*.test.mjs",
-    "test:guscio": "node --test --test-concurrency=1 tests/backend.spec.mjs tests/guscio.spec.mjs",
+    "test:puri": "node --test --import=./tests/gancio-portachiavi.mjs tests/*.test.mjs",
+    "test:guscio": "node --test --import=./tests/gancio-portachiavi.mjs --test-concurrency=1 tests/backend.spec.mjs tests/guscio.spec.mjs tests/finestra-artefatto-rete.spec.mjs",
     "icone": "node scripts/genera-icone.mjs",
     "prova:pty": "node scripts/prova-pty.mjs",
     "prepara": "node scripts/prepara-pacchetto.mjs && node scripts/verifica-protezioni-kernel.mjs",
     "dist": "npm run prepara && node scripts/distribuisci.mjs",
-    "test:installer": "node --test --test-concurrency=1 tests/installer.spec.mjs"
+    "test:installer": "node --test --import=./tests/gancio-portachiavi.mjs --test-concurrency=1 tests/installer.spec.mjs"
   },
   "devDependencies": {
     "@resvg/resvg-js": "2.6.2",
@@ -60,8 +60,10 @@
       "segnalazione.mjs",
       "bolla-finestra.mjs",
       "segno-finestra.mjs",
+      "finestra-artefatto.mjs",
       "pc-sveglio.mjs",
       "fonte-aggiornamenti.mjs",
+      "preferenze-iniziali.mjs",
       "package.json",
       "assets/talos.png",
       "assets/talos-tray.png",

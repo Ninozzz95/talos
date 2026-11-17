@@ -354,7 +354,8 @@ test('DET-15 — il filo nella app: acceso solo dalla chat, e l\'esportazione de
   const app = readFileSync(path.join(qui, '../../src/legacy/app.js'), 'utf8');
   /* una sola chiamata nel monolite accende il blocco, e solo per chi passa il blocco di codice della chat */
   assert.equal(app.split('blocchiRichiudibili').length - 1, 1);
-  assert.match(app, /const inChat = bloccoCodice !== costruisciBloccoCodice;\s+return renderizzaMarkdown\(testoGrezzo, \{ document, bloccoCodice, linkConversazione: true, linkWeb: true, blocchiRichiudibili: inChat \}\);/);
+  /* 11/11/2026 (Assistente, scelte 1 e 7): le risposte dell'Assistente usano lo stesso disegno della chat (`linkFile: true`), coi link ai file */
+  assert.match(app, /const inChat = bloccoCodice !== costruisciBloccoCodice;[\s\S]{0,200}?return renderizzaMarkdown\(testoGrezzo, \{ document, bloccoCodice, linkConversazione: true, linkWeb: true, blocchiRichiudibili: inChat \|\| linkFile === true, linkFile: inChat \|\| linkFile === true \}\);/);
   /* al contrario: `htmlFidato` in chat resta spento (lo accende solo la scheda del modello) */
   assert.equal(app.includes('htmlFidato'), false);
   /* l'esportazione del ragionamento è quella di prima, parola per parola */

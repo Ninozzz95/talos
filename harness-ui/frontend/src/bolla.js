@@ -1,7 +1,13 @@
 /* FE-066: l'ingresso della pagina della bolla. La finestra è del guscio; dati e risposte passano dal canale verso la pagina principale. */
 import { applicaLingua } from './components/lingua.js';
 import { CANALE_BOLLA } from './components/computer-use/bolla-protocollo.js';
-import { CHIAVE_IMPOSTAZIONI, CHIAVE_SEGNO_ASSENTE, creaBolla, linguaDellaBolla } from './components/computer-use/bolla.js';
+import { CHIAVE_IMPOSTAZIONI, CHIAVE_SEGNO_ASSENTE, creaBolla, linguaDellaBolla, tettoDellaBolla } from './components/computer-use/bolla.js';
+
+/* Giro 6 della bolla (14/11): l'altezza della bolla viene dal contenuto, fino al bordo dello schermo (`bolla.css`, `--bolla-tetto`). Lo schermo può cambiare
+   (la bolla trascinata su un altro, la barra delle applicazioni): si rilegge a ogni cambio di misura della finestra, che costa niente. */
+const tetto = () => document.documentElement.style.setProperty('--bolla-tetto', `${tettoDellaBolla(window.screen?.availHeight)}px`);
+tetto();
+window.addEventListener('resize', tetto);
 
 /* La lingua prima di disegnare: i testi della bolla si leggono con t() quando nascono. */
 let salvate = null;

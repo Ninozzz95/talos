@@ -17,12 +17,21 @@
 
 /** Il limite che agisce, o `null` se nessuna sorgente l'ha detto (mai un numero inventato). */
 export function limiteCheAgisce({ budget = null, politica = null } = {}) {
+  /* 11/11/2026 (owner 13:50, v1465, punto 5): la memoria del modello non è nota e il server usa una misura prudente (`windowUnknown`
+     della politica, `session-registry.mjs::sogliePerVoce`). Vale anche quando decide il motore: il modello è lo stesso. */
+  const ignota = politica?.windowUnknown === true ? { finestraIgnota: true } : {};
+  /* giro dopo i revisori (punto 4, owner 17:27 Q1): la memoria scritta dalla persona vince, ma se supera quella letta lo si dice col numero letto */
+  if (Number.isSafeInteger(politica?.windowWrittenAboveCatalog) && politica.windowWrittenAboveCatalog > 0) ignota.sopraIlCatalogo = politica.windowWrittenAboveCatalog;
+  /* passaggio dopo il revisore unico: la finestra è la memoria scritta dalla persona (foto 7), o agisce il tetto del motore (punto 4: il
+     server lo dice `explicit-cap` + `engineCeiling`, perché il telefono di oggi scriva il vero) */
+  if (politica?.windowWritten === true) ignota.scritta = true;
+  if (politica?.engineCeiling === true) ignota.tettoDelMotore = true;
   if (budget && Number.isSafeInteger(budget.triggerTokens) && budget.triggerTokens > 0) {
-    return { soglia: budget.triggerTokens, finestra: Number.isSafeInteger(budget.windowTokens) ? budget.windowTokens : null, fonte: 'motore' };
+    return { soglia: budget.triggerTokens, finestra: Number.isSafeInteger(budget.windowTokens) ? budget.windowTokens : null, fonte: 'motore', ...ignota };
   }
   if (politica && Number.isSafeInteger(politica.triggerTokens) && politica.triggerTokens > 0
     && ['route-minimum', 'explicit-cap', 'fallback'].includes(politica.source)) {
-    return { soglia: politica.triggerTokens, finestra: Number.isSafeInteger(politica.windowTokens) ? politica.windowTokens : null, fonte: politica.source };
+    return { soglia: politica.triggerTokens, finestra: Number.isSafeInteger(politica.windowTokens) ? politica.windowTokens : null, fonte: politica.source, ...ignota };
   }
   return null;
 }
@@ -53,7 +62,14 @@ export function tokenDellaCategoria(ripartizione, id) {
 /** La chiave i18n della riga del perché e i suoi parametri (i numeri li formatta chi disegna). */
 export function percheDelLimite(limite) {
   if (!limite) return null;
+  /* la riga «memoria non nota» (owner 11/11, v1465): solo con la finestra prudente; un tetto scritto apposta resta il suo perché */
+  if (limite.finestraIgnota === true && limite.fonte !== 'explicit-cap') return { chiave: 'processi.inspector.limitWhyPrudent', soglia: limite.soglia, finestra: limite.finestra };
+  if (Number.isSafeInteger(limite.sopraIlCatalogo) && (limite.fonte !== 'explicit-cap' || limite.tettoDelMotore === true)) return { chiave: 'processi.inspector.limitWhyWrittenAbove', soglia: limite.soglia, finestra: limite.finestra, catalogo: limite.sopraIlCatalogo };
   if (limite.fonte === 'motore') return { chiave: 'processi.inspector.limitWhyEngine', soglia: limite.soglia, finestra: limite.finestra };
+  if (limite.scritta === true && (limite.fonte === 'route-minimum' || limite.tettoDelMotore === true)) return { chiave: 'processi.inspector.limitWhyWritten', soglia: limite.soglia, finestra: limite.finestra };
+  if (limite.tettoDelMotore === true && Number.isSafeInteger(limite.finestra)) return { chiave: 'processi.inspector.limitWhyCeiling', soglia: limite.soglia, finestra: limite.finestra };
+  /* giro dopo i revisori (punto 12, owner 17:47): sopra il tetto del motore la soglia non è più il 75% della finestra (1M ⇒ 200k, non 750k) */
+  if (limite.fonte === 'route-minimum' && Number.isSafeInteger(limite.finestra) && limite.soglia < Math.floor(limite.finestra * 0.75)) return { chiave: 'processi.inspector.limitWhyCeiling', soglia: limite.soglia, finestra: limite.finestra };
   if (limite.fonte === 'route-minimum') return { chiave: 'processi.inspector.limitWhyWindow', soglia: limite.soglia, finestra: limite.finestra };
   if (limite.fonte === 'explicit-cap') return { chiave: 'processi.inspector.limitWhyCap', soglia: limite.soglia, finestra: limite.finestra };
   return { chiave: 'processi.inspector.limitWhyUnverified', soglia: limite.soglia, finestra: null };

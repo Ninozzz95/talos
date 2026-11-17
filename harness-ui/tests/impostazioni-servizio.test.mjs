@@ -24,8 +24,8 @@ const CHIAVI_DEL_CONTRATTO = [
   'language.interface', 'language.replies', 'motion.animatedBackground', 'motion.interfaceMotion', 'motion.reduced',
   'chat.questionTimeout', 'chat.stopWithAgents', 'chat.windowPresentation', 'chat.liveBlocks', 'updates.automatic',
   'conversation.model', 'conversation.planModel', 'conversation.reasoningEffort', 'conversation.fastModeRequested', 'conversation.permissions',
-  'conversation.coordination', 'conversation.folderTrust', 'conversation.commandShell', 'conversation.bangCommandsInChat',
-  'context.engine', 'context.summaryModel', 'context.summaryFallback', 'models.localWindowFull', 'tools.defaultCommandShell', 'tools.wslNormalUser', 'tools.computerUse', 'tools.webSearchSource',
+  'conversation.coordination', 'conversation.folderTrust', 'conversation.commandShell', 'conversation.bangCommandsInChat', 'conversation.modelMemory',
+  'context.engine', 'context.summaryModel', 'context.summaryFallback', 'models.localWindowFull', 'models.publicCatalog', 'tools.defaultCommandShell', 'tools.wslNormalUser', 'tools.computerUse', 'tools.webSearchSource',
 ]
 
 /** Fonti in memoria con la stessa forma di quelle vere; `rompi` fa fallire la scrittura di una fonte. */

@@ -406,7 +406,7 @@ test('R116-FE-15 (D5 di R116) — signed in while a turn runs: the resume stays 
   assert.equal(await r.giroFinito({ sessionId: 'sessione-B' }), false);
   assert.deepEqual(riprese, ['accesso-rifatto']);
   const app = readFileSync(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
-  const fini = app.match(/state\.realSession\.eventoTerminaleVisto = !state\.realSession\.redirectPendingId;\s*\n\s*syncRunComposerState\(\);\s*\n(?:\s*\/\*[\s\S]*?\*\/\s*\n)?\s*(?:if \(evento\.code === 'fermato'\) ripresaDopoAccesso\.annulla\(\);\s*\n\s*else )?void ripresaDopoAccesso\.giroFinito\(\{ sessionId: state\.realSession\.id \}\);/gu) ?? [];
+  const fini = app.match(/state\.realSession\.eventoTerminaleVisto = !state\.realSession\.redirectPendingId;\s*\n\s*syncRunComposerState\(\);(?: aggiornaInspectorDaStato\(\);)?\s*\n(?:\s*\/\*[\s\S]*?\*\/\s*\n)?\s*(?:if \(evento\.code === 'fermato'\) ripresaDopoAccesso\.annulla\(\);\s*\n\s*else )?void ripresaDopoAccesso\.giroFinito\(\{ sessionId: state\.realSession\.id \}\);/gu) ?? [];
   assert.equal(fini.length, 2, 'RunFinished and RunError both call giroFinito, after the end of the turn is recorded');
   // C1 of the chat block review (04/11): in the RunError branch the person's Stop disarms instead (the browser proof is R116-B-01)
   assert.equal(app.match(/if \(evento\.code === 'fermato'\) ripresaDopoAccesso\.annulla\(\);\s*\n\s*else void ripresaDopoAccesso\.giroFinito\(/gu)?.length ?? 0, 1,

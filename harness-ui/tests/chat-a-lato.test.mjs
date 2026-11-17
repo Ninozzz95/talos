@@ -38,7 +38,8 @@ function scena(t, opzioni = {}) {
 const RICHIESTA = { model: 'z-ai/glm-5.3-flash', messages: [{ role: 'system', content: 'sistema' }, { role: 'user', content: 'ciao' }, { role: 'assistant', content: 'ok' }], tools: [{ type: 'function', function: { name: 'leggi' } }] };
 const eventiDi = (registro, id) => registro.esporta(id).eventi;
 
-test('LATO-01 la risposta arriva e nel giornale non c\'è né domanda né risposta, solo il consumo', async (t) => {
+/* ⭐ Owner 11/11/2026 17:17 («Sì, si salvano»): l'Assistente salva domanda e risposta con la chat; supera il «non si salva» del 31/10. */
+test('LATO-01 la risposta arriva, e domanda e risposta si salvano nel giornale come scambio dell\'Assistente, col consumo', async (t) => {
   const { registro, giri } = scena(t);
   const { sessionId } = registro.avvia('task');
   await attesa();
@@ -49,9 +50,11 @@ test('LATO-01 la risposta arriva e nel giornale non c\'è né domanda né rispos
   assert.equal(esito.risposta, 'Risposta a parte');
   await attesa();
   const nuovi = eventiDi(registro, sessionId).slice(prima);
-  assert.equal(JSON.stringify(nuovi).includes('DOMANDA-SEGRETA'), false);
-  assert.equal(JSON.stringify(nuovi).includes('Risposta a parte'), false);
-  assert.deepEqual(nuovi.map((e) => e.name), ['consumo-di-servizio'], JSON.stringify(nuovi).slice(0, 200));
+  assert.deepEqual(nuovi.map((e) => e.name), ['consumo-di-servizio', 'assistente-scambio'], JSON.stringify(nuovi).slice(0, 200));
+  const salvato = nuovi.at(-1).value;
+  assert.equal(salvato.domanda, 'DOMANDA-SEGRETA a che punto sei?');
+  assert.equal(salvato.risposta, 'Risposta a parte');
+  assert.equal(salvato.senzaStrumenti, true, 'il giro della prova non ha la strada dei differiti');
 });
 
 test('LATO-02 durante un giro il giro non si ferma e nessun evento di conversazione nasce', async (t) => {
@@ -255,5 +258,13 @@ for (const [nome, rispondi, prezzo] of [
 }
 test('LATO-DOLLARI-5 la rotta porta il costo', () => {
   const http = readFileSync(new URL('../src/http-app.mjs', import.meta.url), 'utf8');
-  assert.match(http, /successEnvelope\(\{ risposta: esito\.risposta, tagliata: esito\.tagliata, filoTagliato: esito\.filoTagliato, usage: esito\.usage, costo: esito\.costo \?\? null \}/u);
+  assert.match(http, /successEnvelope\(\{ risposta: esito\.risposta, tagliata: esito\.tagliata, filoTagliato: esito\.filoTagliato, usage: esito\.usage, costo: esito\.costo \?\? null, scambio: esito\.scambio \?\? null, spesa: esito\.spesa \?\? null \}/u);
+});
+
+/* ⭐ L'Assistente (11/11/2026): la rotta in lettura porta le domande salvate e la spesa; i file citati passano dalla regola dell'Assistente. */
+test('LATO-13 la rotta GET dell\'Assistente è un guscio del registro', () => {
+  const http = readFileSync(new URL('../src/http-app.mjs', import.meta.url), 'utf8');
+  assert.match(http, /sessionRegistry\.leggiALato\(sessionId\)/u);
+  assert.match(http, /sessionRegistry\.fileDellAssistente\(sessionId, url\.searchParams\.get\('percorso'\)/u);
+  assert.match(http, /a-lato\(\?:\\\/file\)\?\$\/, metodi: \['GET'\]/u);
 });

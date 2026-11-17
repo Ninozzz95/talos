@@ -143,3 +143,4 @@
 @import './barra-approvazioni.css'; /* 03/11/2026: la barra delle approvazioni (FE-011) */
 @import './blocchi.css'; /* 03/11/2026: i blocchi dell'interfaccia generativa nella chat (FE-003) */
 @import './impostazioni-dalla-chat.css'; /* 02/11/2026: fase 8 «Impostazioni dalla chat» (bozzetto chiuso FE-055): carta, riga con Annulla, segno, /settings */
+@import './doctor.css'; /* 10/11/2026: 023 passo 2, il Doctor a «Elenco e pannello» (bozzetto approvato, registro 436) */

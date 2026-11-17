@@ -610,7 +610,7 @@ export const CAMPI_IMPOSTAZIONI = conTesti([
     "sezione": "chat",
     "gruppo": "chat"
   },
-  /* 27/10/2026 (owner, «come Hermes»): la bolla della persona a tutta larghezza, spenta di serie. Un gruppo suo, come la
+  /* 27/10/2026 (owner, «come Hermes»): la bolla della persona a tutta larghezza, accesa di serie dal 09/11/2026 (owner). Un gruppo suo, come la
      scadenza delle domande: le partizioni di Aspetto restano quelle del mockup (8/4/11/1/1, PARITA-02). */
   {
     "id": "userBubbleFullWidthToggle",

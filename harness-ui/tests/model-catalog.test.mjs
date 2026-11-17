@@ -94,21 +94,91 @@ test('PF-OR-03 — JSON e formato inattesi restituiscono riserva, mai un crash',
   }
 });
 
-test('⭐⭐ dopo un errore, il prossimo ottieni() riprova davvero — nessuna cache di errore', async () => {
+/*
+ * ⛔ IL TETTO AI TENTATIVI (ripasso del revisore unico, 11/11/2026 22:01, punto 3 ROSSO; giudice v1559). Prima di questa cura un errore
+ *   non lasciava traccia: «la prossima ottieni() riprova davvero» voleva dire un tentativo verso openrouter.ai per OGNI schermata che
+ *   chiedeva l'elenco (20 in 10 minuti, misurati col server vero). Ora un fallimento conta come una lettura: UNA ripetizione dopo
+ *   30 s, poi niente prima di 10 minuti; un successo azzera la serie. Le richieste insieme condividono la lettura in volo.
+ *   Come `compaction-window-source.mjs:49` (attesa dopo un fallimento) e `model-catalog-models-dev.mjs:16` (`RINVIO_MS`).
+ */
+test('⭐⭐ dopo un errore NON si riprova subito: la ripetizione arriva dopo 30 s, e allora riesce', async () => {
   let chiamate = 0;
+  let ora = 1_000_000;
   const fetchFn = async () => {
     chiamate += 1;
     if (chiamate === 1) throw new Error('boom');
     return { ok: true, status: 200, json: async () => ({ data: [MODELLO_GREZZO_1] }) };
   };
-  const catalogo = createModelCatalog({ fetchFn });
+  const catalogo = createModelCatalog({ fetchFn, clock: () => new Date(ora) });
 
   assert.equal((await catalogo.ottieni()).fonte, 'riserva');
+  ora += 29_000;
+  assert.equal((await catalogo.ottieni()).fonte, 'riserva', 'prima dei 30 s: la riserva, senza rete');
+  assert.equal(chiamate, 1);
+  ora += 1_000;
   const seconda = await catalogo.ottieni();
-  assert.equal(chiamate, 2);
+  assert.equal(chiamate, 2, 'a 30 s la ripetizione parte');
   assert.equal(seconda.modelli.length, 1);
   assert.notEqual(seconda.fonte, 'riserva');
   assert.equal(seconda.modelliDiRiserva, undefined);
+});
+
+test('MC-TETTO-01: la rete rifiuta sempre, una richiesta ogni 30 s — 2 tentativi in 10 minuti (0 s e 30 s), poi uno ogni 10 minuti; anche «aggiorna»', async () => {
+  let chiamate = [];
+  let ora = 5_000_000;
+  const inizio = ora;
+  const catalogo = createModelCatalog({ clock: () => new Date(ora), fetchFn: async () => { chiamate.push(ora - inizio); throw new Error('rifiutata'); } });
+  for (let i = 0; i < 20; i += 1) {
+    const r = await catalogo.ottieni({ forzaAggiornamento: i % 3 === 2 });
+    assert.equal(r.fonte, 'riserva');
+    ora += 30_000;
+  }
+  assert.deepEqual(chiamate, [0, 30_000], '10 minuti: il primo tentativo e una sola ripetizione');
+  for (let i = 0; i < 40; i += 1) { await catalogo.ottieni(); ora += 30_000; }
+  assert.deepEqual(chiamate, [0, 30_000, 630_000, 1_230_000], '30 minuti: poi al più uno ogni 10 minuti, senza altre ripetizioni a 30 s');
+});
+
+test('MC-TETTO-02: le richieste che arrivano insieme condividono la stessa lettura in volo (riuscita o fallita)', async () => {
+  let chiamate = 0;
+  let libera;
+  const cancello = new Promise((r) => { libera = r; }); // uno solo per tutte: senza la lettura condivisa nessuna resta appesa
+  const catalogo = createModelCatalog({ fetchFn: async () => {
+    chiamate += 1;
+    await cancello;
+    return { ok: true, status: 200, json: async () => ({ data: [MODELLO_GREZZO_1] }) };
+  } });
+  const cinque = Array.from({ length: 5 }, () => catalogo.ottieni({ forzaAggiornamento: true }));
+  await new Promise((r) => setTimeout(r, 10));
+  libera();
+  const esiti = await Promise.all(cinque);
+  assert.equal(chiamate, 1, 'cinque schermate, una lettura');
+  assert.ok(esiti.every((e) => e.modelli.length === 1));
+  let fallite = 0;
+  const giu = createModelCatalog({ fetchFn: async () => { fallite += 1; await new Promise((r) => setTimeout(r, 5)); throw new Error('giu'); } });
+  const insieme = await Promise.all(Array.from({ length: 5 }, () => giu.ottieni()));
+  assert.equal(fallite, 1, 'anche fallita: un tentativo solo');
+  assert.ok(insieme.every((e) => e.fonte === 'riserva'));
+});
+
+test('MC-TETTO-03: un successo azzera la serie — dopo un nuovo guasto la ripetizione a 30 s torna a valere; con la copia vera si serve quella', async () => {
+  let ora = 9_000_000;
+  let su = true;
+  let chiamate = 0;
+  const catalogo = createModelCatalog({ ttlMs: 60_000, clock: () => new Date(ora), fetchFn: async () => {
+    chiamate += 1;
+    if (!su) throw new Error('giu');
+    return { ok: true, status: 200, json: async () => ({ data: [MODELLO_GREZZO_1] }) };
+  } });
+  await catalogo.ottieni(); su = false;
+  ora += 61_000; assert.equal((await catalogo.ottieni()).fallbackRete, true); // 2: guasto, si serve la copia
+  ora += 10_000; assert.equal((await catalogo.ottieni()).fallbackRete, true); // niente rete prima dei 30 s
+  assert.equal(chiamate, 2);
+  ora += 20_000; su = true;
+  assert.equal((await catalogo.ottieni()).daCache, false, 'ripetizione a 30 s riuscita'); // 3
+  su = false; ora += 61_000; await catalogo.ottieni(); // 4: nuovo guasto
+  ora += 30_000; await catalogo.ottieni(); // 5: la ripetizione vale di nuovo
+  ora += 30_000; await catalogo.ottieni(); // niente: ora si aspetta 10 minuti
+  assert.equal(chiamate, 5);
 });
 
 test('PF-OR-04 — rete assente con copia: conserva i modelli veri e misura la loro età', async () => {
@@ -127,6 +197,7 @@ test('PF-OR-04 — rete assente con copia: conserva i modelli veri e misura la l
   assert.equal(copia.modelliDiRiserva, undefined);
   assert.doesNotMatch(JSON.stringify(copia), /dettagli riservati/);
   disponibile = true;
+  ora += 30_000; // dopo un fallimento la ripetizione arriva a 30 s (tetto ai tentativi, 11/11/2026)
   const vivo = await catalogo.ottieni();
   assert.equal(vivo.daCache, false);
   assert.notEqual(vivo.fallbackRete, true);
@@ -134,7 +205,8 @@ test('PF-OR-04 — rete assente con copia: conserva i modelli veri e misura la l
 
 test('PF-OR-05 — rotta HTTP reale in memoria: riserva e recupero senza aprire porte', async () => {
   let disponibile = false;
-  const modelCatalog = createModelCatalog({ fetchFn: async () => {
+  let ora = 2_000_000;
+  const modelCatalog = createModelCatalog({ clock: () => new Date(ora), fetchFn: async () => {
     if (!disponibile) throw new Error('rete');
     return Response.json({ data: [MODELLO_GREZZO_1] });
   } });
@@ -149,6 +221,7 @@ test('PF-OR-05 — rotta HTTP reale in memoria: riserva e recupero senza aprire 
   assert.equal(giu.status, 200);
   assert.equal(giu.corpo.data.fonte, 'riserva');
   disponibile = true;
+  ora += 30_000; // la ripetizione dopo un fallimento arriva a 30 s (tetto ai tentativi, 11/11/2026)
   const su = await richiesta();
   assert.equal(su.status, 200);
   assert.notEqual(su.corpo.data.fonte, 'riserva');

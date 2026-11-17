@@ -317,6 +317,10 @@ export function creaServizioRemoto({
         while (fila.length) {
           const m = fila.shift();
           spazio();
+          /* Known limit (reviewer RIP-2, 12/11/2026): today ONE request at a time is served on a connection (this `await`, and the `await rispondi(m)`
+             in `dallaFila`). `session.events` relies on it: the same `sub` asked twice TOGETHER would leave two listeners, every live event twice,
+             and one of them still attached after the connection closes. Before serving more requests together, cure that first in
+             `operazioni.mjs` (close the old subscription again after the realignment wait; S3-14 pins a single close and must be relaxed). */
           const avanti = await dallaFila(m);
           if (!lunghe.has(m.n)) presenti.delete(m.n);
           if (!avanti) { fila = []; ferma(); }

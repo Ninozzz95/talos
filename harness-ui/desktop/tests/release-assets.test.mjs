@@ -109,6 +109,8 @@ test('R04-SHA — hash reali, note in inglese col changelog dentro, e nessun art
   assert.ok(note.includes('## What changed'), 'manca la sezione delle novità');
   assert.ok(note.includes('La prima riga che deve finire nelle note'), 'il changelog di questa versione deve essere nelle note');
   assert.ok(!note.includes('versione PRECEDENTE'), 'le note portano SOLO la sezione di questo tag');
+  // 0.2.2 (SignPath): la politica di firma e l'informativa sulla rete, linkate dalle note; e come si spengono gli aggiornamenti
+  for (const testo of ['## Code signing policy', 'https://github.com/owner/progetto#code-signing-policy', 'https://github.com/owner/progetto/blob/main/PRIVACY.md', 'TALOS_DESKTOP_AGGIORNAMENTI=off']) assert.ok(note.includes(testo), testo);
 });
 
 test('R04-CHANGELOG-CANCELLO — senza sezione (o senza file) non si pubblica: il no arriva PRIMA della build', async t => {

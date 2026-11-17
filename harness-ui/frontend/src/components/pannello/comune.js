@@ -234,6 +234,25 @@ export function disegnaScheda(contenitore, costruisci, { interno = false, adatta
   aggiornaOrologio(contenitore);
 }
 
+/*
+ * ⛔ P3 (ricognizione del giudice dell'11/11/2026, D2) — UN DISEGNO UGUALE NON SI RIFÀ. La colonna si disegna a ogni evento del giro, e le
+ *   schede Processi e Agenti si ricostruivano da capo (`replaceChildren` + fino a dieci giri di misura in `disegnaScheda`) anche con gli
+ *   stessi dati. ⇒ Lo stesso controllo della scheda Contesto (`contesto.js`, «coi dati di prima non si ridisegna»), ma con una FIRMA
+ *   ECONOMICA che la scheda si calcola dai campi che mostra (le righe, il loro stato, le misure), senza `JSON.stringify` di tutto e
+ *   senza leggere `clientHeight`: lo spazio che cambia lo dice già `osservaSpazio`, che ridisegna da dentro. Un ridisegno nato DENTRO la
+ *   scheda (`interno`: un gesto, una pagina, lo spazio) si fa sempre. Il tempo «da quanto» scorre col suo orologio (`aggiornaOrologio`),
+ *   senza ridisegni. Come pi, che salta le righe uguali (`packages/tui/src/tui-alt-screen.ts:1752`). Prova: PERF-PANNELLO-01.
+ */
+export function disegnoUguale(ui, contenitore, firma, { interno = false } = {}) {
+  const uguale = !interno && firma !== null && firma === ui.firmaDati && Boolean(ui.radice?.isConnected) && ui.radice.parentNode === contenitore;
+  ui.firmaDati = firma;
+  return uguale;
+}
+/** I pezzi comuni della firma: la lingua, se la scheda è nascosta (un disegno fatto da nascosta non ha misurato lo spazio), l'istante fisso. */
+export function firmaDellaScheda(contenitore, dati = {}) {
+  return [contenitore.ownerDocument?.documentElement?.lang ?? '', Boolean(contenitore.closest?.('[hidden]')), Number.isFinite(dati.adesso) ? dati.adesso : '', dati.sessione ?? '', dati.inCaricamento === true];
+}
+
 /** Un ridisegno per fotogramma al massimo (come `aggiornaInspectorDaStato`, `legacy/app.js:12902`). */
 export function programmaRidisegno(ui) {
   if (ui.programmato) return;
@@ -404,7 +423,7 @@ export function segmenti(d, ui, { voci, etichetta, scelto = ui.ambito ?? voci[0]
 }
 
 /** Una sezione col suo titolo e il suo conto. `attenzione` = il blocco ambra in cima; `spina` = il filo che lega i segni. */
-export function sezione(d, { chiave, titolo, conto = null, attenzione = false, spina = false, azione = null, ui = null }, contenuto) {
+export function sezione(d, { chiave, titolo, conto = null, attenzione = false, spina = false, azione = null, ui = null, nota = null }, contenuto) {
   if (!contenuto?.length) return null;
   const s = el(d, 'section', `pn-sezione${attenzione ? ' pn-sezione--attenzione' : ''}`);
   if (spina) s.dataset.spina = '';
@@ -435,6 +454,9 @@ export function sezione(d, { chiave, titolo, conto = null, attenzione = false, s
   }
   if (azione) h.append(azione);
   s.append(h);
+  /* S1-b (11/11): una riga di nota sotto il titolo, con la grammatica delle note del pannello (`pn-nota`); resta anche a sezione chiusa,
+     come il conto che stava nel titolo (niente si toglie) */
+  if (nota) { const p = el(d, 'p', 'pn-nota', nota); p.dataset.notaSezione = chiave; s.append(p); }
   if (chiusa) { s.dataset.chiusa = ''; return s; }
   const elenco = el(d, 'div', 'pn-elenco');
   elenco.setAttribute('role', 'list');
@@ -788,7 +810,7 @@ export function bloccoDiTesta(d, ui, chiave) {
 }
 
 /** La piega tratteggiata: ciò che resta chiuso finché non lo apri (richieste passate, indice dei giri, tutto il progetto). */
-export function piega(d, ui, { chiave, titolo, sotto, contenuto }) {
+export function piega(d, ui, { chiave, titolo, sotto, contenuto, sottoSoloDaChiusa = false }) {
   const compatta = ui.piegheAperte.has(chiave) && ui.compatte.has(`piega-${chiave}`);
   const aperta = ui.piegheAperte.has(chiave) && !compatta;
   const box = el(d, 'div', 'pn-piega');
@@ -797,7 +819,9 @@ export function piega(d, ui, { chiave, titolo, sotto, contenuto }) {
   b.dataset.controllo = `piega-${chiave}`;
   b.setAttribute('aria-expanded', String(aperta));
   const testi = el(d, 'span', 'pn-piega__testi');
-  testi.append(el(d, 'b', 'pn-tronca', titolo), el(d, 'small', 'pn-tronca', sotto));
+  /* `sottoSoloDaChiusa`: la riga sotto il titolo è lo stesso testo che la piega aperta mostra intero (revisore unico 11/11, foto 1-3: il
+     perché scritto due volte): da aperta non si ripete */
+  testi.append(el(d, 'b', 'pn-tronca', titolo), ...(aperta && sottoSoloDaChiusa ? [] : [el(d, 'small', 'pn-tronca', sotto)]));
   b.append(icona(d, 'i-chevron-right'), testi);
   if (compatta) { b.title = t('pannello.comune.ripiegataPerSpazio'); box.dataset.compatta = ''; }
   b.addEventListener('click', (e) => {

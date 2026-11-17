@@ -7,7 +7,7 @@ import { resolve, dirname, extname, relative, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { preparaCartellaFoto } from '../aiuto/cartella-foto.mjs';
-import { chromium } from '@playwright/test';
+import { lanciaBrowserDelleProve } from '../aiuto/lancia-browser-delle-prove.mjs'; // 12/11: senza ambiente fallisce con la causa, mai salta
 import { build } from 'esbuild';
 import { createProviderCredentialStore } from '../../../src/provider-credential-store.mjs';
 import { createHttpApp } from '../../../src/http-app.mjs';
@@ -61,7 +61,7 @@ test('PK-UI-02/03 — campi cloud reali, salvataggio HTTP, ricarica, errore e di
     });
   `, resolveDir: frontend }, tsconfigRaw: {}, bundle: true, write: false, format: 'iife', logLevel: 'silent' });
   const css = await build({ absWorkingDir: tmpdir(), plugins: [sorgenti], entryPoints: [resolve(frontend, 'src/styles/main.css')], tsconfigRaw: {}, bundle: true, write: false, external: ['./fonts/*'], logLevel: 'silent' });
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await lanciaBrowserDelleProve({ channel: 'chrome', headless: true });
   t.after(() => browser.close());
   for (const width of [1920, 1440, 390]) {
     const page = await browser.newPage({ viewport: { width, height: width === 1920 ? 1080 : 1000 }, reducedMotion: 'reduce' });

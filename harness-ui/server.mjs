@@ -1,5 +1,6 @@
 import './src/difesa-ricerca-programmi.mjs'; // ⛔ PER PRIMO: su Windows un `git.exe` dentro il workspace non deve battere il git vero (misura e fonti nel file)
 import { KERNEL_DI_SERIE_DESKTOP } from './src/kernel-di-serie-desktop.avvio.mjs'; // ⛔ PER SECONDO (L3-9): senza la variabile del kernel vale l'adattatore desktop, e va deciso PRIMA che config e runtime la leggano
+import './src/guardia-portachiavi-prove.avvio.mjs'; // ⛔ PER TERZO (P045, 11/11/2026): la lettura degli antenati parte qui, in parallelo, e trattiene solo il primo accesso al portachiavi
 import { mkdirSync, readFileSync, renameSync, statfsSync, unlinkSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto'; // F3 (24/09): il gettone dello spegnimento gentile
 import { createServer } from 'node:http';
@@ -48,6 +49,7 @@ import { verificaCasaLinux } from './src/casa-linux-binari.mjs'; // Fase B (owne
 import { ENDPOINT_SENTINELLA_DUCKDUCKGO, creaTrasportoSenzaChiave } from './src/duckduckgo-search.mjs';
 import { createModelCatalog } from './src/model-catalog.mjs';
 import { createCompactionWindowSource } from './src/compaction-window-source.mjs';
+import { creaFinestraDaiCataloghi, creaSceltaDellaFinestra, creaFinestraDellOspite } from './src/finestra-di-ripiego.mjs'; // owner 11/11 13:50 (v1465, punto 5)
 import { createModelsDevCatalog, createProviderModelCatalog } from './src/model-catalog-models-dev.mjs'; // P-E (12/09)
 import { creaRegistroTerminali, MINUTI_PRIMA_DI_CHIUDERE_PTY_ORFANA } from './src/pty-terminal.mjs';
 import { creaRegistroSchedeTerminale } from './src/terminal-registry.mjs'; // ⭐ 05/9, W1-01
@@ -75,6 +77,7 @@ import { descriviKernelCaricato } from './src/kernel-caricato.mjs';
 import { creaModelliUtilizzabili } from './src/modelli-utilizzabili.mjs';
 import { createProviderCredentialStore } from './src/provider-credential-store.mjs';
 import { leggiScopePortachiavi, avvolgiAdattatoreKeyring, creaAdattatorePortachiavi, leggiPortachiaviDiProva } from './src/adattatore-keyring.mjs';
+import { rigaDellaGuardia } from './src/guardia-portachiavi-prove.mjs';
 import { migraChiaviLegacySuDesktop } from './src/migrazione-chiavi.mjs';
 import { createGeneratedImageStore } from './src/generated-image-store.mjs';
 import { createOwnerRuntimeAdapter, creaFetchMultiProvider, reasoningAlCambioDiModello } from './src/runtime-owner-adapter.mjs';
@@ -87,6 +90,7 @@ import { createImpostazioniContesto, giroUsaIlMotore } from './src/impostazioni-
 import { creaFiduciaCartelle, opzioniFiduciaPerIlRegistro } from './src/fiducia-cartelle.mjs';
 import { createImpostazioniComandi } from './src/impostazioni-comandi.mjs'; // owner 27/10/2026: dove girano i comandi, di serie
 import { createImpostazioniChat } from './src/impostazioni-chat.mjs'; // decisione 140 (04/11/2026): «Blocchi vivi nelle risposte»
+import { createImpostazioniAssistente } from './src/impostazioni-assistente.mjs'; // l'Assistente (11/11/2026): con che modello pensa
 import { createPreferenzeModelli } from './src/preferenze-modelli.mjs'; // owner 29/10/2026: preferiti e recenti dei modelli
 import { createContextTokenCounter, buildPreparedDesktopContextRequest, credenzialeDelContatore } from './src/context-token-counters.mjs';
 import { createChatImageStore } from './src/chat-image-attachments.mjs';
@@ -123,7 +127,9 @@ import { creaLucchettoRinnovoChatgpt, fileLucchettoRinnovoChatgpt } from './src/
 import { accessoConUso, creaRegistroUsoChatgpt } from './src/chatgpt-uso.mjs';
 import { creaRegistroNotifiche } from './src/notifiche-registro.mjs';
 import { porteDelComputerUse } from './src/computer-use/interruttore.mjs';
+import { creaCustodeFileComputerUse } from './src/computer-use/file-approvati.mjs'; // decisione 374 (07/11): la versione approvata dei due file
 import { creaImpostazioneComputerUse } from './src/computer-use/impostazione.mjs'; // decisione 310 (06/11): «Anteprima», spento di serie, acceso solo a mano
+import { FILE_CATALOGO_PUBBLICO, creaImpostazioneCatalogoPubblico } from './src/catalogo-pubblico.mjs'; // 0.2.2 (SignPath): il catalogo pubblico si spegne
 import { chiudiTuttiGliAiutanti } from './src/computer-use/aiutante-mcp.mjs'; // 04/11/2026: l'aiutante nativo si spegne con l'app
 import { creaScrittoriNotifiche } from './src/notifiche-scrittori.mjs';
 import { creaPulitoreMarkdown } from './src/notifiche-testo.mjs'; // markdown-it si importa alla prima voce con segni, mai qui
@@ -138,6 +144,7 @@ import { creaLettoreBloccate } from './src/remoto/lettore-bloccate.mjs'; // owne
 import { iscriviConRigiocata } from './src/iscrizione-sessione.mjs';
 import { segnalazioneAccesaDallAmbiente } from './src/segnalazione-problema.mjs'; // «Segnala un problema»: l'interruttore positivo (revisione D, F4)
 import { allegatiDellOspite } from './src/allegati-dell-ospite.mjs'; // COD-248: ogni ospite salva a modo suo
+import { statoDalSupervisore } from './src/doctor-motore-locale.mjs'; // 023, giro dopo il revisore: lo stato del modello per il Doctor
 import { aiutoDelServer } from './src/aiuto/aiuto-del-server.mjs'; // Centro assistenza (owner 01/11/2026): la guida di TALOS per `talos_help`
 
 /** ⛔ Stessi tre nomi loopback validati in config.mjs (`LOOPBACK_HOSTS`, non esportato — costante minuscola e stabile, duplicarla qui è più semplice che aggiungere un export per tre stringhe). Un browser può presentarsi con uno qualunque dei tre alias anche se il server è bindato su un altro. */
@@ -208,7 +215,9 @@ async function startServer() {
     /* 14/10/2026 — il portachiavi di un MODULO scelto da chi ospita (`modulo:<percorso>`) è chiuso per difetto: se non si carica,
        il server non parte. Proseguire senza portachiavi (come per quello del sistema) lascerebbe le chiavi senza custodia. */
     if (String(errore?.code ?? '').startsWith('KEYRING_MODULE')) throw errore;
-    console.warn('[provider-store] portachiavi del sistema non disponibile; Doctor segnalerà il limite');
+    /* P045 (11/11/2026): a test run (explicit mark or test-runner ancestor) never opens the real keychain; one line says which mark, never a value. */
+    if (errore?.code === 'KEYRING_TEST_PROFILE') console.warn(rigaDellaGuardia(errore.segno));
+    else console.warn('[provider-store] portachiavi del sistema non disponibile; Doctor segnalerà il limite');
   }
   /*
    * ⭐ (16/09/2026, decisione owner) — chi aveva l'app ≤ 0.1.10 non deve reinserire le chiavi:
@@ -252,8 +261,15 @@ async function startServer() {
      registro, niente rotte, niente operazioni dal dispositivo. Decisione 310 (06/11/2026): la costante è accesa (la funzione è nella
      versione, come «Anteprima»), la scelta della persona è SPENTA di serie e si accende solo a mano, dalle Impostazioni → Strumenti o da
      `app_settings` (`tools.computerUse`) dietro la carta; porte, rotte, ponte e giri la rileggono dal vivo, senza riavviare. */
-  const impostazioneComputerUse = creaImpostazioneComputerUse({ file: percorsoDatiDesktop('.computer-use-impostazione.json') });
-  const computerUse = porteDelComputerUse({ fileLuoghi: percorsoDatiDesktop('.computer-use-luoghi.json'), acceso: impostazioneComputerUse.acceso });
+  /* Decisione 374 (07/11/2026): un custode per server tiene la versione APPROVATA dei due file; i lettori la prendono da lui, mai dal file,
+     e il registro delle sessioni gli chiede di controllarli prima e dopo ogni comando della shell fuori dall'Accesso completo.
+     Giro 2 (08/11/2026, A1): l'impronta approvata vive nel portachiavi delle chiavi, fuori dai file; senza portachiavi il computer use
+     resta spento (chiuso), mai adottato ciò che c'è sul disco. */
+  const custodeFileComputerUse = creaCustodeFileComputerUse({ file: [percorsoDatiDesktop('.computer-use-impostazione.json'), percorsoDatiDesktop('.computer-use-luoghi.json')], portachiavi: providerKeyring });
+  /* Giro 3 (decisione 387, B2): il primo controllo subito all'avvio, non al primo comando; l'esito resta per l'avviso della prima sessione. */
+  custodeFileComputerUse.avvia().catch((e) => console.warn(`[computer-use-files] the startup check failed: ${e?.code ?? e?.message ?? e}`));
+  const impostazioneComputerUse = creaImpostazioneComputerUse({ file: percorsoDatiDesktop('.computer-use-impostazione.json'), custode: custodeFileComputerUse });
+  const computerUse = porteDelComputerUse({ fileLuoghi: percorsoDatiDesktop('.computer-use-luoghi.json'), acceso: impostazioneComputerUse.acceso, custode: custodeFileComputerUse });
   const registroNotifiche = creaRegistroNotifiche({ file: percorsoDatiDesktop('.notifiche.jsonl'), pulisciTesto: creaPulitoreMarkdown() });
   /* L3-1 (13/10/2026): il portachiavi di sistema è di TUTTI i processi TALOS desktop dell'utente (l'app e un server a mano):
      un rinnovo alla volta fra loro, o il secondo butta la sessione che il primo ha appena salvato. La custodia di prova
@@ -346,7 +362,12 @@ async function startServer() {
     runtimeLocali: { get ollama() { return localRuntimes?.ollama; }, get lmstudio() { return localRuntimes?.lmstudio; } },
     statoLocale: () => supervisoreLocale?.status?.() ?? null,
   });
-  const modelCatalog = createModelCatalog();
+  /* 0.2.2 (SignPath, brief «rete spegnibile»): il catalogo pubblico di OpenRouter partiva da solo all'apertura. Ora lo decide
+     `catalogo-pubblico.mjs` a ogni richiesta: l'impostazione, `TALOS_HARNESS_UI_CATALOGO_PUBBLICO=off`, la chiave di OpenRouter o la scelta
+     di un suo modello. Spento, `readModelCapabilities`, il selettore e `modelliUtilizzabili` leggono la copia o il catalogo incorporato. */
+  const catalogoPubblico = creaImpostazioneCatalogoPubblico({ file: percorsoDatiDesktop(FILE_CATALOGO_PUBBLICO), spentoDallAmbiente: config.catalogoPubblicoSpento });
+  const chiaveOpenRouterPresente = () => { try { return providerStore.hasKey('openrouter') === true; } catch { return false; } };
+  const modelCatalog = createModelCatalog({ consentitoFn: () => catalogoPubblico.consentito({ chiaveOpenRouter: chiaveOpenRouterPresente() }) });
   /* P-E (12/09, Astra): i fornitori DIRETTI prendono modelli e prezzi da models.dev (cache su disco con ETag,
      copia servita se la rete manca); OpenRouter resta sul suo catalogo. La chiave non viaggia: si guarda solo se c'è. */
   const modelsDevCatalog = createModelsDevCatalog({ cartellaStore: config.cartellaStore, url: config.modelsDevUrl });
@@ -753,6 +774,10 @@ async function startServer() {
         return { state: 'observed', runtimeId: 'llama.cpp', runtimeState: s.state, modelId: s.modelId ?? null, motore: { ...s.motore, versione: versioneDelMotore.versione(percorsoInUso) },
           caricamento: caricamentoAdesso(s), schedaLenta: s.modelId ? schedaLenta?.corrente(s.modelId) ?? null : null, observedAt: s.observedAt };
       },
+      /* 023, giro dopo il revisore (giudice v1503, opzione A): la lettura dello stato del modello per «Prova il motore locale» del Doctor
+         (`doctor-motore-locale.mjs`, `PERCORSO_DELLO_STATO`). Solo `GET /models`, che non carica niente; col router il supervisore
+         filtra il modello corrente (`llama-router-supervisor.mjs:1201`); provata in DOCTOR-MOTORE-09. */
+      statoDelMotore: statoDalSupervisore(supervisor),
       /* 01/11/2026: la rotta leggera della riga viva, solo stato in memoria (`GET /api/v1/runtime` sonda anche Ollama e LM Studio) */
       caricamento: () => { const s = supervisor.status(); return { caricamento: caricamentoAdesso(s), observedAt: s.observedAt }; },
       listModels: async () => (await localModelStore.list()).filter((model) => model.state === 'ready').map((model) => ({ id: model.id, name: model.repo, source: 'llama.cpp', context: { state: 'unknown' } })),
@@ -929,18 +954,33 @@ async function startServer() {
    * limita in modo conservativo una route OpenRouter dinamica. La prima lettura
    * resta sincrona e prudenziale mentre la verifica parte in background. */
   const compactionWindowSource = createCompactionWindowSource();
-  const finestraDallaRoute = (modello) => {
-    /* 18/10/2026: un modello del motore dell'app ha la finestra VERA della sua apertura (16-32k sul Pad, decisione dell'owner),
-       spinta dall'app: compattare per una finestra da catalogo la sforerebbe */
+  /* 11/11/2026 (owner 13:50, v1465, punto 5; misura MISURE-RESA-DEL-MODELLO §4): quando `/endpoints` non risponde, o alla prima chiamata,
+     la finestra non è più `null` (che valeva 200.000 anche su un modello da 163.840, e TALOS compattava solo dopo il rifiuto): prima la
+     memoria scritta dalla persona, poi la rotta, poi il catalogo del modello, poi una prudente (`finestra-di-ripiego.mjs`). La fonte va
+     al registro (`fonteFinestraFn`): la riga «memoria non nota» si mostra solo per la prudente. `impostazioniContesto` nasce più sotto:
+     si legge alla chiamata, e prima che esista vale «nessuna scritta». */
+  const finestreDaiCataloghi = creaFinestraDaiCataloghi({
+    openrouter: () => modelCatalog.ottieni(),
+    chatgpt: catalogoChatgpt && accessoChatgpt ? async () => (accessoChatgpt.stato()?.collegato === true ? catalogoChatgpt.elenca() : null) : null,
+    diretto: (fornitore) => providerModelCatalog.ottieni(fornitore),
+  });
+  const sceltaDellaFinestra = creaSceltaDellaFinestra({ rotta: compactionWindowSource, cataloghi: finestreDaiCataloghi,
+    scrittaFn: (modello) => impostazioniContesto?.finestraScrittaPer?.(modello) ?? null });
+  /* `undefined` = la finestra la dice un motore locale (la sua, vera), non la scelta del cloud.
+     18/10/2026: un modello del motore dell'app ha la finestra VERA della sua apertura (16-32k sul Pad, decisione dell'owner), spinta
+     dall'app: compattare per una finestra da catalogo la sforerebbe. L1-c (20/10/2026): un modello del motore del PC ha la finestra VERA
+     con cui è partito (16.384 per LFM2.5 da 128K sulla RX 9070 XT); motore spento: la finestra vista l'ultima volta, o una prudente
+     (vedi `finestraDelMotoreLocale`). */
+  const finestraDiUnMotoreLocale = (modello) => {
     const ospite = finestraDelModelloOspite(accessoLocaleOspite, modello);
     if (ospite !== undefined) return ospite;
-    /* L1-c (20/10/2026): un modello del motore del PC ha la finestra VERA con cui è partito (16.384 per LFM2.5 da 128K sulla RX
-       9070 XT, la banda del caricatore qui sotto, prima di L1-d); senza, la compattazione usava la finestra «ignota» (200.000) e non
-       scattava mai in tempo. Motore spento: la finestra vista l'ultima volta, o una prudente (vedi `finestraDelMotoreLocale`). */
-    const delMotore = finestraDelMotoreLocale(() => supervisoreLocale?.status?.() ?? null, modello, { notaFn: (id) => supervisoreLocale?.finestraNota?.(id) });
-    if (delMotore !== undefined) return delMotore;
-    return compactionWindowSource.get(typeof modello === 'string' && modello.startsWith('openrouter:') ? modello.slice('openrouter:'.length) : modello);
+    return finestraDelMotoreLocale(() => supervisoreLocale?.status?.() ?? null, modello, { notaFn: (id) => supervisoreLocale?.finestraNota?.(id) });
   };
+  /* Giro dopo i revisori (punto 2, mutanti A1/A2 vivi): il cablaggio sta in `creaFinestraDellOspite` e lo prova anche il server vero
+     (`tests/soglia-giro-dopo-i-revisori-11-11.test.mjs`, SG2-03). */
+  const finestraDellOspite = creaFinestraDellOspite({ scelta: sceltaDellaFinestra, finestraLocale: finestraDiUnMotoreLocale });
+  const fonteDellaFinestra = finestraDellOspite.fonte;
+  const finestraDallaRoute = finestraDellOspite.finestra;
   /* F3 (24/09): l'oggetto della rotta di spegnimento; gettone e funzione si riempiono dopo che `shutdown` esiste. */
   const spegnimentoPerLaApp = { gettone: null, spegniFn: null };
   /*
@@ -989,6 +1029,8 @@ async function startServer() {
   const impostazioniComandi = createImpostazioniComandi({ file: percorsoDatiDesktop('.impostazioni-comandi.json') });
   /* decisione 140: «Blocchi vivi nelle risposte», per le conversazioni nuove; accesa di serie */
   const impostazioniChat = createImpostazioniChat({ file: percorsoDatiDesktop('.impostazioni-chat.json') });
+  /* L'Assistente (decisione 1645 punto 2, 11/11/2026): il suo modello, di serie quello della chat */
+  const impostazioniAssistente = createImpostazioniAssistente({ file: percorsoDatiDesktop('.impostazioni-assistente.json') });
   const impostazioniPcSveglio = createImpostazioniPcSveglio({ file: percorsoDatiDesktop('.impostazioni-pc-sveglio.json') }); // 01/11/2026
   /* 01/11/2026, «Memoria delle conversazioni»: il massimo dal disco libero dove stanno i modelli (soglia di 20 GB di Performance) */
   const impostazioniMemoriaConversazioni = createImpostazioniMemoriaConversazioni({ file: percorsoDatiDesktop('.impostazioni-memoria-conversazioni.json'),
@@ -1047,6 +1089,7 @@ async function startServer() {
     fonti: creaFontiDelServer({
       impostazioniContesto, impostazioniComandi, preferenzeWslStore, searchSourceStore, impostazioniChat, fiduciaCartelle,
       impostazioneComputerUse, // decisione 310: `tools.computerUse`, gruppo sicurezza ⇒ la carta c'è sempre
+      catalogoPubblico, // 0.2.2: `models.publicCatalog`, gruppo sicurezza ⇒ il modello non lo riaccende da solo
       finestraPienaFn: () => finestraCheCresce ?? sceltaFinestraPienaSenzaMotore,
       registroFn: () => sessionRegistry,
     }),
@@ -1085,6 +1128,7 @@ async function startServer() {
     ...opzioniFiduciaPerIlRegistro(fiduciaCartelle, { telefono: accessoLocaleOspite.attivo }),
     /* contratto «notifiche» (31/10/2026): permessi, domande e fine dei giri diventano voci del registro, dagli eventi della sessione */
     osservatoreNotifiche: scrittoriNotifiche,
+    custodeFileComputerUse, // decisione 374: i due file del computer use controllati prima e dopo ogni comando
     ...(presenzaDaApp ? { personaPresenteFn: () => presenzaDaApp.presente() } : {}), // R-34 parte 2: la presenza dal telefono
     /* Decisione 44 (03/11), condizione del Mobile: sul telefono (l'app che ospita r4 spinge la presenza) la promozione del testo resta accesa finché
        il Codice locale non è provato sul Pad con Spark e Gemma; poi si toglie questa riga. Sul PC è spenta di serie. */
@@ -1124,6 +1168,7 @@ async function startServer() {
        sta nella sua cartella dati (PO-26), mai nel progetto; un guasto non ferma mai un giro (`src/punti-di-ripristino.mjs`). */
     puntiDiRipristino,
     finestraTokenFn: finestraDallaRoute,
+    fonteFinestraFn: fonteDellaFinestra, // 11/11/2026: 'prudente' ⇒ la politica dice `windowUnknown: true` e la scheda Contesto la riga «memoria non nota»; `sopraIlCatalogo` ⇒ `windowWrittenAboveCatalog`
     catalogoBlocchi: catalogoBlocchiDaAmbiente(process.env, { telefono: accessoLocaleOspite.attivo }), // FE-003, decisione 139; mai sul telefono (Z-3.1)
     listaPassi: listaPassiDelServer(process.env, { telefono: accessoLocaleOspite.attivo }), // FE-008, decisione 143
     passiSenzaPersona: passiSenzaPersonaPerProva(process.env), // SOLO per le prove
@@ -1165,6 +1210,7 @@ async function startServer() {
     /* C6 (28/10/2026): il modello dei riassunti scelto dalla persona in Impostazioni → Memoria e contesto (salvato da ef7a6903f) arriva
        al registro (compattazione semplice, fine giro e dentro il giro); la strada del motore lo riceve da `modelloDelRiassuntoFn` più sotto */
     ...(impostazioniContesto ? { sceltaDelRiassuntoFn: () => impostazioniContesto.riassuntoPerUnGiro() } : {}),
+    modelloAssistenteFn: () => impostazioniAssistente.modelloPerUnaDomanda(), // l'Assistente (decisione 1645 punto 2): null = il modello della chat
     doveComandiPerNuoveFn: () => impostazioniComandi.dovePerUnaConversazioneNuova(), // owner 27/10: Impostazioni → Strumenti
     /* decisione 140: letta UNA volta alla nascita (Performance); una conversazione nata dal telefono resta senza fino a UI-137 (Mobile) */
     blocchiViviPerNuoveFn: blocchiViviAllaNascita(() => impostazioniChat.blocchiViviPerUnaConversazioneNuova()),
@@ -1627,13 +1673,16 @@ async function startServer() {
     registraLimitiDelPianoFn: (voce) => usoChatgpt.registraLimiti(voce),
     contextService: contextRuntime?.service,
     impostazioniContesto, // C1: «Motore del contesto» in Impostazioni → Contesto
+    finestraDelModelloFn: finestraDellOspite.perLaCarta, // giro dopo i revisori (punto 11): quale memoria TALOS usa adesso per un modello
     fiduciaCartelle, // decisioni 173/189/196: GET e POST /api/v1/folder-trust (assente sul telefono)
     /* L1 1.3: la scelta «quando la finestra di un modello locale si riempie». Senza motore (nessun binario) resta la sola scelta: si legge
        e si salva lo stesso, e «Allarga» risponde LOCAL_RUNTIME_NOT_CONFIGURED (27/10, prima era un 500 a ogni apertura delle Impostazioni) */
     finestraPiena: finestraCheCresce ?? sceltaFinestraPienaSenzaMotore,
     impostazioniComandi, // owner 27/10: GET/POST /api/v1/command-settings
     impostazioniChat, // decisione 140: GET/POST /api/v1/chat-settings
+    impostazioniAssistente, // l'Assistente: GET/POST /api/v1/assistant-settings
     impostazioneComputerUse, // decisione 310 (06/11): GET/POST /api/v1/computer-use/settings
+    catalogoPubblico, // 0.2.2: GET/POST /api/v1/public-catalog/settings, e la scelta di un modello di OpenRouter dalle rotte delle sessioni
     impostazioniPcSveglio, nellAppInstallata, // 01/11/2026: GET/POST /api/v1/keep-awake-settings
     impostazioniMemoriaConversazioni, // 01/11/2026: GET/POST /api/v1/conversation-memory-settings
     preferenzeModelli, // owner 29/10/2026: GET/POST /api/v1/model-preferences

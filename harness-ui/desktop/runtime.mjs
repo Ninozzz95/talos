@@ -60,12 +60,12 @@ function avvisiKernelEreditato(env, adattatore) {
     .map(([, valore]) => 'Kernel: ignorata la variabile TALOS_OWNER_RUNTIME_MODULE ereditata dal sistema (' + valore.trim() + '). L’app installata usa il suo adattatore: ' + adattatore + '.');
 }
 
-export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, dataDir, scratchDir, motoreLocale, env = process.env, keyringScope = 'desktop', installata = false, versione = null }) {
+export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, dataDir, scratchDir, motoreLocale, env = process.env, keyringScope = 'desktop', installata = false, versione = null, segnoAcceso = false }) {
   if (!isAbsolute(execPath ?? '')) throw new Error('Percorso eseguibile assoluto richiesto.');
   if (!portaValida(port)) throw new Error('La porta del figlio non è consentita.');
   if (!/^[a-f0-9]{64}$/.test(token ?? '')) throw new Error('Credenziale locale non valida.');
   if (!['desktop', 'desktop-preview'].includes(keyringScope)) throw new Error('Scope del portachiavi Desktop non valido.');
-  const ambiente = Object.fromEntries(Object.entries(env).filter(([k, v]) => v !== undefined && !/^(NODE_OPTIONS|NODE_PATH|TALOS_PACKAGED_NODE|ELECTRON_RUN_AS_NODE|ELECTRON_ENABLE_LOGGING|ELECTRON_LOG_FILE|ELECTRON_NO_ASAR|TALOS_HARNESS_UI_TOKEN)$/i.test(k) && !(installata && NOME_VARIABILE_KERNEL.test(k))));
+  const ambiente = Object.fromEntries(Object.entries(env).filter(([k, v]) => v !== undefined && !/^(NODE_OPTIONS|NODE_PATH|TALOS_PACKAGED_NODE|ELECTRON_RUN_AS_NODE|ELECTRON_ENABLE_LOGGING|ELECTRON_LOG_FILE|ELECTRON_NO_ASAR|TALOS_HARNESS_UI_TOKEN|TALOS_SEGNO_ACCESO)$/i.test(k) && !(installata && NOME_VARIABILE_KERNEL.test(k))));
   if (motoreLocale) {
     ambiente.TALOS_LLAMA_SERVER_PATH = motoreLocale.percorso;
     delete ambiente.TALOS_LLAMA_SERVER_DAL_PACCHETTO;
@@ -124,7 +124,14 @@ export function creaAvvioFiglio({ execPath, percorsi, port, token, reportFile, d
   /* Computer use (decisioni 248-249): dove sta l'aiutante del pacchetto (`percorsoAiutantePredefinito` nel server). Dal sorgente non si
      passa: il server usa la build di sviluppo di `native/aiutante-nativo/costruisci.mjs potato`. L'impronta resta quella del codice. */
   if (percorsi.aiutantePc) ambiente.TALOS_AIUTANTE_PC = percorsi.aiutantePc;
-  return { avvisi, segreti: 'TALOS_HARNESS_UI_TOKEN=' + token + '\n', command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, percorsi.server], options: {
+  /* Giudice v1790 (13/11): il segno di TALOS si vede davvero (`segno-finestra.mjs`, `acceso`) ⇒ l'aiutante spegne il suo cursore (`aiutante-mcp.mjs`,
+     `argomentiAiutante`). Solo dal guscio: un valore ereditato dal sistema, in qualunque maiuscola, lo toglie il filtro dei nomi qui sopra. */
+  if (segnoAcceso === true) ambiente.TALOS_SEGNO_ACCESO = '1';
+  /* P045, cura dell'avvio (owner 11/11/2026 09:04): the keychain guard's ancestry read is PRELOADED like the bootstrap, so it runs
+     while the server's module graph loads (~0.9-1.5 s) instead of after it: the first keychain access no longer waits for it.
+     Same file the server imports third (`server.mjs:3`): one module, one read. No new trust channel: nothing is passed, only started. */
+  const guardiaPortachiavi = pathToFileURL(join(percorsi.root, 'src', 'guardia-portachiavi-prove.avvio.mjs')).href;
+  return { avvisi, segreti: 'TALOS_HARNESS_UI_TOKEN=' + token + '\n', command: execPath, args: ['--import', pathToFileURL(percorsi.bootstrap).href, '--import', guardiaPortachiavi, percorsi.server], options: {
     cwd: percorsi.root, env: ambiente, stdio: ['pipe', 'pipe', 'pipe', 'ipc'], windowsHide: true, shell: false,
   } };
 }
@@ -280,14 +287,30 @@ export function apribileNelBrowserDelSistema(indirizzo, { base = null } = {}) {
  * ferma qui (`will-frame-navigate`, `event.preventDefault()` provato dalla spec di Electron): da una cornice di pagina
  * resa si va solo dentro lo STESSO lasciapassare. Ogni altra cornice e la finestra principale non si toccano.
  */
+/*
+ * Giro di sicurezza 5 delle anteprime (11/11/2026, forma `FORMA-ORIGINE-PER-PAGINA-2026-11-11.md`): nel guscio ogni pagina resa ha un'ORIGINE sua,
+ * `http://<etichetta>.localhost:<porta del servizio>` (32 cifre esadecimali, data dal servizio e legata al lasciapassare: `src/pagine-lasciapassare.mjs`).
+ * Chromium dà un processo a ogni origine col raggruppamento di serie: una pagina che cade non porta via le sorelle. Vero solo per la porta del
+ * servizio del momento, in http, senza credenziali nell'indirizzo, un solo livello sotto `localhost`.
+ */
+const NOME_DI_PAGINA = /^[0-9a-f]{32}\.localhost$/u;
+export function origineDiPagina(indirizzo, base) {
+  try {
+    const url = new URL(String(indirizzo ?? ''));
+    const servizio = new URL(String(base ?? ''));
+    return url.protocol === 'http:' && !url.username && !url.password && NOME_DI_PAGINA.test(url.hostname) && servizio.port !== '' && url.port === servizio.port;
+  } catch { return false; }
+}
+
 export function navigazioneCorniceConsentita(base, daUrl, aUrl) {
   let da;
   try { da = new URL(daUrl); } catch { return true; }
-  if (da.origin !== base || !da.pathname.startsWith('/api/v1/pagine/')) return true;
-  const gettone = da.pathname.split('/')[4];
+  /* giro 5: una cornice sull'origine di una pagina è una pagina resa, qualunque sia il suo percorso; e resta sulla SUA origine */
+  if (!origineDiPagina(da.href, base) && (da.origin !== base || !da.pathname.startsWith('/api/v1/pagine/'))) return true;
+  const gettone = da.pathname.startsWith('/api/v1/pagine/') ? da.pathname.split('/')[4] : '';
   if (!gettone) return false;
   try {
     const a = new URL(aUrl);
-    return a.origin === base && a.pathname.startsWith(`/api/v1/pagine/${gettone}/`);
+    return a.origin === da.origin && a.pathname.startsWith(`/api/v1/pagine/${gettone}/`);
   } catch { return false; }
 }

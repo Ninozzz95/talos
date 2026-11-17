@@ -21,6 +21,15 @@ export const EVENTO_RICHIESTA_DEL_GIRO = 'talos.contesto-richiesta';
 import { EVENTO_PASSI, passiDaEventi, riassuntoPassi, statoPassiVuoto, testoPassiDopoCompattazione } from './passi-del-giro.mjs'; // FE-008
 import { eModelloLocale, modelloConChiamateParallele } from './kernel/chiamata-nel-testo.mjs'; // FE-008, FE-010
 import { TETTI_LATO, fotografiaPerALato, messaggiALato, messaggiDelFilo, validaDomandaALato, validaFiloALato } from './chat-a-lato.mjs'; // FE-010
+import { INDIRIZZO_MASSIMO_SULLA_CARTA, attrezziPerAltroModello, cicloDellAssistente, haIlPonte, riassuntoCompatto, trascrittoDaEventi } from './kernel/assistente-lato.mjs'; // l'Assistente (11/11/2026)
+import { fileGiaLettiDallAgente, percorsoPerLAssistente, portePerLAssistente } from './assistente-porte.mjs'; // l'Assistente (11/11/2026)
+/* L'Assistente (owner 11/11/2026 17:17): una domanda e la sua risposta, salvate con la chat (evento durevole, rigiocato al ripristino) */
+export const NOME_SCAMBIO_ASSISTENTE = 'assistente-scambio';
+export const SCHEMA_SCAMBIO_ASSISTENTE = 'talos.assistente-scambio.v1';
+/* L'Assistente, giro di cura A+B+C (11/11/2026): la domanda in corso (per il pannello dal vivo, anche da un'altra finestra) e la carta di un
+   indirizzo (owner 21:40). Stato, non storia: effimeri come `talos.coda`; chi apre dopo li legge da `leggiALato`. */
+export const EVENTO_STATO_ASSISTENTE = 'talos.assistente-stato';
+export const EVENTO_CARTA_ASSISTENTE = 'talos.assistente-carta';
 import { dollariDaUsage, prezzoDelModelloEntro, prezzoPerLaRicerca, sommaDollari } from './kernel/costo-in-dollari.mjs'; // decisioni 57 e 144
 
 export const EVENTO_RISULTATI_ACCORCIATI = 'talos.risultati-accorciati';
@@ -158,7 +167,11 @@ import {
 } from './mcp-registry.mjs';
 import { caricaSkill as caricaSkillReale, SkillRegistryError } from './skill-registry.mjs';
 import { ATTREZZI_CON_PERMESSO_PER_ATTREZZO, permessiPerAttrezzoRichiestaValido } from './config.mjs';
-import { bloccataDa, chiaveDelConsensoDi, comandoNominaUnaBloccata, ePercorsoDiControllo, eUnFileSegreto, motivoDaChiedere as motivoDaChiederePerLaProva } from './path-policy.mjs';
+import { FILE_DI_CONTROLLO, bloccataDa, chiaveDelConsensoDi, comandoNominaUnaBloccata, ePercorsoDiControllo, eUnFileSegreto, motivoDaChiedere as motivoDaChiederePerLaProva, senzaStreamNtfs } from './path-policy.mjs';
+import { COPIE_PER_FILE, EVENTO_FILE_COMPUTER_USE_RIPRISTINATI } from './computer-use/file-approvati.mjs';
+import { creaImpostazioneComputerUse } from './computer-use/impostazione.mjs';
+/* giro 5 (C2): il nome del file dell'impostazione, come lo scrive path-policy (che non si tocca) */
+const NOME_IMPOSTAZIONE_COMPUTER_USE = '.computer-use-impostazione.json';
 import {
   elencaVoci as elencaVociReale, leggiVoce as leggiVoceLibreriaReale, salvaVoce as salvaVoceLibreriaReale,
   eliminaVoce as eliminaVoceLibreriaReale, LibraryStoreError,
@@ -214,7 +227,7 @@ import {
 } from './plugin-registry.mjs';
 /* ⛔ C-3: la MEDESIMA regola del kernel, importata e non ricopiata — come già fa `acp-agent.mjs`
    con `eUnaCredenziale`. Due copie divergerebbero al primo ramo nuovo. */
-import { cartellaFinaleValida } from './kernel/talosHarness.mjs';
+import { cartellaFinaleValida, comandoDiShell } from './kernel/talosHarness.mjs'; // comandoDiShell: decisione 373
 import { eNotaDiFermata } from './kernel/sistema-piegato.mjs'; // decisione 166 (R5): i racconti entrano prima della nota di fermata in coda
 import { ATTREZZI_LUOGHI, NOME_COMPUTER_USE } from './kernel/talosHarness.mjs'; // 03/11/2026: la scheda degli attrezzi; 04/11: computer_use
 import { chiaveDellaCartaDiFuori } from './kernel/talosHarness.mjs'; // P018 (11/11/2026, giro 2): «sì per questo strumento» di un connettore, di un plugin o di Tool Forge
@@ -2844,6 +2857,10 @@ export function createSessionRegistry({
    *   `eliminata(sessionId)` dopo una cancellazione riuscita. Un osservatore che lancia non tocca mai la sessione.
    */
   osservatoreNotifiche = null,
+  /* ⛔ Decisione 374 (07/11/2026): il custode dei due file del computer use (`computer-use/file-approvati.mjs`), uno per server e comune
+     a tutte le sessioni. Fuori dall'Accesso completo li controlla prima e dopo ogni comando della shell (vedi `custodeAlComando`).
+     Assente ⇒ nessun controllo, tutto com'era (le prove che non lo passano). */
+  custodeFileComputerUse = null,
   // 06/9: la delega rifiuta una cartella che non esiste (il percorso in forma WSL che il modello
   // inventava per aggirare il vecchio divieto). Iniettabile: le prove costruiscono cartelle finte.
   cartellaEsisteFn = esisteCartella,
@@ -3039,6 +3056,11 @@ export function createSessionRegistry({
    *   `null` = finestra ignota ⇒ l'adapter usa il solo tetto assoluto (`TALOS_COMPACTION_TOKEN_CAP`).
    */
   finestraTokenFn = null,
+  /* 11/11/2026 (owner 13:50, v1465, punto 5): DA DOVE viene la finestra di `finestraTokenFn` (`finestra-di-ripiego.mjs`): 'prudente' quando
+     nessuno la sa e l'ospite usa una misura prudente ⇒ la politica aggiunge `windowUnknown: true` e la scheda Contesto la riga «memoria non
+     nota». Un campo IN PIÙ, mai una `source` nuova: il pannello del telefono (`pannelloR4.ts:91`) e la CLI accettano solo le tre di sempre.
+     Assente (CLI, telefono senza ospite) ⇒ tutto com'era. */
+  fonteFinestraFn = null,
   catalogoBlocchi = null, // FE-003: `{ tipi?, clic? }` di chi ospita il PC; `null` nel nucleo; l'ospite del PC lo accende di serie (`catalogoBlocchiDaAmbiente`, decisione 139)
   /* FE-008: i Passi. ⛔ Spenti di serie QUI (CLI, 04/11: la CLI crea il registro senza e non cambia); li accende l'ospite del PC
      (`server.mjs`, `passi-del-server.mjs`, decisione 143), mai il server del telefono (Mobile, 04/11). */
@@ -3103,6 +3125,11 @@ export function createSessionRegistry({
   /* ⭐ F3 (24/09/2026), decisione 5 — chi chiama il modello per il riassunto in background (agent-service). */
   riassumiPerCompattazioneFn = riassumiPerCompattazioneReale,
   rispondiALatoFn = rispondiALatoReale,
+  /* L'Assistente (scelta F dell'owner, 16:55): `() => string|null`, il modello scelto nelle Impostazioni per l'Assistente; null, assente o
+     uguale a quello della chat ⇒ il modello della chat sulla sua cache. Chi non la passa (CLI, telefono) resta col modello della chat. */
+  modelloAssistenteFn = null,
+  /* solo per le prove: la lettura di una pagina web dell'Assistente (di serie `leggiPaginaSicura`, la stessa della chat) */
+  apriPaginaALatoFn = null,
   /* owner 01/11/2026: la memoria regge due modelli locali insieme (il router)? Allora vale la scelta della persona. Senza, il modello aperto. */
   localiInsiemeFn = null,
   elencaSessioniPersistiteFn = elencaSessioniPersistiteReale,
@@ -3399,6 +3426,9 @@ export function createSessionRegistry({
    *   42e0e56b6) e Codex (`core/src/config/mod.rs:3955-3973`): carte, parole per il modello e pillola vedono tutti lo stesso modo.
    */
   fiduciaDellaCartellaFn = null,
+  /* Giro 3-bis (owner 11/11 16:35): true per un disco intero, la casa o sopra la casa (`creaFiduciaCartelle().troppoLarga`): lì la fiducia
+     non si salva, si dà solo per la conversazione (`fiduciaSoloQui`, in memoria). Assente = nessuna cartella è troppo larga. */
+  fiduciaTroppoLargaFn = null,
   /*
    * A5 della CLI (03/11/2026, `FORMA-BLOCCO-ALLINEAMENTO-CLI-2026-11-02.md:177`) — la radice dei SOLI registri dello sfondo (il nucleo aggiunge `background/`), del
    *   modello e del `!` della persona. Stessa firma di `cartellaDatiProgettoFn`. Serve a chi non può passare quella, che sposterebbe anche Libreria e Ricerche: la CLI.
@@ -3694,6 +3724,8 @@ export function createSessionRegistry({
      rimette l'Accesso pieno (173), mentre le istruzioni restano come la conversazione è nata (forma B della CLI). Senza fonte, o con
      `null` («non ancora chiesta»), decide il segno, come prima. */
   const cartellaNonFidata = (cartella, voce) => {
+    if (voce?.fiduciaSoloQui === false) return true; // giro 3-bis: il «No» solo per questa conversazione (disco intero o casa)
+    if (voce?.fiduciaSoloQui === true) return false;
     if (typeof fiduciaDellaCartellaFn === 'function') {
       let fiducia;
       try { fiducia = fiduciaDellaCartellaFn(cartella); } catch { return true; }
@@ -3702,6 +3734,27 @@ export function createSessionRegistry({
     }
     return voce?.senzaIstruzioniDelProgetto === true;
   };
+  /* Falla della revisione del 10/11 (reperto 1; owner 11/11 12:18): «mai chiesta» (`null`) NON concede l'Accesso pieno. Lo trattiene come
+     «On request» finché la persona risponde, e l'istantanea lo dice (`fiduciaDaChiedere`): la domanda arriva per ogni via (pillola,
+     `/settings`, l'attrezzo del modello, il telefono collegato, il piano, la ripresa, una chat vecchia), non solo alla nascita. Come pi
+     (`project-trust.ts:72-96`: senza decisione si chiede, senza nessuno che risponda vale no). Istruzioni, ganci e strumenti di una cartella
+     mai chiesta restano come oggi (`strumentiDellaCartellaSpenti`). Senza fonte (CLI, telefono) niente cambia. */
+  /* Giro 3-bis (owner 11/11 16:35, come Claude Code `CHANGELOG.md:8474` e `:4739`): su un disco intero o sulla casa la persona risponde
+     solo per QUESTA conversazione (`voce.fiduciaSoloQui`, true o false): in memoria, mai nel file, persa a ogni riavvio e mai prestata a
+     un'altra conversazione, a un ramo o a un giro d'automazione dopo. Una figlia nella cartella della madre la prende alla nascita. */
+  const fiduciaMaiChiesta = (cartella, voce) => {
+    if (typeof voce?.fiduciaSoloQui === 'boolean') return false;
+    if (typeof fiduciaDellaCartellaFn !== 'function') return false;
+    try { return fiduciaDellaCartellaFn(cartella) === null; } catch { return false; } // l'errore lo prende già `cartellaNonFidata`
+  };
+  const pienoNonConcesso = (cartella, voce) => cartellaNonFidata(cartella, voce) || fiduciaMaiChiesta(cartella, voce);
+  const troppoLargaPerLaFiducia = (cartella) => {
+    if (typeof fiduciaTroppoLargaFn !== 'function' || typeof cartella !== 'string') return false;
+    try { return fiduciaTroppoLargaFn(cartella) === true; } catch { return false; }
+  };
+  /* Giro 2, D1: la cartella su cui si legge la fiducia di una sessione — quella di partenza; per una figlia nella cartella della madre, quella
+     della madre (`cartellaFiducia`, fissata alla nascita e scritta nell'intestazione). */
+  const cartellaFiduciaDi = (voce) => voce?.cartellaFiducia ?? voce?.cartellaBase ?? voce?.cartella;
   /* ⛔ Decisione 173, IL punto solo: il modo della sessione in una cartella non fidata. L'Accesso pieno scende a «On request» (carte per
      scrivere e per i comandi); ogni altro modo resta il suo (scendere va sempre bene). All'avvio, quando lo si sceglie, dopo il piano,
      al ripristino. */
@@ -3714,9 +3767,9 @@ export function createSessionRegistry({
    *   torna quando dà la fiducia (`riapplicaFiducia`; Codex `set_project_trust_level`, `thread_processor.rs:1479-1505`).
    */
   const permessiOraNellaCartella = (voce) => (voce?.permessi === 'Full access' && !voce.padreId
-    && cartellaNonFidata(voce.cartellaBase ?? voce.cartella, voce) ? 'On request' : voce?.permessi);
+    && pienoNonConcesso(cartellaFiduciaDi(voce), voce) ? 'On request' : voce?.permessi);
   function abbassaSeNonFidata(voce) {
-    if (voce?.padreId || voce?.permessi !== 'Full access' || !cartellaNonFidata(voce.cartellaBase ?? voce.cartella, voce)) return false;
+    if (voce?.padreId || voce?.permessi !== 'Full access' || !pienoNonConcesso(cartellaFiduciaDi(voce), voce)) return false;
     voce.permessi = 'On request';
     voce.pienoInAttesaDiFiducia = true;
     voce.cartella = cartellaEffettivaPerPermessi(voce.cartellaBase ?? voce.cartella, 'On request', voce.cartellaGiaScelta);
@@ -3727,12 +3780,43 @@ export function createSessionRegistry({
      senza riga nuova sul disco (la riga salvata dice già «Full access»: il ripristino rilegge la fiducia). Nient'altro sale. */
   function rialzaSeFidata(voce) {
     if (voce?.padreId || voce?.pienoInAttesaDiFiducia !== true || voce.permessi !== 'On request') return false;
-    if (cartellaNonFidata(voce.cartellaBase ?? voce.cartella, voce)) return false;
+    if (pienoNonConcesso(cartellaFiduciaDi(voce), voce)) return false;
     voce.permessi = 'Full access';
     delete voce.pienoInAttesaDiFiducia;
     voce.cartella = cartellaEffettivaPerPermessi(voce.cartellaBase ?? voce.cartella, 'Full access', voce.cartellaGiaScelta);
     void annunciaImpostazioni(voce);
     return true;
+  }
+  /* Giro 3-ter (giudice v1501, controllore del giro 3): la risposta «solo per questa conversazione» è della conversazione intera. Le figlie
+     che l'avevano presa alla nascita (`fiduciaSoloQui`, solo quelle nate nella cartella della madre, e per catena le nipoti) la seguono
+     SUBITO, in cammino e ferme, tutte; col «No» chi era in Accesso pieno scende a «Chiede prima» (la figlia in cammino lo rilegge alla
+     chiamata dopo, `permessiCorrentiFn`). Col «Sì» niente sale da solo. Come Claude Code (la figlia prende il modo della madre e non lo
+     scavalca) e Hermes (`tools/delegate_tool_child_run.py:885-899`, la politica delle approvazioni della figlia viene dalla madre).
+     @returns {string[]} gli id delle figlie abbassate */
+  function figlieSeguonoLaRisposta(madreId, fidata) {
+    const abbassate = [];
+    const daGuardare = [madreId];
+    const viste = new Set(daGuardare);
+    while (daGuardare.length) {
+      const padre = daGuardare.shift();
+      for (const [id, figlia] of sessioni) {
+        if (figlia?.padreId !== padre || viste.has(id) || typeof figlia.fiduciaSoloQui !== 'boolean') continue;
+        viste.add(id);
+        daGuardare.push(id);
+        figlia.fiduciaSoloQui = fidata;
+        if (fidata || figlia.permessi !== 'Full access') continue;
+        figlia.permessi = 'On request';
+        /* L2 (controllore del 3-ter): la figlia nata dove lavorava la madre allargata (dall'elenco dei progetti l'Accesso pieno porta alla
+           radice del disco) ha la radice come cartella di partenza, già scelta: ricalcolata da lì restava il disco intero in «Chiede
+           prima». Torna stretta come la madre, nella cartella di cui si fida la conversazione (`cartellaFiduciaDi`, sempre dentro la
+           sua); anche la partenza, così un rialzo a mano (che ricalcola da `cartellaBase`) non la riallarga. Solo in memoria: come Codex
+           (`agent/control/spawn.rs:346-371`) la figlia lavora nella cartella e nel profilo della madre. */
+        figlia.cartella = figlia.cartellaBase = cartellaFiduciaDi(figlia);
+        void annunciaImpostazioni(figlia);
+        abbassate.push(id);
+      }
+    }
+    return abbassate;
   }
   /* 196 (owner 04/11/2026 20:00): col «No» restano spenti, oltre alle istruzioni, i ganci del progetto e gli strumenti collegati della
      cartella (server MCP, plugin), come nella CLI (`firstrun.trust.plain`, «instructions, hooks and connected tools»). */
@@ -3925,6 +4009,48 @@ export function createSessionRegistry({
       console.error('[session-store] service spend not recorded:', errore instanceof Error ? errore.message : errore);
     }
   };
+  /* ⭐ L'Assistente (owner 11/11/2026): il modello, le domande salvate e la spesa sempre visibile (decisione 1645, punto 6: nessun tetto) */
+  const modelloDellAssistente = (perRete) => {
+    let scelto = null;
+    try { scelto = typeof modelloAssistenteFn === 'function' ? modelloAssistenteFn() : null; } catch { scelto = null; }
+    return typeof scelto === 'string' && scelto.trim() && formaDiModelloRiconosciuta(scelto.trim()) ? scelto.trim() : perRete;
+  };
+  const scambiDellAssistente = (voce) => (Array.isArray(voce?.eventi) ? voce.eventi : [])
+    .filter((e) => e?.type === 'CUSTOM' && e.name === NOME_SCAMBIO_ASSISTENTE && e.value && typeof e.value.domanda === 'string' && typeof e.value.risposta === 'string')
+    .map((e) => e.value);
+  /** Dollari dell'Assistente in questa chat e in tutte le chat del registro; `null` dove un costo non è noto (una somma parziale mentirebbe). */
+  const spesaPerLAssistente = (voce) => {
+    const somma = (scambi) => (scambi.length === 0 ? 0 : sommaDollari(scambi.map((s) => (typeof s.costo === 'number' ? s.costo : null))));
+    return { chat: somma(scambiDellAssistente(voce)), inTutto: somma([...sessioni.values()].flatMap((v) => scambiDellAssistente(v))) };
+  };
+  /** Ciò che la carta mostra: l'indirizzo INTERO (è la persona che decide), mai la funzione che la chiude. */
+  const cartaPerLoSchermo = (c) => ({ id: c.id, nome: c.nome, indirizzo: c.indirizzo, contieneLetto: c.contieneLetto === true });
+  /**
+   * I riferimenti di una risposta (bozzetto 1713, «riferimenti a messaggi, passi e file»): ciò che l'Assistente ha DAVVERO guardato, dal suo
+   *   diario, e il messaggio della persona su cui lavora la chat (l'Assistente legge sempre la conversazione). Il numero del passo è la sua
+   *   posizione fra le chiamate della chat; il messaggio porta la sequenza del suo giro, così la chat lo ritrova (`giro:<sequenza>`).
+   */
+  const riferimentiDelloScambio = (diario, voci) => {
+    const lista = [];
+    const visti = new Set();
+    const metti = (r) => { const k = JSON.stringify(r); if (!visti.has(k) && lista.length < 12) { visti.add(k); lista.push(r); } };
+    const persona = voci.filter((v) => v.chi === 'person');
+    const ultima = persona.at(-1);
+    if (ultima && Number.isSafeInteger(ultima.giro)) metti({ tipo: 'messaggio', n: persona.length, giro: ultima.giro });
+    const passi = voci.filter((v) => v.chi === 'tool').map((v) => v.id);
+    for (const d of Array.isArray(diario) ? diario : []) {
+      if (!d || d.rifiutato || typeof d.cosa !== 'string' || !d.cosa) continue;
+      if (d.nome === 'leggi' || d.nome === 'git_diff') metti({ tipo: 'file', percorso: d.cosa, ...(typeof d.righe === 'string' && d.righe ? { righe: d.righe } : {}) });
+      else if (d.nome === 'uscita_strumento') { const n = passi.indexOf(d.cosa); if (n >= 0) metti({ tipo: 'passo', n: n + 1, id: d.cosa }); }
+    }
+    return lista;
+  };
+  const sommaUsageDelLato = (lista) => {
+    const presenti = lista.filter((u) => u && typeof u === 'object');
+    if (presenti.length === 0) return null;
+    const campo = (k) => presenti.reduce((s, u) => s + (Number.isFinite(u[k]) ? u[k] : 0), 0);
+    return { prompt_tokens: campo('prompt_tokens'), completion_tokens: campo('completion_tokens'), cached_tokens: campo('cached_tokens') };
+  };
   const leggiRiservaRiassunto = (modelloPerRete) => {
     let riserva = null;
     try { riserva = typeof sceltaDelRiassuntoFn === 'function' ? sceltaDelRiassuntoFn()?.riservaDelRiassunto ?? null : null; } catch { riserva = null; }
@@ -3972,13 +4098,54 @@ export function createSessionRegistry({
     }
     return dalRifiuto !== null && (dalCatalogo === null || dalRifiuto < dalCatalogo) ? dalRifiuto : dalCatalogo;
   };
+  /* 11/11/2026: DA DOVE viene la finestra in uso, se è proprio quella dell'ospite (un rifiuto del fornitore col suo numero la rende nota).
+     `fonteFinestraFn` dà una stringa ('prudente', 'catalogo', …) o la scelta intera `{ fonte, sopraIlCatalogo? }` (giro dopo i revisori,
+     punto 4): `{ prudente, sopraIlCatalogo }`, o `null` se non si sa. */
+  const fonteDellOspite = (modelloPerRete, finestra) => {
+    if (typeof fonteFinestraFn !== 'function' || finestra === null || finestra !== leggiFinestraToken(modelloPerRete)) return null;
+    let detta = null;
+    try { detta = fonteFinestraFn(modelloPerRete); } catch { return null; }
+    const fonte = typeof detta === 'string' ? detta : detta?.fonte;
+    const sopra = detta && typeof detta === 'object' && fonte === 'persona' && Number.isSafeInteger(detta.sopraIlCatalogo) && detta.sopraIlCatalogo > 0 ? detta.sopraIlCatalogo : null;
+    return { prudente: fonte === 'prudente', scritta: fonte === 'persona', sopraIlCatalogo: sopra };
+  };
   const sogliePerVoce = (voce) => {
     const modelId = modelloDiSessionePerRete(voce);
     const windowTokens = modelId === null ? null : finestraConRifiuto(voce, modelId);
     const cap = leggiTettoCompattazione(modelId) ?? compattazione.leggiTettoEsplicito(process.env);
     const soglie = compattazione.calcolaSoglie({ tettoToken: cap, finestraToken: windowTokens });
-    const source = cap !== null && soglie.soglia === cap ? 'explicit-cap' : windowTokens !== null ? 'route-minimum' : 'fallback';
-    return { ...soglie, modelId, source };
+    const ospite = modelId === null ? null : fonteDellOspite(modelId, windowTokens);
+    /* Giro dopo i revisori (punto 3, ALTO del revisore B): la finestra PRUDENTE è un ripiego e si dice `fallback`, con `windowUnknown`
+       in più. Il pannello del telefono di oggi (`pannelloR4.ts:100`) scrive allora «~96k · Model window not verified»; con
+       `route-minimum` diceva che 128.000 era «la finestra del modello». Il PC guarda prima `windowUnknown` (`contesto-scheda.js`). */
+    /* Passaggio dopo il revisore unico (punto 4, MEDIO lente telefono): senza un tetto scritto, una finestra più grande del tetto del motore
+       (1M, 400k, 272k: oltre `finestraMassimaDelTetto()` = 266.667) compatta al tetto, non al 75% della finestra. Con `route-minimum` il
+       pannello del telefono di oggi (`pannelloR4.ts:100`, sorgente Talos-Mobile `beac3dc9f`) scriveva «75% of the model window (1,000k)»,
+       falso. Il tetto del motore È il tetto dell'installazione (`TETTO_TOKEN_DEFAULT`, o `TALOS_COMPACTION_TOKEN_CAP`): si dice
+       `explicit-cap`, che il telefono già tratta («Cap set for this installation: TALOS compacts above 200k.», `pannelloR4.ts:101`), e
+       `engineCeiling` dice al PC che è quello del motore (riga «lo stesso tetto del motore»). Soglie invariate. */
+    const tettoDelMotore = cap === null && windowTokens !== null && ospite?.prudente !== true && windowTokens > compattazione.finestraMassimaDelTetto();
+    const source = (cap !== null && soglie.soglia === cap) || tettoDelMotore ? 'explicit-cap' : windowTokens !== null && ospite?.prudente !== true ? 'route-minimum' : 'fallback';
+    return { ...soglie, modelId, source, ...(tettoDelMotore ? { tettoDelMotore: true } : {}), ...(ospite?.prudente ? { finestraIgnota: true } : {}),
+      ...(ospite?.scritta ? { scritta: true } : {}), ...(ospite?.sopraIlCatalogo ? { sopraIlCatalogo: ospite.sopraIlCatalogo } : {}) };
+  };
+  /*
+   * Giro dopo i revisori (punto 9, MEDIO 1 del revisore C): il primo giro di un modello dopo l'avvio partiva con la finestra prudente
+   *   (il catalogo si legge in sottofondo e arriva pochi millisecondi dopo) e la teneva per TUTTO il giro: col compattatore di prima,
+   *   Sonnet 5 da 1M compattava a 115.159 token (sonda r12). Ora, finché la finestra è la prudente, il giro la RILEGGE a ogni misura,
+   *   con la strada che il kernel ha già per la finestra viva del motore locale (`seguiLaFinestra`, L1 1.3 A-4): `attuale()` rilegge,
+   *   e una finestra del cloud non si allarga (`puoCrescere` falso, `cresci` dice di no). Claude Code fa aspettare la prima richiesta
+   *   fino a 1,5 s la finestra del server (CHANGELOG.md:1688); qui il giro non aspetta niente, e la lettura arriva alla misura dopo.
+   *   Con una finestra nota il giro riceve esattamente ciò che riceveva.
+   */
+  const finestraPrudenteDelGiro = (voce, modelloPerRete) => {
+    if (typeof modelloPerRete !== 'string' || !modelloPerRete) return null;
+    if (fonteDellOspite(modelloPerRete, finestraConRifiuto(voce, modelloPerRete))?.prudente !== true) return null;
+    return {
+      attuale: () => finestraConRifiuto(voce, modelloPerRete),
+      puoCrescere: async () => false,
+      cresci: async () => ({ ok: false, motivo: 'finestra-del-fornitore' }),
+    };
   };
   /*
    * L1 1.3, revisione blocco 4 (A-3, A-4; owner A1-1 26/10/2026) — la finestra VIVA del modello locale di questo PC, per il giro e per il
@@ -6137,10 +6304,48 @@ export function createSessionRegistry({
    */
   function permessiDopoIlPiano(voce, decisione) {
     const permessi = PERMESSI_DOPO_IL_PIANO[decisione];
-    if (decisione === 'procedi-accetta-modifiche' && voce.permessi === 'Full access') return 'Full access';
+    /* Giro 2, D5 (giudice v1461): una chat TRATTENUTA (Accesso pieno scelto, in attesa della fiducia o col «No») ha scelto l'Accesso pieno:
+       il piano lo tratta così, e la cartella lo trattiene di nuovo qui sotto. Prima usciva «Workspace write» e la domanda spariva. */
+    const scelto = voce.pienoInAttesaDiFiducia === true && !voce.padreId ? 'Full access' : voce.permessi;
+    if (decisione === 'procedi-accetta-modifiche' && scelto === 'Full access') return 'Full access';
     return permessi;
   }
 
+  /* 173 e la falla del 10/11: i campi della riga fissa. Col «No» `cartellaNonFidata` (e `pienoTrattenuto`); con l'Accesso pieno trattenuto
+     su una cartella mai chiesta `fiduciaDaChiedere` (e `pienoTrattenuto`): la finestra fa la domanda. Fidata o senza fonte: niente. */
+  function campiDellaFiducia(voce, nonFidata) {
+    const soloConversazione = troppoLargaPerLaFiducia(cartellaFiduciaDi(voce)) ? { fiduciaSoloConversazione: true } : {}; // giro 3-bis
+    if (nonFidata) return { cartellaNonFidata: true, ...(voce.pienoInAttesaDiFiducia === true ? { pienoTrattenuto: true } : {}), ...(voce.padreId ? {} : soloConversazione) };
+    if (voce.padreId || voce.pienoInAttesaDiFiducia !== true || !fiduciaMaiChiesta(cartellaFiduciaDi(voce), voce)) return {};
+    /* giro 3-bis: su un disco intero o sulla casa la domanda offre solo «Mi fido solo per questa conversazione» (PC e telefono lo leggono qui) */
+    return { fiduciaDaChiedere: true, pienoTrattenuto: true, ...soloConversazione };
+  }
+  /*
+   * Giro 2, (b): cosa sa il modello della fiducia di questa cartella. `attesa` (Accesso pieno scelto, cartella mai chiesta), `no` (scelto,
+   *   cartella col «No»), `si` (di nuovo in Accesso pieno dopo uno dei due), null (niente da dire). Torna `{ stato, testo }` solo quando lo
+   *   stato è diverso da quello già detto (`fiduciaDettaAlModello`); da qualcosa a null si azzera in silenzio. Testo inglese per il
+   *   modello, i nomi dei modi quelli che il modello vede già. Come Hermes (`cli_model_switch_mixin.py:130-145`: il cambio va col prossimo
+   *   messaggio, mai nel testo di sistema).
+   */
+  const NOTE_FIDUCIA = Object.freeze({
+    attesa: 'Full access was chosen for this conversation, but it is held: TALOS is waiting for the person\'s answer on whether they trust this folder. Until they answer, this conversation works as On request: edits and commands ask first.',
+    no: 'Full access was chosen for this conversation, but the person does not trust this folder: here it works as On request, so edits and commands ask first.',
+    si: 'The person trusts this folder: Full access is on from this request.',
+  });
+  function statoFiduciaPerIlModello(voce) {
+    if (voce.padreId) return null;
+    if (voce.pienoInAttesaDiFiducia === true && voce.permessi === 'On request') {
+      const cartella = cartellaFiduciaDi(voce);
+      if (cartellaNonFidata(cartella, voce)) return 'no';
+      return fiduciaMaiChiesta(cartella, voce) ? 'attesa' : null;
+    }
+    return voce.permessi === 'Full access' && voce.fiduciaDettaAlModello ? 'si' : null;
+  }
+  function notaDellaFiducia(voce) {
+    const stato = statoFiduciaPerIlModello(voce);
+    if (stato === (voce.fiduciaDettaAlModello ?? null)) return null;
+    return { stato, testo: stato ? NOTE_FIDUCIA[stato] : null };
+  }
   function istantaneaImpostazioni(voce) {
     /* 173/189/196: la riga fissa «Not trusted: …» del PC e del telefono si legge da qui (`cartellaNonFidata`, e `pienoTrattenuto` se la
        persona aveva scelto l'Accesso pieno), nell'evento `talos.impostazioni-sessione` e in `impostazioniCorrenti`. Assenti quando la
@@ -6148,7 +6353,7 @@ export function createSessionRegistry({
     const nonFidata = !voce.padreId && strumentiDellaCartellaSpenti(voce);
     voce.nonFidataVista = nonFidata;
     return {
-      ...(nonFidata ? { cartellaNonFidata: true, ...(voce.pienoInAttesaDiFiducia === true ? { pienoTrattenuto: true } : {}) } : {}),
+      ...campiDellaFiducia(voce, nonFidata),
       modello: voce.modello ?? null, modelId: voce.modelId ?? voce.modello ?? null, provider: voce.provider ?? 'cloud', runtimeId: voce.runtimeId ?? null,
       modelloPlanner: voce.modelloPlanner ?? null, reasoning: voce.reasoning ?? null, fasciaVeloce: voce.fasciaVeloce === true,
       permessi: voce.permessi ?? null, permessiPerAttrezzo: voce.permessiPerAttrezzo ? { ...voce.permessiPerAttrezzo } : {},
@@ -7390,7 +7595,9 @@ export function createSessionRegistry({
          dell'host, colpito per gruppo dopo la morte dell'host, colpirebbe altri processi (il terminale che l'aveva lanciato) */
       const gruppo = !win && letto.gruppo === pid ? pid : null;
       void broadcast(ora, { type: 'CUSTOM', name: EVENTO_SFONDO_IMPRONTA, value: {
-        toolCallId, pid, gruppo, impronta: membri.find((m) => m.pid === pid)?.impronta ?? null, ...(win ? { membri } : {}), ospite: chiSegueOra() } }, { durable: true });
+        toolCallId, pid, gruppo, impronta: membri.find((m) => m.pid === pid)?.impronta ?? null, ...(win ? { membri } : {}), ospite: chiSegueOra(),
+        /* giro 8 della 374 (D1): del modello (registrato col custode) o della persona («!»): dopo un riavvio conta solo il primo */
+        delModello: ingresso.custodito === true } }, { durable: true });
     })();
   }
 
@@ -7411,7 +7618,7 @@ export function createSessionRegistry({
       const membri = membriValidi(Array.isArray(v.membri) ? v.membri : [{ pid: v.pid, impronta: v.impronta }]);
       if (!membri.length) continue;
       righe.push({ toolCallId, membri, gruppo: Number.isSafeInteger(v.gruppo) && v.gruppo === v.pid && membri.some((m) => m.pid === v.gruppo) ? v.gruppo : null,
-        seguitoDa: adozioni.get(toolCallId)?.ospite ?? v.ospite ?? null });
+        seguitoDa: adozioni.get(toolCallId)?.ospite ?? v.ospite ?? null, delModello: v.delModello === true });
     }
     return righe;
   }
@@ -7441,6 +7648,7 @@ export function createSessionRegistry({
     const ingresso = voce.comandiFermabili?.get(toolCallId);
     if (!ingresso?.adottato) return;
     voce.comandiFermabili.delete(toolCallId);
+    sfondoUscitoDalCustode(voce, toolCallId); // giro 6 della 374 (A1, P3): il ripreso uscito non tiene più la conversazione «in corso»
     if (voce.fermatiDallaPersona?.has(toolCallId)) {
       segnalaUscitaSfondoIn(voce)({ toolCallId, segnale, comando: comandoDellaRiga(voce, toolCallId) }); // la nota «fermato da te», come un vivo
       return;
@@ -7460,6 +7668,11 @@ export function createSessionRegistry({
     if (!a || a.fermando) return;
     a.fermando = true;
     try {
+      /* ⛔ Quinto giro (13/11/2026, revisore, RL7-04): la sorveglianza che rilegge le impronte teneva `a.fermando`, e uno Stop dato in
+         quel momento tornava qui sopra senza fare niente (6 su 6) mentre `fermaComando` rispondeva «fermato». Ora la sorveglianza ha il
+         suo segno (`a.rilettura`, la promessa della lettura in corso) e lo Stop la ASPETTA, poi riprova l'identità e colpisce: mai due
+         letture PowerShell della stessa riga insieme, e i membri che la lettura ha tolto (numero ridato) non si colpiscono. */
+      if (a.rilettura) await a.rilettura;
       let impronte = new Map();
       try { impronte = await ospite.leggiImpronte(a.membri.map((m) => m.pid)); } catch { impronte = new Map(); }
       const { vivi, suoi, illeggibili } = riconosci(a.membri, impronte);
@@ -7468,19 +7681,62 @@ export function createSessionRegistry({
         return; // vivo ma l'impronta non si legge: non si tocca, e resta fermabile
       }
       let segnale = null;
-      if (win) { for (const m of suoi) await ospite.fermaAlbero(m.pid); }
-      else {
+      let colpiti = suoi;
+      if (win) {
+        /* ⛔ Giudice v1763 (13/11/2026): `taskkill /T` su un membro chiude anche i suoi discendenti, e il numero di un membro appena
+           chiuso Windows lo può ridare: colpirlo al giro dopo poteva cadere su un estraneo. Prima di ogni colpo dopo il primo si
+           riprova l'identità dei membri ancora vivi, come prima del primo (Hermes `process_registry_termination.py:45-49`). Il PID del
+           lanciatore in testa alla fotografia (un comando partito col lanciatore) non è fra i vivi dopo un riavvio: muore con TALOS. */
+        colpiti = [];
+        for (let restano = suoi; restano.length;) {
+          const [primo, ...altri] = restano;
+          await ospite.fermaAlbero(primo.pid);
+          colpiti.push(primo);
+          const ancoraVivi = altri.filter((m) => ospite.esiste(m.pid));
+          let dopo = new Map();
+          if (ancoraVivi.length) { try { dopo = await ospite.leggiImpronte(ancoraVivi.map((m) => m.pid)); } catch { dopo = new Map(); } }
+          restano = ancoraVivi.length ? riconosci(ancoraVivi, dopo).suoi : [];
+        }
+      } else {
         const capo = suoi[0];
         const colpisci = (nome) => (a.gruppo ? ospite.segnale(a.gruppo, nome, { gruppo: true }) : ospite.segnale(capo.pid, nome));
         colpisci('SIGTERM'); segnale = 'SIGTERM';
         for (let atteso = 0; atteso < ospite.graziaMs && vivoAdottato(a); atteso += 100) await ospite.attendi(100);
         if (vivoAdottato(a)) { colpisci('SIGKILL'); segnale = 'SIGKILL'; }
       }
-      a.membri = suoi; // un membro che ha cambiato padrone non tiene viva la riga: da qui si aspetta solo chi era ancora suo
+      a.membri = colpiti; // un membro che ha cambiato padrone non tiene viva la riga: da qui si aspetta solo chi era ancora suo
+      a.colpito = true;
       for (let i = 0; i < 50 && vivoAdottato(a); i += 1) await ospite.attendi(100);
+      if (win && vivoAdottato(a)) await togliNumeriRidati(a);
       if (!vivoAdottato(a)) chiudiAdottato(sessionId, toolCallId, { segnale });
     } finally { a.fermando = false; }
   }
+
+  /*
+   * ⛔ Cura unica dei gialli del lanciatore (13/11/2026, revisore A, nota i): Windows, un membro GIÀ colpito che resta «vivo» per
+   *   `esiste` può essere un altro processo a cui Windows ha ridato il numero: la riga restava «in corso» finché l'altro viveva (3 su 3,
+   *   45-51 s). Si riprova l'ora di partenza dei membri vivi: chi ha un'impronta DIVERSA esce dai membri (non si colpisce, non tiene la
+   *   riga); chi non si legge resta (non si decide su ciò che non si sa). Hermes rifiuta allo stesso modo un numero riciclato
+   *   (`tools/process_registry_termination.py:45-48`).
+   */
+  async function togliNumeriRidati(a) {
+    const vivi = a.membri.filter((m) => ospite.esiste(m.pid));
+    if (!vivi.length) { a.membri = []; return; }
+    let ora;
+    try { ora = await ospite.leggiImpronte(vivi.map((m) => m.pid)); } catch { return; }
+    a.membri = vivi.filter((m) => { const i = ora?.get?.(m.pid); return !i || i.impronta === m.impronta; });
+  }
+
+  /*
+   * ⛔ Quinto giro (13/11/2026, revisore: il costo della sorveglianza). Dopo lo Stop, finché un membro colpito resta vivo e suo (o non si
+   *   legge), la sorveglianza rileggeva le impronte a OGNI giro: su Windows un PowerShell da 1,7-3,2 s ogni 5 s per riga (misurato
+   *   prima: 11 letture in 10 giri, 22,8 s di lettura su 50 s). Ora le riletture si distanziano, 1, 2, 4, 8 giri, poi una ogni
+   *   `RILETTURA_TETTO_GIRI` (60 s): 13 letture nei primi 10 minuti invece di 120. Il limite che resta, detto nel CHANGELOG: un numero
+   *   ridato a un altro processo si vede fino a un tetto dopo. L'uscita vera del membro non costa letture (`esiste`) e si vede al giro
+   *   dopo; un secondo Stop rilegge subito. Hermes legge l'ora di partenza nel processo stesso (`tools/process_registry.py:981`, psutil),
+   *   senza PowerShell; Node non la dà, e qui la lettura resta quella che il nucleo ha già.
+   */
+  const RILETTURA_TETTO_GIRI = 12;
 
   function avviaSorveglianzaAdottati() {
     if (sorveglianzaAdottati || chiuso) return;
@@ -7492,6 +7748,14 @@ export function createSessionRegistry({
           if (!a) continue;
           restano += 1;
           if (!a.fermando && !vivoAdottato(a)) chiudiAdottato(sessionId, toolCallId);
+          else if (win && a.colpito && !a.fermando && !a.rilettura) {
+            // già fermato e ancora «vivo»: il numero può essere passato a un altro processo (vedi `togliNumeriRidati`). Segno proprio,
+            // mai `a.fermando` (RL7-04): uno Stop dato durante la lettura la aspetta e poi colpisce
+            if (a.giriAllaRilettura > 0) { a.giriAllaRilettura -= 1; continue; }
+            a.passoRilettura = Math.min(2 * (a.passoRilettura ?? 0.5), RILETTURA_TETTO_GIRI);
+            a.giriAllaRilettura = a.passoRilettura - 1;
+            a.rilettura = togliNumeriRidati(a).then(() => { if (!vivoAdottato(a)) chiudiAdottato(sessionId, toolCallId); }, () => {}).finally(() => { a.rilettura = null; });
+          }
         }
       }
       if (!restano || chiuso) { clearInterval(sorveglianzaAdottati); sorveglianzaAdottati = null; }
@@ -7534,6 +7798,16 @@ export function createSessionRegistry({
         ferma: () => { void fermaAdottato(l.sessionId, l.toolCallId); }, sfonda: null, pid: () => suoi[0].pid, wsl: () => null, segnaleDelGiro: null, adottato,
       });
       void broadcast(voce, { type: 'CUSTOM', name: EVENTO_SFONDO_ADOTTATO, value: { toolCallId: l.toolCallId, pid: suoi[0].pid, membri: suoi.map((m) => m.pid), ospite: chiSegueOra() } }, { durable: true });
+      /* ⛔ Giro 6 della 374 (A1, P3): un processo di prima del riavvio, di una conversazione fuori dall'Accesso completo, può ancora
+         scrivere i file del computer use: per il custode nuovo la conversazione ha di nuovo un comando in corso, finché il processo vive.
+         Al riavvio non si sa se il comando aveva una carta 373: la sua uscita controlla e basta. */
+      /* ⛔ Giro 8 (D1, revisore B del giro 7): solo un processo del MODELLO (`delModello` sull'impronta); un «!» della persona ripreso dopo
+         il riavvio si può fermare dalla scheda Processi ma non tiene la conversazione «in corso», come mentre TALOS gira (R2 del giro 7).
+         Un'impronta senza il segno (giornale di prima della 374, la 0.2.1 non aveva il custode) non tiene nessuno. */
+      if (custodeFileComputerUse && l.delModello === true && !catenaInAccessoPieno(voce)) {
+        (voce.sfondiDelCustode ??= new Map()).set(l.toolCallId, 'controlla');
+        custodeFileComputerUse.comandoIniziato?.(avvisoDellaVoce(voce));
+      }
       esito.adottati += 1;
     }
     if (esito.adottati) avviaSorveglianzaAdottati();
@@ -7599,7 +7873,8 @@ export function createSessionRegistry({
       || (evento.type === 'CUSTOM' && (evento.name === 'talos.coda' || evento.name === 'talos.agenti' || evento.name === EVENTO_OBIETTIVO || evento.name === EVENTO_RICHIESTA_DEL_GIRO
         || evento.name === compattazione.NOME_EVENTO_PROGRESSO_COMPATTAZIONE // lane CLI 03/10: avanzamento, non storia
         || evento.name === NOME_DEL_BATTITO // revisione D R1 (30/10): il battito del ragionamento, mai nel giornale (condizione della CLI)
-        || evento.name === NOME_EVENTO_NOTIFICA)) // contratto «notifiche» 31/10: l'avviso è stato del registro delle notifiche, non storia
+        || evento.name === NOME_EVENTO_NOTIFICA // contratto «notifiche» 31/10: l'avviso è stato del registro delle notifiche, non storia
+        || evento.name === EVENTO_STATO_ASSISTENTE || evento.name === EVENTO_CARTA_ASSISTENTE)) // l'Assistente (11/11): domanda in corso e carta, stato
       /* ⛔ BUG-8 t1 (04/10/2026) — il rigioco della domanda e il suo colpo di silenzio sono AVANZAMENTO, non storia:
          la domanda vera è già in `voce.eventi` (quella persistita), rigiocarla nel registro scriverebbe la stessa
          scheda ogni 60 s su disco e nella cronologia. Marcatura esplicita, mai un type nuovo: la forma resta quella. */
@@ -7815,11 +8090,22 @@ export function createSessionRegistry({
       const requestId = randomUUID();
       const contratto = voce.soloComandiDelContratto.map(formaDelComandoDelContratto).filter((c) => c !== '');
       const comando = formaDelComandoDelContratto(azione?.comando);
-      const approvato = (azione?.tipo === 'shell' || azione?.tipo === 'prova') && comando !== '' && contratto.includes(comando);
+      /* ⛔ Decisione 373, giro 3 (revisore «carta e ponte»): la carta di un file del controllo del computer use (`fileDiControllo`) non
+         si risponde MAI da sola, nemmeno col comando del contratto: chi ha confermato il contratto non ha visto quella carta. Il
+         confutatore è in sola lettura, quindi è un no subito, detto. */
+      const fileDiControllo = azione?.fileDiControllo === true;
+      const approvato = !fileDiControllo && (azione?.tipo === 'shell' || azione?.tipo === 'prova') && comando !== '' && contratto.includes(comando);
       broadcast(voce, richiestaDiApprovazione(requestId, azione));
       broadcast(voce, approvalResolved({ requestId, approvato, motivo: approvato ? 'contratto-obiettivo' : 'confutatore-sola-lettura' }));
       /* P018 nella 0.2.2, dopo il controllore (CTRL-9): questo no è della regola, non della persona — `automatico: true`, così il nucleo
          non lo ricorda come «the person already said no» (la chiamata uguale dopo risente questa frase, che dice chi rifiuta). */
+      if (fileDiControllo) {
+        return Promise.resolve({
+          approvato: false,
+          automatico: true,
+          motivo: 'you are the TALOS goal refuter and work READ-ONLY: this command names a TALOS computer use settings file, which only the person can allow. Nothing ran.',
+        });
+      }
       return Promise.resolve(approvato ? true : {
         approvato: false,
         automatico: true,
@@ -8976,6 +9262,53 @@ export function createSessionRegistry({
    * muta lo aggiunge qui.
    */
   const ATTREZZI_CHE_SCRIVONO_PER_PERCORSO = Object.freeze(['scrivi', 'file_edit']);
+/*
+ * ⛔ Decisione 373 dell'owner (07/11/2026, «Prima del rilascio»): fuori dall'Accesso pieno un comando della shell che NOMINA uno dei due
+ *   file del controllo del computer chiede la carta, come Hermes (tools/approval_detection.py:24-25: il file di configurazione «IS the
+ *   security policy», e la copertura dal terminale, «sed -i, tee, >, cp», accompagna il divieto degli attrezzi dei file). I nomi vengono
+ *   da FILE_DI_CONTROLLO (path-policy.mjs), un posto solo: il nome intero, la radice senza estensione e il nome senza il punto davanti.
+ * ⛔ Giro 5, ridirezione del giudice (08/11/2026 00:35, regola di arresto): quattro giri di automa sul testo del comando hanno lasciato
+ *   glob veri senza carta, tempo quadratico e rumore (`ls -la .*.json`). Nessuno dei tre concorrenti lo fa: Hermes riconosce il nome,
+ *   Codex e Claude Code si affidano alla sandbox. Il cancello torna ai soli NOMI IN CHIARO, quattro letture e nient'altro:
+ *   - il nome letterale;
+ *   - il nome dentro virgolette semplici o doppie, anche a metà nome e anche le tipografiche che PowerShell legge come virgolette
+ *     (U+2018-U+201F), che si tolgono prima del confronto;
+ *   - il nome spezzato da barra rovescia + a capo (Hermes tools/approval_detection.py:529);
+ *   - maiuscole e minuscole diverse (Windows non distingue).
+ *   Glob, classi, escape, `$'..'`, `${..}`, graffe e grafie note solo quando il comando gira passano senza carta: le prende la 374
+ *   (impronta dei due file prima e dopo il comando). Tempo lineare: tre sostituzioni e un `includes`.
+ *   ⚠ Limite dichiarato, lo stesso di Hermes: un comando che scrive il file SENZA nominarlo in chiaro passa senza carta. Non è una
+ *   barriera, è la carta per il caso visibile.
+ */
+const NOMI_DEL_COMPUTER_USE = Object.freeze(FILE_DI_CONTROLLO.file.filter((f) => f.startsWith('.computer-use-'))
+  .flatMap((f) => { const radice = f.toLowerCase().replace(/\.json$/, ''); return [radice, radice.slice(1) + '.json']; }));
+const VIRGOLETTE_DELLA_SHELL = /["'\u2018-\u201f]/g;
+const pianoDelComando = (comando) => comando.replace(/\\\r?\n/g, '').replace(VIRGOLETTE_DELLA_SHELL, '').toLowerCase();
+function comandoNominaFileDelComputerUse(comando) {
+  if (typeof comando !== 'string' || comando.length === 0) return false;
+  const piano = pianoDelComando(comando);
+  return NOMI_DEL_COMPUTER_USE.some((nome) => piano.includes(nome));
+}
+/* ⛔ Decisione 374, giro 8 (giudice v1621, T2; decisioni 323 e 370 dell'owner, «carta sempre»): i due file del computer use chiedono la
+   carta anche in Accesso pieno, a differenza degli altri file di controllo (decisione 155). Il nome come lo apre il kernel su Windows:
+   maiuscole e minuscole uguali, senza lo stream NTFS (`x.json::$DATA` è `x.json`). I punti e gli spazi in coda restano: Node li tiene
+   (misurato il 12/11/2026, `a.json.` scritto da Node è un altro file), come `ePercorsoDiControllo` in path-policy. */
+const FILE_DEL_COMPUTER_USE = Object.freeze(FILE_DI_CONTROLLO.file.filter((f) => f.startsWith('.computer-use-')).map((f) => f.toLowerCase()));
+function scriveUnFileDelComputerUse(percorso) {
+  if (typeof percorso !== 'string' || percorso.length === 0) return false;
+  const nome = nomeDelPercorso(percorso).toLowerCase().replace(/:.*$/u, '');
+  return FILE_DEL_COMPUTER_USE.includes(nome);
+}
+/* ⛔ Decisione 374 giro 2 (revisore A, A2): dopo una carta 373 accettata si adottano SOLO i file custoditi che il comando nomina, con lo
+   stesso riconoscimento della carta; l'altro file resta custodito (un processo che lo scrive durante il comando torna indietro). */
+function fileDelComputerUseNominati(comando, custoditi) {
+  if (typeof comando !== 'string' || comando.length === 0) return [];
+  const piano = pianoDelComando(comando);
+  return custoditi.filter((f) => {
+    const radice = nomeDelPercorso(f).toLowerCase().replace(/\.json$/, '');
+    return piano.includes(radice) || piano.includes(`${radice.slice(1)}.json`);
+  });
+}
 
   /*
    * R5.11 — gli attrezzi prima dei quali si fotografa il progetto: chi scrive un file per percorso, e la shell (un comando può
@@ -9437,8 +9770,351 @@ export function createSessionRegistry({
     return { ok: false, messaggio: `${nome} is not a devices tool.` };
   }
 
+  /* ⛔ Decisione 373, revisione del 07/11 sera: un «no» col suo motivo arriva da `rispondiApprovazione` come `{ approvato: false, motivo }`,
+     un oggetto, quindi «vero». I due cancelli qui sotto guardavano solo quello e lo prendevano per un sì. Il kernel approva solo `true`
+     (`esitoApprovazione`); qui in più l'oggetto con `approvato: true` (il «solo questa volta» e la domanda modificata). Tutto il resto è no. */
+  function siDellaPersona(risposta) {
+    return risposta === true || (risposta !== null && typeof risposta === 'object' && risposta.approvato === true);
+  }
+
+  /* ⛔ Regola 17 (una carta per compito), misurata sul filo vero il 07/11 sera: in «On request» un comando che nomina i file del computer
+     use mostrava DUE carte, quella del cancello qui sotto e poi quella ordinaria del kernel per ogni comando. Il sì della prima risponde
+     alla seconda, come `chiediConUnSiSolo` del kernel fa per la carta del testo: solo la carta ORDINARIA (nessuna chiave oltre a queste
+     tre, quindi nessun segno di carta forzata: wslRoot, fuoriDalProgetto, segreto… arrivano alla persona), solo per lo STESSO comando,
+     una volta sola. Il sì vale dalla carta del cancello fino alla prossima chiamata: la shell non corre in parallelo, e ogni
+     `pre_tool_call` lo azzera; se qualcosa lo azzera prima del tempo la persona vede una carta in più, mai una in meno. */
+  const CHIAVI_DELLA_CARTA_ORDINARIA_DELLA_SHELL = new Set(['tipo', 'toolCallId', 'comando']);
+  function consumaSiDelCancelloShell(voce, azione) {
+    const comando = voce.siDelCancelloShell;
+    if (typeof comando !== 'string' || azione?.tipo !== 'shell' || typeof azione.toolCallId !== 'string' || azione.comando !== comando) return false;
+    // ⛔ Giro 2 (revisore del ponte): `Reflect.ownKeys`, non `Object.keys`, che non vede le chiavi simbolo come CARTA_SEMPRE.
+    if (!Reflect.ownKeys(azione).every((chiave) => CHIAVI_DELLA_CARTA_ORDINARIA_DELLA_SHELL.has(chiave))) return false;
+    voce.siDelCancelloShell = null;
+    return true;
+  }
+  /* ⛔ Decisione 373, giro 3 (revisore «carta e ponte», W1-13): in «On request» `scrivi`/`file_edit` su un file di controllo costavano DUE
+     carte, quella del cancello per percorso e poi quella ordinaria del kernel, che offriva anche «Per questa sessione». Stesso ponte della
+     shell: il sì del cancello risponde alla carta ordinaria dello STESSO attrezzo e dello STESSO percorso (le chiavi del kernel,
+     talosHarness `verificaPermessoConBarriera` di scrivi e file_edit, nessun segno di carta forzata), una volta sola, fino alla
+     prossima chiamata. */
+  const CHIAVI_DELLA_CARTA_ORDINARIA_PER_PERCORSO = new Set(['tipo', 'toolCallId', 'percorso', 'contenutoPrima', 'contenutoProposto']);
+  function consumaSiDelCancelloPercorso(voce, azione) {
+    const si = voce.siDelCancelloPercorso;
+    if (si === null || typeof si !== 'object' || azione?.tipo !== si.tipo || azione.percorso !== si.percorso || typeof azione.toolCallId !== 'string') return false;
+    if (!Reflect.ownKeys(azione).every((chiave) => CHIAVI_DELLA_CARTA_ORDINARIA_PER_PERCORSO.has(chiave))) return false;
+    voce.siDelCancelloPercorso = null;
+    return true;
+  }
+  /* Ogni altra carta di `scrivi`/`file_edit` per un file di controllo arriva alla persona senza «Per questa sessione» (`sempreNonBasta`,
+     come la carta del cancello): un «sempre» su un file che decide cosa può fare l'agente non lo dà una carta ordinaria. Una copia
+     con le chiavi simbolo (CARTA_SEMPRE e simili restano); un controllo che lancia vale «file di controllo». */
+  function cartaPerFileDiControllo(voce, azione) {
+    if (azione === null || typeof azione !== 'object' || !ATTREZZI_CHE_SCRIVONO_PER_PERCORSO.includes(azione.tipo)) return azione;
+    if (typeof azione.percorso !== 'string' || azione.percorso.length === 0) return azione;
+    let controllo;
+    try {
+      controllo = ePercorsoDiControllo(voce.cartella, azione.percorso);
+    } catch {
+      controllo = true;
+    }
+    if (!controllo) return azione;
+    const copia = Object.defineProperties({}, Object.getOwnPropertyDescriptors(azione));
+    copia.sempreNonBasta = true;
+    return copia;
+  }
+
+  /* ⛔ Decisione 373: la shell che nomina i file del computer use (vedi `comandoNominaFileDelComputerUse`). Stessa disciplina del cancello
+     per percorso qui sotto: Accesso pieno libero (372, come la 155), nessun ascoltatore ⇒ rifiuto detto, un errore ⇒ chiuso. */
+  async function cancelloShellDelComputerUse(voce, evento) {
+    if (catenaInAccessoPieno(voce)) return { consentito: true };
+    let comando = '';
+    let nomina;
+    try {
+      comando = comandoDiShell(evento.argomenti);
+      nomina = comandoNominaFileDelComputerUse(comando);
+    } catch {
+      nomina = true; // un controllo che lancia fallisce chiuso
+    }
+    if (!nomina) return { consentito: true };
+    /* ⛔ Giro 2, regola 17 (revisore «prove e mutanti», S1 e S2): con la shell su «nega», o la sessione in Sola lettura o in Ricerca
+       senza un «chiedi» o un «sempre» per la shell, il kernel rifiuta il comando comunque: una carta sarebbe una domanda il cui sì non
+       fa niente. Si rifiuta subito, senza carta, con la stessa lettura della catena del kernel (`permessiDellaCatena`,
+       `attrezziNegatiDalLivello` in talosHarness.mjs): il livello del kernel può solo stare più in basso, mai più in alto. */
+    const anelli = anelliDellaCatena(voce);
+    const { livelloAccesso, permessiPerAttrezzo } = permessiDellaCatena({ livelli: anelli.map((anello) => anello.livello), anelli });
+    const sceltaShell = permessiPerAttrezzo.shell;
+    if (sceltaShell === 'nega' || ((livelloAccesso === 'lettura' || livelloAccesso === 'ricerca') && sceltaShell !== 'sempre' && sceltaShell !== 'chiedi')) {
+      return {
+        consentito: false,
+        motivo: 'This command names a TALOS computer use settings file (.computer-use-impostazione.json or .computer-use-luoghi.json), and the shell is not allowed in this session (denied, or a read-only access level). Nothing was run.',
+      };
+    }
+    if (voce.ascoltatori.size === 0) {
+      return {
+        consentito: false,
+        motivo: 'This command names a TALOS computer use settings file (.computer-use-impostazione.json or .computer-use-luoghi.json): running it needs an explicit approval, but this session has no active approval channel (no client is listening). Nothing was run. Open the session in the app and try again.',
+      };
+    }
+    let approvato = false;
+    try {
+      approvato = siDellaPersona(await richiediApprovazione(voce, { tipo: 'shell', comando, fileDiControllo: true, sempreNonBasta: true }));
+    } catch {
+      approvato = false;
+    }
+    if (approvato) {
+      voce.siDelCancelloShell = comando;
+      return { consentito: true };
+    }
+    return {
+      consentito: false,
+      motivo: 'This command names a TALOS computer use settings file (.computer-use-impostazione.json or .computer-use-luoghi.json): running it needs an explicit approval, which was denied or not granted. Nothing was run.',
+    };
+  }
+
+  /*
+   * ⛔⛔ Decisione 374 dell'owner (07/11/2026, via giudice): fuori dall'Accesso completo, prima e dopo OGNI comando della shell il custode
+   *   (`computer-use/file-approvati.mjs`) confronta i due file del computer use con la versione approvata; cambiati senza una carta
+   *   accettata ⇒ la versione cambiata va accanto (mai cancellata), si rimette l'approvata e si avvisa la persona. Il cancello 373 qui
+   *   sopra resta per i comandi che li NOMINANO; questo prende tutti gli altri, senza nessuna carta in più (decisione 375).
+   * - Accesso completo (decisione 372): nessuna carta; giro 2 (A4) si controlla PRIMA (un cambio lasciato da un altro processo torna
+   *   indietro) e il file com'è dopo il comando diventa la versione approvata. Giro 4 (decisione 390, «Non toccare nulla»): tutti e
+   *   due i file, come la base 373; il giro 3 (A1, solo i file nominati) è tolto.
+   * - Carta 373 accettata, o `scrivi`/`file_edit` approvato su uno dei due file: si controlla PRIMA (un cambio rimasto da un processo in
+   *   sottofondo) e DOPO si adotta il cambio, che la persona ha visto: giro 2 (A2) solo i file che il comando nomina, l'altro si controlla.
+   * - Giro 2 (A3): ogni attrezzo che lancia un processo (`ATTREZZI_CHE_LANCIANO_PROCESSI`: `shell` e `prova`) passa dal controllo.
+   * - UN avviso per giro della persona (nota e): i ripristini dopo aggiornano lo stesso avviso, con lo stesso `idAvviso`; nessuno se
+   *   niente è cambiato. Un evento durevole, come `talos.finestra-locale`: la riga nella conversazione la disegna il Frontend.
+   *   Giro 2 (revisore C, C5): un evento per contenuto, mai lo stesso avviso ripetuto uguale; (C4) l'avviso va alle sessioni che hanno
+   *   un comando in corso (chi può aver cambiato il file), e solo se nessuna ne ha uno a quella che ha controllato.
+   * - Un custode che lancia non ferma il comando e non approva niente: i lettori usano comunque la versione approvata.
+   */
+  function avvisaFileDelComputerUse(voce, esito) {
+    const ripristinati = Array.isArray(esito?.ripristinati) ? esito.ripristinati : [];
+    const errori = (Array.isArray(esito?.errori) ? esito.errori : []).filter((e) => e?.fase !== 'lettura');
+    if (ripristinati.length === 0 && errori.length === 0) return;
+    const giro = voce.sequenzaUltimoRunStarted ?? null;
+    let avviso = voce.avvisoFileComputerUse;
+    if (!avviso || avviso.giro !== giro) {
+      if (avviso) scaricaAvvisoFileComputerUse(voce, false); // l'avviso tenuto del giro prima esce, mai perso
+      avviso = { giro, idAvviso: randomUUID(), file: [], copie: [], nonRimessi: [], allAvvio: [], copieAllAvvio: [], chiusi: null, tolte: false, firma: null, inSospeso: null };
+      voce.avvisoFileComputerUse = avviso;
+    }
+    for (const r of ripristinati) {
+      const nome = nomeDelPercorso(r.file);
+      const [nomi, copie] = r.allAvvio ? [avviso.allAvvio, avviso.copieAllAvvio] : [avviso.file, avviso.copie];
+      if (!nomi.includes(nome)) nomi.push(nome);
+      if (typeof r.copia === 'string' && !copie.includes(r.copia)) copie.push(r.copia);
+      if (r.tolte > 0) avviso.tolte = true;
+    }
+    /* ⛔ Giro 3 (A4): l'avviso nomina solo le copie che esistono ancora (le potate escono anche dall'elenco tenuto: byte contenuti) */
+    const viva = (c) => custodeFileComputerUse?.copiaViva?.(c) ?? true;
+    avviso.copie = avviso.copie.filter(viva);
+    avviso.copieAllAvvio = avviso.copieAllAvvio.filter(viva);
+    for (const e of errori) {
+      if (e?.tolte > 0) avviso.tolte = true;
+      if (e.fase === 'impronta') { avviso.chiusi ??= String(e.codice); continue; }
+      const nome = nomeDelPercorso(e.file);
+      if (!avviso.nonRimessi.includes(nome)) avviso.nonRimessi.push(nome);
+    }
+    const files = avviso.file.join(', ');
+    const copies = avviso.copie.join(', ');
+    const failed = avviso.nonRimessi.join(', ');
+    const frasi = [];
+    let testoChiave = null;
+    let testoParams = null;
+    if (avviso.file.length > 0 && avviso.copie.length > 0) {
+      frasi.push(`TALOS put back the computer use settings (${files}) because they no longer matched the approved version. The changed version is kept next to it (${copies}): if you changed it yourself, it is there.`);
+      testoChiave = 'server.computerUseFiles.putBackKept';
+      testoParams = { files, copies };
+    } else if (avviso.file.length > 0) {
+      frasi.push(`TALOS put back the computer use settings (${files}) because they no longer matched the approved version.`);
+      testoChiave = 'server.computerUseFiles.putBack';
+      testoParams = { files };
+    }
+    let erroreChiave = null;
+    if (avviso.nonRimessi.length > 0) {
+      frasi.push(`TALOS could not put back ${failed}: computer use keeps using the approved version.`);
+      erroreChiave = 'server.computerUseFiles.notPutBack';
+    }
+    /* giro 2: i casi che non vengono da un comando, con chiave e parametri propri (`altreChiavi`, in quest'ordine) */
+    const altreChiavi = [];
+    if (avviso.allAvvio.length > 0) {
+      const atStart = avviso.allAvvio.join(', ');
+      const atStartCopies = avviso.copieAllAvvio.join(', ');
+      /* ⛔ Giro 5 (C2): «stays off» solo se all'avvio è stata messa da parte l'impostazione E il computer use è ancora spento adesso
+         (la persona può averlo riacceso prima del primo comando, o può essere cambiato solo l'elenco dei luoghi) */
+      if (avviso.allAvvio.some((n) => n.toLowerCase() === NOME_IMPOSTAZIONE_COMPUTER_USE) && computerUseSpentoAdesso()) {
+        frasi.push(`When TALOS started, the computer use settings (${atStart}) did not match the approved version: the changed version was moved aside (${atStartCopies}) and computer use stays off until you turn it on again in Settings.`);
+        altreChiavi.push({ chiave: 'server.computerUseFiles.setAsideAtStart', params: { files: atStart, copies: atStartCopies } });
+      } else {
+        frasi.push(`When TALOS started, the computer use settings (${atStart}) did not match the approved version: the changed version was moved aside (${atStartCopies}).`);
+        altreChiavi.push({ chiave: 'server.computerUseFiles.movedAsideAtStart', params: { files: atStart, copies: atStartCopies } });
+      }
+    }
+    if (avviso.chiusi !== null) {
+      frasi.push(`TALOS could not read or save the approved version of the computer use settings in the system keychain (${avviso.chiusi}): computer use stays off and the files were left as they are until you turn it on again in Settings.`);
+      altreChiavi.push({ chiave: 'server.computerUseFiles.fingerprintUnreadable', params: { code: avviso.chiusi } });
+    }
+    if (avviso.tolte) {
+      frasi.push(`Older changed copies were removed: TALOS keeps the last ${COPIE_PER_FILE} for each file.`);
+      altreChiavi.push({ chiave: 'server.computerUseFiles.oldCopiesRemoved', params: { max: COPIE_PER_FILE } });
+    }
+    const value = {
+      idAvviso: avviso.idAvviso, file: [...avviso.file], copie: [...avviso.copie], nonRimessi: [...avviso.nonRimessi], testo: frasi.join(' '),
+      ...(testoChiave ? { testoChiave, testoParams } : {}), ...(erroreChiave ? { erroreChiave, erroreParams: { failed } } : {}), altreChiavi, at: clock().toISOString(),
+    };
+    const { at: _ora, ...contenuto } = value;
+    const firma = JSON.stringify(contenuto);
+    if (firma === avviso.firma) return; // C5: lo stesso avviso, uguale, non si ripete
+    avviso.firma = firma;
+    /* ⛔ Giro 3 (A4): con un comando in corso l'avviso si tiene e esce UNA volta alla fine del comando (un evento durevole per comando) */
+    if (voce.custodeInCorso) { avviso.inSospeso = value; return; }
+    try { Promise.resolve(broadcast(voce, { type: 'CUSTOM', name: EVENTO_FILE_COMPUTER_USE_RIPRISTINATI, value }, { durable: true })).catch(() => {}); } catch { /* l'avviso non ferma il comando */ }
+  }
+  function scaricaAvvisoFileComputerUse(voce, fineComando = true) {
+    if (fineComando) voce.custodeInCorso = false;
+    const avviso = voce.avvisoFileComputerUse;
+    const value = avviso?.inSospeso;
+    if (!value) return;
+    avviso.inSospeso = null;
+    try { Promise.resolve(broadcast(voce, { type: 'CUSTOM', name: EVENTO_FILE_COMPUTER_USE_RIPRISTINATI, value }, { durable: true })).catch(() => {}); } catch { /* l'avviso non ferma il comando */ }
+  }
+  /* C4: l'esito di un controllo va a chi ha un comando in corso (il custode è comune a tutte le sessioni del server), altrimenti a chi
+     ha controllato. Un file illeggibile si dice una volta nel registro del server. */
+  function riferisciEsitoDelCustode(voce, esito, riserva = null) {
+    for (const e of esito?.errori ?? []) if (e?.fase === 'lettura') console.warn(`[computer-use-files] ${e.file} could not be read (${e.codice}): computer use keeps the approved version`);
+    const inCorso = custodeFileComputerUse.chiHaUnComando?.() ?? [];
+    const destinatari = inCorso.length > 0 ? inCorso : (riserva ?? [avvisoDellaVoce(voce)]);
+    for (const avvisa of destinatari) { try { avvisa(esito); } catch { /* l'avviso non ferma il comando */ } }
+  }
+  const avvisoDellaVoce = (voce) => (voce.avvisaCustode ??= (esito) => avvisaFileDelComputerUse(voce, esito));
+  /* giro 5 (A1): `riserva` = a chi va l'avviso se nel frattempo nessuno ha più un comando in corso (mai la conversazione in Accesso completo) */
+  async function controllaColCustode(voce, riserva = null) {
+    try { riferisciEsitoDelCustode(voce, await custodeFileComputerUse.controlla(), riserva); } catch (e) { console.warn(`[computer-use-files] check failed: ${e?.message ?? e}`); }
+  }
+  /* giro 5 (C2): il computer use è spento adesso? Letto come lo legge il server (impostazione.mjs sul testo approvato); nel dubbio sì */
+  function computerUseSpentoAdesso() {
+    try {
+      const file = custodeFileComputerUse.file.find((f) => nomeDelPercorso(f).toLowerCase() === NOME_IMPOSTAZIONE_COMPUTER_USE);
+      return !file || !creaImpostazioneComputerUse({ file, custode: custodeFileComputerUse, avvisa: () => {} }).acceso();
+    } catch { return true; }
+  }
+  /* ⛔ Giro 5 (A1, A2, B1; decisioni 390 e 396): in Accesso completo, alla fine del comando ciò che c'è diventa l'approvato SOLO se nessuna
+     conversazione fuori dall'Accesso completo ha un comando in corso (il cambio potrebbe essere suo: allora si controlla, e l'avviso va
+     a lei, mai a questa) e solo per i file certi (uno stato chiuso non si riapre da solo). Come hermes-agent tools/approval.py:54,
+     `_session_yolo` per sessione: il permesso di una conversazione non approva ciò che fanno le altre. */
+  async function adottaInAccessoPieno(voce) {
+    /* giro 6 (A1, P3): appena ripartito il server, i processi in sottofondo di prima si riprendono senza fermare le richieste
+       (`adottaSfondiOrfani`, ~1 s su Windows): l'adozione in Accesso completo li aspetta, o un loro cambio passerebbe per suo */
+    if (adozioneSfondi) await adozioneSfondi;
+    const esito = await custodeFileComputerUse.adotta(null, { seNessunAltro: true, soloCerti: true });
+    if (esito?.inVolo?.length > 0) await controllaColCustode(voce, esito.inVolo);
+    /* giro 8 (T1): un file senza versione approvata salvata che il comando ha scritto si mette da parte subito, con l'avviso qui */
+    else if (esito?.protetti?.length > 0) await controllaColCustode(voce);
+  }
+  async function custodePrimaDelComando(voce) {
+    /* ⛔ Giro 4 (decisione 390 dell'owner, 08/11/2026: «Non toccare nulla»): in Accesso completo la 374 non interviene sul comando,
+       come la base 373 e come codex (`DangerFullAccess` ⇒ `FileSystemSandboxPolicy::unrestricted()`): dopo il comando ciò che lascia
+       diventa l'approvato, senza copia, spegnimento né avviso. Il controllo di PRIMA resta (un cambio lasciato FRA due comandi). */
+    const pieno = catenaInAccessoPieno(voce);
+    if (pieno) voce.custodeDopo = { adotta: [], pieno: true };
+    else if (typeof voce.siDelCancelloShell === 'string') voce.custodeDopo = { adotta: fileDelComputerUseNominati(voce.siDelCancelloShell, custodeFileComputerUse.file) };
+    else voce.custodeDopo = 'controlla';
+    /* giro 6 (A1): i processi già vivi prima di questo comando; quelli registrati dopo e ancora vivi alla fine sono suoi, in sottofondo */
+    voce.fermabiliPrimaDelCustode = pieno ? null : new Set(voce.comandiFermabili?.keys() ?? []);
+    await controllaColCustode(voce);
+    /* giro 5 (C1): in Accesso completo la conversazione NON conta come «comando in corso»: gli avvisi delle altre non finiscono qui */
+    if (pieno) return;
+    /* giro 4 (C1): l'avviso del controllo di prima è già uscito; da qui quelli che arrivano durante il comando si tengono fino al «dopo» */
+    voce.custodeInCorso = true;
+    custodeFileComputerUse.comandoIniziato?.(avvisoDellaVoce(voce));
+  }
+  async function custodeDopoIlComando(voce) {
+    const dopo = voce.custodeDopo;
+    voce.custodeDopo = null;
+    const primaDelComando = voce.fermabiliPrimaDelCustode ?? null;
+    voce.fermabiliPrimaDelCustode = null;
+    /* ⛔ Giro 6 (A1 ALTO, revisore A del giro 5, P2): un comando fuori dall'Accesso completo che finisce IN SOTTOFONDO (con `background`,
+       dopo 120 s, o dalla scheda Processi) chiude la chiamata ma non il processo, che può ancora scrivere. Resta «in corso» per il
+       custode finché il suo processo vive (il kernel lo sgancia alla sua uscita vera), e la sua uscita fa di nuovo il «dopo» del
+       comando (`sfondoUscitoDalCustode`). Come hermes-agent tools/process_registry.py:2434 (`has_active_processes`: occupato
+       finché un suo processo vive) e codex unified_exec/process_manager.rs:1843 (solo i processi non usciti contano). */
+    /* ⛔ Giro 7 (R2 ALTO, revisore A del giro 6): contano SOLO i processi registrati col custode (i comandi del modello). Un «!» della
+       persona lanciato durante il comando si registra senza custode (`shell()`): il suo sgancio non avviserebbe mai, e la conversazione
+       resterebbe «in corso» fino al riavvio. Il «!» è della persona: il suo cambio non va messo da parte (limite noto R3). */
+    if (primaDelComando && dopo !== null && !(typeof dopo === 'object' && dopo.pieno)) {
+      for (const [toolCallId, comando] of voce.comandiFermabili ?? []) {
+        if (comando?.custodito === true && !primaDelComando.has(toolCallId)) (voce.sfondiDelCustode ??= new Map()).set(toolCallId, dopo);
+      }
+    }
+    try {
+      if (dopo !== null && typeof dopo === 'object') {
+        if (!dopo.pieno || dopo.adotta.length > 0) await custodeFileComputerUse.adotta(dopo.adotta);
+        if (dopo.pieno) await adottaInAccessoPieno(voce); // giro 5: come la shell in Accesso completo, anche dopo `scrivi` (C3)
+        else await controllaColCustode(voce); // A2: l'altro file, che il comando non nomina, resta custodito
+      } else if (dopo === 'controlla') await controllaColCustode(voce);
+    } catch (e) { console.warn(`[computer-use-files] check failed: ${e?.message ?? e}`); } finally {
+      liberaDalCustode(voce);
+      scaricaAvvisoFileComputerUse(voce);
+    }
+  }
+  /* giro 6 (A1): la conversazione esce dai «comandi in corso» del custode solo se non ha più un processo suo vivo in sottofondo */
+  function liberaDalCustode(voce) {
+    if (!(voce.sfondiDelCustode?.size > 0) && voce.avvisaCustode) custodeFileComputerUse?.comandoFinito?.(voce.avvisaCustode);
+  }
+  /* giro 6 (A1): un processo rimasto in sottofondo è uscito (sgancio del kernel, o un ripreso dopo il riavvio che finisce): il «dopo»
+     del suo comando si fa adesso, con la conversazione ancora «in corso» (l'avviso va a lei), poi si libera. Gli altri suoi restano. */
+  function sfondoUscitoDalCustode(voce, toolCallId) {
+    const dopo = voce?.sfondiDelCustode?.get(toolCallId);
+    if (dopo === undefined || !custodeFileComputerUse) return;
+    voce.sfondiDelCustode.delete(toolCallId);
+    void (async () => {
+      try {
+        if (typeof dopo === 'object' && dopo.adotta.length > 0) await custodeFileComputerUse.adotta(dopo.adotta); // carta 373 accettata
+        await controllaColCustode(voce);
+      } catch (e) { console.warn(`[computer-use-files] check failed: ${e?.message ?? e}`); } finally { liberaDalCustode(voce); }
+    })();
+  }
+  /* giro 6 (A1, P2): ogni comando registrato dal kernel avvisa il custode quando il suo processo esce davvero */
+  const registraComandoFermabileCustodito = (voce, opzioni) => {
+    const registra = registraComandoFermabileIn(voce, opzioni);
+    return (dati) => {
+      const sgancia = registra(dati);
+      const comando = voce.comandiFermabili?.get(dati?.toolCallId);
+      if (comando) comando.custodito = true; // giro 7 (R2): solo questi possono tenere la conversazione «in corso»
+      return () => { sgancia(); sfondoUscitoDalCustode(voce, dati?.toolCallId); };
+    };
+  };
+  /* `scrivi`/`file_edit` approvato (carta o Accesso completo) su uno dei due file custoditi: prima si controlla (giro 2, A4: un cambio
+     lasciato da un altro processo non entra nella scrittura approvata), dopo si adotta solo quello */
+  async function adottaDopoLaScrittura(voce, percorso) {
+    if (!custodeFileComputerUse) return;
+    let assoluto = null;
+    try { assoluto = resolvePath(voce.cartella ?? '.', percorso); } catch { assoluto = null; }
+    /* L1 del revisore B (giro 8 della 374): su Windows `x.json::$DATA` è `x.json` (lo scrive Node, misurato): il custode guarda il file vero */
+    if (assoluto && process.platform === 'win32') assoluto = senzaStreamNtfs(assoluto);
+    if (!assoluto || !custodeFileComputerUse.custodisce(assoluto)) return;
+    await controllaColCustode(voce); // giro 4 (C1): l'avviso del controllo di prima esce subito
+    voce.custodeDopo = catenaInAccessoPieno(voce) ? { adotta: [assoluto], pieno: true } : { adotta: [assoluto] };
+  }
+
   function costruisciCancelloFileDiControllo(voce) {
     return async (evento) => {
+      if (evento?.tipo === 'pre_tool_call') {
+        voce.siDelCancelloShell = null; voce.siDelCancelloPercorso = null; voce.custodeDopo = null;
+        voce.fermabiliPrimaDelCustode = null;
+        liberaDalCustode(voce); // un comando senza il suo «dopo» non resta in corso (giro 6: un suo processo vivo in sottofondo sì)
+        scaricaAvvisoFileComputerUse(voce); // giro 3 (A4): l'avviso tenuto di un comando senza il suo «dopo» esce adesso
+      }
+      if (evento?.tipo === 'post_tool_call') {
+        if (custodeFileComputerUse) await custodeDopoIlComando(voce);
+        return { consentito: true };
+      }
+      if (evento?.tipo === 'pre_tool_call' && ATTREZZI_CHE_LANCIANO_PROCESSI.includes(evento.azione)) {
+        const esito = evento.azione === 'shell' ? await cancelloShellDelComputerUse(voce, evento) : { consentito: true };
+        if (custodeFileComputerUse && esito?.consentito !== false) await custodePrimaDelComando(voce);
+        return esito;
+      }
       if (evento?.tipo !== 'pre_tool_call' || !ATTREZZI_CHE_SCRIVONO_PER_PERCORSO.includes(evento.azione)) return { consentito: true };
       /* ⛔ Giudice 07/11/2026 23:12 (ROSSO, uscito nelle release da c0e91faf4): qui si leggeva solo `argomenti.percorso`, ma il kernel
          scrive anche con gli alias `path`, `file_path`, `filePath`, `file`, `filename` (`ALIAS_PERCORSO`): `{ path: ".harness-ui-hooks.json" }`
@@ -9452,7 +10128,7 @@ export function createSessionRegistry({
          (code.claude.com/docs/en/permission-modes, letta il 04/11: «Allowed»; `CHANGELOG.md:6395` del clone 01/11). Letto VIVO a ogni
          chiamata, sulla catena intera (`catenaInAccessoPieno`): un padre abbassato fa tornare la carta anche alla figlia. Le altre quattro
          modalità restano com'erano. */
-      if (catenaInAccessoPieno(voce)) return { consentito: true };
+      if (catenaInAccessoPieno(voce) && !scriveUnFileDelComputerUse(percorso)) { await adottaDopoLaScrittura(voce, percorso); return { consentito: true }; }
       let controllo;
       try {
         controllo = ePercorsoDiControllo(voce.cartella, percorso);
@@ -9484,7 +10160,7 @@ export function createSessionRegistry({
            copre il cancello): `CARTA_SEMPRE` perché la carta è della PERSONA — un sì automatico (regola, modalità, classificatore) è
            un no in `rispondiApprovazione`, come per le altre carte che valgono anche in Accesso pieno. Simbolo: non va su disco né
            negli eventi, nessun campo nuovo nel contratto. */
-        approvato = await richiediApprovazione(voce, { tipo: evento.azione, percorso, fileDiControllo: true, [CARTA_SEMPRE]: true });
+        approvato = siDellaPersona(await richiediApprovazione(voce, { tipo: evento.azione, percorso, fileDiControllo: true, sempreNonBasta: true, [CARTA_SEMPRE]: true }));
       } catch {
         approvato = false; // un cancello che lancia non autorizza in silenzio — stessa disciplina di chiediApprovazioneFn/hookFn
       }
@@ -9492,7 +10168,11 @@ export function createSessionRegistry({
          carta non li porta) e non è una domanda di ricerca, quindi il sì della persona arriva sempre come `true` (come
          `esitoApprovazione` del kernel). Un no col motivo della persona arriva come `{ approvato: false, motivo }`, un OGGETTO: con
          `if (approvato)` era un sì e il file si scriveva (misurato col solo `percorso`: 8 file di controllo su 9). */
-      if (approvato === true) return { consentito: true };
+      if (approvato === true) {
+        voce.siDelCancelloPercorso = { tipo: evento.azione, percorso };
+        await adottaDopoLaScrittura(voce, percorso); // decisione 374: la persona ha visto la carta, il file scritto diventa l'approvato
+        return { consentito: true };
+      }
       return {
         consentito: false,
         motivo: `"${percorso}" is a TALOS control file (the agent's rules, not a project file): writing it needs an explicit approval, which was denied or not granted.`,
@@ -9815,8 +10495,19 @@ export function createSessionRegistry({
      */
     /* Decisione 173: le istruzioni spente si leggono UNA volta qui (prima nella voce, sotto); la cartella non fidata tiene l'Accesso pieno come «On request» */
     const senzaIstruzioniAllaNascita = senzaIstruzioniPer(cartella, (forkDa ? sessioni.get(forkDa) : null) ?? (padreId ? sessioni.get(padreId) : null));
+    /* Giro 2, D1 (giudice v1461): una figlia che lavora dove lavora la madre (delega senza cartella) legge la fiducia sulla cartella di
+       PARTENZA della madre, per catena: dall'elenco dei progetti in Accesso pieno la madre lavora nella radice del disco, mai chiesta, e la
+       figlia di un progetto fidato nasceva trattenuta senza domanda. Come Codex (`agent/control/spawn.rs:344-356`: la figlia prende la
+       politica e la cartella della madre). Una figlia mandata altrove legge la sua cartella. */
+    const cartellaDellaFiducia = (!voceEsistente && padreId && sessioni.get(padreId) && cartella === sessioni.get(padreId).cartella)
+      ? cartellaFiduciaDi(sessioni.get(padreId)) : (voceEsistente ? cartellaFiduciaDi(voceEsistente) : cartella);
+    /* Giro 3-bis: la figlia che lavora nella cartella della madre (la stessa cartella di fiducia) è parte della sua conversazione e ne prende
+       la risposta «solo per questa conversazione», in memoria; una figlia mandata altrove no, un ramo (`forkDa`) no. */
+    const soloQuiDellaMadre = (!voceEsistente && padreId && cartella === sessioni.get(padreId)?.cartella && typeof sessioni.get(padreId)?.fiduciaSoloQui === 'boolean')
+      ? sessioni.get(padreId).fiduciaSoloQui : undefined;
     const permessiEffettivi = permessiNellaCartella(permessiRichiesti ?? voceEsistente?.permessi ?? 'Workspace write',
-      (permessiRichiesti ?? voceEsistente?.permessi) === 'Full access' && cartellaNonFidata(cartella, { senzaIstruzioniDelProgetto: senzaIstruzioniAllaNascita }));
+      (permessiRichiesti ?? voceEsistente?.permessi) === 'Full access' && pienoNonConcesso(cartellaDellaFiducia, { senzaIstruzioniDelProgetto: senzaIstruzioniAllaNascita,
+        ...(soloQuiDellaMadre !== undefined ? { fiduciaSoloQui: soloQuiDellaMadre } : {}) }));
     /*
      * ⭐⭐⭐ FASE B (28/8) — stessa disciplina di `permessiEffettivi` appena
      * sopra: un fork/resume eredita l'override per-attrezzo della voce
@@ -9842,6 +10533,8 @@ export function createSessionRegistry({
       // indietro se il permesso viene abbassato più tardi.
       cartella: cartellaEffettivaPerPermessi(cartella, permessiEffettivi, cartellaGiaScelta), cartellaBase: cartella,
       cartellaGiaScelta,
+      ...(cartellaDellaFiducia !== cartella ? { cartellaFiducia: cartellaDellaFiducia } : {}), // giro 2, D1: solo le figlie nella cartella della madre
+      ...(soloQuiDellaMadre !== undefined ? { fiduciaSoloQui: soloQuiDellaMadre } : {}), // giro 3-bis: in memoria, mai nell'intestazione
       // ⭐ D-11: chi ha creato questa sessione. Diagnostica, mai un controllo d'accesso.
       origineRichiesta,
       senzaInterfaccia: senzaInterfaccia === true, // decisione owner 30: vedi il parametro
@@ -10021,6 +10714,7 @@ export function createSessionRegistry({
             avviataAlle: voce.avviataAlle, modello: voce.modello, modelloPlanner: voce.modelloPlanner,
             reasoning: voce.reasoning, mobile: voce.mobile, permessi: voce.permessi,
             ...(voce.senzaIstruzioniDelProgetto === true ? { senzaIstruzioniDelProgetto: true } : {}),
+            ...(typeof voce.cartellaFiducia === 'string' ? { cartellaFiducia: voce.cartellaFiducia } : {}), // giro 2, D1: regge al riavvio
             modalitaOperativa: voce.modalitaOperativa,
             doveGiranoIComandi: voce.doveGiranoIComandi,
             comandiNellaConversazione: voce.comandiNellaConversazione,
@@ -10254,8 +10948,10 @@ export function createSessionRegistry({
      */
     /* C16: la carta della RADICE spiega il livello di ADESSO (la persona può averlo cambiato a giro vivo); quella di una figlia
        resta col tetto del suo avvio. */
-    const chiediApprovazioneFn = (azione) => richiediApprovazione(voce, azione, {
-      livelloAvvio: voce.padreId ? livelloAccesso : (livelloDaPermessi(voce.permessi) ?? livelloAccesso) });
+    const chiediApprovazioneFn = (azione) => (consumaSiDelCancelloShell(voce, azione) || consumaSiDelCancelloPercorso(voce, azione)
+      ? Promise.resolve(true)
+      : richiediApprovazione(voce, cartaPerFileDiControllo(voce, azione), {
+        livelloAvvio: voce.padreId ? livelloAccesso : (livelloDaPermessi(voce.permessi) ?? livelloAccesso) }));
     // ⭐⭐⭐ FASE A (hook) — sempre costruito, sincrono: costruisciHookFn
     // rimanda il vero lavoro (I/O) alla prima tool-call, vedi la sua doc.
     const hookFnUtente = costruisciHookFn(voce);
@@ -10491,6 +11187,7 @@ export function createSessionRegistry({
              la bolla mandi le risposte qui e mai alla chat visibile (riga 36) */
           sessionId: voce.sessionId,
           lingua: voce.linguaInterfaccia ?? 'it',
+          motoRidotto: () => voce.motoRidotto === true, // reperto 17 (13/11): detto dalla pagina del PC, riletto a ogni passo (decisione 252)
           chiediDomanda: (questions) => richiediDomandaUtente(voce, questions, { toolCallId: opzioni.toolCallId }),
           /* revisione del passo 5, difetto 2 (04/11/2026): la carta di QUESTO compito si ritira quando la sua attesa scade o il compito si
              ferma; mai quella di un'altra chiamata. Come Hermes, che toglie la domanda in attesa a tempo scaduto o allo Stop
@@ -10642,7 +11339,7 @@ export function createSessionRegistry({
          ogni giro che parte. Il confronto col controller: il segno di un giro nuovo non vale per quello vecchio. */
       fermataDallaPersona: () => voce.controller === controller && voce.fermataDallaPersona === true,
       segnalePausa: controllerPausa.signal, // C3 tappa 4: la pausa di una delega (l'attrezzo in volo finisce, poi si ferma)
-      registraComandoFermabile: registraComandoFermabileIn(voce, { segnaleDelGiro: controller.signal }), // Stop per riga (owner 02/10/2026)
+      registraComandoFermabile: registraComandoFermabileCustodito(voce, { segnaleDelGiro: controller.signal }), // Stop per riga (owner 02/10/2026); giro 6 della 374: e il custode
       segnalaUscitaSfondo: segnalaUscitaSfondoIn(voce), // A6-bis: l'uscita vera di un comando già sfondato
       mobile: voce.mobile,
       ...(voce.senzaIstruzioniDelProgetto === true ? { senzaIstruzioniDelProgetto: true } : {}),
@@ -11209,7 +11906,7 @@ export function createSessionRegistry({
           return broadcast(voce, { type: 'CUSTOM', name: EVENTO_PASSI, value: stato }, { durable: true });
         },
       } : {}),
-      ...((finestraLocale) => (finestraLocale ? { finestraLocale } : {}))(finestraLocaleDelGiro(voce, opzioni.modello)), // L1 1.3 (A-3, A-4)
+      ...((finestraLocale) => (finestraLocale ? { finestraLocale } : {}))(finestraLocaleDelGiro(voce, opzioni.modello) ?? finestraPrudenteDelGiro(voce, opzioni.modello)), // L1 1.3 (A-3, A-4); 11/11 punto 9
       ...(leggiLimiteUscita(opzioni.modello) ? { limiteUscitaToken: leggiLimiteUscita(opzioni.modello) } : {}),
       ...(leggiTettoCompattazione(opzioni.modello) ? { tettoCompattazioneToken: leggiTettoCompattazione(opzioni.modello) } : {}),
       /* 21/10/2026 (CLI): il modello dei riassunti dentro il giro, con la sua finestra (l'adattatore non ha il catalogo) */
@@ -11927,7 +12624,7 @@ export function createSessionRegistry({
       reasoning: Object.hasOwn(patch, 'reasoning') ? patch.reasoning : voce.reasoning,
       fasciaVeloce: Object.hasOwn(patch, 'fasciaVeloce') ? patch.fasciaVeloce === true : voce.fasciaVeloce === true,
       /* decisione 173: scegliere l'Accesso pieno in una cartella non fidata dà «On request» (il punto solo, `permessiNellaCartella`) */
-      permessi: Object.hasOwn(patch, 'permessi') ? permessiNellaCartella(patch.permessi, patch.permessi === 'Full access' && cartellaNonFidata(voce.cartellaBase ?? voce.cartella, voce)) : voce.permessi,
+      permessi: Object.hasOwn(patch, 'permessi') ? permessiNellaCartella(patch.permessi, patch.permessi === 'Full access' && pienoNonConcesso(cartellaFiduciaDi(voce), voce)) : voce.permessi,
       modalitaOperativa: Object.hasOwn(patch, 'modalitaOperativa') ? patch.modalitaOperativa : (voce.modalitaOperativa ?? 'normale'),
       permessiPerAttrezzo: Object.hasOwn(patch, 'unisciPermessiPerAttrezzo')
         ? { ...(voce.permessiPerAttrezzo ?? {}), ...daUnire } // l'unione parte dalle scelte VERE di adesso (C2-R7: senza i saltati)
@@ -11994,12 +12691,15 @@ export function createSessionRegistry({
     /* C2 R6-bis: un «sempre» copiato alla nascita resta ereditato finché resta «sempre»; una mappa riscritta con lo STESSO valore
        (come «Per questa sessione» su un altro attrezzo) lo tiene, un cambio lo fa diventare della figlia. */
     const origineSempreProssima = origineSempreValida(voce.origineSempre, prossimo.permessiPerAttrezzo);
+    /* Falla del 10/11: l'Accesso pieno scelto e trattenuto non è «niente di cambiato» (la domanda va annunciata) e, se la cartella è mai
+       chiesta, si scrive com'è stato scelto: il ripristino rilegge la fiducia, e un «Sì» dato dopo sopravvive al riavvio. */
+    const trattenutoOra = Object.hasOwn(patch, 'permessi') && !voce.padreId && patch.permessi === 'Full access' && prossimo.permessi === 'On request';
     const record = {
       tipo: 'impostazioni-sessione',
       modello: prossimo.modello,
       modelloPlanner: prossimo.modelloPlanner,
       reasoning: prossimo.reasoning,
-      permessi: prossimo.permessi,
+      permessi: trattenutoOra && fiduciaMaiChiesta(cartellaFiduciaDi(voce), voce) ? 'Full access' : prossimo.permessi,
       modalitaOperativa: prossimo.modalitaOperativa,
       permessiPerAttrezzo: prossimo.permessiPerAttrezzo,
       /* C2 R6-bis: in OGNI riga di una figlia, anche `null`. ⛔ Scritta solo quando c'era un'origine (prima stesura), la riga che
@@ -12022,7 +12722,7 @@ export function createSessionRegistry({
     const invariata = !voce.usavaModalitaWorkflow && cartellaProssima === voce.cartella
       && ['modello', 'modelloPlanner', 'reasoning', 'permessi', 'modalitaOperativa', 'fallbackProviders'].every((k) => uguale(prossimo[k], voce[k]))
       && uguale(modelId, voce.modelId) && uguale(prossimo.permessiPerAttrezzo, voce.permessiPerAttrezzo) && prossimo.fasciaVeloce === (voce.fasciaVeloce === true)
-      && (!voce.padreId || uguale(origineSempreProssima, voce.origineSempre));
+      && (!voce.padreId || uguale(origineSempreProssima, voce.origineSempre)) && !(trattenutoOra && voce.pienoInAttesaDiFiducia !== true);
     if (invariata) return { ok: true, ...(nonUniti.length ? { nonUniti } : {}) };
     if (cartellaStore) await registraRigaFn({ cartellaStore, sessionId, record });
 
@@ -12721,9 +13421,13 @@ export function createSessionRegistry({
            lei). La cartella del giro segue il modo DOPO la fiducia: abbassata, una sessione non resta allargata alla radice del disco
            (prova «173 RIPRISTINO», 04/11/2026). */
         const pienoTrattenuto = impostazioni.permessi === 'Full access'
-          && cartellaNonFidata(intestazione.cartella, { senzaIstruzioniDelProgetto: senzaIstruzioniPer(intestazione.cartella, intestazione) });
+          && pienoNonConcesso(typeof intestazione.cartellaFiducia === 'string' ? intestazione.cartellaFiducia : intestazione.cartella,
+            { senzaIstruzioniDelProgetto: senzaIstruzioniPer(intestazione.cartella, intestazione) });
         const permessiRipristinati = pienoTrattenuto ? 'On request' : impostazioni.permessi;
-        const cartellaRipristinata = cartellaEffettivaPerPermessi(intestazione.cartella, permessiRipristinati, intestazione.cartellaGiaScelta);
+        /* L2 (controllore del 3-ter): una figlia nata dove lavorava la madre allargata ha la radice del disco nell'intestazione; trattenuta,
+           torna nella cartella di fiducia (la stessa della madre ripristinata), anche come partenza perché un rialzo non la riallarghi. */
+        const strettaDellaFiglia = pienoTrattenuto && typeof intestazione.cartellaFiducia === 'string' ? intestazione.cartellaFiducia : null;
+        const cartellaRipristinata = strettaDellaFiglia ?? cartellaEffettivaPerPermessi(intestazione.cartella, permessiRipristinati, intestazione.cartellaGiaScelta);
         /*
          * ⛔ 17/09 — la lapide deve togliere il messaggio anche da ciò che il MODELLO riceve, non
          *   solo da ciò che si vede: `messaggiFinali` è la conversazione che il giro dopo rimanda
@@ -12781,7 +13485,8 @@ export function createSessionRegistry({
         }
         const voce = {
           eventi, ascoltatori: new Set(), taskId: intestazione.taskId,
-          cartella: cartellaRipristinata, cartellaBase: intestazione.cartella, cartellaGiaScelta: intestazione.cartellaGiaScelta,
+          cartella: cartellaRipristinata, cartellaBase: strettaDellaFiglia ?? intestazione.cartella, cartellaGiaScelta: intestazione.cartellaGiaScelta,
+          ...(typeof intestazione.cartellaFiducia === 'string' ? { cartellaFiducia: intestazione.cartellaFiducia } : {}), // giro 2, D1
           task: intestazione.task,
           comandoProva: intestazione.comandoProva, forkDa: intestazione.forkDa,
           ...(puntoDelRamo(intestazione.forkPrimaDelGiro) ? { forkPrimaDelGiro: intestazione.forkPrimaDelGiro } : {}),
@@ -13820,6 +14525,11 @@ export function createSessionRegistry({
       }
       sessionId = avvio.sessionId;
       if (conclusa) chiudi(sessionId).then(risolvi, rifiuta);
+      /* giro 2, (2): l'Accesso pieno trattenuto da una cartella mai chiesta non resta muto: un avviso per cartella con la carta della fiducia */
+      const delGiro = sessioni.get(sessionId);
+      if (delGiro && statoFiduciaPerIlModello(delGiro) === 'attesa') {
+        try { osservatoreNotifiche?.fiduciaDaChiedere?.({ automazioneId, sessionId, nome: titoloCorto, cartella: cartellaFiduciaDi(delGiro) }); } catch { /* l'avviso non ferma il giro */ }
+      }
       /* il nome della sessione del giro è quello dell'automazione: dal vivo (08/10/2026) la barra mostrava `automazione:072787c…`,
          l'id grezzo. Stessa riga `nome-sessione` di una rinomina (sopravvive al riavvio); un errore qui non ferma il giro. */
       // 15/10/2026: parola intera e «…», come gli altri nomi; 16/10 sera (owner): due giri vivi della stessa automazione si numerano
@@ -14050,12 +14760,77 @@ export function createSessionRegistry({
     },
 
     /**
-     * FE-010: la chat a lato. La fotografia è l'ultima richiesta spedita, così la cache lavora; a sessione ferma senza richiesta in memoria è la
-     * proiezione della conversazione, e il costo lo dice l'`usage` vero. Niente entra nel giornale, tranne il consumo: la somma deve essere vera.
-     * Se il canale cade la domanda è persa: il server ferma la chiamata e non ritenta da solo. La rotta è un guscio: la CLI chiama questa, senza HTTP.
-     * @returns {Promise<{ ok: true, risposta: string, tagliata: boolean, filoTagliato: boolean, usage: object|null, costo: number|null } | { erroreAvvio: string, code: string, reason: string }>}
+     * ⭐ L'Assistente (owner 11/11/2026): ciò che il pannello mostra a riposo e dopo una ricarica — le domande salvate con la chat, la spesa
+     *   (in questa chat e in tutto, anche a zero), cosa può leggere (messaggi, file letti dall'agente, uscite degli strumenti), il modello e
+     *   se il giro ha la strada degli attrezzi differiti. Sola lettura: niente si scrive.
      */
-    async chiediALato(sessionId, ingresso = {}, { segnale = null } = {}) {
+    leggiALato(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      const eventi = Array.isArray(voce.eventi) ? voce.eventi : [];
+      const voci = trascrittoDaEventi(eventi);
+      const perRete = modelloDiSessionePerRete(voce);
+      const modello = perRete ? modelloDellAssistente(perRete) : null;
+      return {
+        ok: true, scambi: scambiDellAssistente(voce), spesa: spesaPerLAssistente(voce),
+        letture: { messaggi: voci.filter((v) => v.chi === 'person' || v.chi === 'agent').length, file: voce.cartella ? fileGiaLettiDallAgente(eventi, voce.cartella).size : 0,
+          uscite: voci.filter((v) => v.chi === 'tool' && v.esito !== null).length },
+        modello: { id: modello, diSerie: modello === perRete, locale: modello ? eModelloLocale(modello) : false },
+        conStrumenti: modello !== perRete || haIlPonte(voce.ultimaRichiesta?.tools),
+        /* giro di cura (revisore B, GIALLO-3): la domanda in corso anche da un'altra finestra, e la sua carta se aspetta la persona */
+        inCorso: voce.domandaALatoInCorso && voce.domandaALatoInfo ? { ...voce.domandaALatoInfo } : null,
+        carta: voce.cartaDellAssistente ? cartaPerLoSchermo(voce.cartaDellAssistente) : null,
+      };
+    },
+
+    /**
+     * La carta di un indirizzo dell'Assistente (owner 21:40): la persona dice sì o no dalla finestra del PC. Una carta già chiusa (fermata,
+     *   scaduta, risposta da un'altra finestra) lo dice, senza toccare niente.
+     */
+    rispondiCartaDellAssistente(sessionId, { id, approvato } = {}) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      const carta = voce.cartaDellAssistente;
+      /* la stessa frase delle carte della chat: la persona legge un rifiuto che conosce già */
+      if (!carta || typeof id !== 'string' || carta.id !== id) return rifiuto('APPROVAL_NOT_PENDING', 'permission-request-expired', 'This permission request is no longer pending');
+      /* solo un `true` è un sì: qualunque altra cosa chiude la carta con un no */
+      carta.chiudi(approvato === true);
+      return { ok: true };
+    },
+
+    /** Lo Stop del pannello (revisore B, GIALLO-2): ferma la domanda in corso, anche se l'ha fatta un'altra finestra. */
+    fermaAssistente(sessionId) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      const inCorso = voce.domandaALatoInCorso === true && typeof voce.fermaAssistente === 'function';
+      if (inCorso) voce.fermaAssistente();
+      return { ok: true, fermata: inCorso };
+    },
+
+    /**
+     * L'Assistente: un file citato (`percorso:righe`, in chat o in una risposta) si apre in sola lettura SOLO con la regola dell'Assistente
+     *   (`percorsoPerLAssistente`): un segreto o un percorso fuori dalla cartella mai letto dall'agente non si apre, e lo si dice.
+     * @returns {{ ok: true, percorso: string, fuori: boolean } | { erroreAvvio: string, code: string, reason: string }}
+     */
+    fileDellAssistente(sessionId, percorso) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      if (typeof percorso !== 'string' || !percorso.trim() || percorso.length > 1_000) return rifiuto('QUERY_INVALID', 'assistant-file-invalid', 'The file path is not valid.');
+      if (!voce.cartella) return rifiuto('SESSION_NOT_READY', 'assistant-file-no-folder', 'This chat has no folder.');
+      const giudizio = percorsoPerLAssistente({ tipo: 'leggi', percorso, cartella: voce.cartella, giaLetti: fileGiaLettiDallAgente(voce.eventi, voce.cartella) });
+      if (!giudizio.ok && giudizio.motivo === 'segreto') return rifiuto('ASSISTANT_FILE_REFUSED', 'assistant-file-secret', 'This file holds secrets: it does not open from here.');
+      if (!giudizio.ok) return rifiuto('ASSISTANT_FILE_REFUSED', 'assistant-file-outside', 'This file is outside your trusted folders and the agent has not read it: it does not open from here.');
+      return { ok: true, percorso: percorso.trim(), fuori: giudizio.fuori };
+    },
+
+    /**
+     * FE-010: la chat a lato. La fotografia è l'ultima richiesta spedita, così la cache lavora; a sessione ferma senza richiesta in memoria è la
+     * proiezione della conversazione, e il costo lo dice l'`usage` vero. ⭐ L'Assistente (11/11/2026): un ciclo di al più 8 passi di sola lettura
+     * (`kernel/assistente-lato.mjs`), e domanda e risposta si salvano nel giornale (owner 17:17), col consumo.
+     * Se il canale cade la domanda è persa: il server ferma la chiamata e non ritenta da solo. La rotta è un guscio: la CLI chiama questa, senza HTTP.
+     * @returns {Promise<{ ok: true, risposta: string, tagliata: boolean, filoTagliato: boolean, usage: object|null, costo: number|null, scambio: object, spesa: object } | { erroreAvvio: string, code: string, reason: string }>}
+     */
+    async chiediALato(sessionId, ingresso = {}, { segnale = null, conCarte = false, attesaMs = null } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
       const letto = validaDomandaALato(ingresso);
@@ -14065,44 +14840,117 @@ export function createSessionRegistry({
       if (voce.domandaALatoInCorso) return rifiuto('SESSION_NOT_READY', 'domanda-gia-in-corso', 'A side question is already running for this session.');
       /* un motore locale fa una richiesta alla volta: si aspetta il giro, come ha scelto l'owner sul telefono (31/10) */
       if (eModelloLocale(perRete) && !(voce.conclusa === true || voce.interrotta === true)) return rifiuto('SESSION_NOT_READY', 'aspetta-il-giro', 'This model runs one request at a time: the side question waits for the turn.');
+      /* L'Assistente (scelta F, 16:55): di serie il modello della chat, sulla sua cache; un altro modello scelto nelle Impostazioni riceve un
+         riassunto compatto più gli strumenti. Un modello locale aspetta il giro, come sopra. */
+      const modelloAssistente = modelloDellAssistente(perRete);
+      const altroModello = modelloAssistente !== perRete;
+      if (altroModello && eModelloLocale(modelloAssistente) && !(voce.conclusa === true || voce.interrotta === true)) return rifiuto('SESSION_NOT_READY', 'aspetta-il-giro', 'This model runs one request at a time: the side question waits for the turn.');
       const spedita = voce.ultimaRichiesta ?? null;
       const fotografia = fotografiaPerALato(spedita?.messages ?? compattazione.applicaRecord(voce.messaggiFinali ?? [], voce.recordCompattazione ?? null));
       if (fotografia.length === 0) return rifiuto('SESSION_NOT_READY', 'lato-senza-conversazione', 'There is no conversation to read yet.');
+      /* ⛔ giudice v1502, aggiunta 1: gli attrezzi nuovi passano SOLO dalla strada dei differiti del giro. Senza, l'Assistente non aggiunge
+         attrezzi (la cache si perderebbe in silenzio): risponde dalla conversazione e lo dice (`senzaStrumenti`). Con un altro modello la
+         cache non c'è comunque: gli strumenti si offrono diretti. */
+      const attrezziDelGiro = Array.isArray(spedita?.tools) ? spedita.tools : [];
+      const conPonte = haIlPonte(attrezziDelGiro);
+      /* giudice v1596 punto 4: c'è un fornitore della ricerca web? Senza, la ricerca non si offre all'Assistente */
+      let confRicerca = null;
+      try { confRicerca = typeof ricercaWebFn === 'function' ? ricercaWebFn() : { ricercaWeb }; } catch { confRicerca = null; }
+      const ricercaPronta = Boolean(confRicerca?.ricercaWeb);
+      const attrezzi = altroModello ? attrezziPerAltroModello(attrezziDelGiro, { ricercaPronta }) : attrezziDelGiro;
+      const conStrumenti = altroModello || conPonte;
+      const messaggi = altroModello
+        ? [{ role: 'user', content: `Compact digest of the conversation the person is working in (read the rest with trascritto_leggi):\n${riassuntoCompatto(fotografia)}` },
+          ...messaggiALato({ fotografia: [], filo: letto.filo, domanda: letto.domanda, conStrumenti: true, senzaRicercaWeb: !ricercaPronta })]
+        : messaggiALato({ fotografia, filo: letto.filo, domanda: letto.domanda, conStrumenti, senzaRicercaWeb: !ricercaPronta && attrezziDelGiro.some((a) => a?.function?.name === 'web_search') });
       voce.domandaALatoInCorso = true;
       const fermo = new AbortController();
-      const scaduto = setTimeout(() => fermo.abort(), TETTI_LATO.attesaMs);
+      /* da un dispositivo un tetto più corto (`TETTI_LATO.attesaDispositivoMs`): il PC risponde prima che il telefono smetta di aspettare */
+      const scaduto = setTimeout(() => fermo.abort(), Number.isFinite(attesaMs) && attesaMs > 0 ? Math.min(attesaMs, TETTI_LATO.attesaMs) : TETTI_LATO.attesaMs);
       const seFerma = () => fermo.abort();
       segnale?.addEventListener?.('abort', seFerma, { once: true });
-      const reasoningDelGiro = voce.provider === 'local' ? null : (voce.reasoning ?? null);
+      /* revisore B, GIALLO-2: lo Stop della chat (`ferma`) e quello del pannello (`fermaAssistente`) passano da qui */
+      voce.fermaAssistente = seFerma;
+      voce.domandaALatoInfo = { domanda: letto.domanda, da: new Date().toISOString() };
+      broadcast(voce, { type: 'CUSTOM', name: EVENTO_STATO_ASSISTENTE, value: { inCorso: { ...voce.domandaALatoInfo } } });
+      /*
+       * ⛔ Owner 11/11/2026 21:40, «Carta per ogni indirizzo»: la carta col l'indirizzo intero, che aspetta il sì della persona finché la domanda
+       *   vive (al più 120 s, lo Stop la chiude con un no). Solo dalla finestra del PC (`conCarte`): il telefono e la CLI non sanno mostrarla, e
+       *   lì l'indirizzo è un rifiuto secco (revisore B, GIALLO-4), mai un'attesa.
+       */
+      const chiediCarta = conCarte ? ({ nome, indirizzo, contieneLetto }) => new Promise((risolvi) => {
+        const id = randomUUID();
+        const alFermo = () => chiudi(false);
+        function chiudi(si) {
+          if (voce.cartaDellAssistente?.id !== id) return;
+          voce.cartaDellAssistente = null;
+          fermo.signal.removeEventListener('abort', alFermo);
+          broadcast(voce, { type: 'CUSTOM', name: EVENTO_CARTA_ASSISTENTE, value: { id, chiusa: true, approvata: si === true } });
+          risolvi(si === true);
+        }
+        if (fermo.signal.aborted) { risolvi(false); return; }
+        voce.cartaDellAssistente = { id, nome, indirizzo: String(indirizzo).slice(0, INDIRIZZO_MASSIMO_SULLA_CARTA), contieneLetto: contieneLetto === true, chiudi };
+        fermo.signal.addEventListener('abort', alFermo, { once: true });
+        broadcast(voce, { type: 'CUSTOM', name: EVENTO_CARTA_ASSISTENTE, value: cartaPerLoSchermo(voce.cartaDellAssistente) });
+      }) : null;
+      const reasoningDelGiro = voce.provider === 'local' || altroModello ? null : (voce.reasoning ?? null);
       /* Decisioni 57 e 144 (04/11/2026): l'uso di ogni tentativo andato a buon fine, per il costo in dollari della risposta (due tentativi, due conti) */
       const pagati = [];
-      const chiedi = async () => {
+      const chiamaModello = async ({ messaggi: daMandare, attrezzi: daMostrare }) => {
         const t0 = Date.now();
         try {
           const r = await rispondiALatoFn({
-            modello: perRete, chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave, messaggi: messaggiALato({ fotografia, filo: letto.filo, domanda: letto.domanda }),
-            attrezzi: spedita?.tools ?? [], maxOutputTokens: TETTI_LATO.uscitaToken, ...(reasoningDelGiro ? { reasoning: reasoningDelGiro } : {}),
+            modello: modelloAssistente, chiave: typeof chiaveFn === 'function' ? chiaveFn() : chiave, messaggi: daMandare,
+            attrezzi: daMostrare, maxOutputTokens: TETTI_LATO.uscitaToken, ...(reasoningDelGiro ? { reasoning: reasoningDelGiro } : {}),
             ...(typeof fetchModelloFn === 'function' ? { fetchDiRete: fetchModelloFn() } : {}), segnaleStop: fermo.signal,
           });
-          spesaDiServizio(voce, { scopo: 'domanda', modello: perRete, usage: r?.usage ?? null, esito: 'completato', durataMs: Date.now() - t0, inPrimoPiano: true });
+          spesaDiServizio(voce, { scopo: 'domanda', modello: modelloAssistente, usage: r?.usage ?? null, esito: 'completato', durataMs: Date.now() - t0, inPrimoPiano: true });
           pagati.push(r?.usage ?? null);
           return r;
         } catch (errore) {
-          spesaDiServizio(voce, { scopo: 'domanda', modello: perRete, usage: errore?.usage ?? null, esito: fermo.signal.aborted ? 'fermato' : 'interrotto', durataMs: Date.now() - t0, inPrimoPiano: true });
+          spesaDiServizio(voce, { scopo: 'domanda', modello: modelloAssistente, usage: errore?.usage ?? null, esito: fermo.signal.aborted ? 'fermato' : 'interrotto', durataMs: Date.now() - t0, inPrimoPiano: true });
           throw errore;
         }
       };
+      const ctx = portePerLAssistente({
+        sessionId, cartella: voce.cartella, eventi: Array.isArray(voce.eventi) ? voce.eventi : [], permessiPerAttrezzo: voce.permessiPerAttrezzo ?? {},
+        git: typeof repositoryFn === 'function' ? repositoryFn() : null, ricercaWebFn: typeof ricercaWebFn === 'function' ? ricercaWebFn : () => ({ ricercaWeb }),
+        spesa: () => spesaPerLAssistente(voce),
+        /* la seconda rete (owner 21:40): ciò che la conversazione ha già letto — esiti, testo dell'agente, riassunti, domande di prima — lo si
+           confronta con l'indirizzo solo per dirlo sulla carta; la carta c'è comunque, perché l'Assistente ha letto la chat (`haLetto`) */
+        letti: [...fotografia.filter((m) => m?.role !== 'system'), ...messaggiDelFilo(letto.filo)].map((m) => (typeof m?.content === 'string' ? m.content
+          : Array.isArray(m?.content) ? m.content.map((p) => (typeof p?.text === 'string' ? p.text : '')).join('\n') : '')).filter(Boolean),
+        haLetto: true, ...(chiediCarta ? { chiediCarta } : {}), ricercaWebFn: () => confRicerca,
+        ...(typeof apriPaginaALatoFn === 'function' ? { apriPaginaFn: apriPaginaALatoFn } : {}),
+      });
       try {
-        /* una risposta senza testo è una chiamata di strumento che non si esegue: una seconda prova, poi si dice */
-        let esito = await chiedi();
-        if (!esito?.testo) esito = await chiedi();
-        if (!esito?.testo) return rifiuto('SIDE_CHAT_NO_ANSWER', 'side-chat-no-answer', 'The model did not answer the side question.');
+        const soloTesto = !conStrumenti;
+        /* giudice v1605: un contatore dei no per tutta la domanda, anche attraverso la seconda prova qui sotto */
+        const contatoreNo = { n: 0 };
+        let esito = await cicloDellAssistente({ chiamaModello, messaggi, attrezzi, ctx, segnale: fermo.signal, soloTesto, contatoreNo });
+        /* una risposta senza testo né chiamate: una seconda prova, poi si dice */
+        if (!esito?.testo && esito?.fermataDaiNo !== true) esito = await cicloDellAssistente({ chiamaModello, messaggi, attrezzi, ctx, segnale: fermo.signal, soloTesto, contatoreNo });
+        /* due no (giudice v1584 punto 2): la domanda si è fermata apposta; lo scambio si salva con la sua riga anche senza testo */
+        if (!esito?.testo && esito?.fermataDaiNo !== true) return rifiuto('SIDE_CHAT_NO_ANSWER', 'side-chat-no-answer', 'The model did not answer the side question.');
         /* Decisioni 57 e 144: dollari dove il prezzo è noto — il conto dichiarato dal fornitore (`usage.cost`), altrimenti il prezzo pubblicato del
            modello; uno solo ignoto ⇒ `costo: null`, e l'interfaccia dice il lavoro come prima. Il catalogo si chiede solo se serve. */
         const serveIlPrezzo = pagati.some((u) => !(typeof u?.cost === 'number' && Number.isFinite(u.cost) && u.cost >= 0));
-        const prezzo = serveIlPrezzo ? await prezzoDelModelloEntro(prezzoDelModelloFn, perRete) : null;
+        const prezzo = serveIlPrezzo ? await prezzoDelModelloEntro(prezzoDelModelloFn, modelloAssistente) : null;
         const costo = sommaDollari(pagati.map((u) => dollariDaUsage(u, prezzo)));
-        return { ok: true, risposta: esito.testo, tagliata: esito.tagliata === true, filoTagliato: letto.filoTagliato, usage: esito.usage ?? null, costo };
+        const usage = sommaUsageDelLato(pagati);
+        /* ⭐ Owner 11/11/2026 17:17, «Sì, si salvano»: domanda e risposta entrano nel giornale della chat (supera la scelta del 31/10). */
+        const scambio = {
+          id: randomUUID(), at: new Date().toISOString(), domanda: letto.domanda, risposta: esito.testo, tagliata: esito.tagliata === true, costo, usage,
+          passi: esito.passi, alTetto: esito.alTetto === true, ...(esito.fermataDaiNo === true ? { fermataDaiNo: true } : {}), letture: esito.letti, diario: esito.diario.slice(0, 40), modello: modelloAssistente,
+          riferimenti: riferimentiDelloScambio(esito.diario, trascrittoDaEventi(Array.isArray(voce.eventi) ? voce.eventi : [])),
+          ...(conStrumenti ? {} : { senzaStrumenti: true }),
+        };
+        /* revisore A (mutante vivo `durable:false`): `durable` non è un'opzione di `broadcast`, quindi lo scambio si scriveva quando capitava.
+           `durableSync`: la riga è sul disco PRIMA della risposta, come le proposte di piano e le figlie fermate; se la scrittura fallisce si dice. */
+        const salvato = await broadcast(voce, { type: 'CUSTOM', name: NOME_SCAMBIO_ASSISTENTE, value: { schema: SCHEMA_SCAMBIO_ASSISTENTE, ...scambio } }, { durableSync: true });
+        if (salvato === false) console.error(`[session-store] Assistant exchange not saved for ${voce.sessionId}`);
+        return { ok: true, risposta: esito.testo, tagliata: esito.tagliata === true, filoTagliato: letto.filoTagliato, usage, costo, scambio, spesa: spesaPerLAssistente(voce),
+          ...(salvato === false ? { nonSalvato: true } : {}) };
       } catch (errore) {
         /* 03/11/2026: due rifiuti scritti per intero, così il registro dei rifiuti li vede e il dizionario ha la frase di ciascuno.
            Fermata dalla persona ≠ guasto, come Hermes (moa_loop.py:521, «[skipped: interrupted by user]»). */
@@ -14111,7 +14959,11 @@ export function createSessionRegistry({
       } finally {
         clearTimeout(scaduto);
         segnale?.removeEventListener?.('abort', seFerma);
+        voce.cartaDellAssistente?.chiudi(false);
         voce.domandaALatoInCorso = false;
+        voce.fermaAssistente = null;
+        voce.domandaALatoInfo = null;
+        broadcast(voce, { type: 'CUSTOM', name: EVENTO_STATO_ASSISTENTE, value: { inCorso: null } });
       }
     },
 
@@ -14304,9 +15156,13 @@ export function createSessionRegistry({
       if (noteFermate.length) storiaRiprendibile = [...storiaRiprendibile, { role: 'user', content: noteFermate.map((nota) => nota.testo).join('\n\n'), talosOrigin: 'background-notice' }];
       /* Giro 2 della fase 8, voce 1 (02/11/2026): i cambi d'impostazioni della persona viaggiano col SUO messaggio, come le uscite fermate
          (mai con un risveglio, una delega, un passo, l'obiettivo o la risposta a una domanda) */
-      const noteImpostazioni = haNuovoMessaggio && !notificaDelega && !notificaObiettivo && !rispostaDomanda && !consegnaCoda?.origine
-        && voce.noteImpostazioniDellaPersona?.length ? [...voce.noteImpostazioniDellaPersona] : [];
-      if (noteImpostazioni.length) storiaRiprendibile = [...storiaRiprendibile, { role: 'user', content: noteImpostazioni.map((nota) => nota.testo).join('\n'), talosOrigin: 'settings-notice' }];
+      const conLaPersona = haNuovoMessaggio && !notificaDelega && !notificaObiettivo && !rispostaDomanda && !consegnaCoda?.origine;
+      const noteImpostazioni = conLaPersona && voce.noteImpostazioniDellaPersona?.length ? [...voce.noteImpostazioniDellaPersona] : [];
+      /* Giro 2, (b) (giudice v1458/v1461, owner 13:08): lo stato VERO della fiducia, detto al modello quando cambia (in attesa, «No», «Sì»),
+         con lo stesso messaggio della persona e nella stessa nota: calcolato ADESSO, mai una nota vecchia rimasta in coda */
+      const notaFiducia = conLaPersona ? notaDellaFiducia(voce) : null;
+      const testiNote = [...noteImpostazioni.map((nota) => nota.testo), ...(notaFiducia?.testo ? [notaFiducia.testo] : [])];
+      if (testiNote.length) storiaRiprendibile = [...storiaRiprendibile, { role: 'user', content: testiNote.join('\n'), talosOrigin: 'settings-notice' }];
       /* Decisione 198 (forma §3; OK di Performance: testo fisso, in CODA, il prefisso della cache resta intero) — il ▶ su un giro non finito:
          dopo un riavvio le chiamate in volo non sono finite (la nota lo dice); dopo un errore o i giri finiti con la risposta tagliata in
          coda il modello si troverebbe la propria risposta come ultimo messaggio, senza una domanda. Dopo uno Stop niente: il kernel toglie
@@ -14412,6 +15268,7 @@ export function createSessionRegistry({
         if (!sciogliePausa) annunciaCoda(voce);
       }
       if (sciogliePausa) annunciaCoda(voce);
+      if (notaFiducia && !ripresa?.erroreAvvio) voce.fiduciaDettaAlModello = notaFiducia.stato;
       if (noteImpostazioni.length && !ripresa?.erroreAvvio) {
         const consegnate = new Set(noteImpostazioni.map((nota) => nota.id));
         voce.noteImpostazioniDellaPersona = voce.noteImpostazioniDellaPersona.filter((nota) => !consegnate.has(nota.id));
@@ -14477,6 +15334,15 @@ export function createSessionRegistry({
       return { aggiornata: true };
     },
 
+    /** Reperto 17 (13/11): il movimento ridotto dello schermo del PC, per il cursore del computer use; come la lingua delle risposte, in memoria, mai su disco. */
+    impostaMotoRidotto(sessionId, ridotto) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      if (typeof ridotto !== 'boolean') return rifiuto('QUERY_INVALID', 'no-valid-setting', 'No valid setting to update');
+      voce.motoRidotto = ridotto;
+      return { aggiornata: true };
+    },
+
     /*
      * ⛔⛔ C2 «Per questa sessione» sul server (owner 08/10/2026, «Sì, anche sul server») — le modifiche delle impostazioni di una
      *   sessione passano IN CODA, una alla volta: fra il calcolo della mappa nuova e la sua assegnazione c'è la scrittura su disco,
@@ -14511,8 +15377,31 @@ export function createSessionRegistry({
      * chiamata dopo, `permessiCorrentiFn`); un «Sì» rimette l'Accesso pieno a chi l'aveva scelto. Sincrona, niente disco.
      * @returns {{ok:true, cambiate:string[]}}
      */
+    /**
+     * Giro 3-bis (owner 11/11 16:35): «Mi fido solo per questa conversazione» (o «No», sempre solo per lei) su un disco intero o sulla casa,
+     * dove la fiducia non si salva mai (`FOLDER_TRUST_TOO_WIDE`). In memoria, nella voce: niente file, niente intestazione; un riavvio la
+     * perde, un'altra conversazione non la vede. Solo per una conversazione radice (una figlia risponde con la madre) e solo dove la cartella è
+     * troppo larga (altrove la risposta si salva per la cartella). `soloSeMaiChiesta`: come la carta, una seconda finestra non rovescia.
+     * @returns {{ok:true, cartella:string, fidata:boolean, cambiate:string[]}|{erroreAvvio:string, code:string}}
+     */
+    fiduciaSoloPerQuestaConversazione(sessionId, fidata, { soloSeMaiChiesta = false } = {}) {
+      const voce = sessioni.get(sessionId);
+      if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+      if (voce.padreId) return rifiuto('QUERY_INVALID', 'child-session-not-trust-target', 'This conversation is an agent working in its own folder: answer for that folder from the computer');
+      if (fidata !== true && fidata !== false) return rifiuto('QUERY_INVALID', 'folder-trust-yes-or-no', 'Trust for this conversation only is yes or no');
+      const cartella = cartellaFiduciaDi(voce);
+      if (!troppoLargaPerLaFiducia(cartella)) return rifiuto('QUERY_INVALID', 'folder-trust-can-be-saved', 'This folder can be trusted for good: answer yes or no for the folder');
+      if (soloSeMaiChiesta && typeof voce.fiduciaSoloQui === 'boolean') return { ok: true, cartella, fidata: voce.fiduciaSoloQui, cambiate: [] };
+      voce.fiduciaSoloQui = fidata;
+      const figlie = figlieSeguonoLaRisposta(sessionId, fidata); // giro 3-ter: le figlie che l'avevano ereditata la seguono subito
+      const { cambiate } = this.riapplicaFiducia(sessionId);
+      return { ok: true, cartella, fidata, cambiate: [...cambiate, ...figlie] };
+    },
+
     riapplicaFiducia(sessionId = null) {
       const cambiate = [];
+      /* giro 2, (2): gli avvisi di fiducia delle automazioni la cui conversazione non aspetta più si risolvono (Sì o No) */
+      try { osservatoreNotifiche?.fiduciaRisposta?.((id) => { const v = sessioni.get(id); return Boolean(v) && statoFiduciaPerIlModello(v) === 'attesa'; }); } catch { /* mai un errore qui */ }
       for (const [id, voce] of sessionId ? [[sessionId, sessioni.get(sessionId)]] : sessioni) {
         if (!voce || voce.padreId) continue;
         if (abbassaSeNonFidata(voce) || rialzaSeFidata(voce)) { cambiate.push(id); continue; }
@@ -14874,13 +15763,24 @@ export function createSessionRegistry({
      * 173: la cartella di cui chiedere la fiducia PRIMA che la conversazione nasca, con la stessa strada dell'avvio (`avviaLibero`):
      * una conversazione (`sessionId`), una cartella dell'elenco (`cartellaId`), una scelta a mano (`cartellaLibera`) o un collegamento
      * (`workspaceLaunchId`). Pura: nessuna sessione nasce, niente si scrive.
+     * Giro 3 (controllore G2-d, giudice v1483): per una conversazione la cartella è quella su cui il registro LEGGE la fiducia
+     * (`cartellaFiduciaDi`), mai `cartellaBase ?? cartella`: una figlia delegata nella cartella della madre, che dall'elenco dei progetti in
+     * Accesso pieno lavora nella radice del disco, risponde per la cartella di fiducia della madre. Una figlia mandata in un'altra cartella
+     * non è un bersaglio: la sua fiducia la decide la persona sulla cartella, dal PC. Come Codex (`agent/control/spawn.rs:344-356`: la figlia
+     * prende la politica della madre, non ne decide una sua).
      * @returns {{ok:true, cartella:string}|{erroreAvvio:string, code:string}}
      */
     cartellaPerLaFiducia({ sessionId = null, cartellaId = null, cartellaLibera = null, workspaceLaunchId = null } = {}) {
       if (sessionId) {
         const voce = sessioni.get(sessionId);
-        const cartella = voce ? (voce.cartellaBase ?? voce.cartella ?? null) : null;
-        return cartella ? { ok: true, cartella } : rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+        if (voce?.padreId && typeof voce.cartellaFiducia !== 'string') {
+          return rifiuto('QUERY_INVALID', 'child-session-not-trust-target', 'This conversation is an agent working in its own folder: answer for that folder from the computer');
+        }
+        const cartella = voce ? (cartellaFiduciaDi(voce) ?? null) : null;
+        if (!cartella) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
+        /* giro 3-bis: la risposta «solo per questa conversazione», se c'è, e se per questa cartella è la sola possibile */
+        return { ok: true, cartella, ...(typeof voce.fiduciaSoloQui === 'boolean' ? { fiduciaSoloQui: voce.fiduciaSoloQui } : {}),
+          ...(troppoLargaPerLaFiducia(cartella) ? { soloPerLaConversazione: true } : {}) };
       }
       if ([cartellaId, cartellaLibera, workspaceLaunchId].filter((v) => typeof v === 'string' && v.length > 0).length !== 1) {
         return rifiuto('QUERY_INVALID', 'one-folder-required', 'Exactly one folder is needed for this session');
@@ -14890,7 +15790,8 @@ export function createSessionRegistry({
           ? (typeof resolveWorkspaceLaunchFn === 'function' ? resolveWorkspaceLaunchFn(workspaceLaunchId).percorso : null)
           : cartellaLibera;
         if (workspaceLaunchId && !libera) return rifiuto('WORKSPACE_LAUNCH_NOT_AVAILABLE', 'folder-link-unavailable', 'The folder link is not available');
-        return { ok: true, cartella: preparaEsecuzioneLiberaFn(cartelleProgetto, { cartellaId, cartellaLibera: libera, consegna: 'folder-trust' }).cartella };
+        const cartella = preparaEsecuzioneLiberaFn(cartelleProgetto, { cartellaId, cartellaLibera: libera, consegna: 'folder-trust' }).cartella;
+        return { ok: true, cartella, ...(troppoLargaPerLaFiducia(cartella) ? { soloPerLaConversazione: true } : {}) };
       } catch (errore) {
         if (errore instanceof CustomTaskError) return { erroreAvvio: errore.message, code: errore.code };
         return rifiuto('WORKSPACE_LAUNCH_NOT_AVAILABLE', 'folder-link-unavailable', 'The folder link is not available');
@@ -16111,6 +17012,9 @@ export function createSessionRegistry({
       if (!pendente || pendente.requestId !== requestId) {
         return rifiuto('APPROVAL_NOT_PENDING', 'permission-request-expired', 'This permission request is no longer pending');
       }
+      /* ⛔ Decisione 373, giro 2 (revisore del ponte): un sì è SOLO `true`, letto qui una volta. Prima il declassamento guardava
+         `approvato === true` e la risoluzione la sola verità: un 1 o un «yes» col motivo «regola» saltava il primo e apriva la carta. */
+      const si = approvato === true;
       /*
        * ⛔⛔ Automazioni a due porte (owner 08/10/2026 notte) — «Modifica» sulla carta di crea o modifica: la persona ha corretto
        *   la bozza nel foglio e l'ha salvata LEI dall'interfaccia. La carta si chiude con un no, e il perché per il modello lo
@@ -16128,7 +17032,7 @@ export function createSessionRegistry({
           : `the person edited the change and saved it themselves on automation ${automazioneModificata}: do not change it again; call automation_list to see it.`;
       }
       /* D4 (owner 02/11/2026 sera): la domanda corretta sulla carta della ricerca, solo con un sì e solo su quella carta */
-      if (domandaModificata !== undefined && (approvato !== true || pendente.azione?.tipo !== 'research_start' || typeof domandaModificata !== 'string' || !domandaModificata.trim() || domandaModificata.length > 500)) {
+      if (domandaModificata !== undefined && (!si || pendente.azione?.tipo !== 'research_start' || typeof domandaModificata !== 'string' || !domandaModificata.trim() || domandaModificata.length > 500)) {
         return rifiuto('QUERY_INVALID', 'permission-request-not-research', 'This request is not a research question that can be edited');
       }
       /* /goal G6 (owner 15/10/2026) — «Modifica i controlli» sulla carta di goal_create: la persona ha corretto i controlli e ha
@@ -16155,7 +17059,10 @@ export function createSessionRegistry({
          chiamata scritta come testo, la emulata, la carta forzata che ne eredita il segno) è della persona: «un ospite non la approva
          MAI da solo». Senza, un sì della modalità con `ambito: 'strumento'` aprirebbe lo strumento per la conversazione e le figlie. */
       /* 208 bis (MEDIA-5, decisioni 155 e 216): la carta di una cancellazione critica è della persona in OGNI modo, anche senza il segno «sempre» */
-      if (approvato === true && (pendente.azione?.[CARTA_SEMPRE] === true || pendente.azione?.semprePersona === true || pendente.azione?.cancellazioneCritica) && MOTIVI_DEL_SI_SENZA_PERSONA.includes(motivo)) {
+      /* Decisione 373, giudice 07/11 19:56: anche la carta di un FILE DI CONTROLLO (W1-13 e la shell che nomina i file del computer use) è
+         della persona: quei file sono la politica di sicurezza (Hermes, `tools/approval_detection.py:24`), e una regola o la modalità
+         che li apre da sola toglierebbe il senso della carta. */
+      if (si && (pendente.azione?.[CARTA_SEMPRE] === true || pendente.azione?.semprePersona === true || pendente.azione?.cancellazioneCritica || pendente.azione?.fileDiControllo === true) && MOTIVI_DEL_SI_SENZA_PERSONA.includes(motivo)) {
         pendente.fermaOsservatore?.();
         voce.approvazionePendente = null;
         /* P018 nella 0.2.2, dopo il controllore: un no che nessuna persona ha dato, segnato `automatico: true` (il nucleo non lo ricorda come suo) */
@@ -16191,13 +17098,21 @@ export function createSessionRegistry({
       const strumentoMcp = pendente.azione?.soloUnaVolta !== true && !MOTIVI_DEL_SI_SENZA_PERSONA.includes(motivo)
         ? chiaveDellaCartaDiFuori(pendente.azione) : null;
       const ambitoValido = ambito === undefined
-        || (!pendente.azione?.cancellazioneCritica && ((ambito === 'cartella' && approvato === true && typeof chiaveCartella === 'string' && chiaveCartella)
-        || (ambito === 'percorso' && approvato === true && typeof percorsoSegreto === 'string' && percorsoSegreto)
+        || (!pendente.azione?.cancellazioneCritica && ((ambito === 'cartella' && si && typeof chiaveCartella === 'string' && chiaveCartella)
+        || (ambito === 'percorso' && si && typeof percorsoSegreto === 'string' && percorsoSegreto)
         /* Decisione 41 (owner 02/11/2026): «Solo questa volta» esiste solo sulla carta di root; il kernel non ricorda quel sì. */
-        || (ambito === 'volta' && approvato === true && Boolean(pendente.azione?.wslRoot))
+        || (ambito === 'volta' && si && Boolean(pendente.azione?.wslRoot))
         /* E1, decisione 121 (owner 03/11/2026, forma `FORMA-CARTA-EMULATI-D-2026-11-03.md` §3): «Sì per questo strumento in questa
            conversazione» esiste solo sulla carta di una chiamata EMULATA. Il nome lo porta la DOMANDA, mai il client (come F4-03). */
-        || (ambito === 'strumento' && approvato === true && (strumentoEmulato || strumentoMcp))));
+        || (ambito === 'strumento' && si && (strumentoEmulato || strumentoMcp))
+        /* Compiti lunghi, A (owner 13/11/2026 04:35; giudice v1759): «Consenti tutte» / «No a tutte» vale per le chiamate che la carta
+           elenca (`gruppo`, lo scrive il nucleo, mai il client), solo su una carta che ne ha due o più e solo dalla persona: una regola,
+           la modalità o un motivo automatico non rispondono «per tutte». Il sì è quello letto una volta qui sopra (`si`, decisione 373). */
+        || (ambito === 'risposta' && motivo === undefined && Number.isInteger(pendente.azione?.gruppo?.totale) && pendente.azione.gruppo.totale > 1)
+        /* Compiti lunghi, B: «No a questo strumento fino al tuo prossimo messaggio» — un no, solo sulla carta di uno strumento di fuori
+           (connettore, plugin, Tool Forge; anche in «Solo lettura»), solo dalla persona. Lo strumento lo porta la DOMANDA. Come il sì
+           è solo `true`, questo no è solo `false`: un 0 o un «no» non chiude la carta con un no allo strumento (porto sulla 0.2.3). */
+        || (ambito === 'strumento' && approvato === false && motivo === undefined && Boolean(chiaveDellaCartaDiFuori(pendente.azione)))));
       if (!ambitoValido) {
         return rifiuto('QUERY_INVALID', 'permission-request-no-folder', 'This request has no folder to allow for the session');
       }
@@ -16211,7 +17126,7 @@ export function createSessionRegistry({
         const elenco = (consensi.segretiConsentiti ??= []);
         if (!elenco.includes(percorsoSegreto)) elenco.push(percorsoSegreto);
       }
-      if (ambito === 'strumento') {
+      if (ambito === 'strumento' && si) { // compiti lunghi, B: il no allo strumento non scrive niente per la sessione
         const consensi = (voce.consensiSessione ??= {});
         const [campo, valore] = strumentoMcp ? ['attrezziMcpConsentiti', strumentoMcp] : ['strumentiEmulatiConsentiti', strumentoEmulato];
         const elenco = (consensi[campo] ??= []);
@@ -16229,7 +17144,7 @@ export function createSessionRegistry({
          si mostra (carta sempre), il suo sì sovrascrive questo; se il «sì solo» la copre, la ricevuta dice chi ha detto sì al testo. */
       const cartaDelleImpostazioni = pendente.azione?.tipo === NOME_ATTREZZO_IMPOSTAZIONI
         || (pendente.azione?.tipo === 'chiamata-dal-testo' && pendente.azione?.nome === NOME_ATTREZZO_IMPOSTAZIONI);
-      if (approvato === true && cartaDelleImpostazioni && typeof pendente.azione?.toolCallId === 'string') {
+      if (si && cartaDelleImpostazioni && typeof pendente.azione?.toolCallId === 'string') {
         const conferme = (voce.confermeImpostazioni ??= new Map());
         conferme.set(pendente.azione.toolCallId, confermatoDaValido(confermatoDa));
         while (conferme.size > 20) conferme.delete(conferme.keys().next().value);
@@ -16240,11 +17155,16 @@ export function createSessionRegistry({
          riceve `false` come prima; l'evento resta un booleano. */
       const motivoDelNo = typeof motivo === 'string' ? motivo.trim().slice(0, 2_000) : '';
       /* D4: un sì con la domanda corretta porta la domanda al nucleo; l'evento non cambia (la ricevuta è l'esito dell'attrezzo). Su una riga sola (revisione, R13): la dice l'esito, riga per riga. */
-      pendente.resolve(approvato ? (ambito === 'volta' ? { approvato: true, soloQuestaVolta: true } : domandaModificata === undefined ? true : { approvato: true, domandaModificata: domandaModificata.trim().replace(/\s+/gu, ' ') }) : motivoDelNo ? { approvato: false, motivo: motivoDelNo } : false);
+      /* Compiti lunghi, A e B: «per tutte» e «no allo strumento» arrivano al nucleo col loro segno (il nucleo li legge in
+         `cancelloDelloStrumentoDiFuori`); le risposte di sempre restano quelle della gemella. Nucleo ed evento leggono lo STESSO `si`:
+         un 1 o un «yes» «per tutte» è un no per tutte, mai un sì nell evento e un no nel nucleo (porto sulla 0.2.3, decisione 373). */
+      pendente.resolve(ambito === 'risposta' ? { approvato: si, perTutteLeChiamate: true }
+        : ambito === 'strumento' && approvato === false ? { approvato: false, noAlloStrumento: true }
+          : si ? (ambito === 'volta' ? { approvato: true, soloQuestaVolta: true } : domandaModificata === undefined ? true : { approvato: true, domandaModificata: domandaModificata.trim().replace(/\s+/gu, ' ') }) : motivoDelNo ? { approvato: false, motivo: motivoDelNo } : false);
       broadcast(voce, approvalResolved({
-        requestId, approvato: Boolean(approvato), ...(ambito === 'cartella' || ambito === 'percorso' || ambito === 'volta' || ambito === 'strumento' ? { ambito } : {}),
+        requestId, approvato: si, ...(ambito === 'cartella' || ambito === 'percorso' || ambito === 'volta' || ambito === 'strumento' || ambito === 'risposta' ? { ambito } : {}),
         // Blocco 20 (CLI): una regola o la modalità hanno detto sì: il registro delle notifiche non lo racconta come un gesto della persona
-        ...(approvato && MOTIVI_DEL_SI_SENZA_PERSONA.includes(motivo) ? { motivo } : {}),
+        ...(si && MOTIVI_DEL_SI_SENZA_PERSONA.includes(motivo) ? { motivo } : {}),
         // automazioni a due porte (08/10/2026): la carta dice «modificata da te», non «negata» (il perché per il modello resta qui sopra)
         ...(automazioneModificata !== undefined || obiettivoModificato !== undefined ? { motivo: 'modificata-dalla-persona' } : {}), // G6: anche l'obiettivo
         // C2 R6: la risposta è arrivata da un'altra sessione della catena (la carta nel padre) — la traccia lo dice
@@ -16278,7 +17198,7 @@ export function createSessionRegistry({
      *   HTTP esistente è 409 e non lo cambio qui). Dopo un riavvio la mappa in memoria non c'è più: vale
      *   l'esito salvato nel journal.
      */
-    async rispondiDomanda(sessionId, requestId, risposta, { rispostoDa } = {}) {
+    async rispondiDomanda(sessionId, requestId, risposta, { rispostoDa, mostraDettagli = false } = {}) {
       const voce = sessioni.get(sessionId);
       if (!voce) return rifiuto('NOT_FOUND', 'session-not-found', 'Session not found');
       /*
@@ -16319,6 +17239,22 @@ export function createSessionRegistry({
         validata = validaRispostaDomanda(pendente.questions, risposta);
       } catch (errore) {
         return { erroreAvvio: errore instanceof Error ? errore.message : String(errore), code: errore?.code ?? 'QUERY_INVALID' };
+      }
+      /* Giudice v1525, decisione dell'owner 11/11 17:12 sul telefono di oggi: una scelta con `requiresDetails` («Consenti» davanti a un
+         elenco di destinatari che la carta non mostra intero) si accetta solo da un cliente che dichiara di mostrare l'elenco intero
+         (`showsDetails`, la casella delle domande del PC). Il telefono di oggi non lo mostra: la domanda resta aperta e la frase dice
+         di aprire l'elenco sul PC. Le altre scelte non aspettano. Come Claude Code (CHANGELOG.md:150, niente sì a una chiamata che non
+         si legge per intero) e Codex (approval_overlay/clipping_tests.rs:56). */
+      if (validata.status === 'answered' && mostraDettagli !== true) {
+        const servono = (pendente.questions ?? []).some((q) => {
+          if (!q?.details || !Array.isArray(q.options) || !Object.hasOwn(validata.answers ?? {}, q.id)) return false;
+          const scelte = [validata.answers[q.id]].flat();
+          return q.options.some((o) => o?.requiresDetails === true && scelte.includes(o.label));
+        });
+        if (servono) {
+          /* giro di cura dopo i revisori (B, rosso del telefono; giudice v1553): un codice suo, 422, e la frase che arriva sul filo */
+          return rifiuto('QUESTION_ANSWER_NEEDS_DETAILS', 'question-answer-needs-details', 'Open the whole list on the PC to allow this: this device cannot show it');
+        }
       }
       voce.domandaPendente = null;
       const conferma = (async () => {
@@ -16431,7 +17367,7 @@ export function createSessionRegistry({
         }
         const permessiDelPiano = permessiDopoIlPiano(voce, scelta.decisione);
         /* decisione 173: anche il piano approvato non porta l'Accesso pieno in una cartella non fidata */
-        const permessiNuovi = permessiDelPiano === 'Full access' ? permessiNellaCartella(permessiDelPiano, cartellaNonFidata(voce.cartellaBase ?? voce.cartella, voce)) : permessiDelPiano;
+        const permessiNuovi = permessiDelPiano === 'Full access' ? permessiNellaCartella(permessiDelPiano, pienoNonConcesso(cartellaFiduciaDi(voce), voce)) : permessiDelPiano;
         /* M26 (revisione permessi 2): come agli altri tre passaggi, l'Accesso pieno trattenuto si ricorda e torna col «Sì» della pillola */
         if (permessiNuovi && !voce.padreId) {
           if (permessiDelPiano === 'Full access' && permessiNuovi === 'On request') voce.pienoInAttesaDiFiducia = true;
@@ -16445,7 +17381,10 @@ export function createSessionRegistry({
             try {
               await registraRigaFn({ cartellaStore, sessionId, record: {
                 tipo: 'impostazioni-sessione', modello: voce.modello, modelloPlanner: voce.modelloPlanner, reasoning: voce.reasoning,
-                permessi: permessiNuovi, modalitaOperativa: 'normale', permessiPerAttrezzo: voce.permessiPerAttrezzo, modelId: voce.modelId,
+                /* giro 2, D5: trattenuto su una cartella mai chiesta si scrive com'è stato scelto, come `aggiornaImpostazioni`: il ripristino
+                   rilegge la fiducia, e un «Sì» dato dopo un riavvio lo rimette */
+                permessi: voce.pienoInAttesaDiFiducia === true && fiduciaMaiChiesta(cartellaFiduciaDi(voce), voce) ? 'Full access' : permessiNuovi,
+                modalitaOperativa: 'normale', permessiPerAttrezzo: voce.permessiPerAttrezzo, modelId: voce.modelId,
                 versioneImpostazioni: versionePiano,
               } });
             } catch (errore) {
@@ -17014,6 +17953,8 @@ export function createSessionRegistry({
         }
       }
       voce.controller.abort();
+      /* L'Assistente (revisore B, GIALLO-2): lo Stop della PERSONA ferma anche la domanda all'Assistente di questa chat, con la sua carta */
+      if (daChi === 'persona') voce.fermaAssistente?.();
       /* ⛔ COD-205 (Mobile 30/10/2026, stress del telefono 0.1.47): la domanda di permesso si chiude DOPO l'abort. Prima il «no»
          arrivava al nucleo prima del segnale: la sua corsa (`Promise.race([domanda, gara])`, talosHarness.mjs) prendeva il ramo
          «the person did not approve» invece di «fermato su richiesta», e la carta diceva «Denied from another window». Chiusa
@@ -17505,7 +18446,7 @@ export function createSessionRegistry({
           permessi: voce.permessi ?? 'Workspace write',
           /* 173/189/196: la riga fissa anche per chi RIAPRE la conversazione (l'evento la porta solo dal vivo): stessa regola e stessi
              campi dell'istantanea, assenti quando la cartella è fidata o non c'è fonte. Una chiamata in memoria, niente disco. */
-          ...(!voce.padreId && strumentiDellaCartellaSpenti(voce) ? { cartellaNonFidata: true, ...(voce.pienoInAttesaDiFiducia === true ? { pienoTrattenuto: true } : {}) } : {}),
+          ...campiDellaFiducia(voce, !voce.padreId && strumentiDellaCartellaSpenti(voce)),
           modalitaOperativa: voce.modalitaOperativa ?? 'normale',
           /* ⛔ F3-10 (23/09/2026) — vero SOLO per una sessione ripristinata la cui ultima riga di impostazioni
              diceva `workflow`: l'interfaccia mostra «usava la modalità Workflow, tolta» e i due pulsanti
@@ -17732,6 +18673,10 @@ export function createSessionRegistry({
         warningTokens: soglie.warningTokens,
         emergencyTokens: soglie.emergenza,
         source: soglie.source,
+        ...(soglie.finestraIgnota ? { windowUnknown: true } : {}), // 11/11/2026: la finestra è il ripiego prudente (riga «memoria non nota»)
+        ...(soglie.sopraIlCatalogo ? { windowWrittenAboveCatalog: soglie.sopraIlCatalogo } : {}), // owner 17:27 Q1: la memoria scritta supera quella letta
+        ...(soglie.scritta ? { windowWritten: true } : {}), // revisore unico, foto 7: la finestra è la memoria scritta dalla persona (anche sotto il catalogo)
+        ...(soglie.tettoDelMotore ? { engineCeiling: true } : {}), // revisore unico, punto 4: agisce il tetto del motore, non il 75% della finestra
         modelId: soglie.modelId,
         inProgress: compattazioniInBackground.has(sessionId) || compattazioniInCorso.has(sessionId),
       };

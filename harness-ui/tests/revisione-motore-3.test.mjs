@@ -16,8 +16,10 @@ import { createSessionRegistry, giroSulModelloLocale } from '../src/session-regi
 import { attendiScritture } from '../src/session-store.mjs';
 import { EventEmitter } from 'node:events';
 import { chiaviDagliArgomenti } from '../src/llama-router-supervisor.mjs';
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { regolaCopiaInRam, regolaEmulati, regolaCambi, regolaMescolamento, regolaNonPeggiore, regolaScheda, regolaTenuta, verdettoBraccio, giudizio } from '../scripts/banco-regole.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 const RISPOSTA = () => new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'x' } }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 const URL_CHAT = 'https://openrouter.ai/api/v1/chat/completions';

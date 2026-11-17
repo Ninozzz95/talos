@@ -13,6 +13,8 @@ function chiudi() {
 process.on('message', messaggio => {
   if (messaggio?.tipo === 'chiudi') chiudi();
   if (messaggio?.tipo === 'misura' && process.connected) process.send({ tipo: 'misura', pid: process.pid, versions: process.versions, memoria: process.memoryUsage() }, () => {});
+  // Giudice v1790: il segno di TALOS smette di vedersi (protezione rifiutata). L'aiutante del computer use lo rilegge al prossimo avvio (aiutante-mcp.mjs).
+  if (messaggio?.tipo === 'segno') { if (messaggio.acceso === true) process.env.TALOS_SEGNO_ACCESO = '1'; else delete process.env.TALOS_SEGNO_ACCESO; }
 });
 process.once('disconnect', chiudi);
 // Non propagare la modalità speciale alle shell aperte dal Terminale.

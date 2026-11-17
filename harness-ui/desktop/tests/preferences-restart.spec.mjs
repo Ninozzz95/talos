@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { preparaRuntime, root } from './support.mjs';
+import { preparaRuntime, root, lineeDelGancio, nessunPortachiaviVero } from './support.mjs';
 
 const require = createRequire(import.meta.url);
 const { _electron } = require('../../frontend/node_modules/playwright');
@@ -20,6 +20,7 @@ async function launch(env) {
 
 test('PREFS-ORIGIN-RESTART: real Electron process restart preserves system settings and panel widths', { timeout: 120_000 }, async () => {
   const fixture = preparaRuntime('prefs-restart');
+  const primaDelLancio = lineeDelGancio(); // round 3 (K1): the hook trace is read from here on, after the launches below
   const first = await launch(fixture.env);
   let origin;
   let saved;
@@ -87,10 +88,12 @@ test('PREFS-ORIGIN-RESTART: real Electron process restart preserves system setti
     assert.equal(panel.sidebar, '352px');
     assert.equal(panel.inspector, '520px');
   } finally { await second.app.close(); }
+  nessunPortachiaviVero(primaDelLancio); // round 3 (K1): no process of this test reached for the real keyring
 });
 
 test('PREFS-LEGACY-ONE: settings at a previous random-port origin survive the first upgrade launch', { timeout: 120_000 }, async (t) => {
   const fixture = preparaRuntime('prefs-legacy');
+  const primaDelLancio = lineeDelGancio(); // round 3 (K1): the hook trace is read from here on, after the launches below
   const first = await launch(fixture.env);
   let oldOrigin;
   try {
@@ -115,6 +118,7 @@ test('PREFS-LEGACY-ONE: settings at a previous random-port origin survive the fi
       { sessions: 351, inspector: 519 });
     t.diagnostic('The historical origin and its localStorage remained intact');
   } finally { await second.app.close(); }
+  nessunPortachiaviVero(primaDelLancio); // round 3 (K1): no process of this test reached for the real keyring
 });
 
 test('PREFS-LEGACY-BINARY: the 0.1.18 executable upgrades its last Chromium origin without losing preferences', { timeout: 120_000 }, async (t) => {
@@ -125,6 +129,7 @@ test('PREFS-LEGACY-BINARY: the 0.1.18 executable upgrades its last Chromium orig
   if (oldVersion !== '0.1.18') { t.skip(`Historical artifact is ${oldVersion}, not 0.1.18`); return; }
 
   const fixture = preparaRuntime('prefs-binary-upgrade');
+  const primaDelLancio = lineeDelGancio(); // round 3 (K1): the hook trace is read from here on, after the launches below
   const oldEnv = { ...fixture.env };
   delete oldEnv.TALOS_DESKTOP_HARNESS_DIR;
   const old = await _electron.launch({ executablePath: join(oldRoot, 'TALOS.exe'), args: [], env: oldEnv, timeout: 30_000 });
@@ -152,4 +157,5 @@ test('PREFS-LEGACY-BINARY: the 0.1.18 executable upgrades its last Chromium orig
       { sessions: 353, inspector: 521 });
     assert.equal(JSON.parse(readFileSync(join(fixture.dataDir, 'desktop-origin.json'), 'utf8')).port, Number(new URL(oldOrigin).port));
   } finally { await upgraded.app.close(); }
+  nessunPortachiaviVero(primaDelLancio); // round 3 (K1): no process of this test reached for the real keyring
 });

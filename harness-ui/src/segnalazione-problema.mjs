@@ -118,6 +118,8 @@ export function nomeDelSistema(piattaforma, release) {
 }
 
 const PIATTAFORME = Object.freeze({ win32: 'windows', darwin: 'macos', linux: 'linux' });
+/** Decisione 374 R1 (§10.6): perché i programmi lasciati accesi da un comando non sono seguiti (`kernel/lanciatore-windows.mjs`). */
+const MOTIVI_NIPOTI = Object.freeze(['assente', 'impronta', 'non-fissato', 'bloccato', 'shell', 'job', 'morto', 'appeso', 'incerto', 'wsl']);
 const PERMESSI_NOTI = Object.freeze(['Read only', 'Research', 'On request', 'Workspace write', 'Full access']);
 const forma = (valore, re) => (typeof valore === 'string' && re.test(valore) ? valore : null);
 
@@ -160,6 +162,15 @@ export function costruisciDiagnosticaSegnalazione(fatti = {}, { nomi = nomiPriva
     errori,
     motoreLocale: typeof fatti.motoreLocale === 'boolean' ? fatti.motoreLocale : null,
     remoto: typeof fatti.remoto === 'boolean' ? fatti.remoto : null,
+    /* decisione 374 R1 (§10.6): solo su Windows, e solo se la fonte ha risposto; il motivo è una parola dell'elenco, mai un percorso */
+    ...(typeof fatti.nipoti?.nipoti === 'boolean' ? { nipoti: {
+      seguiti: fatti.nipoti.nipoti,
+      motivo: fatti.nipoti.nipoti ? null : (MOTIVI_NIPOTI.includes(fatti.nipoti.motivo) ? fatti.nipoti.motivo : 'altro'),
+      // giro piccolo dopo il controllore (12/11): seguiti, ma Windows ha rifiutato l'appoggio del Job; passa solo il valore esatto `false`
+      ...(fatti.nipoti.nipoti && fatti.nipoti.appoggio === false ? { appoggio: false } : {}),
+      // giro 3 (13/11): seguiti, ma Windows non ha tolto l'appoggio dopo la ripartenza (legati a TALOS); solo il valore esatto `false`
+      ...(fatti.nipoti.nipoti && fatti.nipoti.sgancio === false ? { sgancio: false } : {}),
+    } } : {}),
   };
 }
 
@@ -175,7 +186,7 @@ async function prova(fn, ...argomenti) {
  */
 export async function raccogliDiagnosticaSegnalazione({
   sessionId = null, versione, sistema = () => ({ piattaforma: process.platform, release: releaseDelSistema(), arch: archDelSistema() }),
-  riga, schede, errori, motoreLocale, remoto, nomi = nomiPrivatiDellaMacchina(),
+  riga, schede, errori, motoreLocale, remoto, nipoti, nomi = nomiPrivatiDellaMacchina(),
 } = {}) {
   const v = await prova(versione);
   const conSessione = typeof sessionId === 'string' && sessionId !== '';
@@ -190,6 +201,7 @@ export async function raccogliDiagnosticaSegnalazione({
     terminale: Array.isArray(elencoSchede) ? elencoSchede.some((x) => x?.attiva === true) : undefined,
     errori: (await prova(errori, conSessione ? sessionId : null)) ?? [],
     motoreLocale: await prova(motoreLocale),
+    nipoti: await prova(nipoti),
     remoto: typeof statoRemoto?.acceso === 'boolean' ? statoRemoto.acceso : undefined,
   }, { nomi: nomiTutti });
 }

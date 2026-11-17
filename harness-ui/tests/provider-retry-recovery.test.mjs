@@ -82,7 +82,7 @@ async function worker(t, root, endpoint) {
   mkdirSync(profile, { recursive: true });
   const env = Object.fromEntries(Object.entries(process.env).filter(([k]) => /^(SystemRoot|WINDIR|PATH|TEMP|TMP|COMSPEC|PATHEXT)$/iu.test(k)));
   Object.assign(env, { USERPROFILE: profile, HOME: profile, APPDATA: profile, LOCALAPPDATA: profile,
-    TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_SCRATCH_DIR: join(profile, 'scratch') });
+    TALOS_HARNESS_UI_KEYRING: 'memoria', TALOS_PROVA_ISOLATA: '1', TALOS_SCRATCH_DIR: join(profile, 'scratch') });
   const child = fork(fileURLToPath(new URL('./fixtures/provider-retry-recovery-worker.mjs', import.meta.url)),
     [join(root, 'sessions'), join(root, 'workspace'), endpoint], { env, execArgv: [], windowsHide: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
   const messages = [], pending = new Map();

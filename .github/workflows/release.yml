@@ -546,6 +546,8 @@ jobs:
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       TALOS_R02_BUILDER_NETWORK: '1'
+      # 13/11/2026 (owner via giudice v1816): pacchetto di rilascio, il lanciatore dei comandi è obbligatorio (lanciatore-nel-pacchetto.mjs).
+      TALOS_PACCHETTO_RILASCIO: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -669,6 +671,16 @@ jobs:
           node harness-ui/scripts/scarica-aiutante-pc.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Aiutante del PC non pronto.' }
 
+      # 13/11/2026 (owner via giudice v1815-v1816): il lanciatore dei comandi costruito qui, dallo STESSO commit del tag (come Codex
+      # rust-release-windows.yml:250), con la prova di fumo della crate e l'impronta; TALOS_LANCIATORE_SORGENTE/IMPRONTA in GITHUB_ENV.
+      # prepara-pacchetto verifica la copia con quell'impronta e si ferma se manca o non torna (TALOS_PACCHETTO_RILASCIO qui sopra).
+      - id: lanciatore
+        name: lanciatore dei comandi dallo stesso commit, prova di fumo e impronta
+        timeout-minutes: 15
+        run: |
+          node harness-ui/scripts/costruisci-lanciatore.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Lanciatore dei comandi non pronto.' }
+
       - id: cancelli
         name: server, kernel, frontend e guscio Electron reale
         # 10/10/2026 (0.1.26): 0.1.25 qui 10 min 10 s; nel CI della PR #55 il solo server 9 min 14 s e il frontend 2 min 49 s,
@@ -677,7 +689,7 @@ jobs:
         # il solo server ora 21 min 46 s, frontend 2 min 44 s; 0.1.38 qui 14 min 04 s. 40 = ~27 stimati + 50%.
         timeout-minutes: 40
         run: |
-          node --test harness-ui/tests/*.test.mjs
+          node --test --import=./harness-ui/desktop/tests/gancio-portachiavi.mjs harness-ui/tests/*.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Test server falliti.' }
           npm --prefix harness-ui run test:kernel
           if ($LASTEXITCODE -ne 0) { throw 'Test kernel falliti.' }

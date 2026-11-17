@@ -55,7 +55,10 @@ test('TCF-02 verso contrario: senza la funzione, o con un valore non valido o un
     const { alKernel, politica } = await giroSpiato({ finestraTokenFn: () => 1_000_000, ...(tettoCompattazioneFn ? { tettoCompattazioneFn } : {}) });
     assert.ok(alKernel);
     assert.equal(Object.hasOwn(alKernel, 'tettoCompattazioneToken'), false, String(tettoCompattazioneFn));
-    assert.equal(politica.triggerTokens, 750_000, String(tettoCompattazioneFn));
-    assert.equal(politica.source, 'route-minimum');
+    /* owner 11/11 17:47: il tetto del motore (200.000) vale anche sopra 266.667 di finestra; dal passaggio dopo il revisore unico
+       (punto 4, giudice v1541) la politica lo dice `explicit-cap` + `engineCeiling`, perché il telefono di oggi scriva il vero. */
+    assert.equal(politica.triggerTokens, 200_000, String(tettoCompattazioneFn));
+    assert.equal(politica.source, 'explicit-cap');
+    assert.equal(politica.engineCeiling, true);
   }
 });

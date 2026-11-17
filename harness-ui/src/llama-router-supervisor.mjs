@@ -40,10 +40,11 @@
  *     `resources/local-runtime/{cpu,vulkan}/llama-server.exe` (build 11669, commit 620d2225c).
  */
 import { randomBytes } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdirSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { userInfo } from 'node:os';
+import { mkdirSync, readFileSync, renameSync, rmdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, relative, resolve, win32 } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import { createProcessPolicy, DEFAULT_ENV_ALLOWLIST } from './process-policy.mjs';
 import { percorsoTaskkill, radiceDiSistema } from './taskkill-di-sistema.mjs';
@@ -152,6 +153,36 @@ export function scriviPresetAtomico(percorso, testo) {
   const temporaneo = `${percorso}.${process.pid}.tmp`;
   writeFileSync(temporaneo, testo, 'utf8');
   renameSync(temporaneo, percorso);
+}
+
+/* J-R4: by its full path, never by name. `env`: `SystemRoot` only, like taskkill below — without it the child gets the server's whole
+   environment (`process.env` is the default), with the local API token and the keys in it. */
+const icaclsDiSistema = (args) => execFileSync(win32.join(radiceDiSistema(process.env.SystemRoot), 'System32', 'icacls.exe'), args,
+  { stdio: 'ignore', windowsHide: true, timeout: 5_000, env: { SystemRoot: radiceDiSistema(process.env.SystemRoot) } });
+
+/**
+ * The router's key file, readable by this user only (judge v1591, condition 2). On Windows `mode 0o600` only toggles read-only, so the
+ * ACL is cut with icacls (Atomic `config/windows-acl.ts:53-84`: `/inheritance:r /grant:r <user>:F`, a probe read, `/reset` if it locked
+ * us out) — on the EMPTY temporary file, so the key is never on disk under the folder's inherited ACL; the rename keeps it.
+ * Best effort like Atomic: without icacls the file keeps the folder's ACL, as before. @returns {boolean} true when the ACL is ours only.
+ */
+export function scriviChiaveProtetta(percorso, testo, { piattaforma = process.platform, utente = () => userInfo().username,
+  eseguiIcacls = icaclsDiSistema, leggi = readFileSync } = {}) {
+  mkdirSync(dirname(percorso), { recursive: true });
+  const temporaneo = `${percorso}.${process.pid}.tmp`;
+  writeFileSync(temporaneo, '', { mode: 0o600 });
+  let protetto = piattaforma !== 'win32';
+  if (!protetto) {
+    let nome = '';
+    try { nome = utente(); } catch { /* no user database */ }
+    if (nome) {
+      try { eseguiIcacls([temporaneo, '/inheritance:r', '/grant:r', `${nome}:F`]); protetto = true; } catch { /* the folder's ACL stays */ }
+      try { leggi(temporaneo); } catch { protetto = false; try { eseguiIcacls([temporaneo, '/reset']); } catch { /* the write below says it */ } }
+    }
+  }
+  writeFileSync(temporaneo, testo, 'utf8');
+  renameSync(temporaneo, percorso);
+  return protetto;
 }
 
 /** Bytes one model holds while loaded (Hermes `estimator.py:217-221`): weights + KV cache at its window + the runtime's overhead. */
@@ -364,9 +395,9 @@ export function createLlamaRouterSupervisor({
   /* G-R1: the router runs in the binary's folder; preset and key are named by an ASCII string (see `postoDelPreset`) */
   const posto = postoDelPreset({ presetFile, binaryPath });
   /** A file of the router that cannot be written where the router can read it is a router failure: today's engine (decision 2). */
-  function scriviNelPosto(percorso, testo) {
+  function scriviNelPosto(percorso, testo, scrivi = scriviPresetAtomico) {
     try {
-      scriviPresetAtomico(percorso, testo);
+      scrivi(percorso, testo);
     } catch (errore) {
       throw guastoDelRouter(`the router's preset cannot be written in ${dirname(percorso)} (${errore?.code ?? errore?.message ?? errore})`, 'ROUTER_PRESET_UNWRITABLE');
     }
@@ -644,7 +675,9 @@ export function createLlamaRouterSupervisor({
     const entry = { child: null, porta, baseUrl: `http://${LOOPBACK}:${porta}`, chiave, closed: false, ultimeRighe: [], residuo: '', sse: null, codiceUscita: null,
       daRiavvio, saneAlle: null };
     const argomenti = argomentiDelRouter({ preset: posto.argomentoPreset, modelliMax, porta });
-    scriviNelPosto(posto.chiave, `${chiave}\n`); // a new key at every spawn, as today at every start
+    scriviNelPosto(posto.chiave, `${chiave}\n`, (p, t) => { // a new key at every spawn, as today at every start; this user only (12/11)
+      if (!scriviChiaveProtetta(p, t)) registro('[talos] router: the key file keeps its folder\'s permissions (icacls did not apply)\n');
+    });
     emitLog('stderr', `[talos] router: up to ${modelliMax} model${modelliMax === 1 ? '' : 's'} loaded together, preset ${posto.preset}\n`);
     /* G-R1: the binary's folder as the current folder (never the data folder), the two files by an ASCII name (see `postoDelPreset`) */
     entry.child = processPolicy.spawn(binaryPath, argomenti, { cwd: posto.cartellaDelRouter, shell: false,

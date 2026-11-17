@@ -695,12 +695,14 @@ test('GR-16 (N1, S1) il documento ammette in cornice solo l altro nome alla stes
   const base = await ascolta(t, { token: gettone, sessionRegistry: registro, staticHandler: async () => ({ statusCode: 200, contentType: 'text/html; charset=utf-8', body: Buffer.from('<!doctype html><html><head></head><body>APP</body></html>') }) });
   const porta = Number(new URL(base).port);
   const cookie = { cookie: `talos_token=${gettone}`, accept: 'text/html' };
-  for (const [finestra, altro] of [[`127.0.0.1:${porta}`, `localhost:${porta}`], [`localhost:${porta}`, `127.0.0.1:${porta}`]]) {
+  /* giro di sicurezza 5 delle anteprime: sul nome del guscio (127.0.0.1) anche le origini delle pagine rese, `*.localhost` alla STESSA porta (il servizio
+     le serve solo col lasciapassare della loro etichetta, `tests/pagine-origine-propria.test.mjs`) */
+  for (const [finestra, altri] of [[`127.0.0.1:${porta}`, [`localhost:${porta}`, `*.localhost:${porta}`]], [`localhost:${porta}`, [`127.0.0.1:${porta}`]]]) {
     const sorgenti = frameSrc((await intestazioniConHost(porta, '/', finestra, cookie))['content-security-policy']);
     assert.ok(sorgenti, finestra);
-    assert.deepEqual(sorgenti.filter((s) => s.startsWith('http:')), [`http://${altro}`], `${finestra}: solo il proxy, ${sorgenti.join(' ')}`);
+    assert.deepEqual(sorgenti.filter((s) => s.startsWith('http:')), altri.map((a) => `http://${a}`), `${finestra}: solo il proxy e le pagine, ${sorgenti.join(' ')}`);
     assert.ok(sorgenti.includes("'self'") && sorgenti.includes('https:'), 'le pagine nostre e i siti https restano');
-    assert.ok(!sorgenti.some((s) => /\*/u.test(s)), 'nessuna porta qualunque');
+    assert.ok(!sorgenti.some((s) => /:\*|^\*|^http:\/\/\*\.(?!localhost:)/u.test(s)), 'nessuna porta qualunque, nessun altro nome con l asterisco');
   }
   /* AL CONTRARIO: ogni altra risposta non ammette nessuna cornice http */
   const json = frameSrc((await intestazioniConHost(porta, '/api/v1/sessions', `127.0.0.1:${porta}`, cookie))['content-security-policy']);

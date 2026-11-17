@@ -29,6 +29,17 @@ import { FONTE_GITHUB } from './fonte-aggiornamenti.mjs';
 export const REPO_PREDEFINITO = 'Ninozzz95/talos';
 export const INTERVALLO_MS = 4 * 60 * 60 * 1000;
 export const RITARDO_PRIMO_CONTROLLO_MS = 30_000;
+/*
+ * 0.2.2 (SignPath, brief «rete spegnibile»): `TALOS_DESKTOP_AGGIORNAMENTI=off` (o `0`, `false`, `no`) vale come l'interruttore spento e lo
+ * tiene spento: nessun controllo da solo, nessuna installazione alla chiusura; «Controlla ora» resta (è la persona che chiede). La scelta
+ * salvata della persona non si tocca: tolta la variabile, torna quella. Come `DISABLE_AUTOUPDATER` di Claude Code, che spegne solo
+ * l'automatico (`DISABLE_UPDATES` blocca anche il manuale: claude-code CHANGELOG.md:6578), e il controllo passivo di Hermes spento dal
+ * config (`hermes_cli/source_check.py:537`).
+ */
+export const VARIABILE_AGGIORNAMENTI = 'TALOS_DESKTOP_AGGIORNAMENTI';
+export function aggiornamentiSpentiDallAmbiente(env = {}) {
+  return /^(off|0|false|no)$/iu.test(String(env?.[VARIABILE_AGGIORNAMENTI] ?? '').trim());
+}
 const TAG = /^desktop-v(\d+)\.(\d+)\.(\d+)$/u;
 const VERSIONE = /^(\d+)\.(\d+)\.(\d+)$/u;
 
@@ -111,7 +122,7 @@ export const AVVISO_PRIMA_DELL_INSTALLAZIONE_MS = 1500;
 export function creaAggiornatore({
   updater, fetch, chiavePubblica, versioneAttuale, impostazioni, repo = REPO_PREDEFINITO, fonte = FONTE_GITHUB, // fonte: `fonte-aggiornamenti.mjs`
   pianifica = setTimeout, annulla = clearTimeout, ora = () => new Date(), registra = () => {}, notifica = () => {},
-  calcolaSha512 = sha512DelFile,
+  calcolaSha512 = sha512DelFile, spentiDallAmbiente = false,
 }) {
   updater.autoDownload = false; // scarica solo DOPO la verifica della firma
   updater.autoInstallOnAppQuit = false; // si accende solo dopo il secondo controllo dell'impronta
@@ -128,7 +139,7 @@ export function creaAggiornatore({
   updater.on?.('update-downloaded', () => { queueMicrotask(() => { if (!verificato) updater.autoInstallOnAppQuit = false; }); });
   const salvate = impostazioni.leggi() ?? {};
   const stato = {
-    stato: 'fermo', versioneAttuale, automatici: salvate.automatici !== false,
+    stato: 'fermo', versioneAttuale, automatici: spentiDallAmbiente !== true && salvate.automatici !== false, spentiDallAmbiente: spentiDallAmbiente === true,
     ultimoControllo: salvate.ultimoControllo ?? null, pronto: null, errore: null, installazione: false,
   };
   let timer = null;
@@ -136,7 +147,8 @@ export function creaAggiornatore({
 
   const pubblico = () => structuredClone(stato);
   const annuncia = () => { try { notifica(pubblico()); } catch (e) { registra('notifica', e); } };
-  const salva = () => impostazioni.scrivi({ automatici: stato.automatici, ultimoControllo: stato.ultimoControllo });
+  /* con la variabile si salva la scelta della PERSONA, non quella forzata: tolta la variabile, torna la sua */
+  const salva = () => impostazioni.scrivi({ automatici: stato.spentiDallAmbiente ? salvate.automatici !== false : stato.automatici, ultimoControllo: stato.ultimoControllo });
   const programma = (ms) => { if (timer) annulla(timer); timer = stato.automatici ? pianifica(() => { timer = null; void controlla(); }, ms) : null; };
 
   async function esegui() {
@@ -198,6 +210,7 @@ export function creaAggiornatore({
     avvia() { programma(RITARDO_PRIMO_CONTROLLO_MS); annuncia(); },
     controlla,
     impostaAutomatici(acceso) {
+      if (stato.spentiDallAmbiente) { annuncia(); return pubblico(); } // la variabile li tiene spenti: niente si salva, niente si programma
       stato.automatici = acceso === true;
       updater.autoInstallOnAppQuit = stato.automatici && Boolean(stato.pronto);
       try { salva(); } catch (e) { registra('impostazioni', e); }

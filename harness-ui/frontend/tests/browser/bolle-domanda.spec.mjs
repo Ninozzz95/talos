@@ -120,7 +120,10 @@ test.use({ viewport: { width: 1920, height: 1080 } });
 test.beforeEach(() => { sequenza = 0; });
 
 test('BOLLE-01 · la domanda resta in cima mentre si legge la sua risposta, e ne copre la fascia', async ({ page }) => {
-  const tentate = await apri(page);
+  /* 09/11/2026 (owner, 0.2.2): «Domande a tutta larghezza» è accesa di serie, e allora la bolla parte dal bordo sinistro della colonna
+     e a sinistra non c'è un punto da misurare. Qui la bolla è stretta (spenta a mano): la fascia deve coprire anche il vuoto alla sua
+     sinistra. La bolla larga di serie la misurano DOMANDA-SOPRA-SCHEDA-01/02 (`bolle-domanda-sopra-scheda.spec.mjs`). */
+  const tentate = await apri(page, { aspetto: { userBubbleFullWidth: false } });
   await eventi(page, eventiTurni(6));
   await scorriA(page, 5, 900); // a metà della risposta del terzo turno (turni: 0 q, 1 r, 2 q, 3 r, 4 q, 5 r …)
   const s = await stato(page);
@@ -138,8 +141,24 @@ test('BOLLE-01 · la domanda resta in cima mentre si legge la sua risposta, e ne
   expect(tentate).toEqual([]);
 });
 
-test('BOLLE-02 · passaggio di consegne: la domanda dopo scorre sopra la ferma e ne prende il posto, mai due impilate', async ({ page }) => {
-  const tentate = await apri(page);
+/*
+ * 09/11/2026, giro 2 (revisione avversaria 0.2.2-DL, reperto 4): con «Domande a tutta larghezza» accesa di serie BOLLE-02…04 e 08-14
+ *   girano con la bolla LARGA; la bolla stretta, che la persona può ancora scegliere, restava misurata solo in BOLLE-01, BOLLE-05 e
+ *   nella FOTO 04. BOLLE-02 e BOLLE-04 girano ora nei due modi (le «b»: spenta a mano), con le stesse misure.
+ */
+const STRETTA = { userBubbleFullWidth: false };
+/** Apre nel modo chiesto e controlla che la radice lo dica: `{}` = di serie (larga), `STRETTA` = spenta a mano. */
+async function apriNelModo(page, aspetto) {
+  const tentate = await apri(page, { aspetto });
+  if (aspetto.userBubbleFullWidth === false) await expect(page.locator('html')).not.toHaveClass(/user-bubble-full-width/);
+  else await expect(page.locator('html')).toHaveClass(/user-bubble-full-width/);
+  return tentate;
+}
+
+test('BOLLE-02 · passaggio di consegne: la domanda dopo scorre sopra la ferma e ne prende il posto, mai due impilate', async ({ page }) => { await passaggioDiConsegne(page, {}); });
+test('BOLLE-02b · bolla stretta (spenta a mano): passaggio di consegne, la domanda dopo scorre sopra la ferma, mai due impilate', async ({ page }) => { await passaggioDiConsegne(page, STRETTA); });
+async function passaggioDiConsegne(page, aspetto) {
+  const tentate = await apriNelModo(page, aspetto);
   await eventi(page, eventiTurni(6));
   /* la domanda del quarto turno sta arrivando: 40 px sotto il bordo */
   await scorriA(page, 6, -40);
@@ -176,7 +195,7 @@ test('BOLLE-02 · passaggio di consegne: la domanda dopo scorre sopra la ferma e
     expect(p.inCima, `scrollTop ${p.y}: due domande in cima`).toBeLessThanOrEqual(1);
   }
   expect(tentate).toEqual([]);
-});
+}
 
 test('BOLLE-03 · dal vivo la domanda ferma non copre la riga del lavoro in corso né il compositore', async ({ page }) => {
   const tentate = await apri(page);
@@ -209,8 +228,10 @@ test('BOLLE-03 · dal vivo la domanda ferma non copre la riga del lavoro in cors
   expect(tentate).toEqual([]);
 });
 
-test('BOLLE-04 · la domanda lunga ferma si taglia a quattro righe, e «Domanda intera» la mostra tutta', async ({ page }) => {
-  const tentate = await apri(page);
+test('BOLLE-04 · la domanda lunga ferma si taglia a quattro righe, e «Domanda intera» la mostra tutta', async ({ page }) => { await domandaLungaTagliata(page, {}); });
+test('BOLLE-04b · bolla stretta (spenta a mano): la domanda lunga ferma si taglia a quattro righe, e «Domanda intera» la mostra tutta', async ({ page }) => { await domandaLungaTagliata(page, STRETTA); });
+async function domandaLungaTagliata(page, aspetto) {
+  const tentate = await apriNelModo(page, aspetto);
   await eventi(page, eventiTurni(5, { lunghe: [2] }));
   await scorriA(page, 5, 900);
   let s = await stato(page);
@@ -243,7 +264,7 @@ test('BOLLE-04 · la domanda lunga ferma si taglia a quattro righe, e «Domanda 
   await scorriA(page, 3, 900);
   await expect(page.locator('#conversation > .talos-turn[data-domanda-corrente] .talos-domanda-intera')).toHaveCount(0);
   expect(tentate).toEqual([]);
-});
+}
 
 /** Le misure d'impaginazione di tutta la colonna: si confrontano con e senza la funzione. */
 const impaginazione = (page) => page.evaluate(() => {
@@ -259,7 +280,8 @@ const impaginazione = (page) => page.evaluate(() => {
 });
 
 test('BOLLE-05 · «Domande a tutta larghezza»: spenta la bolla non cambia di un pixel, accesa occupa la colonna', async ({ page }) => {
-  const tentate = await apri(page);
+  /* 09/11/2026 (owner, 0.2.2): accesa è il valore di serie; la parte «spenta» la spegne a mano */
+  const tentate = await apri(page, { aspetto: { userBubbleFullWidth: false } });
   await eventi(page, eventiTurni(6, { lunghe: [4] }));
   await scorriA(page, 9, 900); // una domanda ferma, lunga: lo stato più carico della funzione
   expect((await stato(page)).domande.some((d) => d.posizione === 'sticky')).toBe(true);
@@ -294,7 +316,11 @@ test('BOLLE-05 · «Domande a tutta larghezza»: spenta la bolla non cambia di u
   await pagina2.close();
 });
 
-test('BOLLE-06 · l’impostazione si accende dalle Impostazioni e resta dopo una ricarica', async ({ page }) => {
+/*
+ * 09/11/2026 (owner 19:33, 0.2.2): «Domande a tutta larghezza» è ACCESA di serie. Il salvataggio è rado (si scrive solo ciò che
+ *   differisce dal valore di serie): spenta, il `false` si scrive e resta dopo la ricarica; riaccesa, la chiave sparisce e resta accesa.
+ */
+test('BOLLE-06 · l’impostazione è accesa di serie, si spegne dalle Impostazioni e resta come la persona l’ha lasciata dopo una ricarica', async ({ page }) => {
   const tentate = await apri(page);
   /* Fase 8 (D2): quando la persona cambia una preferenza la finestra manda UNA copia al server. È la sola scrittura ammessa qui, e risponde come il server;
      la revisione tiene la copia di questa finestra (le prove condividono il server). */
@@ -303,30 +329,51 @@ test('BOLLE-06 · l’impostazione si accende dalle Impostazioni e resta dopo un
     tentate.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
     return route.fulfill({ json: { ok: true, data: { revisione: Number.MAX_SAFE_INTEGER } } });
   });
-  await page.evaluate(() => window.__talosHarnessUiRuntime.setSettingsSection('chat', { persist: false }));
-  await page.evaluate(() => {
-    const voce = document.querySelector('.talos-sidebar [data-vaia="impostazioni"]');
-    const gruppo = voce?.closest('.td-nav-group');
-    const testata = gruppo?.id ? document.querySelector(`.talos-sidebar [aria-controls="${gruppo.id}"]`) : null;
-    if (testata?.getAttribute('aria-expanded') === 'false') testata.click();
-    voce?.click();
-    window.__talosHarnessUiRuntime.setSettingsSection('chat', { persist: false });
-  });
-  const riga = page.locator('[data-setting-row="userBubbleFullWidthToggle"]');
-  await expect(riga).toBeVisible();
-  await expect(riga).toContainText('Domande a tutta larghezza');
-  const interruttore = riga.locator('button[role="switch"]');
+  const apriChatDelleImpostazioni = async () => {
+    await page.evaluate(() => window.__talosHarnessUiRuntime.setSettingsSection('chat', { persist: false }));
+    await page.evaluate(() => {
+      const voce = document.querySelector('.talos-sidebar [data-vaia="impostazioni"]');
+      const gruppo = voce?.closest('.td-nav-group');
+      const testata = gruppo?.id ? document.querySelector(`.talos-sidebar [aria-controls="${gruppo.id}"]`) : null;
+      if (testata?.getAttribute('aria-expanded') === 'false') testata.click();
+      voce?.click();
+      window.__talosHarnessUiRuntime.setSettingsSection('chat', { persist: false });
+    });
+    const riga = page.locator('[data-setting-row="userBubbleFullWidthToggle"]');
+    await expect(riga).toBeVisible();
+    await expect(riga).toContainText('Domande a tutta larghezza');
+    return riga.locator('button[role="switch"]');
+  };
+  const aspettoSalvato = () => page.evaluate(() => JSON.parse(localStorage.getItem('talos.harness.desktop.settings.v1')).appearance);
+  const ricarica = async () => { await page.reload(); await page.waitForFunction(() => window.__talosHarnessUiRuntime); };
+
+  /* di serie: accesa, senza nessun valore salvato */
+  await expect(page.locator('html')).toHaveClass(/user-bubble-full-width/);
+  expect(Object.hasOwn(await aspettoSalvato(), 'userBubbleFullWidth')).toBe(false);
+  let interruttore = await apriChatDelleImpostazioni();
+  await expect(interruttore).toHaveAttribute('aria-checked', 'true');
+
+  /* spenta: il false si scrive e resta dopo la ricarica */
+  await interruttore.click();
+  await expect(page.locator('html')).not.toHaveClass(/user-bubble-full-width/);
+  await expect(interruttore).toHaveAttribute('aria-checked', 'false');
+  expect((await aspettoSalvato()).userBubbleFullWidth).toBe(false);
+  await expect.poll(() => tentate.length).toBe(1);
+  await ricarica();
+  await expect(page.locator('html')).not.toHaveClass(/user-bubble-full-width/);
+  expect(tentate).toEqual(['POST /api/v1/app-settings/window']); // una, e la ricarica non ne manda un'altra
+
+  /* riaccesa: è il valore di serie, la chiave sparisce, e resta accesa dopo la ricarica */
+  interruttore = await apriChatDelleImpostazioni();
   await expect(interruttore).toHaveAttribute('aria-checked', 'false');
   await interruttore.click();
   await expect(page.locator('html')).toHaveClass(/user-bubble-full-width/);
   await expect(interruttore).toHaveAttribute('aria-checked', 'true');
-  const salvato = await page.evaluate(() => JSON.parse(localStorage.getItem('talos.harness.desktop.settings.v1')).appearance.userBubbleFullWidth);
-  expect(salvato).toBe(true);
-  await expect.poll(() => tentate.length).toBe(1);
-  await page.reload();
-  await page.waitForFunction(() => window.__talosHarnessUiRuntime);
+  expect(Object.hasOwn(await aspettoSalvato(), 'userBubbleFullWidth')).toBe(false);
+  await expect.poll(() => tentate.length).toBe(2);
+  await ricarica();
   await expect(page.locator('html')).toHaveClass(/user-bubble-full-width/);
-  expect(tentate).toEqual(['POST /api/v1/app-settings/window']); // una, e la ricarica non ne manda un'altra
+  expect(tentate).toEqual(['POST /api/v1/app-settings/window', 'POST /api/v1/app-settings/window']);
 });
 
 test('BOLLE-07 · rigiocata dalla storia salvata: la domanda si ferma in cima come dal vivo', async ({ page }) => {
@@ -583,7 +630,7 @@ for (const modo of ['dark', 'light']) {
     await scena({}, '01-domanda-ferma-corta', (p) => scorriA(p, 3, 700));
     await scena({}, '02-domanda-lunga-tagliata', (p) => scorriA(p, 5, 700));
     await scena({}, '03-passaggio-di-consegne', (p) => scorriA(p, 6, -60));
-    await scena({}, '04-larghezza-spenta', (p) => scorriA(p, 4, -120));
+    await scena({ userBubbleFullWidth: false }, '04-larghezza-spenta', (p) => scorriA(p, 4, -120)); // accesa di serie dal 09/11/2026
     await scena({ userBubbleFullWidth: true }, '05-larghezza-accesa', (p) => scorriA(p, 4, -120));
     await scena({ userBubbleFullWidth: true }, '06-larghezza-accesa-ferma', (p) => scorriA(p, 5, 700));
   });

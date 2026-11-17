@@ -958,6 +958,51 @@ button.talos-turn-spine__tick:focus-visible{outline:var(--talos-focus-width) sol
 .talos-artifact__frame{display:block; width:100%; height:320px; border:0; background:var(--talos-window-bg)}
 .talos-artifact__frame[hidden]{display:none}
 .talos-artifact__status{margin:0; padding:10px 14px; overflow-wrap:anywhere}
+/* 0.2.1-ART D3 (owner 09/11/2026 19:55, bozzetto approvato, variante A): la carta sola. Icona, titolo UNA volta, la riga sotto,
+   «⋯»; niente anteprima in chat, il clic la apre a lato. Sotto la carta, quando servono: l'avviso delle versioni, la nota delle
+   carte vecchie, l'errore con «Riprova». Le misure sono quelle del bozzetto (righe 87-111).
+   ⛔ `.talos-artifact--sola .…` (due classi) e non una: `.talos-icon-button` e `.talos-button--sm` stanno in
+   `design-system/controls.css`, importato DOPO questo foglio (`main.css:4`), e a pari specificità vincerebbero loro. */
+.talos-artifact--sola{display:flex; flex-direction:column; gap:6px; max-width:440px; overflow:visible}
+.talos-artifact--sola [hidden]{display:none}
+.talos-artifact--sola .talos-artifact__box{position:relative}
+.talos-artifact--sola .talos-artifact__carta{display:grid; grid-template-columns:40px minmax(0,1fr); gap:12px; align-items:center; width:100%; margin:0; padding:10px 46px 10px 10px; border:1px solid var(--talos-border); border-radius:12px; background:var(--talos-panel); color:var(--talos-text); font:inherit; text-align:left; cursor:pointer; appearance:none}
+.talos-artifact--sola .talos-artifact__carta:hover{border-color:var(--talos-border-strong); background:var(--talos-panel-soft)}
+.talos-artifact--sola .talos-artifact__carta[aria-expanded="true"]{border-color:var(--talos-accent-border); background:var(--talos-accent-soft)}
+.talos-artifact--sola .talos-artifact__carta:focus-visible{border-radius:12px; outline-offset:2px}
+/* in attesa («Sto creando…») o spenta (una carta di prima che non si apre più): non è un pulsante da premere */
+.talos-artifact--sola .talos-artifact__carta[aria-busy="true"],
+.talos-artifact--sola .talos-artifact__carta[aria-disabled="true"]{cursor:default; border-color:var(--talos-border); background:var(--talos-panel)}
+.talos-artifact--sola .talos-artifact__icona{display:grid; place-items:center; width:40px; height:40px; border:1px solid var(--talos-border); border-radius:9px; background:var(--talos-card); color:var(--talos-accent)}
+.talos-artifact--sola .talos-artifact__carta[aria-disabled="true"] .talos-artifact__icona{color:var(--talos-muted)}
+.talos-artifact--sola .talos-artifact__testo{display:block; min-width:0}
+.talos-artifact--sola .talos-artifact__title{display:block; font-size:14px; line-height:1.35}
+/* una riga di testo sola, non una fila di scatole: così il punto fra i pezzi ha lo stesso spazio ovunque (in fila, col `gap`, «pagina·  v1 di 2»
+   usciva diverso da «2 · ultima»), e in una chat stretta la riga si accorcia coi puntini invece di uscire dalla carta */
+.talos-artifact--sola .talos-artifact__sotto{display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px; line-height:1.4; color:var(--talos-muted)}
+.talos-artifact--sola .talos-artifact__sotto > .i{display:inline-block; margin-right:6px; vertical-align:-2px; color:var(--talos-accent)}
+.talos-artifact--sola .talos-artifact__sotto .talos-artifact__versione{font-size:inherit}
+.talos-artifact--sola .talos-artifact__aperta{color:var(--talos-accent-text)}
+.talos-artifact--sola .talos-artifact__piu{position:absolute; right:8px; top:50%; transform:translateY(-50%); width:30px; min-width:30px; height:30px; min-height:30px; padding:0; border-radius:8px; color:var(--talos-muted); cursor:pointer}
+.talos-artifact--sola .talos-artifact__piu:hover,
+.talos-artifact--sola .talos-artifact__piu[aria-expanded="true"]{background:var(--talos-card); color:var(--talos-text)}
+.talos-artifact--sola .talos-artifact__avviso{padding:6px 6px 6px 12px; border:1px solid var(--talos-border-subtle); border-radius:10px}
+.talos-artifact--sola .talos-artifact__avviso .talos-button{cursor:pointer}
+.talos-artifact--sola .talos-artifact__nota{padding:0 4px; font-size:12.5px; color:var(--talos-muted); overflow-wrap:anywhere}
+.talos-artifact--sola .talos-artifact__errore{display:flex; align-items:flex-start; gap:10px; padding:2px 4px; font-size:13px; line-height:1.45; color:var(--talos-danger)}
+.talos-artifact--sola .talos-artifact__errore[hidden]{display:none}
+.talos-artifact--sola .talos-artifact__errore > .i{flex:none; margin-top:2px}
+.talos-artifact--sola .talos-artifact__errore-testo{flex:1; min-width:0; color:var(--talos-assistant-text); overflow-wrap:anywhere}
+.talos-artifact--sola .talos-artifact__errore-testo strong{color:var(--talos-danger); font-weight:600}
+.talos-artifact--sola .talos-artifact__riprova{padding:0; border:0; background:transparent; color:var(--talos-accent-text); font:inherit; text-decoration:underline; text-underline-offset:2px; cursor:pointer}
+.talos-artifact--sola .talos-artifact__riprova:hover{color:var(--talos-text)}
+/* il menu «⋯» della carta (e il tasto destro): la larghezza del bozzetto, le voci col puntatore */
+/* in colonna: la larghezza la dà la voce più lunga. Come blocco, con `width:max-content`, le cinque voci contavano una accanto all'altra
+   e il menu arrivava al tetto (340 px, misurato nella foto del 09/11/2026) */
+#menuArtefatto{min-width:220px}
+#menuArtefatto:not([hidden]){display:flex; flex-direction:column}
+#menuArtefatto [role="menuitem"]{cursor:pointer}
+#menuArtefatto [role="menuitem"]:disabled{cursor:default}
 /* Le impostazioni d'aspetto dell'originale (Impostazioni → Aspetto), applicate dal monolite sulla radice: qui il CSS le onora (05/09, raccordo con B6 di Astra) */
 :root{--talos-ui-font-scale:1}
 .talos-shell{zoom:var(--talos-ui-font-scale, 1)}
@@ -2004,11 +2049,35 @@ a.talos-button{text-decoration:none}
 .talos-inspector__tabs,.talos-inspector__tabs .talos-tabs__list{min-width:0;max-width:100%}
 .talos-inspector__tabs .talos-tabs__list{overflow-x:auto;overflow-y:hidden;padding-bottom:1px;margin-bottom:-1px;overscroll-behavior-x:contain;scrollbar-width:none}
 .talos-inspector__tabs .talos-tabs__list::-webkit-scrollbar{display:none}
+/* ⭐ 12/11/2026 (giudice v1608, revisore C dell'Assistente: «ntesto» tagliato a metà, senza segno) — dove la fila continua il bordo
+   SFUMA, solo lì (`data-taglio` da `strisciaScorrevole`, app.js): 24 px come le file della colonna (`pannello.css`, `.pn-chips`) e
+   come DeepSeek (`dockkit.module.css:274-284`). Una fila che ci sta non sfuma affatto (Hermes `fade-scroll.tsx`, `edgeMask`). La
+   scheda scelta resta fuori dalla fascia (`SFUMATURA_FILA_PX`, `schede.js`). La fascia cresce con ciò che è nascosto fino a 24 px
+   (`--taglio-prima`/`--taglio-dopo`, come Hermes `styles.css:1139-1140`): 2 px di troppo in inglese a 340 non sbiadiscono «Context». */
+.talos-inspector__tabs .talos-tabs__list{--fila-prima:min(24px,var(--taglio-prima,24px));--fila-dopo:min(24px,var(--taglio-dopo,24px))}
+.talos-inspector__tabs .talos-tabs__list[data-taglio="dopo"]{mask-image:linear-gradient(to right,#000 calc(100% - var(--fila-dopo)),transparent)}
+.talos-inspector__tabs .talos-tabs__list[data-taglio="prima"]{mask-image:linear-gradient(to right,transparent,#000 var(--fila-prima))}
+/* ⭐ 12/11/2026 (giudice v1622, revisore D2) — il contorno del fuoco sta DENTRO la scheda: fuori (offset 3 px di `primitives.css`)
+   la fila che scorre lo tagliava sopra, sotto e al primo bordo, e ne restava solo un pezzo. Come Hermes (`wslg-window-controls.tsx:19`,
+   `focus-visible:-outline-offset-2`). Un pixel in più dentro: la scheda scende di 1 px sotto la fila (la sottolineatura si posa sul
+   bordo della colonna, vedi sopra), e quel pixel la fila lo taglia. */
+.talos-inspector__tabs .talos-tabs__tab:focus-visible{outline-offset:calc(-1px - var(--talos-focus-width,2px))}
+.talos-inspector__tabs .talos-tabs__list[data-taglio="entrambi"]{mask-image:linear-gradient(to right,transparent,#000 var(--fila-prima),#000 calc(100% - var(--fila-dopo)),transparent)}
 /* Owner, seconda risposta (26/09, coi numeri giusti): «margine 6 px + scorrimento». Da 10 (`.talos-tabs--underline .talos-tabs__tab`)
-   a 6 px per lato SOLO nella colonna destra: le cinque schede entrano coi contatori a una cifra (8 px liberi); con due cifre scorre.
+   a 6 px per lato SOLO nella colonna destra; dal 12/11/2026 sono 4 px (sesta scheda «Assistente», misura nel commento qui sotto; sì
+   dell'owner il 12/11 alle 18:55). Dove la fila non ci sta (numeri a due cifre, colonna stretta) scorre, come prima.
    Hermes ne usa 8 (`pane-tab.tsx:220`, «px-2»). ⛔ Tre classi: la regola «underline» ha la stessa specificità a due e nel bundle
    viene DOPO — con due classi vincerebbe lei, in silenzio. */
-.talos-inspector__tabs.talos-tabs--underline .talos-tabs__tab{padding-inline:6px}
+.talos-inspector__tabs.talos-tabs--underline .talos-tabs__tab{padding-inline:4px}
+/* ⭐ 12/11/2026 (giudice v1692: la fila non deve sbordare, e si cura qui) — la sesta scheda ora si chiama «Assistente» (owner 11/11 17:12;
+   eb043e295): 29 px più larga di «A lato», su una fila che ne aveva 10 liberi. Misurato a 340 px (Chromium 151): 334 px di schede su 315
+   in italiano, 339 in inglese, e «Assistente» tagliata a metà parola. Il margine scende da 6 a 4 px per lato (riga qui sopra) e lo
+   spazio fra le schede da 2 a 1 px (riga qui sotto): 304,8 px in italiano e 310,5 in inglese, cioè 10 e 4,5 px d'aria. Fra due nomi
+   restano 9 px (erano 14); la scheda più corta, «Git», è larga 26 px (minimo 24: WCAG 2.2, 2.5.8). La colonna resta a 340 px (owner
+   11/11 17:25) e dove la fila non ci sta (colonna stretta, numeri a due cifre) scorre come prima. Hermes tiene le schede attaccate,
+   senza spazio, divise da un filo (`pane-tab.tsx:22`); DeepSeek 4 px fra le schede (`dockkit.module.css:240`).
+   ⛔ Tre classi anche qui: `.talos-tabs--underline .talos-tabs__list` dichiara `gap:2px` con due classi e nel bundle viene dopo. */
+.talos-inspector__tabs.talos-tabs--underline .talos-tabs__list{gap:1px}
 .talos-inspector__body{flex:1 1 auto; min-height:0; overflow-y:auto; padding:12px}
 .talos-inspector-card{padding:12px 14px; margin-bottom:10px}
 /* ⛔ PO-08 — una card di sotto-agente che si apre. Il segnale sta nel FONDO e nel chevron, non
@@ -2917,6 +2986,39 @@ dialog.sheet-dialog .sheet-toggle-row input.talos-switch,
 .talos-approval__automazione[data-argomenti-dal-testo] > .talos-kv > .talos-kv__k{max-width:100%; white-space:normal; overflow-wrap:anywhere}
 .talos-approval__automazione[data-argomenti-dal-testo] > .talos-kv > .talos-kv__v{flex:1 1 12em}
 .talos-approval__automazione-istruzioni{display:flex; flex-direction:column; gap:4px; padding:6px 0}
+/* Compiti lunghi, A (owner 13/11/2026 04:35): la carta di più chiamate dello stesso strumento — una voce per chiamata, gli argomenti nelle
+   righe di casa; oltre tre, «Mostra tutte». Il riquadro scorre da sé, il piede coi pulsanti resta in vista. */
+.talos-approval__gruppo{max-height:18em; overflow:auto}
+.talos-approval__chiamata{display:flex; flex-direction:column; gap:2px; padding:2px 0}
+.talos-approval__chiamata[hidden]{display:none}
+.talos-approval__chiamata + .talos-approval__chiamata{border-top:1px solid var(--talos-border)}
+.talos-approval__chiamata-vuota{padding-block:6px}
+/* revisore del 13/11: il numero di ogni chiamata in testa alla sua voce; «+N campi» sotto le righe; il nome di un campo che non ha
+   traduzione si legge come dato (un identificatore dello schema del server), non come una parola della carta */
+.talos-approval__chiamata-numero{font-size:12px; font-weight:600; padding-top:6px}
+.talos-approval__campi-in-piu{font-size:12.5px; padding-block:2px 4px}
+.talos-approval__automazione .talos-kv__k.talos-kv__k--dato{font-family:var(--talos-font-mono); font-size:12px}
+/* Secondo revisore A+B (13/11/2026 19:08, giudice v1803): un nome di campo di 289 caratteri era largo 1991 px (`flex:none`, `nowrap`) e
+   lasciava al valore 0 px, nell'elenco della carta di gruppo e nella carta di una chiamata scritta come testo (anche nella 0.2.1, misurato
+   su 5e9fdc1b9). Il nome tiene la sua larghezza fino al 40% della riga e va a capo; al valore resta sempre il resto. Come Codex, che va
+   a capo sulla riga «nome: valore» e non nasconde mai il valore (`codex-rs/tui/src/bottom_pane/mcp_server_elicitation.rs:499-503`, `:940`). */
+.talos-approval__automazione .talos-kv__k{max-width:40%; white-space:normal; overflow-wrap:anywhere}
+/* Foto dello stesso giro: nella carta della chiamata scritta come testo l'elenco ha un'altezza massima, e la colonna stringeva le righe
+   (`flex-shrink:1`): il nome a capo finiva sopra la riga dopo. Ogni riga tiene la sua altezza; scorre l'elenco, mai la riga. */
+.talos-approval__automazione > .talos-kv, .talos-approval__chiamata{flex-shrink:0}
+/* Giallo dello stesso revisore: l'elenco che scorre dentro la carta lo dice con la barra di casa (O-39, più in alto), col pollice nel tono
+   attenuato invece che in quello del bordo: nel tema scuro il bordo misurava 2,45:1 sulla carta, sotto il 3:1 di WCAG 1.4.11. */
+.talos-approval__gruppo::-webkit-scrollbar-thumb, .talos-approval__automazione[data-argomenti-dal-testo]::-webkit-scrollbar-thumb{background:var(--talos-muted); background-clip:padding-box}
+.talos-approval__gruppo::-webkit-scrollbar-thumb:hover, .talos-approval__automazione[data-argomenti-dal-testo]::-webkit-scrollbar-thumb:hover{background:var(--talos-text); background-clip:padding-box}
+@supports not selector(::-webkit-scrollbar){
+  .talos-approval__gruppo, .talos-approval__automazione[data-argomenti-dal-testo]{scrollbar-color:var(--talos-muted) transparent}
+}
+.talos-approval__mostra-tutto{align-self:flex-start; margin-top:4px}
+.talos-approval__conteggio{flex:none}
+/* Compiti lunghi, B: «No a questo strumento fino al tuo prossimo messaggio» è una frase intera; nel menu della carta va a capo dentro il
+   riquadro (in italiano usciva dal bordo destro, foto del 13/11). 0,3,0 batte `.talos-context-menu [role=menuitem]` più in basso. */
+.talos-context-menu.talos-approval__menu{max-width:min(22rem, calc(100vw - var(--talos-space-lg)))}
+.talos-context-menu.talos-approval__menu [role=menuitem]{white-space:normal; text-align:start; height:auto; min-height:var(--talos-control-height); line-height:1.35}
 /* 0,2,1: batte `.talos-message p` (0,1,1, la misura del corpo della chat) — nella carta le istruzioni sono un dato, non la risposta */
 .talos-approval__automazione p.talos-automation__istruzioni-testo{margin:0; font-size:13.5px; line-height:1.55}
 /* Decisioni 12-13 dell'owner (08/10/2026 sera): gli avvisi in testa alla carta. `talos-callout` è l'avviso del progetto (giallo);

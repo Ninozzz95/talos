@@ -11,7 +11,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 const imp = (p) => import(new URL(`../${p}`, import.meta.url).href);
-const { createLlamaServerSupervisor } = await imp('src/llama-server-supervisor.mjs');
+const { createLlamaServerSupervisor: creaSupervisoreVero } = await imp('src/llama-server-supervisor.mjs');
+const { conChiaveNelSupervisore } = await imp('tests/aiuto/motore-con-chiave.mjs');
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 const { rimuoviCartellaDiProva } = await imp('tests/aiuto/rimuovi-cartella-di-prova.mjs');
 
 const cartellaTemp = (t, prefisso) => { const c = mkdtempSync(join(tmpdir(), prefisso)); t.after(() => rimuoviCartellaDiProva(c)); return c; };

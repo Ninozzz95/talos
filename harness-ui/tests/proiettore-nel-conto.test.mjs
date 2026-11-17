@@ -10,8 +10,10 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createLlamaServerSupervisor, MARGINE_FIT_DI_SERIE_MIB, memoriaDelProiettoreMiB } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero, MARGINE_FIT_DI_SERIE_MIB, memoriaDelProiettoreMiB } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { createLocalRuntimeProbe } from '../src/local-runtime-probe.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 const MODELLO = 'C:\\models\\vede.gguf';
 

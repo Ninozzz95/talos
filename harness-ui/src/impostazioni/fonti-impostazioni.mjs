@@ -20,7 +20,7 @@ const dalRegistro = (esito) => {
  * La conversazione: le impostazioni della sessione (`aggiornaImpostazioni`, con l'origine nel suo evento `talos.impostazioni-sessione`)
  * e le due scelte sui comandi. `registroFn` è pigro: il registro nasce dopo il servizio delle impostazioni.
  */
-export function creaFonteSessione(registroFn) {
+export function creaFonteSessione(registroFn, { modelloSceltoFn = null } = {}) {
   const registro = () => {
     const r = typeof registroFn === 'function' ? registroFn() : null;
     if (!r || typeof r.impostazioniCorrenti !== 'function') throw rifiuto('SETTINGS_UNAVAILABLE', 'conversation settings are not available on this server.');
@@ -38,6 +38,8 @@ export function creaFonteSessione(registroFn) {
         modello: s.modello ?? null, modelloPlanner: s.modelloPlanner ?? null, sforzo: s.reasoning?.effort ?? null, fasciaVeloce: s.fasciaVeloce === true,
         permessi: s.permessi ?? 'Workspace write', coordinazione: s.permessiPerAttrezzo?.delega_sottotask === 'sempre',
         dove: s.doveGiranoIComandi ?? null, comandiNellaConversazione: s.comandiNellaConversazione === true,
+        /* giro 2, D4: l'Accesso pieno scelto e trattenuto dalla fiducia della cartella (non è una voce del catalogo: lo legge la ricevuta) */
+        trattenuto: s.fiduciaDaChiedere === true ? 'fiducia-da-chiedere' : s.cartellaNonFidata === true && s.pienoTrattenuto === true ? 'cartella-non-fidata' : null,
         /* REV8-03 (revisione della fase 8): il valore INTERNO dietro una voce pubblica che lo perde (Coordinazione: `false` è sia
            «chiedi» sia «nega»). Il servizio lo tiene nella ricevuta e l'Annulla lo rimette (`scrivi`, `interni`). */
         [VALORI_INTERNI]: { coordinazione: s.permessiPerAttrezzo?.delega_sottotask ?? null },
@@ -75,6 +77,8 @@ export function creaFonteSessione(registroFn) {
         p.unisciPermessiPerAttrezzo = { delega_sottotask: patch.coordinazione === true ? 'sempre' : spenta };
       }
       if (Object.keys(p).length) dalRegistro(await r.aggiornaImpostazioni(sessionId, p, chi));
+      /* 0.2.2: un modello scelto (dopo la carta) è una scelta della persona; se è di OpenRouter, la sua lista si può leggere (`catalogo-pubblico.mjs`) */
+      if (typeof p.modello === 'string' && typeof modelloSceltoFn === 'function') modelloSceltoFn(p.modello);
       if (Object.hasOwn(patch, 'dove')) dalRegistro(await r.doveGiranoIComandi(sessionId, patch.dove, chi));
       if (Object.hasOwn(patch, 'comandiNellaConversazione')) dalRegistro(await r.comandiNellaConversazione(sessionId, patch.comandiNellaConversazione === true, chi));
     },
@@ -113,7 +117,7 @@ export function creaFonteFiducia(fiduciaCartelle, registroFn) {
  * magazzino che quell'ospite non ha) non c'è: le sue voci non si offrono.
  */
 export function creaFontiDelServer({ impostazioniContesto = null, impostazioniComandi = null, finestraPienaFn = null, preferenzeWslStore = null,
-  searchSourceStore = null, registroFn = null, impostazioniChat = null, fiduciaCartelle = null, impostazioneComputerUse = null } = {}) {
+  searchSourceStore = null, registroFn = null, impostazioniChat = null, fiduciaCartelle = null, impostazioneComputerUse = null, catalogoPubblico = null } = {}) {
   const fonti = {};
   if (impostazioniContesto) {
     fonti.contesto = {
@@ -134,6 +138,11 @@ export function creaFontiDelServer({ impostazioniContesto = null, impostazioniCo
   /* decisione 310 (06/11/2026): «Uso del computer (Anteprima)», spento di serie (`computer-use/impostazione.mjs`), voce `tools.computerUse` */
   if (impostazioneComputerUse) {
     fonti.computerUse = { leggi: () => impostazioneComputerUse.leggi(), scrivi: (patch) => impostazioneComputerUse.scrivi(patch) };
+  }
+  /* 0.2.2 (SignPath): «Catalogo pubblico dei modelli» (`catalogo-pubblico.mjs`), voce `models.publicCatalog`. Spento dalla variabile, la fonte
+     rifiuta di accenderlo (`PUBLIC_CATALOG_LOCKED`): niente si salva come acceso se non lo sarebbe */
+  if (catalogoPubblico) {
+    fonti.catalogoPubblico = { leggi: async () => ({ acceso: (await catalogoPubblico.leggi()).acceso }), scrivi: (patch) => catalogoPubblico.scrivi({ acceso: patch.acceso }) };
   }
   if (typeof finestraPienaFn === 'function') {
     fonti.finestraLocale = {
@@ -160,9 +169,34 @@ export function creaFontiDelServer({ impostazioniContesto = null, impostazioniCo
       },
     };
   }
-  if (typeof registroFn === 'function') fonti.sessione = creaFonteSessione(registroFn);
+  if (typeof registroFn === 'function') fonti.sessione = creaFonteSessione(registroFn, { modelloSceltoFn: catalogoPubblico ? (m) => catalogoPubblico.segnaSceltaDelModello(m) : null });
   /* Decisioni 173, 189 e 196 (forma permessi 2 §5): `conversation.folderTrust`, la stessa porta della rotta `/api/v1/folder-trust`:
      la cartella della conversazione (`cartellaPerLaFiducia`), l'archivio della fiducia, poi `riapplicaFiducia` alle conversazioni vive. */
   if (fiduciaCartelle && typeof registroFn === 'function') fonti.fiducia = creaFonteFiducia(fiduciaCartelle, registroFn);
+  /* 11/11/2026 (owner 13:50, v1465, punto 5): `conversation.modelMemory`, la memoria del modello di QUESTA conversazione, nella stessa fonte
+     del campo di Impostazioni → Memoria e contesto (`impostazioni-contesto.mjs`, `finestreDeiModelli`, che la convalida di nuovo). */
+  if (impostazioniContesto && typeof impostazioniContesto.finestraScrittaPer === 'function' && typeof registroFn === 'function') {
+    fonti.memoriaModello = creaFonteMemoriaModello(impostazioniContesto, registroFn);
+  }
   return fonti;
+}
+
+/** La memoria scritta per il modello di questa conversazione: `{ finestra: numero | null }`. */
+export function creaFonteMemoriaModello(impostazioniContesto, registroFn) {
+  const modelloDi = (sessionId) => {
+    const r = typeof registroFn === 'function' ? registroFn() : null;
+    if (!r || typeof r.impostazioniCorrenti !== 'function') throw rifiuto('SETTINGS_UNAVAILABLE', 'conversation settings are not available on this server.');
+    const s = typeof sessionId === 'string' ? r.impostazioniCorrenti(sessionId) : null;
+    if (!s) throw rifiuto('SESSION_NOT_FOUND', 'this conversation is not available.');
+    if (typeof s.modello !== 'string' || !s.modello.trim()) throw rifiuto('MODEL_ID_INVALID', 'this conversation has no model yet.');
+    return s.modello.trim();
+  };
+  return Object.freeze({
+    async leggi({ sessionId } = {}) { return { finestra: impostazioniContesto.finestraScrittaPer(modelloDi(sessionId)) }; },
+    async scrivi(patch, { sessionId } = {}) {
+      if (!Object.hasOwn(patch, 'finestra')) return;
+      try { await impostazioniContesto.scrivi({ finestreDeiModelli: { [modelloDi(sessionId)]: patch.finestra } }); }
+      catch (e) { throw rifiuto(e?.code ?? 'SETTING_REFUSED', e?.message ?? 'the memory of the model was not saved.'); }
+    },
+  });
 }

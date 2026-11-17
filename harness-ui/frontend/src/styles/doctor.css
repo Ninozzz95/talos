@@ -1,0 +1,160 @@
+/*
+ * 023 passo 2 (owner 10/11/2026 21:47, registro 436) — il Doctor a «Elenco e pannello», dal bozzetto approvato
+ * (`bozzetto-impostazioni-dottore-023/bozzetto.html`, righe 142-185), coi token del guscio. Tutto sotto `#schermoDoctor`.
+ *
+ * Contrasto (misurato il 10/11/2026 sui due temi di serie): i colori di esito e il grigio puri scendono sotto 4,5:1 sulla riga
+ * scelta e sul fondo della pagina del tema chiaro (4,15-4,46) e sul passaggio del mouse di quello scuro (4,14). Qui ogni testo
+ * colorato è il colore mescolato al 70% col testo: da 5,4:1 in su su tutti e quattro i fondi (carta, passaggio, scelta, pagina).
+ * Nessun testo sotto 12 px. L'esito si legge dalla forma del segno e dalla parola, non dal colore.
+ */
+#schermoDoctor {
+  --doctor-quiet: color-mix(in srgb, var(--talos-muted) 70%, var(--talos-text));
+  --doctor-success: color-mix(in srgb, var(--talos-success) 70%, var(--talos-text));
+  --doctor-warning: color-mix(in srgb, var(--talos-warning) 70%, var(--talos-text));
+  --doctor-danger: color-mix(in srgb, var(--talos-danger) 70%, var(--talos-text));
+  --doctor-info: color-mix(in srgb, var(--talos-info) 70%, var(--talos-text));
+}
+#schermoDoctor [data-g="success"] { --doctor-g: var(--doctor-success); --doctor-g-pure: var(--talos-success); }
+#schermoDoctor [data-g="warning"] { --doctor-g: var(--doctor-warning); --doctor-g-pure: var(--talos-warning); }
+#schermoDoctor [data-g="danger"] { --doctor-g: var(--doctor-danger); --doctor-g-pure: var(--talos-danger); }
+#schermoDoctor [data-g="info"] { --doctor-g: var(--doctor-info); --doctor-g-pure: var(--talos-info); }
+
+/* la testata resta quella di casa; «Controllato oggi alle …» col carattere dell'interfaccia e mai sotto 12 px */
+/* sotto i 900 px la testata di casa nasconde il percorso: qui quel posto dice QUANDO si è controllato, e resta (banco, 10/11/2026) */
+#schermoDoctor [data-doctor-tempo] { display: block; font: 13px/1.4 var(--talos-font-ui); color: var(--doctor-quiet); }
+#schermoDoctor [data-doctor-export],
+#schermoDoctor [data-doctor-filter-clear] { color: var(--doctor-quiet); }
+/* i bottoni piccoli di casa sono a 11 px (misurato nel banco): in questa schermata nessun testo scende sotto 12 px */
+#schermoDoctor .talos-button--sm { font-size: 13px; }
+
+.talos-doctor { container: doctor / inline-size; }
+.talos-doctor h2, .talos-doctor h3, .talos-doctor h4, .talos-doctor p { margin: 0; }
+
+/* ---------- il verdetto: una frase che dice se si può lavorare ---------- */
+.talos-doctor__verdict {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--talos-border-strong); border-left: 6px solid var(--doctor-g-pure, var(--talos-border-strong));
+  border-radius: 12px; background: var(--talos-card);
+}
+.talos-doctor__verdict-text { flex: 1 1 320px; min-width: 0; }
+.talos-doctor__verdict-text h2 { font-size: 21px; font-weight: 650; line-height: 1.25; letter-spacing: -0.01em; color: var(--talos-text); }
+.talos-doctor__verdict-text p { margin-top: 2px; max-width: 80ch; color: var(--doctor-quiet); font-size: 14px; }
+.talos-doctor__verdict-text .talos-doctor__run { font-size: 13px; }
+.talos-doctor__verdict-actions { display: flex; gap: 8px; margin-left: auto; }
+.talos-doctor__verdict-actions:empty { display: none; }
+/* due classi: `.talos-doctor p { margin: 0 }` qui sopra vincerebbe su una sola */
+.talos-doctor .talos-doctor__error {
+  margin-top: 10px; padding: 10px 14px;
+  border: 1px solid var(--talos-danger); border-radius: 10px; background: var(--talos-card);
+  color: var(--talos-text); font-size: 13px;
+}
+
+/* ---------- i filtri per esito ---------- */
+.talos-doctor__filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 16px 0 10px; }
+.talos-doctor__chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  min-height: 34px; padding: 5px 12px 5px 8px;
+  border: 1px solid var(--talos-border-strong); border-radius: 20px; background: var(--talos-card);
+  color: var(--talos-text); font: 600 13px/1.2 var(--talos-font-ui); cursor: pointer;
+  transition: background var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.talos-doctor__chip:hover { background: color-mix(in srgb, var(--talos-text) 5%, var(--talos-card)); }
+.talos-doctor__chip[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--talos-text); }
+/* il numero col carattere dell'interfaccia e cifre a larghezza fissa: nel carattere a spaziatura fissa lo zero ha la barra e si leggeva «θ» (giudice v1393) */
+.talos-doctor__chip b { font-family: inherit; font-weight: 700; font-variant-numeric: tabular-nums; }
+.talos-doctor__chip:focus-visible,
+.talos-doctor__segment-option:focus-visible,
+.talos-doctor__panel h3:focus-visible { outline: var(--talos-focus-width) solid var(--talos-ring); outline-offset: var(--talos-focus-offset); }
+
+/* ---------- il segno: cerchio ✓ e i, quadrato smussato !, quadrato × ---------- */
+.talos-doctor__sign {
+  display: inline-grid; place-items: center; flex: none;
+  width: 20px; height: 20px; box-sizing: border-box;
+  border: 2px solid currentColor; border-radius: 50%;
+  /* il segno sta su un fondo tinto: al 70% il glifo scendeva a 3,84:1 (misurato nel banco il 10/11/2026), al 50% resta sopra 4,5:1 */
+  color: color-mix(in srgb, var(--doctor-g-pure) 50%, var(--talos-text)); background: color-mix(in srgb, var(--doctor-g-pure) 10%, var(--talos-card));
+  font: 700 12px/1 var(--talos-font-mono);
+}
+.talos-doctor__sign[data-g="warning"] { border-radius: 5px; }
+.talos-doctor__sign[data-g="danger"] { border-radius: 2px; }
+.talos-doctor__sign[hidden] { display: none; }
+
+/* ---------- elenco e pannello ---------- */
+.talos-doctor__split { display: grid; grid-template-columns: minmax(0, 1fr) 460px; gap: 20px; align-items: start; }
+.talos-doctor__list {
+  list-style: none; margin: 0; padding: 0; overflow: hidden;
+  border: 1px solid var(--talos-border); border-radius: 12px; background: var(--talos-card);
+}
+.talos-doctor__list:focus-visible { outline: var(--talos-focus-width) solid var(--talos-ring); outline-offset: var(--talos-focus-offset); }
+.talos-doctor__row {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px;
+  padding: 12px 16px; border-top: 1px solid var(--talos-border); cursor: pointer;
+  transition: background var(--talos-motion-duration-control) var(--talos-motion-ease);
+}
+.talos-doctor__row:first-child { border-top: 0; }
+.talos-doctor__row:hover { background: color-mix(in srgb, var(--talos-text) 5%, var(--talos-card)); }
+.talos-doctor__row[aria-selected="true"] { background: var(--talos-accent-soft); box-shadow: inset 3px 0 0 var(--talos-accent); }
+/* con la tastiera il fuoco è sull'elenco: la riga attiva porta anche l'anello, non solo il fondo */
+.talos-doctor__list:focus-visible .talos-doctor__row[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--talos-accent), inset 0 0 0 2px var(--talos-ring); }
+.talos-doctor__row-title { font-weight: 650; color: var(--talos-text); overflow-wrap: anywhere; }
+.talos-doctor__row-line { color: var(--doctor-quiet); font-size: 13px; overflow-wrap: anywhere; }
+.talos-doctor__word { color: var(--doctor-g); font-size: 12px; font-weight: 700; white-space: nowrap; }
+/* la riga scelta ha il fondo più chiaro del tema scuro: lì il 70% scendeva a 3,84-4,14:1 (banco, 10/11/2026) */
+.talos-doctor__row[aria-selected="true"] .talos-doctor__row-line { color: color-mix(in srgb, var(--talos-muted) 35%, var(--talos-text)); }
+.talos-doctor__row[aria-selected="true"] .talos-doctor__word { color: color-mix(in srgb, var(--doctor-g-pure) 40%, var(--talos-text)); }
+.talos-doctor__empty { display: flex; flex-direction: column; gap: 6px; padding: 30px 16px; color: var(--doctor-quiet); }
+.talos-doctor__empty b { color: var(--talos-text); font-size: 17px; }
+
+.talos-doctor__panel {
+  position: sticky; top: 0; max-height: calc(100vh - var(--talos-topbar-h, 60px) - 80px); overflow: auto;
+  padding: 18px 20px; border: 1px solid var(--talos-border); border-radius: 12px; background: var(--talos-card);
+  color: var(--talos-text); font-size: 14px; line-height: 1.45;
+}
+.talos-doctor__panel[hidden] { display: none; }
+.talos-doctor__panel > p { margin-top: 10px; max-width: 60ch; overflow-wrap: anywhere; }
+.talos-doctor__panel-empty { color: var(--doctor-quiet); }
+.talos-doctor__panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.talos-doctor__panel-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.talos-doctor__panel h3 { font-size: 19px; font-weight: 650; line-height: 1.25; border-radius: 6px; }
+.talos-doctor__panel h4 { margin-top: 16px; color: var(--doctor-quiet); font-size: 13px; font-weight: 650; }
+#schermoDoctor .talos-doctor__more { flex: none; width: var(--talos-control-height); padding: 0; color: var(--talos-text); font-size: 18px; line-height: 1; }
+.talos-doctor__more[aria-expanded="true"] { background: var(--talos-card-hover); border-color: var(--talos-border-strong); }
+.talos-doctor__panel > .talos-doctor__limit { margin-top: 6px; padding-left: 10px; border-left: 3px solid var(--talos-border-strong); color: var(--doctor-quiet); font-size: 13px; }
+.talos-doctor__panel > .talos-doctor__nothing { margin-top: 6px; color: var(--doctor-quiet); font-size: 13px; }
+.talos-doctor__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.talos-doctor__actions .talos-button,
+.talos-doctor__verdict-actions .talos-button { font-size: 13px; }
+
+/* ---------- i fornitori: pronti in vista, gli altri a richiesta ---------- */
+.talos-doctor__providers-head { display: flex; align-items: end; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.talos-doctor__providers-head h4 { margin-top: 0; }
+.talos-doctor__segment { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--talos-border-strong); border-radius: 9px; background: var(--talos-card); }
+.talos-doctor__segment-option {
+  min-height: 30px; padding: 5px 12px; border: 0; border-radius: 7px; background: none;
+  color: var(--doctor-quiet); font: 600 13px/1.2 var(--talos-font-ui); cursor: pointer;
+}
+.talos-doctor__segment-option:hover:not(:disabled) { color: var(--talos-text); }
+.talos-doctor__segment-option[aria-checked="true"] { background: var(--talos-accent-soft); color: var(--talos-text); box-shadow: inset 0 0 0 1px var(--talos-border-strong); }
+.talos-doctor__segment-option:disabled { cursor: default; opacity: 0.6; }
+.talos-doctor__providers { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 13px; }
+.talos-doctor__providers th { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--talos-border-strong); color: var(--doctor-quiet); font-weight: 600; text-align: left; }
+.talos-doctor__providers td { padding: 8px 8px 8px 0; border-bottom: 1px solid var(--talos-border); vertical-align: top; }
+.talos-doctor__providers td:first-child { font-weight: 600; white-space: nowrap; }
+/* il nome non tocca il segno dello stato, nemmeno nella vista «Pronti» dove la colonna è stretta */
+.talos-doctor__providers :is(th, td):first-child { padding-right: 18px; }
+.talos-doctor__provider-state { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; }
+.talos-doctor__providers small { display: block; margin-top: 2px; color: var(--doctor-quiet); font-size: 12px; font-weight: 400; }
+
+/* stretto (pannello di destra aperto, finestra piccola): il pannello scende sotto l'elenco e non resta appiccicato */
+@container doctor (max-width: 940px) {
+  .talos-doctor__split { grid-template-columns: minmax(0, 1fr); }
+  .talos-doctor__panel { position: static; max-height: none; }
+  .talos-doctor__verdict-actions { margin-left: 0; }
+}
+
+@media (forced-colors: active) {
+  .talos-doctor__row[aria-selected="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+  .talos-doctor__chip[aria-pressed="true"], .talos-doctor__segment-option[aria-checked="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+  .talos-doctor__sign { background: Canvas; }
+}

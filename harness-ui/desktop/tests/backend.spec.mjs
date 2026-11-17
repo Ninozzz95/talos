@@ -9,7 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
 import { consegnaSegreti, creaAvvioFiglio, scegliPortaEffimera, validaHandshake, urlIngresso } from '../runtime.mjs';
 import { creaRegistro } from '../log.mjs';
-import { preparaRuntime } from './support.mjs';
+import { leggiPortachiaviDiProva } from '../../src/adattatore-keyring.mjs';
+import { preparaRuntime, lineeDelGancio, nessunPortachiaviVero, figlioColGancio } from './support.mjs';
 
 const require = createRequire(import.meta.url);
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -18,10 +19,13 @@ const attendi = ms => new Promise(r => setTimeout(r, ms));
 
 test('R01-BACKEND — Electron Node, redirect, cookie, rifiuto anonimo, PTY reale, IPC e nessun orfano', { timeout: 45000 }, async t => {
   const { dataDir, runtime, env } = preparaRuntime('backend');
+  const primaDelLancio = lineeDelGancio(); // round 3 (K1): the hook trace is read from here on, after the launches below
   const token = randomBytes(32).toString('hex');
   const port = await scegliPortaEffimera();
   const reportFile = join(dataDir, 'handshake.json');
   const avvio = creaAvvioFiglio({ execPath: require('electron'), percorsi: { root: runtime, server: join(runtime, 'server.mjs'), bootstrap: join(root, 'child-bootstrap.mjs') }, port, token, reportFile, dataDir, env });
+  // 11/11/2026 (judge v1364 B2): checked BEFORE the spawn, so a launch without the test keyring never reaches the real one.
+  assert.equal(leggiPortachiaviDiProva(avvio.options.env), true, 'the backend child must use the in-memory test keyring (tests/support.mjs), never the system one');
   const proc = spawn(avvio.command, avvio.args, avvio.options);
   consegnaSegreti(proc, avvio);
   const registro = creaRegistro(join(dataDir, 'registro.log'), [token]);
@@ -42,6 +46,10 @@ test('R01-BACKEND — Electron Node, redirect, cookie, rifiuto anonimo, PTY real
     await attendi(100);
   }
   assert.ok(base, 'Handshake del backend assente: ' + join(dataDir, 'registro.log'));
+  /* 11/11/2026 (round 3, K1): the positive check from the child itself — the server wrote that it loaded the keyring hook —
+     and nothing reached for the real keyring while it started (the hook stops it and writes the trace). */
+  assert.ok(figlioColGancio(proc.pid, primaDelLancio), 'the backend child must carry the keyring hook (tests/gancio-portachiavi.mjs)');
+  nessunPortachiaviVero(primaDelLancio);
   assert.equal((await fetch(base + '/api/v1/health')).status, 401);
   assert.equal((await fetch(base + '/api/v1/health', { headers: { cookie: 'talos_token=errato' } })).status, 401);
   const ingresso = await fetch(urlIngresso(base, token), { redirect: 'manual' });
@@ -100,5 +108,6 @@ test('R01-BACKEND — Electron Node, redirect, cookie, rifiuto anonimo, PTY real
   assert.equal(memoria.versions.electron, '44.3.0');
   const exit = once(proc, 'exit'); proc.send({ tipo: 'chiudi' }); await exit;
   assert.throws(() => process.kill(proc.pid, 0), { code: 'ESRCH' });
+  nessunPortachiaviVero(primaDelLancio);
   writeFileSync(join(root, '.prove', 'R01-backend.json'), JSON.stringify({ data: new Date().toISOString(), port, pid: proc.pid, anonimo: 401, cookie: 200, pty: { output: testo, uscita: uscitaPty }, riposoMs: 3000, faseMemoria: 'Solo backend, tre secondi dopo uscita PTY; nessun renderer', memoria, orfano: false }, null, 2));
 });

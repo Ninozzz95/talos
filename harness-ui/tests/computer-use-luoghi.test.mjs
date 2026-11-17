@@ -69,8 +69,16 @@ test('LUOGHI-04: file storto o voci storte valgono come vuoto, e il salvataggio 
 
 test('LUOGHI-05: scritture insieme non si perdono; oltre il tetto restano le più recenti', async (t) => {
   const r = creaRegistroLuoghi({ file: join(await cartella(t), 'l.json'), adesso: orologio() });
-  await Promise.all(Array.from({ length: 20 }, (_, i) => r.ricorda({ domini: [`d${i}.example`] })));
-  assert.equal((await r.perIlCiclo()).domini.length, 20);
+  /* 374 g3 (B7): rosso una volta sola sotto i mutanti di B, col solo nome, e mai riprodotto (300 corse in fila, 8×150 in parallelo, 48
+     processi del file vero 8 alla volta: zero rossi). Le due vie possibili su Windows sono una rinomina che fallisce (EPERM/EBUSY se un
+     altro processo tiene il file) e una lettura che fallisce per un attimo, che `leggi` tratta come elenco vuoto. Il prossimo rosso dice
+     quale: gli errori di ogni scrittura e i domini persi, invece del solo nome. */
+  const esiti = await Promise.allSettled(Array.from({ length: 20 }, (_, i) => r.ricorda({ domini: [`d${i}.example`] })));
+  const errori = esiti.filter((e) => e.status === 'rejected').map((e) => `${e.reason?.code ?? ''} ${e.reason?.message ?? e.reason}`);
+  assert.deepEqual(errori, [], 'nessuna scrittura fallita');
+  const visti = (await r.perIlCiclo()).domini;
+  const persi = Array.from({ length: 20 }, (_, i) => `d${i}.example`).filter((d) => !visti.includes(d));
+  assert.deepEqual(persi, [], 'nessun dominio perso (se ne mancano, una lettura è fallita in silenzio fra due scritture)');
   await r.ricorda({ domini: Array.from({ length: TETTO_LUOGHI + 5 }, (_, i) => `n${i}.example`) });
   const d = (await r.perIlCiclo()).domini;
   assert.equal(d.length, TETTO_LUOGHI);

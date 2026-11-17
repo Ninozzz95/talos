@@ -5,8 +5,9 @@ import { createHttpApp } from '../src/http-app.mjs';
 
 test('CTX-WINDOW-HTTP — policy read-only della sessione con guardia token e busta standard', async (t) => {
   const expected = {
-    windowTokens: 1_000_000, triggerTokens: 750_000, warningTokens: 600_000,
-    emergencyTokens: 900_000, source: 'route-minimum', modelId: 'z-ai/glm-5.3-flash', inProgress: false,
+    // owner 11/11 17:47 e punto 4 del passaggio dopo il revisore unico: 1M ⇒ tetto del motore 200.000, detto `explicit-cap` + `engineCeiling`
+    windowTokens: 1_000_000, triggerTokens: 200_000, warningTokens: 160_000,
+    emergencyTokens: 240_000, source: 'explicit-cap', engineCeiling: true, modelId: 'z-ai/glm-5.3-flash', inProgress: false,
   };
   const app = createHttpApp({ senzaGettone: 'prove', 
     staticHandler: async () => null,

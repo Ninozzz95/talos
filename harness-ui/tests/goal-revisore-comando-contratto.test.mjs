@@ -169,3 +169,53 @@ test('GOAL-REV-04 · G4 in una sessione «On request»: il controllo col comando
   assert.deepEqual(lanciati, [CONTRATTO], 'il comando del contratto è partito');
   assert.equal(stato(b, sessionId).stato, 'fatto', `motivo: ${JSON.stringify(stato(b, sessionId).motivo)}`);
 }));
+
+/* ⛔ Decisione 373, giro 3, punto 5 (revisore «carta e ponte», BASSO latente): il confutatore rispondeva DA SOLO `true` a ogni carta shell
+   col comando del contratto, anche alla carta del cancello dei file del computer use (`fileDiControllo`). Una carta di un file di
+   controllo non si risponde mai da sola: il confutatore la rifiuta e lo dice; la carta ordinaria dello stesso comando resta un sì. */
+test('GOAL-REV-05 · una carta di un file di controllo col comando del contratto: il confutatore non la risponde da solo', async (t) => conStore(t, async (cartellaStore) => {
+  const cartella = progetto(t);
+  const contrattoCu = 'echo x> .computer-use-luoghi.json';
+  const risposte = {};
+  const giri = [];
+  const { registro } = registroAGiri(cartellaStore, {
+    modello: 'z-ai/glm-5.3-flash',
+    confutaObiettivoFn: undefined,
+    preparaEsecuzioneFn: () => ({ cartella, comandoProva: contrattoCu, task: { id: 'task-vero', consegna: 'c' } }),
+    permessoDelMotoreFn: async () => ({ consentito: true }),
+    programmaTrovatoFn: async () => true,
+    eseguiComandoDellaProvaFn: async () => ({ codice: 0, enforcement: 'none' }),
+    avviaSessioneFn: async (input) => {
+      input.onEvento({ type: 'RunStarted', threadId: 't', runId: `r${giri.length}` });
+      if (String(input.task?.consegna ?? '').includes('You are the TALOS goal refuter')) {
+        // G23 (mutante vivo del giro 3): anche la cronologia dice no, non «approvato dal contratto»
+        risposte.eventi = [];
+        registro.iscriviti(input.sessionePerLibreria().sessionId, (e) => { if (e.type === 'ApprovalResolved') risposte.eventi.push(e); });
+        risposte.controllo = await input.chiediApprovazioneFn({ tipo: 'shell', comando: contrattoCu, fileDiControllo: true, sempreNonBasta: true });
+        risposte.ordinaria = await input.chiediApprovazioneFn({ tipo: 'shell', toolCallId: 'c1', comando: contrattoCu });
+        // A25 (mutante vivo del giro 3): il segno che conta è fileDiControllo, non sempreNonBasta (lo portano anche altre carte)
+        risposte.soloControllo = await input.chiediApprovazioneFn({ tipo: 'shell', comando: contrattoCu, fileDiControllo: true });
+        risposte.soloSempreNonBasta = await input.chiediApprovazioneFn({ tipo: 'shell', toolCallId: 'c2', comando: contrattoCu, sempreNonBasta: true });
+        input.onEvento({ type: 'RunFinished', threadId: 't', runId: 'rc' });
+        const detto = '{"refuted": null, "reason": "probe"}';
+        return { ok: true, esito: { comeFinita: 'concluso', detto, messaggiFinali: [{ role: 'user', content: 'c' }, { role: 'assistant', content: detto }] } };
+      }
+      let risolvi;
+      const attesa = new Promise((r) => { risolvi = r; });
+      giri.push({ concludi: () => { input.onEvento({ type: 'RunFinished', threadId: 't', runId: 'r' }); risolvi({ ok: true, esito: { comeFinita: 'concluso', detto: 'fatto', messaggiFinali: fine } }); } });
+      return attesa;
+    },
+  });
+  const b = { registro, giri };
+  await obiettivoAvviato(b, contrattoCu);
+  await aspetta(() => 'soloSempreNonBasta' in risposte, 'le quattro carte del confutatore');
+  assert.notEqual(risposte.controllo, true, 'la carta del file di controllo non è un sì');
+  assert.equal(risposte.controllo?.approvato, false);
+  assert.match(risposte.controllo?.motivo ?? '', /computer use settings file/u, 'il no dice perché');
+  assert.deepEqual(risposte.eventi.map((e) => [e.approvato, e.motivo]), [[false, 'confutatore-sola-lettura'], [true, 'contratto-obiettivo'],
+    [false, 'confutatore-sola-lettura'], [true, 'contratto-obiettivo']],
+    'la cronologia mostra il no di ogni carta di un file di controllo e il sì di ogni carta ordinaria');
+  assert.equal(risposte.ordinaria, true, 'la carta ordinaria del comando del contratto resta un sì');
+  assert.equal(risposte.soloControllo?.approvato, false, 'fileDiControllo da solo basta per il no');
+  assert.equal(risposte.soloSempreNonBasta, true, 'sempreNonBasta senza fileDiControllo non è una carta di un file di controllo');
+}));

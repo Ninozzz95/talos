@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { documento, orologio } from './aiuto-dom-blocchi.mjs';
 import { leggiMessaggio } from '../../src/components/computer-use/bolla-protocollo.js';
-import { INDIRIZZO_RIPIEGO } from '../../src/components/computer-use/bolla-messaggi.js';
+import { INDIRIZZO_RIPIEGO, motoRidottoDa } from '../../src/components/computer-use/bolla-messaggi.js';
 import {
   leggiSchermo, inLocale, inGlobale, rettangoloLocale, leggiRipiego, riduciSegno, STATO_INIZIALE_SEGNO, creaSegno,
   DURATA_CURSORE, DURATA_MINIMA_CURSORE, ANDAMENTO_CURSORE, RITARDO_ANELLO, DURATA_ANELLO, TARDI_OLTRE, inizioAnello,
@@ -214,6 +214,7 @@ test('SEG-11 la pagina è servita e costruita: ingresso, stile trasparente, nien
   assert.match(css, /animation:guarda 2s ease-in-out infinite/u);
   assert.match(css, /box-shadow:0 0 0 3px #c98b32,0 0 26px rgba\(201,139,50,\.5\)/u);
   assert.match(css, /@media \(prefers-reduced-motion:reduce\)\{\.anello,\.guarda\{animation:none\}\}/u);
+  assert.match(css, /\.segno\.reduce-motion \.anello,\.segno\.reduce-motion \.guarda\{animation:none\}/u, 'giro 4: anche col solo «Riduci movimento» di TALOS');
   const ingresso = leggi('../../src/segno.js');
   assert.match(ingresso, /e\.source === window && e\.origin === location\.origin/u, 'il ripiego solo dalla pagina stessa (executeJavaScript del guscio)');
 });
@@ -354,4 +355,44 @@ test('SEG-16 (difetto 8a) annuncio con finestra null e punto valido: il cursore 
   canale.arriva(annuncio({ finestra: ALTRA, punto: { x: 100, y: 100 }, t0: ora() }));
   assert.deepEqual(s.stato().guarda, ALTRA, 'il bordo passa alla finestra dell annuncio');
   assert.deepEqual(riduciSegno({ ...STATO_INIZIALE_SEGNO, guarda: FIN }, annuncio({ finestra: ALTRA, punto: { x: 100, y: 100 }, t0: 9 })).guarda, ALTRA, 'anche nel riduttore');
+});
+
+/* Giro 4 della bolla (controllore CU, 13/11): col SOLO «Riduci movimento» di TALOS il cursore non volava più (reperto 17), ma `segno.css` fermava il bordo che
+   pulsa (`.guarda`, ogni 2 s) e l'anello solo con `@media (prefers-reduced-motion)`, cioè con l'impostazione di Windows. Il bozzetto dice «bordo e anello
+   fermi» col movimento ridotto, da qualunque parte venga: come Claude Code, che ferma l'indicatore col sistema, con l'editor o con `prefersReducedMotion`
+   (CHANGELOG.md:1081). La grammatica della pagina principale: la classe `reduce-motion` (`domanda-appiccicata.js:151`). */
+test('SEG-17 movimento ridotto per intero: la classe reduce-motion sul segno ferma anche bordo e anello, col solo «Riduci movimento» di TALOS', () => {
+  const soloTalos = motoRidottoDa({ impostazioni: { appearance: { reducedMotion: true } }, mediaRidotto: false });
+  const { canale, s, ora } = scena({ ridotto: soloTalos });
+  assert.equal(s.nodo.classList.contains('reduce-motion'), true, 'il segno sa che il movimento è ridotto, e lo dice al suo foglio');
+  canale.arriva(evento('talos.computer-use-guarda', { finestra: FIN }));
+  canale.arriva(annuncio({ finestra: FIN, punto: { x: 900, y: 600 }, t0: ora() }));
+  assert.ok(s.nodo.querySelector('.guarda'), 'il bordo c è, fermo');
+  assert.ok(s.nodo.querySelector('.anello'), 'l anello c è, fermo');
+  /* AL CONTRARIO: senza movimento ridotto né di Windows né di TALOS bordo e anello si muovono come nel bozzetto */
+  const normale = scena({ ridotto: motoRidottoDa({ impostazioni: { appearance: { reducedMotion: false } }, mediaRidotto: false }) });
+  assert.equal(normale.s.nodo.classList.contains('reduce-motion'), false);
+  /* il foglio: la stessa regola della preferenza di Windows, anche con la classe; la regola di Windows resta */
+  const css = readFileSync(new URL('../../src/styles/segno.css', import.meta.url), 'utf8');
+  assert.match(css, /\.segno\.reduce-motion \.anello,\.segno\.reduce-motion \.guarda\{animation:none\}/u);
+  assert.match(css, /@media \(prefers-reduced-motion:reduce\)\{\.anello,\.guarda\{animation:none\}\}/u);
+});
+
+test('SEG-18 «Riduci movimento» cambiato con TALOS aperto arriva al segno già caricato: cursore, anello e bordo, nei due versi', () => {
+  const { canale, animazioni, s, ora } = scena();
+  assert.equal(typeof s.moto, 'function', 'il segno riceve il movimento ridotto anche dopo il caricamento');
+  s.moto(true);
+  assert.equal(s.nodo.classList.contains('reduce-motion'), true);
+  canale.arriva(annuncio({ finestra: FIN, punto: { x: 300, y: 200 }, t0: ora() - 900 }));
+  canale.arriva(annuncio({ finestra: FIN, punto: { x: 900, y: 600 }, t0: ora() }));
+  assert.equal(animazioni.length, 0, 'acceso: il cursore non vola');
+  assert.equal(s.nodo.querySelectorAll('.anello').length, 1, 'e l anello parte subito');
+  s.moto(false);
+  assert.equal(s.nodo.classList.contains('reduce-motion'), false);
+  canale.arriva(annuncio({ finestra: FIN, punto: { x: 300, y: 200 }, t0: ora() }));
+  assert.equal(animazioni.length, 1, 'spento: il cursore torna a volare');
+  /* l'ingresso della pagina lo rilegge quando la pagina principale salva le impostazioni (evento `storage`, stessa origine) e quando cambia Windows */
+  const ingresso = readFileSync(new URL('../../src/segno.js', import.meta.url), 'utf8');
+  assert.match(ingresso, /window\.addEventListener\('storage', \(e\) => \{ if \(e\.key === CHIAVE_IMPOSTAZIONI \|\| e\.key === null\) segno\.moto\(ridottoOra\(\)\); \}\);/u);
+  assert.match(ingresso, /media\.addEventListener\?\.\('change', \(\) => segno\.moto\(ridottoOra\(\)\)\);/u);
 });

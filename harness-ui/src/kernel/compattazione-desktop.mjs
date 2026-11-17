@@ -51,7 +51,7 @@ import { chiamataPerChiGuarda } from './ponte-attrezzi.mjs';
 import { oscuraFormeDiSegreto } from '../forme-di-segreto.mjs';
 import { CAMPO_IMMAGINI } from './immagine-da-guardare.mjs';
 import { idRiassuntoValido } from './consumo-di-servizio.mjs'; // spesa dei riassunti (30/10 sera)
-import { INIZIO_AVVISO_ACCORCIATO, avvisoAccorciato } from './avviso-accorciato.mjs'; // M1 della cura per Luna 6 (05/11)
+import { iniziaConAvvisoAccorciato, avvisoAccorciato } from './avviso-accorciato.mjs'; // M1 della cura per Luna 6 (05/11)
 
 export const SCHEMA_RECORD_COMPATTAZIONE = 'talos.compattazione.v1';
 
@@ -212,6 +212,18 @@ export function leggiTettoEsplicito(env = {}) {
  * Le due soglie. `finestraToken` è la finestra del modello dal catalogo (`model-catalog.mjs`, `contextLength`):
  * oggi l'adapter riceve `null` (la cabla l'onda 2), e con `null` vale il solo tetto.
  */
+/*
+ * Giro dopo i revisori della soglia (11/11/2026, punto 12; owner 17:47, `giudice/DECISIONE-OWNER-2026-11-11-1747-*`, «stesso tetto del
+ *   motore»): la finestra più grande su cui si calcolano le soglie, dal tetto assoluto. È il numero del motore del contesto
+ *   (`context-runtime.mjs`, `resolveDesktopDefaultProfile`: finestra = min(catalogo, tetto / 0,75)), ora scritto QUI, una volta, e letto
+ *   da tutti e due. Prima il compattatore di prima su un modello da 1M compattava a 750.000 (×3,75 rispetto a 200.000) mentre il motore
+ *   a 200.000. La finestra del modello resta quella vera (`finestraToken` nel risultato): si limita solo il punto in cui si compatta.
+ */
+export function finestraMassimaDelTetto(tetto = TETTO_TOKEN_DEFAULT) {
+  const t = Number.isSafeInteger(tetto) && tetto > 0 ? tetto : TETTO_TOKEN_DEFAULT;
+  return Math.ceil(t / FRAZIONE_FINESTRA);
+}
+
 export function calcolaSoglie({ tettoToken = null, finestraToken = null } = {}) {
   const tettoEsplicito = Number.isSafeInteger(tettoToken) && tettoToken > 0 ? tettoToken : null;
   const finestra = Number.isFinite(finestraToken) && finestraToken > 0 ? finestraToken : null;
@@ -219,9 +231,10 @@ export function calcolaSoglie({ tettoToken = null, finestraToken = null } = {}) 
     const soglia = tettoEsplicito ?? TETTO_TOKEN_DEFAULT;
     return { soglia, warningTokens: Math.floor(soglia * 0.8), emergenza: Math.ceil(soglia * MOLTIPLICATORE_EMERGENZA_SENZA_FINESTRA), fonte: tettoEsplicito === null ? 'fallback' : 'tetto', tettoToken: soglia, finestraToken: null };
   }
-  const daFinestra = Math.floor(finestra * FRAZIONE_FINESTRA);
+  const perLeSoglie = Math.min(finestra, finestraMassimaDelTetto(tettoEsplicito ?? TETTO_TOKEN_DEFAULT)); // punto 12: il tetto del motore
+  const daFinestra = Math.floor(perLeSoglie * FRAZIONE_FINESTRA);
   const soglia = tettoEsplicito === null ? daFinestra : Math.min(tettoEsplicito, daFinestra);
-  return { soglia, warningTokens: Math.floor(soglia * 0.8), emergenza: Math.floor(finestra * FRAZIONE_EMERGENZA), fonte: tettoEsplicito !== null && soglia === tettoEsplicito ? 'tetto' : 'finestra', tettoToken: tettoEsplicito, finestraToken: finestra };
+  return { soglia, warningTokens: Math.floor(soglia * 0.8), emergenza: Math.floor(perLeSoglie * FRAZIONE_EMERGENZA), fonte: tettoEsplicito !== null && soglia === tettoEsplicito ? 'tetto' : 'finestra', tettoToken: tettoEsplicito, finestraToken: finestra };
 }
 
 /**
@@ -1171,7 +1184,7 @@ function riduciAl(lista, i) {
   if (m?.role === 'tool' && typeof m.content === 'string') {
     /* M1 (05/11/2026, cura per Luna 6): un esito accorciato comincia con la riga del sistema, FUORI dalla busta dei dati, che dice quali
        righe mancano. Un esito che ce l'ha già è già accorciato: non si riaccorcia (l'avviso lo porterebbe sopra i 2.000 caratteri). */
-    if (m.content.startsWith(INIZIO_AVVISO_ACCORCIATO)) return false;
+    if (iniziaConAvvisoAccorciato(m.content)) return false; // anche nella forma di prima dell'11/11 (scritta della 245)
     const corto = accorciaTesto(m.content);
     if (corto === m.content) return false;
     lista[i] = { ...m, content: `${avvisoAccorciato(m.content, { inizio: CARATTERI_INIZIO_ESITO, fine: CARATTERI_FINE_ESITO })}\n${corto}` };

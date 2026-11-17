@@ -132,6 +132,11 @@ After checking the SHA256 and the provenance, choose "More info", check the name
 If your device management blocks that option, ask your administrator. Do not turn SmartScreen or Defender off.
 The GitHub attestation certifies where the build came from; it is not an Authenticode signature and does not remove the SmartScreen warning.
 
+## Code signing policy
+
+How TALOS releases are built and signed, and who approves them: https://github.com/${repository}#code-signing-policy
+What TALOS sends over the network, and how to turn it off: https://github.com/${repository}/blob/main/PRIVACY.md
+
 ## What is inside
 
 An Electron 44.3.0 shell with the Node runtime included, the TALOS backend, the built frontend, the kernel, the context engine, native addons, and llama.cpp v${MOTORE_FISSATO.versione} (build b${MOTORE_FISSATO.build}) CPU/Vulkan builds with their licences.
@@ -141,7 +146,7 @@ No GGUF model and no credential is bundled, and there is no telemetry.
 
 ## Automatic updates
 
-The app checks for a new desktop release when it starts and every 4 hours, downloads it in the background and installs it when you close the app, or at once with *Riavvia ora*. ${nomi.manifesto} is signed with an Ed25519 key (${nomi.firma}): the app verifies the signature with the public key it carries before downloading anything, and checks the downloaded installer against the signed SHA-512 before installing it. Automatic updates can be turned off in Settings, under *Account, Doctor e backup*.
+The app checks for a new desktop release when it starts and every 4 hours, downloads it in the background and installs it when you close the app, or at once with *Riavvia ora*. ${nomi.manifesto} is signed with an Ed25519 key (${nomi.firma}): the app verifies the signature with the public key it carries before downloading anything, and checks the downloaded installer against the signed SHA-512 before installing it. Automatic updates can be turned off in Settings, under *Updates*, or for the whole computer with the environment variable \`TALOS_DESKTOP_AGGIORNAMENTI=off\`.
 Remote providers and model downloads need the network and their own configuration; this installer does not certify that they work.
 
 ## Check the SHA256

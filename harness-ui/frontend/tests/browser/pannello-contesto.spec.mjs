@@ -42,7 +42,20 @@ const SCENE = {
     ...giro(4, 30_000), ...giro(5, 160_000),
     RIASSUNTO_CON_ID('rias-000000000aaa-2', true, '2026-10-29T09:20:00.000Z'),
     ...giro(6, 40_000), RICHIESTA]),
+  /* S1-b (owner 11/11): il caso della foto dell'owner in piccolo — il motore del contesto paga milioni in più chiamate, la cache dichiarata */
+  spesamotore: () => numera([...giro(1, 40_000), ...giro(2, 90_000), ...giro(3, 140_000),
+    MOTORE('job-000000000aaa-1', { prompt_tokens: 1_900_000, completion_tokens: 20_000, prompt_tokens_details: { cached_tokens: 700_000 } }),
+    MOTORE('job-000000000aaa-1', { prompt_tokens: 1_700_000, completion_tokens: 18_000, prompt_tokens_details: { cached_tokens: 700_000 } }, { tentativi: 2 }),
+    RIASSUNTO_CON_ID('job-000000000aaa-1', false, '2026-10-29T09:00:00.000Z'),
+    ...giro(4, 30_000), ...giro(5, 160_000),
+    MOTORE('job-000000000aaa-2', { prompt_tokens: 1_940_000, completion_tokens: 19_900, prompt_tokens_details: { cached_tokens: 700_000 } }),
+    RIASSUNTO_CON_ID('job-000000000aaa-2', false, '2026-10-29T09:20:00.000Z'),
+    ...giro(6, 40_000), RICHIESTA]),
 };
+function MOTORE(jobId, usage, extra = {}) {
+  return { type: 'CUSTOM', name: 'consumo-di-servizio', value: { schema: 'talos.consumo-di-servizio.v1', scopo: 'motore', fonte: 'openrouter', modelloRemoto: MODELLO,
+    usage, esito: 'completato', at: '2026-10-29T08:59:00.000Z', jobId, inPrimoPiano: false, ...extra } };
+}
 function SERVIZIO(idRiassunto, usage) {
   return { type: 'CUSTOM', name: 'consumo-di-servizio', value: { schema: 'talos.consumo-di-servizio.v1', scopo: 'riassunto', fonte: 'openrouter', modelloRemoto: MODELLO,
     usage, esito: 'completato', at: '2026-10-29T08:59:00.000Z', idRiassunto, inPrimoPiano: true } };
@@ -244,7 +257,9 @@ test('PNCTX-SPESA-01 — ogni riassunto dice quanto è costato (su una riga sua,
   const riassunti = scheda(page).locator('[data-sezione="riassunti"]');
   await expect(riassunti).toContainText('costato 1,1k token');
   await expect(riassunti).toContainText('nessun costo');
-  await expect(riassunti.locator('.pn-sezione__titolo')).toContainText('2 · 1,1k token');
+  /* S1-b (owner 11/11): la testata dice solo il numero; la spesa su una riga sua, sotto, con le chiamate */
+  await expect(riassunti.locator('.pn-sezione__titolo')).toHaveText(/^Compattazioni\s*2$/u);
+  await expect(riassunti.locator('[data-nota-sezione="riassunti"]')).toHaveText('Spesa delle compattazioni: 1,1k token in 1 chiamata');
   /* il costo non si taglia: la sua riga sta per intero nella larghezza del pannello */
   const costi = riassunti.locator('[data-costo-riassunto]');
   await expect(costi).toHaveCount(2);
@@ -254,8 +269,9 @@ test('PNCTX-SPESA-01 — ogni riassunto dice quanto è costato (su una riga sua,
   const pagina2 = await page.context().newPage();
   await apri(pagina2, { scena: 'spesa', lingua: 'en' });
   const en = scheda(pagina2).locator('[data-sezione="riassunti"]');
-  await expect(en).toContainText(/1[.,]1k tokens spent/u);
+  await expect(en).toContainText('1.1k tokens spent'); // ultimo giro: i numeri nella lingua dell'interfaccia, anche su un browser italiano
   await expect(en).toContainText('no cost');
+  await expect(en.locator('[data-nota-sezione="riassunti"]')).toHaveText('Compaction spend: 1.1k tokens in 1 call');
   await pagina2.close();
 });
 
@@ -266,8 +282,67 @@ test('PNCTX-SPESA-02 — al contrario: una chat di prima (riassunto senza id, ne
   await expect(riassunti).not.toContainText('costato');
   await expect(riassunti).not.toContainText('nessun costo');
   await expect(riassunti.locator('.pn-sezione__titolo')).not.toContainText('token');
+  await expect(riassunti.locator('[data-nota-sezione="riassunti"]')).toHaveCount(0); // S1-b: niente spesa, niente riga
   expect(conto.nonGet).toEqual([]);
 });
+
+test('PNCTX-SPESA-03 (S1-b) — milioni in M con una cifra, le chiamate contate, la cache solo perché dichiarata; resta anche a sezione chiusa', async ({ page }) => {
+  const conto = await apri(page, { scena: 'spesamotore' });
+  const riassunti = scheda(page).locator('[data-sezione="riassunti"]');
+  const nota = riassunti.locator('[data-nota-sezione="riassunti"]');
+  await expect(riassunti.locator('.pn-sezione__titolo')).toHaveText(/^Compattazioni\s*2$/u);
+  /* ultimo giro: il nome vero della somma (riassunti, /compact e motore) e le chiamate contate per tentativo (una riga ne ha fatti 2) */
+  await expect(nota).toHaveText('Spesa delle compattazioni: 5,6 M token in 4 chiamate, di cui 2,1 M dalla cache');
+  /* ogni compattazione la sua parte, con la stessa «M» (il lavoro del motore lega le righe al riassunto) */
+  await expect(riassunti.locator('[data-costo-riassunto]')).toHaveText(['costato 2,0 M token', 'costato 3,6 M token']);
+  expect(await nota.evaluate((n) => n.scrollWidth <= n.clientWidth)).toBe(true);
+  await riassunti.locator('[data-controllo="piega-sezione-riassunti"]').click();
+  await expect(riassunti).toHaveAttribute('data-chiusa', '');
+  await expect(nota).toBeVisible();
+  expect(conto.errori).toEqual([]);
+});
+
+/* Ultimo giro (GIALLO della 0.2.1): i numeri della scheda nella lingua dell'INTERFACCIA, non in quella del sistema. Il browser delle prove
+   è italiano (`locale: 'it-IT'`, come un Windows italiano): in inglese si leggeva «26,6% of the limit used» e «~4,2k tokens». */
+test('PNCTX-NUMERI-01 — in inglese il punto, in italiano la virgola: percentuale, token stimati, spesa; anche su un browser italiano', async ({ page }) => {
+  await apri(page, { scena: 'spesamotore', lingua: 'en' });
+  const s = scheda(page);
+  await expect(s).toContainText('26.6% of the limit used');
+  await expect(s).toContainText('~4.2k tokens');
+  await expect(s).toContainText('2.8%');
+  await expect(s.locator('[data-nota-sezione="riassunti"]')).toHaveText('Compaction spend: 5.6 M tokens in 4 calls, 2.1 M of them from the cache');
+  await expect(s.locator('[data-costo-riassunto]')).toHaveText(['2.0 M tokens spent', '3.6 M tokens spent']);
+  await expect(s).not.toContainText('26,6%');
+  await expect(s).not.toContainText('4,2k');
+  const it = await page.context().newPage();
+  await apri(it, { scena: 'spesamotore', lingua: 'it' });
+  await expect(scheda(it)).toContainText('26,6% del limite usato');
+  await expect(scheda(it)).toContainText('~4,2k token');
+  await expect(scheda(it)).toContainText('2,8%');
+  await it.close();
+});
+
+for (const lingua of ['it', 'en']) {
+  for (const tema of ['dark', 'light']) {
+    test(`PNCTX-NUMERI-FOTO 1920×1080 ${lingua} ${tema} — i numeri della scheda nella lingua dell'interfaccia`, async ({ page }) => {
+      await apri(page, { scena: 'spesamotore', tema, lingua });
+      await expect(scheda(page).locator('[data-nota-sezione="riassunti"]')).toBeVisible();
+      await expect(page.getByText('Apro la cronologia', { exact: false })).toBeHidden();
+      mkdirSync(FOTO, { recursive: true });
+      await page.screenshot({ path: join(FOTO, `numeri-${lingua}-${tema}.png`) });
+    });
+  }
+}
+
+for (const tema of ['dark', 'light']) {
+  test(`PNCTX-SPESA-S1B-FOTO 1920×1080 ${tema} — la testata da sola e la riga della spesa del motore`, async ({ page }) => {
+    await apri(page, { scena: 'spesamotore', tema });
+    await expect(scheda(page).locator('[data-nota-sezione="riassunti"]')).toBeVisible();
+    await expect(page.getByText('Apro la cronologia', { exact: false })).toBeHidden();
+    mkdirSync(FOTO, { recursive: true });
+    await page.screenshot({ path: join(FOTO, `spesa-motore-s1b-${tema}.png`) });
+  });
+}
 
 for (const tema of ['dark', 'light']) {
   test(`PNCTX-SPESA-FOTO 1920×1080 ${tema} — la scheda Contesto coi costi dei riassunti`, async ({ page }) => {

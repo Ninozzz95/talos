@@ -53,6 +53,8 @@ const ACCESO = [
   ['modello.capability.trustingAuthorizesThisDeclaration', 'Trusting authorizes this declaration. It does not prove that it is running. Changes to the checked content require new trust.'],
   ['en.js › browser › Controlla che il servizio sia acceso.', 'Check that the service is running.'],
   ['modelli.fonti.nonAcceso', '{nome} is not running on this computer'],
+  // 023 cura 1 (owner 11/11/2026, O2): la frase approvata parola per parola, inglese compreso; «running» = un motore locale acceso
+  ['varie.doctor.check.access.noneReady', 'No provider is ready. If you use a local engine that is already running, TALOS can answer through it: this check does not measure it.'],
 ];
 
 /* Frasi intere: «running» è il predicato o l'attributo del giro in una frase (il brief della decisione 97 le esclude). */

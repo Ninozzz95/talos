@@ -32,7 +32,7 @@ import { STATI_PROCESSO } from './fonti.js';
 import { ICONA_FAMIGLIA, NOME_FAMIGLIA, analizzaComando } from '../comando-shell.js';
 import {
   el, icona, bottone, statoUi, disegnaScheda, testa, sezione, riga, vuoto, scheletro, fatti, codice, scintilla, durata,
-  oraBreve, eseguiNellaRiga, chiediConferma, normalizza, bloccoDiTesta, bottoneIcona, perSessione,
+  oraBreve, eseguiNellaRiga, chiediConferma, normalizza, bloccoDiTesta, bottoneIcona, perSessione, disegnoUguale, firmaDellaScheda,
 } from './comune.js';
 
 export const TETTO = 40; // la misura di OGGI (`TETTO_PROCESSI`, inspector.js:375); nel v2 la pagina la decide lo spazio (`elencoPaginato`)
@@ -123,12 +123,33 @@ export function contoProcessi(dati = {}) {
   };
 }
 
+/** P3 (11/11/2026): la firma economica della scheda — le righe con i campi che mostra, le misure (CPU, memoria, porte), mai il tempo che
+ *  scorre (quello lo scrive l'orologio). `fermoDaMs` conta solo oltre la soglia, dove la riga dice da quanti secondi tace.
+ *  La storia della CPU entra con TUTTI i suoi valori (al più 12, `.slice(-12)` in app.js): con «lunghezza:ultimo» una lettura uguale
+ *  all'ultima a minuto pieno lasciava fermo il mini-grafico (revisore dell'11/11, R-1, prova rev-scintilla). */
+function firmaProcessi(contenitore, dati) {
+  const righe = Array.isArray(dati.processi) ? dati.processi : [];
+  const parti = [...firmaDellaScheda(contenitore, dati), righe.length];
+  for (const p of righe) {
+    if (!p) { parti.push('-'); continue; }
+    const id = String(p.id);
+    const ris = dati.risorse instanceof Map ? dati.risorse.get(id) : null;
+    const cpu = dati.storiaCpu instanceof Map ? dati.storiaCpu.get(id) : null;
+    const porte = dati.porte instanceof Map ? dati.porte.get(id) : null;
+    const fermoS = Number.isFinite(p.fermoDaMs) && p.fermoDaMs >= SOGLIA_FERMO_MS ? Math.round(p.fermoDaMs / 1000) : 0;
+    parti.push(id, p.stato, p.uscita, p.durataMs, p.avviatoA, p.comando, p.descrizione, p.chi, p.giro, p.cwd, p.famiglia, p.fileSfondo, p.sfondoDa, p.adottato, p.pid, p.rifiutato, fermoS,
+      ris?.cpuPercento, ris?.memoriaByte, Array.isArray(cpu) ? cpu.join(',') : '', Array.isArray(porte) ? porte.map((x) => `${x?.porta}@${x?.url}`).join(',') : '');
+  }
+  return parti.join('\u0001');
+}
+
 export function disegnaProcessiV2(contenitore, dati = {}, azioni = {}, { interno = false } = {}) {
   const ui = statoUi(contenitore);
   perSessione(ui, dati.sessione); // al cambio di conversazione niente righe aperte, filtri o conferme di quella prima
   ui.dati = dati; ui.azioni = azioni;
   ui.ridisegna = () => disegnaProcessiV2(contenitore, ui.dati, ui.azioni, { interno: true });
   if (!ui.ambito) ui.ambito = 'accesi';
+  if (disegnoUguale(ui, contenitore, firmaProcessi(contenitore, dati), { interno })) return; // P3: coi dati di prima la scheda resta com'è
   disegnaScheda(contenitore, (d) => costruisci(d, ui, dati, azioni), { interno });
 }
 

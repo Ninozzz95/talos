@@ -184,7 +184,15 @@ export async function preparaToolMcpPerSessione({ cartella, cartellaTrust, onEli
       /* Dopo il controllore (mutante C5): il segno solo con destructiveHint assente o esattamente false; «"true"», 1, un oggetto o
          null chiedono (lo schema MCP lo vuole booleano; si sbaglia dalla parte della domanda, mai da quella dell'esecuzione). */
       const senzaDistruttivo = t.annotations?.destructiveHint === undefined || t.annotations?.destructiveHint === false;
-      const segnoDiSolaLettura = t.annotations?.readOnlyHint === true && senzaDistruttivo ? { annotations: { readOnlyHint: true } } : {};
+      /* Compiti lunghi, A (owner 13/11/2026 04:35; giudice v1759 b): anche il segno «non distruttivo», SOLO con destructiveHint
+         esattamente false. Il nucleo lo legge per una cosa sola: se le chiamate uguali di una risposta possono stare in UNA carta
+         (`raggruppabileMcp`); non toglie mai una carta. Assente, true o non booleano: niente segno, una carta per ogni chiamata
+         (lo schema MCP 2025-06-18: «destructiveHint … Default: true»). */
+      const segni = {
+        ...(t.annotations?.readOnlyHint === true && senzaDistruttivo ? { readOnlyHint: true } : {}),
+        ...(t.annotations?.destructiveHint === false ? { destructiveHint: false } : {}),
+      };
+      const segnoDiSolaLettura = Object.keys(segni).length ? { annotations: segni } : {};
       toolMcp.push({ name: nomeEsposto, description: t.description, inputSchema: schemaIngressoAttrezzo(t.inputSchema), serverId: esito.server.id, nomeOriginale: t.name, ...segnoDiSolaLettura });
       instradamento.set(nomeEsposto, { client: esito.client, nomeOriginale: t.name });
     }

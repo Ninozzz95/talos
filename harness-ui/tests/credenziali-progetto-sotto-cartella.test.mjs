@@ -91,8 +91,10 @@ const grafieDi = (coda) => {
     `${BS}${BS}localhost${BS}${disco}$${restoWin}${BS}${codaWin}`, `${BS}${BS}127.0.0.1${BS}${disco.toLowerCase()}$${restoUnix}/${coda}`,
     `${BS}${BS}?${BS}UNC${BS}localhost${BS}${disco}$${restoWin}${BS}${codaWin}`,
     `/mnt/${disco.toLowerCase()}${restoUnix}/${coda}`, `/${disco.toLowerCase()}${restoUnix}/${coda}`,
-    /* senza lettera: il disco della cartella corrente (qui lo stesso della casa finta), mai scambiato per un disco di Git Bash */
-    ...(process.cwd().slice(0, 1).toLowerCase() === disco.toLowerCase() ? [`${restoUnix}/${coda}`] : []),
+    /* senza lettera: il disco della cartella della SESSIONE (qui lo stesso della casa finta), mai scambiato per un disco di Git Bash
+       né per il disco del processo. ⛔ 12/11/2026: prima questa grafia si provava solo se il processo stava sullo stesso disco della
+       casa, e la prova era verde da un altro disco perché la toglieva; ora c'è sempre, con le barre dritte e con le rovesce. */
+    `${restoUnix}/${coda}`, `${restoWin}${BS}${codaWin}`,
     /* riverifica 3: il nome di questa macchina, tutto 127.0.0.0/8 e la forma corta, le graffe di PowerShell, il relativo al disco */
     `${BS}${BS}${hostname()}${BS}${disco}$${restoWin}${BS}${codaWin}`, `${BS}${BS}${hostname().toLowerCase()}${BS}${disco}$${restoWin}${BS}${codaWin}`,
     `${BS}${BS}127.0.0.2${BS}${disco}$${restoWin}${BS}${codaWin}`, `${BS}${BS}127.1${BS}${disco}$${restoWin}${BS}${codaWin}`,

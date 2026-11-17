@@ -51,8 +51,10 @@ test('173 — quando lo si sceglie dopo: «Full access» in una cartella non fid
   assert.equal(b.corse.at(-1).livelloAccesso, 'su-richiesta')
 })
 
-test('173 AL CONTRARIO — cartella fidata o non ancora chiesta, o nessuna fonte: l\'Accesso pieno resta pieno (golden)', async (t) => {
-  for (const fiducia of [() => true, () => null, null]) {
+/* Falla del 10/11 (reperto 1): «non ancora chiesta» non è più qui. Con la fonte, `null` TRATTIENE l'Accesso pieno finché la persona
+   risponde (`fiducia-cartella-mai-chiesta.test.mjs`); senza fonte (CLI, telefono) resta pieno come prima. */
+test('173 AL CONTRARIO — cartella fidata, o nessuna fonte: l\'Accesso pieno resta pieno (golden)', async (t) => {
+  for (const fiducia of [() => true, null]) {
     const b = banco(t, fiducia ? { fiduciaDellaCartellaFn: fiducia } : {})
     b.registro.avvia('c', { permessiScelto: 'Full access' })
     await pausa()

@@ -45,10 +45,11 @@ function formatoNumeri(opzioni) {
   return FORMATI_NUMERI.get(chiave);
 }
 const num = { format: (v) => formatoNumeri({ maximumFractionDigits: 1 }).format(v) };
-/** «41,2k», «200k», «0,4k» come nel mockup. */
+/** «41,2k», «200k», «0,4k» come nel mockup; da un milione in su «1M», «1,5M» (revisore unico 11/11: «1000k» e «1,000k» su 1M). */
 export function kilo(n) {
   const v = Number(n);
   if (!Number.isFinite(v) || v < 0) return '—';
+  if (v >= 1_000_000) return `${num.format(v / 1_000_000)}M`;
   return `${num.format(v / 1000)}k`; // «200k», «145,4k», «0,4k»: un decimale quando serve, come nel mockup
 }
 const numPercento = { format: (v) => formatoNumeri({ minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(v) };
@@ -121,12 +122,12 @@ export function righeFinestraSulLimite({ usage = null, ripartizione = null, limi
   const p = percheDelLimite(limite);
   /* ⛔ 10/10 sera, visto sul 4174 dopo un riavvio: il limite di RIPIEGO del server (fonte `fallback`) era scritto come quello vero.
      Si dichiara con «~», il segno che la scheda usa già per le stime; la riga del perché lo dice «non verificato». */
-  const segno = limite.fonte === 'fallback' ? '~' : '';
+  const segno = limite.fonte === 'fallback' || limite.finestraIgnota === true ? '~' : ''; // 11/11/2026: anche la misura prudente è una stima
   return {
     titoloDestra: `${segno}${kilo(limite.soglia)}`,
     righe,
     fette: r.voci.filter((v) => v.percentuale !== null).map((v) => ({ id: v.id, percentuale: v.percentuale })),
-    perche: p ? tr(p.chiave, { soglia: kilo(p.soglia), finestra: p.finestra === null ? '—' : kilo(p.finestra) }) : '',
+    perche: p ? tr(p.chiave, { soglia: kilo(p.soglia), finestra: p.finestra === null ? '—' : kilo(p.finestra), catalogo: Number.isSafeInteger(p.catalogo) ? kilo(p.catalogo) : '—' }) : '',
     // la card compressa (C1, 10/10): misurato su limite; la percentuale la dice la barra, che da compressa resta (foto: «98k · …» tagliato)
     anteprima: `${r.usati === null ? '—' : `${stimato ? '~' : ''}${kilo(r.usati)}`} / ${segno}${kilo(limite.soglia)}`,
   };
@@ -688,6 +689,11 @@ export function strisciaScorrevole(riga, { asse = 'x' } = {}) {
     const dopo = da + vede < tutto - 1;
     const taglio = prima && dopo ? 'entrambi' : prima ? 'prima' : dopo ? 'dopo' : 'nessuno';
     if (riga.dataset.taglio !== taglio) riga.dataset.taglio = taglio;
+    /* ⭐ 12/11/2026 (giudice v1608) — QUANTO è nascosto per lato, in px, per chi vuole una sfumatura che cresce con lo scorrimento
+       (Hermes `styles.css:1139-1140`: «an edge is fully faded in once pad + size px have been scrolled»): con 2 px nascosti la fila
+       delle schede della colonna non deve sbiadire 24 px di «Context» intero. Chi non le usa non vede niente. */
+    riga.style?.setProperty?.('--taglio-prima', `${Math.max(0, Math.round(da))}px`);
+    riga.style?.setProperty?.('--taglio-dopo', `${Math.max(0, Math.round(tutto - vede - da))}px`);
   };
   riga.__talosRimisura = misura;
   riga.addEventListener('scroll', misura, { passive: true });

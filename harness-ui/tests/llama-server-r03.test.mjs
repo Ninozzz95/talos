@@ -25,7 +25,7 @@ for(const gpu of ['driver','perso'])test('R03-RIPIEGO — '+gpu+' su processo ve
   assert.equal(args[args.indexOf('-ngl')+1],'0');assert.equal(args[args.indexOf('--device')+1],'none');assert.equal(args[args.indexOf('-c')+1],'8192');
   assert.equal(args.includes('-fa'),false);assert.equal(args.includes('--spec-type'),false);assert.ok(sonde.some(([p])=>p===resolve('cpu.exe')));
   assert.deepEqual(serrature,['+scelto-dalla-persona']);assert.ok(eventi.some(e=>e.ripiego?.a==='cpu'));
-  assert.equal(JSON.stringify(stato).includes(chiamate[1].args[chiamate[1].args.indexOf('--api-key')+1]),false);
+  assert.match(chiamate[1].options.env.LLAMA_API_KEY,/^[a-f0-9]{64}$/u);assert.equal(JSON.stringify(stato).includes(chiamate[1].options.env.LLAMA_API_KEY),false);assert.equal(args.includes('--api-key'),false); // 12/11: the key in the environment
   await supervisor.stop();assert.deepEqual(serrature,['+scelto-dalla-persona','-scelto-dalla-persona']);
 });
 test('R03-DOPPIO-GUASTO — conserva le due code, non tenta un terzo processo',async t=>{

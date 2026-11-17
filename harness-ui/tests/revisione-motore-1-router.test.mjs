@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { createLlamaServerSupervisor } from '../src/llama-server-supervisor.mjs';
+import { createLlamaServerSupervisor as creaSupervisoreVero } from '../src/llama-server-supervisor.mjs';
+import { conChiaveNelSupervisore } from './aiuto/motore-con-chiave.mjs';
 import { createLlamaRouterSupervisor } from '../src/llama-router-supervisor.mjs';
 import { fotoDelCaricamento } from '../src/apertura-condivisa.mjs';
 import { createHttpApp } from '../src/http-app.mjs';
@@ -14,6 +15,7 @@ import { creaOperazioni } from '../src/remoto/operazioni.mjs';
 import { iscriviConRigiocata } from '../src/iscrizione-sessione.mjs';
 import { creaRouterFinto } from './aiuto/router-finto.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+const createLlamaServerSupervisor = conChiaveNelSupervisore(creaSupervisoreVero);
 
 const BIN = 'C:\\talos\\llama-server.exe';
 const ms = (n) => new Promise((r) => setTimeout(r, n));

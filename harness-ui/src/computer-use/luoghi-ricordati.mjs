@@ -36,20 +36,26 @@ const vocePulita = (v) => {
 };
 const chiave = (v) => `${v.tipo}\u0000${v.nome}`;
 
-/** @param {{ file: string, adesso?: () => number }} p */
-export function creaRegistroLuoghi({ file, adesso = Date.now }) {
+/*
+ * ⛔ Decisione 374 (07/11/2026): con un `custode` (`file-approvati.mjs`) i luoghi vengono dalla VERSIONE APPROVATA in memoria, mai dal
+ *   file (un processo in sottofondo che aggiunge un luogo non salta la carta), e si scrivono attraverso il custode, che la aggiorna.
+ */
+/** @param {{ file: string, adesso?: () => number, custode?: { custodisce: Function, testo: Function, scrivi: Function } | null }} p */
+export function creaRegistroLuoghi({ file, adesso = Date.now, custode = null }) {
+  if (custode && !custode.custodisce(file)) throw new TypeError('The remembered places file is not kept by the given keeper.');
   let coda = Promise.resolve();
   const inCoda = (fn) => { const p = coda.then(fn, fn); coda = p.catch(() => {}); return p; };
 
   const leggi = async () => {
     let grezzo;
-    try { grezzo = JSON.parse(await readFile(file, 'utf8')); } catch { return []; }
+    try { grezzo = JSON.parse(custode ? custode.testo(file) : await readFile(file, 'utf8')); } catch { return []; }
     const voci = Array.isArray(grezzo?.voci) ? grezzo.voci : [];
     const viste = new Map();
     for (const v of voci) { const p = vocePulita(v); if (p) viste.set(chiave(p), p); }
     return [...viste.values()];
   };
   const scrivi = async (voci) => {
+    if (custode) return custode.scrivi(file, `${JSON.stringify({ versione: 1, voci }, null, 1)}\n`);
     await mkdir(dirname(file), { recursive: true });
     const tmp = `${file}.${process.pid}.tmp`;
     await writeFile(tmp, `${JSON.stringify({ versione: 1, voci }, null, 1)}\n`, 'utf8');
