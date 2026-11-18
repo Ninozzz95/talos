@@ -11,6 +11,8 @@
  * Il dizionario (`testi/server-r4.json`) si rigenera da r4 con lo script `testi-server-r4.mjs` (dal commit fissato), mai a mano.
  */
 import dizionario from './testi/server-r4.json'
+import carte from './testi/server-carte-r4.json'
+import delTelefono from './testi/carte-del-telefono.json'
 
 export interface TestiServerR4 {
     origine: { commit: string; percorso: string; sha256: string }
@@ -19,6 +21,14 @@ export interface TestiServerR4 {
 }
 
 export const TESTI_SERVER_R4: TestiServerR4 = dizionario
+/*
+ * Telefono 0.1.49 (decisione dell'owner 18/11/2026, il nucleo di oggi): le frasi delle carte nuove di quel nucleo (P018 e cancellazioni
+ * critiche) stanno in `server-carte-r4.json`, preso dallo stesso script al commit del nucleo. Si cerca prima nel dizionario di sempre:
+ * una chiave che c'è già resta la sua.
+ * Giudice v2133-v2135: PRIMA di tutto le parole proprie del telefono (`carte-del-telefono.json`, scritte a mano apposta, le sole), per
+ * le frasi del nucleo che dicono «this PC»/«questo PC»: sul telefono è falso. Le copie e il nucleo non cambiano.
+ */
+const TABELLE: ReadonlyArray<{ it: Record<string, string>; en: Record<string, string> }> = [delTelefono, dizionario, carte]
 
 /** La funzione che l'adattatore riceve: la chiave, i valori e la riserva inglese → la frase da mostrare. */
 export type TestoDelServerR4 = (chiave: string | null | undefined, params: unknown, riserva: string) => string
@@ -33,8 +43,16 @@ function propria(tabella: Record<string, string>, nome: string): string | undefi
     return Object.hasOwn(tabella, nome) ? tabella[nome] : undefined
 }
 
+function propriaIn(lingua: 'it' | 'en', nome: string): string | undefined {
+    for (const tabella of TABELLE) {
+        const trovata = propria(tabella[lingua], nome)
+        if (trovata !== undefined) return trovata
+    }
+    return undefined
+}
+
 function voce(chiave: string): string | undefined {
-    return chiave.startsWith(PREFISSO) ? propria(TESTI_SERVER_R4.en, chiave.slice(PREFISSO.length)) : undefined
+    return chiave.startsWith(PREFISSO) ? propriaIn('en', chiave.slice(PREFISSO.length)) : undefined
 }
 
 function interpola(frase: string, valori: Record<string, unknown> | undefined): string {
@@ -44,8 +62,7 @@ function interpola(frase: string, valori: Record<string, unknown> | undefined): 
 
 function nellaLingua(chiave: string, lingua: string, valori: Record<string, unknown> | undefined): string {
     const nome = chiave.slice(PREFISSO.length)
-    const tabella = italiano(lingua) ? TESTI_SERVER_R4.it : TESTI_SERVER_R4.en
-    return interpola(propria(tabella, nome) ?? propria(TESTI_SERVER_R4.en, nome) ?? '', valori)
+    return interpola(propriaIn(italiano(lingua) ? 'it' : 'en', nome) ?? propriaIn('en', nome) ?? '', valori)
 }
 
 /*

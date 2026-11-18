@@ -1,0 +1,16 @@
+{
+  "origine": {
+    "autore": "telefono 0.1.49 (giudice v2133-v2135)",
+    "perche": "Parole PROPRIE del telefono, scritte a mano apposta: le frasi del nucleo copiate dal PC dicono «this PC»/«questo PC», e sul telefono non è vero. Vincono sulle copie solo per queste chiavi; le copie e il nucleo restano come sono."
+  },
+  "en": {
+    "approval.pluginTool": "It wants to use the tool «{attrezzo}» of the plugin «{plugin}». A plugin runs its own program on this device: it needs your yes.",
+    "approval.mcpToolReadOnly": "You are in Read only, but the tool «{attrezzo}» of the connector «{server}» can change things outside this device. Allow it only this once?",
+    "approval.pluginToolReadOnly": "You are in Read only, but the tool «{attrezzo}» of the plugin «{plugin}» runs a program that can change things on this device and outside it. Allow it only this once?"
+  },
+  "it": {
+    "approval.pluginTool": "Vuole usare lo strumento «{attrezzo}» del plugin «{plugin}». Un plugin fa girare un suo programma su questo dispositivo: serve il tuo sì.",
+    "approval.mcpToolReadOnly": "Sei in Solo lettura, ma lo strumento «{attrezzo}» del connettore «{server}» può cambiare cose fuori da questo dispositivo. Lo consenti solo questa volta?",
+    "approval.pluginToolReadOnly": "Sei in Solo lettura, ma lo strumento «{attrezzo}» del plugin «{plugin}» fa girare un programma che può cambiare cose su questo dispositivo e fuori. Lo consenti solo questa volta?"
+  }
+}

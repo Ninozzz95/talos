@@ -6,6 +6,77 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device unless a version says otherwise.
 
+## mobile-v0.1.49
+
+A security fix for Code on the device: it now runs on the same core as the computer app 0.2.3, so tools of connectors,
+plugins and Tool Forge ask before they run, and more deletions and secrets are caught.
+
+### Fixed
+
+- **In Code, a tool of a connector, a plugin or Tool Forge ran without asking you.** Every other tool that changes
+  something passes through the permission card; these three went straight to the program behind them. Now they pass
+  the same gate: with the default permission the first use brings a card that names the connector (or plugin) and the
+  tool and shows what the call sends, with secrets hidden; "Asks first" asks every time, "Read only" asks before each
+  call unless the connector declared the tool read-only, "Full access" does not ask, as for the other tools. On the device the card offers "Allow once" and "Deny", not
+  "For this tool".
+  - In italiano: nel Codice lo strumento di un connettore, di un plugin o di Tool Forge partiva senza chiederti niente.
+    Ogni altro strumento che cambia qualcosa passa dalla carta dei permessi; questi tre andavano dritti al programma
+    dietro di loro. Ora passano dallo stesso cancello: col permesso di serie il primo uso porta una carta che dice il
+    connettore (o il plugin) e lo strumento e mostra che cosa manda la chiamata, coi segreti nascosti; «Chiede prima»
+    chiede ogni volta, «Solo lettura» chiede prima di ogni chiamata, tranne per uno strumento che il connettore ha
+    dichiarato di sola lettura, «Accesso pieno» non chiede, come per gli altri
+    strumenti. Sul dispositivo la carta offre «Consenti una volta» e «Nega», non «Per questo strumento».
+- **With Full access, some deletions of whole folders ran without asking.** A command such as
+  `rm -rf "$EMPTY"/`, where an empty or unknown variable comes before `/`, now counts as deleting the root of the disk,
+  and a command too complex to read before it runs, that may delete something, asks every time, with any permission,
+  Full access included. The card now says what the command deletes; before, it gave a generic reason and offered "For
+  this session", which never stopped the question.
+  - In italiano: con Accesso pieno alcune cancellazioni di cartelle intere partivano senza chiedere. Un comando come `rm -rf "$VUOTA"/`,
+    dove davanti a `/` c'è una variabile vuota o sconosciuta, ora conta come la cancellazione della radice del disco, e un
+    comando troppo complesso per essere letto prima che parta, che potrebbe cancellare qualcosa, chiede ogni volta, con
+    qualsiasi permesso, anche con Accesso pieno. La carta ora dice che cosa cancella il comando; prima dava un motivo
+    generico e offriva «Per questa sessione», che non fermava mai la domanda.
+- **More secrets are hidden.** Values after names such as `DB_PASSPHRASE=`, `session-cookie:` or `APP_SECRETS=`, and
+  fields whose name ends with the name of a secret (`clientsecret`, `dbpassword`), are now hidden where Code hides
+  secrets, the new cards included.
+  - In italiano: si nascondono più segreti. I valori dopo nomi come `DB_PASSPHRASE=`, `session-cookie:` o `APP_SECRETS=`,
+    e i campi il cui nome finisce col nome di un segreto (`clientsecret`, `dbpassword`), ora si nascondono dove il Codice
+    nasconde i segreti, carte nuove comprese.
+- **The description of "Writes to the project" said that every command goes through the gate.** It now says what is
+  true: writing a file outside the session folder asks you, and commands ask only for sensitive places (home, the
+  project, the phone's folders), not for every folder outside.
+  - In italiano: la descrizione di «Scrive nel progetto» diceva che ogni comando passa dal cancello. Ora dice il vero:
+    scrivere un file fuori dalla cartella della sessione ti chiede, e i comandi chiedono solo per i posti delicati (la
+    casa, il progetto, le cartelle del telefono), non per ogni cartella fuori.
+
+### Known limitations
+
+- These fixes are in Code. The Chat of the app still runs on its own engine, with its own checks, which did not change
+  in this version.
+  - In italiano: queste cure sono nel Codice. La Chat dell'app gira ancora su un motore suo, coi suoi controlli, che in
+    questa versione non sono cambiati.
+- The Assistant and folder trust of the computer app are not on the device.
+  - In italiano: l'Assistente e la fiducia delle cartelle dell'app del computer non ci sono sul dispositivo.
+- Known limit: a critical deletion hidden inside another language's one-liner (for example `perl -e` or `python -c`
+  calling a delete) is not recognised and runs without the critical-deletion card. This is also true on the PC and in
+  the CLI. A later release recognises these commands.
+  - Limite noto: una cancellazione critica nascosta dentro una riga di un altro linguaggio (per esempio `perl -e` o
+    `python -c` che chiamano una cancellazione) non viene riconosciuta e parte senza la carta delle cancellazioni
+    critiche. Vale anche sul PC e nella CLI. Una versione successiva riconosce questi comandi.
+- Known limit: if the keyboard is open when a permission card appears, the card can scroll out of view and show only its buttons. Close the keyboard and read the whole card before you choose.
+  - Limite noto: se la tastiera è aperta quando compare una carta dei permessi, la carta può scorrere fuori vista e mostrare solo i tasti. Chiudi la tastiera e leggi tutta la carta prima di scegliere.
+- Tested on a computer, with the phone's own tests on the core of this version, and on a test tablet with the app built
+  from this version: the app starts, Chat and Code work, and a critical deletion is stopped with Full access. The card
+  for tools of connectors, plugins and Tool Forge is tested in the code, not yet live on a device.
+  - In italiano: provato su un computer, con le prove del telefono sul nucleo di questa versione, e su un tablet di
+    prova con l'app costruita da questa versione: l'app si avvia, Chat e Codice funzionano, e una cancellazione critica
+    viene fermata con Accesso pieno. La carta per gli strumenti di connettori, plugin e Tool Forge è provata nel codice,
+    non ancora dal vivo su un dispositivo.
+
+### Install
+
+- From 0.1.46 TALOS updates itself to this version.
+
 ## mobile-v0.1.48
 
 A security fix for Code on the device: two tools could write a file that may hold keys or passwords into your project

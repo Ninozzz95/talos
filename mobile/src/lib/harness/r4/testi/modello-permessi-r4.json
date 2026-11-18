@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
+    "commit": "bb6d3799af882f9909c683af256384e884f622cd",
     "percorso": "harness-ui/frontend/src/i18n/testi/modello.js",
-    "sha256": "d56fd5241d7260892d982a30a9703f9f100e85b4ca4c39e800ae1129a62aced3",
+    "sha256": "bc1589a88464933860dfda34874ef259577e89916179be6c9874640731d730fa",
     "prefisso": [
       "permissions.howMuchTalosCan",
       "permissions.permissionsTheyApplyTo",
@@ -40,13 +40,13 @@
     "permissions.readsTheProjectAnd": "Legge il progetto e lancia comandi che non cambiano niente. Ogni scrittura viene rifiutata.",
     "permissions.writesToTheProject": "Scrive nel progetto",
     "permissions.mediumRisk": "rischio medio",
-    "permissions.writesOnItsOwn": "Scrive da sola dentro la cartella della sessione; per scrivere fuori ti chiede. Comandi e test passano dal cancello.",
+    "permissions.writesOnItsOwn": "Scrive da sola dentro la cartella della sessione; per scrivere un file fuori ti chiede. I comandi passano dal cancello, che chiede per i posti delicati (la casa, il progetto, le cartelle del telefono), non per ogni cartella fuori.",
     "permissions.recommended": "Consigliato",
     "permissions.asksFirst": "Chiede prima",
     "permissions.asksYouToConfirm": "Ti chiede conferma prima di ogni azione che lascia traccia: scritture, comandi, rete.",
     "permissions.fullAccess": "Accesso pieno",
     "permissions.veryHighRisk": "rischio molto alto",
-    "permissions.filesAndNetworkWithout": "File e rete senza i cancelli ordinari. Solo se sai gia cosa sta per fare."
+    "permissions.filesAndNetworkWithout": "File e rete senza i cancelli ordinari. Solo se sai già cosa sta per fare."
   },
   "en": {
     "chat.theNextMessageWill": "The next message will prepare a plan without changing the files.",
@@ -62,7 +62,7 @@
     "permissions.readsTheProjectAnd": "Reads the project and runs commands that change nothing. Every write is refused.",
     "permissions.writesToTheProject": "Writes to the project",
     "permissions.mediumRisk": "medium risk",
-    "permissions.writesOnItsOwn": "Writes on its own inside the session folder; to write outside it asks you. Commands and tests go through the gate.",
+    "permissions.writesOnItsOwn": "Writes on its own inside the session folder; writing a file outside it asks you. Commands go through the gate, which asks for sensitive places (home, the project, the phone's folders), not for every folder outside.",
     "permissions.recommended": "Recommended",
     "permissions.asksFirst": "Asks first",
     "permissions.asksYouToConfirm": "Asks you to confirm before every action that leaves a trace: writes, commands, network.",
