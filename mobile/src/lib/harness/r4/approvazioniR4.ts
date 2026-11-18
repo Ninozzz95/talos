@@ -13,15 +13,46 @@
  * Le parole sono del desktop (dizionari JSON nel chunk del Codice); le frasi del kernel con chiave passano da `testoDelCampoR4`.
  */
 import app from './testi/app-approvazione-r4.json'
+import appCarte from './testi/app-carte-r4.json'
 import chatApprovazione from './testi/chat-approvazione-r4.json'
 import chatPermessi from './testi/chat-permessi-r4.json'
 import kernel from './testi/kernel-approvazione-r4.json'
-import { testoDelCampoR4 } from './testiServerR4'
+import { testoDelCampoR4, testoDelServerR4 } from './testiServerR4'
 import { nomeDiRipiegoAttrezzoR4, nomeUmanoAttrezzoR4 } from './agentiR4'
 import type { AzioneApprovazioneR4, EsitoApprovazioneR4 } from './approvazioneChiave'
 
 type Tabella = { it: Record<string, string>; en: Record<string, string> }
-const AREE: Record<string, Tabella[]> = { app: [app], chat: [chatApprovazione, chatPermessi], kernel: [kernel] }
+/* Telefono 0.1.49: `app-carte-r4.json` porta solo le parole nuove delle carte del nucleo di oggi (P018), dopo quelle di sempre */
+const AREE: Record<string, Tabella[]> = { app: [app, appCarte], chat: [chatApprovazione, chatPermessi], kernel: [kernel] }
+
+/*
+ * ⛔ Telefono 0.1.49 (decisione dell'owner 18/11/2026, il nucleo di oggi; P018 del PC, `legacy/app.js:234`, `:18188-18190`, `:18285-18290`,
+ * `:18346-18350`, `:18650-18655`, `:18710`, `:18771`, `:18812`): lo strumento di un connettore, di un plugin o di Tool Forge passa ora dal
+ * cancello dei permessi, e la carta dice CHI e QUALE strumento (il nome leggibile, mai `mcp__github__create_issue`) e CHE COSA manda la
+ * chiamata (gli argomenti che il nucleo ha già oscurato e tagliato, `argomentiPerLaCarta`), come Codex («Allow the {server} MCP server to
+ * run tool …», `codex-rs/core/src/mcp_tool_call.rs:2087`). Il telefono non disegna «Per questo strumento»: niente terzo pulsante, come
+ * Hermes nasconde il «sempre» che il server non onora (`apps/desktop/src/components/assistant-ui/tool/approval.tsx:279-283`).
+ */
+const TIPI_STRUMENTO_DI_FUORI: ReadonlySet<string> = new Set(['mcp_tool', 'plugin_tool', 'forge_tool'])
+const PERCHE_DI_FUORI: Readonly<Record<string, string>> = Object.freeze({
+    mcp_tool: 'app.approval.wantsUseConnectorTool', plugin_tool: 'app.approval.wantsUsePluginTool', forge_tool: 'app.approval.wantsUseForgeTool',
+})
+
+/** `fraseDelloStrumentoDiFuori` del PC (`legacy/app.js:18285`): la frase del nucleo coi nomi resi leggibili. */
+function fraseDelloStrumentoDiFuori(a: Record<string, unknown>, lingua: string): string {
+    const p = a.fraseParams && typeof a.fraseParams === 'object' ? a.fraseParams as Record<string, unknown> : {}
+    const leggibili = Object.fromEntries(Object.entries(p).map(([k, v]) => [k, ['attrezzo', 'server', 'plugin'].includes(k) && typeof v === 'string' ? nomeDiRipiegoAttrezzoR4(v) || v : v]))
+    return testoDelServerR4(typeof a.fraseChiave === 'string' ? a.fraseChiave : null, leggibili, typeof a.frase === 'string' ? a.frase : '', lingua).trim()
+}
+
+/** Il bersaglio della carta di uno strumento di fuori (`legacy/app.js:18650-18652`): «create issue (github)», «check (lint)», «daily note». */
+function bersaglioDiFuori(a: Record<string, unknown>): string {
+    const attrezzo = typeof a.attrezzo === 'string' ? a.attrezzo : ''
+    if (a.tipo === 'mcp_tool') return nomeDiRipiegoAttrezzoR4(a.nome)
+    if (a.tipo === 'plugin_tool' && attrezzo) return `${nomeDiRipiegoAttrezzoR4(attrezzo)}${typeof a.plugin === 'string' && a.plugin ? ` (${nomeDiRipiegoAttrezzoR4(a.plugin)})` : ''}`
+    if (a.tipo === 'forge_tool' && attrezzo) return nomeDiRipiegoAttrezzoR4(attrezzo)
+    return ''
+}
 const italiano = (lingua: string) => /^it(?:-|$)/iu.test(lingua)
 const propria = (t: Record<string, string>, k: string) => (Object.hasOwn(t, k) ? t[k] : undefined)
 
@@ -135,6 +166,7 @@ function perche(a: Record<string, unknown>, lingua: string): string {
     if (a.tipo === 'giri-in-tondo') {
         return tn('app.approval.wantsGoOnRepeatingOne', 'app.approval.wantsGoOnRepeatingMany', Number(a.volte) || 5, lingua, { strumento: nomeAttrezzo(stringa(a.strumento), lingua) })
     }
+    if (typeof a.tipo === 'string' && Object.hasOwn(PERCHE_DI_FUORI, a.tipo)) return tr(PERCHE_DI_FUORI[a.tipo])
     return tr('app.approval.wantsChangeSomething')
 }
 
@@ -148,6 +180,9 @@ function codice(a: Record<string, unknown>): string {
     if (a.tipo === 'scrivi' || a.tipo === 'leggi') return stringa(a.percorso)
     if (a.tipo === 'naviga') return stringa(a.url)
     if (a.tipo === CHIAVE_COORDINAZIONE) return stringa(a.compito)
+    // P018: che cosa manda la chiamata, già oscurato e tagliato dal nucleo (`legacy/app.js:18710-18716`, «Clients SHOULD show tool inputs»)
+    if (typeof a.tipo === 'string' && TIPI_STRUMENTO_DI_FUORI.has(a.tipo) && a.argomenti && typeof a.argomenti === 'object'
+        && Object.keys(a.argomenti).length > 0) return JSON.stringify(a.argomenti, null, 2)
     return ''
 }
 
@@ -158,8 +193,14 @@ function motivo(a: Record<string, unknown>, politica: PoliticaSessioneR4, lingua
     const frasiVere: string[] = []
     if (a.contenutoSospetto) frasiVere.push(domandaContenutoSospetto(a.contenutoSospetto, lingua))
     const fraseDiCampo = (o: unknown) => { const f = o ? testoDelCampoR4(o, 'frase', lingua) : null; return typeof f === 'string' && f.trim() ? f.trim() : null }
-    for (const campo of ['segreto', 'wslRoot', 'fuoriDalProgetto', 'percorsoDiRete']) {
+    // Telefono 0.1.49: anche la cancellazione critica (decisione 155 del PC, `legacy/app.js:18346`): che cosa cancella e perché chiede sempre
+    for (const campo of ['segreto', 'wslRoot', 'fuoriDalProgetto', 'percorsoDiRete', 'cancellazioneCritica']) {
         const f = fraseDiCampo(a[campo])
+        if (f) frasiVere.push(f)
+    }
+    // P018 (`legacy/app.js:18350`): chi e quale strumento; in «Solo lettura» la frase `…ReadOnly` dice perché chiede
+    if (typeof a.tipo === 'string' && TIPI_STRUMENTO_DI_FUORI.has(a.tipo) && typeof a.fraseChiave === 'string') {
+        const f = fraseDelloStrumentoDiFuori(a, lingua)
         if (f) frasiVere.push(f)
     }
     const trifecta = typeof a.trifecta === 'string' ? a.trifecta.trim() : (a.trifecta === true ? tr('app.approval.trifecta') : '')
@@ -182,6 +223,7 @@ const BADGE: Record<string, string> = {
     scrivi: 'app.approval.badgeWrite', file_edit: 'app.approval.badgeEdit', leggi: 'app.approval.badgeRead', elenca: 'app.approval.badgeOpenFolder',
     shell: 'app.approval.badgeRun', prova: 'app.approval.badgeRun', research_start: 'app.approval.badgeSearch',
     [CHIAVE_COORDINAZIONE]: 'app.approval.badgeStartAgent', 'giri-in-tondo': 'app.approval.badgeRepeating',
+    mcp_tool: 'app.approval.badgeConnector', plugin_tool: 'app.approval.badgePlugin', forge_tool: 'app.approval.badgeForge',
 }
 
 /** La carta di `ApprovalRequested.azione` con la politica della sessione che chiede. Un'azione storta è la carta generica. */
@@ -189,13 +231,14 @@ export function cartaApprovazioneR4(azione: unknown, politica: PoliticaSessioneR
     const a: AzioneApprovazioneR4 = azione && typeof azione === 'object' && !Array.isArray(azione) ? azione as AzioneApprovazioneR4 : {}
     const tr = (k: string) => testoApprovazioneR4(k, lingua)
     const bersaglio = stringa(a.percorso) || stringa(a.comando) || stringa(a.question) || stringa(a.title)
-        || (a.tipo === CHIAVE_COORDINAZIONE ? stringa(a.modello) : '') || ''
+        || (a.tipo === CHIAVE_COORDINAZIONE ? stringa(a.modello) : '') || bersaglioDiFuori(a) || ''
     let unaVolta = tr('chat.approval.allowOnce')
     let terzo: CartaApprovazioneR4['terzo'] = { etichetta: tr('chat.approval.forThisSession'), scelta: 'sessione' }
     let nota = tr('app.approval.appliesOnce')
     const segreto = a.segreto as Record<string, unknown> | undefined
     const davantiAUnSegreto = Boolean(segreto)
-    const percorsoConsentibile = davantiAUnSegreto && !a.contenutoSospetto && !a.percorsoDiRete && !a.wslRoot && !a.fuoriDalProgetto
+    const critica = Boolean(a.cancellazioneCritica)
+    const percorsoConsentibile = davantiAUnSegreto && !a.contenutoSospetto && !a.percorsoDiRete && !a.wslRoot && !a.fuoriDalProgetto && !critica
         && typeof segreto?.percorso === 'string' && segreto.percorso !== ''
     if (percorsoConsentibile) {
         terzo = { etichetta: tr('app.approval.allowSecretSession'), scelta: 'percorso' }
@@ -203,11 +246,15 @@ export function cartaApprovazioneR4(azione: unknown, politica: PoliticaSessioneR
     } else if (davantiAUnSegreto) terzo = null
     if (a.contenutoSospetto) terzo = null
     if (a.percorsoDiRete) terzo = null
-    if ((a.percorsoDiRete as Record<string, unknown> | undefined)?.ambito === 'sessione') {
+    // Decisione 155 del PC (`legacy/app.js:18771-18774`): una cancellazione critica si chiede ogni volta, il sì vale una volta sola
+    if (critica) terzo = null
+    // P018: il telefono non disegna «Per questo strumento» (`legacy/app.js:18812-18819`): restano «una volta» e «No»
+    if (typeof a.tipo === 'string' && TIPI_STRUMENTO_DI_FUORI.has(a.tipo)) terzo = null
+    if ((a.percorsoDiRete as Record<string, unknown> | undefined)?.ambito === 'sessione' && !critica) {
         unaVolta = tr('app.approval.allowSession')
         nota = tr('app.approval.appliesSession')
     }
-    if (a.wslRoot && !davantiAUnSegreto) {
+    if (a.wslRoot && !davantiAUnSegreto && !critica) {
         unaVolta = tr('app.approval.allowSession')
         terzo = null
         nota = tr('app.approval.appliesSession')

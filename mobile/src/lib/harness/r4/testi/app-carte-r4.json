@@ -1,0 +1,31 @@
+{
+  "origine": {
+    "commit": "bb6d3799af882f9909c683af256384e884f622cd",
+    "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
+    "sha256": "e0acf0dc512bf5c6f726474e7ec795ce48045ce68a5287ddee95dd9c16d2a52c",
+    "prefisso": [
+      "approval.wantsUseConnectorTool",
+      "approval.wantsUsePluginTool",
+      "approval.wantsUseForgeTool",
+      "approval.badgeConnector",
+      "approval.badgePlugin",
+      "approval.badgeForge"
+    ]
+  },
+  "it": {
+    "approval.wantsUseConnectorTool": "Vuole usare uno strumento di un connettore:",
+    "approval.wantsUsePluginTool": "Vuole usare uno strumento di un plugin:",
+    "approval.wantsUseForgeTool": "Vuole usare uno strumento di Tool Forge:",
+    "approval.badgeConnector": "Chiede di usare un connettore",
+    "approval.badgePlugin": "Chiede di usare un plugin",
+    "approval.badgeForge": "Chiede di usare uno strumento di Tool Forge"
+  },
+  "en": {
+    "approval.wantsUseConnectorTool": "It wants to use a tool of a connector:",
+    "approval.wantsUsePluginTool": "It wants to use a tool of a plugin:",
+    "approval.wantsUseForgeTool": "It wants to use a Tool Forge tool:",
+    "approval.badgeConnector": "Asks to use a connector",
+    "approval.badgePlugin": "Asks to use a plugin",
+    "approval.badgeForge": "Asks to use a Tool Forge tool"
+  }
+}

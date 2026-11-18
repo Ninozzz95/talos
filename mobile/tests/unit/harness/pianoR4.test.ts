@@ -24,6 +24,9 @@ const golden = JSON.parse(readFileSync(resolve(__dirname, '..', '..', 'fixtures'
 const PIN = '701c6c0d2d711879b53aa21bddad5a06d33538e7'
 // pin r4 4cee78f33 (29/10): i testi delle quattro aree vengono dal pin nuovo; il golden resta @ 701c6c0d2 (le sue fonti non cambiano la carta)
 const PIN_TESTI = '4cee78f3349c5d34b4f44303a157b93542656aef'
+// Telefono 0.1.49 (LISTA voce 102): i testi del foglio dei permessi rigenerati dal nucleo della 0.1.49 (desktop 0.2.3), per la frase
+// vera di «Scrive nel progetto»; le altre tre aree restano al pin
+const PIN_PERMESSI = 'bb6d3799af882f9909c683af256384e884f622cd'
 const LINGUE = ['it', 'en'] as const
 
 describe('la carta del piano come il desktop @ 701c6c0d2', () => {
@@ -78,7 +81,7 @@ describe('la carta del piano come il desktop @ 701c6c0d2', () => {
 
     it('PIA-05 le aree nuove vengono dal pin e hanno le stesse chiavi nelle due lingue', () => {
         for (const area of [chatPiano, appPiano, modelloPermessi, erroriPiano]) {
-            expect(area.origine.commit).toBe(PIN_TESTI)
+            expect(area.origine.commit).toBe(area === modelloPermessi ? PIN_PERMESSI : PIN_TESTI)
             expect(Object.keys(area.it).sort()).toEqual(Object.keys(area.en).sort())
         }
         for (const chiave of ['plan.activeNextTurn', 'plan.updated', 'plan.planFirst', 'plan.workNormally', 'permissions.workModeLabel', 'permissions.modeChangeHint']) {

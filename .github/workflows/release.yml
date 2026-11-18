@@ -246,6 +246,9 @@ jobs:
         run: npm run typecheck
         working-directory: ${{ steps.dove.outputs.dir }}
 
+      - name: install core packages for the card tests
+        run: npm ci --prefix harness-ui --no-audit --no-fund --ignore-scripts
+
       - name: test
         run: npx vitest run
         working-directory: ${{ steps.dove.outputs.dir }}

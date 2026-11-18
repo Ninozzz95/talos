@@ -142,6 +142,12 @@ const AREE = {
     'app-attivita': { percorso: PERCORSO_TESTI_APP, prefisso: ['activity.noOutput', 'activity.outputLabel', 'activity.diagnosticsLabel', 'activity.moreLinesOne',
         'activity.moreLinesMany', 'activity.characters', 'activity.failedOne', 'activity.failedMany', 'activity.interruptedOne', 'activity.interruptedMany',
         'activity.arg.'] },
+    // ⛔ Telefono 0.1.49 (decisione dell'owner 18/11/2026: il nucleo di oggi, quello del PC): le carte che quel nucleo manda e che il
+    // telefono non sapeva dire (P018: lo strumento di un connettore, di un plugin, di Tool Forge; le cancellazioni critiche). SOLO le
+    // chiavi nuove, dal commit del nucleo: ciò che sta già negli altri dizionari resta del suo commit (niente aggiornamento in massa).
+    'server-carte': { percorso: PERCORSO_TESTI_SERVER, prefisso: ['approval.mcpTool', 'approval.pluginTool', 'approval.forgeTool', 'approval.criticalDelete.'] },
+    'app-carte': { percorso: PERCORSO_TESTI_APP, prefisso: ['approval.wantsUseConnectorTool', 'approval.wantsUsePluginTool', 'approval.wantsUseForgeTool',
+        'approval.badgeConnector', 'approval.badgePlugin', 'approval.badgeForge'] },
 }
 
 /** Un dizionario d'area di r4 a quel commit (`export default { it: {…}, en: {…} }`), letto come modulo; con `prefisso` (uno o più), solo quelle chiavi. */

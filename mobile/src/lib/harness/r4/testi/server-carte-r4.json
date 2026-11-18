@@ -1,0 +1,53 @@
+{
+  "origine": {
+    "commit": "bb6d3799af882f9909c683af256384e884f622cd",
+    "percorso": "harness-ui/frontend/src/i18n/testi/server.js",
+    "sha256": "37247799ef9ac0be373c9e0a31a3ef6164762ce758737807f45f877d33624d74",
+    "prefisso": [
+      "approval.mcpTool",
+      "approval.pluginTool",
+      "approval.forgeTool",
+      "approval.criticalDelete."
+    ]
+  },
+  "it": {
+    "approval.mcpTool": "Vuole usare lo strumento «{attrezzo}» del connettore «{server}». Un connettore fa girare un suo programma fuori da TALOS: serve il tuo sì.",
+    "approval.pluginTool": "Vuole usare lo strumento «{attrezzo}» del plugin «{plugin}». Un plugin fa girare un suo programma su questo PC: serve il tuo sì.",
+    "approval.forgeTool": "Vuole usare «{attrezzo}», uno strumento fatto in Tool Forge. Può cambiare le tue note, attività e memoria: serve il tuo sì.",
+    "approval.mcpToolReadOnly": "Sei in Solo lettura, ma lo strumento «{attrezzo}» del connettore «{server}» può cambiare cose fuori da questo PC. Lo consenti solo questa volta?",
+    "approval.pluginToolReadOnly": "Sei in Solo lettura, ma lo strumento «{attrezzo}» del plugin «{plugin}» fa girare un programma che può cambiare cose su questo PC e fuori. Lo consenti solo questa volta?",
+    "approval.forgeToolReadOnly": "Sei in Solo lettura, ma «{attrezzo}», uno strumento fatto in Tool Forge, può cambiare le tue note, attività e memoria. Lo consenti solo questa volta?",
+    "approval.criticalDelete.root": "Questo comando cancella {percorso}, la radice di un disco. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.",
+    "approval.criticalDelete.topLevel": "Questo comando cancella {percorso}, una cartella principale del disco. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.",
+    "approval.criticalDelete.phone": "Questo comando cancella {percorso}, la memoria condivisa del telefono. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.",
+    "approval.criticalDelete.home": "Questo comando cancella {percorso}, la tua cartella utente. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.",
+    "approval.criticalDelete.project": "Questo comando cancella {percorso}, la cartella di questo progetto. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.",
+    "approval.criticalDelete.aboveProject": "Questo comando cancella {percorso}, una cartella che contiene questo progetto. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.",
+    "approval.criticalDelete.substitution": "Questo comando cancella una cartella il cui nome si calcola solo mentre gira ({percorso}), quindi non si può controllare prima. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.",
+    "approval.criticalDelete.phoneFolder": "Questo comando cancella {percorso}, una cartella principale della memoria condivisa del telefono (foto, download, documenti). Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.",
+    "approval.criticalDelete.appData": "Questo comando cancella {percorso}, dove TALOS tiene le chiavi e le conversazioni su questo telefono. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.",
+    "approval.criticalDelete.projectsFolder": "Questo comando cancella {percorso}, la cartella che contiene tutti i tuoi progetti. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.",
+    "approval.criticalDelete.tooNested": "Questo comando cancella qualcosa dentro troppe shell annidate per poterlo controllare prima. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta.",
+    "approval.criticalDelete.tooComplex": "Questo comando è troppo complesso per essere letto prima che parta, e potrebbe cancellare qualcosa. Con qualsiasi permesso, anche con Accesso pieno, serve il tuo sì ogni volta."
+  },
+  "en": {
+    "approval.mcpTool": "It wants to use the tool «{attrezzo}» of the connector «{server}». A connector runs its own program outside TALOS: it needs your yes.",
+    "approval.pluginTool": "It wants to use the tool «{attrezzo}» of the plugin «{plugin}». A plugin runs its own program on this PC: it needs your yes.",
+    "approval.forgeTool": "It wants to use «{attrezzo}», a tool made in Tool Forge. It can change your notes, tasks and memory: it needs your yes.",
+    "approval.mcpToolReadOnly": "You are in Read only, but the tool «{attrezzo}» of the connector «{server}» can change things outside this PC. Allow it only this once?",
+    "approval.pluginToolReadOnly": "You are in Read only, but the tool «{attrezzo}» of the plugin «{plugin}» runs a program that can change things on this PC and outside it. Allow it only this once?",
+    "approval.forgeToolReadOnly": "You are in Read only, but «{attrezzo}», a tool made in Tool Forge, can change your notes, tasks and memory. Allow it only this once?",
+    "approval.criticalDelete.root": "This command deletes {percorso}, the root of a disk. With any permission, Full access included, this needs your yes every time.",
+    "approval.criticalDelete.topLevel": "This command deletes {percorso}, a top-level folder of the disk. With any permission, Full access included, this needs your yes every time.",
+    "approval.criticalDelete.phone": "This command deletes {percorso}, the phone's shared storage. With any permission, Full access included, this needs your yes every time.",
+    "approval.criticalDelete.home": "This command deletes {percorso}, your user folder. With any permission, Full access included, this needs your yes every time.",
+    "approval.criticalDelete.project": "This command deletes {percorso}, the folder of this project. With any permission, Full access included, this needs your yes every time.",
+    "approval.criticalDelete.aboveProject": "This command deletes {percorso}, a folder that contains this project. With any permission, Full access included, this needs your yes every time.",
+    "approval.criticalDelete.substitution": "This command deletes a folder whose name is worked out only while it runs ({percorso}), so it cannot be checked first. With any permission, Full access included, this needs your yes every time.",
+    "approval.criticalDelete.phoneFolder": "This command deletes {percorso}, a main folder of the phone's shared storage (photos, downloads, documents). With any permission, Full access included, this needs your yes every time.",
+    "approval.criticalDelete.appData": "This command deletes {percorso}, where TALOS keeps its keys and conversations on this phone. With any permission, Full access included, this needs your yes every time.",
+    "approval.criticalDelete.projectsFolder": "This command deletes {percorso}, the folder that holds all your projects. With any permission, Full access included, this needs your yes every time.",
+    "approval.criticalDelete.tooNested": "This command deletes something inside too many nested shells to check it first. With any permission, Full access included, this needs your yes every time.",
+    "approval.criticalDelete.tooComplex": "This command is too complex to read before it runs, and it may delete something. With any permission, Full access included, this needs your yes every time."
+  }
+}

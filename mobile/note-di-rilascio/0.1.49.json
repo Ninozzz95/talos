@@ -1,0 +1,20 @@
+{
+    "en": [
+        "Security fix for Code on the device: tools of connectors, plugins and Tool Forge no longer run without asking. They pass the permission card like the other tools; it names the tool and shows what the call sends, with secrets hidden.",
+        "A critical deletion, such as rm -rf \"$EMPTY\"/ or a command too complex to read first, asks for your yes every time, Full access included, and the card no longer offers \"For this session\".",
+        "More secrets are hidden (values after names like DB_PASSPHRASE= or session-cookie:), the permission cards say \"this device\", and \"Writes to the project\" says that commands ask only for sensitive places.",
+        "Tested on a test tablet with this app: it starts, Chat and Code work, and a critical deletion is stopped with Full access. The card for connector, plugin and Tool Forge tools is tested in the code, not yet live on a device.",
+        "Known limit: a critical deletion hidden in another language's one-liner (for example perl -e or python -c calling a delete) is not recognised and runs without the critical-deletion card, also on the PC and in the CLI.",
+        "Known limit: if the keyboard is open when a permission card appears, the card can scroll out of view and show only its buttons. Close the keyboard and read the whole card before you choose.",
+        "The Chat still runs on its own engine and checks, unchanged in this version; the Assistant and folder trust of the computer app are not on the device."
+    ],
+    "it": [
+        "Correzione di sicurezza per il Codice sul dispositivo: gli strumenti di connettori, plugin e Tool Forge non partono più senza chiedere. Passano dalla carta dei permessi, che dice lo strumento e cosa manda, coi segreti nascosti.",
+        "Una cancellazione critica, come rm -rf \"$VUOTA\"/ o un comando troppo complesso da leggere prima, chiede il tuo sì ogni volta, anche con Accesso pieno, e la carta non offre più \"Per questa sessione\".",
+        "Si nascondono più segreti (i valori dopo nomi come DB_PASSPHRASE= o session-cookie:), le carte dei permessi dicono \"questo dispositivo\", e \"Scrive nel progetto\" dice che i comandi chiedono solo per i posti delicati.",
+        "Provata su un tablet di prova con questa app: si avvia, Chat e Codice vanno, una cancellazione critica è fermata con Accesso pieno. La carta di connettori, plugin e Tool Forge è provata nel codice, non ancora dal vivo su un dispositivo.",
+        "Limite noto: una cancellazione critica nascosta in una riga di un altro linguaggio (per esempio perl -e o python -c che chiamano una cancellazione) non viene riconosciuta e parte senza la sua carta, anche sul PC e nella CLI.",
+        "Limite noto: se la tastiera è aperta quando compare una carta dei permessi, la carta può scorrere fuori vista e mostrare solo i tasti. Chiudi la tastiera e leggi tutta la carta prima di scegliere.",
+        "La Chat gira ancora su un motore e controlli suoi, invariati in questa versione; l'Assistente e la fiducia delle cartelle dell'app del computer non ci sono sul dispositivo."
+    ]
+}
