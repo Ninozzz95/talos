@@ -24,6 +24,8 @@ const ARCHIVI = [['notes', '.notes-store', { titolo: 'Nota della persona', conte
   ['tasks', '.tasks-store', { titolo: 'Attività della persona' }, 'attivita'],
   ['memory', '.memory-store', { titolo: 'Ricordo della persona', contenuto: 'preferisco il tema scuro' }, 'memorie']];
 const fileJson = (cartella) => (existsSync(cartella) ? readdirSync(cartella).filter((f) => f.endsWith('.json')) : []);
+/* Startup ceiling ×4 only under CI (a shared runner took more than the 15 s the real server gets here); locally it stays as it was. */
+const MOLTIPLICATORE_CI = process.env.CI && process.env.CI !== 'false' ? 4 : 1;
 
 async function portaLibera() {
   const s = creaServerTcp();
@@ -75,7 +77,7 @@ test('ARCHIVI-PERSONALI-01 — con la cartella dati impostata, ciò che scrive l
   const base = `http://127.0.0.1:${porta}`;
   const H = { 'Content-Type': 'application/json', Origin: base };
   let pronto = false;
-  for (let i = 0; i < 150 && figlio.exitCode === null; i += 1) {
+  for (let i = 0; i < 150 * MOLTIPLICATORE_CI && figlio.exitCode === null; i += 1) {
     try { if ((await fetch(`${base}/api/v1/health`, { signal: AbortSignal.timeout(300) })).ok) { pronto = true; break; } } catch {}
     await delay(100);
   }

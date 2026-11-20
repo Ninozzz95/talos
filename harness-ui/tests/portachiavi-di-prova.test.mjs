@@ -36,6 +36,9 @@ test('KEYRING-PROVA-02 — la custodia in memoria conserva, rimuove, e ogni ista
   a.remove('talos-harness-provider-pool', 'openrouter:mai-esistita'); // l'assenza già rimossa non è un errore
 });
 
+/* Startup ceiling ×4 only under CI (a shared runner took more than the 15 s the real server gets here); locally it stays as it was. */
+const MOLTIPLICATORE_CI = process.env.CI && process.env.CI !== 'false' ? 4 : 1;
+
 async function portaLibera() {
   const s = createServer();
   await new Promise((fatto) => s.listen(0, '127.0.0.1', fatto));
@@ -67,7 +70,7 @@ test('KEYRING-PROVA-03 — un server con la custodia di prova non vede né la cu
   for (const flusso of [figlio.stdout, figlio.stderr]) flusso.on('data', (c) => { coda = (coda + c).slice(-3000); });
   const base = `http://127.0.0.1:${porta}`;
   let pronto = false;
-  for (let i = 0; i < 150 && figlio.exitCode === null; i += 1) {
+  for (let i = 0; i < 150 * MOLTIPLICATORE_CI && figlio.exitCode === null; i += 1) {
     try { if ((await fetch(`${base}/api/v1/health`, { signal: AbortSignal.timeout(300) })).ok) { pronto = true; break; } } catch {}
     await delay(100);
   }

@@ -27,6 +27,11 @@ function cartella(t) {
   t.after(() => rimuoviCartellaDiProva(c));
   return c;
 }
+/** The choice is written in a queue, not awaited by the caller: poll until it is on disk (at most 5 s) instead of a fixed 50 ms, too short on a slow CI runner. */
+async function sceltaSulDisco(file) {
+  const letta = () => { try { return JSON.parse(readFileSync(file, 'utf8')).openrouterScelto === true; } catch { return false; } };
+  for (const fine = Date.now() + 5_000; !letta() && Date.now() < fine;) await new Promise((r) => setTimeout(r, 20));
+}
 /** Una rete finta che conta: ogni chiamata è una richiesta che sarebbe uscita verso openrouter.ai. */
 function reteFinta() {
   const chiamate = [];
@@ -116,7 +121,7 @@ test('CP-04: «OpenRouter scelto» riapre lo spento della persona e resta dopo u
   await catalogo.ottieni();
   assert.equal(rete.chiamate.length, 1, 'scelto un modello di OpenRouter: 1 richiesta');
   assert.equal(imp.segnaSceltaDelModello('openai/gpt-6'), false, 'già scelto: niente da scrivere');
-  await new Promise((r) => setTimeout(r, 50));
+  await sceltaSulDisco(file);
   assert.equal(JSON.parse(readFileSync(file, 'utf8')).openrouterScelto, true, 'sul disco');
   const dopo = creaImpostazioneCatalogoPubblico({ file });
   assert.equal(dopo.consentito(), true, 'dopo un riavvio la scelta resta');
@@ -131,7 +136,7 @@ test('CP-04: «OpenRouter scelto» riapre lo spento della persona e resta dopo u
   assert.equal(bloccato.segnaSceltaDelModello('z-ai/glm-5.3-flash'), true, 'la scelta si segna');
   await due.catalogo.ottieni(); await due.catalogo.ottieni({ forzaAggiornamento: true });
   assert.deepEqual(due.rete.chiamate, [], 'variabile off, chiave e modello scelto: zero richieste');
-  await new Promise((r) => setTimeout(r, 50));
+  await sceltaSulDisco(file2);
   assert.equal(creaImpostazioneCatalogoPubblico({ file: file2 }).consentito(), true, 'tolta la variabile, la scelta della persona torna a valere');
   assert.equal(eModelloDiOpenRouter('~deepseek/deepseek-v4-flash-latest'), true, 'anche gli alias con la tilde');
 });
@@ -149,7 +154,7 @@ test('CP-05: spegnere dalle Impostazioni dimentica la scelta di OpenRouter: si t
   const imp2 = creaImpostazioneCatalogoPubblico({ file: file2, diSerie: true });
   const p = imp2.scrivi({ acceso: false });
   imp2.segnaSceltaDelModello('openai/gpt-6');
-  await p; await new Promise((r) => setTimeout(r, 50));
+  await p; await sceltaSulDisco(file2);
   assert.deepEqual(JSON.parse(readFileSync(file2, 'utf8')), { schema: SCHEMA_CATALOGO_PUBBLICO, acceso: false, openrouterScelto: true });
   assert.equal(creaImpostazioneCatalogoPubblico({ file: file2 }).consentito(), true, 'la scelta arrivata dopo vale');
 });
