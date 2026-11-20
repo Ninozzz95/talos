@@ -52,7 +52,8 @@ const NELLA_FINESTRA_APICE = scala(piuGrande(FINESTRA, 'token'), 'token', "'");
 const UN_MEGA = scala(piuGrande(1024 * 1024, 'password'));
 /** The best of three runs, in milliseconds. */
 const migliore = (fare) => Math.min(...[0, 1, 2].map(() => { const t0 = performance.now(); fare(); return performance.now() - t0; }));
-const miglioreAsync = async (fare) => { const c = []; for (let i = 0; i < 3; i++) { const t0 = performance.now(); await fare(); c.push(performance.now() - t0); } return Math.min(...c); };
+/* Extra cost over plain text, from alternated samples: each round times the built text and the plain text back to back, so a slow stretch of a shared runner lands on both; the two minimums of 9 rounds are compared (was: 3 samples of one, then 3 of the other). */
+const piuDelPiano = async (costruito, piano) => { let a = Infinity; let b = Infinity; for (let i = 0; i < 9; i++) { let t0 = performance.now(); await costruito(); a = Math.min(a, performance.now() - t0); t0 = performance.now(); await piano(); b = Math.min(b, performance.now() - t0); } return a - b; };
 /* Time ceilings ×4 only under CI (shared runners, PR #95 fell twice on time with every behaviour test green); locally they stay as they were. */
 const MOLTIPLICATORE_CI = process.env.CI && process.env.CI !== 'false' ? 4 : 1;
 const MS_PER_FINESTRA = 10 * MOLTIPLICATORE_CI;
@@ -137,7 +138,7 @@ test('G6-R1-10: importer 8, the notification log (notifiche-registro): the built
   await scrivi('warm up');
   for (const [s, tetto] of [[NELLA_FINESTRA, MS_PER_FINESTRA], [UN_MEGA, MS_PER_MEGA]]) {
     const piano = 'y'.repeat(s.length);
-    const ms = (await miglioreAsync(() => scrivi(s))) - (await miglioreAsync(() => scrivi(piano)));
+    const ms = await piuDelPiano(() => scrivi(s), () => scrivi(piano));
     stampa(`notifiche-registro, ${s.length} characters, more than plain text`, ms, tetto);
     assert.ok(ms < tetto, `${s.length} characters: ${ms.toFixed(1)} ms more than plain text`);
   }
@@ -160,7 +161,7 @@ test('G6-R1-11: importer 9, agent-service (the call written as text): the built 
   await giroDelServizio('warm up');
   for (const [s, tetto] of [[NELLA_FINESTRA, MS_PER_FINESTRA], [UN_MEGA, MS_PER_MEGA]]) {
     const piano = 'y'.repeat(s.length);
-    const ms = (await miglioreAsync(() => giroDelServizio(s))) - (await miglioreAsync(() => giroDelServizio(piano)));
+    const ms = await piuDelPiano(() => giroDelServizio(s), () => giroDelServizio(piano));
     stampa(`agent-service, ${s.length} characters, more than plain text`, ms, tetto);
     assert.ok(ms < tetto, `${s.length} characters: ${ms.toFixed(1)} ms more than plain text`);
   }

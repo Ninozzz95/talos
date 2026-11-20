@@ -124,7 +124,11 @@ test('GRAFIE-A6 — AL CONTRARIO: le sottocartelle e i posti qualunque scritti �
     assert.equal(cancellazioneCritica(comando, { cartella: PROGETTO_A_PAROLE, home: CASA_A_PAROLE, piattaforma: 'win32', ambiente: {} }), null, comando);
     for (const livello of ['accesso-pieno', 'scrittura-progetto']) {
       const { chieste } = await cancello({ tipo: 'shell', comando }, { livelloAccesso: livello, cartella: PROGETTO_A_PAROLE, permessiPerAttrezzo: { shell: 'sempre' } });
-      assert.equal(chieste.length, 0, `${livello}: nessuna carta per ${comando}`);
+      /* 0.2.4 B3 (owner 17/11/2026): in «Scrive nel progetto» `rm -rf /q/…` (il disco Q: per il `rm` di Git) cancella FUORI dal progetto e
+         chiede con la carta del fuori, mai la critica; `Remove-Item` e `rd` leggono `\q\…` del disco del progetto, e non chiedono */
+      const fuori = livello === 'scrittura-progetto' && /^rm -rf \/q\//u.test(comando)
+      assert.equal(chieste.length, fuori ? 1 : 0, `${livello}: ${fuori ? 'la carta del fuori' : 'nessuna carta'} per ${comando}`);
+      if (fuori) assert.ok(chieste[0].fuoriDalProgetto && !chieste[0].cancellazioneCritica, comando);
     }
   }
 });

@@ -32,6 +32,13 @@ Any request over the internet shows your IP address to the service that receives
   asks openrouter.ai which providers serve that model and how long a conversation they accept
   (`GET /api/v1/models/<author>/<model>/endpoints`, no key, no chat content), at most once every 10 minutes per model (once a minute while openrouter.ai cannot be
   reached); this goes to the provider you already chose and does not depend on the public model list switch.
+- **Google Gemini with your key.** Every chat request to the Gemini API carries `store: false`. In Google's words, this field
+  "configures the logging behavior for a given request" and "takes precedence over the project-level logging config"; Google stores
+  Generate Content requests by default only for paid-tier projects created on or after 26 October 2026, and keeps those logs up to
+  55 days. The field covers only that logging: what else Google keeps is set by Google's own terms. Gemini models reached through
+  OpenRouter go by OpenRouter's rules, not this field. With Gemini reached at an address of your own (a base URL other than
+  generativelanguage.googleapis.com, for example a proxy) TALOS does not add the field. If Google rejects the field, the request
+  is sent once more without it, and TALOS writes that in its log.
 - **Model lists for direct providers.** After you add the key of a direct provider, the model picker reads the public catalogue at
   `models.dev`. Your key is not sent. The copy is kept for 4 hours.
 - **Web search.** When you or the model search the web, the search text goes to the search service set in Settings → Agent tools and permissions: DuckDuckGo
@@ -99,6 +106,13 @@ Ogni richiesta su internet mostra il tuo indirizzo IP al servizio che la riceve.
   con un modello di OpenRouter, TALOS chiede anche a openrouter.ai quali fornitori servono quel modello e quanto può essere lunga la
   conversazione (`GET /api/v1/models/<autore>/<modello>/endpoints`, senza chiave né contenuto della chat), al più una volta ogni 10
   minuti per modello (una volta al minuto finché openrouter.ai non risponde); va al fornitore che hai già scelto e non dipende dall'interruttore dell'elenco pubblico.
+- **Google Gemini con la tua chiave.** Ogni richiesta della chat alla Gemini API porta `store: false`. Con le parole di Google, il campo
+  «configures the logging behavior for a given request» (regola la registrazione di quella richiesta) e vale sopra l'impostazione del
+  progetto; Google conserva di serie le richieste di Generate Content solo per i progetti a pagamento creati dal 26 ottobre 2026 in poi,
+  e tiene quei registri fino a 55 giorni. Il campo riguarda solo quella registrazione: che cos'altro tiene Google lo dicono i termini di
+  Google. I modelli Gemini raggiunti da OpenRouter seguono le regole di OpenRouter, non questo campo. Con Gemini raggiunto da un
+  indirizzo tuo (un indirizzo diverso da generativelanguage.googleapis.com, per esempio un proxy) TALOS non aggiunge il campo. Se
+  Google rifiuta il campo, la richiesta riparte una volta senza, e TALOS lo scrive nel suo registro.
 - **Elenchi dei modelli dei fornitori diretti.** Dopo che hai messo la chiave di un fornitore diretto, il selettore dei modelli legge il
   catalogo pubblico di `models.dev`. La tua chiave non parte. La copia si tiene 4 ore.
 - **Ricerca sul web.** Quando tu o il modello cercate sul web, il testo cercato va al servizio scelto in Impostazioni → Strumenti agente e permessi:

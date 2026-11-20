@@ -99,7 +99,7 @@ const NOMI_INTERI_DI_SEGRETO = 'pwd|bearer|secret[_-]?value|raw[_-]?secret|secre
    ritorni indietro non copre gli sguardi a sinistra (proposta TC39 «linear matching», letta il 14/11/2026): la linearità sta nella forma. */
 /* Nel TESTO la parola del segreto chiude un nome diviso da `_` o `-` (`DB_PASSWORD`, `x-api-key`), mai attaccata: misurato il 14/11 sullo
    stesso corpus (47.200 righe di codice e note), la forma attaccata oscurava `finestraToken = null`, `primoToken: {…}` in ogni riassunto. */
-const NOME_SEPARATO = (suffissi) => String.raw`[_-]*(?:[A-Za-z0-9]+[_-]+)*(?:${suffissi}|${NOMI_INTERI_DI_SEGRETO})|[_-]*(?:[A-Za-z0-9]+[_-]+)+key`;
+/* (0.2.4, blocco 1: la forma NOME_SEPARATO è sostituita dalle parole di `segretoNelNome`, sotto: stessa regola nel testo, parola in ogni punto) */
 /* Il valore, la forma della base (0.2.1): fra virgolette fino alla virgoletta che chiude; senza la virgoletta che chiude si ferma a uno
    spazio, a `;` o a `,`, come un valore senza virgolette (Hermes `agent/redact.py:249`, `(\S+)`).
  * ⛔ Giro 6, strada stretta (revisore 1 dopo il giro 5, ROSSO 2; owner 14/11 17:03): la coda del giro 5 `(?:"|$)` prendeva tutto fino alla
@@ -109,8 +109,7 @@ const NOME_SEPARATO = (suffissi) => String.raw`[_-]*(?:[A-Za-z0-9]+[_-]+)*(?:${s
  * (nel testo libero non `credentials`: «credentials: see the docs» è prosa; come nome di campo sì)
  * ⛔ Giro 6: tornano i due nomi attaccati della base, `accessToken` e `authToken` (anche `_authToken=` di un `.npmrc`): il giro 5 li aveva
  *   persi, misurato sul corpus del giro 6 (`{ accessToken: accesso }`, `authToken: gettone`: oscurati nella base, in chiaro nel giro 5). */
-const SUFFISSI_NEL_TESTO = `${SUFFISSI_DI_SEGRETO.replace('|credentials?', '')}|access[_-]?token|auth[_-]?token`;
-export const VALORE_DOPO_UN_NOME_DI_SEGRETO = new RegExp(String.raw`(?<![A-Za-z0-9_-])((?:${NOME_SEPARATO(SUFFISSI_NEL_TESTO)})\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s;,]+)`, 'giu');
+/* (0.2.4, blocco 1: VALORE_DOPO_UN_NOME_DI_SEGRETO è sostituita da `oscuraValoriDopoUnNome`, sotto, con le stesse tre forme del valore) */
 /* Giro 6 (revisore 1 dopo il giro 5, ROSSO 3): un valore sì/no (`true`, `false`, `yes`, `no`) sotto un nome che la BASE 0.2.1 non oscurava
    resta leggibile: `clear_cookies=true`, `include_secrets: true`, `list_api_keys: false`, i falsi positivi nati dai nomi nuovi del giro 5.
    Sotto un nome che la base oscurava già (`password: true`, `is_password: true`) resta oscurato come prima: nessun testo torna in chiaro.
@@ -120,8 +119,12 @@ const NOME_SEGRETO_DELLA_BASE = /(?:^|[_-])(?:api[_-]?key|access[_-]?token|auth[
 export function siNoLeggibile(nome, valore) {
   const siNo = typeof valore === 'boolean' || (typeof valore === 'string' && VALORE_SI_NO.test(valore));
   if (!siNo || typeof nome !== 'string') return false;
+  return !nomeDellaBase(nome);
+}
+/* un nome che la base 0.2.1 oscurava già: sotto di lui niente torna in chiaro (nemmeno un `null`, 0.2.4 blocco 1) */
+function nomeDellaBase(nome) {
   const n = nome.replace(INVISIBILI, '').trim();
-  return !NOME_SEGRETO_DELLA_BASE.test(n) && !NOME_SEGRETO_DELLA_BASE.test(n.replace(/([a-z0-9])([A-Z])/gu, '$1_$2'));
+  return NOME_SEGRETO_DELLA_BASE.test(n) || NOME_SEGRETO_DELLA_BASE.test(n.replace(/([a-z0-9])([A-Z])/gu, '$1_$2'));
 }
 /* Il campo JSON (o Python) dentro un testo con un valore SENZA virgolette, per un nome diviso da `_` o `-` (`"pin_password": 1234`).
  * ⛔ Giro 6, strada stretta (revisore 1 dopo il giro 5, ROSSO 1): il campo col valore FRA virgolette del giro 5 (CAMPO_TRA_VIRGOLETTE, la
@@ -129,15 +132,157 @@ export function siNoLeggibile(nome, valore) {
  *   \\…\"x` con le barre che calano rileggeva la riga per ogni campo (~D³): 37,6 ms su una finestra della carta, ~10 s su 246 KB letti dal
  *   telefono. Un `{"password": "…"}` dentro un testo torna come nella base: in chiaro, limite dichiarato curato nella 0.2.3. Questa forma
  *   parte solo dalla prima barra di una fila e il nome si legge una volta: lineare. */
-const CON_AUTORIZZAZIONE = `${SUFFISSI_DI_SEGRETO}|authorization`;
-const CAMPO_TRA_VIRGOLETTE_NUDO = new RegExp(String.raw`(?<!\\)(\\*["'])(${NOME_SEPARATO(CON_AUTORIZZAZIONE)})\1(\s*:\s*)(?![\\"'])([^\s,;}\]]+)`, 'giu');
 /* Il nome di un campo di argomenti è già un nome di segreto: il valore si oscura intero, qualunque forma abbia (Hermes
    `tools/mcp_tool_handlers.py:87` `_mask_secret_fields`, che usa `agent/redact.py:462-503` `is_secret_field_name`). Per un campo,
    come Hermes, anche `authorization`; il camelCase si legge come `_` (`clientSecret` = `client_Secret`). */
 const NOME_DI_CAMPO_SEGRETO = new RegExp(`(?:${SUFFISSI_DI_SEGRETO}|authorization)$|(?:^|[_-])(?:${NOMI_INTERI_DI_SEGRETO})$|[_-]key$`, 'iu');
 const INVISIBILI = /[\p{Default_Ignorable_Code_Point}\p{Bidi_Control}]/gu;
+/*
+ * ⛔ 0.2.4, blocco 1 (voci 1, 3, 4; limiti noti della 0.2.3 «A field named `tokens` is read as a counter», «names with a number after the
+ *   secret word, such as `DB_PASSWORD_2`», «the short name `pass`», e della 0.2.2 «`password_confirmation` or `apiKeyValue`»). La parola
+ *   del segreto si cerca in QUALUNQUE punto del nome, a confine di parola, come Hermes `agent/redact.py:374-396`
+ *   (`_has_word_bounded_keyword`: bordo, non-lettera o camelCase; una «s» finale assorbita). In più di Hermes, che tiene leggibili i nomi
+ *   «dato» solo per suffisso (`:748-761`, TOKEN_COUNT, PASSWORD_POLICY, SECRET_NAME): una parola-DATO in qualunque punto DOPO la parola del
+ *   segreto la rende un dato sul segreto (`password_hint`, `token_limit`, `secret_name`, `password_min_length`, `token_type`), mai il segreto.
+ *   Le parole si leggono una volta, da destra: lineare anche su un nome di 100.000 caratteri.
+ * ⛔ `tokens` al plurale è AMBIGUO (un contatore o una lista di gettoni): dopo `access_`, `refresh_`, `id_`… è un segreto; dopo `max_`,
+ *   `total_`, `prompt_`… un contatore; da solo decide il VALORE, come Hermes per i nomi ambigui (`_looks_like_opaque_credential`, `:404`):
+ *   un numero, un testo di sole cifre, una lista di numeri o un oggetto (si scende: `usage: {tokens: 12}`) restano leggibili, il resto no.
+ *   `pass` è un segreto come nome di un campo; nel TESTO, da solo, è ambiguo allo stesso modo («pass: 3, fail: 0» è il conto di una prova).
+ */
+const PAROLE_DI_SEGRETO = new Set(['password', 'passwords', 'passwd', 'passphrase', 'passphrases', 'pwd', 'pass', 'secret', 'secrets', 'token',
+  'credential', 'credentials', 'cookie', 'cookies', 'authorization', 'bearer', 'apikey', 'apikeys', 'privatekey', 'privatekeys',
+  'accesstoken', 'accesstokens', 'authtoken', 'authtokens', 'keymaterial', 'secretvalue', 'rawsecret', 'secretinput']);
+/* nel testo libero «credentials: see the docs» e «Authorization: …» sono prosa (la forma `Bearer` ha la sua regola) */
+const SOLO_NEI_CAMPI = new Set(['credential', 'credentials', 'authorization']);
+const PAROLE_DATO = new Set(['policy', 'policies', 'hint', 'hints', 'limit', 'limits', 'length', 'len', 'count', 'counts', 'name', 'names', 'type',
+  'types', 'kind', 'enabled', 'disabled', 'required', 'min', 'max', 'minimum', 'maximum', 'expiry', 'expires', 'expiration', 'expire', 'expired',
+  'ttl', 'timeout', 'url', 'uri', 'path', 'file', 'filename', 'dir', 'folder', 'field', 'fields', 'label', 'prompt', 'mode', 'format', 'version',
+  'id', 'ids', 'rule', 'rules', 'strength', 'size', 'header', 'param', 'endpoint', 'pattern', 'regex', 'rate', 'through', 'domain', 'secure',
+  'samesite', 'httponly', 'manager', 'store', 'helper', 'provider', 'source', 'env', 'var', 'scope', 'scopes', 'used', 'remaining', 'budget',
+  'usage', 'index', 'prefix', 'suffix', 'location']);
+const PRIMA_DI_GETTONI_SEGRETI = new Set(['access', 'auth', 'refresh', 'id', 'session', 'bearer', 'api', 'oauth', 'csrf', 'xsrf', 'personal', 'device']);
+const PRIMA_DI_UN_CONTATORE = new Set(['max', 'min', 'total', 'prompt', 'completion', 'input', 'output', 'cached', 'cache', 'reasoning', 'num',
+  'number', 'used', 'remaining', 'context', 'response', 'request', 'thinking', 'budget', 'estimated', 'batch', 'chunk', 'per', 'count']);
+const SEPARA_PAROLE = /[^a-z0-9]+|(?<=[a-z])(?=[0-9])|(?<=[0-9])(?=[a-z])/u;
+/* Giro 2 (revisore, giallo 3, rumore; decisione 375): cinque nomi che tengono un COMANDO o un PERCORSO, non il segreto (`token_command:
+   "gh auth token"`, `secret_mount: "/run/secrets"`, `cookie_jar: "/tmp/cookies.txt"`): leggibili, come lo erano nella 0.2.3. Solo queste
+   coppie esatte, non le parole da sole: `secret_json` o `token_mount` restano segreti. Il valore passa comunque dalle forme dei segreti. */
+const COPPIE_DATO = new Set(['token command', 'password command', 'secret mount', 'credentials json', 'cookie jar']);
+/* true: un segreto; 'contatore': decide il valore; false: un nome onesto. `campo`: il nome di un campo (camelCase diviso, anche le parole
+   che nel testo libero sono prosa); altrimenti un nome scritto in un testo (solo `_` e `-` dividono: `finestraToken = null` resta). */
+function segretoNelNome(nome, campo) {
+  const pulito = nome.replace(INVISIBILI, '').trim();
+  const parole = (campo ? pulito.replace(/([a-z0-9])([A-Z])/gu, '$1_$2') : pulito).toLowerCase().split(SEPARA_PAROLE).filter(Boolean);
+  let datoDopo = false;
+  let ambiguo = false;
+  for (let i = parole.length - 1; i >= 0; i -= 1) {
+    const p = parole[i];
+    if (PAROLE_DATO.has(p)) { datoDopo = true; continue; }
+    if (datoDopo) continue;
+    if (i + 1 < parole.length && COPPIE_DATO.has(`${p} ${parole[i + 1]}`)) { datoDopo = true; continue; }
+    const prima = i > 0 ? parole[i - 1] : null;
+    if (p === 'tokens') {
+      if (prima !== null && PRIMA_DI_GETTONI_SEGRETI.has(prima)) return true;
+      if (prima === null || !PRIMA_DI_UN_CONTATORE.has(prima)) ambiguo = true;
+      continue;
+    }
+    if ((p === 'key' || p === 'keys') && (prima !== null || parole[i + 1] === 'material')) return true;
+    if (!PAROLE_DI_SEGRETO.has(p) || (!campo && SOLO_NEI_CAMPI.has(p))) continue;
+    if (p === 'pass' && !campo && parole.length === 1) { ambiguo = true; continue; }
+    return true;
+  }
+  return ambiguo ? 'contatore' : false;
+}
+/* un valore che un contatore può avere: un numero, un testo di sole cifre, una lista di numeri, un oggetto (lo si scende) */
+const CIFRE = /^\s*-?\d[\d_.,]*\s*$/u;
+function valoreDaContatore(valore) {
+  if (typeof valore === 'number' || typeof valore === 'bigint') return true;
+  if (typeof valore === 'string') return CIFRE.test(valore);
+  if (Array.isArray(valore)) return valore.every((x) => typeof x === 'number' || (typeof x === 'string' && CIFRE.test(x)));
+  return valore !== null && typeof valore === 'object';
+}
 export function nomeDiCampoSegreto(chiave) {
-  return typeof chiave === 'string' && NOME_DI_CAMPO_SEGRETO.test(chiave.replace(INVISIBILI, '').trim().replace(/([a-z0-9])([A-Z])/gu, '$1_$2'));
+  if (typeof chiave !== 'string') return false;
+  return NOME_DI_CAMPO_SEGRETO.test(chiave.replace(INVISIBILI, '').trim().replace(/([a-z0-9])([A-Z])/gu, '$1_$2')) || segretoNelNome(chiave, true) === true;
+}
+/** Il valore di questo campo si mostra «[redacted]»? Il nome, e per un nome ambiguo (`tokens`) il valore; un vuoto e un sì/no onesto mai. */
+export function campoSegreto(nome, valore) {
+  if (typeof nome !== 'string' || valore === null || valore === undefined || valore === '' || siNoLeggibile(nome, valore)) return false;
+  if (nomeDiCampoSegreto(nome)) return true;
+  return segretoNelNome(nome, true) === 'contatore' && !valoreDaContatore(valore);
+}
+/*
+ * Il valore dopo un nome dentro un TESTO (voci 3 e 4): UN lettore lineare al posto delle due forme di prima (CAMPO_TRA_VIRGOLETTE_NUDO e
+ *   VALORE_DOPO_UN_NOME_DI_SEGRETO). Due candidati: un nome fra virgolette, anche protette (`"password": …`, `\"api_key\": \"…\"`, la stessa
+ *   fila di barre per nome e valore come Hermes `agent/redact.py:456`), letto come nome di CAMPO; o un nome nudo seguito da `:` o `=`, letto
+ *   come nome nel testo. Il candidato parte solo dove la fila di barre o il nome comincia (sguardo a sinistra), il nome ha un tetto di 256 e
+ *   la decisione la prende `segretoNelNome`: ogni carattere si legge un numero limitato di volte. Un nome onesto non consuma il suo valore:
+ *   la lettura riprende dopo i due punti, così `foo: password=x` oscura `x`.
+ * Il valore: fra virgolette fino a quella che chiude (con la stessa fila di barre); un oggetto o una lista fino alla parentesi che li chiude
+ *   (`secrets: { db: … }`, entro 16.384 caratteri; le coppie si trovano UNA volta per testo, con una pila); altrimenti, come nella base, fino
+ *   a uno spazio, `;` o `,` (un valore che non chiude nasconde la sua parola e il resto della riga resta: G6-R2).
+ */
+const CANDIDATO_DI_NOME = /(?<!\\)(\\*)(["'])([A-Za-z0-9_-]{1,256})\1\2(\s*:\s*)|(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{1,256})(?![A-Za-z0-9_-])(\s*[:=]\s*)/gu;
+const TETTO_DEL_VALORE = 16_384;
+/* un valore che non c'è (`null` di JSON, `None` di Python, `undefined`) non è un segreto: resta, e il JSON resta JSON (G7-M-04) */
+const VALORE_NULLO = /^(?:null|none|undefined|nil)[)\]},]*$/iu;
+const PAROLA_DEL_VALORE = /[^\s;,]+/uy;
+const PAROLA_DEL_VALORE_JSON = /[^\s,;}\]]+/uy;
+function coppieDiParentesi(testo) {
+  const chiude = new Int32Array(testo.length).fill(-1);
+  const pile = { '{': [], '[': [] };
+  for (let i = 0; i < testo.length; i += 1) {
+    const c = testo[i];
+    if (c === '{' || c === '[') pile[c].push(i);
+    else if (c === '}' && pile['{'].length) chiude[pile['{'].pop()] = i;
+    else if (c === ']' && pile['['].length) chiude[pile['['].pop()] = i;
+  }
+  return chiude;
+}
+function oscuraValoriDopoUnNome(testo) {
+  let fuori = '';
+  let da = 0;
+  let coppie = null;
+  CANDIDATO_DI_NOME.lastIndex = 0;
+  for (let m = CANDIDATO_DI_NOME.exec(testo); m !== null; m = CANDIDATO_DI_NOME.exec(testo)) {
+    const virgolettato = m[3] !== undefined;
+    const nome = virgolettato ? m[3] : m[5];
+    const inizio = m.index + m[0].length;
+    const esito = segretoNelNome(nome, virgolettato);
+    CANDIDATO_DI_NOME.lastIndex = inizio;
+    if (esito === false || inizio >= testo.length) continue;
+    const chiusura = virgolettato ? `${m[1]}${m[2]}` : null;
+    let fine = -1;
+    let dentro = null; // un valore fra virgolette protette tiene le sue virgolette
+    const c = testo[inizio];
+    if (chiusura !== null && testo.startsWith(chiusura, inizio)) {
+      /* la virgoletta che chiude si cerca SOLO entro il tetto (una finestra, non il resto del testo): sulla scala di barre che calano del
+         revisore del giro 6 la ricerca senza tetto rileggeva il testo per ogni campo (1 MB: 189 ms) */
+      const da0 = inizio + chiusura.length;
+      const j = testo.substring(da0, da0 + TETTO_DEL_VALORE).indexOf(chiusura);
+      if (j !== -1) { fine = da0 + j + chiusura.length; dentro = chiusura; }
+    } else if (chiusura === null && (c === '"' || c === "'")) {
+      const j = testo.indexOf(c, inizio + 1);
+      if (j !== -1) fine = j + 1;
+    } else if (c === '{' || c === '[') {
+      coppie ??= coppieDiParentesi(testo);
+      const j = coppie[inizio];
+      if (j !== -1 && j - inizio <= TETTO_DEL_VALORE) fine = j + 1;
+    }
+    if (fine === -1) { // un valore senza virgolette, o che non chiude: la sua parola, come nella base
+      const parola = virgolettato ? PAROLA_DEL_VALORE_JSON : PAROLA_DEL_VALORE;
+      parola.lastIndex = inizio;
+      if (!parola.test(testo)) continue;
+      fine = parola.lastIndex;
+    }
+    const valore = dentro !== null ? testo.slice(inizio + dentro.length, fine - dentro.length) : testo.slice(inizio, fine);
+    if (valore === '' || valore === SEGRETO_OSCURATO || (VALORE_NULLO.test(valore) && !nomeDellaBase(nome)) || siNoLeggibile(nome, valore) || (esito === 'contatore' && CIFRE.test(valore.replace(/^["']|["']$/gu, '')))) continue;
+    fuori += testo.slice(da, inizio) + (dentro !== null ? `${dentro}${SEGRETO_OSCURATO}${dentro}` : SEGRETO_OSCURATO);
+    da = fine;
+    CANDIDATO_DI_NOME.lastIndex = fine;
+  }
+  return da === 0 ? testo : fuori + testo.slice(da);
 }
 /* Cura gemella della 0.2.2, giro 7 (revisore della pagina, punto 1; revisore 3, ROSSO 1): le maschere della carta di un connettore
    (`argomentiPerLaCarta`, talosHarness.mjs) su un valore intero, senza tagli, per chi MOSTRA degli argomenti fuori da quella carta: la riga
@@ -164,8 +309,8 @@ const PROFONDITA_DA_MOSTRARE = 64;
 export const TETTO_NODI_DA_MOSTRARE = 10_000;
 export const TETTO_CARATTERI_DA_MOSTRARE = 1_000_000;
 const TAGLIATO = '…';
-export function oscuraPerStruttura(valore, { nodi = TETTO_NODI_DA_MOSTRARE, caratteri = TETTO_CARATTERI_DA_MOSTRARE } = {}) {
-  return scendi(valore, 0, { nodi, caratteri, finito: false });
+export function oscuraPerStruttura(valore, { nodi = TETTO_NODI_DA_MOSTRARE, caratteri = TETTO_CARATTERI_DA_MOSTRARE, ricorda = false } = {}) {
+  return scendi(valore, 0, { nodi, caratteri, finito: false, oscura: ricorda ? oscuraFormeDiSegretoRicordando : oscuraFormeDiSegreto });
 }
 /* spende dal bilancio, o lo chiude: dopo il primo no, tutto è «…» */
 function spendi(bilancio, caratteri) {
@@ -187,7 +332,7 @@ function nomeLibero(fuori, prossimo, nome) {
 }
 function scendi(valore, profondita, bilancio) {
   if (!spendi(bilancio, typeof valore === 'string' ? valore.length : 0)) return TAGLIATO;
-  if (typeof valore === 'string') return oscuraFormeDiSegreto(valore);
+  if (typeof valore === 'string') return bilancio.oscura(valore);
   if (valore === null || typeof valore !== 'object') return valore;
   if (profondita >= PROFONDITA_DA_MOSTRARE) return TAGLIATO;
   if (Array.isArray(valore)) {
@@ -202,8 +347,8 @@ function scendi(valore, profondita, bilancio) {
   const prossimo = new Map();
   for (const [k, x] of Object.entries(valore)) {
     if (!spendi(bilancio, k.length)) { metti(fuori, nomeLibero(fuori, prossimo, TAGLIATO), TAGLIATO); break; }
-    const nome = nomeLibero(fuori, prossimo, oscuraFormeDiSegreto(k));
-    const segreto = nomeDiCampoSegreto(k) && x !== null && x !== undefined && x !== '' && !siNoLeggibile(k, x);
+    const nome = nomeLibero(fuori, prossimo, bilancio.oscura(k));
+    const segreto = campoSegreto(k, x); // 0.2.4 blocco 1: anche `tokens` con un valore che non è un contatore
     metti(fuori, nome, segreto ? SEGRETO_OSCURATO : scendi(x, profondita + 1, bilancio));
   }
   return fuori;
@@ -211,13 +356,39 @@ function scendi(valore, profondita, bilancio) {
 /* Giro 8: le forme con la «g» costruite UNA volta (prima ogni testo ne costruiva 17: su 10.000 nomi corti era metà del costo). `replace`
    con una espressione globale riparte sempre da 0 (lastIndex azzerato dalla specifica), quindi condividerle non cambia niente. */
 const FORME_GLOBALI = Object.freeze(FORME_DI_SEGRETO.map((forma) => new RegExp(forma.source, `${forma.flags}g`)));
+/*
+ * 0.2.4, blocco 1, voce 5 (L 1: «la maschera si rifà sull'oggetto intero a ogni pezzo», +0,72 ms per fotogramma a 10 KB): INCREMENTALE.
+ *   Mentre gli argomenti arrivano, ogni testo già CHIUSO è identico da un fotogramma all'altro e ripassava dalle 17 forme ogni volta. Il
+ *   risultato (la funzione è pura) si ricorda per i testi di almeno 64 caratteri: al fotogramma dopo costa una ricerca nella mappa e ripassa
+ *   dalle forme solo il pezzo nuovo. Tetti: 512 testi e 4 milioni di caratteri in tutto, poi si dimentica il più vecchio. Solo per la riga
+ *   che arriva (`oscuraPerStruttura(…, { ricorda: true })`, `leggiArgomentiDellaRiga`): `oscuraFormeDiSegreto` resta senza memoria, così le
+ *   misure di tempo dei giri 5-8 misurano sempre il lavoro vero.
+ */
+const MEMORIA_MINIMO = 64;
+const MEMORIA_VOCI = 512;
+const MEMORIA_CARATTERI = 4_000_000;
+const memoria = new Map();
+let caratteriInMemoria = 0;
+export function oscuraFormeDiSegretoRicordando(testo) {
+  if (typeof testo !== 'string' || testo.length < MEMORIA_MINIMO || testo.length > MEMORIA_CARATTERI / 4) return oscuraFormeDiSegreto(testo);
+  const ricordato = memoria.get(testo);
+  if (ricordato !== undefined) return ricordato;
+  const fuori = oscuraFormeDiSegreto(testo);
+  memoria.set(testo, fuori);
+  caratteriInMemoria += testo.length + fuori.length;
+  while (memoria.size > MEMORIA_VOCI || caratteriInMemoria > MEMORIA_CARATTERI) {
+    const [vecchio, suo] = memoria.entries().next().value;
+    memoria.delete(vecchio);
+    caratteriInMemoria -= vecchio.length + suo.length;
+  }
+  return fuori;
+}
 export function oscuraFormeDiSegreto(testo) {
   if (typeof testo !== 'string' || testo === '') return testo;
   let fuori = testo;
   for (const blocco of BLOCCHI_PEM) fuori = fuori.replace(blocco, SEGRETO_OSCURATO);
   for (const forma of FORME_GLOBALI) fuori = fuori.replace(forma, SEGRETO_OSCURATO);
-  fuori = fuori.replace(CAMPO_TRA_VIRGOLETTE_NUDO, (tutto, q, nome, sep, valore) => (siNoLeggibile(nome, valore) ? tutto : `${q}${nome}${q}${sep}${SEGRETO_OSCURATO}`));
-  fuori = fuori.replace(VALORE_DOPO_UN_NOME_DI_SEGRETO, (_tutto, nome, valore) => (valore === SEGRETO_OSCURATO || siNoLeggibile(nome.replace(/\s*[:=]\s*$/u, ''), valore) ? `${nome}${valore}` : `${nome}${SEGRETO_OSCURATO}`));
+  fuori = oscuraValoriDopoUnNome(fuori);
   return fuori.replace(/(\b[a-z][a-z0-9+.-]{1,20}:\/\/)[^\s/@:"']{1,256}:[^\s/@"']{1,256}@/giu, `$1${SEGRETO_OSCURATO}@`);
 }
 
@@ -230,4 +401,34 @@ export function formaDiSegretoNelTesto(testo) {
     }
   }
   return null;
+}
+
+/*
+ * 0.2.4, blocco 1, voce 5 (L 1, la «prima voce» della 0.2.3 rimasta in parte): mentre gli argomenti ARRIVANO a pezzi, un segreto spezzato
+ *   fra due pezzi si vedeva per un attimo — `sk-proj-…` sotto la lunghezza minima, `Bearer …` prima dei 20 caratteri, il valore di
+ *   `password=` a metà — perché la forma riconosce solo il token intero. Come le guardie di flusso (si trattiene SOLO la coda che può ancora
+ *   diventare un segreto, e l'uscita non dipende da dove cade il taglio) e come Hermes che oscura solo righe intere
+ *   (`gateway/session_managed_worker_log.py:70-80`): l'ultima parola ancora aperta diventa «…» se comincia come una forma di chiave, se
+ *   viene dopo `Bearer` o dopo un nome di segreto. Il resto passa dalle stesse maschere di sempre. La coda si legge da destra, una volta,
+ *   entro 20.000 caratteri (più del JWT più lungo che le forme conoscono): lineare.
+ */
+/* gli inizi delle forme di FORME_DI_SEGRETO: una coda che comincia con uno di loro, o che ne è ancora l'inizio (da 2 caratteri), si trattiene */
+const INIZI_DI_FORMA = Object.freeze(['sk-', 'sk_', 'rk_', 'ghp_', 'gho_', 'ghu_', 'ghs_', 'ghr_', 'github_pat_', 'glpat-', 'gloas-', 'gldt-', 'glrtr-',
+  'glrt-', 'glcbt-', 'glptt-', 'glft-', 'glimt-', 'glagent-', 'glwt-', 'glsoat-', 'glffct-', 'xoxa-', 'xoxb-', 'xoxp-', 'xoxr-', 'xoxs-', 'xapp-',
+  'AIza', 'AKIA', 'ASIA', 'hf_', 'npm_', 'gsk_', 'xai-', 'eyJ', '-----BEGIN']);
+const apreUnaForma = (coda) => INIZI_DI_FORMA.some((inizio) => coda.startsWith(inizio) || (coda.length >= 2 && inizio.startsWith(coda)));
+const CARATTERE_DI_TOKEN = /[A-Za-z0-9_.+/=~-]/u;
+const CODA_MASSIMA = 20_000;
+const NOME_PRIMA_DELLA_CODA = /(?<![A-Za-z0-9_-])([A-Za-z0-9_-]{1,256})["']?\s*[:=]\s*["']?$/u;
+export function oscuraTestoInArrivo(testo) {
+  if (typeof testo !== 'string' || testo === '') return testo;
+  let i = testo.length;
+  const limite = Math.max(0, testo.length - CODA_MASSIMA);
+  while (i > limite && CARATTERE_DI_TOKEN.test(testo[i - 1])) i -= 1;
+  const coda = testo.slice(i);
+  if (coda === '') return oscuraFormeDiSegreto(testo);
+  const prima = testo.slice(Math.max(0, i - 300), i);
+  const dopoUnNome = NOME_PRIMA_DELLA_CODA.exec(prima);
+  const trattiene = apreUnaForma(coda) || /bearer[ \t]+$/iu.test(prima) || (dopoUnNome !== null && segretoNelNome(dopoUnNome[1], false) !== false);
+  return trattiene ? `${oscuraFormeDiSegreto(testo.slice(0, i))}${TAGLIATO}` : oscuraFormeDiSegreto(testo);
 }

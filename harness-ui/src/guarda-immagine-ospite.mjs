@@ -60,15 +60,22 @@ export async function ridimensionatoreDisponibile() {
  */
 export function creaGuardaImmagine({ chatImageStore, ridimensionaFn = null, statFn = stat, readFileFn = readFile }) {
   if (!chatImageStore || typeof chatImageStore.upload !== 'function') throw new TypeError('creaGuardaImmagine needs the chat image store.');
-  return async ({ percorso, percorsoMostrato, segnale } = {}) => {
+  /* 0.2.4, blocco 6: `byte` = un'immagine già scaricata dal nucleo (`view_image { url }`, filtro di `naviga`): niente disco, il resto uguale */
+  return async ({ percorso, percorsoMostrato, segnale, byte: giaScaricati } = {}) => {
     const detto = String(percorsoMostrato ?? percorso ?? '');
-    let info;
-    try { info = await statFn(percorso); }
-    catch { return { ok: false, esito: `"${detto}" does not exist. Check the path with "elenca".` }; }
-    if (!info.isFile()) return { ok: false, esito: `"${detto}" is not a file.` };
-    if (info.size > BYTE_MASSIMI_DA_LEGGERE) return { ok: false, esito: `"${detto}" is too large to view (${mb(info.size)}).` };
-    segnale?.throwIfAborted?.();
-    let byte = new Uint8Array(await readFileFn(percorso));
+    let byte;
+    if (giaScaricati instanceof Uint8Array) {
+      if (giaScaricati.length > BYTE_MASSIMI_DA_LEGGERE) return { ok: false, esito: `"${detto}" is too large to view (${mb(giaScaricati.length)}).` };
+      byte = giaScaricati;
+    } else {
+      let info;
+      try { info = await statFn(percorso); }
+      catch { return { ok: false, esito: `"${detto}" does not exist. Check the path with "elenca".` }; }
+      if (!info.isFile()) return { ok: false, esito: `"${detto}" is not a file.` };
+      if (info.size > BYTE_MASSIMI_DA_LEGGERE) return { ok: false, esito: `"${detto}" is too large to view (${mb(info.size)}).` };
+      segnale?.throwIfAborted?.();
+      byte = new Uint8Array(await readFileFn(percorso));
+    }
     const intestazione = leggiIntestazioneImmagine(byte);
     const decisione = decidiImmagine({ byte, intestazione, sappiamoRidimensionare: typeof ridimensionaFn === 'function' });
     if (decisione.esito === 'rifiuta') {

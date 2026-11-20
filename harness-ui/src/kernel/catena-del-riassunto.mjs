@@ -26,8 +26,10 @@ const CODICI_SENZA_CHIAVE = new Set(['PROVIDER_KEY_MISSING', 'CHATGPT_NON_COLLEG
 const CODICI_DI_RETE = new Set(['ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'ECONNREFUSED', 'ECONNABORTED', 'ETIMEDOUT', 'EHOSTUNREACH',
   'ENETUNREACH', 'ENETDOWN', 'EPIPE', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_HEADERS_TIMEOUT', 'UND_ERR_BODY_TIMEOUT', 'UND_ERR_SOCKET'])
 
+/* S6 della 0.2.4 (18/11/2026): l'SDK (`APICallError` di `@ai-sdk/provider`) mette lo stato in `statusCode`, non in `status`. Sul riassunto
+   (`callContextModel`) l'errore arriva grezzo: un 404 di un modello sparito restava illeggibile e la riserva della persona non partiva. */
 const statoHttp = (errore) => {
-  for (const v of [errore?.httpStatus, errore?.stato, errore?.status]) if (Number.isSafeInteger(v) && v >= 100 && v <= 599) return v
+  for (const v of [errore?.httpStatus, errore?.stato, errore?.status, errore?.statusCode]) if (Number.isSafeInteger(v) && v >= 100 && v <= 599) return v
   return null
 }
 /* undici (fetch di Node) lancia `TypeError: fetch failed` e mette il codice in `cause.code`, a volte più giù (`cause.cause`) o dentro un

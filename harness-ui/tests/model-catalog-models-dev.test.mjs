@@ -37,7 +37,8 @@ test('PF-MD-01 — ogni diretto remoto: rete giù senza copia restituisce riserv
     const r = await rotta.ottieni(id);
     assert.equal(r.fonte, 'riserva');
     /* 09/10/2026: Anthropic's list gained claude-haiku-5-5 (out 07/10), so its fallback list is dated that day */
-    assert.equal(r.motivo, `catalog unreachable: fallback list of ${id === 'anthropic' ? '2026-10-09' : id === 'gemini' ? '2026-10-18' : '2026-09-12'}`); // gemini: 3.5 Flash-Lite, 18/10/2026
+    /* 18/11/2026 (S6 of 0.2.4): OpenAI's list gained gpt-6-luna in place of gpt-5-mini, which shuts down on 11/12 */
+    assert.equal(r.motivo, `catalog unreachable: fallback list of ${id === 'anthropic' ? '2026-10-09' : id === 'gemini' ? '2026-10-18' : id === 'openai' ? '2026-11-18' : '2026-09-12'}`); // gemini: 3.5 Flash-Lite, 18/10/2026
     assert.ok(r.modelli.length > 0);
     assert.deepEqual(r.modelliDiRiserva, r.modelli);
     assert.equal(r.daCache, false);

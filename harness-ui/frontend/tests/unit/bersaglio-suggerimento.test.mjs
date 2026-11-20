@@ -19,5 +19,6 @@ test('SUGGERIMENTO-02 un percorso del progetto e un testo restano come sono', ()
 
 test('SUGGERIMENTO-03 il compositore lo usa davvero', () => {
   const app = readFileSync(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
-  assert.match(app, /const bersaglio = bersaglioDelSuggerimento\(bersaglioAttrezzoNudo\(ultimo\.nome, ultimo\.argomenti\)\);/u);
+  // 0.2.4 blocco 1, voce 2: il suggerimento legge la copia MASCHERATA degli argomenti, mai quelli veri
+  assert.match(app, /const argomenti = argomentiDaMostrare\(ultimo\.argomenti\);\s*const bersaglio = bersaglioDelSuggerimento\(bersaglioAttrezzoNudo\(ultimo\.nome, argomenti\)\);/u);
 });

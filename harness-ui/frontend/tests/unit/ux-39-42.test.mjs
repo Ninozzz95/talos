@@ -67,7 +67,7 @@ test('UX-40 decision 192: after a search the suggestion names the searched text 
   assert.equal(TESTI.it['app.suggestion.digDeeper'], undefined, '«Approfondisci» un pezzo di parola non si propone più');
   /* il filo nella chat del PC: il testo della persona è la domanda del giro, e un bersaglio vuoto non fa nessun suggerimento */
   const app = readFileSync(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
-  assert.match(app, /case 'cerca': \{[^\n]*\n\s*const cercato = bersaglioDellaRicerca\(ultimo\.argomenti, state\.realSession\.ultimaDomanda\);\s*return cercato \? tr\('app\.suggestion\.searchFound', \{ bersaglio: cercato \}\) : null;/u);
+  assert.match(app, /case 'cerca': \{[^\n]*\n\s*const cercato = bersaglioDellaRicerca\(argomenti, state\.realSession\.ultimaDomanda\);\s*return cercato \? tr\('app\.suggestion\.searchFound', \{ bersaglio: cercato \}\) : null;/u);
 });
 
 test('UX-42 the attachment tray writes the total only when there is more than one attachment', () => {

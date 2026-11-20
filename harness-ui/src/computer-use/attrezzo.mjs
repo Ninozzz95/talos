@@ -23,6 +23,8 @@ import { POLITICHE, eTastiDiConferma, aCapoInMezzo, aCapoAmmesso } from './prote
 import { NON_DISPONIBILE, CURSORE_NON_RIMESSO } from './aiutante-mcp.mjs';
 import { leggiIntestazioneImmagine } from '../kernel/immagine-da-guardare.mjs';
 import { avvolgiDati } from '../kernel/confine-dati.mjs';
+// 0.2.4, chiavi in ricerca e Chrome: lo STESSO aiuto per valore di `naviga` e delle foto (mai un secondo confronto)
+import { indirizzoConUnaChiave, testoSenzaChiavi, LUNGHEZZA_MINIMA_CHIAVE, SEGNO_CHIAVE_NASCOSTA } from '../kernel/talosHarness.mjs';
 
 export const NOME_COMPUTER_USE = 'computer_use';
 export const LATO_MASSIMO_SCHERMATA = 1280;
@@ -153,16 +155,27 @@ const dominioDa = (valore) => {
   try { return new URL(/^[a-z][a-z0-9+.-]*:\/\//iu.test(v) ? v : `https://${v}`).hostname.toLowerCase() || null; } catch { return null; }
 };
 
-const tagliaValore = (v, max) => (v.length > max && max > 500 ? `${v.slice(0, max)}…` : v.slice(0, max));
-function elementoDelCiclo(e) {
+/* 0.2.4, giro di cura 1 di «chiavi di ricerca e Chrome» (revisore REVC-11, giudice v2262): prima si TAGLIAVA e poi si nascondeva, e una
+   chiave a cavallo del taglio arrivava al modello coi primi caratteri (e la foto partiva). Ora ogni testo si nasconde GREZZO (`pulisci`)
+   e si taglia dopo; un taglio che cadrebbe dentro il segno lo tiene intero (al più `SEGNO_CHIAVE_NASCOSTA.length - 1` caratteri in più),
+   così il modello legge «[one of your keys, hidden]» e non un suo pezzo. Come Hermes, «Redact before truncating so a cut cannot split a
+   secret past its pattern» (`tools/mcp_tool_handlers.py:115-116`). Senza segno il taglio è quello di prima, carattere per carattere. */
+const tagliaNascosto = (t, max) => {
+  if (t.length <= max) return t;
+  const i = t.lastIndexOf(SEGNO_CHIAVE_NASCOSTA, max - 1);
+  return i >= 0 && i + SEGNO_CHIAVE_NASCOSTA.length > max ? t.slice(0, i + SEGNO_CHIAVE_NASCOSTA.length) : t.slice(0, max);
+};
+const nessunaChiave = (t) => t;
+const tagliaValore = (v, max) => (v.length > max && max > 500 ? `${tagliaNascosto(v, max)}…` : tagliaNascosto(v, max));
+function elementoDelCiclo(e, pulisci = nessunaChiave) {
   const ruolo = RUOLI[String(e.role ?? '').toLowerCase()] ?? 'altro';
   const riservato = e.riservato === true;
   return {
-    ref: `e${e.element_index}`, ruolo, nome: String(e.label ?? '').slice(0, 200),
+    ref: `e${e.element_index}`, ruolo, nome: tagliaNascosto(pulisci(String(e.label ?? '')), 200),
     // cura del rosso (R4): i destinatari («A», «Cc», «Ccn»…) letti per intero, e un valore tagliato finisce con «…», che la carta dice.
     // Secondo giro (revisore C, 5f): prima il taglio era a 4000 caratteri e la carta contava ciò che restava (300 indirizzi = «179»);
     // ora il tetto è quello del contratto delle domande (200 000, ~5000 indirizzi), e il modello ne vede comunque solo i primi 200
-    valore: riservato ? null : (typeof e.value === 'string' ? tagliaValore(e.value, eCampoDestinatario(e.label) ? LIMITI_DOMANDA_UTENTE.dettagliMax : 500) : null),
+    valore: riservato ? null : (typeof e.value === 'string' ? tagliaValore(pulisci(e.value), eCampoDestinatario(e.label) ? LIMITI_DOMANDA_UTENTE.dettagliMax : 500) : null),
     ...(riservato ? { riservato: true, oscurato: true, sensibile: true, segnali: { isPassword: true } } : {}),
     rettangolo: frame(e.frame), pixel: frame(e.screenshot_frame), token: typeof e.element_token === 'string' ? e.element_token : null,
     stato: { attivo: e.enabled !== false, selezionato: e.selected === true },
@@ -275,7 +288,9 @@ const formaDeiPulsanti = (righe) => {
  * `Window` ha un indice, altrimenti `w0`, `w1`… senza element_token), `finestra` sugli elementi dentro (il dialogo più interno) e i
  * testi del dialogo come righe `testo` (`x1`, `x2`…, `soloTesto`). Nessun dialogo ⇒ gli elementi come prima.
  */
-export function segnaDialoghi({ elementi, grezzi, markdown, titolo, finestraIntera }) {
+export function segnaDialoghi({ elementi, grezzi, markdown, titolo, finestraIntera, pulisci = nessunaChiave }) {
+  // 0.2.4, cura 1: la forma del dialogo si legge sul testo com'è; i nomi che vanno al modello si nascondono interi, prima del taglio
+  const finestraDelDialogo = (ref, nome, finestra) => finestraDelDialogoPulita(ref, pulisci(String(nome ?? '')), finestra);
   const righe = righeDellAlbero(markdown, grezzi);
   if (!righe) {
     if (!finestraIntera) return elementi;
@@ -330,14 +345,14 @@ export function segnaDialoghi({ elementi, grezzi, markdown, titolo, finestraInte
     if (c >= TESTI_PER_DIALOGO) return;
     testiPer.set(intorno.ref, c + 1);
     t += 1;
-    fuori.push({ ref: `x${t}`, ruolo: 'testo', nome: r.nome.slice(0, 300), valore: null, rettangolo: null, pixel: null, token: null,
+    fuori.push({ ref: `x${t}`, ruolo: 'testo', nome: tagliaNascosto(pulisci(r.nome), 300), valore: null, rettangolo: null, pixel: null, token: null,
       stato: { attivo: true, selezionato: false }, inLista: false, soloTesto: true, finestra: intorno.ref });
   });
   for (const e of elementi) if (!usati.has(e.ref)) fuori.push(e); // non succede con un albero che torna: per prudenza
   return fuori;
 }
-function finestraDelDialogo(ref, nome, finestra) {
-  return { ref, ruolo: 'finestra', nome: String(nome ?? '').slice(0, 200), valore: null, rettangolo: null, pixel: null, token: null,
+function finestraDelDialogoPulita(ref, nome, finestra) {
+  return { ref, ruolo: 'finestra', nome: tagliaNascosto(String(nome ?? ''), 200), valore: null, rettangolo: null, pixel: null, token: null,
     stato: { attivo: true, selezionato: false }, inLista: false, modale: true, ...(finestra ? { finestra } : {}) };
 }
 
@@ -402,6 +417,11 @@ const INVII_VERI = /\r\n|\r|\n/gu;
 const aCapoDaScartare = (testo, el, s) => !aCapoAmmesso(el, s) && (aCapoInMezzo(testo) || (testo.match(INVII_VERI) ?? []).length > 1);
 const AVVISO_MODIFICATORE_DI_CONFERMA = '"keys": with enter, space or alt+s every other modifier is lost on the way (only ctrl+enter stays a send): to confirm, press the button.';
 const AVVISO_A_CAPO = '"type": a line break inside the text can arrive as a real Enter and send it: write the text on one line.';
+/* 0.2.4, chiavi in ricerca e Chrome (owner 19/11 09:33, giudice v2239): un indirizzo da aprire o un testo da scrivere in un browser col VALORE
+   esatto di una chiave della persona si scarta PRIMA di ogni carta e di ogni azione, come `naviga` nel nucleo; il modello lo legge al passo dopo */
+const AVVISO_CHIAVE_NELL_INDIRIZZO = '"open": this address contains one of the person\'s keys. TALOS does not open such an address, in any permission mode: it would carry the key out. Nothing was opened. Tell the person.';
+const AVVISO_CHIAVE_NEL_TESTO = '"type": this text contains one of the person\'s keys. TALOS does not type it into a browser, in any permission mode: the page would receive the key. Nothing was typed. Tell the person.';
+const RIGA_CHIAVE_SULLO_SCHERMO = 'The screen shows one of the person\'s keys: TALOS hid it in the text above and did not send the screenshot of this step.';
 /* ⛔ Quarto giro (revisione Q2, difetto B1, 04/11/2026): Invio o spazio con un ref che non è un campo diventano `premi` (un Invoke UIA) solo
    dove il controllo vero fa lo stesso. cua-driver `click` con un element_token prova Invoke, Toggle, SelectionItem, ExpandCollapse e poi
    CLICCA al centro dell'elemento (`tools/click.rs:883-981`): su una finestra, un riquadro, un testo sarebbe un clic mai valutato su ciò
@@ -596,7 +616,8 @@ export function creaOspiteComputerUse({ aiutante, registroLuoghi = null, ridimen
     return ridimensionatore;
   };
 
-  return async function ospiteComputerUse(nome, argomenti, { fase = 'esegui', toolCallId = null, segnale = null, livelloAccesso, sessione = {} } = {}) {
+  return async function ospiteComputerUse(nome, argomenti, { fase = 'esegui', toolCallId = null, segnale = null, livelloAccesso, sessione = {},
+    valoriDelleChiaviFn = null } = {}) {
     if (nome !== NOME_COMPUTER_USE) return RIFIUTO(`${nome} is not the computer_use tool.`);
     if (fase !== 'esegui') return { ok: true, carta: false }; // la carta è quella del compito, dentro il ciclo
     const task = argomenti && typeof argomenti === 'object' && typeof argomenti.task === 'string' ? argomenti.task.trim() : '';
@@ -620,13 +641,30 @@ export function creaOspiteComputerUse({ aiutante, registroLuoghi = null, ridimen
       const segna = (attivo) => { if (idSessione && sessioneAttiva && typeof sessioneAttiva.segna === 'function') { try { sessioneAttiva.segna(idSessione, attivo); } catch { /* il segnale non ferma il compito */ } } };
       segna(true);
       try {
-        return await eseguiUnCompito({ task, testoDellaPersona, accessoPieno, livelloAccesso, toolCallId, segnale, sessione });
+        return await eseguiUnCompito({ task, testoDellaPersona, accessoPieno, livelloAccesso, toolCallId, segnale, sessione, valoriDelleChiaviFn });
       } finally { segna(false); rilascia(); }
     } finally { SCHERMI_OCCUPATI.delete(aiutante); }
   };
 
-  async function eseguiUnCompito({ task, testoDellaPersona, accessoPieno, livelloAccesso, toolCallId, segnale, sessione }) {
+  async function eseguiUnCompito({ task, testoDellaPersona, accessoPieno, livelloAccesso, toolCallId, segnale, sessione, valoriDelleChiaviFn }) {
     const lingua = etichetteDi(sessione.lingua);
+    /* 0.2.4, chiavi in ricerca e Chrome: le chiavi della persona per valore, dal nucleo (`valoriDelleChiaviFn`, le stesse di `naviga`), rilette
+       a ogni sguardo. Senza la funzione (CLI, telefono, prove vecchie) nessuna: il compito è quello di prima. Una lettura che lancia tiene
+       quelle lette prima. Solo valori di almeno `LUNGHEZZA_MINIMA_CHIAVE` caratteri. */
+    let chiaviNote = new Set();
+    const rileggiChiavi = async () => {
+      if (typeof valoriDelleChiaviFn !== 'function') return;
+      let v = null;
+      try { v = await valoriDelleChiaviFn(); } catch { return; }
+      if (v instanceof Set || Array.isArray(v)) chiaviNote = new Set([...v].filter((x) => typeof x === 'string' && x.length >= LUNGHEZZA_MINIMA_CHIAVE));
+    };
+    await rileggiChiavi();
+    const conUnaChiave = (testo) => {
+      if (chiaviNote.size === 0 || typeof testo !== 'string') return false;
+      const forme = [testo];
+      try { forme.push(new URL(testo).href); } catch { /* non è un indirizzo intero: vale il testo com'è */ }
+      return indirizzoConUnaChiave(forme, chiaviNote);
+    };
     /* Giudice v1794 (13/11): l'aiutante riaperto per rimettere il suo cursore non è ripartito (CURSORE_NON_RIMESSO). Per il ciclo è un aiutante «spento»
        (`ciclo.mjs` resta com'è: la CLI ne porta una copia identica byte per byte); il perché vero, `cursore`, lo aggiunge qui l'ospite all'esito per lo
        schermo della persona e alla frase per il modello, mai «accendilo in Impostazioni». */
@@ -784,6 +822,7 @@ export function creaOspiteComputerUse({ aiutante, registroLuoghi = null, ridimen
     const guarda = async (s) => {
       const f = fermato();
       if (f) return { frenoArmato, fermato: f, elementi: [] };
+      await rileggiChiavi();
       if (await manoAdesso()) return { frenoArmato, fermato: fermato(), elementi: [] };
       if (vistePrima === null) {
         const tutte = await chiama('list_windows', { on_screen_only: false }, s);
@@ -831,22 +870,42 @@ export function creaOspiteComputerUse({ aiutante, registroLuoghi = null, ridimen
       const d = stato.dati ?? {};
       const grezzi = segnaRiservati(d.elements); // ⛔ PRIMA di tutto il resto
       const bordi = d.window_bounds ?? scelta.bounds ?? null;
-      const elementi = segnaDialoghi({ elementi: grezzi.filter((e) => e && Number.isInteger(e.element_index)).map(elementoDelCiclo), grezzi,
-        markdown: d.tree_markdown, titolo: String(d.window_title ?? scelta.title ?? ''), finestraIntera: formaDiDialogo(scelta, bordi, finestre) });
+      /* 0.2.4, chiavi in ricerca e Chrome: ciò che la finestra mostra (nomi e valori degli elementi, titolo, sito) passa dallo STESSO aiuto
+         per valore: una chiave della persona diventa il segno (`testoSenzaChiavi`) prima di arrivare al modello, e la foto di quel passo non
+         parte (i pixel la mostrerebbero). Le protezioni del ciclo leggono gli stessi elementi già puliti. */
+      let chiaveSulloSchermo = false;
+      const pulito = (t) => {
+        if (typeof t !== 'string' || chiaviNote.size === 0) return t;
+        const p = testoSenzaChiavi(t, chiaviNote);
+        if (p !== t) chiaveSulloSchermo = true;
+        return p;
+      };
+      /* Giro di cura 1 (REVC-11): si nasconde sul testo GREZZO, prima di ogni taglio (nome, valore, titolo, righe dell'albero). La passata
+         che prima girava DOPO il taglio non serve più: ogni nome e valore che arriva qui è già passato da `pulito` nella sua forma intera
+         (un taglio toglie solo una coda, e il segno non contiene una chiave), e da sola raddoppiava il costo del passo (misurato con 30
+         chiavi: senza di lei il passo costa come nella base). Una chiave in un punto qualunque dell'albero (anche una riga che il modello
+         non legge) toglie la foto. */
+      pulito(d.tree_markdown);
+      const titoloLetto = pulito(String(d.window_title ?? scelta.title ?? ''));
+      const elementi = segnaDialoghi({ elementi: grezzi.filter((e) => e && Number.isInteger(e.element_index)).map((e) => elementoDelCiclo(e, pulito)), grezzi,
+        markdown: d.tree_markdown, titolo: titoloLetto, finestraIntera: formaDiDialogo(scelta, bordi, finestre), pulisci: pulito });
       const app = nomeApp(d.app_name ?? scelta.app_name) || null;
       const browser = BROWSER.has(app);
       const barra = browser ? barraDelBrowser(grezzi) : null; // cura 7: solo la barra vera, dagli elementi dell'aiutante
-      const dominio = barra && typeof barra.value === 'string' ? dominioDa(barra.value) : null;
+      const dominioLetto = barra && typeof barra.value === 'string' ? dominioDa(barra.value) : null;
+      const dominio = dominioLetto && pulito(dominioLetto) !== dominioLetto ? null : dominioLetto; // un sito con una chiave nel nome non è un luogo
       finestra = { pid: scelta.pid, window_id: scelta.window_id, larghezzaCattura: Number(d.screenshot_width) || null, bounds: bordi };
-      await preparaImmagine(stato.immagine);
+      if (chiaveSulloSchermo) immagine = null;
+      else await preparaImmagine(stato.immagine);
       const zona = finestraDa(bordi); // il riquadro della finestra in pixel fisici globali: va negli eventi annuncio e guarda (decisione 252)
       // giro 2 (Performance R1, parte b): l'impronta della cattura così come arriva; con l'albero vuoto è il solo segno di uno schermo cambiato
       const impronta = typeof stato.immagine?.base64 === 'string' ? createHash('sha256').update(stato.immagine.base64).digest('hex').slice(0, 32) : null;
-      return { frenoArmato, fermato: fermato(), app, titolo: String(d.window_title ?? scelta.title ?? ''), ...(browser ? { browser: true } : {}),
-        ...(dominio ? { dominio, origine: dominio } : {}), ...(zona ? { finestra: zona } : {}), ...(impronta ? { impronta } : {}), elementi };
+      return { frenoArmato, fermato: fermato(), app, titolo: titoloLetto, ...(browser ? { browser: true } : {}),
+        ...(dominio ? { dominio, origine: dominio } : {}), ...(zona ? { finestra: zona } : {}), ...(impronta ? { impronta } : {}),
+        ...(chiaveSulloSchermo ? { chiaveNascosta: true } : {}), elementi };
     };
 
-    const rigaElemento = (e) => (e.soloTesto ? `  text ${JSON.stringify(e.nome)}` : `${e.ref} ${PER_IL_MODELLO[e.ruolo] ?? 'other'} ${JSON.stringify(e.nome)}${e.modale ? ' [dialog]' : ''}${e.riservato ? ' [hidden: the person fills it]' : (e.valore ? ` = ${JSON.stringify(e.valore.slice(0, 200))}` : '')}${e.coperto ? ' [covered by TALOS]' : ''}${e.stato?.attivo === false ? ' [disabled]' : ''}`);
+    const rigaElemento = (e) => (e.soloTesto ? `  text ${JSON.stringify(e.nome)}` : `${e.ref} ${PER_IL_MODELLO[e.ruolo] ?? 'other'} ${JSON.stringify(e.nome)}${e.modale ? ' [dialog]' : ''}${e.riservato ? ' [hidden: the person fills it]' : (e.valore ? ` = ${JSON.stringify(tagliaNascosto(e.valore, 200))}` : '')}${e.coperto ? ' [covered by TALOS]' : ''}${e.stato?.attivo === false ? ' [disabled]' : ''}`);
     const chiedi = async ({ osservazione: s, storia }, segnaleChiedi) => {
       // finestra bloccata: chi copre la finestra del compito non arriva al modello, nemmeno col titolo
       const schermo = s.cambioFinestra ? FINESTRA_DEL_COMPITO_NON_LETTA
@@ -859,6 +918,7 @@ export function creaOspiteComputerUse({ aiutante, registroLuoghi = null, ridimen
         avvolgiDati(schermo, { fonte: 'computer_use screen' }).testo,
         storia.length ? `Last steps:\n${storia.slice(-8).join('\n')}` : 'No step done yet.',
         ...(avvisi.length ? [`Skipped from your last reply: ${avvisi.splice(0).join(' ')}`] : []),
+        ...(s.chiaveNascosta ? [RIGA_CHIAVE_SULLO_SCHERMO] : []),
         immagine ? `The screenshot is ${immagine.larghezza}x${immagine.altezza} pixels.` : 'No screenshot this step: use the element refs.',
         'Reply {"actions":[...]} (at most 10) or {"done":{"success":true|false,"impossible":false,"note":"what you saw, short"}}.',
         'Actions: {"type":"press","ref":"e3"} · {"type":"type","ref":"e5","text":"..."} · {"type":"keys","ref":"e5","keys":"enter"} · {"type":"scroll","direction":"down","ref":"e2"} ·',
@@ -960,6 +1020,7 @@ export function creaOspiteComputerUse({ aiutante, registroLuoghi = null, ridimen
           if (typeof a.text !== 'string') return null;
           // quinto giro, Q3-B; C2 della revisione R (il corpo di una mail tiene gli a capo); Q4-B (più Invii veri)
           if (aCapoDaScartare(a.text, ref ? (s?.elementi ?? []).find((e) => e.ref === ref) ?? null : null, s)) { avvisi.push(AVVISO_A_CAPO); return null; }
+          if (s?.browser === true && conUnaChiave(a.text)) { avvisi.push(AVVISO_CHIAVE_NEL_TESTO); return null; } // 0.2.4: nemmeno nella barra
           return { tipo: 'scrivi', ref, testo: a.text };
         }
         case 'keys': {
@@ -981,8 +1042,11 @@ export function creaOspiteComputerUse({ aiutante, registroLuoghi = null, ridimen
           const b = finestra.bounds; const k = finestra.larghezzaCattura && b?.width ? b.width / finestra.larghezzaCattura : 1;
           return { tipo: 'clic', x: Math.round((b?.x ?? 0) + pixel.x * k), y: Math.round((b?.y ?? 0) + pixel.y * k), pixel };
         }
-        case 'open': return typeof a.app === 'string' || typeof a.url === 'string'
-          ? { tipo: 'apri', ...(typeof a.app === 'string' ? { app: a.app } : {}), ...(typeof a.url === 'string' ? { indirizzo: a.url } : {}) } : null;
+        case 'open':
+          // 0.2.4: anche nel nome dell'app (un indirizzo scritto lì lo apre il browser di serie)
+          if ((typeof a.url === 'string' && conUnaChiave(a.url)) || (typeof a.app === 'string' && conUnaChiave(a.app))) { avvisi.push(AVVISO_CHIAVE_NELL_INDIRIZZO); return null; }
+          return typeof a.app === 'string' || typeof a.url === 'string'
+            ? { tipo: 'apri', ...(typeof a.app === 'string' ? { app: a.app } : {}), ...(typeof a.url === 'string' ? { indirizzo: a.url } : {}) } : null;
         case 'wait': return { tipo: 'aspetta', secondi: Math.min(Math.max(Number(a.seconds) || 1, 0), 5) };
         case 'select': return ref ? { tipo: 'scegli', ref, valore: String(a.value ?? '') } : null;
         case 'ask_person': return { tipo: 'chiedi_persona', motivo: typeof a.reason === 'string' ? a.reason.slice(0, 200) : '' }; // revisione O, C: nessun codice predefinito

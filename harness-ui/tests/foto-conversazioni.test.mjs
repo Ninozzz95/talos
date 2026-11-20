@@ -212,20 +212,43 @@ test('FC-10 a message that went past the cap does not make the driver believe th
   /* Rule 6 (03/11): the cap was 150 ms with a 160 ms save, so C had 10 ms of room and went red under load in the merge queue.
      Now C waits ~40 ms of a 400 ms cap and B's cap (at ~450 ms) falls in the middle of C's restore (60 -> 860 ms): the order of the
      timers decides, not the load (Node runs expired timers by deadline). Same story as before, room on both sides. */
+  /* List 0.2.3 item 97 (0.2.4, block 0): still on the real clock, it went red in round 2 of PR 96 ('attesa-scaduta' for C): under load
+     the save of A (60 ms of the fake engine plus the real disk writes of the driver) went past C's 400 ms cap, so C never reached the
+     slot. Now the TEST moves the clock (node:test mock timers, setTimeout only): the same dates as before (A saves for 60 ms, C asks at
+     20 and B at 50, the caps at 420 and 450, C's restore from 60 to 860), and the test waits for the events of the fake engine (the save
+     and the restore really started), never for milliseconds. The disk does its part with no clock against it. */
   const f = await creaFotoConversazioni({ cartella, motore, identita: async () => ID, avvisa: () => {}, tettoAttesaMs: 400 });
   await f.primaDelGiro('C'); completamento('C'); await f.dopoIlGiro('C', { token: 900 });
   await f.primaDelGiro('A'); completamento('A');
-  st.ritardo.save = 60; st.ritardo.restore = 800;
-  const salvaA = f.dopoIlGiro('A', { token: 900 });
-  await new Promise((r) => setTimeout(r, 20));
-  const primaC = f.primaDelGiro('C');
-  await new Promise((r) => setTimeout(r, 30));
-  const primaB = f.primaDelGiro('B');
-  assert.equal((await primaB).esito, 'attesa-scaduta');
-  completamento('B');
-  assert.equal((await primaC).esito, 'rimessa');
-  completamento('C');
-  await salvaA;
+  const inAttesa = [];
+  const slotVero = motore.slot;
+  motore.slot = (azione, file) => { const p = slotVero.call(motore, azione, file); for (const w of inAttesa.splice(0)) w(azione); return p; };
+  const parte = (azione) => new Promise((r) => { const w = (a) => { if (a === azione) r(); else inAttesa.push(w); }; inAttesa.push(w); });
+  /* with the clock mocked a broken driver would hang instead of failing (even --test-timeout waits on the mocked clock): a real watchdog */
+  const veroSetTimeout = globalThis.setTimeout;
+  const entro = (p, cosa) => Promise.race([p, new Promise((_ok, no) => { veroSetTimeout(() => no(new Error(`${cosa}: not there after 10 real seconds`)), 10_000).unref(); })]);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let salvaA;
+  try {
+    st.ritardo.save = 60; st.ritardo.restore = 800;
+    const salvataggio = parte('save');
+    salvaA = f.dopoIlGiro('A', { token: 900 });
+    await entro(salvataggio, 'the save of A'); // the engine is saving A: its 60 ms start now
+    t.mock.timers.tick(20);
+    const primaC = f.primaDelGiro('C'); // cap at 420
+    t.mock.timers.tick(30);
+    const primaB = f.primaDelGiro('B'); // cap at 450
+    const rimessa = parte('restore');
+    t.mock.timers.tick(10); // 60: the save of A ends; the real disk writes follow, with no clock against them
+    await entro(rimessa, 'the restore of C'); // C is on the slot: its restore runs until 860
+    t.mock.timers.tick(390); // 450: B's cap falls in the middle of C's restore
+    assert.equal((await entro(primaB, 'the answer to B')).esito, 'attesa-scaduta');
+    completamento('B');
+    t.mock.timers.tick(410); // 860: C's restore ends
+    assert.equal((await entro(primaC, 'the answer to C')).esito, 'rimessa');
+    completamento('C');
+    await entro(salvaA, 'the save of A');
+  } finally { t.mock.timers.reset(); motore.slot = slotVero; }
   st.ritardo.save = 0;
   assert.equal(st.scheda, 'C');
   await f.dopoIlGiro('B', { token: 1200 });

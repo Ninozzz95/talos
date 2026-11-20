@@ -16,7 +16,7 @@ import { lstatSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve as risolvi, sep } from 'node:path';
 import {
   cercaNelProgetto, discoNode, elencaDaCartella, esitoDellaLettura, eseguiRicercaWeb, formattaRisultatiRicerca, leggiPaginaSicura, leggiTestoLimitato,
-  parametriDiElenca, percorsoDiFile, uscitaUtile,
+  parametriDiElenca, percorsoDiFile, uscitaUtile, indirizzoConUnaChiave,
 } from './kernel/talosHarness.mjs';
 import { eUnFileSegreto, motivoDaChiedere } from './path-policy.mjs';
 import { LIVELLO_DELL_ASSISTENTE, paginaDelTrascritto, trascrittoDaEventi, TETTI_ASSISTENTE } from './kernel/assistente-lato.mjs';
@@ -197,6 +197,16 @@ export function portePerLAssistente(o) {
   /* `ricercaPronta`: c'è un fornitore della ricerca web; senza, la ricerca non si offre e si rifiuta prima della carta (giudice v1596 punto 4) */
   let ricercaPronta = false;
   try { ricercaPronta = Boolean(typeof o.ricercaWebFn === 'function' ? o.ricercaWebFn()?.ricercaWeb : null); } catch { ricercaPronta = false; }
+  /* 0.2.4, chiavi in ricerca e Chrome: `valoriDelleChiaviFn` (le chiavi della persona per valore, dal registro) ⇒ il ciclo rifiuta prima
+     della carta un indirizzo o una ricerca che ne contiene una, con lo stesso aiuto di `naviga` (`indirizzoConUnaChiave`) */
+  const chiaveNelTesto = typeof o.valoriDelleChiaviFn === 'function' ? async (testo) => {
+    const valori = await o.valoriDelleChiaviFn();
+    if (!(valori instanceof Set)) return false;
+    const forme = [String(testo ?? '')];
+    try { forme.push(new URL(forme[0]).href); } catch { /* una ricerca, o un indirizzo illeggibile: vale il testo com'è */ }
+    return indirizzoConUnaChiave(forme, valori);
+  } : null;
   return { file, nuovi, apriPagina, cercaSulWeb, permessiPerAttrezzo: o.permessiPerAttrezzo ?? {}, letti: Array.isArray(o.letti) ? o.letti : [],
-    haLetto: o.haLetto === true, ricercaPronta, ...(typeof o.chiediCarta === 'function' ? { chiediCarta: o.chiediCarta } : {}) };
+    haLetto: o.haLetto === true, ricercaPronta, ...(typeof o.chiediCarta === 'function' ? { chiediCarta: o.chiediCarta } : {}),
+    ...(chiaveNelTesto ? { chiaveNelTesto } : {}) };
 }

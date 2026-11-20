@@ -2,11 +2,14 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import {
+  RENAME_ATTEMPTS,
+  RENAME_MAX_WAIT_MS,
   putResultBytes,
   readResultBytes,
   verifyResultBytes,
@@ -98,4 +101,111 @@ test('RESULT-CAS-REPARSE — a symlink or junction cannot redirect CAS publicati
     (error) => error?.code === 'WORKFLOW_STORE_LOCATION_INVALID',
   );
   assert.equal(existsSync(join(outside, 'sha256')), false);
+});
+
+// 19/11/2026 (0.2.4 block 4, item 5): on the no-link path (exFAT, FAT32, ReFS, Android) a crash between the exclusive create of
+// the final name and its write leaves a truncated value with no index; every later put of the same answer failed CORRUPT.
+test('a truncated or damaged final is replaced by the same bytes on put and verified again; a directory there stays CORRUPT', async (t) => {
+  const root = rootFor(t);
+  const bytes = Buffer.from('the answer that was paid for', 'utf8');
+  const hex = digest(bytes);
+  const final = join(root, 'cas', 'sha256', hex.slice(0, 2), hex);
+  await mkdir(join(final, '..'), { recursive: true });
+  for (const damage of ['', 'the answer th', 'other bytes entirely']) {
+    writeFileSync(final, damage);
+    const stored = await putResultBytes({ workflowDataRoot: root, bytes, maxBytes: 1024 });
+    assert.equal(stored.sha256, `sha256:${hex}`, JSON.stringify(damage));
+    assert.deepEqual(readFileSync(final), bytes, JSON.stringify(damage));
+    assert.deepEqual(await readResultBytes({ workflowDataRoot: root, sha256: stored.sha256, maxBytes: 1024 }), bytes);
+  }
+  const other = Buffer.from('a directory holds this name', 'utf8');
+  const otherFinal = join(root, 'cas', 'sha256', digest(other).slice(0, 2), digest(other));
+  await mkdir(join(otherFinal, 'inside'), { recursive: true });
+  await assert.rejects(() => putResultBytes({ workflowDataRoot: root, bytes: other, maxBytes: 1024 }), (error) => error?.code === 'WORKFLOW_RESULT_CORRUPT');
+  assert.ok(existsSync(join(otherFinal, 'inside')), 'a directory is never removed');
+});
+
+// 0.2.4 block 4, round 2, item A: the put says when it repaired a damaged final, so the caller can count it and say it.
+test('putResultBytes answers repaired: true only when it replaced a damaged final', async (t) => {
+  const root = rootFor(t);
+  const bytes = Buffer.from('counted repair', 'utf8');
+  assert.equal((await putResultBytes({ workflowDataRoot: root, bytes, maxBytes: 1024 })).repaired, false);
+  assert.equal((await putResultBytes({ workflowDataRoot: root, bytes, maxBytes: 1024 })).repaired, false, 'an intact final is not a repair');
+  const hex = digest(bytes);
+  writeFileSync(join(root, 'cas', 'sha256', hex.slice(0, 2), hex), 'counted');
+  assert.equal((await putResultBytes({ workflowDataRoot: root, bytes, maxBytes: 1024 })).repaired, true);
+});
+
+// 0.2.4 block 4, round 2, item C: the verification after the replace is what keeps a bad replace from being trusted. A rename
+// that leaves bytes failing their hash (a faulty file system, a disk that lies) makes the put answer CORRUPT, never success.
+test('a replace that leaves bytes failing their hash is never trusted: the put answers CORRUPT and does not say repaired', async (t) => {
+  const root = rootFor(t);
+  const bytes = Buffer.from('the answer that must not be faked', 'utf8');
+  const hex = digest(bytes);
+  const final = join(root, 'cas', 'sha256', hex.slice(0, 2), hex);
+  await mkdir(join(final, '..'), { recursive: true });
+  writeFileSync(final, 'the answer th');
+  const fsp = createRequire(import.meta.url)('node:fs/promises');
+  const realRename = fsp.rename;
+  fsp.rename = async (from, to) => { await realRename(from, to); writeFileSync(to, 'damaged right after the replace'); };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(() => putResultBytes({ workflowDataRoot: root, bytes, maxBytes: 1024 }), (error) => error?.code === 'WORKFLOW_RESULT_CORRUPT');
+  } finally {
+    fsp.rename = realRename;
+    syncBuiltinESMExports();
+  }
+  await assert.rejects(() => readResultBytes({ workflowDataRoot: root, sha256: `sha256:${hex}`, maxBytes: 1024 }), (error) => error?.code === 'WORKFLOW_RESULT_CORRUPT');
+});
+
+// 0.2.4 block 4, round 2, item B: a replace refused while another repairer holds the name (Windows EPERM) is tried again at most
+// RENAME_ATTEMPTS times with a growing wait; the put then verifies what the winner put there, and it is not counted as a repair.
+test('a replace refused under contention is tried RENAME_ATTEMPTS times with growing waits, then the winner bytes are verified', async (t) => {
+  const root = rootFor(t);
+  const bytes = Buffer.from('the answer another repairer wins with', 'utf8');
+  const hex = digest(bytes);
+  const final = join(root, 'cas', 'sha256', hex.slice(0, 2), hex);
+  await mkdir(join(final, '..'), { recursive: true });
+  writeFileSync(final, 'the answer an');
+  const fsp = createRequire(import.meta.url)('node:fs/promises');
+  const realRename = fsp.rename;
+  let attempts = 0;
+  fsp.rename = async () => {
+    attempts += 1;
+    writeFileSync(final, bytes);
+    throw Object.assign(new Error('EPERM: operation not permitted, rename'), { code: 'EPERM' });
+  };
+  syncBuiltinESMExports();
+  const started = performance.now();
+  let stored;
+  try { stored = await putResultBytes({ workflowDataRoot: root, bytes, maxBytes: 1024 }); } finally {
+    fsp.rename = realRename;
+    syncBuiltinESMExports();
+  }
+  const elapsed = performance.now() - started;
+  assert.equal(attempts, RENAME_ATTEMPTS);
+  assert.equal(stored.repaired, false, 'the winner repaired it, not this put');
+  assert.ok(elapsed >= 240, `the waits grow: 10 + 20 + 40 + 80 + 100 ms at least, measured ${elapsed} ms`);
+  assert.ok(RENAME_MAX_WAIT_MS <= 400, 'the written cap stays short');
+});
+
+// Round 2, item B: a directory at the final name is never a contended file: no replace is tried, the put answers CORRUPT at once.
+test('a directory at the final name is not retried: no replace at all, CORRUPT at once', async (t) => {
+  const root = rootFor(t);
+  const bytes = Buffer.from('a directory sits at this name', 'utf8');
+  const final = join(root, 'cas', 'sha256', digest(bytes).slice(0, 2), digest(bytes));
+  await mkdir(join(final, 'inside'), { recursive: true });
+  const fsp = createRequire(import.meta.url)('node:fs/promises');
+  const realRename = fsp.rename;
+  let attempts = 0;
+  fsp.rename = async (...args) => { attempts += 1; return realRename(...args); };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(() => putResultBytes({ workflowDataRoot: root, bytes, maxBytes: 1024 }), (error) => error?.code === 'WORKFLOW_RESULT_CORRUPT');
+  } finally {
+    fsp.rename = realRename;
+    syncBuiltinESMExports();
+  }
+  assert.equal(attempts, 0);
+  assert.ok(existsSync(join(final, 'inside')));
 });

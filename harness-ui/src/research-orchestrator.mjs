@@ -145,6 +145,9 @@ import {
   talosResearchReplay, talosResearchSpent, talosResearchWorkLeft,
 } from './research/run.mjs';
 import { avanzamentoRicerca } from './research/avanzamento.mjs'; // 24/09/2026, decisione owner: barra + fase e conteggi
+import { indirizzoConUnaChiave } from './kernel/talosHarness.mjs'; // 0.2.4: lo stesso aiuto per valore di `naviga`
+/** 0.2.4: il motivo di una fonte non riaperta perché il suo indirizzo contiene una chiave della persona (mai quale). */
+export const MOTIVO_CHIAVE_NELLA_FONTE = 'this address contains one of your keys: TALOS did not open it';
 import {
   talosResearchJudgePrompt, talosResearchPickJudge, talosResearchVerifiedStanding,
   talosResearchVerify,
@@ -1110,6 +1113,13 @@ export function creaResearchOrchestrator({
    *   di una che ammette di non poter guardare.
    */
   leggiPaginaFn = null,
+  /*
+   * 0.2.4, chiavi in ricerca e Chrome (owner 19/11 09:33, giudice v2239): `valoriDelleChiaviFn() => Set<string>`, le chiavi della
+   * persona per valore (`valoriDelleChiaviConosciute` del nucleo). La ri-verifica apre gli indirizzi delle fonti scritte nel rapporto:
+   * uno che contiene una chiave non si apre (`indirizzoConUnaChiave`, lo stesso aiuto di `naviga`) e la fonte resta «irraggiungibile»
+   * col suo motivo. Assente ⇒ come prima. Una lettura che lancia ⇒ nessun valore, come prima.
+   */
+  valoriDelleChiaviFn = null,
   /*
    * ⭐⭐⭐⭐ BC-44 (12/09/2026) — le due porte della ripresa automatica, iniettabili come tutto
    * il resto e per una ragione precisa, non per abitudine:
@@ -2324,6 +2334,17 @@ export function creaResearchOrchestrator({
    *
    * @returns {Promise<{trovata:false}|{trovata:true, ok:false, motivo:string}|{trovata:true, ok:true, riverifica:object}>}
    */
+  /* 0.2.4: sì o no, mai quale chiave; i valori si leggono a ogni fonte (la funzione legge dalla memoria, mai dal portachiavi) */
+  async function indirizzoDaNonAprire(indirizzo) {
+    if (typeof valoriDelleChiaviFn !== 'function') return false;
+    let valori = null;
+    try { valori = await valoriDelleChiaviFn(); } catch { return false; }
+    if (!(valori instanceof Set)) return false;
+    const forme = [String(indirizzo ?? '')];
+    try { forme.push(new URL(forme[0]).href); } catch { /* illeggibile: la lettura sicura lo rifiuta dopo */ }
+    return indirizzoConUnaChiave(forme, valori);
+  }
+
   async function riverifica({ cartella, id }) {
     const record = await leggiRicercaFn({ cartella, id });
     if (!record) return { trovata: false };
@@ -2369,6 +2390,7 @@ export function creaResearchOrchestrator({
        *   è intatta e ha solo rifiutato questa richiesta.
        */
       read: async (indirizzo) => {
+        if (await indirizzoDaNonAprire(indirizzo)) throw new Error(MOTIVO_CHIAVE_NELLA_FONTE); // prima della rete
         const pagina = await leggiPaginaFn(indirizzo);
         const corpo = typeof pagina?.corpo === 'string' ? pagina.corpo : '';
         if (!pagina || Number(pagina.stato) >= 400 || corpo.trim().length === 0) return null;

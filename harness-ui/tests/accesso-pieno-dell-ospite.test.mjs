@@ -48,6 +48,24 @@ test('OSPITE-PIENO-02 — AL CONTRARIO: the host says no (or there is no host fu
   }
 });
 
+/* P011, 13/11/2026 (portata dal ramo della 0.1.48, dove non era mai stata corsa): l'ospite che dice «no» non chiude ciò che il livello
+   apre. Nessuna prova lo teneva: un ritocco per cui «se c'è un ospite decide solo lui» passava verde. Il livello si legge in
+   `inAccessoPieno` di agent-service.mjs (prima il livello vivo, poi l'ospite). Sul telefono l'ospite non c'è; nella CLI sì. */
+test('OSPITE-PIENO-05 — AL CONTRARIO: the host says no, but the level is Full access (at the start, or live) ⇒ the level is enough and the secret document is written; with a live lower level the same "no" refuses', async (t) => {
+  for (const [nome, opzioni] of [
+    ['Full access at the start, no live reader', { livelloAccesso: 'accesso-pieno' }],
+    ['Full access live over a lower start', { livelloAccesso: 'su-richiesta', permessiCorrentiFn: () => ({ livelloAccesso: 'accesso-pieno' }) }],
+  ]) {
+    const { esito, file } = await accoda(t, { ...opzioni, accessoPienoDellOspite: () => false });
+    assert.equal(esito?.ok, true, `${nome}: ${JSON.stringify(esito)?.slice(0, 200)}`);
+    assert.match(file, /"b":2/u, nome);
+  }
+  // the reverse: the turn started in Full access, the live level is now lower and the host says no ⇒ refused, the secret unchanged
+  const { esito, file } = await accoda(t, { livelloAccesso: 'accesso-pieno', permessiCorrentiFn: () => ({ livelloAccesso: 'scrittura-progetto' }), accessoPienoDellOspite: () => false });
+  assert.equal(esito?.ok, false, JSON.stringify(esito)?.slice(0, 200));
+  assert.equal(file, '{"a":1}\n');
+});
+
 /* Il registro: la funzione dell'ospite riceve { sessionId, radiceId }, una figlia la radice della madre, e una funzione che lancia vale «no». */
 function giriFinti() {
   const giri = [];

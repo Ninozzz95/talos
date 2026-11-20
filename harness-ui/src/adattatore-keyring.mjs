@@ -19,9 +19,10 @@
  *   dev.
  */
 
-import { statSync } from 'node:fs';
-import { isAbsolute } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { existsSync, realpathSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { isAbsolute, posix, win32 } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { segnoDiProva } from './guardia-portachiavi-prove.mjs';
 
 /** Scope Desktop e Preview isolati; oltre all'assenza: qualunque altro valore è un errore d'avvio, non un default silenzioso. */
@@ -30,6 +31,61 @@ export const SCOPE_PREVIEW = 'desktop-preview';
 export const SUFFISSO_PREVIEW = '-desktop-preview';
 /** Il suffisso che separa il namespace dell'app installata da quello dello sviluppo. */
 export const SUFFISSO_DESKTOP = '-desktop';
+
+/*
+ * ⛔⛔ 0.2.4, blocco 1, voce 6 (owner via giudice v1962, D 16/11 08:12; limite noto della 0.2.2 «The automatic tests in the source code
+ *   can reach the system keyring used by the installed app»): `desktop/runtime.mjs` passa lo scope `desktop` ANCHE da sorgente e nelle prove
+ *   del guscio, e qui chiunque chiedesse lo scope riceveva `<servizio>-desktop`, lo spazio dell'app installata: un server di prova con
+ *   APPDATA finto e senza segno di prova (P045 lo ferma solo se il segno c'è) arrivava alle chiavi vere dell'owner.
+ *   Ora è il PRODOTTO a legare lo spazio al pacchetto: sul portachiavi di SISTEMA (quello che apre `@napi-rs/keyring`, segnato qui sotto)
+ *   `-desktop` e `-desktop-preview` si aprono SOLO se questo server è quello del pacchetto installato — dentro l'eseguibile di Electron
+ *   (`process.versions.electron`, il figlio con ELECTRON_RUN_AS_NODE) e in `<cartella di TALOS.exe>/resources/harness-ui/`, dove
+ *   `prepara-pacchetto.mjs:368-369` lo mette. Da sorgente lo stesso scope apre `<servizio>-desktop-sorgente`: uno spazio suo, che nasce vuoto e
+ *   che nessuna app installata legge. Vale per tutto ciò che passa da qui: server, migrazione delle chiavi, pulizia alla disinstallazione.
+ *   Hermes protegge dal lato delle prove (`hermes_state_guard.py:89-114`), Codex inietta un portachiavi finto (`keyring-store/src/lib.rs:144`):
+ *   qui in più è impossibile da sorgente, con o senza segno. L'app installata non cambia: stesso spazio, stesse chiavi, nessun passo.
+ *   Il portachiavi in memoria e quello del modulo del telefono non sono di sistema: per loro niente cambia.
+ */
+export const SUFFISSO_SORGENTE = '-sorgente';
+const DI_SISTEMA = Symbol.for('talos.portachiavi.diSistema');
+/** Segna un adattatore come portachiavi di SISTEMA (solo la fabbrica vera; le prove lo usano su una Map finta, mai sul vero). */
+export function segnaDiSistema(adattatore) {
+  Object.defineProperty(adattatore, DI_SISTEMA, { value: true, enumerable: false });
+  return adattatore;
+}
+export function eDiSistema(adattatore) {
+  return Boolean(adattatore && adattatore[DI_SISTEMA] === true);
+}
+const RADICE_DI_QUESTO_SERVER = fileURLToPath(new URL('..', import.meta.url));
+/*
+ * Giro 2 (revisore, ROSSO 1; forma del giudice): il confronto di prima prendeva `execPath` com'è e la radice che Node aveva già RISOLTO da
+ *   `import.meta.url`: con TALOS installato dietro una giunzione (AppData o profilo spostati su un altro disco) i due differivano, l'app vera
+ *   apriva `-desktop-sorgente` vuoto e la pulizia alla disinstallazione avrebbe cancellato lo spazio sbagliato. Ora:
+ *   - nel processo PRINCIPALE di Electron (`process.type === 'browser'`, la pulizia di `main.mjs`) decide `app.isPackaged`, l'API ufficiale
+ *     («returns true if the app is packaged», docs/api/app.md, letta il 19/11/2026); `main.mjs` la passa anche esplicitamente;
+ *   - nel figlio del server (ELECTRON_RUN_AS_NODE: lì `app` non esiste, e `main.mjs` gli passa solo l'ambiente, che non si usa perché si può
+ *     fingere) i due lati passano da `realpathSync.native`, e l'albero deve essere quello del PACCHETTO: il guscio `resources/app/main.mjs`
+ *     accanto (electron-builder con `asar: false`, `desktop/package.json:35`) e nessun `desktop/main.mjs` dentro la radice, che c'è solo in un
+ *     albero di sorgente. Una giunzione che faccia sembrare il sorgente un pacchetto si risolve nel sorgente e dice no.
+ *   Niente variabili d'ambiente: un'altra installazione o una prova non possono accenderlo dall'ambiente.
+ */
+function appElectronImpacchettata() {
+  try { return createRequire(import.meta.url)('electron')?.app?.isPackaged === true; } catch { return false; }
+}
+/** Questo server è quello del pacchetto installato? Le opzioni servono alle prove. */
+export function serverDelPacchetto({ execPath = process.execPath, versions = process.versions, radice = RADICE_DI_QUESTO_SERVER, piattaforma = process.platform,
+  tipo = process.type, appImpacchettata = appElectronImpacchettata, reale = realpathSync.native, esiste = existsSync } = {}) {
+  if (!versions?.electron) return false;
+  if (tipo === 'browser') return appImpacchettata() === true;
+  if (typeof execPath !== 'string' || !isAbsolute(execPath) || typeof radice !== 'string') return false;
+  const percorsi = piattaforma === 'win32' ? win32 : posix;
+  const risorse = percorsi.join(percorsi.dirname(execPath), 'resources');
+  let attesa; let vera;
+  try { attesa = reale(percorsi.join(risorse, 'harness-ui')); vera = reale(radice); } catch { return false; }
+  const uguale = (p) => (piattaforma === 'win32' ? percorsi.resolve(p).toLowerCase() : percorsi.resolve(p));
+  if (uguale(attesa) !== uguale(vera)) return false;
+  return esiste(percorsi.join(risorse, 'app', 'main.mjs')) && !esiste(percorsi.join(vera, 'desktop', 'main.mjs'));
+}
 
 /**
  * Legge `TALOS_HARNESS_UI_KEYRING_SCOPE` STRICT: assente/vuota → null (sviluppo, nomi di sempre);
@@ -49,10 +105,11 @@ export function leggiScopePortachiavi(env = process.env) {
  * che gli arriva. Scope null → l'adattatore com'è (lo sviluppo non cambia una virgola). Un
  * adattatore assente passa intatto: chi lo riceve gestisce già quel caso.
  */
-export function avvolgiAdattatoreKeyring(keyring, scope) {
+export function avvolgiAdattatoreKeyring(keyring, scope, { delPacchetto = serverDelPacchetto } = {}) {
   if (scope !== null && scope !== undefined && ![SCOPE_DESKTOP, SCOPE_PREVIEW].includes(scope)) throw new Error('Invalid keyring scope.');
   if (!keyring || !scope) return keyring;
-  const suffix = scope === SCOPE_PREVIEW ? SUFFISSO_PREVIEW : SUFFISSO_DESKTOP;
+  /* 0.2.4 blocco 1, voce 6: lo spazio dell'app installata sul portachiavi VERO solo dal server del pacchetto; da sorgente, `-sorgente` */
+  const suffix = (scope === SCOPE_PREVIEW ? SUFFISSO_PREVIEW : SUFFISSO_DESKTOP) + (eDiSistema(keyring) && !delPacchetto() ? SUFFISSO_SORGENTE : '');
   const conSuffisso = (servizio) => `${servizio}${suffix}`;
   return {
     get: (servizio, account) => keyring.get(conSuffisso(servizio), account),
@@ -86,11 +143,11 @@ export async function creaAdattatorePortachiaviSistema({ env = process.env, segn
       { code: 'KEYRING_TEST_PROFILE', segno: visto });
   }
   const { Entry } = await importa();
-  return {
+  return segnaDiSistema({
     get: (servizio, account) => new Entry(servizio, account).getPassword() || null,
     set: (servizio, account, valore) => new Entry(servizio, account).setPassword(valore),
     remove: (servizio, account) => { new Entry(servizio, account).deletePassword(); },
-  };
+  });
 }
 
 /*

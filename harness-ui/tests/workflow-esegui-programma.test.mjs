@@ -3,12 +3,14 @@
  * a program edited in the middle reuses the untouched calls, across a restart (a new journal object on the same root).
  */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 import { eseguiProgramma } from '../src/workflow/esegui-programma.mjs';
+import { chiaveDellaChiamata } from '../src/workflow/giornale-chiave.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const WF = '0d7c4c1e-90a8-4b77-8e6f-4fb8a3a4c2d9';
@@ -41,7 +43,7 @@ test('a second run (new process: new journal objects) calls no agent and returns
   const first = await run(root, program(['one', 'two', 'three']), h1, { runId: 'r1' });
   assert.equal(first.outcome, 'ok', JSON.stringify(first.error));
   assert.equal(h1.calls.length, 3);
-  assert.deepEqual(first.usage.journal, { replayed: 0, live: 3, recordFailures: 0, shared: 0 });
+  assert.deepEqual(first.usage.journal, { replayed: 0, live: 3, recordFailures: 0, shared: 0, repaired: 0 });
   const h2 = fakeHost();
   const second = await run(root, program(['one', 'two', 'three']), h2, { runId: 'r2' });
   assert.deepEqual(second.value, first.value);
@@ -195,4 +197,28 @@ test('each run sweeps the index temporaries a crash left behind', async (t) => {
   utimesSync(stale, old, old);
   await run(root, program(['a', 'b', 'c']), fakeHost());
   assert.equal(existsSync(stale), false);
+});
+
+// 19/11/2026 (0.2.4 block 4, round 2, item A): the repair of a truncated saved answer is COUNTED and VISIBLE (judge): a counter in
+// usage.journal and ONE diagnostic for the key, with the hash and the reason, never the value. Before it was silent (0 diagnostics).
+test('a truncated saved answer repaired by the put is counted and written once, with its hash and no content', async (t) => {
+  const root = rootFor(t);
+  const bytes = Buffer.from(JSON.stringify('R(one)'), 'utf8');
+  const hex = createHash('sha256').update(bytes).digest('hex');
+  mkdirSync(join(root, 'cas', 'sha256', hex.slice(0, 2)), { recursive: true });
+  writeFileSync(join(root, 'cas', 'sha256', hex.slice(0, 2), hex), bytes.subarray(0, 3));
+  const first = await run(root, program(['one', 'two', 'three']), fakeHost(), { runId: 'r1' });
+  assert.equal(first.outcome, 'ok', JSON.stringify(first.error));
+  assert.deepEqual(first.value, ['R(one)', 'R(two)', 'R(three)']);
+  assert.equal(first.usage.journal.repaired, 1);
+  assert.equal(first.usage.journal.recordFailures, 0);
+  const key = chiaveDellaChiamata('one', undefined, 0);
+  assert.deepEqual(first.diagnostics.map((d) => [d.code, d.key]), [['WORKFLOW_RESULT_REPAIRED', key]], JSON.stringify(first.diagnostics));
+  assert.ok(first.diagnostics[0].message.includes(hex) && !first.diagnostics[0].message.includes('R(one)'), first.diagnostics[0].message);
+  assert.ok(!/[\\/]/u.test(first.diagnostics[0].safeMessage));
+  const h2 = fakeHost();
+  const second = await run(root, program(['one', 'two', 'three']), h2, { runId: 'r2' });
+  assert.equal(h2.calls.length, 0, 'the repaired answer is served');
+  assert.equal(second.usage.journal.repaired, 0);
+  assert.deepEqual(second.diagnostics, []);
 });

@@ -109,7 +109,10 @@ test('INSIEMI-TEMPO-REVISORE — `a=\'*[b×4000]\'` e `rm -rf ../$a` × 1.000, c
     await cancello(s, c, 'accesso-pieno', { cartella: CARTELLA64[s] }); // a caldo
     for (const livello of LIVELLI) {
       const r = await cancello(s, c, livello, { cartella: CARTELLA64[s] });
-      assert.deepEqual(r.perche, [], `${s} ${livello}: ${JSON.stringify(r.perche)}`);
+      /* 0.2.4, apice ANSI (Forma 2, giudice v2304 strada a): su Windows il testo con un apostrofo si rilegge ANCHE come lo legge cmd
+         (dove `'` non è un apice: `$a` vale `'*[b…]'` con gli apici), nello STESSO tetto del comando: l'espansione arriva a 4.195.240
+         caratteri, oltre il tetto di 4.194.304, e la carta è «troppo complesso» (misurato). L A M senza carta, come la 0.2.1. */
+      assert.deepEqual(r.perche, s === 'W' ? ['troppo-complesso'] : [], `${s} ${livello}: ${JSON.stringify(r.perche)}`);
       if (!SOTTO_CARICO) assert.ok(r.ms < 500 * MOLTIPLICATORE_CI, `[ceiling ${500 * MOLTIPLICATORE_CI} ms] ${s} ${livello}: ${r.ms.toFixed(0)} ms (CPU ${campioni.join('/')}%)`);
     }
   }

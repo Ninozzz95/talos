@@ -23,8 +23,9 @@ import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.
 const BS = String.fromCharCode(92);
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const radice = realpathSync.native(mkdtempSync(join(tmpdir(), 'talos-gemello-')));
-mkdirSync(join(radice, 'src'), { recursive: true });
-for (const nome of ['path-policy.mjs', 'forme-di-segreto.mjs']) {
+mkdirSync(join(radice, 'src', 'kernel'), { recursive: true });
+/* 0.2.4: `path-policy.mjs` legge `$'…'` col lettore unico del nucleo (`kernel/apici-ansi-c.mjs`, soli builtin): va nel gemello anche lui */
+for (const nome of ['path-policy.mjs', 'forme-di-segreto.mjs', 'kernel/apici-ansi-c.mjs']) {
   const testo = readFileSync(join(SRC, nome), 'utf8');
   writeFileSync(join(radice, 'src', nome), testo.replaceAll("from 'node:path'", () => "from 'node:path/posix'").replaceAll('process.platform', () => "'linux'"));
 }

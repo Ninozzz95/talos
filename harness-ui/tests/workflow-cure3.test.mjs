@@ -66,6 +66,46 @@ test('LOW 1: through the runner, an unreadable index is a counted record failure
   assert.deepEqual(calls, ['p']);
 });
 
+// 19/11/2026 (0.2.4 block 4, item 3): an obstacle TALOS never writes (a folder at the index path) is refused, never removed
+// (Hermes hermes_state.py:278-281), and it is ONE diagnostic per run: measured before, 3 per run (lookup, record, runner).
+test('item 3: a folder at the index path is one diagnostic per run, in every run; the folder stays and the answers are right', async (t) => {
+  const root = rootFor(t);
+  const key = chiaveDellaChiamata('p0', undefined, 0);
+  mkdirSync(join(indexPathOf(root, key), 'inside'), { recursive: true });
+  const src = "export const meta = { name: 'r', description: 'd', maxAgents: 4 }\nreturn [await agent('p0'), await agent('p1'), await agent('p2')]";
+  for (const runId of ['a', 'b']) {
+    const host = { agent: async (prompt) => ({ value: `R(${prompt})`, costUsd: 0 }) };
+    const out = await eseguiProgramma({ source: src, workflowDataRoot: root, workflowId: WF, runId, host, caps: { maxUsd: 1, estimateUsd: 0.01 } });
+    assert.equal(out.outcome, 'ok', JSON.stringify(out.error));
+    assert.deepEqual(out.value, ['R(p0)', 'R(p1)', 'R(p2)']);
+    assert.equal(out.usage.journal.recordFailures, 1);
+    assert.deepEqual(out.diagnostics.map((d) => [d.code, d.key]), [['WORKFLOW_REPLAY_INDEX_UNREADABLE', key]], JSON.stringify(out.diagnostics));
+  }
+  assert.ok(statSync(join(indexPathOf(root, key), 'inside')).isDirectory(), 'the obstacle is never removed');
+});
+
+// Item 3, review of its mutants: the dedupe is per key. Two obstacles are two diagnostics, and two keys with the same damage
+// (the same message, no path in it) are two diagnostics too.
+test('item 3: two obstacles in one run are two diagnostics, one for each key; the same damage under two keys is two diagnostics', async (t) => {
+  const root = rootFor(t);
+  const k0 = chiaveDellaChiamata('p0', undefined, 0);
+  const k1 = chiaveDellaChiamata('p1', undefined, 0);
+  for (const key of [k0, k1]) mkdirSync(join(indexPathOf(root, key), 'inside'), { recursive: true });
+  const src = "export const meta = { name: 'r', description: 'd', maxAgents: 4 }\nreturn [await agent('p0'), await agent('p1')]";
+  const host = { agent: async (prompt) => ({ value: `R(${prompt})`, costUsd: 0 }) };
+  const out = await eseguiProgramma({ source: src, workflowDataRoot: root, workflowId: WF, runId: 'a', host, caps: { maxUsd: 1, estimateUsd: 0.01 } });
+  assert.deepEqual(out.value, ['R(p0)', 'R(p1)']);
+  assert.equal(out.usage.journal.recordFailures, 2);
+  assert.deepEqual(out.diagnostics.map((d) => [d.code, d.key]), [['WORKFLOW_REPLAY_INDEX_UNREADABLE', k0], ['WORKFLOW_REPLAY_INDEX_UNREADABLE', k1]], JSON.stringify(out.diagnostics));
+  const other = mkdtempSync(join(tmpdir(), 'talos-wf-cure3-'));
+  t.after(() => rimuoviCartellaDiProva(other));
+  const journal = createKeyedJournal({ workflowDataRoot: other, workflowId: WF });
+  for (const key of [k0, k1]) { mkdirSync(join(indexPathOf(other, key), '..'), { recursive: true }); writeFileSync(indexPathOf(other, key), '{"sch'); }
+  assert.equal(await journal.lookup(k0), null);
+  assert.equal(await journal.lookup(k1), null);
+  assert.deepEqual(journal.diagnostics.map((d) => [d.code, d.key]), [['WORKFLOW_REPLAY_INDEX_INVALID', k0], ['WORKFLOW_REPLAY_INDEX_INVALID', k1]], JSON.stringify(journal.diagnostics));
+});
+
 test('LOW 1: an index that does not exist is still a plain miss with no diagnostic', async (t) => {
   const root = rootFor(t);
   const journal = createKeyedJournal({ workflowDataRoot: root, workflowId: WF });
@@ -199,4 +239,19 @@ test('note 6: caps.maxValueDepth accepts 1..MAX_STABLE_DEPTH and refuses anythin
     const out = await eseguiNelRecinto({ source: `${META}return 1`, agent: noAgent, caps: { ...CAPS, maxValueDepth: good } });
     assert.equal(out.outcome, 'ok', JSON.stringify(out.error));
   }
+});
+
+// 0.2.4 block 4, round 2, item E2 (review of the mutants): the runner skips only a refusal the journal already wrote with the SAME
+// code for that key; a refusal of another code (here the size cap after a damaged index) is still written.
+test('item 3, round 2: a record refusal of a different code than the journal diagnosis for that key is still written', async (t) => {
+  const root = rootFor(t);
+  const key = chiaveDellaChiamata('p0', undefined, 0);
+  mkdirSync(join(indexPathOf(root, key), '..'), { recursive: true });
+  writeFileSync(indexPathOf(root, key), '{"young');
+  const src = "export const meta = { name: 'r', description: 'd', maxAgents: 2 }\nreturn await agent('p0')";
+  const host = { agent: async () => ({ value: 'x'.repeat(200), costUsd: 0 }) };
+  const out = await eseguiProgramma({ source: src, workflowDataRoot: root, workflowId: WF, runId: 'a', host, caps: { maxUsd: 1, estimateUsd: 0.01 }, maxResultBytes: 64 });
+  assert.equal(out.outcome, 'ok', JSON.stringify(out.error));
+  assert.equal(out.usage.journal.recordFailures, 1);
+  assert.deepEqual(out.diagnostics.map((d) => [d.code, d.key]), [['WORKFLOW_REPLAY_INDEX_INVALID', key], ['WORKFLOW_LIMIT_EXCEEDED', key]], JSON.stringify(out.diagnostics));
 });

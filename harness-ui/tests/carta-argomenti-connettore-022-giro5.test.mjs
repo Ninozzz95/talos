@@ -237,9 +237,13 @@ test('G5-R4-05: the masks reviewer 1 saw hold are still there: nested, in a list
 /* ------------------------------------------------- the judge's condition 2: honest names stay visible ------------------------------------------------- */
 const ONESTI = ['token_limit', 'max_tokens', 'tokens', 'keyboard', 'monkey', 'secretary', 'password_hint', 'cookie_policy', 'token_count', 'total_tokens',
   'tokenizer', 'secret_name', 'password_policy', 'keys', 'author', 'authority', 'cookies_enabled', 'passport'];
+/* 0.2.4, block 1 (item 1, the known limit of 0.2.3 «A field named `tokens` is read as a counter»): `tokens` alone stays an honest NAME, but
+   the value decides — a counter (a number) is shown, a text like «visible-2» under it is now masked (`segreti-024-b1-nomi.test.mjs`).
+   So here `tokens` carries a counter; every other honest name keeps its text. */
+const valoreOnesto = (k, i) => (k === 'tokens' ? 1000 + i : `visible-${i}`);
 test('G5-FP-01: honest names stay VISIBLE on the card: token_limit, max_tokens, tokens, keyboard, monkey, secretary, password_hint, cookie_policy', () => {
   for (const k of ONESTI) assert.equal(nomeDiCampoSegreto(k), false, k);
-  const valori = Object.fromEntries(ONESTI.map((k, i) => [k, `visible-${i}`]));
+  const valori = Object.fromEntries(ONESTI.map((k, i) => [k, valoreOnesto(k, i)]));
   assert.deepEqual(perLaCarta(valori).argomenti, valori);
 });
 
@@ -251,7 +255,7 @@ test('G5-FP-02: in a text, «token_limit: 4000», «max_tokens=4096», «tokens:
 });
 
 test('G5-FP-03: through the gate, the honest names reach the card readable, beside a «cookie» that is masked', async (t) => {
-  const valori = Object.fromEntries(ONESTI.map((k, i) => [k, `visible-${i}`]));
+  const valori = Object.fromEntries(ONESTI.map((k, i) => [k, valoreOnesto(k, i)]));
   const r = await giro(t, { ...valori, cookie: `${S}c` });
   for (const k of ONESTI) assert.equal(r.carte[0].argomenti[k], valori[k], k);
   assert.equal(r.carte[0].argomenti.cookie, OSCURATO);

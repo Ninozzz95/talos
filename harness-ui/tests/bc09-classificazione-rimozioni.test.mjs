@@ -39,7 +39,8 @@ const CLASSE_B = new Map([
   ['tests/acp-agent.test.mjs', 'un agente ACP esterno vive nella cartella e va chiuso (`agente.chiudi()`)'],
   ['tests/casa-linux-u2028-22-10.test.mjs', 'il servente VERO della casa Linux è un processo figlio che legge un file nella cartella: va fermato (e aspettato) prima della rimozione'],
   ['tests/context-embedding-runtime.test.mjs', 'il runtime degli embedding lancia un processo figlio (`runtime.close()`)'],
-  ['tests/context-engine-server.test.mjs', 'il servizio del contesto e un processo figlio con un socket (`stop()`)'],
+  /* 0.2.4 S4: `tests/context-engine-server.test.mjs` è passato all'aiuto. Il server figlio si controlla USCITO prima di pulire (rosso
+     subito se vivo); ciò che resta è il nipote `echo ok` del Doctor col cwd nella cartella, che `child.kill()` su Windows non ferma. */
   ['tests/context-runtime.test.mjs', 'runtime desktop vivi, chiusi uno per uno nel teardown'],
   ['tests/c1-import-giornale-nuovo.test.mjs', 'C1: runtime desktop col suo SQLite, chiuso (`runtime.close()`) prima della rimozione, come context-runtime'],
   ['tests/git-service.test.mjs', '`execFileSync(git)` gira col cwd DENTRO la cartella: un git rimasto vivo la tiene'],
@@ -75,6 +76,8 @@ const FUORI_CURA = new Map([
   ['tests/aiuto/rimuovi-cartella-di-prova.mjs', 'e l aiuto stesso: la rimozione nuda e la cosa che implementa, non un difetto'],
   ['tests/aiuto-rimozione-ritentativi.test.mjs', 'la sua prova tiene viva una premessa apposta e la smonta a mano, coi ritentativi in chiaro'],
   ['tests/aiuto/taglie-base/cancello.mjs', 'attrezzo vero del cricchetto, non una prova: il comando e la coda ne estraggono dalla base SOLO la cartella taglie-base/ e lanciano quella copia, che non puo importare l aiuto di prova; il suo unico figlio e uno spawnSync gia uscito prima del finally'],
+  ['tests/aiuto/casi-024-s1.mjs', 'testo di comandi dato al riconoscitore, mai eseguito: le rimozioni che il modello vede sono dentro stringhe di casi di prova'],
+  ['tests/cancellazioni-in-un-altro-linguaggio.test.mjs', 'testo di comandi dato al riconoscitore, mai eseguito; le sue cartelle vere le toglie l aiuto (per questo non puo stare in CLASSE_B)'],
 ]);
 
 /*

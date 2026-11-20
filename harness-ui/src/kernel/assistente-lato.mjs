@@ -155,6 +155,9 @@ const RIFIUTO_CARTA_NEGATA = 'REFUSED. The person said no on the card for this a
    non si consente ciò che la persona non vede, e un indirizzo tagliato non è quello chiesto */
 export const INDIRIZZO_MASSIMO_SULLA_CARTA = 4_000
 const RIFIUTO_TROPPO_LUNGO = `REFUSED. The address is too long: over ${INDIRIZZO_MASSIMO_SULLA_CARTA} characters, more than the person's card can show in full, and nothing is opened that the person cannot see. Nothing was sent. Use a shorter address, or answer without it.`
+/* 0.2.4, chiavi in ricerca e Chrome (giudice v2239): un indirizzo o una ricerca col VALORE esatto di una chiave della persona non parte,
+   PRIMA della carta (una carta non deve chiedere di mandare fuori una chiave), come `naviga` e `web_search` della chat */
+const RIFIUTO_CHIAVE_NEL_TESTO = 'REFUSED. This address or search contains one of your keys: TALOS does not send it out, in any permission mode. Nothing was sent. Tell the person.'
 /* giudice v1596 punto 4 (revisore C, regola 375): senza fornitore della ricerca la carta non cambierebbe niente, e il diario direbbe «ha cercato» */
 const RIFIUTO_SENZA_FORNITORE = 'REFUSED. Web search is not set up in this app: no provider was chosen. Nothing was sent. Answer from what you can read, and say the person can set up web search in Settings.'
 /* giudice v1584 punto 2 (revisore A, GIALLO-2): come la chat (`talosHarness.mjs`, `rifiutiDalTestoNelGiro >= 2`), due no bastano */
@@ -193,6 +196,10 @@ export async function eseguiAttrezzoALato({ nome, argomenti }, ctx = {}) {
       /* le due guardie PRIMA della carta: una carta deve poter cambiare qualcosa, e mostrare tutto ciò che parte */
       if (nome === 'web_search' && ctx.ricercaPronta === false) return { esito: RIFIUTO_SENZA_FORNITORE, letto: false, diario: { ...rete(true), motivo: 'senza-fornitore' } }
       if (testo.length > INDIRIZZO_MASSIMO_SULLA_CARTA) return { esito: RIFIUTO_TROPPO_LUNGO, letto: false, diario: { ...rete(true), motivo: 'troppo-lungo' } }
+      /* 0.2.4: `chiaveNelTesto` la passa chi ospita (il PC, `assistente-porte.mjs`); assente (CLI) ⇒ come prima; una che lancia ⇒ come prima */
+      let conChiave = false
+      if (typeof ctx.chiaveNelTesto === 'function') { try { conChiave = await ctx.chiaveNelTesto(testo) === true } catch { conChiave = false } }
+      if (conChiave) return { esito: RIFIUTO_CHIAVE_NEL_TESTO, letto: false, diario: { ...rete(true), motivo: 'chiave' } }
       /* ⛔ Owner 11/11/2026 21:40, «Carta per ogni indirizzo»: dopo una lettura qualsiasi (file, chat, riassunto, domande di prima) ogni
          indirizzo mostra la carta con l'indirizzo INTERO, anche in Accesso pieno. La seconda rete (`indirizzoColContenuto`) non decide: lo
          dice sulla carta. Una richiesta che non può mostrare carte (telefono, CLI) riceve un rifiuto secco, mai un'attesa. */

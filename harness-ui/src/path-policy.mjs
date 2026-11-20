@@ -16,6 +16,7 @@ import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:p
 
 import { existsSync as esisteSync, readdirSync as elencaSync, realpathSync as realpathSyncNativa, statSync as statSyncNativa, lstatSync as lstatSyncNativa, readlinkSync as readlinkSyncNativa, openSync as apriSync, readSync as leggiSync, closeSync as chiudiSync, fstatSync as fstatSyncNativa } from 'node:fs';
 import { formaDiSegretoNelTesto } from './forme-di-segreto.mjs';
+import { decodificaAnsiC as decodificaAnsiCDelNucleo } from './kernel/apici-ansi-c.mjs'; // 0.2.4, apice ANSI: un solo lettore di `$'…'`
 import { createHash } from 'node:crypto';
 import { homedir, hostname } from 'node:os';
 import { basename as nomeBase, dirname as cartellaDi, parse as parsePercorso, relative as relativoA, resolve as risolvi, sep as separatore } from 'node:path';
@@ -575,23 +576,9 @@ function chiusaBilanciata(testo, da, apre, chiude) {
   return -1;
 }
 
-/** Il contenuto di `$'..'` come lo decodifica bash (manuale 3.1.2.4): `\n`, `\xHH`, `\NNN` ottale, `\uHHHH`, `\cX`… — `$'\x2eenv'` è `.env`. */
+/** Il contenuto di `$'..'` come lo decodifica bash (manuale 3.1.2.4): il lettore unico del nucleo (`kernel/apici-ansi-c.mjs`), qui col jolly oltre Unicode. */
 function decodificaAnsiC(s) {
-  const semplici = { a: '\u0007', b: '\b', e: '\u001b', E: '\u001b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v', '\\': '\\', "'": "'", '"': '"', '?': '?' };
-  let fuori = '';
-  for (let i = 0; i < s.length; i += 1) {
-    if (s[i] !== '\\' || i + 1 >= s.length) { fuori += s[i]; continue; }
-    const c = s[i + 1];
-    let m;
-    if (semplici[c] !== undefined) { fuori += semplici[c]; i += 1; }
-    else if ((m = /^x([0-9A-Fa-f]{1,2})/u.exec(s.slice(i + 1)))) { fuori += String.fromCodePoint(parseInt(m[1], 16)); i += m[0].length; }
-    else if ((m = /^u([0-9A-Fa-f]{1,4})/u.exec(s.slice(i + 1)))) { fuori += String.fromCodePoint(parseInt(m[1], 16)); i += m[0].length; }
-    else if ((m = /^U([0-9A-Fa-f]{1,8})/u.exec(s.slice(i + 1)))) { const n = parseInt(m[1], 16); fuori += n <= 0x10ffff ? String.fromCodePoint(n) : JOLLY; i += m[0].length; }
-    else if ((m = /^[0-7]{1,3}/u.exec(s.slice(i + 1)))) { fuori += String.fromCodePoint(parseInt(m[0], 8) & 0xff); i += m[0].length; }
-    else if (c === 'c' && i + 2 < s.length) { fuori += String.fromCodePoint(s.codePointAt(i + 2) & 0x1f); i += 2; }
-    else { fuori += '\\' + c; i += 1; }
-  }
-  return fuori;
+  return decodificaAnsiCDelNucleo(s, { fuoriScala: JOLLY });
 }
 
 /*

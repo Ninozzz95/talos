@@ -175,6 +175,9 @@ export default {
     'approval.group.callNumber': 'Chiamata {n} di {count}',
     'approval.group.moreFieldsOne': '+{count} campo',
     'approval.group.moreFieldsMany': '+{count} campi',
+    /* 0.2.4 blocco 1, voce 7: la carta elenca al più 20 chiamate; il resto si dice, con la risposta che lo copre */
+    'approval.group.moreCallsOne': 'E ancora {count} chiamata, non elencata qui: la tua risposta vale anche per lei.',
+    'approval.group.moreCallsMany': 'E altre {count} chiamate, non elencate qui: la tua risposta vale anche per loro.',
     'approval.group.showAll': 'Mostra tutte e {count}',
     'approval.group.showLess': 'Mostra meno',
     'approval.group.appliesAllOne': 'La risposta vale per questa chiamata',
@@ -510,7 +513,7 @@ export default {
     'foot.permission.always.outside': 'scritture fuori dal progetto',
     'foot.permission.always.secrets': 'file con segreti',
     'foot.permission.always.suspicious': 'azioni dopo un contenuto sospetto',
-    'foot.permission.always.criticalDelete': 'cancellare un disco, una cartella principale, la tua cartella utente o il progetto', // decisione 155
+    'foot.permission.always.criticalDelete': 'cancellare un disco, una cartella principale, la tua cartella utente o il progetto (anche da uno script)', // decisione 155; 0.2.4 S1: anche dentro python, node, perl…
     'foot.permission.always.savedKeys': 'leggere le tue chiavi salvate', // decisioni 158 e 161
     'foot.permission.always.paidResearch': 'ricerche a pagamento', // decisione 158
     'foot.permission.turnedOff': 'Spenti: {cosa}',
@@ -1482,6 +1485,9 @@ export default {
     'approval.group.callNumber': 'Call {n} of {count}',
     'approval.group.moreFieldsOne': '+{count} field',
     'approval.group.moreFieldsMany': '+{count} fields',
+    /* 0.2.4 block 1, item 7: the card lists at most 20 calls; the rest is said, with the answer that covers it */
+    'approval.group.moreCallsOne': 'And {count} more call, not listed here: your answer covers it too.',
+    'approval.group.moreCallsMany': 'And {count} more calls, not listed here: your answer covers them too.',
     'approval.group.showAll': 'Show all {count}',
     'approval.group.showLess': 'Show fewer',
     'approval.group.appliesAllOne': 'Your answer covers this call',
@@ -1817,7 +1823,7 @@ export default {
     'foot.permission.always.outside': 'writes outside the project',
     'foot.permission.always.secrets': 'files with secrets',
     'foot.permission.always.suspicious': 'actions after suspicious content',
-    'foot.permission.always.criticalDelete': 'deleting a drive, a top folder, your user folder or the project', // decision 155
+    'foot.permission.always.criticalDelete': 'deleting a drive, a top folder, your user folder or the project (also from a script)', // decision 155; 0.2.4 S1: also inside python, node, perl…
     'foot.permission.always.savedKeys': 'reading your saved keys', // decisions 158 and 161
     'foot.permission.always.paidResearch': 'paid research', // decision 158
     'foot.permission.turnedOff': 'Turned off: {cosa}',

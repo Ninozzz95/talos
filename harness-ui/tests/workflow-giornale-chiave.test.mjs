@@ -4,7 +4,9 @@
  * published exclusively (first writer wins), value before index. Survives a new journal object (= a restart).
  */
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmdirSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -332,4 +334,77 @@ test('stable JSON refuses a value nested deeper than MAX_STABLE_DEPTH with its o
   const root = rootFor(t);
   const journal = createKeyedJournal({ workflowDataRoot: root, workflowId: WF });
   await assert.rejects(journal.record(chiaveDellaChiamata('p', {}, 0), { value: nest(MAX_STABLE_DEPTH + 1) }), { code: 'WORKFLOW_STABLE_JSON_INVALID' });
+});
+
+// 19/11/2026 (0.2.4 block 4, item 2): a process killed between the write of a value temporary and its publish left it in temp/cas
+// for good (2 after 12 kills); the same sweep now covers it, with the same age rule, and nothing outside temp/ is touched.
+test('sweepTemporaries also removes value temporaries in temp/cas older than an hour; young ones and other names stay', async (t) => {
+  const root = rootFor(t);
+  const journal = createKeyedJournal({ workflowDataRoot: root, workflowId: WF });
+  const cas = join(root, 'temp', 'cas');
+  mkdirSync(cas, { recursive: true });
+  const twoHoursAgo = (Date.now() - 2 * 60 * 60 * 1000) / 1000;
+  const halfAnHourAgo = (Date.now() - 30 * 60 * 1000) / 1000;
+  const name = (c) => `${c.repeat(64)}.4242.00000000-0000-4000-8000-000000000000.tmp`;
+  for (const [n, when] of [[name('a'), twoHoursAgo], [name('b'), halfAnHourAgo], ['old.keep', twoHoursAgo]]) {
+    writeFileSync(join(cas, n), 'x');
+    utimesSync(join(cas, n), when, when);
+  }
+  const outside = join(root, 'cas', 'old.tmp');
+  mkdirSync(join(root, 'cas'), { recursive: true });
+  writeFileSync(outside, 'x');
+  utimesSync(outside, twoHoursAgo, twoHoursAgo);
+  assert.equal(await journal.sweepTemporaries(), 1);
+  assert.deepEqual(readdirSync(cas).sort(), [name('b'), 'old.keep']);
+  assert.ok(existsSync(outside), 'nothing outside temp/ is swept');
+});
+
+// 0.2.4 block 4, round 2, item C: a replace that leaves a value failing its hash is never recorded, counted as a repair or served.
+test('a faulty replace of a damaged value is never recorded nor served nor counted as a repair', async (t) => {
+  const root = rootFor(t);
+  const journal = createKeyedJournal({ workflowDataRoot: root, workflowId: WF });
+  const key = chiaveDellaChiamata('faulty replace', {}, 0);
+  const bytes = Buffer.from(jsonStabile('the right answer'), 'utf8');
+  const hex = createHash('sha256').update(bytes).digest('hex');
+  mkdirSync(join(root, 'cas', 'sha256', hex.slice(0, 2)), { recursive: true });
+  writeFileSync(join(root, 'cas', 'sha256', hex.slice(0, 2), hex), bytes.subarray(0, 5));
+  const fsp = createRequire(import.meta.url)('node:fs/promises');
+  const realRename = fsp.rename;
+  fsp.rename = async (from, to) => { await realRename(from, to); writeFileSync(to, '"a wrong answer"'); };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(journal.record(key, { value: 'the right answer', runId: 'r' }), (e) => e.code === 'WORKFLOW_RESULT_CORRUPT');
+  } finally {
+    fsp.rename = realRename;
+    syncBuiltinESMExports();
+  }
+  assert.equal(journal.valuesRepaired, 0);
+  assert.equal(await journal.lookup(key), null, 'never served');
+  assert.ok(!existsSync(indexFile(root, key)), 'no index for a value that failed its hash');
+});
+
+// 0.2.4 block 4, round 2, item D: temp/cas or temp/replay replaced by a junction (or a symlink) to a folder outside the data root
+// was swept like our own: old .tmp files THERE went away. Now a temporary folder whose real path leaves <root>/temp is not swept
+// and the journal says so once. The junction is made in the test profile, towards another folder of it, and detached here.
+test('a temporary folder that resolves outside the data root is not swept, and it is said once', async (t) => {
+  const root = rootFor(t);
+  const outside = mkdtempSync(join(tmpdir(), 'talos-giornale-fuori-'));
+  t.after(() => rimuoviCartellaDiProva(outside));
+  const twoHoursAgo = (Date.now() - 2 * 60 * 60 * 1000) / 1000;
+  const victim = join(outside, `${'d'.repeat(64)}.1.00000000-0000-4000-8000-000000000000.tmp`);
+  writeFileSync(victim, 'not ours');
+  utimesSync(victim, twoHoursAgo, twoHoursAgo);
+  mkdirSync(join(root, 'temp'), { recursive: true });
+  const links = [join(root, 'temp', 'cas'), join(root, 'temp', 'replay')];
+  for (const link of links) symlinkSync(outside, link, process.platform === 'win32' ? 'junction' : 'dir');
+  const journal = createKeyedJournal({ workflowDataRoot: root, workflowId: WF });
+  try {
+    assert.equal(await journal.sweepTemporaries(), 0);
+    assert.equal(await journal.sweepTemporaries(), 0);
+    assert.ok(existsSync(victim), 'an old .tmp outside the data root is never swept');
+    assert.deepEqual(journal.diagnostics.map((d) => d.code), ['WORKFLOW_STORE_LOCATION_INVALID', 'WORKFLOW_STORE_LOCATION_INVALID'], JSON.stringify(journal.diagnostics));
+    assert.ok(journal.diagnostics.every((d) => !/[\\/]/u.test(d.safeMessage)));
+  } finally {
+    for (const link of links) { if (process.platform === 'win32') rmdirSync(link); else unlinkSync(link); }
+  }
 });

@@ -394,7 +394,9 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
     Object.assign(attrezziAutomazioni, { local_model_window: [['action', 'tokens'], ['action']] });
     /* Owner 27/10/2026 («Lo aggiungo adesso, piccolo, come i concorrenti»): `view_image`, un attrezzo esteso NUOVO di sola lettura, fuori
      * dalla base (il banco non passa mai `onGuardaImmagine`); forma fissata qui come Codex (`path` obbligatorio), le due impronte restano */
-    Object.assign(attrezziAutomazioni, { view_image: [['path'], ['path']] });
+    /* 0.2.4, blocco 6 (owner 18/11/2026 10:50, richiesta 160; forma FORMA-024-B6-FOTO-WEB): `view_image` guarda anche un'immagine del
+     * web con `url`, quindi si passa `path` OPPURE `url` e nessuno dei due è obbligatorio. Sempre fuori dalla base; le due impronte restano */
+    Object.assign(attrezziAutomazioni, { view_image: [['path', 'url'], []] });
     /* «Segnala un problema» (owner 29/10/2026, contratto con la CLI): `report_problem`, un attrezzo esteso NUOVO che non scrive niente,
      * fuori dalla base (il banco non passa mai `onSegnalazioneFn`); forma del contratto fissata qui, le due impronte restano */
     Object.assign(attrezziAutomazioni, { report_problem: [['description', 'kind', 'title'], ['kind', 'title']] });
@@ -785,6 +787,15 @@ test('BC49: inventario e campi TALOS-BANCO invariati, eccetto le esenzioni dichi
         const frase = ' To save a live block from this chat in the person\'s Library instead, pass the block source (`root = …`) as html.';
         assert.ok(f.description.endsWith(frase), 'artifact_create: la prosa dice la seconda porta di «Salva in Libreria», in coda');
         f.description = f.description.slice(0, -frase.length);
+      }
+      /* 0.2.4, blocco 6 (owner 18/11/2026 10:50, richiesta 160; forma FORMA-024-B6-FOTO-WEB), esenzione dichiarata: le foto delle pagine
+       * web. `naviga` guadagna il campo facoltativo `images` (boolean); `url` resta l'unico obbligatorio. Si asserisce la forma esatta,
+       * poi si toglie: l'impronta storica resta, prova misurata che nient'altro è cambiato (`view_image` sta fra gli estesi, sopra). */
+      if (f.name === 'naviga') {
+        const schema = f.parameters ?? f.input_schema;
+        assert.deepEqual(schema.properties.images, { type: 'boolean', description: 'true only when you need to look at the page\'s photos: the first 4 images of its list are attached.' });
+        assert.deepEqual(schema.required, ['url'], 'naviga: `url` resta l unico obbligatorio');
+        delete schema.properties.images;
       }
       if (f.name === 'library_delete') {
         const schema = f.parameters ?? f.input_schema;

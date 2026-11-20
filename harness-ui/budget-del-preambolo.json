@@ -4,18 +4,18 @@
     "desktop": {
       "byteSistema": 2929,
       "byteNotaDoveSei": 368,
-      "byteAttrezzi": 30170,
+      "byteAttrezzi": 30313,
       "nAttrezzi": 25,
-      "tokenStimati": 8470,
-      "nota": "12/11/2026: rimisurati sulla candidata edba3aee8 (recupero P5): sistema +329 byte, attrezzi +289 byte, +156 token stimati in 962 commit dal 3/11. Prima: 3/11/2026: valori di partenza misurati (#48). Registro + ponte acceso come server.mjs:868, negozi vuoti, senza le funzioni dell'ospite (process_output, local_page, view_image)."
+      "tokenStimati": 8505,
+      "nota": "19/11/2026: 0.2.4 blocco 6 (foto delle pagine web): il campo facoltativo images di naviga, attrezzi +143 byte, +35 token stimati. Prima: 12/11/2026: rimisurati sulla candidata edba3aee8 (recupero P5): sistema +329 byte, attrezzi +289 byte, +156 token stimati in 962 commit dal 3/11. Prima: 3/11/2026: valori di partenza misurati (#48). Registro + ponte acceso come server.mjs:868, negozi vuoti, senza le funzioni dell'ospite (process_output, local_page, view_image)."
     },
     "desktop-gemini": {
       "byteSistema": 2929,
       "byteNotaDoveSei": 368,
-      "byteAttrezzi": 53347,
+      "byteAttrezzi": 53490,
       "nAttrezzi": 51,
-      "tokenStimati": 14465,
-      "nota": "12/11/2026: rimisurati sulla candidata edba3aee8 (recupero P5): sistema +329 byte, attrezzi +333 byte, +166 token stimati. Prima: 3/11/2026: valori di partenza misurati (#48). Fornitore Gemini diretto: il registro spegne il ponte (decisione del 21/10), tutti gli attrezzi in chiaro."
+      "tokenStimati": 14501,
+      "nota": "19/11/2026: 0.2.4 blocco 6 (foto delle pagine web): il campo facoltativo images di naviga, attrezzi +143 byte, +36 token stimati. Prima: 12/11/2026: rimisurati sulla candidata edba3aee8 (recupero P5): sistema +329 byte, attrezzi +333 byte, +166 token stimati. Prima: 3/11/2026: valori di partenza misurati (#48). Fornitore Gemini diretto: il registro spegne il ponte (decisione del 21/10), tutti gli attrezzi in chiaro."
     },
     "cli": {
       "misurataDa": "suite della CLI (decisione della CLI, 30/10: solo la composizione vera della CLI costruisce la sua prima richiesta)",
@@ -23,13 +23,13 @@
     },
     "kernel-nudo": {
       "nAttrezzi": 7,
-      "caratteriSchemi": 9163,
-      "tokenAttrezzi": 2296,
+      "caratteriSchemi": 9306,
+      "tokenAttrezzi": 2331,
       "usataDa": [
         "E-NONENTRA-01 (e-fattore-k-23-10.test.mjs)",
         "ZK3-01..03 (z-k3-linea-certa-23-10.test.mjs)"
       ],
-      "nota": "12/11/2026: rimisurati sulla candidata edba3aee8 (recupero P5): +1 carattere, +1 token; E-NONENTRA-01 e ZK3-01 si spostano di 1 token. Prima: 3/11/2026: valori di partenza misurati (#48, PB-06). talosLavora senza registro, come lo chiamano le prove della compattazione: i loro fornitori finti contano stimaDegliAttrezzi. Le due prove si spostano di (tokenAttrezzi - taratura); se questi numeri cambiano, si aggiornano qui e le prove seguono da sole."
+      "nota": "19/11/2026: 0.2.4 blocco 6 (foto delle pagine web), il campo images di naviga: +143 caratteri, +35 token; E-NONENTRA-01 e ZK3-01 si spostano di 35 token. Prima: 12/11/2026: rimisurati sulla candidata edba3aee8 (recupero P5): +1 carattere, +1 token; E-NONENTRA-01 e ZK3-01 si spostano di 1 token. Prima: 3/11/2026: valori di partenza misurati (#48, PB-06). talosLavora senza registro, come lo chiamano le prove della compattazione: i loro fornitori finti contano stimaDegliAttrezzi. Le due prove si spostano di (tokenAttrezzi - taratura); se questi numeri cambiano, si aggiornano qui e le prove seguono da sole."
     }
   }
 }

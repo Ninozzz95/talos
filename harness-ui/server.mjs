@@ -1134,6 +1134,9 @@ async function startServer() {
        il Codice locale non è provato sul Pad con Spark e Gemma; poi si toglie questa riga. Sul PC è spenta di serie. */
     ...(presenzaDaApp ? { promuoviDalTesto: true } : {}),
     guardaImmagineFn, vedeImmaginiFn, // owner 27/10/2026, view_image
+    /* 0.2.4, blocco 6, giro 2 (giudice v2220, forma B): le chiavi salvate, dalla MEMORIA del deposito (caricato una volta all'avvio,
+       `loadFromKeyring` sopra): una foto del web che porta una di loro non si scarica. Mai il portachiavi a ogni scaricamento. */
+    segretiConosciutiFn: () => providerStore.segretiInMemoria(),
     motoreInCaricamentoFn, // 01/11/2026: la carta dell'arresto durante un'apertura
     prezzoDelModelloFn, // decisioni 57 e 144: dollari sulla carta della ricerca e nella chat a lato
     fotoConversazioni: fotoConversazioniDelRegistro, // 01/11/2026: «Memoria delle conversazioni», la scheda su disco a fine giro

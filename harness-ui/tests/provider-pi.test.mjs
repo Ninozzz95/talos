@@ -17,10 +17,14 @@ import { createHttpApp } from '../src/http-app.mjs';
 
 const ATTESI = {
   kimi: ['Kimi', 'https://api.moonshot.ai/v1', 'MOONSHOT_API_KEY', 'moonshotai', 'kimi-k2.6'],
-  minimax: ['MiniMax', 'https://api.minimax.io/v1', 'MINIMAX_API_KEY', 'minimax', 'MiniMax-M2.5'],
+  /* S6 della 0.2.4 (18/11/2026): MiniMax-M2.5 «deprecated» su models.dev; ausiliario M3.1 Flash, più economico su ogni voce */
+  minimax: ['MiniMax', 'https://api.minimax.io/v1', 'MINIMAX_API_KEY', 'minimax', 'MiniMax-M3.1-Flash'],
   qwen: ['Qwen', 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', 'DASHSCOPE_API_KEY', 'alibaba', 'qwen-flash'],
 };
-const FIXTURE = JSON.parse(readFileSync(new URL('./fixtures/provider-pi-models-dev-2026-09-12.json', import.meta.url), 'utf8'));
+const FIXTURE_12_09 = JSON.parse(readFileSync(new URL('./fixtures/provider-pi-models-dev-2026-09-12.json', import.meta.url), 'utf8'));
+/* S6 della 0.2.4: i fatti di MiniMax vengono dalla proiezione del 18/11 (voci vere di api.json, `models-dev-esempio-2026-11-18.json`) */
+const DEL_18_11 = JSON.parse(readFileSync(new URL('./fixtures/models-dev-esempio-2026-11-18.json', import.meta.url), 'utf8'));
+const FIXTURE = { ...FIXTURE_12_09, fornitori: { ...FIXTURE_12_09.fornitori, minimax: DEL_18_11.minimax } };
 const CHIAVE = 'credenziale-finta-pi';
 const deps = store => ({ leggiChiave: store.getKey, leggiRuntime: store.getRuntime });
 const storePer = id => createProviderCredentialStore({ env: { [ATTESI[id][2]]: CHIAVE } });
@@ -203,7 +207,9 @@ test('PI-06 — Qwen: booleano thinking sul wire, streaming vincolato solo dove 
 });
 
 test('PI-REG-CONFLITTI e PI-REG-ISOLAMENTO — opzioni malformate/discordanti respinte, altri modelli invariati', () => {
-  for (const [id, [, , , , model]] of Object.entries(ATTESI)) {
+  /* S6 della 0.2.4: l'ausiliario di MiniMax è diventato M3.1 Flash, che ha i livelli; la prova vuole un modello senza livelli */
+  for (const [id, [, , , , ausiliario]] of Object.entries(ATTESI)) {
+    const model = id === 'minimax' ? 'MiniMax-M2.5' : ausiliario;
     for (const errata of [{ reasoning: 'high' }, { extra_body: [] }, { reasoning: { enabled: false, effort: 'high' } },
       { reasoning: { enabled: false }, reasoning_effort: 'high' }, { extra_body: { model: 'dirottato' } },
       { extra_body: { messages: [] } }]) {

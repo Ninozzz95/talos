@@ -53,7 +53,7 @@ import { comandoCheModifica, comandoFinitoRosso, deveRiaprireSuProvaRossa, eComa
 import { normalizzaMetadatiCattura } from '../process-output-contract.mjs'
 import { creaRegistroLetture, registraLetturaRighe, registraLetturaDentroRiga, registraScritturaPropria, motivoPerNonSovrascrivere, frasePerNonSovrascrivere, serveImpronta, haImpronta, registraImpronta } from '../letture-prima-di-sovrascrivere.mjs' // T25/B09: la lettura prima di sovrascrivere
 import { PROCESS_OUTPUT_ENCODINGS } from '../process-output-encoding.mjs' // OEM36: solo l'elenco; iconv-lite si carica lì, e solo a richiesta
-import { nomeDiCampoSegreto, oscuraFormeDiSegreto, SEGRETO_OSCURATO, siNoLeggibile } from '../forme-di-segreto.mjs' // cura gemella 0.2.2 giro 3: gli argomenti sulla carta di un attrezzo di fuori
+import { campoSegreto, oscuraFormeDiSegreto, SEGRETO_OSCURATO, formaDiSegretoNelTesto, siNoLeggibile } from '../forme-di-segreto.mjs' // cura gemella 0.2.2 giro 3: gli argomenti sulla carta di un attrezzo di fuori
 import { StringDecoder } from 'node:string_decoder'
 import { createParser } from 'eventsource-parser'
 import { leggiAttesaRichiestaDalFornitore, erroreEsitoProviderIncerto, erroreEsitoProviderIncertoEsaurito, erroreNessunaPrimaRispostaEsaurito, leggiRifiutoProvider } from '../provider-retry.mjs'
@@ -70,7 +70,7 @@ import { CHIAMATA_NEL_TESTO, argomentiDalFrammento, codaChiamataNelTesto, creaFi
 import { PREFISSO_SINTESI_RECINTATA, costruisciBloccoFatti } from './ricarica-post-compact.mjs' // ⭐ 06/10/2026: la ricarica della memoria post-compact (opzione A + C-a + C-b, ricerca 5×5×5×5 §6.4)
 import { createHash, generateKeyPairSync, randomUUID, sign as firmaCrypto, verify as verificaCrypto } from 'node:crypto'
 import { lookup as risolviDns } from 'node:dns'
-import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { createWriteStream } from 'node:fs'
 import { lstat, open, readdir, readFile, readlink, realpath, stat as statAsync } from 'node:fs/promises'
 import { request as richiestaHttp } from 'node:http'
@@ -81,7 +81,8 @@ import { createRequire } from 'node:module'
 import { setTimeout as dormiConSegnale } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { imageMessageContent } from '../chat-image-attachments.mjs'
-import { CAMPO_IMMAGINI, GUARDATE_MASSIME_PER_GIRO, conImmaginiDegliAttrezzi, senzaCampoImmagini } from './immagine-da-guardare.mjs'
+import { CAMPO_IMMAGINI, GUARDATE_MASSIME_PER_GIRO, PIXEL_MASSIMI_IMMAGINE, conImmaginiDegliAttrezzi, leggiIntestazioneImmagine, senzaCampoImmagini } from './immagine-da-guardare.mjs'
+import { TESTA_ELENCO_IMMAGINI, immaginiDellaPagina, indirizziDellElenco, testoDellElenco } from './immagini-della-pagina.mjs' // 0.2.4 blocco 6: le foto delle pagine web
 import { consenteAttrezzoDelega, delegaLimitata } from '../delegation-contract.mjs'
 import { codificaCursore, confrontaChiavi, cursoreSegnaposto, decodificaCursore, notaCursoreSegnaposto, testoElenco } from '../elenco-paginato.mjs' // C5: le pagine di `elenca`
 import { riferimentoDiRicerca } from './ricerche-in-corso.mjs' // R-24: solo `r<numero>` è l'id di una ricerca
@@ -144,8 +145,9 @@ import { serveLoStatoDelBersaglio, motivoPerNonScrivereTesto } from './guardia-s
 import { bloccoDelPavimento, rifiutoDelPavimento } from './pavimento-comandi.mjs' // N-02, owner 02/10/2026: il pavimento di Hermes, parti 1+2+3
 import { notaPaginaDaAggiungere, indirizzoPulito, titoloPulito, RIGA_PAGINA_DA_ALTROVE, TESTA_PAGINA_BROWSER } from './pagina-del-browser.mjs' // decisione 201 (04/11/2026)
 import { cancellazioneCritica } from './cancellazioni-critiche.mjs' // decisione 155 (04/11/2026): la sola carta nuova dell'Accesso pieno
+import { scrittureDelComando } from './scritture-della-shell.mjs' // 0.2.4 B3: dove scrive un comando, per «Scrive nel progetto»
 import { notaDoveSei, ultimaNotaDove, aliasDelPercorso, argomentiConAlias } from './dove-sei.mjs' // L1 (owner 20/10/2026): il percorso vero e gli alias
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { vistaWindows, vistaLinux } from './percorsi-casa-linux.mjs' // Fase B, owner 01/10/2026: le due viste dello stesso percorso
 import { SCRIPT_FATTI_WSL, leggiFattiWsl, sceltaUtenteWsl, discoDellaCartella, distroSenzaUtenteNormale, comandoChiedeRootWsl } from './utente-wsl.mjs' // F009, owner 01/10/2026: con che utente girano i comandi Linux
 import { notaProgrammaMancante } from './programma-mancante.mjs' // COD-207, 30/10/2026: «"git" is not available in this environment»
@@ -3338,7 +3340,10 @@ const ATTREZZI = [
             + 'local network, no credentials in the URL.',
         input_schema: {
             type: 'object',
-            properties: { url: { type: 'string', description: 'the page to read, e.g. "https://example.org/docs"' } },
+            properties: {
+                url: { type: 'string', description: 'the page to read, e.g. "https://example.org/docs"' },
+                images: { type: 'boolean', description: 'true only when you need to look at the page\'s photos: the first 4 images of its list are attached.' },
+            },
             required: ['url'],
         },
     },
@@ -3832,13 +3837,14 @@ const ATTREZZI_ESTESI = [
         name: 'view_image',
         description: 'Look at an image file (PNG, JPEG, WebP or GIF): a file of the project, or a screenshot the browser tool saved. '
             + 'The image is attached to the result so you can see it. Use it when what matters is visual: a screenshot, a chart, a design, '
-            + 'a photo. For text files use "leggi".',
+            + 'a photo. For text files use "leggi". For an image on the web, pass url instead of path: an exact address from the image '
+            + 'list "naviga" gave you, or one the person wrote.',
         input_schema: {
             type: 'object',
             properties: {
                 path: { type: 'string', description: 'Path of the image file: relative to the project, or the full path a tool gave you.' },
+                url: { type: 'string', description: 'Instead of path: the web address of the image, exactly as listed by naviga or written by the person.' },
             },
-            required: ['path'],
         },
     },
     /*
@@ -8357,6 +8363,39 @@ export function eUnaCredenziale(chiave) {
 }
 
 /*
+ * Giro di cura 1 di «chiavi nel testo web» (revisore REV-07, giudice v2243): per CONFRONTARE un indirizzo con le chiavi, dall'ambiente si
+ * prendono solo i valori che sembrano chiavi. `eUnaCredenziale` resta larga per i comandi (lì nascondere troppo costa poco); qui un valore
+ * preso per sbaglio rifiuta pagine normali: `AZURE_AUTHORITY_HOST=https://login.microsoftonline.com/` chiudeva quel sito, `GIT_AUTHOR_EMAIL`
+ * ogni ricerca col suo indirizzo di posta. Fuori: i nomi che finiscono per `_HOST`, `_URL`, `_URI`, `_EMAIL`, `_NAME`, `_DOMAIN`; i nomi con
+ * AUTHOR (non AUTHORIZATION) senza una parola da chiave vera; i valori che sono un indirizzo, una posta o un nome di host. Codex esclude
+ * per nome `*KEY*`, `*SECRET*`, `*TOKEN*` (`codex-rs/protocol/src/shell_environment.rs:141-143`), Hermes per suffisso
+ * (`hermes_cli/config.py:3854`): nessuno dei due prende AUTH da solo.
+ */
+const NOME_CHE_NON_PORTA_UNA_CHIAVE = /(?:_HOST|_URL|_URI|_EMAIL|_NAME|_DOMAIN)$/iu
+const NOME_CON_AUTORE = /AUTHOR(?!I[SZ])/iu
+const PAROLA_DA_CHIAVE_VERA = /TOKEN|SECRET|PASSW|CREDENTIAL|KEY/iu
+const VALORI_CHE_NON_SONO_CHIAVI = [
+    /^[a-z][a-z0-9+.-]*:\/\/\S*$/iu, // un indirizzo
+    /^[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,24}$/iu, // una posta
+    /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\.?(?::\d{1,5})?$/iu, // un nome di host, con la porta
+]
+
+/** I valori dell'ambiente `ambiente` che possono essere una chiave della persona (per il confronto degli indirizzi, mai per i comandi).
+ *  ⛔ Nessun valore di serie: chi chiama passa l'ambiente (il nucleo `process.env`, le prove uno finto), mai letto per sbaglio. */
+export function valoriDiChiaveDellAmbiente(ambiente) {
+    const valori = []
+    for (const [nome, valore] of Object.entries(ambiente ?? {})) {
+        if (typeof valore !== 'string' || !eUnaCredenziale(nome)) continue
+        if (NOME_CHE_NON_PORTA_UNA_CHIAVE.test(nome)) continue
+        if (NOME_CON_AUTORE.test(nome) && !PAROLA_DA_CHIAVE_VERA.test(nome)) continue
+        const v = valore.trim()
+        if (VALORI_CHE_NON_SONO_CHIAVI.some((forma) => forma.test(v))) continue
+        valori.push(valore)
+    }
+    return valori
+}
+
+/*
  * 11/10/2026 notte — LA SHELL DEI COMANDI, DETTA. `shell: true` vuol dire `/bin/sh` su Unix (doc Node v24, child_process: «Uses
  * '/bin/sh' on Unix, and process.env.ComSpec on Windows»), che su Android non esiste: il Node del Pad (build di Termux) cercava la sh
  * di Termux e falliva con ENOENT, e ogni comando del modello moriva (misura della sessione mobile col server r4 sul Pad). Su Android
@@ -10965,6 +11004,202 @@ export async function leggiPaginaSicura(urlGrezzo, unSaltoFn = unSaltoHttp) {
     }
 }
 
+/*
+ * ⭐ 0.2.4, blocco 6 (owner 18/11/2026 10:50, richiesta 160): un'IMMAGINE dal web passa dallo STESSO filtro di `naviga` — la camminata
+ *   di `leggiPaginaSicura` (ogni salto rivalidato, 5 salti, niente https→http) e il DNS controllato dentro la connessione
+ *   (`ricercaPubblica`) — con un salto BINARIO: `unSaltoHttp` decodifica il corpo in utf-8 e rompe i byte, e resta intoccato.
+ *   Nessun terzo filtro (il proxy del browser ha il rebinding scoperto, `browser-proxy-universale.mjs:40-42`).
+ *   Tetti: 10 MB in flusso interrotto, e un `content-length` oltre il tetto si rifiuta prima di leggere (Hermes `tools/vision_tools.py:287-308`,
+ *   50 MB; Gemini CLI `web-fetch.ts:43`, 10 MB); 15 s TOTALI su tutta la catena (Hermes 30 s, `vision_tools.py:84-87`). Nessun cookie,
+ *   nessun Referer, nessuna credenziale: la richiesta porta solo `accept` e `user-agent`. Il tipo vero si legge dai byte, dopo.
+ */
+export const BYTE_MASSIMI_IMMAGINE_WEB = 10 * 1024 * 1024
+export const TEMPO_MASSIMO_IMMAGINE_WEB_MS = 15_000
+/** `naviga { images: true }`: le prime tante dell'elenco (~1.500 token ciascuna a 1568 px; forma 024-B6). */
+export const IMMAGINI_ALLEGATE_DA_NAVIGA = 4
+const ACCETTA_IMMAGINI = 'image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.9,*/*;q=0.1'
+
+export function unSaltoBinario(url, { msRimasti = TEMPO_MASSIMO_IMMAGINE_WEB_MS, segnale = null, byteMassimi = BYTE_MASSIMI_IMMAGINE_WEB } = {}) {
+    return new Promise((risolvi, rifiuta) => {
+        if (!(msRimasti > 0)) { rifiuta(new Error('TALOS_WEB_TIMEOUT')); return }
+        if (segnale?.aborted) { rifiuta(new Error('TALOS_WEB_STOPPED')); return }
+        let finito = false
+        let scadenza = null
+        let richiesta = null
+        const suStop = () => { richiesta?.destroy(); chiudi(new Error('TALOS_WEB_STOPPED')) }
+        const chiudi = (errore, valore) => {
+            if (finito) return
+            finito = true
+            clearTimeout(scadenza)
+            segnale?.removeEventListener?.('abort', suStop)
+            if (errore) rifiuta(errore)
+            else risolvi(valore)
+        }
+        const troppo = () => { richiesta.destroy(); chiudi(new Error('TALOS_WEB_RESPONSE_TOO_LARGE')) }
+        const richiediFn = url.protocol === 'https:' ? richiestaHttps : richiestaHttp
+        richiesta = richiediFn(url, {
+            method: 'GET',
+            lookup: ricercaPubblica,
+            headers: { accept: ACCETTA_IMMAGINI, 'user-agent': NAVIGA_USER_AGENT },
+            timeout: Math.min(msRimasti, 20_000),
+        }, (risposta) => {
+            const dichiarati = Number(risposta.headers['content-length'])
+            if (Number.isFinite(dichiarati) && dichiarati > byteMassimi) { troppo(); return }
+            const pezzi = []
+            let totale = 0
+            risposta.on('data', (pezzo) => {
+                totale += pezzo.length
+                if (totale > byteMassimi) { troppo(); return }
+                pezzi.push(pezzo)
+            })
+            risposta.on('end', () => chiudi(null, { stato: risposta.statusCode, posizione: risposta.headers.location, corpo: Buffer.concat(pezzi) }))
+            risposta.on('error', (e) => chiudi(e))
+            risposta.on('close', () => chiudi(new Error('TALOS_WEB_RESPONSE_INCOMPLETE')))
+        })
+        scadenza = setTimeout(() => { richiesta.destroy(); chiudi(new Error('TALOS_WEB_TIMEOUT')) }, msRimasti)
+        segnale?.addEventListener?.('abort', suStop, { once: true })
+        richiesta.on('timeout', () => { richiesta.destroy(); chiudi(new Error('TALOS_WEB_TIMEOUT')) })
+        richiesta.on('error', (e) => chiudi(e))
+        richiesta.end()
+    })
+}
+
+/** Un'immagine dal web: la camminata di `naviga` col salto binario e una scadenza sola per tutti i salti. `{ url, byte }`; lancia altrimenti. */
+export async function scaricaImmagineWeb(urlGrezzo, { segnale = null, unSaltoFn = null } = {}) {
+    const fine = Date.now() + TEMPO_MASSIMO_IMMAGINE_WEB_MS
+    const salto = unSaltoFn ?? ((url) => unSaltoBinario(url, { msRimasti: fine - Date.now(), segnale }))
+    const r = await leggiPaginaSicura(urlGrezzo, salto)
+    if (r.stato !== 200) throw new Error(`TALOS_WEB_IMAGE_HTTP ${r.stato}`)
+    return { url: r.url, byte: new Uint8Array(r.corpo ?? []) }
+}
+
+/** Un indirizzo che porta qualcosa con la forma di un segreto (giudice v2200): com'è e decodificato, col riconoscitore di casa importato. */
+export function segretoNellIndirizzo(url) {
+    const varianti = [String(url ?? '')]
+    for (const decodifica of [(v) => decodeURIComponent(v), (v) => decodeURIComponent(v.replace(/\+/gu, ' '))]) {
+        try { varianti.push(decodifica(varianti[0])) } catch { /* una codifica rotta: resta la forma com'è */ }
+    }
+    return varianti.some((v) => formaDiSegretoNelTesto(v) !== null || oscuraFormeDiSegreto(v) !== v)
+}
+
+/** Giro 2 (giudice v2220): sotto questa lunghezza un valore non si confronta (le chiavi vere ne hanno 20 e più; un «1» o un «true»
+ *  sotto un nome da credenziale bloccherebbe mezzo web). */
+export const LUNGHEZZA_MINIMA_CHIAVE = 16
+
+/**
+ * Giro di cura 1 di «chiavi nel testo web» (revisore REV-01, giudice v2243): una passata di decodifica in percento che NON lancia mai.
+ * `decodeURIComponent` lancia sull'intero testo per un solo «%» solitario, un `%ZZ` o un UTF-8 rotto (MDN, «URIError: malformed URI
+ * sequence»), e una chiave codificata accanto passava. Qui ogni corsa di `%XX` si legge byte per byte: l'ASCII si decodifica, ogni
+ * sequenza UTF-8 valida (RFC 3629, le stesse che accetta `decodeURIComponent`) insieme, ciò che è rotto resta com'è. Nessuna eccezione,
+ * nemmeno dentro (un indirizzo ostile con migliaia di sequenze rotte costerebbe migliaia di eccezioni). Lineare. Come `unquote` di
+ * Python, che Hermes usa (`tools/web_tools_extract.py:104`) e che non lancia mai.
+ */
+const SECONDO_BYTE_UTF8 = new Map([[0xe0, [0xa0, 0xbf]], [0xed, [0x80, 0x9f]], [0xf0, [0x90, 0xbf]], [0xf4, [0x80, 0x8f]]])
+export function decodificaPercentoSenzaLanciare(testo) {
+    return String(testo ?? '').replace(/(?:%[0-9a-f]{2})+/giu, (corsa) => {
+        const byte = []
+        for (let i = 0; i < corsa.length; i += 3) byte.push(parseInt(corsa.slice(i + 1, i + 3), 16))
+        let fuori = ''
+        for (let i = 0; i < byte.length;) {
+            const b = byte[i]
+            if (b < 0x80) { fuori += String.fromCharCode(b); i += 1; continue }
+            const lunghezza = b >= 0xc2 && b <= 0xdf ? 2 : b >= 0xe0 && b <= 0xef ? 3 : b >= 0xf0 && b <= 0xf4 ? 4 : 0
+            if (lunghezza > 0 && i + lunghezza <= byte.length) {
+                const [minimo, massimo] = SECONDO_BYTE_UTF8.get(b) ?? [0x80, 0xbf]
+                let valida = byte[i + 1] >= minimo && byte[i + 1] <= massimo
+                for (let k = 2; valida && k < lunghezza; k += 1) valida = byte[i + k] >= 0x80 && byte[i + k] <= 0xbf
+                if (valida) {
+                    let punto = b & (lunghezza === 2 ? 0x1f : lunghezza === 3 ? 0x0f : 0x07)
+                    for (let k = 1; k < lunghezza; k += 1) punto = (punto << 6) | (byte[i + k] & 0x3f)
+                    fuori += String.fromCodePoint(punto)
+                    i += lunghezza
+                    continue
+                }
+            }
+            fuori += corsa.slice(i * 3, i * 3 + 3)
+            i += 1
+        }
+        return fuori
+    })
+}
+
+/** Quante passate di decodifica si guardano: con tre, anche la tripla codifica (prima un limite dichiarato delle foto) è chiusa. */
+export const PASSATE_DI_DECODIFICA = 3
+
+/**
+ * Giro 2 (giudice v2217-v2220, forma B): l'indirizzo contiene il VALORE esatto di una delle chiavi? Si guarda ogni forma data (com'è e
+ * normalizzata: chi normalizza abbassa le maiuscole del nome del sito) e, se si legge come indirizzo, ogni suo pezzo (utente, parola
+ * d'ordine, sito, percorso, query, ogni parametro come lo legge il server, frammento); ognuno com'è e dopo ogni passata della decodifica
+ * che non lancia, fino a `PASSATE_DI_DECODIFICA` (una chiave non ha spazi, quindi il «+» non conta). Solo sì o no: mai quale chiave, mai
+ * dove. Limiti dichiarati: un valore spezzato in due parametri non si riconosce; le maiuscole cambiate nemmeno.
+ */
+export function indirizzoConUnaChiave(forme, valori) {
+    if (!valori || valori.size === 0) return false
+    const pezzi = []
+    for (const forma of forme) {
+        const intera = String(forma ?? '')
+        pezzi.push(intera)
+        let u = null
+        try { u = new URL(intera) } catch { /* illeggibile come indirizzo: vale la forma intera */ }
+        if (u) {
+            pezzi.push(u.username, u.password, u.hostname, u.pathname, u.search, u.hash)
+            for (const [nome, valore] of u.searchParams) pezzi.push(nome, valore)
+        }
+    }
+    const testi = new Set()
+    for (const pezzo of pezzi) {
+        let t = pezzo
+        if (!t || testi.has(t)) continue
+        testi.add(t)
+        for (let passata = 0; passata < PASSATE_DI_DECODIFICA; passata += 1) {
+            const dopo = decodificaPercentoSenzaLanciare(t)
+            if (dopo === t) break
+            t = dopo
+            testi.add(t)
+        }
+    }
+    for (const valore of valori) for (const testo of testi) if (testo.includes(valore)) return true
+    return false
+}
+
+/*
+ * 0.2.4, chiavi in ricerca e Chrome (owner 19/11 09:33, giudice v2239): la raccolta dei valori delle chiavi della persona, la STESSA del
+ *   nucleo (le foto e il testo del web la usano da dentro il giro), qui fuori dal giro perché la usino anche chi non ha il giro: la
+ *   ri-verifica della ricerca approfondita e l'Assistente. Fonti: `chiavi` (la chiave del giro, quella della ricerca web), `ambiente`
+ *   (filtrato da `valoriDiChiaveDellAmbiente`; ⛔ nessun ambiente di serie: chi chiama lo passa, le prove uno finto), e la funzione
+ *   facoltativa dell'ospite `segretiConosciutiFn()` (dalla sua memoria, mai il portachiavi a ogni chiamata). Soglia
+ *   `LUNGHEZZA_MINIMA_CHIAVE`. Se la funzione lancia: con `ospiteRottoChiude` l'errore sale (le foto chiudono), senza si tiene il resto.
+ */
+export async function valoriDelleChiaviConosciute({ chiavi = [], ambiente, segretiConosciutiFn = null, ospiteRottoChiude = true } = {}) {
+    const valori = new Set()
+    const metti = (v) => { if (typeof v === 'string' && v.trim().length >= LUNGHEZZA_MINIMA_CHIAVE) valori.add(v.trim()) }
+    for (const v of Array.isArray(chiavi) ? chiavi : []) metti(v)
+    for (const valore of valoriDiChiaveDellAmbiente(ambiente)) metti(valore)
+    if (typeof segretiConosciutiFn === 'function') {
+        let dati = null
+        try { dati = await segretiConosciutiFn() }
+        catch (rotto) { if (ospiteRottoChiude) throw rotto }
+        if (Array.isArray(dati)) for (const v of dati) metti(v)
+    }
+    return valori
+}
+
+/** Il segno che prende il posto di una chiave della persona in un testo letto dallo schermo (computer use). */
+export const SEGNO_CHIAVE_NASCOSTA = '[one of your keys, hidden]'
+
+/**
+ * 0.2.4, chiavi in ricerca e Chrome: un testo letto (lo schermo del computer use) senza le chiavi della persona. Ogni valore esatto,
+ * il più lungo prima (un pezzo non copre mai il valore che lo contiene), diventa `SEGNO_CHIAVE_NASCOSTA`, come Hermes
+ * `redact_registered_vault_values` (`agent/redact.py:73-83`). Se dopo resta una chiave in un'altra forma (codificata in percento: lo dice
+ * `indirizzoConUnaChiave`, lo stesso aiuto degli indirizzi), il testo intero diventa il segno. Senza valori il testo torna identico.
+ */
+export function testoSenzaChiavi(testo, valori) {
+    if (typeof testo !== 'string' || testo === '' || !valori || valori.size === 0) return testo
+    let fuori = testo
+    for (const valore of [...valori].sort((a, b) => b.length - a.length)) if (fuori.includes(valore)) fuori = fuori.split(valore).join(SEGNO_CHIAVE_NASCOSTA)
+    return indirizzoConUnaChiave([fuori], valori) ? SEGNO_CHIAVE_NASCOSTA : fuori
+}
+
 const RICERCA_MAX_BYTE = 1 * 1024 * 1024
 
 /**
@@ -11829,6 +12064,24 @@ export function chiaveDellaCartaDiFuori(azione) {
  *     (`clear_cookies: true`); under one it masked (`password: true`) it stays masked (`siNoLeggibile`, forme-di-segreto.mjs).
  */
 export const TETTO_ARGOMENTI_DELLA_CARTA = Object.freeze({ caratteriPerValore: 1_200, caratteriInTutto: 4_800, profondita: 8, orlo: 16_400, jsonInTutto: 24_000 })
+/*
+ * 0.2.4, block 1, item 7 (list item 90, judge v2030, reviewer of the cards: «R2 no cap on the number of calls in the list»): the card of
+ * several calls listed EVERY remaining call, so with N=100 the first card weighed 439 KB and answering one at a time wrote 22 MB to the stream
+ * and the journal (each card repeats the rest: N + (N-1) + …). Now at most `TETTO_CHIAMATE_DEL_GRUPPO` calls travel on the card, each masked
+ * as before, and `nonMostrate` says how many more it covers: the page writes «and N more calls not shown, Allow all covers them too».
+ * ⛔ The decision is untouched: `totale` is still every call, and a yes «for all» still answers every member of the group (`gruppo.risposta`
+ *   below), so nothing is approved without the card saying so. Like Hermes `ui-tui/src/components/agentsPanel.tsx:121` (`moreHidden`) and
+ *   DeepSeek `JsonBlock.tsx:6` (a cap with a footer that says what is left out).
+ */
+export const TETTO_CHIAMATE_DEL_GRUPPO = 20
+export function gruppoPerLaCarta(membri) {
+    const mostrate = membri.slice(0, TETTO_CHIAMATE_DEL_GRUPPO)
+    return {
+        totale: membri.length,
+        chiamate: mostrate.map((m) => ({ toolCallId: m.toolCallId, argomenti: argomentiPerLaCarta(m.argomenti).argomenti })),
+        ...(membri.length > mostrate.length ? { nonMostrate: membri.length - mostrate.length } : {}),
+    }
+}
 export const SEGNO_TAGLIATO = '…'
 /**
  * The arguments for the card: MASKED first (a key that is a secret name loses its whole value, as Hermes `_mask_secret_fields`,
@@ -11903,7 +12156,7 @@ export function argomentiPerLaCarta(argomenti) {
             const x = v[k]
             const chiave = unica(fuori, testo(k))
             /* the REAL name decides: neither the cut nor the number may hide a secret name */
-            const segreto = nomeDiCampoSegreto(k) && x !== null && x !== undefined && x !== '' && !siNoLeggibile(k, x) // round 6: a yes/no under a name the base did not mask is shown
+            const segreto = campoSegreto(k, x) // round 6: a yes/no under a name the base did not mask is shown; 0.2.4 block 1: `tokens` holding no counter is a secret
             if (segreto) restano -= SEGRETO_OSCURATO.length
             metti(fuori, chiave, segreto ? SEGRETO_OSCURATO : visita(x, profondita + 1))
         }
@@ -12342,6 +12595,7 @@ export function creaRicevutaOperazione({
  *   'scrittura-progetto' — F4-03, 01/10/2026: «Scrive nel progetto». Tutto come senza livello, tranne `scrivi`/`file_edit`
  *                        che finiscono FUORI dalla cartella (percorso vero, collegamenti compresi): lì si chiede, anche
  *                        con «sempre», salvo una cartella consentita per la sessione (`consensiSessione.cartelleFuori`).
+ *                        0.2.4 B3: anche un comando della shell che scrive o cancella fuori (bersagli letti dal testo).
  *   'lettura'         — esiste da prima: nessuna scrittura/comando/documento.
  *   'ricerca'         — NUOVO (L1, 11/09): come `'lettura'` per TUTTO, tranne
  *                        `research_deposit`, e solo se il percorso risolve dentro
@@ -12513,7 +12767,13 @@ function dentroLaCartella(radice, percorso, { separatore = sep } = {}) {
  * @returns {Promise<{dentro:boolean, verificato:boolean, vero:string|null, cartella:string|null}>} `cartella` è la cartella
  *   VERA del file: quella che la persona può consentire per la sessione.
  */
-export async function posizioneNelProgetto(cartella, percorso) {
+export async function posizioneNelProgetto(cartella, percorso, { visti = null } = {}) {
+    /* ⛔⛔ BUG-024-UNC (20/11/2026): un posto su un altro computer (`\\ospite\cond`, `//ospite`, `\\?\UNC\`, WebDAV, un collegamento
+       locale che porta là) si riconosce dal TESTO e da `lstat`/`readlink` locali, mai aperto: `realpath` qui sotto sarebbe già il
+       contatto SMB con le credenziali di Windows (Hermes `file_safety.py:146-151`). Non verificato ⇒ chi decide chiede, mai «per la
+       sessione». Dentro un progetto che sta lui su una condivisione (`via: 'cartella'`) si misura come prima. */
+    const rete = cartella ? await destinazioneDiRete(resolve(cartella, percorso ?? ''), { cartella, visti }) : null
+    if (rete && rete.via !== 'cartella') return { dentro: false, verificato: false, vero: null, cartella: null, rete: { genere: rete.genere, ospite: rete.ospite } }
     const radice = cartella ? (await percorsoVero(cartella)) ?? resolve(cartella) : null
     const vero = cartella ? await percorsoVero(resolve(cartella, percorso ?? '')) : null
     if (!radice || !vero) return { dentro: false, verificato: false, vero: null, cartella: null }
@@ -12523,6 +12783,21 @@ export async function posizioneNelProgetto(cartella, percorso) {
 /* La chiave di un consenso «per questa cartella»: dove (`locale`, o la distro della casa Linux) e quale cartella. */
 const SEPARATORE_CHIAVE_CONSENSO = '|'
 function chiaveConsensoCartella(spazio, cartellaVera) { return `${spazio}${SEPARATORE_CHIAVE_CONSENSO}${cartellaVera}` }
+/*
+ * ⛔ 0.2.4 B3 giro 3 (owner 19/11/2026 08:23, giudice v2229): «Consenti in questa cartella per la sessione» MAI per la radice di un disco
+ *   (`C:\`, `/`, `\\server\share\`) né per la casa (`~`; nella casa Linux `/root` e `/home/<nome>`): ricorderebbe il disco o la casa
+ *   intera (revisore B3: `/tmp/../x` chiedeva nominando `C:\`). Lì la carta resta «una volta»: niente `chiave`, quindi niente bottone e il
+ *   registro rifiuta l'ambito.
+ */
+function cartellaTroppoLarga(spazio, cartellaVera) {
+    if (spazio !== 'locale') return percorsiPosix.dirname(cartellaVera) === cartellaVera || /^\/(?:root|home\/[^/]+)\/?$/u.test(cartellaVera)
+    if (dirname(cartellaVera) === cartellaVera) return true
+    let casa
+    try { casa = realpathSync(homedir()) } catch { casa = resolve(homedir()) }
+    const forma = (x) => (process.platform === 'win32' ? x.toLowerCase() : x).replace(/[\\/]+$/u, '')
+    return forma(cartellaVera) === forma(casa)
+}
+const chiavePerLaSessione = (spazio, cartellaVera) => (cartellaTroppoLarga(spazio, cartellaVera) ? {} : { chiave: chiaveConsensoCartella(spazio, cartellaVera) })
 /** La CHIAVE del consenso «per questa cartella» che copre la posizione, oppure `null` (C2 R6: serve a dire chi l'ha dato). */
 function consensoCopre(consensiSessione, posizione) {
     const elenco = Array.isArray(consensiSessione?.cartelleFuori) ? consensiSessione.cartelleFuori : []
@@ -12573,13 +12848,110 @@ async function scritturaFuoriDalProgetto(azione, { cartella, posizioneFn, consen
     }
     return verificato
         ? {
-            verificato: true, cartella: posizione.cartella, chiave: chiaveConsensoCartella(posizione.spazio, posizione.cartella),
+            verificato: true, cartella: posizione.cartella, ...chiavePerLaSessione(posizione.spazio, posizione.cartella),
             ...fraseDiPermesso('server.approval.outsideProject.verified', { cartella: posizione.cartella }),
         }
         : {
             verificato: false, cartella: null,
             ...fraseDiPermesso('server.approval.outsideProject.unverified', { percorso: azione.percorso }),
         }
+}
+
+/** Le cartelle temporanee del sistema, col percorso vero: `os.tmpdir()`, `TEMP`, `TMP`, `TMPDIR`, e `/tmp` fuori da Windows. */
+async function temporaneeVere() {
+    const scritte = [tmpdir(), process.env.TEMP, process.env.TMP, process.env.TMPDIR, ...(process.platform === 'win32' ? [] : ['/tmp', '/var/tmp'])]
+    const vere = []
+    for (const t of scritte) {
+        if (typeof t !== 'string' || t === '') continue
+        const v = (await percorsoVero(resolve(t))) ?? resolve(t)
+        if (!vere.includes(v)) vere.push(v)
+    }
+    return vere
+}
+
+/*
+ * ⛔⛔ 0.2.4 B3 (owner 17/11/2026 13:40, richiesta 154; forma `FORMA-024-B3-SCRIVE-NEL-PROGETTO-2026-11-18.md`) — «Scrive nel progetto»
+ *   chiede anche per un COMANDO che scrive o cancella fuori dal progetto. I bersagli li legge `scritture-della-shell.mjs` a parole; qui
+ *   ognuno si misura con la stessa `posizioneFn` di `scrivi` (percorso vero, giunzioni, casa Linux). Non chiedono: dentro la cartella,
+ *   in una cartella consentita per la sessione (anche da un antenato), nella cartella temporanea del sistema (Codex `codex-rs/protocol/
+ *   src/permissions.rs:837-852`). Chiedono: ogni bersaglio vero fuori (la carta nomina la cartella; con una sola cartella «Consenti in
+ *   questa cartella per la sessione» la ricorda: la cartella stessa se il bersaglio è una cartella, altrimenti la madre, come `scrivi`), e
+ *   ogni bersaglio che non si sa dire o un'installazione globale («non so dove», senza «per la sessione»). `null` se non serve una carta.
+ */
+async function scritturaDellaShellFuori(comando, { cartella, posizioneFn, consensiSessione, traccia = null }) {
+    const letto = scrittureDelComando(comando, { cartella })
+    if (letto.bersagli.length === 0 && letto.illeggibili.length === 0 && letto.globali.length === 0) return null
+    const nonVerificati = [...letto.illeggibili.map((x) => x.scritto), ...letto.globali.map((x) => x.comando)]
+    const fuori = []
+    let temporanee = null
+    let reteDi = null
+    const misurati = new Set()
+    const visti = new Map() // BUG-024-UNC giro 2: i pezzi già letti da `destinazioneDiRete` in QUESTO comando non si rileggono
+    const misura = async (percorso) => {
+        try {
+            return typeof posizioneFn === 'function'
+                ? await posizioneFn(percorso, { visti })
+                : { ...(await posizioneNelProgetto(cartella, percorso, { visti })), spazio: 'locale' }
+        }
+        catch { return null }
+    }
+    /*
+     * Via corta (prove di tempo del cancello: `rm -rf` di 3.237 cartelle sotto i 500 ms): un bersaglio che A PAROLE sta sotto la cartella
+     *   della sessione si misura dalla MADRE, una volta per madre (percorso vero: un collegamento più su porta fuori e si vede), più una
+     *   lettura della madre che dice quali nomi sono collegamenti o giunzioni: un bersaglio che è lui un collegamento si misura per
+     *   intero, come ogni altro. Solo sul disco di questa macchina (`spazio: 'locale'`); la casa Linux misura sempre per intero.
+     */
+    const radiceAParole = typeof cartella === 'string' && cartella !== '' ? resolve(cartella) : null
+    const madri = new Map()
+    const collegamentiDi = (madre) => {
+        try { return new Set(readdirSync(madre, { withFileTypes: true }).filter((d) => d.isSymbolicLink()).map((d) => (process.platform === 'win32' ? d.name.toLowerCase() : d.name))) }
+        catch (errore) { return errore?.code === 'ENOENT' ? new Set() : null }
+    }
+    for (const b of letto.bersagli) {
+        if (misurati.has(`${b.percorso}\u0000${b.cartella}`)) continue // lo stesso posto si misura una volta (una lettura del disco per posto)
+        misurati.add(`${b.percorso}\u0000${b.cartella}`)
+        const aParole = radiceAParole && isAbsolute(b.percorso) ? resolve(b.percorso) : null
+        if (aParole && aParole !== radiceAParole && dentroLaCartella(radiceAParole, aParole)) {
+            const madre = dirname(aParole)
+            if (!madri.has(madre)) {
+                const p = await misura(madre)
+                madri.set(madre, p?.verificato === true && p.dentro === true && p.spazio === 'locale' ? collegamentiDi(madre) : null)
+            }
+            const collegamenti = madri.get(madre)
+            const nome = process.platform === 'win32' ? basename(aParole).toLowerCase() : basename(aParole)
+            if (collegamenti && !collegamenti.has(nome)) continue
+        }
+        const posizione = await misura(b.percorso)
+        if (posizione?.verificato === true && posizione.dentro === true) continue
+        if (posizione?.verificato !== true || typeof posizione.vero !== 'string' || typeof posizione.spazio !== 'string') {
+            nonVerificati.push(b.scritto)
+            if (typeof posizione?.rete?.ospite === 'string') reteDi ??= { ospite: posizione.rete.ospite, percorso: b.scritto }
+            continue
+        }
+        const locale = posizione.spazio === 'locale'
+        temporanee ??= locale ? await temporaneeVere() : ['/tmp', '/var/tmp']
+        if (temporanee.some((t) => dentroLaCartella(t, posizione.vero, { separatore: locale ? sep : '/' }))) continue
+        const chiaveCoperta = consensoCopre(consensiSessione, posizione)
+        if (chiaveCoperta) {
+            if (traccia) traccia.consentitoDa ??= origineDelConsenso(consensiSessione, 'cartelleFuori', chiaveCoperta, 'cartella')
+            continue
+        }
+        const suCartella = b.cartella || (locale && (() => { try { return statSync(posizione.vero).isDirectory() } catch { return false } })())
+        const cartellaVera = suCartella ? posizione.vero : posizione.cartella
+        if (typeof cartellaVera === 'string' && !fuori.some((f) => f.cartella === cartellaVera && f.spazio === posizione.spazio)) fuori.push({ cartella: cartellaVera, spazio: posizione.spazio })
+    }
+    /* BUG-024-UNC: un bersaglio su un altro computer lo dice la carta (frase che esiste nelle due lingue, `network.open`), mai «per la sessione» */
+    if (nonVerificati.length) return { verificato: false, cartella: null, ...(reteDi
+        ? fraseDiPermesso('server.approval.network.open', { cosa: FRASI_DI_PERMESSO['server.approval.network.action.write'], cosaChiave: 'server.approval.network.action.write', ...reteDi })
+        : fraseDiPermesso('server.approval.outsideProject.unverified', { percorso: nonVerificati[0] })) }
+    if (fuori.length === 0) return null
+    const nomi = fuori.map((f) => f.cartella).join(', ')
+    return {
+        verificato: true, cartella: nomi,
+        /* due o più cartelle: nessun «per la sessione» (la carta ne ricorderebbe una sola e il comando le tocca tutte) */
+        ...(fuori.length === 1 ? chiavePerLaSessione(fuori[0].spazio, fuori[0].cartella) : {}),
+        ...fraseDiPermesso('server.approval.outsideProject.verified', { cartella: nomi }),
+    }
 }
 
 /* ⛔ 23/09/2026 notte, riparazione CTX (mutazione M5b sopravvissuta): esportata SOLO perché un test possa
@@ -12889,6 +13261,12 @@ export async function letturaEmulataNelProgetto(nome, argomenti, cartella, posiz
  * @returns {Promise<'segreto' | 'fuoriDalProgetto' | null>}
  */
 export async function cartaForzataPrevista(nome, argomenti, { livelloAccesso, cartella, posizioneFn, consensiSessione } = {}) {
+    /* 0.2.4 B3: un comando emulato che scrive fuori in «Scrive nel progetto» prende la carta del cancello, non due (la critica resta com'era) */
+    if (nome === 'shell') {
+        const comando = comandoDiShell(argomenti)
+        if (livelloLetto(livelloAccesso) !== 'scrittura-progetto' || !comando || cancellazioneCritica(comando, { cartella })) return null
+        return (await scritturaDellaShellFuori(comando, { cartella, posizioneFn, consensiSessione })) ? 'fuoriDalProgetto' : null
+    }
     if (nome !== 'scrivi' && nome !== 'file_edit') return null
     const percorso = argomenti?.percorso
     if (typeof percorso !== 'string' || percorso === '') return null
@@ -13094,16 +13472,22 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
      *   `acceptEdits` e Codex `workspace-write` con le approvazioni, `codex-rs/core/src/safety.rs:29-80`); TEMP conta come fuori;
      *   «Scrittura: Sempre» NON scavalca il confine (il foglio dice SE, la politica dice DOVE — come il segreto di F15, qui
      *   sopra); una cartella consentita «per la sessione» copre anche le sue sottocartelle.
-     * ⛔ Solo `scrivi` e `file_edit`: sono gli attrezzi che portano un percorso verificabile. La shell resta com'era (non ha un
-     *   confine senza un isolamento del sistema), e le letture restano libere (owner: «letture come oggi»).
+     * ⛔ `scrivi` e `file_edit` col loro percorso; dalla 0.2.4 (B3, owner 17/11/2026) anche la `shell`, coi bersagli che il testo nomina
+     *   (`scritture-della-shell.mjs`; un programma che scrive da sé resta fuori vista: non è un isolamento). Le letture restano libere
+     *   (owner: «letture come oggi»).
      * ⛔ `undefined` (TALOS-BANCO, CLI, mobile) NON entra qui: il banco resta bit per bit quello di prima.
      */
     /* ⛔ Owner 02/10/2026, «Una sola carta»: un percorso di rete ha GIÀ avuto il sì della persona per QUESTO file
        (`controllaPercorsoDiRete`, che dice anche da quale computer): quel sì vale anche come «fuori dal progetto», niente
        seconda carta. Solo questa domanda: segreti, politica «Chiedi» e il resto restano come sono. */
-    const fuori = !reteConsentita && livelloAccesso === 'scrittura-progetto' && (azione.tipo === 'scrivi' || azione.tipo === 'file_edit')
-        ? await scritturaFuoriDalProgetto(azione, { cartella, posizioneFn, consensiSessione, traccia: tracciaConsenso })
-        : null
+    /* ⛔⛔ 0.2.4 B3 (owner 17/11/2026, richiesta 154): anche la SHELL, dai bersagli letti nel testo (`scritturaDellaShellFuori`). Una carta
+       sola: se il comando è anche una cancellazione critica resta solo la critica (`critica`, qui sopra), che vale una volta e dice di più. */
+    const fuori = reteConsentita || livelloAccesso !== 'scrittura-progetto' ? null
+        : (azione.tipo === 'scrivi' || azione.tipo === 'file_edit')
+            ? await scritturaFuoriDalProgetto(azione, { cartella, posizioneFn, consensiSessione, traccia: tracciaConsenso })
+            : azione.tipo === 'shell' && !critica
+                ? await scritturaDellaShellFuori(azione.comando, { cartella, posizioneFn, consensiSessione, traccia: tracciaConsenso })
+                : null
     const fuoriForzaConferma = Boolean(fuori)
     /*
      * ⛔⛔ F-027 (owner 02/10/2026, «+1 con conferma») — DOPO UN CONTENUTO SOSPETTO, IL PASSO CHE CAMBIA QUALCOSA LO DECIDE UNA
@@ -13250,6 +13634,8 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
                 : segreto.perche === 'biglietti'
                 ? 'this command prints an entry ticket for the TALOS server: a human confirmation is needed even with an "always" permission'
                 : `the path "${segreto.percorso}" belongs to the class of reserved files (keys, credentials, keychains): a human confirmation is needed even with an "always" permission`)
+            : fuoriForzaConferma && azione.tipo === 'shell'
+            ? `this command ${fuori.verificato ? `writes or deletes outside the session folder (in "${fuori.cartella}")` : `writes somewhere that could not be verified (${fuori.fraseParams?.percorso ?? '?'}), maybe outside the session folder`}: with the project-write policy a human yes is needed`
             : fuoriForzaConferma
             ? `the path "${azione.percorso}" ${fuori.verificato ? `ends up outside the session folder (in "${fuori.cartella}")` : 'could not be verified, and may end up outside the session folder'}: with the project-write policy a human yes is needed`
             : sospettoForzaConferma
@@ -13329,6 +13715,9 @@ export async function verificaPermessoScrittura(azione, { livelloAccesso, modali
     if (!risposta.approvato) {
         /* F4-03 — «non approvato» qui copre anche la sessione senza nessuno davanti (automazioni, passi dei Workflow): il registro
            chiude la domanda subito. Al modello si dice cosa fare, non solo che non si può. */
+        if (viaRichiesta === 'fuori-dal-progetto' && azione.tipo === 'shell') {
+            return { consentito: false, via: viaRichiesta, motivo: risposta.motivo ?? `this command writes or deletes outside the session folder${fuori.cartella ? ` ("${fuori.cartella}")` : ''} and that was not confirmed. Do not run it again in another form: work inside the project, or ask the person what they prefer.` }
+        }
         if (viaRichiesta === 'fuori-dal-progetto') {
             return { consentito: false, via: viaRichiesta, motivo: risposta.motivo ?? `writing outside the session folder was not confirmed${fuori.cartella ? ` ("${fuori.cartella}")` : ''}. Do not try again outside: write inside the project, or ask the person what they prefer.` }
         }
@@ -14046,6 +14435,14 @@ export async function talosLavora({
     /* Owner 27/10/2026, `view_image`: (modello) => true | false | null — il modello del giro vede immagini? Letta una volta all'avvio del
        giro. Solo `true` accende l'attrezzo e porta le immagini al fornitore; `false`/`null`/assente (la CLI: null = non si sa) no. */
     vedeImmaginiFn,
+    /* 0.2.4, blocco 6: ({ url, segnale }) => { url, byte } — chi scarica un'immagine dal web. Di serie il filtro di `naviga` col salto
+       binario (`scaricaImmagineWeb`); le prove passano uno scaricatore finto. I byte vanno poi a `onGuardaImmagine({ byte, … })`. */
+    scaricaImmagineWebFn = null,
+    /* 0.2.4, blocco 6, giro 2 (giudice v2220, forma B): () => string[] | Promise<string[]> — i valori delle chiavi della persona che l'OSPITE
+       ha già in memoria (sul PC il deposito delle chiavi: `segretiInMemoria`), mai una lettura del portachiavi a ogni scaricamento. Facoltativa:
+       assente ⇒ le sole fonti del nucleo (chiave del giro, chiave della ricerca, ambiente). Chiamata UNA volta per scaricamento; i valori non
+       escono mai (niente registri, errori, messaggi). */
+    segretiConosciutiFn = null,
     /* 01/11/2026 (contratto chiuso da Desktop con Frontend e Mobile): (modello) => true | false — il motore locale di questo modello si sta
        ancora aprendo? Letta solo allo Stop. Assente (la CLI) = come prima. Vera: il punto della carta dice «while the model was still
        loading»: frase ESATTA, il telefono la riconosce dal testo. */
@@ -15077,8 +15474,8 @@ export async function talosLavora({
      *   percorsi di Linux (un collegamento creato da Linux su un disco di Windows, da qui, non si sa leggere); altrimenti questo
      *   disco. Un servente che non risponde, o un percorso che Linux non raggiunge, è «non verificato»: chi decide chiede.
      */
-    const posizioneDelGiro = async (percorso) => {
-        if (!inCasaLinux()) return { ...(await posizioneNelProgetto(cartella, percorso)), spazio: 'locale' }
+    const posizioneDelGiro = async (percorso, opzioni) => {
+        if (!inCasaLinux()) return { ...(await posizioneNelProgetto(cartella, percorso, opzioni)), spazio: 'locale' }
         try {
             const misura = await chiamaCasa('posizioneNelProgetto', { cartella: casaDelGiro.radice, percorso: linuxDi(percorso) })
             return { ...misura, spazio: `linux:${casaDelGiro.distro}` }
@@ -15269,7 +15666,10 @@ export async function talosLavora({
             async cambiata(percorso) {
                 if (!prima) return false
                 const ora = await posizioneDelGiro(percorso)
+                /* BUG-024-UNC giro 2 (revisore di correttezza, gara): un posto di rete non ha `vero` (non si apre), quindi un collegamento
+                   che durante la carta passa da `\\srv1` a `\\srv2` si vede dall'OSPITE letto a parole. */
                 return ora.verificato !== prima.verificato || ora.dentro !== prima.dentro || ora.vero !== prima.vero
+                    || (ora.rete?.ospite ?? null) !== (prima.rete?.ospite ?? null) || (ora.rete?.genere ?? null) !== (prima.rete?.genere ?? null)
             },
         }
     }
@@ -15313,7 +15713,7 @@ export async function talosLavora({
         if (voce === null || typeof voce !== 'object' || Array.isArray(voce) || !Object.hasOwn(voce, 'testo')) return voce || null
         return testoDelMessaggio(voce.testo).trim() === '' && !(Array.isArray(voce.testo) && voce.testo.length > 0) ? null : voce
     }
-    const consegnaVoceInCoda = (voceInCoda) => {
+    const consegnaVoceInCoda = async (voceInCoda) => {
         const conSegno = voceInCoda !== null && typeof voceInCoda === 'object' && !Array.isArray(voceInCoda) && Object.hasOwn(voceInCoda, 'testo')
         const messaggioInCoda = conSegno ? voceInCoda.testo : voceInCoda
         messaggi.push({ role: 'user', content: messaggioInCoda })
@@ -15327,7 +15727,7 @@ export async function talosLavora({
            la nota, se è cambiata, va subito dopo di lei; e da qui `browser_page` sa che il giro viene dalla finestra. */
         if (conSegno && voceInCoda.dallaPersona === true && Object.hasOwn(voceInCoda, 'paginaBrowser')) {
             paginaDalloSchermoDelGiro = true
-            const nota = notaPaginaDaAggiungere(messaggi, voceInCoda.paginaBrowser ?? null)
+            const nota = notaPaginaDaAggiungere(messaggi, await paginaPerLaNota(voceInCoda.paginaBrowser ?? null))
             if (nota) messaggi.push({ role: 'system', content: nota })
         }
         sospettoDelGiro ??= sospettoNeiRisultatiFigli(testoDelMessaggio(messaggioInCoda)) // F-027: un risultato sospetto di una figlia
@@ -15902,7 +16302,7 @@ export async function talosLavora({
                     /* every member is within the limit of the card (`argomentiEntroLaCarta`): its arguments go whole, nothing is cut.
                        Port onto 0.2.3: each one MASKED as the card of one call (`argomentiPerLaCarta`, twin repair of 0.2.2 round 3) — the
                        list travels in the same question to the stream and the journal and the phone; the executor and the model keep the real ones */
-                    ...(daQui.length > 1 ? { gruppo: { totale: daQui.length, chiamate: daQui.map((m) => ({ toolCallId: m.toolCallId, argomenti: argomentiPerLaCarta(m.argomenti).argomenti })) } } : {}),
+                    ...(daQui.length > 1 ? { gruppo: gruppoPerLaCarta(daQui) } : {}),
                 })
                 if (diQuesta) rispostaDellaCarta = { r }
                 if (daQui.length > 1 && r?.perTutteLeChiamate === true && r?.automatico !== true) gruppo.risposta = r
@@ -15997,7 +16397,9 @@ export async function talosLavora({
      *   cui il suo ramo non chiede niente (F15, piu' sotto); le altre quattro non attraversano cancelli nemmeno al loro turno
      *   (sono in `ATTREZZI_PIANO`, e il rifiuto di un pre-hook su una lettura e' gia' ignorato: FASE A nel ciclo).
      */
-    const apriPaginaWeb = (url) => {
+    const apriPaginaWeb = async (url) => {
+        /* chiavi nel testo del web (giudice v2229): prima della cache e della rete, una chiave della persona nell'indirizzo ⇒ mai aperto */
+        if (await indirizzoDelTestoConUnaChiave(url)) throw new Error(FRASE_CHIAVE_NEL_TESTO)
         /*
          * ⭐ L9 §7-B — la pagina passa dalla cache della corsa, quando ce n'è una.
          * ⛔ `letta.fromCache` non entra in `esito`: byte identici fra una pagina riaperta e una servita dalla cache, o il
@@ -16008,9 +16410,138 @@ export async function talosLavora({
             ? cacheWeb.around({ kind: 'extract', url, provider: 'naviga' }, chiedi)
             : chiedi().then((value) => ({ value, fromCache: false }))
     }
+    /*
+     * ⭐ 0.2.4, blocco 6 (giudice v2200, regola minima): un'immagine dal web si scarica senza chiedere SOLO se il suo indirizzo esatto stava
+     *   nell'elenco di una pagina letta con `naviga` in questa conversazione, o l'ha scritto la persona. Si legge dalla STORIA, quindi vale
+     *   dopo una ripresa; dopo una compattazione che ha tolto l'elenco non vale più (si rilegge la pagina). Ogni altro indirizzo, costruito
+     *   dal modello, si rifiuta: potrebbe portare fuori un pezzo della conversazione (`https://x/?q=…`). La carta per chiederlo alla persona
+     *   è un pezzo d'interfaccia nuovo (forma 024-B6): finché non c'è, il rifiuto dice al modello come arrivarci.
+     *   Come OpenAI («AI agent link safety», 29/01/2026: apre da solo solo indirizzi già visti), più stretto di Hermes (`vision_analyze` non
+     *   guarda l'indirizzo: `tools/image_source.py:119-128`).
+     */
+    const scrittoNelTesto = (testo, url) => {
+        for (let i = testo.indexOf(url); i >= 0; i = testo.indexOf(url, i + 1)) {
+            if (i + url.length === testo.length || /[\s"'<>)\]]/u.test(testo[i + url.length])) return true
+        }
+        return false
+    }
+    const indirizzoImmagineConosciuto = (...forme) => {
+        const nomi = new Map()
+        for (const m of messaggi ?? []) {
+            if (m?.role === 'assistant' && Array.isArray(m.tool_calls)) for (const tc of m.tool_calls) nomi.set(tc?.id, tc?.function?.name ?? tc?.name)
+        }
+        for (const m of messaggi ?? []) {
+            if (m?.role === 'tool' && nomi.get(m.tool_call_id) === 'naviga' && typeof m.content === 'string') {
+                const elenco = indirizziDellElenco(m.content)
+                if (forme.some((u) => elenco.has(u))) return true
+            }
+            if (m?.role === 'user') {
+                const testo = testoDelMessaggio(m.content)
+                if (forme.some((u) => scrittoNelTesto(testo, u))) return true
+            }
+        }
+        return false
+    }
+    /* Giro 2 (giudice v2220, forma B): i valori delle chiavi della persona, UNA raccolta per scaricamento. Fonti A, già nel nucleo e senza
+       letture: la chiave del giro, quella della ricerca web, l'ambiente col nome da credenziale (`eUnaCredenziale`, lo stesso filtro dei
+       comandi, ristretto da `valoriDiChiaveDellAmbiente` ai valori che sembrano chiavi: giro di cura 1). Fonte B, facoltativa: `segretiConosciutiFn()` dell'ospite, dalla sua memoria (sul PC il deposito delle chiavi, mai il
+       portachiavi a ogni scaricamento); assente (CLI, telefono, prove) ⇒ vale A. Si tiene un valore solo se è un testo di almeno
+       `LUNGHEZZA_MINIMA_CHIAVE` caratteri: sotto, un «1» o un «true» bloccherebbe mezzo web. Se la funzione lancia, l'errore sale: chi
+       chiama chiude (le foto); con `ospiteRottoChiude: false` (il testo) si tiene A e si va avanti. */
+    /* 0.2.4, chiavi in ricerca e Chrome: la raccolta è la stessa funzione esportata (`valoriDelleChiaviConosciute`), che usano anche la
+       ri-verifica della ricerca e l'Assistente; qui con le fonti del giro e l'ambiente del processo. */
+    const valoriDelleChiaviNote = ({ ospiteRottoChiude = true } = {}) => valoriDelleChiaviConosciute({
+        chiavi: [chiave, ricercaWeb?.apiKey], ambiente: process.env, segretiConosciutiFn, ospiteRottoChiude,
+    })
+    /* 0.2.4, chiavi nel testo del web (owner 19/11 08:23, giudice v2229): lo STESSO controllo delle foto sul testo (`naviga`, la sua
+       partenza anticipata, `browser_page`): un indirizzo col VALORE esatto di una chiave della persona non si apre, in ogni livello
+       (Accesso pieno compreso), zero carte; mai per forma. Differenza voluta dalle foto: se la funzione dell'ospite lancia, il testo NON si
+       chiude (prima non c'era nessun controllo, chiudere romperebbe la navigazione) e valgono le fonti del nucleo. Solo sì o no. */
+    const FRASE_CHIAVE_NEL_TESTO = 'this address contains one of your keys. TALOS never opens such an address, in any permission mode: it would carry the key out of the conversation. Nothing was read. Tell the person.'
+    const FRASE_CHIAVE_NELLA_PAGINA_APERTA = 'REFUSED. The address of the page open in the Browser contains one of your keys. TALOS does not read it, in any permission mode: the key would enter the conversation. Nothing was read. Tell the person.'
+    const indirizzoDelTestoConUnaChiave = async (url) => {
+        const forme = [String(url ?? '')]
+        try { forme.push(new URL(forme[0]).href) } catch { /* illeggibile: la politica di `naviga` lo rifiuta dopo */ }
+        return indirizzoConUnaChiave(forme, await valoriDelleChiaviNote({ ospiteRottoChiude: false }))
+    }
+    /* 0.2.4, chiavi in ricerca e Chrome (owner 19/11 09:33, giudice v2239): la domanda di `web_search` esce verso il fornitore della
+       ricerca. Col VALORE esatto di una chiave della persona (anche codificata: lo stesso aiuto degli indirizzi) non parte, PRIMA della
+       cache e della rete, nel ramo e nella partenza anticipata (stessa `cercaSulWeb`), in ogni livello, zero carte; mai per forma. Funzione
+       dell'ospite che lancia: come il testo, la ricerca non si chiude e valgono le fonti del nucleo. Hermes non guarda la domanda
+       (`tools/web_tools.py:302-339`, la registra anche nel log): solo gli indirizzi, per forma. Solo sì o no. */
+    const FRASE_CHIAVE_NELLA_RICERCA = 'this search contains one of your keys. TALOS does not send such a search to the search provider, in any permission mode: it would carry the key out of the conversation. Nothing was searched. Tell the person.'
+    const ricercaConUnaChiave = async (query) => indirizzoConUnaChiave([String(query ?? '')], await valoriDelleChiaviNote({ ospiteRottoChiude: false }))
+    /* La nota «pagina aperta nel Browser» (decisione 201) puliva l'indirizzo solo per NOME del parametro (`indirizzoPulito`): un `?q=<chiave>`
+       aperto dalla persona entrava nella nota. Ora anche per VALORE, con lo stesso aiuto: indirizzo (e titolo, scritto dalla pagina) con una
+       chiave ⇒ la nota dice che è nascosto (`pagina-del-browser.mjs`). La pulizia per nome resta tutta. Funzione che lancia: fonti del nucleo. */
+    const paginaPerLaNota = async (pagina) => {
+        if (!pagina || typeof pagina !== 'object' || typeof pagina.url !== 'string') return pagina
+        const valori = await valoriDelleChiaviNote({ ospiteRottoChiude: false })
+        const forme = [pagina.url]
+        try { forme.push(new URL(pagina.url).href) } catch { /* non è un indirizzo: la nota lo scarta comunque */ }
+        const chiaveNellIndirizzo = indirizzoConUnaChiave(forme, valori)
+        const chiaveNelTitolo = typeof pagina.titolo === 'string' && indirizzoConUnaChiave([pagina.titolo], valori)
+        return chiaveNellIndirizzo || chiaveNelTitolo ? { ...pagina, chiaveNellIndirizzo, chiaveNelTitolo } : pagina
+    }
+    const FRASE_NON_VEDE_IMMAGINI = 'Viewing images is not available here: the model in use cannot see images, or this harness has no image reader.'
+    const scaricaImmagine = typeof scaricaImmagineWebFn === 'function' ? scaricaImmagineWebFn : ({ url, segnale }) => scaricaImmagineWeb(url, { segnale })
+    /* Un'immagine dal web, dall'indirizzo al riferimento nello store: `{ ok, esito, immagine? }`. `daElenco` = l'indirizzo viene dall'elenco
+       della pagina appena letta (`naviga { images: true }`), che nella storia non c'è ancora. */
+    const guardaImmagineDalWeb = async (urlDetto, { daElenco = false } = {}) => {
+        const url = String(urlDetto ?? '').trim()
+        if (!vedeImmagini) return { ok: false, esito: FRASE_NON_VEDE_IMMAGINI }
+        let normale
+        try { normale = validaUrlNaviga(url).toString() }
+        catch (bloccato) { return { ok: false, esito: `blocked: ${bloccato instanceof Error ? bloccato.message : String(bloccato)}` } }
+        if (!daElenco && !indirizzoImmagineConosciuto(url, normale)) {
+            /* costruito dal modello: per FORMA si blocca (giudice v2200), altrimenti si rifiuta; in ogni caso non si scarica */
+            if (segretoNellIndirizzo(url)) {
+                return { ok: false, esito: 'BLOCKED. This image address contains something shaped like a key, a token or a password. TALOS never downloads such an address, in any permission mode: it could carry a secret out of the conversation. Nothing was downloaded. Tell the person.' }
+            }
+            return { ok: false, esito: 'REFUSED. This image address did not appear in the image list of a page read with naviga in this conversation, and the person did not write it. Nothing was downloaded. Read the page that shows the image with naviga and use an address from its list, or ask the person to paste the address.' }
+        }
+        /* giudice v2217-v2220 (forma B): un indirizzo dell'elenco o scritto dalla persona si blocca SOLO per il VALORE esatto di una chiave
+           della persona, mai per la forma (gli indirizzi firmati legittimi ne hanno); in ogni livello, Accesso pieno compreso. Il valore non
+           esce mai: nemmeno qui, solo sì o no. Senza poter leggere le chiavi dell'ospite, chiusa. */
+        let valori
+        try { valori = await valoriDelleChiaviNote() }
+        catch { return { ok: false, esito: 'BLOCKED. TALOS could not check this address against your keys, so it did not download it. Nothing was downloaded. Tell the person.' } }
+        if (indirizzoConUnaChiave([url, normale], valori)) {
+            return { ok: false, esito: 'BLOCKED. This image address contains one of your keys. TALOS never downloads such an address, in any permission mode: it would carry the key out of the conversation. Nothing was downloaded. Tell the person.' }
+        }
+        const chiaveVista = `web|${normale}`
+        const volte = guardateNelGiro.get(chiaveVista) ?? 0
+        if (volte >= GUARDATE_MASSIME_PER_GIRO) return { ok: false, esito: `This image was already viewed ${volte} times in this turn and is still in the conversation above. Do not view it again.` }
+        let byte
+        try {
+            const scaricata = await scaricaImmagine({ url: normale, segnale: segnaleStop })
+            byte = scaricata?.byte instanceof Uint8Array ? scaricata.byte : new Uint8Array(0)
+        }
+        catch (bloccato) { return { ok: false, esito: `blocked: ${bloccato instanceof Error ? bloccato.message : String(bloccato)}` } }
+        /* il tipo VERO dai primi byte, e i pixel dall'intestazione prima che l'ospite decodifichi (`immagine-da-guardare.mjs:16-21`) */
+        const intestazione = leggiIntestazioneImmagine(byte)
+        if (!intestazione) return { ok: false, esito: 'The address returned data that is not a PNG, JPEG, WebP or GIF image (TALOS reads the bytes, not the declared type). Nothing was attached.' }
+        if (intestazione.larghezza * intestazione.altezza > PIXEL_MASSIMI_IMMAGINE) {
+            return { ok: false, esito: `The image is ${intestazione.larghezza}×${intestazione.altezza} pixels, more than TALOS opens safely (about 89 megapixels). Nothing was attached.` }
+        }
+        try {
+            const nome = (() => { try { return decodeURIComponent(new URL(normale).pathname.split('/').pop() || '') } catch { return '' } })()
+            const r = await onGuardaImmagine({ byte, percorsoMostrato: nome.slice(0, 80) || 'image', segnale: segnaleStop })
+            const immagine = r?.ok === true ? r.immagine : null
+            if (!immagine || typeof immagine.riferimento !== 'string' || !immagine.riferimento) return { ok: false, esito: 'The image could not be opened or reduced to fit the conversation. Nothing was attached.' }
+            guardateNelGiro.set(chiaveVista, volte + 1)
+            const misure = immagine.larghezza && immagine.altezza ? ` (${immagine.larghezza}×${immagine.altezza})` : ''
+            return {
+                ok: true, esito: `The image${misure} from this address is attached below.`,
+                immagine: { riferimento: immagine.riferimento, mime: immagine.mime ?? null, larghezza: immagine.larghezza ?? null, altezza: immagine.altezza ?? null, percorso: normale },
+            }
+        }
+        catch (rotto) { return { ok: false, esito: `view_image failed: ${rotto instanceof Error ? rotto.message : String(rotto)}` } }
+    }
     // ⛔ Onesto come `shell`/`enforcement:'none'`: mai un fallimento silenzioso, mai un tentativo senza chiave.
     const ricercaWebConfigurata = Boolean(ricercaWeb?.provider || ricercaWeb?.apiKey || ricercaWeb?.endpoint)
-    const cercaSulWeb = (argomenti) => {
+    const cercaSulWeb = async (argomenti) => {
+        if (await ricercaConUnaChiave(argomenti.query)) throw new Error(FRASE_CHIAVE_NELLA_RICERCA) // prima della cache e della rete
         // ⭐ L9 §7-C — stessa porta di `naviga`: due rami della stessa ricerca che partono dalla stessa domanda la pagano una volta sola.
         const cerca = () => eseguiRicercaWeb(
             argomenti.query ?? '', argomenti.maxResults, ricercaWeb,
@@ -16188,7 +16719,7 @@ export async function talosLavora({
      */
     let paginaDalloSchermoDelGiro = paginaBrowser !== undefined
     {
-        const nota = notaPaginaDaAggiungere(messaggi, paginaBrowser)
+        const nota = notaPaginaDaAggiungere(messaggi, await paginaPerLaNota(paginaBrowser))
         if (nota) messaggi.push({ role: 'system', content: nota })
     }
     let notaLinguaDelGiro = null
@@ -17478,7 +18009,7 @@ export async function talosLavora({
                 comandoRosso = false // R-53: la persona ha parlato, vince lei
                 comandiDelGiro.clear()
                 provaRossa = false // R-58, idem
-                consegnaVoceInCoda(messaggioInCoda)
+                await consegnaVoceInCoda(messaggioInCoda)
                 continue
             }
             /* R-53 per primo, poi R-58; una ripartenza sola per giro, qualunque sia il motivo. Il testo si sceglie qui, da NOTE_DI_RIPARTENZA. */
@@ -17986,6 +18517,14 @@ export async function talosLavora({
                                 : esitoDellaLettura(letta, percorsoDetto, { avvolgi: avvolgiEsterno(`leggi ${percorsoDetto}`, {}, { adottabile: fileAdottatoNelGiro(percorsoDiFile(argomenti), percorso) }) }))
                     erroreTool = Boolean(rifiutoRete) || percorso === '' || Boolean(permessoLettura && !permessoLettura.consentito) || permessoLetturaSostituito || allegatoCambiato
                 }
+                else if (nome === 'view_image' && percorsoDiFile(argomenti) === '' && typeof argomenti?.url === 'string' && argomenti.url.trim() !== '') {
+                    /* 0.2.4, blocco 6: un'immagine dal WEB è una lettura del web, come `naviga` (nessuna carta nuova); le regole stanno in
+                       `guardaImmagineDalWeb`: indirizzo già visto o scritto dalla persona, segreti bloccati, filtro di `naviga`, tipo dai byte. */
+                    const r = await guardaImmagineDalWeb(argomenti.url)
+                    erroreTool = r.ok !== true
+                    esito = r.esito
+                    if (r.ok === true) immaginiDellaChiamata = [r.immagine]
+                }
                 else if (nome === 'view_image') {
                     /*
                      * Owner 27/10/2026 — una LETTURA: lo stesso cancello di `leggi` qui sopra (cartelle bloccate e percorsi di rete prima di
@@ -18044,8 +18583,13 @@ export async function talosLavora({
                        accessi); qui la testa di TALOS, il titolo e il testo nel confine, e il taglio di `naviga`. Nessuna conferma (205). */
                     erroreTool = true
                     try {
-                        const r = await leggiPaginaBrowserFn({ segnale: segnaleStop })
-                        if (r?.ok !== true) esito = `REFUSED. ${String(r?.motivo ?? 'The page could not be read.')}`
+                        /* chiavi nel testo del web (giudice v2229): l'indirizzo che il giro dice aperto si guarda PRIMA (l'ospite non legge
+                           niente), quello letto davvero DOPO (giro partito altrove, o la scheda è cambiata): il testo non arriva al modello */
+                        const r = typeof paginaBrowser?.url === 'string' && await indirizzoDelTestoConUnaChiave(paginaBrowser.url)
+                            ? { ok: false, chiave: true }
+                            : await leggiPaginaBrowserFn({ segnale: segnaleStop })
+                        if (r?.chiave === true || (r?.ok === true && await indirizzoDelTestoConUnaChiave(r.url))) esito = FRASE_CHIAVE_NELLA_PAGINA_APERTA
+                        else if (r?.ok !== true) esito = `REFUSED. ${String(r?.motivo ?? 'The page could not be read.')}`
                         else {
                             erroreTool = false
                             const indirizzo = indirizzoPulito(r.url) ?? 'unknown address'
@@ -18937,7 +19481,28 @@ export async function talosLavora({
                             : cartellaPagineWeb && corpo.length > TETTO_PAGINA_WEB
                                 ? paginaTagliataPerIlModello(corpo, await salvaPaginaIntera(cartellaPagineWeb, pagina.url, corpo))
                                 : uscitaUtile(pagina.corpo, 4_000, 0.25)
-                        esito = `HTTP ${pagina.stato} · ${pagina.url}\n${vista}`
+                        /* 0.2.4, blocco 6 (strada C): l'elenco delle immagini in coda, dentro il confine dei dati; la testa dell'elenco
+                           scritta DALLA PAGINA si disinnesca, così l'ultimo elenco del testo è sempre quello di TALOS */
+                        const elenco = immaginiDellaPagina(corpo, pagina.url)
+                        const testoElenco = testoDellElenco(elenco)
+                        const vistaSicura = typeof vista === 'string' ? vista.split(TESTA_ELENCO_IMMAGINI).join('Images on this page [text written by the page].') : vista
+                        esito = `HTTP ${pagina.stato} · ${pagina.url}\n${vistaSicura}${testoElenco ? `\n\n${testoElenco}` : ''}`
+                        if (argomenti?.images === true) {
+                            /* il modello ha chiesto di GUARDARE: le prime 4 dell'elenco, con le stesse regole di `view_image { url }` */
+                            if (!vedeImmagini) codaDiTalosDellaChiamata = `[TALOS: no images attached. ${FRASE_NON_VEDE_IMMAGINI}]`
+                            else if (!elenco.length) codaDiTalosDellaChiamata = '[TALOS: this page has no content images to attach.]'
+                            else {
+                                const allegate = []
+                                const mancate = []
+                                for (const [i, voce] of elenco.slice(0, IMMAGINI_ALLEGATE_DA_NAVIGA).entries()) {
+                                    const r = await guardaImmagineDalWeb(voce.url, { daElenco: true })
+                                    if (r.ok === true) allegate.push({ ...r.immagine, numero: i + 1 })
+                                    else mancate.push(`image ${i + 1}: ${r.esito}`)
+                                }
+                                if (allegate.length) immaginiDellaChiamata = allegate.map(({ numero: _n, ...im }) => im)
+                                codaDiTalosDellaChiamata = `[TALOS: ${allegate.length ? `images ${allegate.map((a) => a.numero).join(', ')} of the list are attached below, in that order.` : 'no images attached.'}${mancate.length ? ` Not attached: ${mancate.join(' ')}` : ''}]`
+                            }
+                        }
                     }
                     catch (bloccato) {
                         // ⛔ Un rifiuto della policy NON è un errore di rete: il modello deve
@@ -18957,7 +19522,9 @@ export async function talosLavora({
                             esito = formattaRisultatiRicerca(argomenti.query ?? '', risultati)
                         }
                         catch (bloccato) {
-                            esito = `search failed: ${bloccato instanceof Error ? bloccato.message : String(bloccato)}`
+                            const motivo = bloccato instanceof Error ? bloccato.message : String(bloccato)
+                            /* una chiave nella domanda non è un guasto della ricerca: «blocked», come `naviga`, così il modello non ritenta */
+                            esito = motivo === FRASE_CHIAVE_NELLA_RICERCA ? `blocked: ${motivo}` : `search failed: ${motivo}`
                         }
                     }
                 }
@@ -20291,7 +20858,11 @@ export async function talosLavora({
                     }
                     else {
                         try {
-                            const r = await onComputerUseFn(nome, { task }, { fase: 'esegui', toolCallId: c.id, segnale: segnaleStop, livelloAccesso })
+                            /* 0.2.4, chiavi in ricerca e Chrome: le chiavi della persona per valore (le stesse di `naviga`), che l'ospite guarda
+                               negli indirizzi che apre, nel testo che scrive in un browser e in ciò che legge dallo schermo. Funzione che lancia:
+                               fonti del nucleo. Un ospite che non la legge (la CLI, il telefono) resta com'era. */
+                            const r = await onComputerUseFn(nome, { task }, { fase: 'esegui', toolCallId: c.id, segnale: segnaleStop, livelloAccesso,
+                                valoriDelleChiaviFn: () => valoriDelleChiaviNote({ ospiteRottoChiude: false }) })
                             esito = typeof r?.testo === 'string' && r.testo ? r.testo : 'computer_use ended without a result.'
                             if (r?.ok !== true) erroreTool = true
                         }
@@ -21173,7 +21744,7 @@ export async function talosLavora({
                 if (!messaggioInCoda) break
                 comandoRosso = false // R-53: la persona ha parlato, vince lei
                 comandiDelGiro.clear()
-                consegnaVoceInCoda(messaggioInCoda)
+                await consegnaVoceInCoda(messaggioInCoda)
             }
         }
 

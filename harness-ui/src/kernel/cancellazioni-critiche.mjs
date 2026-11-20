@@ -51,6 +51,7 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 /* la decisione della 0.2.1, ferma: vedi la nota qui sopra. ⛔ Mai importarla da un altro posto né cambiarla oltre i cambi scritti del nono giro. */
 import { cancellazioneCritica as decisioneDella021, dimenticaPercorsiVeri as dimenticaQuelliDella021 } from './fermo-0.2.1-5e9fdc1b9/cancellazioni-critiche.mjs'
+import { chiusuraAnsiC, decodificaAnsiC } from './apici-ansi-c.mjs' // 0.2.4, apice ANSI: il lettore unico di `$'…'` del nucleo
 
 const COMANDI_CHE_CANCELLANO = new Set(['rm', 'rmdir', 'rd', 'del', 'erase', 'remove-item', 'ri'])
 const INTERRUTTORI_DI_CMD = new Set(['rd', 'del', 'erase'])
@@ -111,7 +112,15 @@ const CANCELLAZIONE_DI_DOTNET = /::Delete\s*\(|\.Delete\s*\(\s*\$true/iu
 const OPZIONE_FILTRO = /^-(?:filt(?:e(?:r)?)?|inc(?:l(?:u(?:d(?:e)?)?)?)?)(?::.*)?$/iu
 /** P: i comandi di PowerShell che si calcolano a parole quando sono l'argomento fra parentesi di un comando che cancella */
 const CALCOLABILI_PS = new Set(['join-path', 'get-location', 'gl', 'pwd', 'resolve-path', 'rvpa', 'convert-path', 'cvpa', 'get-item', 'gi'])
-const sembraCancellare = (testo) => SEMBRA_CANCELLARE.test(testo) || SEMBRA_CANCELLARE.test(testo.replace(/['"\\]/gu, '')) || SEMBRA_CANCELLARE_ANCHE.test(testo)
+/* 0.2.4, reperto del 19/11 (giudice v2304): il nome scritto in ANSI o spezzato (`$'\x72m' -rf /`, `r$'m' -rf ~`) passava questo primo filtro
+   senza carta su W L A M; ora il filtro guarda anche il testo coi `$'…'` decodificati dal lettore unico (`apici-ansi-c.mjs`) */
+/* giro dopo i revisori (giudice v2311): `$'…'` col carattere zero si legge nei due modi (bash tronca, `troncaAlNul`); `r$"m"` (il `$"…"`
+   di bash è `"…"`) e il nome in ANSI anche per il secondo filtro (`$'\x66ind' / -delete`) */
+const conAnsiDecodificato = (testo, troncaAlNul = false) => testo.replace(/\$'((?:\\[\s\S]|[^'\\])*)'/gu, (_, dentro) => decodificaAnsiC(dentro, { troncaAlNul }))
+const senzaApici = (testo) => testo.replace(/['"\\]/gu, '')
+const sembraCancellare = (testo) => SEMBRA_CANCELLARE.test(testo) || SEMBRA_CANCELLARE.test(senzaApici(testo)) || SEMBRA_CANCELLARE_ANCHE.test(testo) ||
+  (testo.includes('$"') && SEMBRA_CANCELLARE.test(senzaApici(testo.replace(/\$(?=")/gu, '')))) ||
+  (testo.includes("$'") && [false, true].some((tronca) => { const d = senzaApici(conAnsiDecodificato(testo, tronca)); return SEMBRA_CANCELLARE.test(d) || SEMBRA_CANCELLARE_ANCHE.test(d) }))
 
 /*
  * 208 bis (ALTO-1): il testo come lo legge cmd.exe prima di eseguirlo, misurato in un cmd vero (05/11/2026; `cmd /?`, `rd /?`; jeb e
@@ -276,8 +285,17 @@ function comeSulTelefono(x) {
  * virgolette; un comando che riceve una pipe porta `dopoPipe`. La barra rovescia NON è un carattere di fuga (sono percorsi di Windows);
  * `$(..)` e gli apici inversi restano dentro la parola e la parola si segna come «fatta di sostituzioni» se non ha altro. `$'..'` è
  * un apice (ANSI-C di bash).
+ * ⛔ 0.2.4, apice ANSI (Forma 2, giudice v2301): `posix` booleano = la lettura di sempre, invariata. Un NOME di guscio ('posix', 'cmd',
+ * 'powershell') = gli apici di QUEL guscio, dato da chi chiama (mai dedotto dal testo): in 'posix' `$'…'` si chiude solo a un apice non
+ * protetto e si decodifica (`apici-ansi-c.mjs`), `$"…"` vale `"…"`; in 'cmd' `'` non è un apice e `^` protegge il carattere dopo; in
+ * 'powershell' `''` dentro `'…'` e l'apice inverso sono fughe. Un apice ancora aperto in fondo, se `apertoChiede`, lancia: chi legge
+ * risponde «troppo complesso» (`letturaNuova`). La lettura di sempre resta accanto (`conGliApiciDelGuscio`): mai una carta in meno.
+ * 'posix0' (giro dopo i revisori, d) = 'posix' col carattere zero che chiude il contenuto di `$'…'`, come bash.
  */
-function comandiSemplici(testo, posix = false) {
+function comandiSemplici(testo, posix = false, { apertoChiede = false } = {}) {
+  const guscio = typeof posix === 'string' ? posix : null
+  const diPosix = guscio === 'posix' || guscio === 'posix0'
+  if (guscio) posix = diPosix
   const comandi = []
   let parole = []
   let parola = ''
@@ -363,12 +381,23 @@ function comandiSemplici(testo, posix = false) {
       }
     }
     if (apice) {
+      if (guscio === 'powershell' && apice === "'" && c === "'" && testo[i + 1] === "'") { parola += "'"; i += 1; continue }
+      if (guscio === 'powershell' && apice === '"' && c === '`' && i + 1 < testo.length) { parola += testo[i + 1]; i += 1; continue }
       if (c === apice) apice = ''
       else parola += c
       continue
     }
-    if (c === '$' && testo[i + 1] === "'") continue
-    if (c === "'" || c === '"') { apice = c; haParola = true; nuda = false; continue }
+    if (diPosix && c === '$' && testo[i + 1] === "'") {
+      const j = chiusuraAnsiC(testo, i + 2)
+      if (j === -1 && apertoChiede) throw APICE_APERTO
+      parola += decodificaAnsiC(testo.slice(i + 2, j === -1 ? testo.length : j), { troncaAlNul: guscio === 'posix0' })
+      haParola = true; nuda = false; i = j === -1 ? testo.length : j
+      continue
+    }
+    if (diPosix && c === '$' && testo[i + 1] === '"') continue
+    if ((guscio === 'cmd' && c === '^' || guscio === 'powershell' && c === '`') && i + 1 < testo.length) { parola += testo[i + 1]; haParola = true; nuda = false; i += 1; continue }
+    if (!guscio && c === '$' && testo[i + 1] === "'") continue
+    if (c === '"' || (c === "'" && guscio !== 'cmd')) { apice = c; haParola = true; nuda = false; continue }
     /* `${NOME}`, `${env:NOME}`: una parola sola anche dove le graffe separano (PowerShell) */
     if (c === '$' && testo[i + 1] === '{') {
       const j = testo.indexOf('}', i + 2)
@@ -438,9 +467,12 @@ function comandiSemplici(testo, posix = false) {
     parola += c
     haParola = true
   }
+  if (guscio && apice && apertoChiede) throw APICE_APERTO
   chiudiComando()
   return comandi
 }
+/** 0.2.4, apice ANSI: un apice del guscio vero rimasto aperto in fondo al testo; `letturaNuova` lo prende come «troppo complesso». */
+const APICE_APERTO = Object.freeze({ apice: 'aperto' })
 
 /**
  * C (forma permessi 2, punto 2): il corpo di un heredoc POSIX (`cat <<'EOF' > x.sh … EOF`) è testo, non comandi: si toglie. Si rilegge
@@ -448,10 +480,13 @@ function comandiSemplici(testo, posix = false) {
  * fino in fondo (come in bash).
  */
 function separaHeredoc(testo) {
-  if (!/<</u.test(testo)) return { testo, corpi: [] }
+  if (!/<</u.test(testo)) return { testo, corpi: [], codici: [], scritti: [] }
   const righe = testo.split('\n')
   const fuori = []
   const corpi = []
+  /* S1 (0.2.4): i corpi che riceve un interprete (`codici`, col comando davanti) e quelli che vanno in un file (`scritti`) */
+  const codici = []
+  const scritti = []
   for (let i = 0; i < righe.length; i += 1) {
     const riga = righe[i]
     fuori.push(riga)
@@ -471,11 +506,17 @@ function separaHeredoc(testo) {
       if (j >= righe.length) break // senza la riga di chiusura non si toglie niente: le righe restano comandi (una carta in più, mai in meno)
       const davanti = prima.split(/[;&|]/u).pop()
       if (davanti.split(/\s+/u).some((w) => SHELL_POSIX.has(nomeDelComando(w)) || nomeDelComando(w) === 'ssh')) corpi.push(corpo.join('\n'))
+      /* `<<-` toglie i tab in testa anche alle righe del corpo (manuale di GNU Bash, «Here Documents») */
+      const codice = (togliTab ? corpo.map((r) => r.replace(/^\t+/u, '')) : corpo).join('\n')
+      if (davanti.split(/\s+/u).some((w) => famigliaDi(nomeDelComando(w)) !== null)) codici.push({ corpo: codice, davanti })
+      const segmento = `${davanti} ${riga.slice(m.index + m[0].length).split(/[;&|]/u)[0]}`
+      const file = /(?:^|\s)1?>>?\s*(\S+)/u.exec(segmento)?.[1] ?? /\btee\s+(?:-a\s+)?(\S+)/u.exec(segmento)?.[1]
+      if (file) scritti.push({ file: file.replace(/^(['"])(.*)\1$/u, '$2'), corpo: codice })
       prossima = j + 1
     }
     i = prossima - 1
   }
-  return { testo: fuori.join('\n'), corpi }
+  return { testo: fuori.join('\n'), corpi, codici, scritti }
 }
 
 /** I testi delle sostituzioni `$(..)` e `` `..` `` di una parola: la shell li esegue, quindi si guardano come comandi a sé. */
@@ -1172,9 +1213,13 @@ function* bersagliDel(parole, ctx) {
   }
 }
 
+/** Giro dopo i revisori (c) e terzo giro: la lettura di un gruppo di PowerShell, la stessa per calcolarlo e per decidere se si salta. */
+function letturaDelGruppo(dentro) { return /''|`/u.test(dentro) ? 'powershell' : false }
+
 /** P: il valore a parole di `(Join-Path A B)`, `(Get-Location)`, `(Resolve-Path X)`, `(Convert-Path X)`; `null` per ogni altro gruppo. */
 function calcolaGruppo(dentro, ctx, dove) {
-  const comandi = comandiSemplici(dentro, false)
+  /* giro dopo i revisori (c): il gruppo è di PowerShell, si legge coi suoi apici (`'O''Brien'` è `O'Brien`, l'apice inverso protegge) */
+  const comandi = comandiSemplici(dentro, letturaDelGruppo(dentro))
   if (comandi.length !== 1) return null
   const [primo, ...resto] = comandi[0]
   const nome = nomeDelComando(primo.testo)
@@ -1436,6 +1481,960 @@ function giudicaForfiles(parole, ctx, realpathFn, qui, rileggi) {
   return null
 }
 
+/* ── S1 (0.2.4): le cancellazioni scritte in un altro linguaggio ─────────────────────────────────────────────────────────── */
+
+/*
+ * ⛔⛔ 0.2.4, voce S1 (18/11/2026; decisione dell'owner 2026-11-18-1334, registro 164; forma `FORMA-024-S1-2026-11-18.md`, variante B
+ *   decisa dal giudice v2172). Prima `perl -e "system(q(rm -rf ~))"` e `python -c "import shutil; shutil.rmtree('/')"` non erano viste da
+ *   nessun nucleo (già nella 0.2.3): in Accesso pieno partivano senza chiedere. Ora il codice di un interprete (python, py, pypy, node,
+ *   bun, deno, perl, ruby, php) si LEGGE, da dovunque arrivi: l'argomento di `-c`/`-e`/`--eval`/`-p`/`-r`/`deno eval` (anche unito
+ *   `-Ic`, `-lne`, `-pe` e attaccato `-c'…'`), il corpo di un heredoc che l'interprete riceve, `<<< '…'`, `echo`/`printf … |`, un file
+ *   scritto nello stesso comando (`cat > x.py <<EOF`, `echo … > x.js`). Un lessico per linguaggio toglie stringhe e commenti; sullo
+ *   scheletro si cercano:
+ *   - le chiamate a un guscio (`os.system`, `subprocess.*`, `child_process.*`, `Bun.spawn`, `` Bun.$`…` ``, `Deno.Command`, `system`,
+ *     `exec`, apici inversi, `qx`, `%x`, `IO.popen`, `shell_exec`…): il comando letterale si RILEGGE con la lettura della shell di
+ *     sempre; se è costruito e il testo sembra cancellare o è offuscato ⇒ «troppo complesso»;
+ *   - `eval`/`exec`/`Function` di un letterale ⇒ si rilegge nello stesso linguaggio; di un valore costruito ⇒ «troppo complesso»;
+ *   - le funzioni che cancellano (`rmtree`, `os.remove`, `Path(…).unlink`, `fs.rmSync`, `Deno.remove`, `FileUtils.rm_rf`, `unlink`…):
+ *     il bersaglio si calcola a parole (letterale, `~`, la casa, la cartella, l'ambiente, `join`, concatenazioni di pezzi noti) e si
+ *     giudica con `bersaglioAssoluto` e `perche` come per `rm`; se non si sa dire ⇒ «troppo complesso» (nel dubbio si chiede);
+ *   - offuscato (base64, `chr`, `pack`, `\x..`, concatenazioni) insieme a un nome dinamico (`getattr`, `send`, `require(x)`) o a
+ *     stringhe che sembrano cancellare ⇒ «troppo complesso».
+ *   Niente di tutto questo ⇒ nessuna carta (i 20 innocui d'uso comune della prova). Nessun motivo nuovo e nessun testo nuovo: la carta
+ *   dice il posto di sempre, o `troppo-complesso`. Ogni lettura conta nei tetti del comando (letture, lavoro, annidamento).
+ * Fonti: Hermes `tools/approval_detection.py:632-642` (interpreti e flag), `:898-930` (opzioni unite, valori attaccati), `:1008-1011`
+ *   (lì ogni `-e/-c` o `<<` chiede: la variante A); Codex `is_dangerous_command.rs:67-72` (rilegge i letterali di `bash -lc`, il codice
+ *   degli interpreti no); Claude Code `CHANGELOG.md:1941` (chiedere a ogni `python3 -c` era rumore); docs.python.org «Command line»,
+ *   nodejs.org «CLI», perldoc perlrun (letti il 18/11/2026).
+ */
+const FAMIGLIE_DEGLI_INTERPRETI = [
+  ['python', /^(?:python[\dw.]*|py|pypy[\d.]*)$/u],
+  ['node', /^(?:node|nodejs)$/u],
+  ['bun', /^bun$/u],
+  ['deno', /^deno$/u],
+  ['perl', /^perl[\d.]*$/u],
+  ['ruby', /^ruby[\d.]*$/u],
+  ['php', /^php[\d.]*$/u],
+]
+function famigliaDi(nome) {
+  for (const [famiglia, re] of FAMIGLIE_DEGLI_INTERPRETI) if (re.test(nome)) return famiglia
+  return null
+}
+const LINGUA_DELLA_FAMIGLIA = Object.freeze({ python: 'python', node: 'js', bun: 'js', deno: 'js', perl: 'perl', ruby: 'ruby', php: 'php' })
+/** Chi lancia un interprete davanti a lui (`uv run python -c …`, `npx node -e …`): l'interprete è la prima parola che lo è. */
+const LANCIATORI = new Set(['uv', 'uvx', 'poetry', 'pipenv', 'pdm', 'hatch', 'rye', 'conda', 'mamba', 'micromamba', 'pixi', 'npx', 'pnpx', 'bunx', 'pnpm', 'yarn'])
+/** Il prefiltro: un testo che nomina un interprete si legge anche se non «sembra cancellare» (il codice può non avere `rm`). */
+const NOMINA_UN_INTERPRETE = /(?:^|[^\w.-])(?:python[\dw.]*|py|pypy[\d.]*|node|nodejs|bun|deno|perl[\d.]*|ruby[\d.]*|php[\d.]*)(?:\.exe)?(?=$|[^\w-])/iu
+const PAROLE_CHE_CANCELLANO_NEI_LINGUAGGI = /\b(?:rmtree|remove_tree|rm_rf|rm_r|rm_f|rmSync|rmdirSync|unlinkSync|removeSync|rimraf\w*|emptyDir\w*|removedirs|remove_dir|remove_entry\w*|remove_file|safe_unlink|unlink|rmdir)\b|\bDeno\s*\.\s*remove|\b(?:File|Dir)\s*\.\s*delete\b|\bos\s*\.\s*remove\b|\bfs\w*\s*\.\s*rm\b/u
+const sembraCancellareInUnLinguaggio = (t) => PAROLE_CHE_CANCELLANO_NEI_LINGUAGGI.test(t)
+const sembraIl = (t) => sembraCancellare(t) || sembraCancellareInUnLinguaggio(t)
+/** Oltre questa lunghezza il codice non si legge: si chiede (`troppo-complesso`). */
+const TETTO_DEL_CODICE = 1 << 16
+/** Le chiamate guardate in un codice (gusci, eval, cancellazioni): oltre, si chiede (`troppo-annidato`, come il lavoro). */
+const TETTO_DELLE_CHIAMATE = 256
+
+/**
+ * Le opzioni di ogni interprete (docs.python.org «Command line», nodejs.org «CLI», perlrun, ruby(1), php «Command line options»; Hermes
+ * `approval_detection.py:638-655`): `codice` le lettere che portano il codice (attaccato o la parola dopo); `restoNonCodice` se ciò che
+ * segue la lettera nella stessa parola NON è il codice (`node -pe`); `valore` le lettere col valore attaccato, `staccato` quelle che lo
+ * prendono anche nella parola dopo; `cifre` le lettere seguite da cifre ottali (`-l0`, `-0x0a`); `ferma` le lettere dopo cui non c'è
+ * codice (`python -m`); `script` la lettera col nome di uno script (`php -f`).
+ */
+const RIGHE_DI_COMANDO = Object.freeze({
+  python: { codice: 'c', soloUno: true, valore: 'WX', staccato: 'WX', ferma: 'm', lunghiConValore: ['--check-hash-based-pycs'] },
+  node: { codice: 'ep', restoNonCodice: true, valore: 'rC', staccato: 'rC', lunghiDiCodice: ['--eval', '--print'], lunghiConValore: ['--require', '--import', '--loader', '--experimental-loader', '--conditions', '--title', '--cpu-prof-dir', '--diagnostic-dir', '--icu-data-dir', '--openssl-config', '--env-file', '--input-type'] },
+  bun: { codice: 'ep', restoNonCodice: true, valore: 'r', staccato: 'r', lunghiDiCodice: ['--eval', '--print'], lunghiConValore: ['--config', '--cwd', '--env-file', '--preload', '--require'] },
+  perl: { codice: 'eE', valore: 'iMmIFxdDC', staccato: 'IM', cifre: 'l0' },
+  ruby: { codice: 'e', valore: 'rICEFKWTix', staccato: 'rICEF', cifre: '0' },
+  php: { codice: 'rBRE', valore: 'cdftzF', staccato: 'cdftzF', script: 'f' },
+})
+
+/** Da dove arriva il codice di un interprete: `{ codici: [{ testo } | { ignoto }], script, stdin }`. Solo parole, nessun file letto. */
+function sorgentiDelCodice(famiglia, parole) {
+  const r = { codici: [], script: null, stdin: false }
+  const codice = (w) => r.codici.push(w === undefined || w.sostituzione ? { ignoto: true } : { testo: w.testo })
+  if (famiglia === 'deno') {
+    /* `deno [opzioni] eval [opzioni] CODICE`, `deno run -` (stdin), `deno -e`/`--eval` (Hermes `:640`, docs.deno.com «deno eval») */
+    let sotto = null
+    for (let k = 1; k < parole.length; k += 1) {
+      const t = parole[k].testo
+      if (t === '-e' || t === '--eval') { codice(parole[k + 1]); return r }
+      if (t.startsWith('--eval=')) { r.codici.push({ testo: t.slice('--eval='.length) }); return r }
+      if (t === '-') { if (sotto === 'run') r.stdin = true; return r }
+      if (t === '-L' || t === '--log-level' || (sotto === 'eval' && t === '--ext')) { k += 1; continue }
+      if (t.startsWith('-')) continue
+      if (sotto === null) { sotto = t; if (t !== 'eval' && t !== 'run') return r; continue }
+      if (sotto === 'eval') { codice(parole[k]); return r }
+      r.script = t
+      return r
+    }
+    return r
+  }
+  const g = RIGHE_DI_COMANDO[famiglia]
+  for (let k = 1; k < parole.length; k += 1) {
+    const t = parole[k].testo
+    if (t === '-') { if (!r.codici.length) r.stdin = true; return r }
+    if (t === '--') { if (!r.codici.length) r.script = parole[k + 1]?.testo ?? null; return r }
+    if (/^\d*[<>]/u.test(t)) break // una redirezione (`<<< '…'`, `<<EOF`, `< x.py`, `> out`): finiscono le opzioni
+    if (famiglia === 'python' && /^-(?:\d|V:)/u.test(t)) continue // `py -3`, `py -3.12`, `py -V:3.12`
+    if (t.startsWith('--')) {
+      const uguale = t.indexOf('=')
+      const nome = uguale === -1 ? t : t.slice(0, uguale)
+      if (g.lunghiDiCodice?.includes(nome)) {
+        if (uguale !== -1) r.codici.push({ testo: t.slice(uguale + 1) })
+        else { codice(parole[k + 1]); k += 1 }
+        if (g.soloUno) return r
+        continue
+      }
+      if (uguale === -1 && g.lunghiConValore?.includes(nome)) k += 1
+      continue
+    }
+    if (t.startsWith('-') && t.length > 1) {
+      for (let i = 1; i < t.length; i += 1) {
+        const c = t[i]
+        if (g.codice.includes(c)) {
+          const resto = t.slice(i + 1)
+          if (resto && !g.restoNonCodice) r.codici.push({ testo: resto })
+          else { codice(parole[k + 1]); k += 1 }
+          if (g.soloUno) return r
+          break
+        }
+        if (g.ferma?.includes(c)) return r
+        if (g.cifre?.includes(c)) {
+          if (c === '0' && t[i + 1] === 'x') { i += 1; while (/[0-9a-fA-F]/u.test(t[i + 1] ?? '')) i += 1 } else while (/[0-7]/u.test(t[i + 1] ?? '')) i += 1
+          continue
+        }
+        if (g.valore.includes(c)) {
+          const staccato = i === t.length - 1 && g.staccato.includes(c)
+          if (g.script?.includes(c)) r.script = staccato ? parole[k + 1]?.testo ?? null : t.slice(i + 1)
+          if (staccato) k += 1
+          break
+        }
+      }
+      continue
+    }
+    if (!r.codici.length && r.script === null) r.script = t
+    return r
+  }
+  if (!r.codici.length && r.script === null) r.stdin = true
+  return r
+}
+
+/*
+ * Il lessico: toglie le stringhe letterali e i commenti, e lascia lo SCHELETRO del codice con un segno al posto di ogni stringa
+ * (`\u0001n\u0002`). Un passo solo, nessuna regex sul testo intero dentro il ciclo (niente che esploda). Ogni stringa porta il suo
+ * valore, se è letterale (una stringa con dentro un valore che si calcola mentre gira — f-string, `${…}`, `#{…}`, `"$x"` — non lo è) e
+ * il tipo: `testo`, `lista` (`qw(…)`, `%w(…)`), `guscio` (apici inversi, `qx`, `%x`, `` Bun.$`…` ``).
+ */
+const APRE_E_CHIUDE = Object.freeze({ '(': ')', '[': ']', '{': '}', '<': '>' })
+/*
+ * S1 giro 2 (revisore R2): le sequenze di fuga dei letterali si DECODIFICANO prima di leggere comando e bersaglio, con le regole di
+ * ogni linguaggio (docs.python.org «Lexical analysis» 2.4.1; ECMA-262 «EscapeSequence», MDN «String» → «Escape sequences»; perlop
+ * «Quote and Quote-like Operators»; Ruby «Literals» → «String Literals»; php.net «Strings» → «Double quoted»): `\x72`, `/`,
+ * `\u{2f}`, `\162` (ottale), `\U0000002f`, `\cX`. Ciò che non si decodifica con certezza (`\N{NOME}`, `\L…\E` di perl, `\M-x` di
+ * ruby, un `\x` senza cifre in python) toglie il «letterale» alla stringa: un bersaglio o un comando così chiede (`troppo-complesso`).
+ */
+const FUGHE_SEMPLICI = Object.freeze({
+  python: { n: '\n', t: '\t', r: '\r', a: '\x07', b: '\b', f: '\f', v: '\v', '\\': '\\', "'": "'", '"': '"', '\n': '' },
+  js: { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', '\n': '' },
+  perl: { n: '\n', t: '\t', r: '\r', f: '\f', b: '\b', a: '\x07', e: '\x1b' },
+  ruby: { n: '\n', t: '\t', r: '\r', f: '\f', v: '\v', a: '\x07', b: '\b', e: '\x1b', s: ' ', '\n': '' },
+  php: { n: '\n', t: '\t', r: '\r', v: '\v', e: '\x1b', f: '\f', '\\': '\\', $: '$', '"': '"' },
+})
+/* le fughe che non si decodificano con certezza (un nome Unicode, le maiuscole di perl, i caratteri di controllo, una cifra che manca o
+   va oltre): la stringa non è più «letterale» e il suo bersaglio chiede */
+const FUGHE_INCERTE = Object.freeze({ python: /[NxuU]/u, js: /[xu]/u, perl: /[NlLuUQExoc]/u, ruby: /[MCxuc0-7]/u, php: /[u]/u })
+const daCodice = (n) => (Number.isInteger(n) && n >= 0 && n <= 0x10ffff ? String.fromCodePoint(n) : null)
+function decodifica(v, lingua, byte = false) {
+  const semplici = FUGHE_SEMPLICI[lingua]
+  let t = ''
+  let certo = true
+  for (let i = 0; i < v.length; i += 1) {
+    const c = v[i]
+    if (c !== '\\' || i + 1 >= v.length) { t += c; continue }
+    const d = v[i + 1]
+    const dopo = v.slice(i + 2, i + 14)
+    let m = null
+    let carattere = null
+    let lunghezza = 0
+    if (Object.hasOwn(semplici, d)) { carattere = semplici[d]; lunghezza = 0 }
+    else if (d === 'x') {
+      m = lingua === 'perl' ? /^\{\s*([0-9a-fA-F]{1,8})\s*\}|^([0-9a-fA-F]{1,2})/u.exec(dopo) : (lingua === 'python' || lingua === 'js' ? /^()([0-9a-fA-F]{2})/u : /^()([0-9a-fA-F]{1,2})/u).exec(dopo)
+      if (m) { carattere = daCodice(parseInt(m[1] || m[2], 16)); lunghezza = m[0].length }
+    } else if (d === 'u' && lingua !== 'perl' && !(lingua === 'python' && byte)) {
+      m = lingua === 'python' ? /^()([0-9a-fA-F]{4})/u.exec(dopo) : /^\{\s*([0-9a-fA-F]{1,6})\s*\}|^()([0-9a-fA-F]{4})/u.exec(dopo)
+      if (lingua === 'php' && m && !m[1]) m = null // php conosce solo `\u{…}`: `A` resta scritto com'è
+      if (m) { carattere = daCodice(parseInt(m[1] || m[2] || m[3], 16)); lunghezza = m[0].length }
+    } else if (d === 'U' && lingua === 'python' && !byte) {
+      m = /^[0-9a-fA-F]{8}/u.exec(dopo)
+      if (m) { carattere = daCodice(parseInt(m[0], 16)); lunghezza = 8 }
+    } else if (/[0-7]/u.test(d)) {
+      /* ottale: tre cifre al massimo; in js la forma vecchia (`\0`-`\377`, da `\4` in su due cifre: ECMA-262 B.1.2), php tiene un byte
+         («"\400" === "\000"», php.net), ruby oltre `\377` non si sa dire */
+      m = (lingua === 'js' && d > '3' ? /^[0-7]?/u : /^[0-7]{0,2}/u).exec(dopo)
+      const n = parseInt(d + m[0], 8)
+      if (!(lingua === 'ruby' && n > 0o377)) { carattere = daCodice(lingua === 'php' ? n & 0xff : n); lunghezza = m[0].length }
+    }
+    if (carattere !== null) { t += carattere; i += 1 + lunghezza; continue }
+    if (FUGHE_INCERTE[lingua].test(d)) certo = false
+    /* il resto: python e php lasciano la barra davanti a una fuga che non conoscono; js, perl e ruby tengono il carattere solo */
+    t += lingua === 'python' || lingua === 'php' ? `\\${d}` : d
+    i += 1
+  }
+  return { t, certo }
+}
+const CASA_NELLE_STRINGHE = /\$ENV\{\s*['"]?(HOME|USERPROFILE)['"]?\s*\}|#\{\s*(?:ENV\[\s*['"](HOME|USERPROFILE)['"]\s*\]|Dir\.home)\s*\}/gu
+function stringheDel(codice, lingua) {
+  const stringhe = []
+  let s = ''
+  let i = 0
+  const n = codice.length
+  const metti = (valore, letterale, tipo = 'testo') => {
+    s += `\u0001${stringhe.length}\u0002`
+    stringhe.push({ valore, letterale, tipo, elementi: tipo === 'lista' ? valore.split(/\s+/u).filter(Boolean) : null })
+  }
+  /* fino alla chiusura `q` (anche di tre caratteri); `[valore, dopo, chiusa]` */
+  const fino = (q, j) => {
+    let v = ''
+    for (; j < n; j += 1) {
+      if (codice[j] === '\\' && j + 1 < n) { v += codice[j] + codice[j + 1]; j += 1; continue }
+      if (codice.startsWith(q, j)) return [v, j + q.length, true]
+      v += codice[j]
+    }
+    return [v, n, false]
+  }
+  /* un delimitatore qualsiasi, le parentesi si annidano (`q(a(b)c)`, `%x{…}`) */
+  const delimitato = (j) => {
+    const apre = codice[j]
+    const chiude = APRE_E_CHIUDE[apre] ?? apre
+    let prof = 1
+    let v = ''
+    for (let k = j + 1; k < n; k += 1) {
+      const c = codice[k]
+      if (c === '\\' && k + 1 < n) { v += c + codice[k + 1]; k += 1; continue }
+      if (chiude !== apre && c === apre) prof += 1
+      else if (c === chiude && (prof -= 1) === 0) return [v, k + 1, true]
+      v += c
+    }
+    return [v, n, false]
+  }
+  /* una stringa che si calcola mentre gira: la casa scritta col nome dell'ambiente resta come `$HOME`, ogni altra interpolazione no */
+  /* giro 2: l'interpolazione si cerca nel testo SCRITTO, senza le fughe (`"\$x"` è un dollaro, non una variabile); poi si decodifica */
+  const interpolata = (v, re) => {
+    const { t, certo } = decodifica(v.replace(CASA_NELLE_STRINGHE, (_, a, b) => `$${a ?? b ?? 'HOME'}`), lingua)
+    return { t, letterale: certo && !re.test(v.replace(CASA_NELLE_STRINGHE, '').replace(/\\[\s\S]/gu, '')) }
+  }
+  while (i < n) {
+    const c = codice[i]
+    const prima = codice[i - 1] ?? ''
+    if (c === '#' && lingua !== 'js' && !(lingua === 'perl' && prima === '$') && !(lingua === 'ruby' && codice[i + 1] === '{')) {
+      const a = codice.indexOf('\n', i)
+      i = a === -1 ? n : a
+      continue
+    }
+    if ((lingua === 'js' || lingua === 'php') && c === '/' && codice[i + 1] === '/') { const a = codice.indexOf('\n', i); i = a === -1 ? n : a; continue }
+    if ((lingua === 'js' || lingua === 'php') && c === '/' && codice[i + 1] === '*') { const a = codice.indexOf('*/', i + 2); i = a === -1 ? n : a + 2; s += ' '; continue }
+    if (lingua === 'python' && (c === '"' || c === "'")) {
+      const pre = /(?:^|[^\w])([rRbBuUfF]{1,2})$/u.exec(s.slice(-3))
+      const prefisso = pre ? pre[1].toLowerCase() : ''
+      if (pre) s = s.slice(0, -pre[1].length)
+      const q = codice.startsWith(c.repeat(3), i) ? c.repeat(3) : c
+      const [v, dopo, chiusa] = fino(q, i + q.length)
+      const calcolata = prefisso.includes('f') && /\{/u.test(v.replace(/\{\{/gu, ''))
+      const { t, certo } = prefisso.includes('r') ? { t: v, certo: true } : decodifica(v, 'python', prefisso.includes('b'))
+      metti(t, chiusa && !calcolata && certo)
+      i = dopo
+      continue
+    }
+    if (lingua === 'js' && (c === '"' || c === "'" || c === '`')) {
+      const [v, dopo, chiusa] = fino(c, i + 1)
+      const guscio = c === '`' && /(?:^|[^\w$.])(?:Bun\s*\.\s*)?\$\s*$/u.test(s.slice(-12))
+      const { t, certo } = decodifica(v, 'js')
+      metti(t, chiusa && certo && !(c === '`' && v.includes('${')), guscio ? 'guscio' : 'testo')
+      i = dopo
+      continue
+    }
+    if ((lingua === 'perl' || lingua === 'php') && c === "'") { const [v, dopo, chiusa] = fino(c, i + 1); metti(v.replace(/\\([\\'])/gu, '$1'), chiusa); i = dopo; continue }
+    if (lingua === 'ruby' && c === "'") { const [v, dopo, chiusa] = fino(c, i + 1); metti(v.replace(/\\([\\'])/gu, '$1'), chiusa); i = dopo; continue }
+    if (c === '"' || c === '`') {
+      const [v, dopo, chiusa] = fino(c, i + 1)
+      /* ruby interpola solo `#{…}` (anche fra apici inversi: `$HOME` lo espande la shell); perl e php `$x`, `@x` */
+      const { t, letterale } = interpolata(v, lingua === 'ruby' ? /#\{/u : /[$@][\w{]/u)
+      metti(t, chiusa && letterale, c === '`' ? 'guscio' : 'testo')
+      i = dopo
+      continue
+    }
+    if (lingua === 'perl' && c === 'q' && !/[\w$@%&]/u.test(prima)) {
+      const op = /^(qq|qw|qx|q)\s*([^\w\s=,;)])/u.exec(codice.slice(i, i + 8))
+      if (op) {
+        const [v, dopo, chiusa] = delimitato(i + op[0].length - 1)
+        const tipo = op[1] === 'qw' ? 'lista' : op[1] === 'qx' ? 'guscio' : 'testo'
+        const { t, letterale } = op[1] === 'q' || op[1] === 'qw' ? { t: v.replace(/\\([\\])/gu, '$1'), letterale: true } : interpolata(v, /[$@][\w{]/u)
+        metti(t, chiusa && letterale, tipo)
+        i = dopo
+        continue
+      }
+    }
+    if (lingua === 'ruby' && c === '%') {
+      const op = /^%([qQwWxiI]?)([([{<|!/])/u.exec(codice.slice(i, i + 3))
+      /* `a%w(…)` attaccato a un nome è il modulo; `rm_rf %w(…)`, `(%q(…))` sono stringhe (ruby lo legge così) */
+      if (op && !/[\w)\]]$/u.test(s.slice(-1))) {
+        const [v, dopo, chiusa] = delimitato(i + op[0].length - 1)
+        const tipo = /[wWiI]/u.test(op[1]) ? 'lista' : op[1] === 'x' ? 'guscio' : 'testo'
+        const { t, letterale } = /[qwi]/u.test(op[1]) ? { t: v, letterale: true } : interpolata(v, /#\{/u)
+        metti(t, chiusa && letterale, tipo)
+        i = dopo
+        continue
+      }
+    }
+    s += c
+    i += 1
+  }
+  return { scheletro: s, stringhe }
+}
+
+/** `require('fs')`, `__import__('shutil')` con un letterale: il nome del modulo al posto della chiamata (`fs.rmSync`, `shutil.rmtree`). */
+function conIModuliPerNome(s, stringhe) {
+  return s.replace(/\b(?:require|__import__)\s*\(\s*\u0001(\d+)\u0002\s*\)/gu, (tutto, k) => {
+    const x = stringhe[Number(k)]
+    return x?.letterale ? x.valore.replace(/^node:/u, '').replace(/\W/gu, '_') || tutto : tutto
+  })
+}
+
+/** L'indice della parentesi che chiude quella in `j` (tonde, quadre, graffe insieme), o -1. */
+function chiusaDa(s, j) {
+  let prof = 0
+  for (let k = j; k < s.length; k += 1) {
+    const c = s[k]
+    if (c === '(' || c === '[' || c === '{') prof += 1
+    else if ((c === ')' || c === ']' || c === '}') && (prof -= 1) === 0) return k
+  }
+  return -1
+}
+const saltaSpazi = (s, j) => { while (j < s.length && (s[j] === ' ' || s[j] === '\t')) j += 1; return j }
+const SENZA_PARENTESI = new Set(['perl', 'ruby'])
+/** Dopo un nome: è una chiamata? Con la parentesi sempre; in perl e ruby anche `unlink "x"`, `system "rm", …`, `rm_rf Dir.home`. */
+function chiamataDopo(s, j, lingua) {
+  const k = saltaSpazi(s, j)
+  if (s[k] === '(') return true
+  return SENZA_PARENTESI.has(lingua) && (k > j || s[k] === '\u0001') && /[\u0001$@\w[%:]/u.test(s[k] ?? '') && !/^(?:if|unless|and|or|do|then|while|until|for|foreach)\b/u.test(s.slice(k, k + 8))
+}
+/** Il testo degli argomenti dopo un nome: fra parentesi, o in perl e ruby fino alla fine dell'istruzione (`;`, a capo, `if`, `or`…). */
+function argomentiDopo(s, j, lingua) {
+  const k = saltaSpazi(s, j)
+  if (s[k] === '(') { const e = chiusaDa(s, k); return s.slice(k + 1, e === -1 ? s.length : e) }
+  if (!SENZA_PARENTESI.has(lingua)) return ''
+  let prof = 0
+  let e = k
+  for (; e < s.length; e += 1) {
+    const c = s[e]
+    if (c === '(' || c === '[' || c === '{') prof += 1
+    else if (c === ')' || c === ']' || c === '}') { if (prof === 0) break; prof -= 1 } else if (prof === 0 && (c === ';' || c === '\n')) break
+  }
+  const t = s.slice(k, e)
+  const taglio = /\s(?:if|unless|or|and|while|until|for|foreach|do)\b|&&|\|\|/u.exec(t)
+  return taglio ? t.slice(0, taglio.index) : t
+}
+/** Gli argomenti divisi dalle virgole (e da `=>`) al livello zero, senza spazi ai lati. */
+function pezziDi(t) {
+  const pezzi = []
+  let prof = 0
+  let da = 0
+  for (let k = 0; k < t.length; k += 1) {
+    const c = t[k]
+    if (c === '(' || c === '[' || c === '{') prof += 1
+    else if (c === ')' || c === ']' || c === '}') prof -= 1
+    else if (prof === 0 && (c === ',' || (c === '=' && t[k + 1] === '>'))) { pezzi.push(t.slice(da, k)); da = c === ',' ? k + 1 : k + 2; if (c === '=') k += 1 }
+  }
+  pezzi.push(t.slice(da))
+  return pezzi.map((p) => p.trim()).filter(Boolean)
+}
+/** Il ricevitore davanti a un `.metodo` (`pathlib.Path('/x')` in `pathlib.Path('/x').unlink()`), letto all'indietro. */
+function ricevitore(s, punto) {
+  let j = punto - 1
+  while (j >= 0 && /\s/u.test(s[j])) j -= 1
+  const fine = j + 1
+  for (let giri = 0; giri < 8 && j >= 0; giri += 1) {
+    if (s[j] === ')' || s[j] === ']') {
+      let prof = 0
+      for (; j >= 0; j -= 1) { if (s[j] === ')' || s[j] === ']') prof += 1; else if ((s[j] === '(' || s[j] === '[') && (prof -= 1) === 0) break }
+      j -= 1
+    }
+    while (j >= 0 && /[\w$\u0001\u0002]/u.test(s[j])) j -= 1
+    if (j >= 0 && s[j] === '.') { j -= 1; continue }
+    break
+  }
+  return s.slice(j + 1, fine).trim()
+}
+
+/*
+ * Il valore di un pezzo di codice, a parole (mai eseguito): un elenco di stringhe, o `null` se non si sa dire. Sa leggere i letterali,
+ * le liste di letterali, la casa (`~`, `Path.home()`, `os.homedir()`, `Dir.home`), la cartella (`os.getcwd()`, `process.cwd()`), le
+ * variabili dell'ambiente (`os.environ['HOME']`, `process.env.HOME`, `ENV['HOME']`, `$ENV{HOME}`, `getenv('HOME')`: diventano `$HOME`,
+ * che `bersaglioAssoluto` sa espandere), `expanduser`/`Path(…)`/`glob(…)` (il loro argomento), `join` e le concatenazioni di pezzi noti.
+ */
+const CASA_DI = new Set(['os.homedir', 'homedir', 'Path.home', 'pathlib.Path.home', 'Dir.home', 'File::HomeDir->my_home', 'Deno.homeDir'])
+const QUI_DI = new Set(['os.getcwd', 'getcwd', 'process.cwd', 'Path.cwd', 'pathlib.Path.cwd', 'Deno.cwd', 'Dir.pwd', 'Dir.getwd', 'cwd', 'Cwd::getcwd', 'Cwd::cwd', 'os.curdir', '__dirname'])
+const AMBIENTE_DI = new Set(['os.getenv', 'os.environ.get', 'getenv', 'Deno.env.get', 'ENV.fetch', 'environ.get'])
+const STESSO_DI = new Set(['os.path.expanduser', 'expanduser', 'os.path.abspath', 'abspath', 'os.path.realpath', 'realpath', 'os.path.normpath', 'normpath', 'Path', 'pathlib.Path', 'PurePath', 'pathlib.PurePath', 'PosixPath', 'WindowsPath', 'str', 'os.fspath', 'File.expand_path', 'File.absolute_path', 'Pathname.new', 'Pathname', 'path.normalize', 'glob.glob', 'glob.iglob', 'glob', 'iglob', 'Dir.glob', 'fs.realpathSync', 'realpathSync', 'abs_path', 'Cwd::abs_path'])
+const UNISCI_DI = new Set(['os.path.join', 'path.join', 'path.resolve', 'path.posix.join', 'path.win32.join', 'path.posix.resolve', 'path.win32.resolve', 'File.join', 'join', 'resolve', 'File::Spec->catdir', 'File::Spec->catfile', 'catdir', 'catfile'])
+const CODA_INNOCUA = /^(?:\s*\.\s*(?:expanduser|resolve|absolute|as_posix|toString|to_s|to_path|realpath|expand_path)\s*(?:\(\s*\))?)*$/u
+const NOME_CHIAMATO = /^([A-Za-z_$][\w$]*(?:\s*(?:\.|::|->)\s*[A-Za-z_$][\w$]*)*)\s*(?=\(|\[|$)/u
+const ALL_AMBIENTE = /^(?:os\s*\.\s*environ|process\s*\.\s*env|Bun\s*\.\s*env|ENV|\$_SERVER|\$_ENV|\$ENV)\s*(?:\[\s*(\u0001\d+\u0002|\w+)\s*\]|\{\s*(\u0001\d+\u0002|\w+)\s*\}|\.\s*(\w+))$/u
+const assolutoAParole = (x) => /^(?:[\\/]|[A-Za-z]:[\\/]|~)/u.test(x)
+const unisci = (valori) => valori.reduce((acc, x) => (acc === null || assolutoAParole(x) ? x : `${acc.replace(/[\\/]+$/u, '')}/${x}`), null)
+function spezzaAlLivelloZero(t, operatore) {
+  const parti = []
+  let prof = 0
+  let da = 0
+  for (let k = 0; k < t.length; k += 1) {
+    const c = t[k]
+    if (c === '(' || c === '[' || c === '{') prof += 1
+    else if (c === ')' || c === ']' || c === '}') prof -= 1
+    else if (prof === 0 && c === operatore && t[k + 1] !== '=' && t[k + 1] !== operatore && t[k - 1] !== operatore) { parti.push(t.slice(da, k)); da = k + 1 }
+  }
+  parti.push(t.slice(da))
+  return parti
+}
+function valoreDelPezzo(p, stringhe, lingua, prof = 0) {
+  if (prof > 8 || typeof p !== 'string') return null
+  let t = p.trim()
+  while (t.startsWith('(') && chiusaDa(t, 0) === t.length - 1) t = t.slice(1, -1).trim()
+  if (t === '') return null
+  /* `Path.home() / 'x'` (pathlib), poi le concatenazioni (`+`; `.` in perl e php) */
+  for (const [op, come] of [...(lingua === 'python' ? [['/', 'unisci']] : []), [lingua === 'perl' || lingua === 'php' ? '.' : '+', 'attacca']]) {
+    const parti = spezzaAlLivelloZero(t, op)
+    if (parti.length < 2) continue
+    const valori = parti.map((x) => valoreDelPezzo(x, stringhe, lingua, prof + 1))
+    if (valori.some((v) => v === null || v.length !== 1)) return null
+    return [come === 'unisci' ? unisci(valori.map((v) => v[0])) : valori.map((v) => v[0]).join('')]
+  }
+  const segno = /^\u0001(\d+)\u0002$/u.exec(t)
+  if (segno) {
+    const x = stringhe[Number(segno[1])]
+    if (!x?.letterale || x.tipo === 'guscio') return null
+    return x.tipo === 'lista' ? x.elementi : [x.valore]
+  }
+  /* giro 2: in python e in ruby due letterali vicini sono uno solo (`'r' 'm -rf /'`, docs.python.org 2.4.2, Ruby «String Literals») */
+  if ((lingua === 'python' || lingua === 'ruby') && /^(?:\u0001\d+\u0002\s*){2,}$/u.test(t)) {
+    const pezzi = [...t.matchAll(/\u0001(\d+)\u0002/gu)].map((m) => stringhe[Number(m[1])])
+    return pezzi.every((x) => x?.letterale && x.tipo === 'testo') ? [pezzi.map((x) => x.valore).join('')] : null
+  }
+  if (t.startsWith('[') && chiusaDa(t, 0) === t.length - 1) {
+    const tutti = []
+    for (const x of pezziDi(t.slice(1, -1))) { const v = valoreDelPezzo(x, stringhe, lingua, prof + 1); if (v === null) return null; tutti.push(...v) }
+    return tutti
+  }
+  const ambiente = ALL_AMBIENTE.exec(t)
+  if (ambiente) {
+    const scritto = ambiente[1] ?? ambiente[2] ?? ambiente[3]
+    const nome = /^\u0001(\d+)\u0002$/u.test(scritto) ? stringhe[Number(scritto.slice(1, -1))]?.valore : scritto
+    return typeof nome === 'string' && /^[A-Za-z_]\w*$/u.test(nome) ? [`$${nome}`] : null
+  }
+  /* perl: `@d` (una lista legata più su) */
+  if (lingua === 'perl' && /^@\w+$/u.test(t)) return valoreDelNome(t, stringhe, lingua, prof)
+  const chiamato = NOME_CHIAMATO.exec(t)
+  if (!chiamato) return null
+  const nome = chiamato[1].replace(/\s+/gu, '')
+  let resto = t.slice(chiamato[0].length)
+  let argomenti = null
+  if (resto.startsWith('(') || resto.startsWith('[')) {
+    const e = chiusaDa(resto, 0)
+    if (e === -1) return null
+    argomenti = pezziDi(resto.slice(1, e))
+    if (resto.startsWith('[') && nome !== 'Dir') return null
+    resto = resto.slice(e + 1)
+  }
+  let base = null
+  if (CASA_DI.has(nome)) base = ['~']
+  else if (QUI_DI.has(nome)) base = ['.']
+  else if (argomenti === null) {
+    /* giro 2 (punto 6): un nome legato più su nel codice (`d = …`, `for f in …`): i valori del legame, come `D=…; rm -rf "$D"` */
+    if (!/^[A-Za-z_$][\w$]*$/u.test(nome)) return null
+    base = valoreDelNome(nome, stringhe, lingua, prof)
+  } else {
+    const valori = []
+    for (const x of argomenti) {
+      if (/^\w+\s*=(?!=)|^\{/u.test(x)) break // `ignore_errors=True`, `{ recursive: true }`: opzioni, non pezzi del percorso
+      const v = valoreDelPezzo(x, stringhe, lingua, prof + 1)
+      if (v === null || v.length !== 1) return null
+      valori.push(v[0])
+    }
+    if (AMBIENTE_DI.has(nome)) base = valori.length >= 1 && /^[A-Za-z_]\w*$/u.test(valori[0]) ? [`$${valori[0]}`] : null
+    else if (STESSO_DI.has(nome) || nome === 'Dir') base = valori.length >= 1 ? [valori[0]] : null
+    else if (UNISCI_DI.has(nome)) base = valori.length ? [unisci(valori)] : null
+  }
+  if (base === null) return null
+  // giro 2 (punto 6): `Path('.').glob('**/__pycache__')`, `.rglob(…)`, `.joinpath(…)`, `.iterdir()`: il posto sotto, come lo scrive la shell
+  for (let giri = 0; giri < 8; giri += 1) {
+    const m = /^\s*\.\s*(glob|rglob|joinpath|iterdir)\s*\(/u.exec(resto)
+    if (!m) break
+    const e = chiusaDa(resto, m[0].length - 1)
+    if (e === -1) return null
+    const pezzi = pezziDi(resto.slice(m[0].length, e)).map((x) => soloUnTesto(x, stringhe, lingua))
+    if (pezzi.some((x) => x === null) || base.length !== 1) return null
+    const sotto = m[1] === 'iterdir' ? ['*'] : m[1] === 'rglob' ? [`**/${pezzi[0] ?? ''}`] : pezzi
+    if (!sotto.length) return null
+    base = [unisci([base[0], ...sotto])]
+    resto = resto.slice(e + 1)
+  }
+  return CODA_INNOCUA.test(resto) ? base : null
+}
+
+/*
+ * S1 giro 2 (punto 6, giudice v2186): un bersaglio scritto con un NOME si giudica come la shell giudica `"$d"`. La shell: `D=/x; rm -rf
+ * "$D"` legge `/x`; `for f in *.pyc; do rm "$f"` legge `*.pyc`; `d=$(mktemp -d); rm -rf "$d"` NON dà la carta (il valore lo scrive un
+ * programma mentre gira, `ricordaAssegnazioni` lo segna «non si sa»). Qui lo stesso: `d = '/x'`, `for f in glob.glob('*.pyc')`,
+ * `for p in Path('.').glob(…)` danno i loro valori; `d = tempfile.mkdtemp()` (una chiamata senza argomenti, che non nomina la casa,
+ * la cartella, la radice o l'ambiente: l'equivalente di `$(mktemp -d)`) dà `IGNOTA`, che il bersaglio giudica come la shell giudica un `"$d"` che non si sa
+ * (niente carta). Un nome mai legato, o legato in un modo che non si legge (`a, b = …`, `d += …`, `d = x if y else z`), non si sa
+ * dire: `null`, e il chiamante chiede (`troppo-complesso`).
+ */
+const IGNOTA = '\u0003'
+const NOMINA_UN_POSTO = /\b(?:home|homedir|environ|env|getenv|ENV|cwd|getcwd|getwd|pwd|curdir|pardir|sep|altsep|anchor|drive|parent|parents|expanduser|expand_path|__dirname|argv|ARGV|HOME|USERPROFILE|root|tmpdir|gettempdir)\b|~/u
+/* una chiamata SENZA argomenti (`tempfile.mkdtemp()`, `Dir.mktmpdir`): come `$(mktemp -d)`; con argomenti (`abspath(os.sep)`) non si sa dire */
+const SOLO_UNA_CHIAMATA = /^[A-Za-z_$][\w$]*(?:\s*(?:\.|::|->)\s*[A-Za-z_$][\w$]*)*\s*\(\s*\)$/u
+function unaChiamataCheNonSiSa(espressione, lingua) {
+  const t = espressione.trim()
+  if (NOMINA_UN_POSTO.test(t)) return false
+  if (SOLO_UNA_CHIAMATA.test(t)) return true
+  /* ruby chiama anche senza parentesi: `Dir.mktmpdir`, `Tempfile.new.path` */
+  return lingua === 'ruby' && /^[A-Z]\w*(?:\s*(?:\.|::)\s*\w+)+$/u.test(t)
+}
+function valoreDelNome(nome, stringhe, lingua, prof) {
+  const legami = stringhe.legami
+  if (!legami || legami.troppi) return null
+  const memo = stringhe.memo
+  if (memo.has(nome)) return memo.get(nome) // anche `null` mentre lo si calcola: `d = d + '/'` non gira in tondo
+  const voci = legami.get(nome)
+  memo.set(nome, null)
+  if (!voci || voci.includes(null)) return null
+  const valori = []
+  for (const espressione of voci) {
+    const v = valoreDelPezzo(espressione, stringhe, lingua, prof + 1)
+    if (v !== null) { valori.push(...v); continue }
+    if (!unaChiamataCheNonSiSa(espressione, lingua)) return null
+    valori.push(IGNOTA)
+  }
+  const fatti = valori.length && valori.length <= 16 ? valori : null
+  memo.set(nome, fatti)
+  return fatti
+}
+/* dove finisce l'espressione che comincia in `j`: un `;`, un a capo o una virgola al livello zero, o la parentesi che chiude il livello */
+function fineDellEspressione(s, j, fermi) {
+  let prof = 0
+  for (let k = j; k < s.length; k += 1) {
+    const c = s[k]
+    if (c === '(' || c === '[' || c === '{') prof += 1
+    else if (c === ')' || c === ']' || c === '}') { if (prof === 0) return k; prof -= 1 }
+    else if (prof === 0 && (c === ';' || c === '\n' || fermi.test(s.slice(k, k + 6)))) return k
+  }
+  return s.length
+}
+const TETTO_DEI_LEGAMI = 256
+/** I nomi legati nello scheletro del codice: `nome → [espressioni]`, con `null` fra le espressioni se un legame non si legge. */
+function legamiDel(s, lingua) {
+  const legami = new Map()
+  let quanti = 0
+  /* oltre il tetto i legami non si seguono più: nessun nome si sa dire (mai l'ultimo valore perso, mai un sì muto) */
+  const lega = (nome, da, fermi = /^,/u) => {
+    if ((quanti += 1) > TETTO_DEI_LEGAMI) { legami.troppi = true; return }
+    const voci = legami.get(nome) ?? []
+    if (da === null) voci.push(null)
+    else {
+      const e = s.slice(da, fineDellEspressione(s, da, fermi)).trim()
+      voci.push(lingua === 'python' && pezziDi(e).length > 1 ? null : e) // `d = 'a', '/'` è una tupla
+    }
+    legami.set(nome, voci)
+  }
+  /* un legame già tagliato (il ricevitore di un `.forEach`, il valore di un `with … as`): `null` se non c'è */
+  const aggiungi = (nome, espressione) => { if ((quanti += 1) > TETTO_DEI_LEGAMI) legami.troppi = true; else legami.set(nome, [...(legami.get(nome) ?? []), espressione || null]) }
+  const NOME = lingua === 'perl' ? '[$@]\\w+' : lingua === 'php' ? '\\$\\w+' : '[A-Za-z_$][\\w$]*'
+  /* `nome = …` (non `==`, `=>`, `=~`, e non un campo: `x.nome = …`); in python una virgola fa una tupla, altrove chiude la dichiarazione */
+  for (const m of s.matchAll(new RegExp(`(?<![\\w$@.:>])(${NOME})\\s*(?::=|=(?![=>~]))`, 'gu'))) lega(m[1], m.index + m[0].length, lingua === 'python' ? /^$/u : /^,/u)
+  /* `nome += …` e simili: il valore cambia in un modo che non si legge */
+  for (const m of s.matchAll(new RegExp(`(?<![\\w$@.:>])(${NOME})\\s*(?:\\*\\*|\\/\\/|<<|>>|\\|\\||&&|\\?\\?|[-+*/%|&^.])=(?!=)`, 'gu'))) lega(m[1], null)
+  if (lingua === 'python') {
+    for (const m of s.matchAll(/\bfor\s+([A-Za-z_]\w*)\s+in\s+/gu)) lega(m[1], m.index + m[0].length, /^(?::|\s+if\s|\s+for\s)/u)
+    for (const m of s.matchAll(/\bfor\s+[A-Za-z_]\w*\s*,[^\n;]*?\bin\b/gu)) for (const n of m[0].slice(3, -2).split(',')) if (/^\s*[A-Za-z_]\w*\s*$/u.test(n)) lega(n.trim(), null)
+    for (const m of s.matchAll(/\bwith\s+([^\n;:]*?)\s+as\s+([A-Za-z_]\w*)/gu)) aggiungi(m[2], m[1].trim())
+  } else if (lingua === 'js') {
+    for (const m of s.matchAll(/\bfor\s*\(\s*(?:const|let|var)?\s*([A-Za-z_$][\w$]*)\s+(?:of|in)\s+/gu)) lega(m[1], m.index + m[0].length)
+    for (const m of s.matchAll(/\.\s*(?:forEach|map|filter|some|every|flatMap)\s*\(\s*(?:async\s+)?(?:function\s*[\w$]*\s*)?\(?\s*([A-Za-z_$][\w$]*)/gu)) {
+      aggiungi(m[1], ricevitore(s, m.index))
+    }
+  } else if (lingua === 'perl') {
+    for (const m of s.matchAll(/\bfor(?:each)?\s+(?:my\s+|our\s+)?(\$\w+)\s*\(/gu)) lega(m[1], m.index + m[0].length)
+    for (const m of s.matchAll(/\bfor(?:each)?\s*\(/gu)) lega('$_', m.index + m[0].length)
+    for (const m of s.matchAll(/\s(?:for|foreach)\s+(?![(]|my\b|our\b|\$)/gu)) lega('$_', m.index + m[0].length)
+  } else if (lingua === 'ruby') {
+    for (const m of s.matchAll(/\bfor\s+([a-z_]\w*)\s+in\s+/gu)) lega(m[1], m.index + m[0].length, /^\s+do\b/u)
+    for (const m of s.matchAll(/(?:do|\{)\s*\|\s*([a-z_]\w*)\s*\|/gu)) {
+      /* `X.each do |f|`: gli elementi di X; `Dir.mktmpdir do |d|`: ciò che la chiamata dà al blocco */
+      let j = m.index
+      while (j > 0 && /\s/u.test(s[j - 1])) j -= 1
+      const each = /\.\s*(?:each|each_entry|map|select|reject|each_with_index)\s*$/u.exec(s.slice(Math.max(0, j - 40), j))
+      aggiungi(m[1], each ? ricevitore(s, j - each[0].length) : ricevitore(s, j))
+    }
+  } else if (lingua === 'php') {
+    for (const m of s.matchAll(/\bforeach\s*\(\s*/gu)) {
+      const fine = fineDellEspressione(s, m.index + m[0].length, /^$/u)
+      const dentro = s.slice(m.index + m[0].length, fine)
+      const as = /\s+as\s+(?:\$\w+\s*=>\s*)?(\$\w+)\s*$/u.exec(dentro)
+      if (as) aggiungi(as[1], dentro.slice(0, as.index).trim())
+    }
+  }
+  return legami
+}
+/** Un argomento che è un letterale solo (o una concatenazione di letterali): il suo testo, o `null`. */
+const soloUnTesto = (p, stringhe, lingua) => { const v = p === undefined ? null : valoreDelPezzo(p, stringhe, lingua); return v?.length === 1 && !v[0].includes(IGNOTA) ? v[0] : null }
+
+/** I pezzi di una chiamata a un guscio come parole del comando: si ferma alle opzioni (`shell=True`, `{ stdio }`, `exception: true`). */
+function comeComando(pezzi, stringhe, lingua) {
+  const parole = []
+  let parziale = false
+  for (const p of pezzi) {
+    if (/^\w+\s*=(?!=)|^\{|^:\w+\s*=>|^\w+:\s/u.test(p)) {
+      /* `new Deno.Command('rm', { args: [...] })`, `Deno.run({ cmd: [...] })`: la lista dentro le opzioni */
+      const lista = /\b(?:args|cmd)\s*:\s*\[/u.exec(p)
+      if (lista) {
+        const da = lista.index + lista[0].length - 1
+        const v = valoreDelPezzo(p.slice(da, chiusaDa(p, da) + 1), stringhe, lingua)
+        if (v === null || v.some((x) => x.includes(IGNOTA))) parziale = true
+        else parole.push(...v)
+      }
+      break
+    }
+    const v = valoreDelPezzo(p, stringhe, lingua)
+    /* un pezzo che si sa solo mentre gira (`c = input(); os.system(c)`) è come `$c` nella shell: il comando non è intero */
+    if (v === null || v.some((x) => x.includes(IGNOTA))) { parziale = true; continue }
+    parole.push(...v)
+  }
+  return { parole, parziale }
+}
+const citato = (w, ctx) => (/^[\w@%+=:,./~*?\\-]+$/u.test(w) ? w : ctx.windows ? `"${w.replace(/"/gu, '')}"` : `'${w.replace(/'/gu, "'\\''")}'`)
+
+/** Le chiamate a un guscio di ogni linguaggio (il comando è il primo argomento, o la lista degli argomenti). */
+const GUSCI = Object.freeze({
+  python: [/\b(?:os|posix|nt)\s*\.\s*(?:system|popen\d?|spawn\w*|exec\w*)\b/gu, /\bsubprocess\s*\.\s*(?:run|call|check_call|check_output|Popen|getoutput|getstatusoutput)\b/gu, /(?<![\w.])(?:system|popen|check_call|check_output|getoutput|getstatusoutput|Popen)\b/gu, /\bcreate_subprocess_(?:shell|exec)\b/gu, /\bpty\s*\.\s*spawn\b/gu],
+  js: [/\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync|fork|execa|execaSync|execaCommand|execaCommandSync)\b/gu, /\bDeno\s*\.\s*(?:run|Command)\b/gu],
+  perl: [/\b(?:system|exec)\b/gu],
+  ruby: [/\b(?:system|exec|spawn)\b/gu, /\bIO\s*\.\s*popen\b/gu, /\bOpen3\s*\.\s*\w+/gu, /\bPTY\s*\.\s*spawn\b/gu],
+  php: [/\b(?:system|exec|shell_exec|passthru|proc_open|popen|pcntl_exec)\b/gu],
+})
+/** Il codice che si scrive mentre gira: un letterale si rilegge, un valore costruito chiede. */
+const EVAL = Object.freeze({
+  python: /(?<![\w.])(?:exec|eval|compile)(?=\s*\()/gu,
+  js: /(?<![\w.$])(?:eval|Function)(?=\s*\()|\bvm\s*\.\s*(?:runIn\w*|Script|compileFunction)\b/gu,
+  perl: /\beval\b(?!\s*\{)/gu,
+  ruby: /\b(?:eval|instance_eval|class_eval|module_eval|instance_exec)\b/gu,
+  php: /\b(?:eval|assert|create_function)(?=\s*\()/gu,
+})
+/** Le funzioni che cancellano (`se`: la regola vale solo se il codice le importa; `metodo`: il bersaglio è il ricevitore). */
+const NOMINA_FS = (s, stringhe) => stringhe.some((x) => /^(?:node:)?fs(?:\/promises)?$|^fs-extra$|^rimraf$/u.test(x.valore)) || /\bfs\b/u.test(s)
+const CANCELLAZIONI = Object.freeze({
+  python: [
+    { re: /\brmtree\b/gu },
+    { re: /\b(?:os|posix|nt)\s*\.\s*(?:remove|unlink|rmdir|removedirs)\b/gu },
+    { re: /(?<![\w.])(?:remove|unlink|rmdir|removedirs)\b/gu, se: (s) => /\bfrom\s+(?:os|posix|nt)\s+import\b/u.test(s) },
+    { re: /\.\s*(?:unlink|rmdir)\b/gu, metodo: true },
+  ],
+  js: [
+    { re: /\b(?:rmSync|rmdirSync|unlinkSync|removeSync|emptyDirSync|rimrafSync|rimraf)\b/gu },
+    { re: /\.\s*(?:rm|rmdir|unlink)\b/gu },
+    { re: /\b(?:Deno|fse|fsExtra|fs_extra)\s*\.\s*(?:remove|emptyDir)\b/gu },
+    { re: /(?<![\w.$])(?:rm|rmdir|unlink|remove|emptyDir)\b/gu, se: NOMINA_FS },
+  ],
+  perl: [{ re: /\b(?:unlink|rmdir|rmtree|remove_tree)\b/gu }],
+  ruby: [
+    { re: /\b(?:FileUtils\s*\.\s*)?(?:rm_rf|rm_r|rm_f|remove_dir|remove_entry_secure|remove_entry|rmtree|remove_file|safe_unlink)\b/gu },
+    { re: /\bFileUtils\s*\.\s*(?:rm|rmdir|remove)\b/gu },
+    { re: /\b(?:File|Dir)\s*\.\s*(?:delete|unlink|rmdir)\b/gu },
+  ],
+  php: [{ re: /\b(?:unlink|rmdir)\b/gu }],
+})
+/** I segni dell'offuscamento (Bohannon, «Invoke-Obfuscation»; Fass et al., JaSt 2018): decodifiche, caratteri per numero, rovesci. */
+const OFFUSCATO = Object.freeze({
+  python: /\b(?:b64decode|b32decode|b16decode|a85decode|b85decode|decodebytes|fromhex|unhexlify|rot13)\b|\bcodecs\s*\.\s*decode\b|\bchr\s*\(|\bbytes\s*\(\s*\[|\[\s*:\s*:\s*-1\s*\]|\bzlib\b|\bmarshal\b|\bpickle\s*\.\s*loads\b|\.\s*(?:join|replace|decode)\s*\(/u,
+  js: /\batob\s*\(|\bBuffer\s*\.\s*from\s*\(|\bfromCharCode\b|\bfromCodePoint\b|\bunescape\s*\(|\bdecodeURIComponent\s*\(|\.\s*(?:reverse|join|replace|split|map)\s*\(/u,
+  perl: /\b(?:pack|unpack|chr|reverse|decode_base64|decode|sprintf|join|lc|uc)\b/u,
+  ruby: /\b(?:Base64|decode64|unpack1?|pack|chr|reverse|join|gsub|tr)\b/u,
+  php: /\b(?:base64_decode|str_rot13|chr|hex2bin|gzinflate|gzuncompress|strrev|implode|sprintf|str_replace|pack)\s*\(/u,
+})
+/** I nomi che si scelgono mentre gira: la funzione chiamata non si sa a parole. */
+const DINAMICO = Object.freeze({
+  python: /\bgetattr\s*\(|\b__import__\s*\(|\bimportlib\b|\bimport_module\b|\bglobals\s*\(\s*\)|\blocals\s*\(\s*\)|\b__builtins__\b|\bvars\s*\(|\.\s*__dict__\b/u,
+  js: /\brequire\s*\(\s*(?!\u0001\d+\u0002\s*\))|\bimport\s*\(\s*(?!\u0001\d+\u0002\s*\))|\bprocess\s*\.\s*binding\b|\bglobalThis\s*\[|\bmodule\s*\.\s*constructor\b|\[\s*[^\]\u0001]*\u0001\d+\u0002\s*\+|\b(?:fs|fs_extra|fse|fsExtra|child_process|promises|Deno|Bun)\s*\[/u,
+  perl: /&\s*\{|&\s*\$|\bcan\s*\(|->\s*\$|\bno\s+strict\b/u,
+  ruby: /\b(?:send|public_send|__send__|const_get|method|instance_method|instance_variable_get)\b/u,
+  php: /\$\w+\s*\(|\bcall_user_func\w*\b|\barray_map\s*\(\s*\u0001/u,
+})
+/*
+ * S1 giro 2 (R1): i nomi di ciò che cancella o lancia un guscio, per lingua (le stesse famiglie di `GUSCI`, `EVAL`, `CANCELLAZIONI`, più i
+ * moduli che le portano): una stringa o un simbolo che vale ESATTAMENTE uno di questi (anche col modulo davanti, `'os.system'`,
+ * `"File::Path::rmtree"`) accanto a un nome scelto mentre gira chiede. Uguaglianza, non ricerca: `getattr(args, 'verbose')` non chiede.
+ */
+const NOMI_CHE_CANCELLANO = Object.freeze({
+  python: 'rmtree|remove|unlink|rmdir|removedirs|system|popen\\d?|spawn\\w*|exec\\w*|run|call|check_call|check_output|Popen|getoutput|getstatusoutput|eval|compile|__import__|import_module|shutil|os|posix|nt|subprocess|pathlib|pty',
+  js: 'rmSync|rmdirSync|unlinkSync|rm|rmdir|unlink|remove|removeSync|emptyDir|emptyDirSync|rimraf|rimrafSync|exec|execSync|execFile|execFileSync|spawn|spawnSync|fork|eval|Function|fs|fs-extra|node:fs|child_process|node:child_process|rimraf',
+  perl: 'unlink|rmdir|rmtree|remove_tree|system|exec|eval|File::Path',
+  ruby: 'rm_rf|rm_r|rm_f|rm|rmdir|remove|remove_dir|remove_entry|remove_entry_secure|rmtree|remove_file|safe_unlink|delete|unlink|system|exec|spawn|popen|eval|instance_eval|FileUtils|Kernel|Open3|IO|PTY|Process|File|Dir',
+  php: 'unlink|rmdir|system|exec|shell_exec|passthru|proc_open|popen|pcntl_exec|eval|assert|create_function',
+})
+const NOME_CHE_CANCELLA = Object.freeze(Object.fromEntries(Object.entries(NOMI_CHE_CANCELLANO).map(([l, n]) => [l, new RegExp(`^(?:[\\w:.\\\\-]*(?:::|\\.|\\\\))?(?:${n})$`, 'u')])))
+const SIMBOLO_CHE_CANCELLA = new RegExp(`(?<![\\w:]):(?:${NOMI_CHE_CANCELLANO.ruby})(?![\\w?!])`, 'u')
+/* un modulo che cancella usato con un nome scelto mentre gira (il nome non è un letterale: `getattr(shutil, x)`, `FileUtils.send(m, …)`) */
+const MODULO_PER_NOME = Object.freeze({
+  python: /\b(?:getattr|vars|hasattr)\s*\(\s*(?:shutil|os|posix|nt|subprocess|pathlib|pty|builtins|__builtins__)\b|\b(?:shutil|os|posix|nt|subprocess|pathlib)\s*\.\s*__dict__\b|\b(?:__import__|import_module)\s*\((?!\s*\u0001)/u,
+  js: /\b(?:fs|fs_extra|fse|fsExtra|child_process|promises|Deno|Bun)\s*\[|\brequire\s*\(\s*(?!\u0001\d+\u0002\s*\))|\bimport\s*\(\s*(?!\u0001\d+\u0002\s*\))/u,
+  perl: /\bFile::(?:Path|Remove)\b|\bCORE::/u,
+  ruby: /\b(?:FileUtils|Kernel|File|Dir|IO|Open3|Process|Pathname|PTY|Object)\s*\.\s*(?:send|public_send|__send__|method|instance_method|const_get)\b|(?<![\w.:])(?:send|public_send|__send__|method)\b(?!\s*\(?\s*[:\u0001])/u,
+  php: /\bcall_user_func\w*\s*\(\s*\$/u,
+})
+/*
+ * S1 giro 2 (R4; forma r.37): «sembra cancellare» UGUALE per tutte le lingue della forma, fatto con le stesse tabelle che leggono il
+ * codice (ogni regola di `CANCELLAZIONI`, `GUSCI`, `EVAL`, senza le condizioni `se`, più i metodi di fs-extra): oltre il tetto di
+ * annidamento, e per un codice che c'è ma non si sa (`-c "$(cat x)"`), un testo così chiede. Prima `.rm(` e `remove` mancavano.
+ */
+const TUTTE_LE_REGOLE = Object.freeze([
+  ...Object.values(CANCELLAZIONI).flat().map((r) => r.re),
+  ...Object.values(GUSCI).flat(),
+  ...Object.values(EVAL),
+  /\.\s*(?:remove|removeSync|emptyDir|emptyDirSync)\s*\(/u,
+].map((re) => new RegExp(re.source, 'u')))
+const sembraIlCodice = (t) => sembraIl(t) || TUTTE_LE_REGOLE.some((re) => re.test(t))
+function nominaCioCheCancella(s, stringhe, lingua) {
+  if (MODULO_PER_NOME[lingua].test(s)) return true
+  if (lingua === 'ruby' && SIMBOLO_CHE_CANCELLA.test(s)) return true
+  return stringhe.some((x) => NOME_CHE_CANCELLA[lingua].test(x.valore.trim()))
+}
+/*
+ * S1 giro 2 (R3; forma r.25): fs-extra si segue col NOME a cui è legato, qualunque sia (github.com/jprichardson/node-fs-extra, «Methods»:
+ * `remove`, `removeSync`, `emptyDir`, `emptyDirSync`): `const fs = require('fs-extra')`, `import x from 'fs-extra'`, `import * as x from
+ * 'fs-extra'`, `import('fs-extra').then((x) => …)`; e le funzioni prese per nome (`const { remove: via } = require('fs-extra')`,
+ * `import { emptyDir as e } from 'fs-extra'`). `require('fs-extra')` è già `fs_extra` (`conIModuliPerNome`).
+ */
+const DI_FS_EXTRA = /^(?:remove|removeSync|emptyDir|emptyDirSync|emptydir|emptydirSync|rm|rmSync|rmdir|rmdirSync|unlink|unlinkSync)$/u
+function regoleDiFsExtra(s, stringhe) {
+  const eFsExtra = (k) => /^fs-extra(?:\/.*)?$/u.test(stringhe[Number(k)]?.valore ?? '')
+  const moduli = new Set()
+  const funzioni = new Set()
+  const prese = (elenco) => {
+    for (const voce of elenco.split(',')) {
+      const m = /^\s*([A-Za-z_$][\w$]*)\s*(?:(?::|\bas\b)\s*([A-Za-z_$][\w$]*))?\s*$/u.exec(voce)
+      if (m && DI_FS_EXTRA.test(m[1])) funzioni.add(m[2] ?? m[1])
+    }
+  }
+  for (const m of s.matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)\s*=\s*(?:await\s+)?fs_extra\b(?!\s*\.)/gu)) moduli.add(m[1])
+  for (const m of s.matchAll(/\b(?:const|let|var)\s*\{([^}]*)\}\s*=\s*(?:await\s+)?fs_extra\b/gu)) prese(m[1])
+  for (const m of s.matchAll(/\bimport\s+(?:\*\s*as\s+)?([A-Za-z_$][\w$]*)?\s*,?\s*(?:\{([^}]*)\})?\s*from\s*\u0001(\d+)\u0002/gu)) {
+    if (!eFsExtra(m[3])) continue
+    if (m[1]) moduli.add(m[1])
+    if (m[2]) prese(m[2])
+  }
+  for (const m of s.matchAll(/\bimport\s*\(\s*\u0001(\d+)\u0002\s*\)\s*\.\s*then\s*\(\s*(?:async\s+)?(?:function\s*[\w$]*\s*)?\(?\s*([A-Za-z_$][\w$]*)/gu)) if (eFsExtra(m[1])) moduli.add(m[2])
+  /* un nome qualsiasi, poi `filtro` guarda se è uno dei legati (prima di contarlo fra le chiamate): nessun tetto sui nomi da aggirare */
+  const regole = []
+  if (moduli.size) regole.push({ re: /(?<![\w$.])([A-Za-z_$][\w$]*)\s*\.\s*(?:remove|removeSync|emptyDir|emptyDirSync)\b/gu, filtro: (m) => moduli.has(m[1]) })
+  if (funzioni.size) regole.push({ re: /(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$])/gu, filtro: (m) => funzioni.has(m[1]) })
+  return regole
+}
+/** L'istruzione intorno a un nome che non è chiamato: un `import`, un `require`, una destrutturazione non cancellano niente. */
+function soloNominato(s, k) {
+  const da = Math.max(s.lastIndexOf(';', k), s.lastIndexOf('\n', k)) + 1
+  let a = s.length
+  for (const c of [';', '\n']) { const x = s.indexOf(c, k); if (x !== -1 && x < a) a = x }
+  return /\b(?:import|require|use|from)\b|\b(?:const|let|var)\s*\{[^}]*\}\s*=/u.test(s.slice(da, a))
+}
+
+/**
+ * Legge il codice di un altro linguaggio e dice la cancellazione critica che fa: `{ percorso, perche }`, `TROPPO_COMPLESSO`,
+ * `TROPPO_ANNIDATO`, o `null`. `contorno` è il testo della shell intorno (un commento o un argomento che cancella conta).
+ */
+function leggiIlCodice(codice, lingua, ctx, qui, realpathFn, profondita, contorno) {
+  if ((ctx.conto.letture += 1) > TETTO_DELLE_LETTURE) return TROPPO_ANNIDATO
+  if (conta(ctx, PESI.lettura + Math.floor(codice.length / PESI.caratteri))) return TROPPO_ANNIDATO
+  if (profondita > TETTO_ANNIDAMENTO) return sembraIlCodice(codice) ? TROPPO_ANNIDATO : null
+  if (codice.length > TETTO_DEL_CODICE) return TROPPO_COMPLESSO
+  const { scheletro, stringhe } = stringheDel(codice, lingua)
+  /* giro 2 (R2): in js anche un nome si scrive con le fughe (`fs.rmSync`, ECMA-262 «IdentifierName»): si decodifica */
+  const conINomi = lingua === 'js' ? scheletro.replace(/\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})/gu, (tutto, a, b) => daCodice(parseInt(a ?? b, 16)) ?? tutto) : scheletro
+  const s = conIModuliPerNome(conINomi, stringhe)
+  stringhe.legami = legamiDel(s, lingua)
+  stringhe.memo = new Map()
+  const valori = stringhe.map((x) => x.valore).join('\n')
+  const stringheCheCancellano = sembraIl(valori)
+  const offuscato = OFFUSCATO[lingua].test(s) || /\\x[0-9a-f]{2}|\\u\{?[0-9a-f]{4}|\\[0-7]{3}/iu.test(codice)
+    || (lingua === 'perl' || lingua === 'php' ? /\u0002\s*\.\s*[\u0001$\w(]|[\w)}\]]\s*\.\s*\u0001/u : /\u0002\s*\+|\+\s*\u0001/u).test(s)
+  const rileggiIlGuscio = (t) => giudica(t, ctx, realpathFn, profondita + 1, qui)
+  let chiamate = 0
+  const troppe = () => (chiamate += 1) > TETTO_DELLE_CHIAMATE || conta(ctx, PESI.comando)
+  /* 1. il testo che va a un guscio: apici inversi, `qx`, `%x`, `` Bun.$`…` `` */
+  for (const x of stringhe) {
+    if (x.tipo !== 'guscio') continue
+    if (troppe()) return TROPPO_ANNIDATO
+    if (!x.letterale) { if (sembraIl(x.valore) || offuscato) return TROPPO_COMPLESSO; continue }
+    const trovata = rileggiIlGuscio(x.valore)
+    if (trovata) return trovata
+  }
+  /* 2. il codice scritto mentre gira */
+  for (const m of s.matchAll(EVAL[lingua])) {
+    if (troppe()) return TROPPO_ANNIDATO
+    const pezzi = pezziDi(argomentiDopo(s, m.index + m[0].length, lingua))
+    const testo = soloUnTesto(/Function/u.test(m[0]) ? pezzi.at(-1) : pezzi[0], stringhe, lingua)
+    if (testo === null) return TROPPO_COMPLESSO
+    const trovata = leggiIlCodice(testo, lingua, ctx, qui, realpathFn, profondita + 1, contorno)
+    if (trovata) return trovata
+  }
+  /* 3. le chiamate a un guscio */
+  for (const re of GUSCI[lingua]) {
+    for (const m of s.matchAll(re)) {
+      const dopo = m.index + m[0].length
+      if (!chiamataDopo(s, dopo, lingua)) continue
+      if (troppe()) return TROPPO_ANNIDATO
+      const { parole, parziale } = comeComando(pezziDi(argomentiDopo(s, dopo, lingua)), stringhe, lingua)
+      const t = parole.length <= 1 ? parole[0] ?? '' : parole.map((w) => citato(w, ctx)).join(' ')
+      if (t) { const trovata = rileggiIlGuscio(t); if (trovata) return trovata }
+      if ((parziale || !t) && (sembraIl(t) || stringheCheCancellano || offuscato || sembraIl(contorno))) return TROPPO_COMPLESSO
+    }
+  }
+  /* 4. le funzioni che cancellano: il bersaglio a parole, giudicato come quello di `rm` */
+  for (const regola of lingua === 'js' ? [...CANCELLAZIONI.js, ...regoleDiFsExtra(s, stringhe)] : CANCELLAZIONI[lingua]) {
+    if (regola.se && !regola.se(s, stringhe)) continue
+    for (const m of s.matchAll(regola.re)) {
+      if (regola.filtro && !regola.filtro(m)) continue
+      if (troppe()) return TROPPO_ANNIDATO
+      const dopo = m.index + m[0].length
+      let bersagli = null
+      if (regola.metodo) {
+        if (s[saltaSpazi(s, dopo)] !== '(') continue
+        const chi = ricevitore(s, m.index)
+        if (/^(?:os|posix|nt)$/u.test(chi)) continue // `os.rmdir(…)`: la regola di prima
+        bersagli = valoreDelPezzo(chi, stringhe, lingua)
+      } else {
+        /* un nome che non è chiamato: in un `import` o in una destrutturazione non conta; passato come valore (`map(os.remove, …)`) sì */
+        if (!chiamataDopo(s, dopo, lingua)) { if (soloNominato(s, m.index)) continue; return TROPPO_COMPLESSO }
+        const pezzi = pezziDi(argomentiDopo(s, dopo, lingua))
+        /* giro 2: `shutil.rmtree(path='/')`: il percorso passato col suo nome è il primo argomento */
+        const scelti = SENZA_PARENTESI.has(lingua) ? pezzi.filter((p) => !/^\w+:\s|^:\w+\s*=>|^\{/u.test(p))
+          : /^(?:path|dir|directory|name|file|filename|target|top|src)\s*=(?!=)/u.test(pezzi[0] ?? '') ? [pezzi[0].replace(/^\w+\s*=\s*/u, '')] : pezzi.slice(0, 1)
+        bersagli = []
+        for (const p of scelti) { const v = valoreDelPezzo(p, stringhe, lingua); if (v === null) { bersagli = null; break } bersagli.push(...v) }
+      }
+      if (bersagli === null || bersagli.length === 0) return TROPPO_COMPLESSO
+      for (const b of bersagli) {
+        if (conta(ctx, PESI.bersaglio)) return TROPPO_ANNIDATO
+        /* giro 2 (punto 6): il bersaglio si giudica con la STESSA funzione di `rm` nella shell; un valore che si sa solo mentre gira
+           (`IGNOTA`, il `"$d"` di `d=$(mktemp -d)`) e un posto che la shell non sa dire non danno la carta, come nella shell */
+        if (b.includes(IGNOTA)) continue
+        const { carta } = giudicaIlBersaglio({ testo: b, sostituzione: false }, true, ctx, qui, realpathFn)
+        if (carta) return carta
+      }
+    }
+  }
+  /*
+   * 5. un nome scelto mentre gira (`getattr`, `send`, `public_send`, `method(:x)`, `__import__(x)`, `call_user_func`, `&$f`): si chiede
+   *    se il codice è anche offuscato, o se ha stringhe che cancellano, o (giro 2, R1; forma r.32) se NOMINA ciò che cancella: una
+   *    stringa o un simbolo col nome di una funzione che cancella o lancia un guscio (`'rmtree'`, `:system`, `"unlink"`), o un modulo
+   *    che cancella usato per nome scelto (`getattr(shutil, …)`, `Kernel.send(…)`, `fs[x]`).
+   */
+  if (DINAMICO[lingua].test(s) && (offuscato || stringheCheCancellano || nominaCioCheCancella(s, stringhe, lingua))) return TROPPO_COMPLESSO
+  return null
+}
+
+/**
+ * Il giudizio di UN bersaglio di una cancellazione (`{ testo, sostituzione }`), nella cartella `dove2`: `{ carta, assoluto }`. Lo usano
+ * `rm`/`rd`/`Remove-Item` nella shell e (S1 giro 2, punto 6, giudice v2186) le funzioni che cancellano negli altri linguaggi: per lo
+ * stesso bersaglio la stessa risposta. `assoluto` è `null` quando il posto non si sa dire (e la shell, lì, non dà la carta).
+ */
+function giudicaIlBersaglio(bersaglio, ricorsiva, ctx, dove2, realpathFn) {
+  /* `rm -rf "$(pwd)"` e simili: un bersaglio fatto solo di una sostituzione non si sa dove porta (Claude Code `CHANGELOG.md:2384`) */
+  if (bersaglio.sostituzione && !/^\$\(\s*pwd\s*\)$|^`\s*pwd\s*`$/iu.test(bersaglio.testo)) {
+    return { carta: ricorsiva ? { percorso: bersaglio.testo, perche: 'sostituzione' } : null, assoluto: null }
+  }
+  /* dopo un `cd` che non si sa dove porta (`cd "$(mktemp -d)/../.."`, `cd $X`, `cd -`), un `rm -r` relativo cancella un posto che si
+     sa solo mentre gira: carta, come per la sostituzione (si fallisce chiusi, mai un sì muto) */
+  if (dove2 === null && ricorsiva) {
+    const scritto = espanso(bersaglio.testo, ctx, null)
+    if (scritto === null || !ctx.p.isAbsolute(ctx.windows ? discoLocale(scritto, ctx) : scritto)) return { carta: { percorso: bersaglio.testo, perche: 'sostituzione' }, assoluto: null }
+  }
+  /* 208 bis: `%~dp0`, `!X!` ignota, `%X:~a,b%` ignota in un comando ricorsivo di Windows: il posto si sa solo mentre gira → carta */
+  if (ctx.windows && ricorsiva && CMD_CALCOLATO.test(bersaglio.testo)) {
+    const scritto = espanso(bersaglio.testo, ctx, dove2)
+    if (scritto === null || CMD_CALCOLATO.test(scritto)) return { carta: { percorso: bersaglio.testo, perche: 'sostituzione' }, assoluto: null }
+  }
+  /* 208 ter (ALTO-2): la variabile di un `for` di cmd i cui valori non si sanno */
+  if (ctx.windows && ctx.forIgnoti?.size && ricorsiva && [...ctx.forIgnoti].some((n) => new RegExp(`\\$\\{?${n}(?![\\w])`, 'iu').test(bersaglio.testo))) {
+    return { carta: { percorso: bersaglio.testo, perche: 'sostituzione' }, assoluto: null }
+  }
+  const assoluto = bersaglioAssoluto(bersaglio.testo, ctx, dove2)
+  if (assoluto === null) return { carta: null, assoluto: null }
+  const motivo = perche(assoluto, ctx, veriDi(ctx, realpathFn))
+  return { carta: motivo ? { percorso: assoluto, perche: motivo } : null, assoluto }
+}
+
+const chiaveDelFile = (nome, ctx, qui) => { const p = ctx.p.resolve(qui ?? ctx.cartella, nome); return ctx.windows ? p.toLowerCase() : p }
+/** `echo "…" > x.py`, `printf … >> x.js`: il file scritto nello stesso comando, per l'interprete che lo esegue dopo. */
+function ricordaIlFileScritto(parole, ctx, qui) {
+  const k = parole.findIndex((w, j) => j > 0 && /^(?:1?>>?)(.*)$/u.test(w.testo))
+  if (k < 1) return
+  const attaccato = /^(?:1?>>?)(.*)$/u.exec(parole[k].testo)[1]
+  const file = attaccato || parole[k + 1]?.testo
+  if (!file) return
+  const testo = parole.slice(1, k).filter((w) => !/^-[neE]+$/u.test(w.testo)).map((w) => w.testo).join(' ')
+  ricordaIlCodice(ctx, chiaveDelFile(file, ctx, qui), nomeDelComando(parole[0].testo) === 'printf' ? testo.replace(/\\n/gu, '\n') : testo)
+}
+function ricordaIlCodice(ctx, chiave, codice) {
+  ctx.scritti ??= new Map()
+  if (ctx.scritti.size < TETTO_MEMORIA && codice.length <= TETTO_DEL_CODICE) ctx.scritti.set(chiave, codice)
+}
+
+/** Le parole dall'interprete in poi: lui stesso, o quello che un lanciatore fa partire (`uv run python -c …`); altrimenti com'erano. */
+function conIlSuoInterprete(parole) {
+  if (!parole.length || !LANCIATORI.has(nomeDelComando(parole[0].testo))) return parole
+  const j = parole.findIndex((w, k) => k > 0 && famigliaDi(nomeDelComando(w.testo)) !== null)
+  return j > 0 ? parole.slice(j) : parole
+}
+
+/** Un interprete nel comando: legge il codice da dove arriva e lo giudica. `null` se non c'è niente da leggere. */
+function giudicaUnInterprete(famiglia, parole, comando, prima, ctx, qui, testo, realpathFn, profondita) {
+  const lingua = LINGUA_DELLA_FAMIGLIA[famiglia]
+  const sorgenti = sorgentiDelCodice(famiglia, parole)
+  /* su POSIX la shell toglie la barra davanti a `$` e `` ` `` fra virgolette doppie (`comandiSemplici` la lascia scritta) */
+  const leggi = (codice) => leggiIlCodice(ctx.windows ? codice : codice.replace(/\\([$`])/gu, '$1'), lingua, ctx, qui, realpathFn, profondita + 1, testo)
+  /* il codice c'è ma non si sa (`-c "$(cat x)"`, `curl … | python`): chiede se il testo intorno sembra cancellare */
+  const ignoto = () => (sembraIlCodice(testo) ? TROPPO_COMPLESSO : null)
+  for (const c of sorgenti.codici) { const trovata = c.ignoto ? ignoto() : leggi(c.testo); if (trovata) return trovata }
+  if (sorgenti.codici.length) return null
+  if (sorgenti.script !== null) {
+    const scritto = ctx.scritti?.get(chiaveDelFile(sorgenti.script, ctx, qui))
+    return scritto === undefined ? null : leggi(scritto)
+  }
+  if (!sorgenti.stdin) return null
+  for (let k = 1; k < parole.length; k += 1) {
+    const t = parole[k].testo
+    if (t.startsWith('<<<')) {
+      const w = t === '<<<' ? parole[k + 1] : { testo: t.slice(3), sostituzione: false }
+      return !w ? null : w.sostituzione ? ignoto() : leggi(w.testo)
+    }
+    if (t.startsWith('<<')) return null // il corpo dell'heredoc si legge in `giudicaUnTesto`, prima dei comandi
+    if (t === '<' || /^<[^<]/u.test(t)) {
+      const file = t === '<' ? parole[k + 1]?.testo : t.slice(1)
+      const scritto = file ? ctx.scritti?.get(chiaveDelFile(file, ctx, qui)) : undefined
+      return scritto === undefined ? null : leggi(scritto)
+    }
+  }
+  if (comando.dopoPipe && prima?.length) {
+    const fonte = nomeDelComando(prima[0].testo)
+    if (fonte !== 'echo' && fonte !== 'printf') return ignoto()
+    const pezzi = prima.slice(1).filter((w) => !/^-[neE]+$/u.test(w.testo))
+    if (pezzi.some((w) => w.sostituzione)) return ignoto()
+    const codice = pezzi.map((w) => w.testo).join(' ')
+    return leggi(fonte === 'printf' || prima.some((w) => /^-[nE]*e[nE]*$/u.test(w.testo)) ? codice.replace(/\\n/gu, '\n').replace(/\\t/gu, '\t') : codice)
+  }
+  return null
+}
+
 /*
  * `scelte`, `eventi` (quinto giro, 13/11/2026: la regola del sottofondo può solo AGGIUNGERE carte): ogni punto dove la regola di bash
  * dice che un `cd` NON resta (una cartella ripresa dopo una sottoshell, un sottofondo o una pipe; un `cd` saltato in una pipe o in
@@ -1448,7 +2447,7 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
   /* ⛔ ottavo giro: ogni lettura scompone il testo intero, e il lavoro conta nel tetto del comando (`TETTO_DEL_LAVORO`) */
   if (conta(ctx, PESI.lettura + Math.floor(testo.length / PESI.caratteri))) return TROPPO_ANNIDATO
   /* ⛔ oltre il tetto si fallisce CHIUSI (Codex `is_dangerous_command.rs:35-58`): un testo che sembra cancellare e che non si guarda fino in fondo è una carta */
-  if (profondita > TETTO_ANNIDAMENTO) return sembraCancellare(testo) ? TROPPO_ANNIDATO : null
+  if (profondita > TETTO_ANNIDAMENTO) return sembraCancellare(testo) || (NOMINA_UN_INTERPRETE.test(testo) && sembraIlCodice(testo)) ? TROPPO_ANNIDATO : null
   /* P: `[IO.Directory]::Delete(…)`, `(Get-Item X).Delete($true)`: il parser non li segue, si fallisce chiusi */
   if (CANCELLAZIONE_DI_DOTNET.test(testo)) return TROPPO_ANNIDATO
   let cartella = dove
@@ -1463,12 +2462,15 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
    *   nominava un posto che non si cancella. Il testo di `cmd /c` torna alla regola della lettura in corso (`ctx.cdDelGiro`), anche
    *   dentro PowerShell o bash: `powershell -c "cmd /c 'cd K:\x && rd /s /q .'"` cancella il progetto e resta visto.
    */
-  const rileggiCon = (cdCambiaDisco, t, dentro, bash = false) => {
+  /* 0.2.4, apice ANSI: `gusci`, gli apici della shell detta per nome (bash e sh: 'posix'; `cmd /c`: 'cmd'; PowerShell: 'powershell') */
+  const rileggiCon = (cdCambiaDisco, t, dentro, bash = false, gusci = ctx.gusci) => {
     const era = ctx.cdCambiaDisco
     const eraBash = ctx.bash
+    const eraGusci = ctx.gusci
     ctx.cdCambiaDisco = cdCambiaDisco
     ctx.bash = bash // il testo che riceve bash per nome (R15, 13/11/2026: anche fuori da Windows)
-    try { return rileggi(t, dentro) } finally { ctx.cdCambiaDisco = era; ctx.bash = eraBash }
+    ctx.gusci = gusci
+    try { return rileggi(t, dentro) } finally { ctx.cdCambiaDisco = era; ctx.bash = eraBash; ctx.gusci = eraGusci }
   }
   /* giro piccolo dopo il controllore: con la regola di bash, la cartella messa da parte prima di una sottoshell o di una lista in
      sottofondo (`comandiSemplici`, `salvaPrima`) torna dopo di lei (`ripristinaDopo`) */
@@ -1478,9 +2480,22 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
      segue fino al primo `&`, `|` o a capo non parte (misurato con cmd.exe, 12/11/2026). Vale per la lettura di cmd del `cd` qui sotto. */
   let ingoiato = false
   /* C: il corpo di un heredoc è testo; si rilegge solo quello che riceve una shell */
-  const { testo: senzaCorpi, corpi } = ctx.windows ? { testo, corpi: [] } : separaHeredoc(testo)
+  const separato = separaHeredoc(testo)
+  const { testo: senzaCorpi, corpi } = ctx.windows ? { testo, corpi: [] } : separato
   for (const corpo of corpi) { const trovata = rileggi(corpo); if (trovata) return trovata }
-  for (const [n, comando] of comandiSemplici(senzaCorpi, !ctx.windows).entries()) {
+  /* S1 (0.2.4): il corpo di un heredoc che va a un file (`cat > x.py <<EOF`) si ricorda; quello che riceve un interprete che legge da
+     stdin (`python - <<EOF`, `node <<'EOF'`) è codice, su ogni sistema (su Windows le righe restano lette anche come comandi, come prima) */
+  for (const { file, corpo } of separato.scritti) ricordaIlCodice(ctx, chiaveDelFile(file, ctx, cartella), corpo)
+  for (const { corpo, davanti } of separato.codici) {
+    const ultimo = comandiDelGuscio(davanti, ctx).at(-1)
+    const tolti = ultimo ? senzaInvolucri(ultimo, ctx, cartella) : null
+    const parole = conIlSuoInterprete(tolti?.parole ?? [])
+    const famiglia = famigliaDi(nomeDelComando(parole[0]?.testo ?? ''))
+    if (!famiglia || !sorgentiDelCodice(famiglia, parole).stdin) continue
+    const trovata = leggiIlCodice(corpo, LINGUA_DELLA_FAMIGLIA[famiglia], ctx, tolti.cartella, realpathFn, profondita + 1, testo)
+    if (trovata) return trovata
+  }
+  for (const [n, comando] of comandiDelGuscio(senzaCorpi, ctx).entries()) {
     if (conta(ctx, PESI.comando)) return TROPPO_ANNIDATO // ottavo giro: ogni comando guardato è lavoro
     if (ctx.bash) {
       for (let k = 0; daRiprendere > 0 && daParte.length; daRiprendere -= 1, k += 1) {
@@ -1499,7 +2514,11 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
       if (trovata) return trovata
     }
     for (const w of comando) {
-      if (w.gruppo === undefined || CALCOLABILI_PS.has(nomeDelComando(comandiSemplici(w.gruppo, false)[0]?.[0]?.testo ?? ''))) continue
+      /* giro dopo i revisori (b): si salta solo un gruppo che è UN comando calcolabile (la condizione di `calcolaGruppo`):
+         `(Join-Path a b | % { Remove-Item … })` si rilegge. Terzo giro: «calcolabile» con la lettura di `calcolaGruppo` (`b` | …` è
+         una pipe), e un gruppo con un altro gruppo dentro si rilegge (`(Join-Path a (Remove-Item …))`) */
+      const delGruppo = w.gruppo === undefined ? [] : comandiSemplici(w.gruppo, letturaDelGruppo(w.gruppo))
+      if (w.gruppo === undefined || (delGruppo.length === 1 && !w.gruppo.includes('(') && CALCOLABILI_PS.has(nomeDelComando(delGruppo[0][0]?.testo ?? '')))) continue
       const trovata = rileggi(w.gruppo)
       if (trovata) return trovata
     }
@@ -1519,6 +2538,15 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
     const nome = nomeDelComando(parole[0].testo)
     const qui = tolti.cartella
     const resto = () => parole.slice(1).map((w) => w.testo).join(' ')
+    /* S1 (0.2.4): il codice di un altro linguaggio si legge (`python -c`, `node -e`, `perl -e`, `deno eval`, stdin, il file scritto qui) */
+    if (nome === 'echo' || nome === 'printf') ricordaIlFileScritto(parole, ctx, qui)
+    const interprete = conIlSuoInterprete(parole)
+    const famiglia = famigliaDi(nomeDelComando(interprete[0].testo))
+    if (famiglia) {
+      const trovata = giudicaUnInterprete(famiglia, interprete, comando, prima, ctx, qui, testo, realpathFn, profondita)
+      if (trovata) return trovata
+      continue
+    }
     /* `cd C:\Users && rm -rf nino`: la cartella cambia per i comandi dopo */
     /* 208 ter (MEDIA-3): `Push-Location`/`Pop-Location` di PowerShell come `pushd`/`popd` (about_Locations) */
     if (COMANDI_CHE_SPOSTANO.has(nome)) {
@@ -1549,7 +2577,8 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
     if (nome === 'forfiles') { const trovata = giudicaForfiles(parole, ctx, realpathFn, qui, rileggi); if (trovata) return trovata; continue }
     /* `eval`, e in PowerShell `iex`/`Invoke-Expression` (P): il testo si rilegge, con le variabili assegnate prima */
     if (nome === 'eval' || nome === 'iex' || nome === 'invoke-expression') {
-      const corpo = parole.slice(1).map((w) => (/^[$%]/u.test(w.testo) ? espanso(w.testo, ctx, qui) ?? w.testo : w.testo)).join(' ')
+      /* giro dopo i revisori (a): `eval "$'\x72m' -rf ~"`: un `$'…'`/`$"…"` arriva così a eval, non è una variabile */
+      const corpo = parole.slice(1).map((w) => (/^(?:%|\$(?!['"]))/u.test(w.testo) ? espanso(w.testo, ctx, qui) ?? w.testo : w.testo)).join(' ')
       const trovata = rileggi(corpo, qui)
       if (trovata) return trovata
       continue
@@ -1564,7 +2593,7 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
         /* P: `bash -c "$(printf …)"`: il testo lo scrive un comando, non si sa → carta se il testo cancella */
         if (parole[k].sostituzione && sembraCancellare(testo)) return TROPPO_ANNIDATO
         /* P: `sh -c '… "$1"' _ X`: i posizionali entrano nel testo */
-        const trovata = rileggiCon(true, conPosizionali(parole[k].testo, parole.slice(k + 1).map((w) => w.testo)), qui, true)
+        const trovata = rileggiCon(true, conPosizionali(parole[k].testo, parole.slice(k + 1).map((w) => w.testo)), qui, true, GUSCIO_POSIX)
         if (trovata) return trovata
         continue
       }
@@ -1572,14 +2601,14 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
       const h = parole.findIndex((w, j) => j > 0 && w.testo.startsWith('<<<'))
       if (h > 0) {
         const stringa = parole[h].testo === '<<<' ? parole[h + 1]?.testo : parole[h].testo.slice(3)
-        if (stringa) { const trovata = rileggiCon(true, stringa, qui, true); if (trovata) return trovata }
+        if (stringa) { const trovata = rileggiCon(true, stringa, qui, true, GUSCIO_POSIX); if (trovata) return trovata }
         continue
       }
       /* P: `echo '…' | bash`, `printf … | sh`: si rilegge il testo; un'altra fonte nella pipe di una shell non si sa → carta se il testo cancella */
       if (comando.dopoPipe && prima?.length) {
         const fonte = nomeDelComando(prima[0].testo)
         if (fonte === 'echo' || fonte === 'printf') {
-          const trovata = rileggiCon(true, prima.slice(1).filter((w) => !/^-[neE]+$/u.test(w.testo)).map((w) => w.testo).join(' '), qui, true)
+          const trovata = rileggiCon(true, prima.slice(1).filter((w) => !/^-[neE]+$/u.test(w.testo)).map((w) => w.testo).join(' '), qui, true, GUSCIO_POSIX)
           if (trovata) return trovata
         } else if (sembraCancellare(testo)) return TROPPO_ANNIDATO
       }
@@ -1590,8 +2619,15 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
         const t = parole[j].testo
         const attaccato = /^\/[ck](?!:)(.+)$/isu.exec(t) // P: `cmd /c"rd /s /q …"`
         if (!/^\/[ckr]$/iu.test(t) && !attaccato) continue // `/r` è un altro nome di `/c`
-        const trovata = rileggiCon(ctx.cdDelGiro, [...(attaccato ? [attaccato[1]] : []), ...parole.slice(j + 1).map((w) => w.testo)].join(' '), qui)
+        const trovata = rileggiCon(ctx.cdDelGiro, [...(attaccato ? [attaccato[1]] : []), ...parole.slice(j + 1).map((w) => w.testo)].join(' '), qui, false, GUSCIO_CMD)
         if (trovata) return trovata
+        /* S1 (0.2.4): `cmd /c python -c "…; …"`: il codice era fra virgolette; si rilegge ANCHE con le virgolette rimesse alle parole con
+           spazi (una lettura in più, mai una in meno: quella di prima resta) */
+        const dopo = parole.slice(j + 1)
+        if (!attaccato && dopo.length > 1 && dopo.some((w) => /\s/u.test(w.testo)) && famigliaDi(nomeDelComando(dopo[0].testo))) {
+          const conVirgolette = rileggiCon(ctx.cdDelGiro, dopo.map((w) => (/\s/u.test(w.testo) ? `"${w.testo.replace(/"/gu, "'")}"` : w.testo)).join(' '), qui, false, GUSCIO_CMD)
+          if (conVirgolette) return conVirgolette
+        }
         break
       }
       continue
@@ -1631,7 +2667,7 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
         if (nome === 'powershell') corpo = parole.slice(j).map((w) => w.testo).join(' ') // powershell.exe: il primo argomento è -Command
         break
       }
-      if (corpo) { const trovata = rileggiCon(true, corpo, dentro); if (trovata) return trovata }
+      if (corpo) { const trovata = rileggiCon(true, corpo, dentro, false, GUSCIO_POWERSHELL); if (trovata) return trovata }
       continue
     }
     /* P: `gci X | % { ri $_ … }`, `ForEach-Object { Remove-Item $_.FullName … }`: `$_` vale ciò che elenca chi sta prima della pipe */
@@ -1753,30 +2789,10 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
         if (motivo) return { percorso: ctx.p.resolve(dove2 ?? ctx.cartella, valore), perche: motivo }
         continue
       }
-      /* `rm -rf "$(pwd)"` e simili: un bersaglio fatto solo di una sostituzione non si sa dove porta (Claude Code `CHANGELOG.md:2384`) */
-      if (bersaglio.sostituzione && !/^\$\(\s*pwd\s*\)$|^`\s*pwd\s*`$/iu.test(bersaglio.testo)) {
-        if (ricorsivo(parole)) return { percorso: bersaglio.testo, perche: 'sostituzione' }
-        continue
-      }
-      /* dopo un `cd` che non si sa dove porta (`cd "$(mktemp -d)/../.."`, `cd $X`, `cd -`), un `rm -r` relativo cancella un posto che si
-         sa solo mentre gira: carta, come per la sostituzione (si fallisce chiusi, mai un sì muto) */
-      if (dove2 === null && ricorsivo(parole)) {
-        const scritto = espanso(bersaglio.testo, ctx, null)
-        if (scritto === null || !ctx.p.isAbsolute(ctx.windows ? discoLocale(scritto, ctx) : scritto)) return { percorso: bersaglio.testo, perche: 'sostituzione' }
-      }
-      /* 208 bis: `%~dp0`, `!X!` ignota, `%X:~a,b%` ignota in un comando ricorsivo di Windows: il posto si sa solo mentre gira → carta */
-      if (ctx.windows && ricorsivo(parole) && CMD_CALCOLATO.test(bersaglio.testo)) {
-        const scritto = espanso(bersaglio.testo, ctx, dove2)
-        if (scritto === null || CMD_CALCOLATO.test(scritto)) return { percorso: bersaglio.testo, perche: 'sostituzione' }
-      }
-      /* 208 ter (ALTO-2): la variabile di un `for` di cmd i cui valori non si sanno */
-      if (ctx.windows && ctx.forIgnoti?.size && ricorsivo(parole) && [...ctx.forIgnoti].some((n) => new RegExp(`\\$\\{?${n}(?![\\w])`, 'iu').test(bersaglio.testo))) {
-        return { percorso: bersaglio.testo, perche: 'sostituzione' }
-      }
-      const assoluto = bersaglioAssoluto(bersaglio.testo, ctx, dove2)
+      /* S1 giro 2 (punto 6): il giudizio del bersaglio è `giudicaIlBersaglio`, lo stesso per il codice di un altro linguaggio */
+      const { carta, assoluto } = giudicaIlBersaglio(bersaglio, ricorsivo(parole), ctx, dove2, realpathFn)
+      if (carta) return carta
       if (assoluto === null) continue
-      const motivo = perche(assoluto, ctx, veriDi(ctx, realpathFn))
-      if (motivo) return { percorso: assoluto, perche: motivo }
       /* 208 bis (MEDIA-4): un collegamento o una giunzione verso un posto critico, cancellato ATTRAVERSO il collegamento (`link/`, `link/.`,
          e `Remove-Item -Recurse link`, che in PowerShell 5.1 svuota la destinazione); `rm -rf link` toglie solo il collegamento */
       /* 208 ter (MEDIA-1): `del /s link`, `del /s link\*` svuotano la destinazione della giunzione (Microsoft Learn `del`, misurato):
@@ -1908,6 +2924,8 @@ function lettureInPiu(testo) {
     const comeLaRiceve = testo.replace(/\\([$`"\\])/gu, (_, c) => c)
     const senzaLei = comeLaRiceve === testo ? comeLaRiceve : senzaECommercialiNelleGraffe(comeLaRiceve)
     if (senzaLei !== comeLaRiceve && !altre.includes(senzaLei)) altre.push(senzaLei)
+    /* giro dopo i revisori (a): `bash -c "x=\$'\''; rm -rf ../ #'"`: fra le doppie `\$` arriva `$` alla shell, e lì `$'…'` è un apice */
+    else if (/\\\$['"]/u.test(testo) && !altre.includes(comeLaRiceve)) altre.push(comeLaRiceve)
   }
   return altre
 }
@@ -1954,9 +2972,101 @@ function casiDiUnTesto(testo, ctx, realpathFn, profondita, dove) {
   } finally { rimetti(ctx, unione(finali)) }
 }
 
+/*
+ * ⛔ 0.2.4, apice ANSI (owner riga 187; Forma 2 «segue il guscio vero», giudice v2301). `x=$'\''; rm -rf ~` passava SENZA carta su W L A M
+ *   (anche nella 0.2.1 e nella 0.2.3): la lettura di sempre apriva un apice a `'` per ogni guscio e non conosceva `$'…'`, e il resto del
+ *   comando finiva fra apici. Su Windows il guscio vero è cmd (`talosHarness.mjs` `shellDeiComandi`, `shell: true` = ComSpec), dove `'`
+ *   non è un apice: `echo it's & rd /s /q C:\` passava. Ora, accanto alla lettura di sempre (che resta: mai una carta in meno), il testo si
+ *   rilegge con gli apici di OGNI guscio che lo eseguirà (`ctx.gusci`: un argomento di chi chiama, `gusci`, di serie dalla piattaforma: su
+ *   Windows cmd E posix, perché un comando può andare in WSL; altrove posix; dentro `bash -c`, `cmd /c`, `powershell -Command` il loro),
+ *   e chiede se una delle letture chiede. Una lettura in più solo quando gli apici di quel guscio possono cambiare qualcosa (`cambiaIlGuscio`).
+ *   Come Codex, che non dà il sì a un `ansi_c_string` (`codex-rs/shell-command/src/bash.rs:36-62`) né a un albero con errori (`:30-31`).
+ */
+const GUSCIO_POSIX = Object.freeze(['posix'])
+const GUSCIO_CMD = Object.freeze(['cmd'])
+const GUSCIO_POWERSHELL = Object.freeze(['powershell'])
+/** I comandi semplici con gli apici della lettura in corso: quelli di sempre, o quelli del guscio (`ctx.apici`). */
+/* l'apice aperto in fondo chiede solo dove l'apice è un apice della shell che esegue: la shell POSIX, fuori da Windows */
+const comandiDelGuscio = (testo, ctx) => (ctx.apici ? comandiSemplici(testo, ctx.apici, { apertoChiede: ctx.apici === 'posix' && !ctx.windows }) : comandiSemplici(testo, !ctx.windows))
+/** Un apice semplice o doppio che resta aperto in fondo, con le regole della shell POSIX (la barra protegge fuori dall'apice semplice). */
+function apiceApertoPosix(testo) {
+  let apice = ''
+  for (let i = 0; i < testo.length; i += 1) {
+    const c = testo[i]
+    if (apice === "'") { if (c === "'") apice = ''; continue }
+    if (c === '\\') { i += 1; continue }
+    if (apice === '"') { if (c === '"') apice = ''; continue }
+    if (c === "'" || c === '"') apice = c
+  }
+  return apice !== ''
+}
+/** Se gli apici di `guscio` possono leggere il testo diverso dalla lettura di sempre (altrimenti la lettura in più non serve). */
+function cambiaIlGuscio(testo, guscio, ctx) {
+  if (guscio === 'cmd') return /['^]/u.test(testo)
+  if (guscio === 'powershell') return /''|`/u.test(testo)
+  return /\$['"]/u.test(testo) || (!ctx.windows && apiceApertoPosix(testo))
+}
+/*
+ * Le parole che la lettura vede con gli apici `apici` (null = quelli di sempre), in tutti i punti in cui `giudicaUnTesto` le chiede
+ * (`comandiDelGuscio`: il testo senza i corpi degli heredoc e ciò che sta davanti a un heredoc che riceve codice). Se sono le stesse di
+ * quelle di sempre la lettura del guscio darebbe la STESSA risposta (`ctx.apici` si legge solo in `comandiDelGuscio`), e non si rifà:
+ * misurato, `x=$'a'; ` davanti a otto `(cd … && npm i)` raddoppiava le letture (256 → 301, il tetto) e dava la carta a un comando onesto.
+ */
+function paroleDelGuscio(testo, ctx, apici) {
+  const era = ctx.apici
+  ctx.apici = apici
+  try {
+    /* giro dopo i revisori (C2): ESATTO, come `conTuttiICasi` e `giudicaUnTesto`: anche le letture in più di bash e, su ogni sistema,
+       ciò che sta davanti a un heredoc che riceve codice */
+    const pezzi = [testo, ...(ctx.bash ? lettureInPiu(testo) : [])].flatMap((t) => {
+      const separato = separaHeredoc(t)
+      return [ctx.windows ? t : separato.testo, ...separato.codici.map((x) => x.davanti)]
+    })
+    return JSON.stringify(pezzi.map((t) => comandiDelGuscio(t, ctx).map((c) => ({ ...c }))))
+  } finally { ctx.apici = era }
+}
+/** Se un `$'…'` del testo ha il carattere zero (bash lì tronca: `troncaAlNul`). */
+const conUnNul = (testo) => testo.includes("$'") && [...testo.matchAll(/\$'((?:\\[\s\S]|[^'\\])*)'/gu)].some(([, d]) => decodificaAnsiC(d, { troncaAlNul: true }) !== decodificaAnsiC(d))
+function conGliApiciDelGuscio(testo, ctx, realpathFn, profondita, dove) {
+  const prima = fotografia(ctx)
+  const eraApici = ctx.apici
+  ctx.apici = null
+  /* un apice aperto in fondo (solo posix fuori da Windows) non ferma le altre letture: si ricorda nel conto del comando e, se
+     nessuna lettura dà una carta più precisa, `letturaNuova` risponde «troppo complesso» */
+  const apertoInFondo = (f) => { try { return f() } catch (e) { if (e !== APICE_APERTO) throw e; ctx.conto.apertoInFondo = true; return null } }
+  try {
+    /* giro dopo i revisori (d): col carattere zero dentro `$'…'` la lettura posix che tronca come bash viene PRIMA (il suo motivo è
+       quello vero: `rm -rf $'/\0x'` è la radice); quella che lo tiene (POSIX lo lascia aperto) resta accanto, nel giro dei gusci */
+    const finali = []
+    if ((ctx.gusci ?? []).includes('posix') && conUnNul(testo)) {
+      ctx.apici = 'posix0'
+      const trovata = apertoInFondo(() => conTuttiICasi(testo, ctx, realpathFn, profondita, dove))
+      if (trovata) return trovata
+      finali.push(fotografia(ctx))
+      rimetti(ctx, prima)
+      ctx.apici = null
+    }
+    const sempre = conTuttiICasi(testo, ctx, realpathFn, profondita, dove)
+    if (sempre) return sempre
+    finali.unshift(fotografia(ctx))
+    const candidati = (ctx.gusci ?? []).filter((g) => cambiaIlGuscio(testo, g, ctx))
+    const diSempre = candidati.length ? paroleDelGuscio(testo, ctx, null) : null
+    const gusci = candidati.filter((g) => { const parole = apertoInFondo(() => paroleDelGuscio(testo, ctx, g)); return parole !== null && parole !== diSempre })
+    for (const guscio of gusci) {
+      rimetti(ctx, prima)
+      ctx.apici = guscio
+      const trovata = apertoInFondo(() => conTuttiICasi(testo, ctx, realpathFn, profondita, dove))
+      if (trovata) return trovata
+      finali.push(fotografia(ctx))
+    }
+    if (finali.length > 1) rimetti(ctx, unione(finali))
+    return null
+  } finally { ctx.apici = eraApici }
+}
+
 /** 208 bis: su Windows si giudica il testo grezzo e, se cmd lo legge diverso, anche come lo legge cmd (l'unione: mai una carta in meno). */
 function giudica(testo, ctx, realpathFn, profondita, dove) {
-  const grezzo = conTuttiICasi(testo, ctx, realpathFn, profondita, dove)
+  const grezzo = conGliApiciDelGuscio(testo, ctx, realpathFn, profondita, dove)
   if (grezzo || !ctx.windows) return grezzo
   const comeCmd = comeLoLeggeCmd(testo)
   if (comeCmd === testo) return null
@@ -1977,13 +3087,16 @@ let ultimeLetture = 0 // per le prove soltanto (`__perLeProve.letture`): le lett
 let ultimoLavoro = 0 // per le prove soltanto (`__perLeProve.lavoro`): il lavoro contato del comando appena giudicato
 let ultimiEspansi = 0 // per le prove soltanto (`__perLeProve.espansi`): i caratteri espansi contati del comando appena giudicato
 let ultimiPassiDelGlob = 0 // per le prove soltanto (`__perLeProve.globPassi`): i passi dei confronti dei glob del comando appena giudicato
-function letturaNuova(comando, { cartella, home = homedir(), piattaforma = process.platform, ambiente = process.env, realpathFn = realpathSync.native, progettiCritici = [] } = {}) {
+/** 0.2.4, apice ANSI: i gusci che eseguono il comando, di serie dalla piattaforma (Windows: cmd, e posix per WSL; altrove: posix). */
+const gusciDiSerie = (piattaforma) => (piattaforma === 'win32' ? ['cmd', 'posix'] : ['posix'])
+function letturaNuova(comando, { cartella, home = homedir(), piattaforma = process.platform, ambiente = process.env, realpathFn = realpathSync.native, progettiCritici = [], gusci = gusciDiSerie(piattaforma) } = {}) {
   /* settimo e ottavo giro: UN conto per comando, comune a tutti i giri, i livelli e i casi: le letture (`TETTO_DELLE_LETTURE`) e il
      lavoro (`TETTO_DEL_LAVORO`) */
   const conto = { letture: 0, lavoro: 0, espansi: 0, glob: 0 }
   try {
     const testo = String(comando ?? '')
-    if (testo.trim() === '' || (!sembraCancellare(testo) && !(piattaforma === 'win32' && sembraCancellare(comeLoLeggeCmd(testo))))) return null
+    /* S1 (0.2.4): un testo che nomina un interprete si legge anche senza `rm` (`python -c "import shutil; shutil.rmtree('/')"`) */
+    if (testo.trim() === '' || (!sembraCancellare(testo) && !NOMINA_UN_INTERPRETE.test(testo) && !(piattaforma === 'win32' && sembraCancellare(comeLoLeggeCmd(testo))))) return null
     if (typeof cartella !== 'string' || cartella === '') return null
     /* K: un elenco di stringhe; altro = ignorato. Assente = come prima */
     const critici = Array.isArray(progettiCritici) ? progettiCritici.filter((x) => typeof x === 'string' && x !== '' && x !== cartella) : []
@@ -2003,6 +3116,9 @@ function letturaNuova(comando, { cartella, home = homedir(), piattaforma = proce
       /* R15 (13/11/2026, giudice v1757 f, owner 12:25): fuori da Windows il comando lo esegue una shell POSIX, con le sue regole del
          sottofondo, delle sottoshell e delle pipe (`cd /x & rm -rf *` cancella la cartella del comando) */
       ctx.bash = !ctx.windows
+      /* 0.2.4, apice ANSI: il guscio vero è un argomento (mai dedotto dal testo); un valore che non è un elenco di gusci noti = quelli di serie */
+      ctx.gusci = Array.isArray(gusci) && gusci.length > 0 && gusci.every((g) => g === 'posix' || g === 'cmd' || g === 'powershell') ? gusci : gusciDiSerie(piattaforma)
+      ctx.apici = null
       const trovata = giudica(testo, ctx, realpathFn, 0, cartella)
       if (ctx.senzaDisco) visto.grafia = true
       if (ctx.movimentoDubbio) visto.movimento = true
@@ -2012,13 +3128,14 @@ function letturaNuova(comando, { cartella, home = homedir(), piattaforma = proce
     const leggi = (comeIlSistema) => giro(comeIlSistema, 'posix') ?? (visto.movimento ? giro(comeIlSistema, 'cmd') ?? giro(comeIlSistema, 'powershell') : null)
     const comeGitBash = leggi(false)
     /* 12/11/2026, le due letture di `/x/…` (vedi `discoLocale`): solo se il comando ha una di quelle grafie */
-    if (!visto.grafia) return comeGitBash?.trovata ?? null
+    /* 0.2.4, apice ANSI: un apice della shell POSIX rimasto aperto in fondo (`conGliApiciDelGuscio`) chiede se nessuna lettura chiede */
+    if (!visto.grafia) return comeGitBash?.trovata ?? (conto.apertoInFondo ? TROPPO_COMPLESSO : null)
     const comeSistema = leggi(true)
     /* giro 2 (limite 2 del revisore C): la carta di un'azione che non si annulla nomina il posto che verrà cancellato DAVVERO. Se
        tutte e due le letture sono critiche vale quella del sistema (`Remove-Item /T/progetto` è `C:\T\progetto`, non `T:\progetto`),
        tranne per un `rm` scritto alla POSIX (`rm -rf /c/…`), che gira in Git Bash o in WSL: lì `/c` è il disco. */
     if (comeSistema && comeGitBash) return comeGitBash.allaPosix ? comeGitBash.trovata : comeSistema.trovata
-    return (comeSistema ?? comeGitBash)?.trovata ?? null
+    return (comeSistema ?? comeGitBash)?.trovata ?? (conto.apertoInFondo ? TROPPO_COMPLESSO : null)
   } catch {
     /* ⛔ decimo giro: FALLISCE CHIUSA. Il tetto dell'espansione, una stringa troppo lunga, un ambiente illeggibile, qualunque errore:
        un comando che la lettura non sa leggere fino in fondo chiede (prima un errore qui era `null`, nessuna carta, e la cancellazione
@@ -2083,3 +3200,5 @@ export const cancellazioneCritica = unaCartaSeUnaChiede(letturaNuova, decisioneD
 
 /** Per le prove soltanto: le due letture da sole e il modo in cui si mettono insieme (nessun valore nuovo per chi chiama). */
 export const __perLeProve = Object.freeze({ letturaNuova, della021: decisioneDella021, unaCartaSeUnaChiede, TETTO_DELLE_LETTURE, letture: () => ultimeLetture, TETTO_DEL_LAVORO, PESI, lavoro: () => ultimoLavoro, TETTO_DELL_ESPANSIONE, espansi: () => ultimiEspansi, globPrende, globPassi: () => ultimiPassiDelGlob, TETTO_DEL_GLOB })
+/** 0.2.4 B3 (19/11/2026): il lettore delle parole, prestato a `scritture-della-shell.mjs` («Scrive nel progetto»); qui niente cambia. */
+export const __lettoreDeiComandi = Object.freeze({ comandiSemplici, separaHeredoc, senzaInvolucri, cartellaDopo, argomentoDelCd, bersaglioAssoluto, contesto, ricordaAssegnazioni, sostituzioniDi, nomeDelComando, decodificaPowerShell, legateNelTesto, espanso, SHELL_POSIX, SHELL_POWERSHELL, COMANDI_CHE_SPOSTANO, OPZIONE_COMANDO_PS, OPZIONE_CODIFICATA_PS, OPZIONI_PS_CON_VALORE })

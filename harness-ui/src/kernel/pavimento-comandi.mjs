@@ -134,16 +134,20 @@ const eInizioCommento = (c, i) => c[i] === '#' && (i === 0 || eSpazio(c[i - 1]) 
 /* Passi lessicali `[tipo, i, j, virgoletta]`: 'char', 'esc' (barra rovescia + carattere, mai fra apici), 'quote',
    'subst' (`$(…)`, backtick, `${…}`), 'comment'. Le sostituzioni contano fuori dalle virgolette con 'u' in `subst`,
    dentro le doppie con 'q'. */
+/* 0.2.4, apice ANSI (owner riga 187, Forma 2): con `apiciAnsiC` acceso, `$'…'` è l'apice di bash, dove la barra protegge il carattere dopo
+   (`$'\''` si chiude al terzo apice). Si accende solo nella seconda lettura di `rilevaComandoSenzaRecupero`: la prima resta quella di Hermes
+   (`approval_detection.py:1054-1057`, dove `$'\''` chiude al secondo apice e il resto finisce fra apici). */
+let apiciAnsiC = false
 function* scansiona(testo, inizio = 0, fine = null, { subst = '', graffe = false, fermaSeAperta = false, backtickIngenuo = false, commenti = false } = {}) {
     const n = fine === null ? testo.length : fine
-    let virg = null, i = inizio
+    let virg = null, i = inizio, ansi = false
     while (i < n) {
         const ch = testo[i]
         let tipo = 'char', j = i + 1
         if (commenti && virg === null && eInizioCommento(testo, i)) {
             const k = testo.indexOf('\n', i)
             tipo = 'comment'; j = k < 0 || k >= n ? n : k
-        } else if (virg !== "'" && ch === '\\' && i + 1 < n) {
+        } else if ((virg !== "'" || ansi) && ch === '\\' && i + 1 < n) {
             tipo = 'esc'; j = i + 2
         } else if (ch === virg || (virg === null && (ch === "'" || ch === '"'))) {
             tipo = 'quote'
@@ -157,7 +161,7 @@ function* scansiona(testo, inizio = 0, fine = null, { subst = '', graffe = false
             else if (fermaSeAperta) { yield ['subst', i, null, virg]; return }
         }
         yield [tipo, i, j, virg]
-        if (tipo === 'quote') virg = virg ? null : ch
+        if (tipo === 'quote') { ansi = !virg && ch === "'" && apiciAnsiC && i > inizio && testo[i - 1] === '$'; virg = virg ? null : ch }
         i = j
     }
 }
@@ -798,6 +802,13 @@ const descrizioneDellaVariante = (variante) => {
 }
 /** (1) `detect_hardline_command`, più il +1 sugli involucri: la descrizione del comando senza recupero, o null. */
 export function rilevaComandoSenzaRecupero(comando, { soloHermes = false } = {}) {
+    const prima = rilevaConGliApici(comando, { soloHermes })
+    if (prima || soloHermes || apiciAnsiC || !String(comando ?? '').includes("$'")) return prima
+    /* 0.2.4, apice ANSI: la seconda lettura, con `$'…'` letto come bash; una carta in più, mai una in meno */
+    apiciAnsiC = true
+    try { return rilevaConGliApici(comando, { soloHermes }) } finally { apiciAnsiC = false }
+}
+function rilevaConGliApici(comando, { soloHermes }) {
     const c = String(comando ?? '')
     if (oltreIlLimiteDelParser(c)) return DESCRIZIONE_LIMITE_PARSER
     if (varianteSenzaPatternGrep(mascheraAcapoTraVirgolette(c))[1]) return DESCRIZIONE_PAYLOAD_ILLEGGIBILE

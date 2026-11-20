@@ -27,7 +27,7 @@
  *   cancellare i servizi del dev. Il default «mantieni» sta nell'uninstaller, non qui.
  */
 
-import { SCOPE_DESKTOP, avvolgiAdattatoreKeyring, creaAdattatorePortachiaviSistema } from './adattatore-keyring.mjs';
+import { SCOPE_DESKTOP, avvolgiAdattatoreKeyring, creaAdattatorePortachiaviSistema, serverDelPacchetto } from './adattatore-keyring.mjs';
 import { PROVIDER_IDS, createProviderCredentialStore } from './provider-credential-store.mjs';
 import { FONTI_RICERCA_IDS, createSearchSourceStore } from './search-source-store.mjs';
 
@@ -40,9 +40,9 @@ import { FONTI_RICERCA_IDS, createSearchSourceStore } from './search-source-stor
  *   Il riepilogo stampato su stdout contiene SOLO nomi e conteggi: mai il valore di una chiave
  *   (che non entra nemmeno in questo modulo — i negozi non lo espongono).
  */
-export async function puliziaDatiDesktop({ keyring, logger = console } = {}) {
+export async function puliziaDatiDesktop({ keyring, logger = console, delPacchetto = serverDelPacchetto } = {}) {
   const portachiaviNudo = keyring ?? await creaAdattatorePortachiaviSistema();
-  const portachiavi = avvolgiAdattatoreKeyring(portachiaviNudo, SCOPE_DESKTOP);
+  const portachiavi = avvolgiAdattatoreKeyring(portachiaviNudo, SCOPE_DESKTOP, { delPacchetto }); // giro 2: main.mjs passa app.isPackaged
   const cancellati = [];
   const errori = [];
   const segnala = (tipo, id, errore) => errori.push({ tipo, id, messaggio: errore?.message ?? String(errore) });

@@ -16655,7 +16655,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         const inAttesa = batch.scrittureInAttesa?.findIndex?.((voce) => voce.article === info.article) ?? -1;
         if (inAttesa >= 0) batch.scrittureInAttesa.splice(inAttesa, 1);
       }
-      disegnaArgomentiSeInAttesa(info); // gli argomenti si disegnano un fotogramma dopo: prima di scrivere l'esito si svuota l'attesa, come fa ToolCallResult
+      chiudiArgomentiInArrivo(info); // gli argomenti si disegnano un fotogramma dopo: prima di scrivere l'esito si svuota l'attesa, come fa ToolCallResult
       info.stato = 'interrotto';
       /* la riga smette di dire «…» (in corso): resta ciò che stava facendo, e che si è fermato */
       if (info.summaryText) { const base = info.summaryText.textContent.replace(/…\s*$/u, '').trim(); info.summaryText.textContent = base ? `${base} · ${tr('app.activity.interrupted')}` : tr('app.activity.interrupted'); }
@@ -17687,13 +17687,17 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   function suggerimentoDaUltimoAttrezzo() {
     const ultimo = state.realSession.ultimoBersaglioAttrezzo;
     if (!ultimo || !ultimo.nome) return null;
-    const bersaglio = bersaglioDelSuggerimento(bersaglioAttrezzoNudo(ultimo.nome, ultimo.argomenti));
+    /* 0.2.4 blocco 1, voce 2 (limite noto della 0.2.3 «the suggestion offered after a turn … can put an argument, unmasked, into the
+       suggested message»): il suggerimento legge gli argomenti con le maschere della carta (`argomentiDaMostrare`, la stessa copia della
+       riga), mai quelli veri: «Explain what it did: export DB_PASSWORD=…» diventava un messaggio pronto da mandare col segreto dentro. */
+    const argomenti = argomentiDaMostrare(ultimo.argomenti);
+    const bersaglio = bersaglioDelSuggerimento(bersaglioAttrezzoNudo(ultimo.nome, argomenti));
     if (!bersaglio) return null;
     switch (ultimo.nome) {
       case 'leggi': return tr('app.suggestion.readMore', { bersaglio });
       case 'scrivi': return tr('app.suggestion.reviewChanges', { bersaglio });
       case 'cerca': { // revisione UX 04/11, riga 40, e decisione 192: `bersaglio-suggerimento.js`
-        const cercato = bersaglioDellaRicerca(ultimo.argomenti, state.realSession.ultimaDomanda);
+        const cercato = bersaglioDellaRicerca(argomenti, state.realSession.ultimaDomanda);
         return cercato ? tr('app.suggestion.searchFound', { bersaglio: cercato }) : null;
       }
       case 'shell': return tr('app.suggestion.explainCommand', { bersaglio });
@@ -17932,14 +17936,15 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      mostrava `password: hunter2` e una password annidata in chiaro mentre la carta li oscurava. Ora si disegnano solo gli argomenti DA
      MOSTRARE (`argomentiDellaRiga`, carta-dal-testo.js: le maschere della carta, anche sul JSON che arriva a pezzi); un JSON che non si
      chiude non si disegna, un testo che non è JSON passa dalle forme dei segreti (`argomentiGrezziDellaRiga`). */
-  function renderizzaArgomentiAttrezzo(contenitore, jsonGrezzo, argomentiMostrati = argomentiDellaRiga(jsonGrezzo)) {
+  function renderizzaArgomentiAttrezzo(contenitore, jsonGrezzo, argomentiMostrati = argomentiDellaRiga(jsonGrezzo), { finito = false } = {}) {
     contenitore.replaceChildren();
     const argomenti = argomentiMostrati;
     if (!argomenti || typeof argomenti !== 'object') {
-      const grezzo = argomentiGrezziDellaRiga(jsonGrezzo);
+      const grezzo = argomentiGrezziDellaRiga(jsonGrezzo, { finito });
       if (!grezzo) return;
       const pre = document.createElement('pre');
       pre.className = 'tool-result-block';
+      pre.dataset.argomentiGrezzi = '1'; // 0.2.4 B1 giro 2: `chiudiArgomentiInArrivo` lo ritrova a fine argomenti
       pre.appendChild(textElement('code', '', grezzo));
       contenitore.appendChild(pre);
       return;
@@ -24977,7 +24982,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const mostrati = letti.mostrati; // giro 7 della gemella 0.2.2: testa e dettaglio con le maschere della carta, letti una volta sola
     if (argomentiParsati && info.summaryText) info.summaryText.textContent = riassuntoAttrezzoInCorso(info.nome, mostrati);
     if (argomentiParsati && info.dettaglio) info.dettaglio.textContent = dettaglioRigaAttrezzo(info.nome, mostrati); // 05/9 Fase 2: il dettaglio mono della ToolRow
-    if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti, mostrati);
+    if (info.detail) renderizzaArgomentiAttrezzo(info.detail, info.argomenti, mostrati, { finito: info.argomentiFiniti === true });
   }
   /** Giro 7 della gemella 0.2.2: gli argomenti di una riga già parsati (anche corretti dalla persona), con le maschere della carta. */
   function argomentiDaMostrare(argomenti) { return argomenti && typeof argomenti === 'object' ? argomentiMascherati(argomenti) : argomenti; } // giro 8: una copia per oggetto, la stessa del gruppo delle attività (testa, dettaglio e riepilogo non rifanno il lavoro)
@@ -24996,6 +25001,23 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   /** Il disegno differito si salda PRIMA che qualcun altro scriva dentro `info.detail`. */
   function disegnaArgomentiSeInAttesa(info) {
     if (info && argomentiAttrezzoInAttesa.has(info)) aggiornaVistaArgomentiAttrezzo(info);
+  }
+
+  /*
+   * ⛔ 0.2.4, blocco 1, giro 2 (revisore, giallo 2): mentre gli argomenti NON JSON arrivano, un'ultima parola che è l'inizio di una forma di
+   *   chiave resta «…» (`oscuraTestoInArrivo`); la riga però si disegnava solo a ogni pezzo, e a fine flusso `which npm` restava `which …`.
+   *   Gli argomenti sono finiti quando la chiamata esce, ha un esito o si interrompe: qui, una volta sola, il blocco grezzo si ridisegna con
+   *   le maschere di sempre. Si cambia solo il suo testo, così l'uscita viva o il lettore appesi sotto restano. Il disegno differito di un
+   *   replay si salda prima, come prima.
+   */
+  function chiudiArgomentiInArrivo(info) {
+    disegnaArgomentiSeInAttesa(info);
+    if (!info || info.argomentiFiniti === true) return;
+    info.argomentiFiniti = true;
+    if (info.comandoDellaPersona || !info.detail) return;
+    const blocco = info.detail.firstElementChild;
+    if (blocco?.dataset?.argomentiGrezzi !== '1' || !blocco.firstElementChild) return;
+    blocco.firstElementChild.textContent = argomentiGrezziDellaRiga(info.argomenti, { finito: true });
   }
 
   /*
@@ -25070,7 +25092,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       const info = state.realSession.toolCallNomi.get(evento.value?.toolCallId);
       const receipt = info && normalizzaRicevutaOutput(evento.value, {sessionId: state.realSession.id, toolCallId: evento.value.toolCallId});
       if (receipt) {
-        disegnaArgomentiSeInAttesa(info);
+        chiudiArgomentiInArrivo(info); // 0.2.4 B1 giro 2: c è un uscita, gli argomenti sono finiti
         if (info.outputReader) info.outputReader.aggiorna(receipt);
         else info.outputReader = creaLettoreOutput({receipt, API, fetchFn: fetchSorvegliata, signal: outputSessionController.signal});
         info.outputReader.monta(info.detail);
@@ -26143,7 +26165,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        */
       case 'ToolCallOutput': {
         const info = state.realSession.toolCallNomi.get(evento.toolCallId);
-        disegnaArgomentiSeInAttesa(info); // 11/09: gli argomenti differiti PRIMA di appendere, o replaceChildren li cancellerebbe
+        disegnaArgomentiSeInAttesa(info); chiudiArgomentiInArrivo(info); // 11/09: gli argomenti differiti PRIMA di appendere, o replaceChildren li cancellerebbe
         if (!info?.detail || typeof evento.delta !== 'string' || !evento.delta) break;
         if (!info.uscitaViva) {
           const pre = document.createElement('pre');
@@ -26165,7 +26187,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         const info = state.realSession.toolCallNomi.get(evento.toolCallId);
         chiudiRigaDelComando(evento.toolCallId); // D20: finito il comando, la sua riga sotto la carta se ne va
         attesaArtefatti.finisci(evento.toolCallId); // 0.2.1-ART D3: senza artefatto la carta in attesa se ne va e la riga torna, col suo esito
-        disegnaArgomentiSeInAttesa(info); // 11/09: idem — qui sotto si appende a `info.detail`
+        disegnaArgomentiSeInAttesa(info); chiudiArgomentiInArrivo(info); // 11/09: idem — qui sotto si appende a `info.detail`
         /* D4: la persona ha corretto la domanda sulla carta. L'evento non porta campi nuovi (forma con Mobile e CLI): la dice l'esito dell'attrezzo, e riga e carta dicono ciò che è partito davvero, anche alla riapertura. */
         const domandaCorretta = info?.nome === 'research_start' ? domandaCorrettaDallEsito(evento.content) : null;
         if (domandaCorretta) {

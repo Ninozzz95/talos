@@ -1,0 +1,9 @@
+{
+  "schema": "talos.nucleo-eccezioni.v1",
+  "perche": "File del nucleo che un prodotto NON confronta, ciascuno col suo motivo e la sua fonte. Si aggiunge una riga solo con un motivo scritto e approvato (decisione 402): una riga senza motivo o senza fonte ferma il cancello.",
+  "eccezioni": [
+    { "file": "harness-ui/server.mjs", "prodotto": "cli", "motivo": "la CLI non lo impacchetta: il suo nucleo parte da harness-ui/src, non dal server HTTP", "fonte": "cli/scripts/pack-vendor.mjs:17-25 (VENDOR_TREES)" },
+    { "file": "harness-ui/package-lock.json", "prodotto": "cli", "motivo": "la CLI non lo impacchetta: le dipendenze le fissa il suo package-lock", "fonte": "cli/scripts/pack-vendor.mjs:17-25 (VENDOR_TREES)" },
+    { "file": "harness-ui/aiuto/index.json", "prodotto": "telefono", "motivo": "il telefono non lo copia: l'aiuto del sito non è nel suo pacchetto r4", "fonte": "mobile/scripts/kernel-r4/copia-r4.mjs:24-33 (PERCORSI_R4)" }
+  ]
+}

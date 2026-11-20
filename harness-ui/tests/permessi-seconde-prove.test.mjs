@@ -226,8 +226,9 @@ test('SECONDA-P15 — la giunzione sul disco del processo verso `.ssh`, nominata
 /* il gemello di Linux, come FUORI-*: lo stesso sorgente con `node:path/posix` e la piattaforma scritta */
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const gemello = realpathSync.native(mkdtempSync(join(tmpdir(), 'talos-seconde-gemello-')));
-mkdirSync(join(gemello, 'src'), { recursive: true });
-for (const nome of ['path-policy.mjs', 'forme-di-segreto.mjs']) {
+mkdirSync(join(gemello, 'src', 'kernel'), { recursive: true });
+/* 0.2.4: `path-policy.mjs` legge `$'…'` col lettore unico del nucleo (`kernel/apici-ansi-c.mjs`, soli builtin): va nel gemello anche lui */
+for (const nome of ['path-policy.mjs', 'forme-di-segreto.mjs', 'kernel/apici-ansi-c.mjs']) {
   const testo = readFileSync(join(SRC, nome), 'utf8');
   writeFileSync(join(gemello, 'src', nome), testo.replaceAll("from 'node:path'", () => "from 'node:path/posix'").replaceAll('process.platform', () => "'linux'"));
 }
