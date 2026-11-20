@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, createHash } from 'node:crypto';
 import { createSqliteContextStore } from '../../context-engine/src/node/sqlite-store.mjs';
+import { rimuoviCartellaDiProvaAttesa } from './aiuto/rimuovi-cartella-di-prova.mjs';
 
 const root = resolve(fileURLToPath(new URL('../', import.meta.url)));
 const delay = ms => new Promise(done => setTimeout(done, ms));
@@ -33,7 +34,19 @@ test('CTX-SERVER-TRIAL-ROUNDTRIP real server imports and persists context across
     if (!child || child.exitCode !== null || child.signalCode !== null) return;
     const exited = new Promise(done => child.once('exit', done)); child.kill(); await exited;
   }
-  t.after(async () => { await stop(); await rm(directory, { recursive: true, force: true }); });
+  /*
+   * 0.2.4 S4 — `EBUSY rmdir` 1 volta su 15859 sul runner Windows. `stop()` aspetta già l'uscita VERA del server (evento `exit`): non è
+   * lui. Misurato con una sonda sui processi figli (18/11/2026): a ogni avvio il Doctor del server lancia `echo ok` col cwd DENTRO questa
+   * cartella (`scratch/talos-doctor-*`, `src/doctor.mjs`), e `child.kill()` su Windows termina solo il server, non i suoi figli: se lo
+   * stop cade mentre `echo` vive (qui 90 ms di margine, sotto carico meno), il nipote tiene la cartella per qualche millisecondo.
+   * ⇒ (1) prima della rimozione si controlla che il server sia DAVVERO uscito (se no rosso subito: è la notizia che la classe B
+   * voleva); (2) la rimozione ritenta sui codici della corsa (`maxRetries`/`retryDelay` di `fs.rm`, Node 24) E lo dice con un avviso.
+   */
+  t.after(async () => {
+    await stop();
+    assert.ok(!child || child.exitCode !== null || child.signalCode !== null, 'il server di prova è ancora vivo: prima di pulire va fermato');
+    await rimuoviCartellaDiProvaAttesa(directory);
+  });
   async function start() {
     child = spawn(process.execPath, ['server.mjs'], { cwd: root, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: {
       ...process.env, TALOS_HARNESS_UI_PORT: String(port), TALOS_HARNESS_UI_SEGRETI_DA: 'stdin',

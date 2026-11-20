@@ -355,14 +355,30 @@ describe('F15 — la shell chiede davanti a un segreto, anche con «sempre»', (
 
         const CHIAMA_SCRIVI = { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', function: { name: 'scrivi', arguments: '{"percorso":"nuovo.txt","contenuto":"ciao"}' } }] }
 
-        /** Aspetta che la domanda compaia sul buffer della sessione (o che il giro finisca senza chiederla). */
+        /**
+         * Aspetta l'EVENTO della domanda (`ApprovalRequested`) ascoltando il registro; `null` se il giro finisce senza chiederla, o dopo un
+         * tetto di tempo largo. 0.2.4 (F15): prima contava 50 giri di `setImmediate`, che sotto il carico della suite intera finivano prima
+         * che la domanda arrivasse (rossa in 11,7 ms). Ora si aspetta ciò che conta, non un numero di giri.
+         */
+        const TETTO_DELLA_DOMANDA_MS = 15_000
         async function aspettaLaDomanda(scena) {
-            for (let giro = 0; giro < 50; giro += 1) {
-                const richiesta = scena.eventi.find((e) => e.type === 'ApprovalRequested')
-                if (richiesta) return richiesta
-                await new Promise((risolvi) => setImmediate(risolvi))
+            const giaArrivata = scena.eventi.find((e) => e.type === 'ApprovalRequested')
+            if (giaArrivata) return giaArrivata
+            let smetti = () => {}
+            let tetto = null
+            try {
+                return await Promise.race([
+                    new Promise((risolvi) => {
+                        smetti = scena.registro.iscriviti(scena.sessionId, (e) => { if (e?.type === 'ApprovalRequested') risolvi(e) })
+                    }),
+                    // il giro è finito senza chiedere: la prova resta ROSSA subito, senza aspettare il tetto
+                    scena.attesa.then(() => scena.eventi.find((e) => e.type === 'ApprovalRequested') ?? null),
+                    new Promise((risolvi) => { tetto = setTimeout(() => risolvi(null), TETTO_DELLA_DOMANDA_MS) }),
+                ])
+            } finally {
+                clearTimeout(tetto)
+                smetti()
             }
-            return null
         }
 
         it('⛔⛔⛔⛔ SESSIONE PREDEFINITA + `cat .env`: arriva UNA domanda, con la frase per la persona', async (t) => {

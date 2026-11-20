@@ -128,7 +128,7 @@ test('CHIP-PERMESSI-01: «Scrive nel progetto» — file, comandi e documenti pa
   const r = riassuntoSenzaChiedere('Workspace write', {});
   assert.equal(r.testo, 'Senza chiedere: file, comandi, documenti');
   /* decisione 208 (owner 04/11/2026 sera): cancellare il progetto, una cartella sopra, la casa o un disco chiede in ogni modo */
-  assert.equal(r.suggerimento, 'Permesso: Scrive nel progetto\nChiede sempre: cancellare un disco, una cartella principale, la tua cartella utente o il progetto, scritture fuori dal progetto, file con segreti, azioni dopo un contenuto sospetto\nCambia il permesso');
+  assert.equal(r.suggerimento, 'Permesso: Scrive nel progetto\nChiede sempre: cancellare un disco, una cartella principale, la tua cartella utente o il progetto (anche da uno script), scritture fuori dal progetto, file con segreti, azioni dopo un contenuto sospetto\nCambia il permesso');
   // C2b: la Coordinazione sta nella stessa mappa ma non è uno dei sei attrezzi
   assert.equal(riassuntoSenzaChiedere('Workspace write', { delega_sottotask: 'chiedi' }).testo, 'Senza chiedere: file, comandi, documenti');
 });
@@ -136,7 +136,7 @@ test('CHIP-PERMESSI-01: «Scrive nel progetto» — file, comandi e documenti pa
 test('CHIP-PERMESSI-02: «Accesso pieno» dice «tutto» solo se passa davvero tutto; un «chiedi» lo riporta all elenco', () => {
   assert.equal(riassuntoSenzaChiedere('Full access', {}).testo, 'Senza chiedere: tutto');
   /* decisioni 155, 158 e 161 (owner 04/11/2026): in Accesso pieno chiedono solo le cancellazioni critiche, le chiavi salvate e la ricerca che spende */
-  assert.equal(riassuntoSenzaChiedere('Full access', {}).suggerimento, 'Permesso: Accesso pieno\nChiede sempre: cancellare un disco, una cartella principale, la tua cartella utente o il progetto, leggere le tue chiavi salvate, ricerche a pagamento\nCambia il permesso');
+  assert.equal(riassuntoSenzaChiedere('Full access', {}).suggerimento, 'Permesso: Accesso pieno\nChiede sempre: cancellare un disco, una cartella principale, la tua cartella utente o il progetto (anche da uno script), leggere le tue chiavi salvate, ricerche a pagamento\nCambia il permesso');
   assert.doesNotMatch(riassuntoSenzaChiedere('Full access', {}).suggerimento, /file con segreti|contenuto sospetto/u, '155: i segreti del progetto e il contenuto sospetto non chiedono in Accesso pieno');
   assert.doesNotMatch(riassuntoSenzaChiedere('Full access', {}).suggerimento, /fuori dal progetto/u, 'fuori dal progetto chiede solo «Scrive nel progetto»');
   // un comando su due chiede ancora: «comandi» si nomina (qualcosa passa), ma «tutto» sarebbe falso
@@ -150,7 +150,7 @@ test('CHIP-PERMESSI-03: «Chiede prima» chiede tutto; un «Per questa sessione�
   assert.equal(riassuntoSenzaChiedere('On request', { shell: 'sempre' }).testo, 'Senza chiedere: comandi (tranne i test)');
   assert.doesNotMatch(riassuntoSenzaChiedere('On request', {}).suggerimento, /Chiede sempre/u, 'chiede già tutto: niente riga in più');
   /* decisione 208: con i comandi «per la sessione» la riga nomina la cancellazione critica, che chiede lo stesso */
-  assert.match(riassuntoSenzaChiedere('On request', { shell: 'sempre' }).suggerimento, /Chiede sempre: cancellare un disco, una cartella principale, la tua cartella utente o il progetto, /u);
+  assert.match(riassuntoSenzaChiedere('On request', { shell: 'sempre' }).suggerimento, /Chiede sempre: cancellare un disco, una cartella principale, la tua cartella utente o il progetto \(anche da uno script\), /u);
   /* AL CONTRARIO: un «sempre» sui soli file non fa passare comandi, quindi non la nomina */
   assert.doesNotMatch(riassuntoSenzaChiedere('On request', { scrivi: 'sempre' }).suggerimento, /cancellare un disco/u);
 });

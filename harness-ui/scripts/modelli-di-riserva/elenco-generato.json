@@ -1,0 +1,116 @@
+{
+  "fonte": "https://models.dev/api.json",
+  "letto": "2026-11-18",
+  "sha256": "53fe4bbc0f0911bf07abb49956b71302d1cd269817cfac0ace5ea540bd8fad97",
+  "fornitori": {
+    "openai": { "modelsDevId": "openai", "presenteSuModelsDev": true, "ausiliario": "gpt-6-luna", "voci": [
+      {"ruolo":"riserva","id":"gpt-6-luna","nome":"GPT-6 Luna","stato":"vivo","attrezzi":true,"ingresso":0.1,"uscita":0.5,"cacheLettura":0.01},
+      {"ruolo":"candidato","id":"gpt-4o-mini","nome":"GPT-4o mini","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.6,"cacheLettura":0.075},
+      {"ruolo":"candidato","id":"gpt-5.6-luna","nome":"GPT-5.6 Luna","stato":"vivo","attrezzi":true,"ingresso":0.2,"uscita":1.2,"cacheLettura":0.02},
+      {"ruolo":"candidato","id":"gpt-5.4-nano","nome":"GPT-5.4 nano","stato":"vivo","attrezzi":true,"ingresso":0.2,"uscita":1.25,"cacheLettura":0.02} ] },
+    "deepseek": { "modelsDevId": "deepseek", "presenteSuModelsDev": true, "ausiliario": "deepseek-flash", "voci": [
+      {"ruolo":"riserva","id":"deepseek-flash","nome":"DeepSeek V4.1 Flash 1017","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.6,"cacheLettura":0.003},
+      {"ruolo":"riserva","id":"deepseek-v4-pro","nome":"DeepSeek V4 Pro","stato":"vivo","attrezzi":true,"ingresso":0.66,"uscita":1.98,"cacheLettura":0.022} ] },
+    "kimi": { "modelsDevId": "moonshotai", "presenteSuModelsDev": true, "ausiliario": "kimi-k2.6", "voci": [
+      {"ruolo":"riserva","id":"kimi-k2.6","nome":"Kimi K2.6","stato":"vivo","attrezzi":true,"ingresso":0.95,"uscita":4,"cacheLettura":0.16},
+      {"ruolo":"riserva","id":"kimi-k2.7-code","nome":"Kimi K2.7 Code","stato":"vivo","attrezzi":true,"ingresso":0.95,"uscita":4,"cacheLettura":0.19},
+      {"ruolo":"candidato","id":"kimi-k2.7-code-highspeed","nome":"Kimi K2.7 Code HighSpeed","stato":"vivo","attrezzi":true,"ingresso":1.9,"uscita":8,"cacheLettura":0.38},
+      {"ruolo":"candidato","id":"kimi-k3.1-pro","nome":"Kimi K3.1 Pro","stato":"vivo","attrezzi":true,"ingresso":2,"uscita":10,"cacheLettura":0.2},
+      {"ruolo":"candidato","id":"kimi-k3","nome":"Kimi K3","stato":"vivo","attrezzi":true,"ingresso":3,"uscita":15,"cacheLettura":0.3} ] },
+    "minimax": { "modelsDevId": "minimax", "presenteSuModelsDev": true, "ausiliario": "MiniMax-M3.1-Flash", "voci": [
+      {"ruolo":"riserva","id":"MiniMax-M3","nome":"MiniMax-M3","stato":"vivo","attrezzi":true,"ingresso":0.3,"uscita":1.2,"cacheLettura":0.06},
+      {"ruolo":"riserva","id":"MiniMax-M3.1-Flash","nome":"MiniMax-M3.1-Flash","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.6,"cacheLettura":0.015} ] },
+    "qwen": { "modelsDevId": "alibaba", "presenteSuModelsDev": true, "ausiliario": "qwen-flash", "voci": [
+      {"ruolo":"riserva","id":"qwen-flash","nome":"Qwen Flash","stato":"vivo","attrezzi":true,"ingresso":0.05,"uscita":0.4,"cacheLettura":0.01},
+      {"ruolo":"riserva","id":"qwen3.8-flash","nome":"Qwen3.8 Flash","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.47,"cacheLettura":0.016},
+      {"ruolo":"candidato","id":"qwen3.7-flash","nome":"Qwen3.7 Flash","stato":"vivo","attrezzi":true,"ingresso":0.03,"uscita":0.13,"cacheLettura":0.006},
+      {"ruolo":"candidato","id":"qwen3.5-flash","nome":"Qwen3.5 Flash","stato":"vivo","attrezzi":true,"ingresso":0.1,"uscita":0.4,"cacheLettura":0.01},
+      {"ruolo":"candidato","id":"qwen3.8-omni-flash","nome":"Qwen3.8 Omni Flash","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.47,"cacheLettura":0.016} ] },
+    "zai": { "modelsDevId": "zai", "presenteSuModelsDev": true, "ausiliario": "glm-4.7-flash", "voci": [
+      {"ruolo":"riserva","id":"glm-4.7-flash","nome":"GLM-4.7-Flash","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":0},
+      {"ruolo":"riserva","id":"glm-4.7","nome":"GLM-4.7","stato":"vivo","attrezzi":true,"ingresso":0.6,"uscita":2.2,"cacheLettura":0.11},
+      {"ruolo":"candidato","id":"glm-4.5-flash","nome":"GLM-4.5-Flash","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":0},
+      {"ruolo":"candidato","id":"glm-4.6v-flash","nome":"GLM-4.6V-Flash","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":0},
+      {"ruolo":"candidato","id":"glm-4.7-flashx","nome":"GLM-4.7-FlashX","stato":"vivo","attrezzi":true,"ingresso":0.07,"uscita":0.4,"cacheLettura":0.01} ] },
+    "anthropic": { "modelsDevId": "anthropic", "presenteSuModelsDev": true, "ausiliario": "claude-haiku-4-5-20251001", "voci": [
+      {"ruolo":"riserva","id":"claude-haiku-4-5-20251001","nome":"Claude Haiku 4.5","stato":"vivo","attrezzi":true,"ingresso":1,"uscita":5,"cacheLettura":0.1},
+      {"ruolo":"riserva","id":"claude-sonnet-5","nome":"Claude Sonnet 5","stato":"vivo","attrezzi":true,"ingresso":2,"uscita":10,"cacheLettura":0.2},
+      {"ruolo":"riserva","id":"claude-haiku-5-5","nome":"Claude Haiku 5.5","stato":"vivo","attrezzi":true,"ingresso":0.1,"uscita":0.5,"cacheLettura":0.01},
+      {"ruolo":"candidato","id":"claude-haiku-4-5","nome":"Claude Haiku 4.5 (latest)","stato":"vivo","attrezzi":true,"ingresso":1,"uscita":5,"cacheLettura":0.1},
+      {"ruolo":"candidato","id":"claude-sonnet-5-5","nome":"Claude Sonnet 5.5","stato":"vivo","attrezzi":true,"ingresso":2,"uscita":10,"cacheLettura":0.1},
+      {"ruolo":"candidato","id":"claude-sonnet-4-6","nome":"Claude Sonnet 4.6","stato":"vivo","attrezzi":true,"ingresso":3,"uscita":15,"cacheLettura":0.3} ] },
+    "gemini": { "modelsDevId": "google", "presenteSuModelsDev": true, "ausiliario": "gemini-3.5-flash-lite", "voci": [
+      {"ruolo":"riserva","id":"gemini-3.5-flash-lite","nome":"Gemini 3.5 Flash Lite","stato":"vivo","attrezzi":true,"ingresso":0.3,"uscita":2.5,"cacheLettura":0.03},
+      {"ruolo":"riserva","id":"gemini-3.1-flash-lite","nome":"Gemini 3.1 Flash Lite","stato":"vivo","attrezzi":true,"ingresso":0.25,"uscita":1.5,"cacheLettura":0.025},
+      {"ruolo":"candidato","id":"gemma-4-26b-a4b-it","nome":"Gemma 4 26B A4B IT","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":null},
+      {"ruolo":"candidato","id":"gemma-4-31b-it","nome":"Gemma 4 31B IT","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":null},
+      {"ruolo":"candidato","id":"gemini-2.5-flash-lite","nome":"Gemini 2.5 Flash-Lite","stato":"vivo","attrezzi":true,"ingresso":0.1,"uscita":0.4,"cacheLettura":0.01} ] },
+    "openrouter": { "modelsDevId": "openrouter", "presenteSuModelsDev": true, "ausiliario": "google/gemma-4-26b-a4b-it:free", "voci": [
+      {"ruolo":"riserva","id":"liquid/lfm-3-1.7b:free","nome":"LFM3-1.7B (free)","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":null},
+      {"ruolo":"riserva","id":"openai/gpt-6-luna","nome":"GPT-6 Luna","stato":"vivo","attrezzi":true,"ingresso":0.1,"uscita":0.5,"cacheLettura":0.01},
+      {"ruolo":"riserva","id":"google/gemma-4-26b-a4b-it:free","nome":"Gemma 4 26B A4B  (free)","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":null},
+      {"ruolo":"candidato","id":"baidu/ernie-5.5-flash-preview:free","nome":"ERNIE-5.5-Flash-Preview (free)","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":null},
+      {"ruolo":"candidato","id":"cohere/north-mini-code:free","nome":"North Mini Code (free)","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":null},
+      {"ruolo":"candidato","id":"google/gemma-4-31b-it:free","nome":"Gemma 4 31B (free)","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":null} ] },
+    "groq": { "modelsDevId": "groq", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"openai/gpt-oss-20b","nome":"GPT OSS 20B","stato":"vivo","attrezzi":true,"ingresso":0.075,"uscita":0.3,"cacheLettura":0.0375},
+      {"ruolo":"candidato","id":"openai/gpt-oss-safeguard-20b","nome":"Safety GPT OSS 20B","stato":"vivo","attrezzi":true,"ingresso":0.075,"uscita":0.3,"cacheLettura":0.0375},
+      {"ruolo":"candidato","id":"openai/gpt-oss-120b","nome":"GPT OSS 120B","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.6,"cacheLettura":0.075},
+      {"ruolo":"candidato","id":"qwen/qwen3.8-27b","nome":"Qwen3.8 27B","stato":"vivo","attrezzi":true,"ingresso":0.8,"uscita":4,"cacheLettura":null} ] },
+    "cerebras": { "modelsDevId": "cerebras", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"gpt-oss-120b","nome":"GPT OSS 120B","stato":"vivo","attrezzi":true,"ingresso":0.35,"uscita":0.75,"cacheLettura":0.35},
+      {"ruolo":"candidato","id":"qwen-3.8-27b","nome":"Qwen3.8 27B","stato":"vivo","attrezzi":true,"ingresso":0.99,"uscita":1.49,"cacheLettura":0.99} ] },
+    "mistral": { "modelsDevId": "mistral", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"mistral-small-latest","nome":"Mistral Small (latest)","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.6,"cacheLettura":0.015},
+      {"ruolo":"candidato","id":"ministral-3b-2512","nome":"Ministral 3 3B","stato":"vivo","attrezzi":true,"ingresso":0.1,"uscita":0.1,"cacheLettura":0.01},
+      {"ruolo":"candidato","id":"ministral-3b-latest","nome":"Ministral 3B (latest)","stato":"vivo","attrezzi":true,"ingresso":0.1,"uscita":0.1,"cacheLettura":0.01},
+      {"ruolo":"candidato","id":"ministral-8b-2512","nome":"Ministral 3 8B","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.15,"cacheLettura":0.015} ] },
+    "together": { "modelsDevId": "togetherai", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"openai/gpt-oss-120b","nome":"GPT OSS 120B","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.6,"cacheLettura":null},
+      {"ruolo":"candidato","id":"Qwen/Qwen3.5-9B","nome":"Qwen3.5 9B","stato":"vivo","attrezzi":true,"ingresso":0.17,"uscita":0.25,"cacheLettura":null},
+      {"ruolo":"candidato","id":"nvidia/NVIDIA-Nemotron-3.5-Super-VL","nome":"Nemotron 3.5 Super VL 120B A12B","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.5,"cacheLettura":0.02},
+      {"ruolo":"candidato","id":"zai-org/GLM-5.3-Flash","nome":"GLM-5.3-Flash","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.5,"cacheLettura":0.03} ] },
+    "fireworks": { "modelsDevId": "fireworks-ai", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"accounts/fireworks/models/gpt-oss-120b","nome":null,"stato":"sconosciuto","attrezzi":false,"ingresso":null,"uscita":null,"cacheLettura":null},
+      {"ruolo":"candidato","id":"accounts/fireworks/models/glm-5p3-flash","nome":"GLM 5.3 Flash","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.5,"cacheLettura":0.03},
+      {"ruolo":"candidato","id":"accounts/fireworks/routers/glm-flash-latest","nome":"GLM Flash Latest (GLM 5.3 Flash)","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.5,"cacheLettura":0.03},
+      {"ruolo":"candidato","id":"accounts/fireworks/models/minimax-m3p1-flash","nome":"MiniMax-M3.1-Flash","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.6,"cacheLettura":0.015} ] },
+    "deepinfra": { "modelsDevId": "deepinfra", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"openai/gpt-oss-20b","nome":"GPT OSS 20B","stato":"vivo","attrezzi":true,"ingresso":0.03,"uscita":0.14,"cacheLettura":0.015},
+      {"ruolo":"candidato","id":"google/gemma-3-4b-it","nome":"Gemma 3 4B IT","stato":"vivo","attrezzi":true,"ingresso":0.05,"uscita":0.1,"cacheLettura":null},
+      {"ruolo":"candidato","id":"google/gemma-3-12b-it","nome":"Gemma 3 12B IT","stato":"vivo","attrezzi":true,"ingresso":0.05,"uscita":0.15,"cacheLettura":null},
+      {"ruolo":"candidato","id":"openai/gpt-oss-120b","nome":"GPT OSS 120B","stato":"vivo","attrezzi":true,"ingresso":0.037,"uscita":0.17,"cacheLettura":0.0185} ] },
+    "novita": { "modelsDevId": "novita-ai", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"qwen/qwen3-coder-30b-a3b-instruct","nome":null,"stato":"sconosciuto","attrezzi":false,"ingresso":null,"uscita":null,"cacheLettura":null},
+      {"ruolo":"candidato","id":"apodex/apodex-1.1-mini","nome":"Apodex 1.1 Mini","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":null},
+      {"ruolo":"candidato","id":"inclusionai/ling-3.0-flash","nome":"Ling 3.0 Flash","stato":"vivo","attrezzi":true,"ingresso":0.06,"uscita":0.18,"cacheLettura":0.012},
+      {"ruolo":"candidato","id":"nvidia/nemotron-3-nano-30b-a3b","nome":"Nemotron 3 Nano 30B A3B","stato":"vivo","attrezzi":true,"ingresso":0.05,"uscita":0.2,"cacheLettura":null} ] },
+    "nebius": { "modelsDevId": "nebius", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"openai/gpt-oss-120b","nome":"gpt-oss-120b","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.6,"cacheLettura":0.15},
+      {"ruolo":"candidato","id":"nvidia/Nemotron-3_5-Lightning","nome":"Nemotron 3.5 Lightning 30B A3B","stato":"vivo","attrezzi":true,"ingresso":0.06,"uscita":0.24,"cacheLettura":0.06},
+      {"ruolo":"candidato","id":"google/gemma-3-27b-it","nome":"Gemma-3-27b-it","stato":"vivo","attrezzi":true,"ingresso":0.1,"uscita":0.3,"cacheLettura":0.1},
+      {"ruolo":"candidato","id":"Qwen/Qwen3-30B-A3B-Instruct-2507","nome":"Qwen3-30B-A3B-Instruct-2507","stato":"vivo","attrezzi":true,"ingresso":0.1,"uscita":0.3,"cacheLettura":0.1} ] },
+    "xai": { "modelsDevId": "xai", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"grok-4.3","nome":"Grok 4.3","stato":"vivo","attrezzi":true,"ingresso":1.25,"uscita":2.5,"cacheLettura":0.2},
+      {"ruolo":"candidato","id":"grok-build-0.1","nome":"Grok Build 0.1","stato":"vivo","attrezzi":true,"ingresso":1,"uscita":2,"cacheLettura":0.2},
+      {"ruolo":"candidato","id":"grok-4.20-0309-non-reasoning","nome":"Grok 4.20 (Non-Reasoning)","stato":"vivo","attrezzi":true,"ingresso":1.25,"uscita":2.5,"cacheLettura":0.2},
+      {"ruolo":"candidato","id":"grok-4.20-0309-reasoning","nome":"Grok 4.20 (Reasoning)","stato":"vivo","attrezzi":true,"ingresso":1.25,"uscita":2.5,"cacheLettura":0.2} ] },
+    "ollama-cloud": { "modelsDevId": "ollama-cloud", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"gpt-oss:20b","nome":"gpt-oss:20b","stato":"vivo","attrezzi":true,"ingresso":0.07,"uscita":0.3,"cacheLettura":0.035},
+      {"ruolo":"candidato","id":"nemotron-3-nano:30b","nome":"nemotron-3-nano:30b","stato":"vivo","attrezzi":true,"ingresso":0.06,"uscita":0.24,"cacheLettura":null},
+      {"ruolo":"candidato","id":"mimo-v2.6-flash","nome":"MiMo-V2.6-Flash","stato":"vivo","attrezzi":true,"ingresso":0.14,"uscita":0.28,"cacheLettura":0.0028},
+      {"ruolo":"candidato","id":"gemma4:31b","nome":"gemma4:31b","stato":"vivo","attrezzi":true,"ingresso":0.14,"uscita":0.4,"cacheLettura":0.05} ] },
+    "huggingface": { "modelsDevId": "huggingface", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"openai/gpt-oss-20b","nome":"GPT OSS 20B","stato":"vivo","attrezzi":true,"ingresso":0.1,"uscita":0.5,"cacheLettura":null},
+      {"ruolo":"candidato","id":"zai-org/GLM-4.7-Flash","nome":"GLM-4.7-Flash","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":null},
+      {"ruolo":"candidato","id":"meta-llama/Llama-3.1-8B-Instruct","nome":"Llama-3.1-8B-Instruct","stato":"vivo","attrezzi":true,"ingresso":0.06,"uscita":0.06,"cacheLettura":null},
+      {"ruolo":"candidato","id":"google/gemma-3-4b-it","nome":"Gemma 3 4B IT","stato":"vivo","attrezzi":true,"ingresso":0.05,"uscita":0.1,"cacheLettura":null} ] },
+    "zai-anthropic": { "modelsDevId": "zai-coding-plan", "presenteSuModelsDev": true, "ausiliario": null, "voci": [
+      {"ruolo":"riserva","id":"glm-5.3-flash","nome":"GLM-5.3-Flash","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":0},
+      {"ruolo":"riserva","id":"glm-5.3","nome":"GLM-5.3","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":0},
+      {"ruolo":"candidato","id":"glm-5.3-highspeed","nome":"GLM-5.3 Highspeed","stato":"vivo","attrezzi":true,"ingresso":0,"uscita":0,"cacheLettura":0} ] },
+    "minimax-anthropic": { "modelsDevId": "minimax", "presenteSuModelsDev": true, "ausiliario": "MiniMax-M3.1-Flash", "voci": [
+      {"ruolo":"riserva","id":"MiniMax-M3.1-Flash","nome":"MiniMax-M3.1-Flash","stato":"vivo","attrezzi":true,"ingresso":0.15,"uscita":0.6,"cacheLettura":0.015},
+      {"ruolo":"riserva","id":"MiniMax-M3","nome":"MiniMax-M3","stato":"vivo","attrezzi":true,"ingresso":0.3,"uscita":1.2,"cacheLettura":0.06} ] }
+  }
+}

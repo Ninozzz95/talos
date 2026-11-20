@@ -87,7 +87,8 @@ const espansa = (k) => `a=${'['.repeat(500)}; rm -rf ../${'$a'.repeat(k)}`;
 
 test('PARENTESI-TEMPO-CANCELLO — le forme del revisore da 642 e 578 caratteri, al cancello intero, sotto i 50 ms e senza carta (come la 0.2.1)', { timeout: 300000 }, async () => {
   /* a caldo: la prima chiamata del processo compila le funzioni (la misura a freddo, a processo fresco, sta nel banco del rapporto) */
-  await cancello('L', espansa(64), 'accesso-pieno', CARTELLA19.L);
+  /* 0.2.4 B3: «Scrive nel progetto» ha una strada sua (il lettore delle scritture fuori), che si scalda anche lei */
+  for (const livello of LIVELLI) await cancello('L', espansa(64), livello, CARTELLA19.L);
   for (const k of [64, 32]) {
     const c = espansa(k);
     assert.equal(c.length, k === 64 ? 642 : 578);

@@ -76,11 +76,22 @@ function sessione(custode, permessiScelto = 'On request') {
     post: (azione = 'shell', esito = 'exit 0\n') => input.hookFn({ tipo: 'post_tool_call', azione, esito, giro: 0 }),
     /** Un comando che resta in sottofondo: ritorna `esce()`, l'uscita vera del suo processo (lo sgancio del kernel). */
     async sfondo(azione = 'shell', argomenti = { comando: 'node scrittore.mjs', background: true }) {
+      const altri = new Set(custode.chiHaUnComando());
       await s.pre(azione, argomenti);
       n += 1;
       const sgancia = input.registraComandoFermabile({ toolCallId: `bg-${n}`, ferma: () => {}, pid: () => null });
       await s.post(azione, SFONDO);
-      return async () => { sgancia(); await pausa(30); };
+      /* L 107 (0.2.4, blocco 0): `esce` aspettava 30 ms fissi, ma il «dopo» dell'uscita è asincrono (`sfondoUscitoDalCustode`,
+         session-registry.mjs: adozione in coda e `readFile`, poi il controllo, poi `liberaDalCustode`). Sotto carico la prova leggeva
+         prima della fine (PR 96 giro 9; 6 su 200 in locale, lettore cu-374-a1). Ora aspetta l'evento: la conversazione esce dai
+         «comandi in corso» del custode solo nel `finally`, dopo adozione e controllo. Fuori dall'Accesso pieno è lì; in Accesso pieno
+         non c'entra e lo sgancio non lascia niente in sospeso. */
+      s.mio ??= custode.chiHaUnComando().find((c) => !altri.has(c)) ?? null;
+      const mio = s.mio;
+      return async () => {
+        sgancia();
+        if (mio) await finche(() => !custode.chiHaUnComando().includes(mio), 'il «dopo» dell uscita del processo non è finito');
+      };
     },
     livello: (permessi) => registro.aggiornaImpostazioni(sessionId, { permessi }),
     carte: () => ricevuti.filter((e) => e.type === 'ApprovalRequested').length,

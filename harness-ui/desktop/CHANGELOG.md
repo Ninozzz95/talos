@@ -4,6 +4,421 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
+## desktop-v0.2.4 — 2026-11-20
+
+### Added
+
+- **The assistant can look at the photos of a web page.** When it reads a page, it now also gets the list of the page's
+  pictures (up to 20: the page's own cover picture first, then the photos in order; icons, tracking pixels, drawings in SVG
+  format and recognizable ads are left out). With a model that can see images it can open one of them, or ask for the first
+  four at once, for example to look at the photos of a listing. TALOS downloads the picture itself, through the same checks
+  as the page (only public addresses, every redirect checked again, at most 10 MB and 15 seconds), checks that it really is a
+  PNG, JPEG, WebP or GIF picture, and attaches it like the pictures you attach yourself; the conversation shows it in the row
+  of the tool. It only opens addresses that were in the list of a page read in this conversation, or that you wrote yourself;
+  an address is not downloaded when it contains one of your keys exactly as saved, in any permission mode. TALOS recognizes your keys by their
+  exact value (the keys you saved in Settings, the key of the model in use, the web search key and keys in its environment),
+  even when they are percent-encoded or in the path, not by how they look: signed picture addresses from storage services
+  keep working. Known limits: values shorter than 16 characters are not compared, and a key written in a different letter
+  case or split into two pieces is not recognized. An
+  address the assistant made up itself is still refused. With a model that cannot see images the list arrives as text and
+  the assistant says it cannot look. No new permission card.
+  In italiano: **L'assistente può guardare le foto di una pagina web.** Quando legge una pagina riceve anche l'elenco delle sue immagini
+  (fino a 20: prima l'immagine di copertina della pagina, poi le foto nell'ordine; icone, pixel di tracciamento, disegni in
+  formato SVG e pubblicità riconoscibili restano fuori). Con un modello che vede le immagini può aprirne una, o chiedere le
+  prime quattro insieme, per esempio per guardare le foto di un annuncio. TALOS scarica l'immagine da sé, con gli stessi
+  controlli della pagina (solo indirizzi pubblici, ogni reindirizzamento ricontrollato, al massimo 10 MB e 15 secondi),
+  controlla che sia davvero un'immagine PNG, JPEG, WebP o GIF e la allega come le immagini che alleghi tu; la conversazione la
+  mostra nella riga dello strumento. Apre solo indirizzi che stavano nell'elenco di una pagina letta in questa conversazione, o
+  che hai scritto tu; un indirizzo non si scarica quando contiene una delle tue chiavi esattamente com'è salvata, in ogni livello di permessi. TALOS
+  riconosce le tue chiavi dal loro valore esatto (le chiavi salvate nelle Impostazioni, quella del modello in uso, quella della
+  ricerca sul web e quelle nel suo ambiente), anche codificate in percento o nel percorso, non dall'aspetto: gli indirizzi
+  firmati delle immagini dei servizi di archiviazione continuano a funzionare. Limiti noti: i valori più corti di 16 caratteri
+  non si confrontano, e una chiave scritta con maiuscole e minuscole diverse o spezzata in
+  due pezzi non si riconosce. Un indirizzo inventato dall'assistente resta rifiutato. Con
+  un modello che non vede le immagini l'elenco arriva come testo e l'assistente dice che non può guardare. Nessuna carta dei
+  permessi nuova.
+
+### Fixed
+
+- **Models that no longer exist are gone from the built-in list.** The list TALOS shows when the public model list is off
+  still offered LiquidAI LFM 2.5 2.6B on OpenRouter, which OpenRouter removed (choosing it gave only «The provider did not
+  accept the request»). It is replaced by two free models: its successor LFM 3 1.7B and Google Gemma 4 26B A4B. MiniMax M2.5
+  and Together's Llama 3.3 70B, marked retired by the public catalog, are replaced by MiniMax M3.1 Flash and GPT OSS 120B,
+  and OpenAI's GPT-5 Mini, which shuts down on 11 December 2026, by GPT-6 Luna: each of these replacements costs less than the
+  model it replaces. GPT-5 Nano, which shuts down the same day, is replaced by GPT-6 Luna too, on OpenAI and on OpenRouter, as
+  OpenAI recommends; Luna costs more: 0.10 dollars per million tokens in and 0.50 out, instead of 0.05 and 0.40 (0.20 and 0.75
+  beyond 272,000 tokens of context). Models you pick yourself are not touched: a model the public catalog marks as retired but
+  its provider still serves stays in the model picker.
+- **A summary model that no longer exists now hands over to your backup summary model.** When the model chosen for
+  summaries answered that it does not exist any more, TALOS did not recognise the answer, so it neither moved to the backup
+  model you chose nor asked you to pick another one. It now does both, as it already did for other providers' errors.
+- In italiano: dall'elenco incorporato spariscono i modelli che non esistono più (LFM 2.5 su OpenRouter, tolto dal
+  fornitore; al suo posto due gratuiti, LFM 3 1.7B e Google Gemma 4 26B A4B) o che il catalogo pubblico dà per ritirati
+  (MiniMax M2.5, Llama 3.3 70B di Together), e GPT-5 Mini che si spegne l'11 dicembre 2026; ognuno di questi sostituti costa
+  meno del modello che sostituisce. Anche GPT-5 Nano, che si spegne lo stesso giorno, è sostituito da GPT-6 Luna, su OpenAI e
+  su OpenRouter, come consiglia OpenAI; Luna costa di più: 0,10 dollari per milione di token in entrata e 0,50 in uscita, invece
+  di 0,05 e 0,40 (0,20 e 0,75 oltre 272.000 token di contesto). I modelli che scegli tu non cambiano: un modello che il catalogo pubblico dà per ritirato ma il fornitore serve ancora resta nel selettore. Se il modello
+  scelto per i riassunti risponde che non esiste più, TALOS passa al modello di riserva che hai scelto o ti chiede di
+  sceglierne un altro.
+- **A deletion written after an ANSI-C quote, or after an apostrophe on Windows, now asks.** In `x=$'\''; rm -rf ~` the
+  check for critical deletions read `$'\''` like a plain single quote, so the rest of the command looked like quoted text and
+  the deletion passed without a card on Windows, Linux, macOS and Android. On Windows, where a command runs in cmd and an
+  apostrophe is not a quote, `echo it's & rd /s /q C:\` passed the same way, and so did a deletion after `` a`'b `` in the
+  text given to `powershell -Command` or `pwsh -c`. The defect was already in 0.2.1 and 0.2.3. The check now also reads the
+  command with the quotes of the shell that runs it (on Windows cmd and, because a command can go to WSL, bash; elsewhere the
+  POSIX shell; PowerShell for the text of `powershell -Command`), reads `$'…'` as bash does (`$'\x2f'` is `/`), and asks if
+  any of these readings finds a critical deletion; outside Windows a quote still open at the end of a deleting command asks
+  as too complex to read. The floor for commands that cannot be undone reads `$'…'` the same way. A command name written
+  with ANSI-C quotes (`$'\x72m' -rf /`, `r$'m' -rf ~`, `$'\162m'`, `$'r'$'m'`) also passed without a card, in the build
+  this change starts from and in the check of 0.2.1 kept next to it; it now asks on the four systems. Measured on 15,558
+  generated commands on Windows, Linux, macOS and Android, against the reading before this change: no card is lost, and 163
+  cards are added, all on generated commands that end with a critical deletion. On the 74 everyday commands of the five
+  groups used for earlier changes there is no new card; on 37 commands with apostrophes or `$'…'` there is no new card on
+  Windows, while on Linux, macOS and Android two commands written for cmd with a single apostrophe
+  (`echo l'altro && rd /s /q build`, `rd /s /q build\l'altro`) now ask as too complex.
+  - In italiano: **una cancellazione scritta dopo un apice ANSI-C, o dopo un apostrofo su Windows, ora chiede.** In
+    `x=$'\''; rm -rf ~` il controllo delle cancellazioni critiche leggeva `$'\''` come un apice semplice, quindi il resto del
+    comando sembrava testo fra apici e la cancellazione passava senza carta su Windows, Linux, macOS e Android. Su Windows,
+    dove il comando gira in cmd e l'apostrofo non è un apice, `echo it's & rd /s /q C:\` passava allo stesso modo, e così una
+    cancellazione dopo `` a`'b `` nel testo dato a `powershell -Command` o `pwsh -c`. Il difetto c'era già nella 0.2.1 e
+    nella 0.2.3. Ora il controllo legge il comando anche con gli apici della shell che lo esegue (su Windows cmd e, perché un
+    comando può andare in WSL, bash; altrove la shell POSIX; PowerShell per il testo di `powershell -Command`), legge `$'…'`
+    come bash (`$'\x2f'` è `/`) e chiede se una di queste letture trova una cancellazione critica; fuori da Windows un apice
+    ancora aperto in fondo a un comando che cancella chiede perché troppo complesso da leggere. Il blocco dei comandi che non
+    si annullano legge `$'…'` allo stesso modo. Anche il nome di un comando scritto con gli apici ANSI-C (`$'\x72m' -rf /`,
+    `r$'m' -rf ~`, `$'\162m'`, `$'r'$'m'`) passava senza carta, nella versione da cui parte questa modifica e nel controllo
+    della 0.2.1 tenuto accanto; ora chiede sui quattro sistemi. Misurato su 15.558 comandi generati su Windows, Linux, macOS e Android,
+    contro la lettura di prima: nessuna carta persa e 163 carte in più, tutte su comandi generati che finiscono con una
+    cancellazione critica. Sui 74 comandi di ogni giorno dei cinque gruppi usati per le cure precedenti nessuna carta nuova;
+    su 37 comandi con apostrofi o `$'…'` nessuna carta nuova su Windows, mentre su Linux, macOS e Android due comandi scritti
+    per cmd con un solo apostrofo (`echo l'altro && rd /s /q build`, `rd /s /q build\l'altro`) ora chiedono perché troppo
+    complessi.
+- **More deletions hidden by quotes now ask, on the four systems.** Three reviews of the change above found forms that passed
+  without a card, already in 0.2.1 and 0.2.3: `\$'` inside the double quotes of `bash -c "…"`, `sh -c "…"` or `eval "…"` (the
+  shell receives `$'…'`, an ANSI-C quote), as in `bash -c "x=\$'\''; rm -rf ../ #'"`; `eval "$'\x72m' -rf ~"`; a zero
+  character inside `$'…'`, where bash ends the quoted text (`rm -rf ~/$'\0x'` deletes the home folder, `rm -rf $'/\0x'` the
+  root); `r$"m" -rf ~` and `$'\x66ind' / -delete`; on Windows a PowerShell group that starts with `Join-Path`, `Resolve-Path`
+  or `Get-Location` and goes on with a pipe (`(Join-Path a b | % { Remove-Item -Recurse -Force C:\ })`), and a group read
+  without the PowerShell rule for `''` (a home folder named `O'Brien`). They now ask on Windows, Linux, macOS and Android.
+  Measured on the same 15,558 generated commands, the 74 everyday commands and the 37 with apostrophes, on the four systems,
+  against the change above: no card lost and no card added.
+  - In italiano: **altre cancellazioni nascoste dagli apici ora chiedono, sui quattro sistemi.** Tre revisioni della modifica
+    qui sopra hanno trovato forme che passavano senza carta, già nella 0.2.1 e nella 0.2.3: `\$'` fra le virgolette doppie di
+    `bash -c "…"`, `sh -c "…"` o `eval "…"` (alla shell arriva `$'…'`, un apice ANSI-C), come in
+    `bash -c "x=\$'\''; rm -rf ../ #'"`; `eval "$'\x72m' -rf ~"`; un carattere zero dentro `$'…'`, dove bash chiude il testo
+    fra apici (`rm -rf ~/$'\0x'` cancella la cartella di casa, `rm -rf $'/\0x'` la radice); `r$"m" -rf ~` e
+    `$'\x66ind' / -delete`; su Windows un gruppo di PowerShell che comincia con `Join-Path`, `Resolve-Path` o `Get-Location` e
+    continua con una pipe (`(Join-Path a b | % { Remove-Item -Recurse -Force C:\ })`), e un gruppo letto senza la regola di
+    PowerShell per `''` (una cartella di casa che si chiama `O'Brien`). Ora chiedono su Windows, Linux, macOS e Android.
+    Misurato sugli stessi 15.558 comandi generati, sui 74 comandi di ogni giorno e sui 37 con apostrofi, sui quattro sistemi,
+    contro la modifica qui sopra: nessuna carta persa e nessuna carta in più.
+- **A PowerShell group inside a computed group now asks.** A group that starts with `Join-Path` was skipped when the usual
+  reading saw a single command in it, so a second group inside it, or a pipe the usual reading did not see, hid a deletion:
+  `powershell -Command "Write-Output (Join-Path a (Remove-Item -Recurse -Force C:\))"` passed without a card on Windows, and
+  the same kind of group with a pipe after an escaped space passed inside `powershell -Command` or `pwsh -c` on Windows, Linux, macOS and Android.
+  It was already in 0.2.3. The group is now read with the quotes of PowerShell, the same reading used to compute it, and a
+  group with another group inside is read again. Measured on the check of critical deletions, against the change above, on the
+  15,558 generated commands, the 74 everyday commands and the 37 with apostrophes, on the four systems: no card lost and no
+  card added.
+  - In italiano: **un gruppo di PowerShell dentro un gruppo calcolato ora chiede.** Un gruppo che comincia con `Join-Path`
+    si saltava quando la lettura di sempre ci vedeva un comando solo, quindi un secondo gruppo dentro, o una pipe che la
+    lettura di sempre non vedeva, nascondeva una cancellazione:
+    `powershell -Command "Write-Output (Join-Path a (Remove-Item -Recurse -Force C:\))"` passava senza carta su Windows, e
+    lo stesso tipo di gruppo con una pipe dopo uno spazio protetto dall'apice inverso passava dentro `powershell -Command` o `pwsh -c` su Windows, Linux, macOS e Android.
+    C'era già nella 0.2.3. Ora il gruppo si legge con gli apici di PowerShell, la stessa lettura che serve a calcolarlo, e un
+    gruppo con un altro gruppo dentro si rilegge. Misurato sul controllo delle cancellazioni critiche, contro la modifica qui
+    sopra, sui 15.558 comandi generati, sui 74 comandi di ogni giorno e sui 37 con apostrofi, sui quattro sistemi: nessuna
+    carta persa e nessuna carta in più.
+- **«Writes to the project»: a write after an apostrophe or an ANSI-C quote now asks.** The reading of where a command writes
+  used only the usual quotes: `x=$'\''; echo hi > ~/.bashrc` found no place on Linux, macOS and Windows, and on Windows
+  `echo it's & echo hi > C:\outside\x.txt` was allowed with no card under «Writes to the project» with the shell set to
+  «always» (without the apostrophe this check already asked). This check is new in this version: 0.2.3 did not look at where a
+  command writes, so these commands ran with no card there, with or without the apostrophe; the first form of the check missed
+  the writes after an apostrophe. The writes are now also read with
+  the quotes of the shell that runs the command, as the deletion check does; it asks as it does without the apostrophe. On
+  Windows, for a PowerShell command sent to the shell, the cmd reading can add a place inside the project or the temporary
+  folder: no card. Measured on the same commands as above, the whole permission check on the four systems: no card lost and
+  no card added.
+  - In italiano: **«Scrive nel progetto»: una scrittura dopo un apostrofo o un apice ANSI-C ora chiede.** La lettura di dove
+    scrive un comando usava solo gli apici di sempre: `x=$'\''; echo hi > ~/.bashrc` non trovava nessun posto su Linux, macOS
+    e Windows, e su Windows `echo it's & echo hi > C:\fuori\x.txt` passava senza carta con «Scrive nel progetto» e la shell
+    su «sempre» (senza l'apostrofo questo controllo chiedeva già). Questo controllo è nuovo in questa versione: la 0.2.3 non
+    guardava dove scrive un comando, quindi lì questi comandi partivano senza carta, con o senza apostrofo; la prima forma del
+    controllo non vedeva le scritture dopo un apostrofo. Ora le scritture si leggono anche
+    con gli apici della shell che esegue il comando, come fa il controllo delle cancellazioni; chiede come senza l'apostrofo.
+    Su Windows, per un comando di PowerShell mandato alla shell, la lettura di cmd può aggiungere un posto dentro il progetto o
+    nella cartella temporanea: nessuna carta. Misurato sugli stessi comandi di sopra, col controllo dei permessi intero sui
+    quattro sistemi: nessuna carta persa e nessuna carta in più.
+
+### Changed
+
+- **Google Gemini: TALOS asks Google not to store your chat requests.** Since 26 October 2026 Google stores Generate Content
+  requests by default for new paid-tier projects of the Gemini API, and says: «To opt out, set `store=false` on individual
+  requests». Every chat request TALOS sends to Gemini with your key (`generateContent` and `streamGenerateContent`) now carries
+  `store: false`, which in Google's words «configures the logging behavior for a given request» and takes precedence over the
+  project setting. Nothing else changes: token counts, other Google requests and every other provider are sent as before, and
+  Gemini models used through OpenRouter follow OpenRouter's rules. The same holds in the TALOS CLI and in Code on the phone,
+  which share this core. Limits: with Gemini reached at an address of your own (a base URL other than
+  generativelanguage.googleapis.com, for example a proxy) TALOS does not add `store: false`. If Google rejects the field,
+  the request is sent once more without it and TALOS writes that in its log. The details are in PRIVACY.md.
+  - In italiano: dal 26 ottobre 2026 Google conserva di serie le richieste di Generate Content dei progetti nuovi a pagamento
+    della Gemini API, e dice «per non partecipare, metti `store=false` sulle singole richieste». Ora ogni richiesta della chat
+    che TALOS manda a Gemini con la tua chiave porta `store: false`, che regola la registrazione di quella richiesta e vale sopra
+    l'impostazione del progetto. Il resto non cambia: conteggio dei token, altre richieste a Google e gli altri fornitori partono
+    come prima; i modelli Gemini usati da OpenRouter seguono le regole di OpenRouter. Vale anche nella CLI e nel Codice del
+    telefono, che hanno lo stesso nucleo. Limiti: con Gemini raggiunto da un indirizzo tuo (un indirizzo diverso da
+    generativelanguage.googleapis.com, per esempio un proxy) TALOS non aggiunge `store: false`. Se Google rifiuta il campo, la
+    richiesta riparte una volta senza e TALOS lo scrive nel suo registro. I dettagli in PRIVACY.md.
+- **«Writes to the project»: a command that writes or deletes outside the project now asks you.** Until 0.2.3 only the file
+  tools asked before writing outside the session folder; a shell command asked only for sensitive places (home, the project and
+  the folder above it, the phone's folders), so `rm -rf` of a plain folder outside the project ran without a card. Now TALOS reads
+  where a command writes (redirections such as `>` and `tee`, `rm`, `cp`, `mv`, `mkdir`, `sed -i`, `tar -x -C`, `curl -o`,
+  `git -C`, PowerShell's `Set-Content`/`Remove-Item`/`Copy-Item` and cmd's `copy`/`del`, also inside `bash -c`, `cmd /c` and
+  `powershell -Command`) and asks, with the folder named, when that is outside the session folder. The system temp folder and
+  `/dev/null` do not ask; work inside the project does not ask. «Allow in this folder for the session» remembers the folder, for
+  commands and file tools alike. A global install (`npm i -g`, `pip install` outside a project environment, `git config
+  --global`) asks too. When TALOS cannot tell where a command writes, it asks instead of guessing. Full access is unchanged. This
+  lifts the 0.2.3 known limit on this level. «Allow in this folder for the session» is never offered for the root of a disk
+  (`C:\`, `/`) or for your home folder: there the card allows only once. A command that makes a link and then writes through it
+  (`ln -s .. x && echo > x/a`, `mklink /J`, `New-Item -ItemType Junction`), or that writes to a bash brace pattern such as
+  `{a,..}`, is judged where it really lands. A temp-folder name built with `$RANDOM`, `%RANDOM%`, `$$` or a wildcard in the last
+  part (`out-*.log`) does not ask. In PowerShell only `$env:TEMP` and `$env:TMP` count as the temp folder: a plain `$TEMP`,
+  `${TEMP}` or `$TMP` is a PowerShell variable there, so a command writing to it asks. A command that writes to a place on
+  another computer (a network path, its long and device forms, a WebDAV address, a link in the project that leads there)
+  always asks, and is never remembered for the session; a project that itself lives on a share asks as before. A file that the
+  assistant writes or edits with its file tools on a disk of this computer written as a device also gets the «not verified»
+  card: one more card on rare spellings.
+  - In italiano: **«Scrive nel progetto»: un comando che scrive o cancella fuori dal progetto ora ti chiede.** Fino alla 0.2.3
+    chiedevano prima di scrivere fuori dalla cartella della sessione solo gli attrezzi dei file; un comando chiedeva solo per i
+    posti delicati (la casa, il progetto e la cartella sopra, le cartelle del telefono), quindi un `rm -rf` di una cartella
+    qualsiasi fuori dal progetto partiva senza carta. Ora TALOS legge dove scrive un comando (le redirezioni come `>` e `tee`,
+    `rm`, `cp`, `mv`, `mkdir`, `sed -i`, `tar -x -C`, `curl -o`, `git -C`, `Set-Content`/`Remove-Item`/`Copy-Item` di PowerShell
+    e `copy`/`del` di cmd, anche dentro `bash -c`, `cmd /c` e `powershell -Command`) e, quando è fuori dalla cartella della
+    sessione, ti chiede dicendo la cartella. La cartella temporanea del sistema e `/dev/null` non chiedono; il lavoro dentro il
+    progetto non chiede. «Consenti in questa cartella per la sessione» ricorda la cartella, per i comandi come per gli attrezzi
+    dei file. Chiede anche un'installazione globale (`npm i -g`, `pip install` fuori da un ambiente del progetto, `git config
+    --global`). Quando TALOS non sa dire dove scrive un comando, chiede invece di indovinare. Accesso pieno non cambia. Toglie il
+    limite noto della 0.2.3 su questo livello. «Consenti in questa cartella per la sessione» non si offre mai per la radice di
+    un disco (`C:\`, `/`) né per la tua cartella di casa: lì la carta consente solo una volta. Un comando che crea un
+    collegamento e poi ci scrive dentro (`ln -s .. x && echo > x/a`, `mklink /J`, `New-Item -ItemType Junction`), o che scrive
+    su uno schema di graffe di bash come `{a,..}`, si giudica dove arriva davvero. Un nome nella cartella temporanea fatto con
+    `$RANDOM`, `%RANDOM%`, `$$` o un jolly nell'ultimo pezzo (`out-*.log`) non chiede. In PowerShell valgono come cartella
+    temporanea solo `$env:TEMP` e `$env:TMP`: lì `$TEMP`, `${TEMP}` o `$TMP` semplici sono variabili di PowerShell, quindi un
+    comando che ci scrive chiede. Un comando che scrive in un posto su un altro computer (un percorso di rete, le sue forme
+    lunghe e di dispositivo, un indirizzo WebDAV, un collegamento nel progetto che porta là) chiede sempre, e non si ricorda mai
+    per la sessione; un progetto che sta lui su una condivisione chiede come prima. Anche un file che l'assistente scrive o
+    modifica con i suoi attrezzi dei file su un disco di questo computer scritto come dispositivo riceve la carta «non
+    verificato»: una carta in più su grafie rare.
+- **A card for many calls lists at most 20 of them.** With a hundred calls in one turn the card became very heavy. It now lists
+  the first 20 and says how many more your answer covers; «Allow all» and your answer still apply to every call.
+  - In italiano: una carta per molte chiamate ne elenca al massimo 20. Con cento chiamate in un giro la carta diventava molto
+    pesante. Ora elenca le prime 20 e dice quante altre copre la tua risposta; «Consenti tutte» e la tua risposta valgono
+    sempre per tutte le chiamate.
+
+### Security
+
+- **The assistant can no longer open a web page whose address contains one of your keys.** Until now it could read a page at
+  an address such as `…?k=<your key>`, and the key went out to that site. Now, before reading a page, and before reading the
+  page open in the Browser tab, TALOS checks the address against your keys with the same rule as the pictures: their exact
+  value (the keys you saved in Settings, the key of the model in use, the web search key and keys in its environment; from the
+  environment only values that look like keys, not web addresses, email addresses or host names), also percent-encoded up to
+  three times and next to a broken percent sign, in the site name, path, query or fragment. How a value looks does not count,
+  values shorter than 16 characters are not compared, and a key split into two pieces or with its capital letters changed is
+  not recognized. Such an address is refused in every permission mode with a clear sentence that does not show the key. If
+  TALOS cannot read your saved keys, pages still open and the other keys are still checked. No new permission card; ordinary
+  addresses read exactly as before.
+  In italiano: l'assistente non può più aprire una pagina web il cui indirizzo contiene una delle tue chiavi (prima poteva, e
+  la chiave arrivava a quel sito); prima di leggere una pagina, e la pagina aperta nella scheda Browser, TALOS confronta
+  l'indirizzo con le tue chiavi con la stessa regola delle foto (valore esatto, anche codificato in percento fino a tre volte e
+  accanto a un segno di percento rotto; dall'ambiente solo i valori che sembrano chiavi, non indirizzi web, di posta o nomi di
+  host; niente sotto i 16 caratteri; una chiave spezzata in due o con le maiuscole cambiate non si riconosce) e lo rifiuta in
+  ogni livello di permessi con una frase che non mostra la chiave; se non può leggere le chiavi salvate le pagine si aprono
+  comunque e le altre chiavi restano controllate; nessuna carta nuova.
+- **The same check on your keys now covers web search, the recheck of a deep research, the Assistant, the note about the
+  Browser page and computer use.** Until now a web search could send one of your keys to the search provider inside the
+  search words, the recheck of a deep research could open a source address that carried a key, the Assistant could send
+  one out (after its card), the note that tells the assistant which page is open in the Browser tab hid only parameters
+  named like a secret, and computer use could open or type a key in Chrome and send what the screen showed. Now, with the
+  same rule as pages and pictures (exact value of your keys, also percent-encoded; 16 characters at least): such a search
+  does not start; such a source is not reopened and is shown as unreachable with the reason; the Assistant refuses before
+  any card; the note shows "address hidden" (and hides a title with a key); computer use does not open such an address and
+  does not type such a text in a browser, and a key that the screen shows reaches the model as "[one of your keys,
+  hidden]", without the screenshot of that step. The screen text is hidden before it is shortened, so a key that sits
+  across the point where a long name, value, window title or dialog line is cut also arrives as that whole sign, with no
+  character of the key and no screenshot; a key anywhere in the window's text, even a line the model does not read, also
+  keeps the screenshot of that step back. In every permission mode, with a sentence that does not show the key, and
+  no new permission card; ordinary searches, pages and screens work exactly as before. Limits: a key shown only in the
+  pixels of the screen and not in its text is not recognized; on computer use, typing a key into an app that is not a
+  browser is not checked, and pasting (Ctrl+V in the address bar) or typing a key one keystroke at a time is not checked
+  either, because what is on the clipboard is not known; when the Assistant refuses an address with a key in the site
+  name, its saved log still keeps that site name (as in 0.2.3); the command line does not pass the saved keys, so there
+  only the key of the model in use, the web search key and the keys in the environment are compared.
+  In italiano: lo stesso controllo sulle tue chiavi ora vale anche per la ricerca web (la ricerca non parte), la
+  ri-verifica della ricerca approfondita (la fonte non si riapre e risulta irraggiungibile col motivo), l'Assistente (rifiuta
+  prima della carta), la nota della pagina aperta nella scheda Browser (indirizzo e titolo con una chiave nascosti) e il
+  computer use (non apre l'indirizzo, non scrive la chiave in un browser, e una chiave che lo schermo mostra arriva al
+  modello come «[one of your keys, hidden]» senza la foto di quel passo, anche quando la chiave sta a cavallo del punto in
+  cui un nome, un valore, un titolo o una riga di un dialogo lungo si taglia: il testo si nasconde prima del taglio; una
+  chiave in un punto qualunque del testo della finestra toglie la foto di quel passo); in ogni livello, nessuna carta nuova,
+  il resto funziona come prima. Limiti: una chiave visibile solo nei pixel non si riconosce; nel computer use una chiave
+  scritta in un'app che non è un browser non si controlla, e nemmeno «incolla» (Ctrl+V nella barra degli indirizzi) o una
+  chiave battuta un tasto alla volta, perché ciò che sta negli appunti non si conosce; quando l'Assistente rifiuta un
+  indirizzo con una chiave nel nome del sito, il suo registro salvato tiene ancora quel nome (come nella 0.2.3); la riga di
+  comando non passa le chiavi salvate.
+- **Everywhere: a delete of a disk, a top folder, your user folder or the project written inside a script now asks.** A
+  command can hide the delete in another language: `python -c "import shutil; shutil.rmtree('/')"`,
+  `perl -e "system(q(rm -rf ~))"`, `node -e "require('fs').rmSync(...)"`, `ruby -e`, `php -r`, `bun -e`, `deno eval`, a script
+  given to Python or Node through a here-document, `<<<`, `echo … |` or a file written by the same command. TALOS did not look
+  inside (0.2.3 and earlier too), so in Full access it could run with no card. Now TALOS reads the script: when it deletes one
+  of those places it shows the usual card for that place, in every permission mode, every time, never «for this session».
+  It reads the path written in the script also with escapes (`'\x2f'`, `'/'`, `"\057"`), with two strings side by side
+  (`'r' 'm -rf /'`), from a name set earlier in the script (`d = '/'`, `for d in [...]`), and fs-extra under any name it is
+  given. When the script hides what it runs (base64 or another decoding inside the code, characters built one by one, code
+  built while it runs, a function picked by name with `getattr`, `send` or `call_user_func` next to something that deletes)
+  or the place cannot be read, the card says the command is too complex to read first; the same when the script is nested
+  in more shells than TALOS reads. A script that deletes nothing important, or nothing at all, runs as before: on 64 everyday
+  commands (`python -c "print(1)"`, `node -e "console.log(process.version)"`, `perl -pe 's/a/b/'`, a temporary folder made and
+  removed, `*.pyc` or `__pycache__` cleaned in a loop…) no extra card, and a delete in a script answers like `rm` on the same
+  place. The permission chip now says it: «Always asks: deleting a drive, a top folder, your user folder or the project (also
+  from a script)».
+  - In italiano: **Ovunque: cancellare un disco, una cartella principale, la tua cartella utente o il progetto da dentro uno
+    script ora chiede.** Un comando può nascondere la cancellazione in un altro linguaggio:
+    `python -c "import shutil; shutil.rmtree('/')"`, `perl -e "system(q(rm -rf ~))"`, `node -e "require('fs').rmSync(...)"`,
+    `ruby -e`, `php -r`, `bun -e`, `deno eval`, uno script dato a Python o a Node con un here-document, `<<<`, `echo … |` o un file scritto dallo
+    stesso comando. TALOS non guardava dentro (anche nella 0.2.3 e prima), quindi in Accesso pieno poteva partire senza carta.
+    Ora TALOS legge lo script: se cancella uno di quei posti mostra la solita carta di quel posto, con qualsiasi permesso, ogni
+    volta, mai «per questa sessione». Legge il percorso scritto nello script anche con le sequenze di fuga (`'\x2f'`, `'/'`,
+    `"\057"`), con due stringhe vicine (`'r' 'm -rf /'`), da un nome dato prima nello script (`d = '/'`, `for d in [...]`), e
+    fs-extra con qualunque nome gli si dia. Se lo script nasconde quello che esegue (base64 o un'altra decodifica dentro il
+    codice, caratteri costruiti uno per uno, codice scritto mentre gira, una funzione scelta per nome con `getattr`, `send` o
+    `call_user_func` accanto a qualcosa che cancella) o il posto non si può leggere, la carta dice che il comando è troppo
+    complesso da leggere prima; lo stesso quando lo script è annidato in più shell di quante TALOS ne legga. Uno script che non
+    cancella niente di importante, o niente del tutto, parte come prima: su 64 comandi di ogni giorno (`python -c "print(1)"`,
+    `node -e "console.log(process.version)"`, `perl -pe 's/a/b/'`, una cartella temporanea creata e tolta, `*.pyc` o
+    `__pycache__` puliti in un ciclo…) nessuna carta in più, e una cancellazione in uno script risponde come `rm` sullo stesso
+    posto. Il chip dei permessi ora lo dice: «Chiede sempre: cancellare un disco, una cartella principale, la tua cartella
+    utente o il progetto (anche da uno script)».
+- **Known limits, still open (read as before, so no card from this check):** a delete function given another name when it is
+  imported, in Python or in Node; a script read from standard input, from a process substitution, from a base64 decoder, from a
+  variable, from a file written with tee or imported by name; a script started by xargs, find -exec or the Node preload option;
+  look-alike Unicode letters; a function name held in a variable and passed on; some JavaScript regular expressions and perl,
+  ruby and Python 3.12 quoting forms; on Windows, a script inside `cmd /c` with outer quotes, and nested `bash -c` with escaped
+  quotes.
+  - In italiano: **Limiti noti, ancora aperti (letti come prima, quindi senza carta da questo controllo):** una funzione che
+    cancella rinominata quando si importa, in Python o in Node; uno script letto dall'ingresso standard, da una sostituzione di
+    processo, da un decodificatore base64, da una variabile, da un file scritto con tee o importato per nome; uno script lanciato
+    da xargs, find -exec o dal precaricamento di Node; lettere Unicode che sembrano uguali; il nome di una funzione tenuto in una
+    variabile e passato avanti; alcune espressioni regolari di JavaScript e alcuni apici di perl, ruby e Python 3.12; su Windows uno script
+    dentro `cmd /c` con le virgolette esterne, e `bash -c` annidato con virgolette protette.
+- **Secrets shown by the chat are masked in more places.** These were known limits of 0.2.2 and 0.2.3. A secret word anywhere
+  in a field name is now masked (`DB_PASSWORD_2`, `password_confirmation`, `apiKeyValue`, `DB_PASS`), also inside JSON written
+  in a text; a field named `tokens` is masked unless its value is a count. The suggestion offered after a turn (for example
+  «explain this command») no longer copies an argument unmasked into the suggested message. While the arguments of a call are
+  still arriving, a key split between two pieces is in most cases no longer shown. Four names whose value is a command or a path
+  stay readable (`token_command`, `password_command`, `secret_mount`, `cookie_jar`). `credentials_json` also stays readable, as
+  in 0.2.3: its value is often the key of a service account itself, so parts of that key can be shown. TALOS run from its source code now
+  uses a keychain space of its own and cannot reach the keys saved by the installed app; the installed app keeps its keys, also
+  when it is installed behind a folder link.
+  - In italiano: i segreti mostrati dalla chat sono mascherati in più punti (erano limiti noti della 0.2.2 e della 0.2.3). Una
+    parola segreta in qualunque punto del nome di un campo ora è mascherata (`DB_PASSWORD_2`, `password_confirmation`,
+    `apiKeyValue`, `DB_PASS`), anche dentro un JSON scritto in un testo; un campo `tokens` è mascherato se il valore non è un
+    conteggio. Il suggerimento proposto dopo un giro (per esempio «spiega questo comando») non copia più un argomento in chiaro
+    nel messaggio suggerito. Mentre gli argomenti di una chiamata stanno ancora arrivando, una chiave divisa fra due pezzi nella
+    maggior parte dei casi non si vede più. Quattro nomi il cui valore è un comando o un percorso restano leggibili
+    (`token_command`, `password_command`, `secret_mount`, `cookie_jar`). Resta leggibile anche `credentials_json`, come nella
+    0.2.3: il suo valore spesso è la chiave stessa di un account di servizio, quindi pezzi di quella chiave si possono vedere.
+    TALOS lanciato dal codice sorgente ora usa uno spazio suo nel portachiavi
+    e non raggiunge le chiavi salvate dall'app installata; l'app installata tiene le sue chiavi, anche se è installata dietro un
+    collegamento di cartella.
+
+### Known limits
+
+- **ANSI-C quotes: what the readings still leave out.** The floor does not decode escape sequences inside an ANSI-C quote: a
+  recursive delete of the root with its slash written as an escape sequence is not stopped by the floor; it asks with the card
+  of the root (on Windows, of a top folder). On Windows a command that has `$'…'` and sixteen `cd` in parentheses (eight of them inside `bash -c`) now asks
+  as too nested to read: measured, the second reading takes it from 257 readings to the ceiling of 300. On Windows a text with
+  an apostrophe is read a second time the way cmd reads it, within the same ceiling of the command, so a long `bash -c '…'`
+  reaches the ceiling sooner: measured, with 49 `$(…)` instead of 75, or 74 instead of 100 when it also has `${x/a/&}`; then it
+  asks as too nested to read. With double quotes (`bash -c "…"`) the limit is the same as before.
+  - In italiano: **apici ANSI-C: che cosa le letture lasciano ancora fuori.** Il blocco non decodifica le sequenze di fuga
+    dentro un apice ANSI-C: una cancellazione ricorsiva della radice con la barra scritta come sequenza di fuga non è fermata dal
+    blocco; chiede con la carta della radice (su Windows, di una cartella principale). Su Windows un comando che ha `$'…'` e sedici `cd` fra parentesi (otto dentro
+    `bash -c`) ora chiede perché troppo annidato da leggere: misurato, la seconda lettura lo porta da 257 letture al tetto
+    di 300. Su Windows un testo con un apostrofo si legge una seconda volta come lo legge cmd, nello stesso tetto del comando,
+    quindi un `bash -c '…'` lungo arriva prima al tetto: misurato, con 49 `$(…)` invece di 75, o 74 invece di 100 se ha anche
+    `${x/a/&}`; da lì chiede perché troppo annidato da leggere. Con le virgolette doppie (`bash -c "…"`) il limite è quello di
+    prima.
+- **On Windows, PowerShell text given to the shell as it is, not inside `powershell -Command` or `pwsh -c`, is read the way
+  cmd and a POSIX shell read it.** Measured on the check of critical deletions and on the floor for commands that cannot be
+  undone: the escapes of PowerShell (the backtick) are not applied to that text, so a deletion that only those escapes would
+  show can pass without a card, with or without a group in parentheses such as `(Join-Path …)`. On Windows TALOS runs commands
+  in cmd (the default ComSpec), or in bash through WSL, and neither of them runs that text as PowerShell.
+  - In italiano: **su Windows il testo di PowerShell dato alla shell così com'è, non dentro `powershell -Command` o
+    `pwsh -c`, si legge come lo leggono cmd e una shell POSIX.** Misurato sul controllo delle cancellazioni critiche e sul
+    blocco dei comandi che non si annullano: le sequenze di fuga di PowerShell (l'apice inverso) non si applicano a quel
+    testo, quindi una cancellazione che solo quelle sequenze mostrerebbero può passare senza carta, con o senza un gruppo fra
+    parentesi come `(Join-Path …)`. Su Windows TALOS lancia i comandi in cmd (il ComSpec di serie), o in bash attraverso WSL, e nessuno dei due
+    esegue quel testo come PowerShell.
+- **The check that runs before a permission card can be slow on very long commands.** A very long command with many backtick
+  substitutions, or with thousands of slashes, can keep the check busy for tens of seconds; meanwhile TALOS does not answer. On the
+  commands we measured the outcome of the check is the same; it only arrives late. Measured on one Windows machine.
+  - In italiano: **il controllo che gira prima della carta dei permessi può essere lento sui comandi lunghissimi.** Un comando molto
+    lungo con molte sostituzioni fra accenti gravi, o con migliaia di barre, può tenere occupato il controllo per decine di secondi;
+    intanto TALOS non risponde. Sui comandi che abbiamo misurato l'esito del controllo è lo stesso; arriva solo tardi. Misurato su
+    una macchina Windows.
+- **A command name computed while the command runs is not read.** Measured on the check of critical deletions, not on the whole
+  path to the card: a deletion whose command name is put together by the shell while it runs (an empty variable inside the name, a
+  piece of a variable, a delayed variable of cmd) passes without a card on Windows, Linux, macOS and Android; on Windows the same
+  holds for a deletion handed to the Linux subsystem with a backslash inside the name (on Linux, macOS and Android that text asks).
+  The floor for commands that cannot be undone does not stop them either.
+  - In italiano: **il nome di un comando calcolato mentre il comando gira non si legge.** Misurato sul controllo delle cancellazioni
+    critiche, non sul percorso intero fino alla carta: una cancellazione il cui nome è composto dalla shell mentre gira (una
+    variabile vuota dentro il nome, un pezzo di variabile, una variabile ritardata di cmd) passa senza carta su Windows, Linux,
+    macOS e Android; su Windows vale lo stesso per una cancellazione passata al sottosistema Linux con una barra rovesciata dentro
+    il nome (su Linux, macOS e Android quel testo chiede). Neanche il blocco dei comandi che non si annullano le ferma.
+- **A command name written by closing and reopening a quote is not read.** Measured on the check of critical deletions: a deletion
+  handed to `bash -c` or `eval` inside single quotes, whose command name closes and reopens the quote around an escaped letter,
+  passes without a card on Windows, Linux, macOS and Android. It was already so in 0.2.3.
+  - In italiano: **il nome di un comando scritto chiudendo e riaprendo un apice non si legge.** Misurato sul controllo delle
+    cancellazioni critiche: una cancellazione passata a `bash -c` o a `eval` dentro apici semplici, il cui nome chiude e riapre
+    l'apice attorno a una lettera scritta con una sequenza di escape, passa senza carta su Windows, Linux, macOS e Android. C'era
+    già nella 0.2.3.
+- **Outside Windows, a PowerShell command inside a script block is not always read.** Measured on the check of critical
+  deletions: inside `pwsh -c`, a deletion written in a script block after a pipe or after the call operator passes without a card
+  on Linux, macOS and Android; on Windows it asks. It was already so in 0.2.3.
+  - In italiano: **fuori da Windows un comando di PowerShell dentro un blocco di script non sempre si legge.** Misurato sul
+    controllo delle cancellazioni critiche: dentro `pwsh -c`, una cancellazione scritta in un blocco di script dopo una pipe o dopo
+    l'operatore di chiamata passa senza carta su Linux, macOS e Android; su Windows chiede. C'era già nella 0.2.3.
+- **On Windows, inside `powershell -Command`, a deletion that follows a text in quotes escaped with the backtick is not read.**
+  Measured on the check of critical deletions: the second command of such a line passes without a card on Windows; on Linux, macOS
+  and Android it asks. It was already so in 0.2.3.
+  - In italiano: **su Windows, dentro `powershell -Command`, una cancellazione che segue un testo fra virgolette protette
+    dall'accento grave non si legge.** Misurato sul controllo delle cancellazioni critiche: il secondo comando di una riga così passa
+    senza carta su Windows; su Linux, macOS e Android chiede. C'era già nella 0.2.3.
+- **«Writes to the project» reads what a command says, it is not a sandbox.** A program that writes files by itself (a script
+  run with `node`, `python -c "…"`, `make`) is not seen; only an operating-system sandbox would see it.
+  - In italiano: **«Scrive nel progetto» legge ciò che dice il comando, non è una sandbox.** Un programma che scrive file da sé
+    (uno script lanciato con `node`, `python -c "…"`, `make`) non si vede; lo vedrebbe solo una sandbox del sistema operativo.
+- **A key can still show in pieces while the arguments of a call arrive.** When the key is attached right after `=`, `.` or
+  `/`, its first pieces can be read until the whole key has arrived, as in 0.2.3; once the arguments are complete it is masked.
+  - In italiano: una chiave può ancora vedersi a pezzi mentre arrivano gli argomenti di una chiamata. Quando la chiave è
+    attaccata subito dopo `=`, `.` o `/`, i suoi primi pezzi si leggono finché non è arrivata tutta, come nella 0.2.3; ad
+    argomenti completi è mascherata.
+- **Links and braces: only the spellings TALOS reads.** A link made by another program in the same command (`tar -x`,
+  `git checkout`, `cp -s`, a script) and then written through is not seen. Brace ranges such as `{1..3}` are read as written;
+  a command with more than 32 brace combinations asks, saying it could not verify where it writes.
+  - In italiano: **Collegamenti e graffe: solo le grafie che TALOS legge.** Un collegamento creato da un altro programma nello
+    stesso comando (`tar -x`, `git checkout`, `cp -s`, uno script) e poi usato per scrivere non si vede. Le serie fra graffe
+    come `{1..3}` si leggono come sono scritte; un comando con più di 32 combinazioni di graffe chiede, dicendo che non si è
+    potuto verificare dove scrive.
+- **On a small context window with many tools, a request can still be refused once as too large.** When a conversation lands
+  in a narrow band just under the window, TALOS can send the request before summarising; the provider refuses it, TALOS
+  summarises and sends it again, and the reply arrives with nothing lost. It was the same in 0.2.3.
+  - In italiano: con una finestra di contesto piccola e molti strumenti, una richiesta può ancora essere rifiutata una volta
+    perché troppo grande. Quando la conversazione cade in una fascia stretta appena sotto la finestra, TALOS può mandarla prima
+    di riassumere; il fornitore la rifiuta, TALOS riassume e la rimanda, e la risposta arriva senza perdere niente. Era così
+    anche nella 0.2.3.
+
 ## desktop-v0.2.3 — 2026-11-17
 
 ### Added
@@ -1090,12 +1505,11 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   installa questa versione non tiene più il cambio di un comando in Accesso pieno in un'altra conversazione: se scrive le
   impostazioni dell'uso del computer, il cambio diventa la versione approvata.
 
-### Permissions repair: spellings of a disk and deletions (this branch)
-
-> PROVVISORIO: testo da approvare. PROVISIONAL: this text is waiting for approval.
+### Permissions repair: spellings of a disk and deletions
 
 #### Fixed
 - A delete command that names the home or the project with a negated set (`rm -rf ../[!P]rogetto`, `rm -rf /Users/[![:upper:]]izio`) now asks on Windows, macOS and the phone's shared storage. Before, it passed with no card.
+- Una cancellazione che nomina la casa o il progetto con un insieme negato (`rm -rf ../[!P]rogetto`, `rm -rf /Users/[![:upper:]]izio`) ora chiede su Windows, macOS e nella memoria condivisa del telefono. Prima passava senza carta.
 
 - **Everywhere: a delete that starts from an empty or missing variable now asks.** When the target of a delete begins with
   a variable that is empty or not set, followed by a slash (for example a folder variable that was never filled in), the
@@ -1116,8 +1530,6 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 ### Permissions repair: earlier rounds
 
-> PROVVISORIO: testo da approvare. PROVISIONAL: this text is waiting for approval.
-
 #### Fixed
 
 - **Everywhere: a command too complex to read could pass without a card; now it always asks.** In 0.2.1 (measured) and in the
@@ -1126,8 +1538,9 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   with no card, in Full access and in Workspace write. Update to this version. Now a command the check cannot read to the end
   always asks, with its own card («too complex to read before it runs»), in every permission mode. The check also has a fixed
   limit, a number and not a time, on how much text the variables of one command may add while it is read (4 MiB): past it,
-  the same card. No honest command we measured comes near it: at most 43,513 characters in the 25,644 commands of the
-  reviewers, the five groups of honest commands and the phone commands. When this check has asked, the decision of 0.2.1 that
+  the same card. The honest commands we measured stay far below it: at most 43,513 characters in the 25,644 generated
+  commands, the five groups of honest commands and the phone commands; an honest command that sets a PATH of 16,384 characters
+  or more in eight subshells does reach it and asks (Linux, Android, macOS). When this check has asked, the decision of 0.2.1 that
   travels inside TALOS is not consulted again, so a short command that kept the whole check busy 1.6-4.3 s now asks in
   2-7 ms (four runs with the CPU under 50 %); when this check does not ask, that decision is consulted as before, so no card of 0.2.1 is lost (compared on
   the same 25,644 commands, in both permission levels, on Windows, Linux, Android and macOS). Some ways of writing a name
@@ -1138,10 +1551,10 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   Measured on this repair through the whole check (three runs with the CPU at 28-36 % on average and every sample under
   50 %, this version and 0.2.1 taking turns, on Windows, Linux, Android and macOS): a command that compares a bracket set of
   4,000 entries 1,000 times takes 134-198 ms (0.2.1: 199-276 ms) and its variants 74-229 ms (0.2.1: 107-381 ms); the
-  commands that reach the limit ask in 9-193 ms; the three long commands take 190-371 ms, 10-20 ms and 11-20 ms (0.2.1:
-  0.55-1.01 s, 1.05-1.80 s and 0.79-1.42 s), and the short command that multiplies asks in 3-11 ms (0.2.1: 0.44-1.03 s). On
+  commands that reach the limit ask in 9-193 ms; the three long commands take 190-371 ms, 10-20 ms and 11-20 ms, and the
+  short command that multiplies asks in 3-11 ms. On
   the first call a 642-character command full of open brackets takes 39-50 ms, and a 578-character one 24-32 ms (0.2.1 on
-  the same machine: 37-55 ms and 22-24 ms; CPU at 16-49 %).
+  the same machine: 37-55 ms and 22-26 ms; CPU at 16-49 %).
 - **Ovunque: un comando troppo complesso da leggere poteva passare senza carta; ora chiede sempre.** Nella 0.2.1 (misurato) e nelle
   versioni di prova di questa riparazione, quando il controllo dei permessi non riusciva a leggere un comando fino in fondo
   rispondeva come se il comando non cancellasse niente di critico, quindi una cancellazione della tua cartella utente, della
@@ -1149,8 +1562,9 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   Aggiorna a questa versione. Ora un comando che il controllo non sa leggere fino in fondo chiede sempre, con la sua carta
   («troppo complesso per essere letto prima che parta»), con qualsiasi permesso. Il controllo ha anche un limite fisso, un
   numero e non un tempo, su quanto testo le variabili di un comando possono aggiungere mentre lo si legge (4 MiB): oltre, la
-  stessa carta. Nessun comando onesto che abbiamo misurato ci si avvicina: al massimo 43.513 caratteri nei 25.644 comandi dei
-  revisori, nei cinque gruppi di comandi onesti e nei comandi del telefono. Quando questo controllo ha chiesto, la decisione
+  stessa carta. I comandi onesti che abbiamo misurato restano molto sotto: al massimo 43.513 caratteri nei 25.644 comandi
+  generati, nei cinque gruppi di comandi onesti e nei comandi del telefono; un comando onesto che scrive un PATH di
+  16.384 caratteri o più in otto sottoshell ci arriva e chiede (Linux, Android, macOS). Quando questo controllo ha chiesto, la decisione
   della 0.2.1 che viaggia dentro TALOS non si consulta di nuovo, quindi un comando corto che teneva occupato il controllo
   intero 1,6-4,3 s ora chiede in 2-7 ms (quattro corse con la CPU sotto il 50 %); quando questo controllo non chiede, quella decisione si consulta come prima,
   quindi nessuna carta della 0.2.1 si perde (confrontato sugli stessi 25.644 comandi, nei due livelli di permesso, su
@@ -1162,10 +1576,10 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   Misurato in questa riparazione nel controllo intero (tre corse con la CPU al 28-36 % in media e ogni campione sotto il
   50 %, questa versione e la 0.2.1 a turno, su Windows, Linux, Android e macOS): un comando che confronta 1.000 volte un
   insieme di 4.000 voci ci mette 134-198 ms (0.2.1: 199-276 ms) e le sue varianti 74-229 ms (0.2.1: 107-381 ms); i comandi
-  che arrivano al limite chiedono in 9-193 ms; i tre comandi lunghi ci mettono 190-371 ms, 10-20 ms e 11-20 ms (0.2.1:
-  0,55-1,01 s, 1,05-1,80 s e 0,79-1,42 s), e il comando corto che moltiplica chiede in 3-11 ms (0.2.1: 0,44-1,03 s). Alla
+  che arrivano al limite chiedono in 9-193 ms; i tre comandi lunghi ci mettono 190-371 ms, 10-20 ms e 11-20 ms, e il
+  comando corto che moltiplica chiede in 3-11 ms. Alla
   prima chiamata un comando di 642 caratteri pieno di parentesi quadre aperte ci mette 39-50 ms, e uno di 578 caratteri
-  24-32 ms (0.2.1 sulla stessa macchina: 37-55 ms e 22-24 ms; CPU al 16-49 %).
+  24-32 ms (0.2.1 sulla stessa macchina: 37-55 ms e 22-26 ms; CPU al 16-49 %).
 - **macOS: a delete of your home or of the project written in another way had no card.** The disk of a Mac does not tell
   capitals apart, nor an accented letter typed as one character from the same letter typed as two, nor `ß` from `SS`; the
   check compared the names letter by letter and gave no card (already in 0.2.1, in Full access and Workspace write). Update
@@ -1181,13 +1595,13 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   i comandi del telefono, su Windows, Linux, Android e macOS).
 - **Android: in the shared storage of the phone a name pattern written with other capitals had no card.** The shared
   storage does not tell capitals apart, and the check already knew it for plain names, but not for name patterns: a delete of
-  the projects folder written as a pattern with capitals gave no card (already in 0.2.1, in Full access and Workspace write).
+  the projects folder written as a pattern with capitals gave no card (in Full access and Workspace write).
   Update to this version. Now patterns follow the same rule as names there; outside the shared storage capitals still count.
   None of the 13 phone commands gets a new card.
 - **Android: nella memoria condivisa del telefono un nome scritto come modello con altre maiuscole non aveva la carta.** La
   memoria condivisa non distingue le maiuscole, e il controllo lo sapeva già per i nomi scritti per intero, ma non per i nomi
   scritti come modello: una cancellazione della cartella dei progetti scritta come modello con le maiuscole non dava la carta
-  (già nella 0.2.1, in Accesso pieno e in Scrive nel progetto). Aggiorna a questa versione. Ora lì i modelli seguono la stessa
+  (in Accesso pieno e in Scrive nel progetto). Aggiorna a questa versione. Ora lì i modelli seguono la stessa
   regola dei nomi; fuori dalla memoria condivisa le maiuscole contano ancora. Nessuno dei 13 comandi del telefono riceve una
   carta nuova.
 - **Windows: three ways of writing a path made TALOS check a different place from the one the system opened.** The protection
@@ -1266,8 +1680,8 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 - **Windows: the long form of a path with doubled slashes is recognised.** A credential file of your home or a secret file of
   the project written as `\\?\C:\\Users\\…` (the long form, with the slashes doubled after the drive letter) was read by the
-  file tools with no card in Workspace write and in On request with only the ordinary card of a read, and the credential file
-  also in Full access up to 0.2.1 (from 0.1.14, the first version that read doubled slashes, to 0.2.1). The same doubled
+  file tools with no card in Workspace write and in On request with only the ordinary card of a read (from 0.1.14, the first
+  version that read doubled slashes, to 0.2.1), and the credential file also in Full access (from 0.1.33 to 0.2.1). The same doubled
   slashes after `\\.\`, `\??\`, `\\?\GLOBALROOT\` and `\\?\UNC\` are joined too: a command such as
   `Get-Content '\\.\C:\\Users\\…'` that reads a credential file or a secret file of the project now asks in Workspace write,
   where it passed with no card. In Full access a credential file of your home written as `\??\C:\…` or
@@ -1275,8 +1689,8 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 - **Windows: la forma lunga di un percorso con le barre raddoppiate viene riconosciuta.** Un file di credenziali della tua casa
   o un file segreto del progetto scritto come `\\?\C:\\Users\\…` (la forma lunga, con le barre raddoppiate dopo la lettera del
   disco) veniva letto dagli attrezzi dei file senza carta in Scrive nel progetto e in Su richiesta con la sola carta di sempre
-  di una lettura, e il file di credenziali fino alla 0.2.1 anche in Accesso pieno (dalla 0.1.14, la prima versione che leggeva
-  le barre raddoppiate, alla 0.2.1). Si uniscono anche le stesse barre raddoppiate dopo `\\.\`, `\??\`, `\\?\GLOBALROOT\` e
+  di una lettura (dalla 0.1.14, la prima versione che leggeva le barre raddoppiate, alla 0.2.1), e il file di credenziali
+  anche in Accesso pieno (dalla 0.1.33 alla 0.2.1). Si uniscono anche le stesse barre raddoppiate dopo `\\.\`, `\??\`, `\\?\GLOBALROOT\` e
   `\\?\UNC\`: un comando come `Get-Content '\\.\C:\\Users\\…'` che legge un file di credenziali o un file segreto del progetto
   ora chiede in Scrive nel progetto, dove passava senza carta. In Accesso pieno un file di credenziali della tua casa scritto
   come `\??\C:\…` o `\\?\GLOBALROOT\??\C:\…`, anche con le barre raddoppiate dopo il prefisso, ora chiede, da un comando e
@@ -1295,8 +1709,8 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   inside a subshell or a group sends only what is inside it to the background: `bash -c "cd src; cd .. && (npm run dev &) ;
   rm -rf *"` asks, as in 0.2.1.
 - **Everywhere: before deleting a critical folder, TALOS asks at least every time 0.2.1 asked.** This version carries the
-  check of 0.2.1 unchanged (its file, byte for byte; a test fails if one byte changes) next to the new one, and asks if
-  either of the two asks; the reason on the card is the new check's when it asks. The new check also reads more: wherever
+  check of 0.2.1 next to the new one, changed only in how it reads the environment (once per command; the same answers on
+  15,558 commands compared); a test fails if any other byte changes. TALOS asks if either of the two asks; the reason on the card is the new check's when it asks. The new check also reads more: wherever
   it thinks a `cd` does not stay (sent to the background, in a subshell, in a pipe), it also reads the case where the `cd`
   stays, in every combination; a variable set inside `eval` keeps the values of every case (`cd src; eval 'cd .. && echo
   ${x/\}/&}; X=$PWD'; rm -rf "$X"` deletes the project in bash, and it asks); and an `&` inside `${…}` no longer splits the
@@ -1316,8 +1730,9 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   carta (misurato). Un `&` dentro una sottoshell o un gruppo manda in sottofondo solo ciò che sta dentro: `bash -c "cd src;
   cd .. && (npm run dev &) ; rm -rf *"` chiede, come nella 0.2.1.
 - **Ovunque: prima di cancellare una cartella critica TALOS chiede almeno tutte le volte che chiedeva la 0.2.1.** Questa
-  versione porta il controllo della 0.2.1 tale e quale (il suo file, byte per byte; una prova fallisce se cambia un byte)
-  accanto a quello nuovo, e chiede se chiede uno dei due; il motivo sulla carta è quello del controllo nuovo quando chiede.
+  versione porta il controllo della 0.2.1 accanto a quello nuovo, cambiato solo nel modo di leggere l'ambiente (una volta per
+  comando; stesse risposte su 15.558 comandi confrontati); una prova fallisce se cambia un altro byte. TALOS chiede se chiede
+  uno dei due; il motivo sulla carta è quello del controllo nuovo quando chiede.
   Anche il controllo nuovo legge di più: dove pensa che un `cd` non resti (mandato in sottofondo, in una sottoshell, in una
   pipe), legge anche il caso in cui il `cd` resta, in ogni combinazione; una variabile scritta dentro `eval` tiene i valori di
   tutti i casi (`cd src; eval 'cd .. && echo ${x/\}/&}; X=$PWD'; rm -rf "$X"` in bash cancella il progetto, e chiede); e un `&`
@@ -1332,16 +1747,16 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 - **Everywhere: two fixed ceilings on the work of checking one command.** The new check reads every `cd` that may not stay
   in both cases, and every reading goes over all the targets again, once for every value of a `for`; in the permission check a
   target ending with a slash also asks the disk for its real path. In the test builds of this repair the ceiling held for each
-  level, so cases inside cases multiplied (eight `(cd x && npm i)` and eight more inside a `bash -c` took 2.8-3.8 s; with a
+  level, so cases inside cases multiplied (eight `(cd x && npm i)` and eight more inside a `bash -c` took about 3 s, with the CPU busy; with a
   third level more than 100 s), and the next test build, with a ceiling of 300 readings, still let an honest command of 551
   characters (eight `(cd packages/x && npm ci)` and a `for` of 16 packages with six folders each) keep the check busy for
-  0.9-1.8 s, and one of 864 characters for 10-14 s, while TALOS waited (measured by the reviewer). Now each command has two
+  0.9-1.8 s, and one of 864 characters for 10-15 s, while TALOS waited (measured by the reviewer). Now each command has two
   fixed numbers, not times, summed over every level, every case, every Windows pass and every reading: at most 300 readings,
   and at most 10,000 units of work (a reading is 2 units plus one every 64 characters, a command 1, a target 3, a real path
   asked of the disk 12; a target counts once for each value of a `for` and each choice of braces). Past either ceiling it asks
   «too nested» instead of reading on. Measured with the whole permission check, CPU under 50 %: the commands of 551 and 864
   characters now ask in 40-64 ms on Windows, Linux, Android and macOS (0.2.1, which reads them less, 29-33 ms and 245-265 ms);
-  eight and eight 21-33 ms, eight, eight and eight 12-18 ms; the 20 typical commands take as long as before (0.99-1.04 times
+  eight and eight 21-33 ms, eight, eight and eight 12-18 ms; the 20 typical commands take as long as before (0.98-1.02 times
   the previous test build). The check of a command right under the ceiling takes at most about 60 ms. The slowest whole
   permission checks the reviewers found did not come from this ceiling: the decision of 0.2.1, which travels inside TALOS,
   read the whole environment again for every variable of the command and, for the project folders, for every target. One
@@ -1359,16 +1774,16 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   restare nei due casi, e ogni lettura ripassa tutti i bersagli, una volta per ogni valore di un `for`; nel controllo dei
   permessi un bersaglio con la barra in coda chiede anche al disco il suo percorso vero. Nelle versioni di prova di questa
   riparazione il tetto valeva per ogni livello, quindi i casi dentro i casi si moltiplicavano (otto `(cd x && npm i)` e altri
-  otto dentro un `bash -c` chiedevano 2,8-3,8 s; con un terzo livello più di 100 s), e la versione di prova dopo, col tetto di
+  otto dentro un `bash -c` chiedevano circa 3 s, con la CPU occupata; con un terzo livello più di 100 s), e la versione di prova dopo, col tetto di
   300 letture, lasciava ancora un comando onesto di 551 caratteri (otto `(cd packages/x && npm ci)` e un `for` di 16 pacchetti
-  con sei cartelle ciascuno) tenere occupato il controllo per 0,9-1,8 s, e uno di 864 caratteri per 10-14 s, mentre TALOS
+  con sei cartelle ciascuno) tenere occupato il controllo per 0,9-1,8 s, e uno di 864 caratteri per 10-15 s, mentre TALOS
   aspettava (misurato dal revisore). Ora ogni comando ha due numeri fissi, non tempi, sommati su ogni livello, ogni caso, ogni
   giro di Windows e ogni lettura: al massimo 300 letture, e al massimo 10.000 unità di lavoro (una lettura vale 2 unità più una
   ogni 64 caratteri, un comando 1, un bersaglio 3, un percorso vero chiesto al disco 12; un bersaglio conta una volta per ogni
   valore di un `for` e ogni scelta delle graffe). Oltre uno dei due tetti chiede «troppo annidato» invece di continuare a
   leggere. Misurato col controllo dei permessi intero, CPU sotto il 50 %: i comandi di 551 e 864 caratteri ora chiedono in
   40-64 ms su Windows, Linux, Android e macOS (la 0.2.1, che li legge meno, 29-33 ms e 245-265 ms); otto e otto 21-33 ms, otto,
-  otto e otto 12-18 ms; i 20 comandi tipici ci mettono quanto prima (0,99-1,04 volte la versione di prova precedente). Il
+  otto e otto 12-18 ms; i 20 comandi tipici ci mettono quanto prima (0,98-1,02 volte la versione di prova precedente). Il
   controllo di un comando appena sotto il tetto ci mette al massimo circa 60 ms. I controlli dei permessi interi più lenti
   trovati dai revisori non venivano da questo tetto: la decisione della 0.2.1, che viaggia dentro TALOS, rileggeva tutto
   l'ambiente per ogni variabile del comando e, per le cartelle dei progetti, per ogni bersaglio. Una parola fatta di una
@@ -1420,22 +1835,22 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 
 - The check reads the command, it does not run it: a script that builds the path while it runs is not seen, and a credential
   read by a later command, after an earlier one moved to another folder, is judged from the folder of the session. A command
-  that changes folder more than sixteen times asks instead of guessing, also in Full access (a Git Bash path like `/c/…`
+  that moves into more than sixteen different folders asks instead of guessing, also in Full access (a Git Bash path like `/c/…`
   counts as one move); when every move goes to a different drive with a Git Bash path it asks at the tenth move (see below).
 - Il controllo legge il comando, non lo esegue: uno script che costruisce il percorso mentre gira non si vede, e una
   credenziale letta da un comando successivo, dopo che uno precedente si è spostato in un'altra cartella, viene giudicata
-  dalla cartella della sessione. Un comando che cambia cartella più di sedici volte chiede invece di tirare a indovinare,
+  dalla cartella della sessione. Un comando che si sposta in più di sedici cartelle diverse chiede invece di tirare a indovinare,
   anche in Accesso pieno (un percorso di Git Bash come `/c/…` conta come uno spostamento); quando ogni spostamento va su un
   disco diverso con un percorso di Git Bash chiede al decimo spostamento (vedi sotto).
 - When every `cd` goes to a different drive with a Git Bash path (`cd /a/…`, then `cd /b/…`, then `cd /d/…`) the ceiling of
   the folders a command can be followed through comes at the tenth move instead of the seventeenth: in Full access the
   command then asks, also when it is honest. With two drives that alternate (`cd /a/…`, `cd /b/…`, `cd /a/…`), as on one
-  drive, it asks at the seventeenth move. New in this version: 0.2.1 had no ceiling and did not follow these moves (measured).
+  drive, it asks at the seventeenth move. New in this version: 0.2.1 had no ceiling and did not follow these moves.
 - Quando ogni `cd` va su un disco diverso con un percorso di Git Bash (`cd /a/…`, poi `cd /b/…`, poi `cd /d/…`) il tetto
   delle cartelle in cui un comando si può seguire arriva al decimo spostamento invece che al diciassettesimo: in Accesso pieno
   il comando allora chiede, anche quando è onesto. Con due dischi che si alternano (`cd /a/…`, `cd /b/…`, `cd /a/…`), come su
   un disco solo, chiede al diciassettesimo spostamento. Nuovo in questa versione: la 0.2.1 non aveva il tetto e non seguiva
-  questi spostamenti (misurato).
+  questi spostamenti.
 - A `cd` that does not stay is still followed in these cases: at the start of a command not given to bash by name, a
   subshell, a pipe, a group in braces or a list sent to the background (for example `(cd build) && rm -rf *` or
   `{ cd x; } & rm -rf *`); and PowerShell's `Start-Job { cd … }`. A critical delete after it can pass with no card, as in
@@ -1454,14 +1869,14 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   (cd .. && make); rm -rf *"`, where bash deletes inside `src`). Measured on the 368 forms of the reviews: 12 such cards (10 on
   Windows) that the previous test build did not show, all of them also in 0.2.1; none on the 20 typical commands, the 12
   common ones, 14 Linux and 13 phone commands.
-- Four cards are new compared with 0.2.1. The check reads a `}` after a backslash both ways, also as closing `${`, so an `&`
+- Four cards that bash does not need are new compared with 0.2.1, among them: the check reads a `}` after a backslash both ways, also as closing `${`, so an `&`
   after it can look like a background: `bash -c 'cd /d/work/build && echo ${x/\}/&}; rm -rf *'` asks naming the project, while
   bash deletes inside `build`; and after an `eval` a variable keeps the values of both readings: `cd src; eval 'echo ${x/\}/&}
   cd ..; X=$PWD'; rm -rf "$X"` asks naming the project, while bash deletes `src` (measured). On Windows, inside `bash -c "…"`,
   a quote written `\"` keeps its backslash in the path, which then reads as a network path: `bash -c "X=/k/data/out; echo
   \${x/a/&}; rm -rf \"\$X\"/*"` asks naming the top-level folder `\\k\data\out`, while bash deletes inside `K:\data\out`;
   0.2.1 already asked the same for the form with the path written out (`rm -rf \"/k/data/out\"/*`), and the new one asks only
-  with an `&` inside `${…}` (measured). The real reader of the shell will fix all three. And inside bash (off Windows, or in a
+  with an `&` inside `${…}` (measured). And inside bash (off Windows, or in a
   command given to bash with `bash -c` on Windows) more than eight `cd` that may or may not stay in one command (for example
   nine `(cd x && npm i)` in a row, then `rm -rf dist`) ask instead of being followed, also when honest; at the first level of a
   Windows command they are not read this way (cmd has no subshells) and do not ask.
@@ -1475,7 +1890,7 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 - The price of the ceiling of 10,000 units of work: an honest command with a lot of work asks «too nested». Eight `(cd x &&
   …)` followed by `rm -rf dist/ build/` (two targets with a slash, read in 256 cases), four and four `(cd x && …)` with `rm -rf
   dist/ build/` inside a `bash -c`, a monorepo cleanup with eight `(cd packages/x && npm ci)` and a `for` over 8 to 16 packages
-  with two to six folders each, a `for` of 16 values with 42 folders each, one `rm -rf` of 700 folders with a slash (3,500
+  with two to six folders each, a `for` of 16 values with 42 folders each written with a slash, one `rm -rf` of 700 folders with a slash (3,500
   without), on Windows `rd /s /q` of 700 folders or `Remove-Item` of 700 folders. Measured on 23 such commands on Windows,
   Linux, Android and macOS: 12 ask on Windows and 10 on the others, where the previous test build asked for none (and took
   seconds for the monorepo ones); eight `(cd x && …)` with `rm -rf dist/`, with six folders without a slash, or with a `for` of
@@ -1486,15 +1901,14 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   `bash -c "cd src; (cd .. && make); rm -rf *"`, dove bash cancella dentro `src`). Misurato sulle 368 forme delle revisioni:
   12 carte così (10 su Windows) che la versione di prova precedente non mostrava, tutte presenti anche nella 0.2.1; nessuna sui
   20 comandi tipici, sui 12 comuni, su 14 comandi di Linux e 13 del telefono.
-- Quattro carte sono nuove rispetto alla 0.2.1. Il controllo legge una `}` dopo una barra rovescia nei due modi, anche come
+- Fra le carte nuove rispetto alla 0.2.1 che a bash non servono, quattro sono: il controllo legge una `}` dopo una barra rovescia nei due modi, anche come
   fine di `${`, quindi un `&` dopo di lei può sembrare un sottofondo: `bash -c 'cd /d/work/build && echo ${x/\}/&}; rm -rf *'`
   chiede nominando il progetto, mentre bash cancella dentro `build`; e dopo un `eval` una variabile tiene i valori delle due
   letture: `cd src; eval 'echo ${x/\}/&} cd ..; X=$PWD'; rm -rf "$X"` chiede nominando il progetto, mentre bash cancella `src`
   (misurato). Su Windows, dentro `bash -c "…"`, una virgoletta scritta `\"` lascia la sua barra nel percorso, che allora si
   legge come un percorso di rete: `bash -c "X=/k/data/out; echo \${x/a/&}; rm -rf \"\$X\"/*"` chiede nominando la cartella di
   primo livello `\\k\data\out`, mentre bash cancella dentro `K:\data\out`; la 0.2.1 chiedeva già lo stesso per la forma col
-  percorso scritto (`rm -rf \"/k/data/out\"/*`), e quella nuova chiede solo con un `&` dentro `${…}` (misurato). Le sistemerà
-  tutte e tre il lettore vero della shell. E dentro bash (fuori da Windows, o in un comando dato a bash con `bash -c` su
+  percorso scritto (`rm -rf \"/k/data/out\"/*`), e quella nuova chiede solo con un `&` dentro `${…}` (misurato). E dentro bash (fuori da Windows, o in un comando dato a bash con `bash -c` su
   Windows) più di otto `cd` che possono restare o no in un comando solo (per esempio nove `(cd x && npm i)` di fila, poi `rm
   -rf dist`) chiedono invece di essere seguiti, anche quando sono onesti; al primo livello di un comando di Windows non si
   leggono così (cmd non ha sottoshell) e non chiedono.
@@ -1508,12 +1922,18 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 - Il prezzo del tetto di 10.000 unità di lavoro: un comando onesto con tanto lavoro chiede «troppo annidato». Otto `(cd x &&
   …)` seguiti da `rm -rf dist/ build/` (due bersagli con la barra, letti in 256 casi), quattro e quattro `(cd x && …)` con `rm
   -rf dist/ build/` dentro un `bash -c`, una pulizia di monorepo con otto `(cd packages/x && npm ci)` e un `for` su 8-16
-  pacchetti con da due a sei cartelle ciascuno, un `for` di 16 valori con 42 cartelle ciascuno, un `rm -rf` di 700 cartelle con
+  pacchetti con da due a sei cartelle ciascuno, un `for` di 16 valori con 42 cartelle ciascuno scritte con la barra, un `rm -rf` di 700 cartelle con
   la barra (3.500 senza), su Windows `rd /s /q` di 700 cartelle o `Remove-Item` di 700 cartelle. Misurato su 23 comandi così su
   Windows, Linux, Android e macOS: ne chiedono 12 su Windows e 10 sugli altri, dove la versione di prova precedente non ne
   chiedeva nessuno (e per quelli del monorepo ci metteva secondi); otto `(cd x && …)` con `rm -rf dist/`, con sei cartelle senza
   barra, o un `for` di 16 valori e sei cartelle senza `cd`, passano ancora. Nessuno fra i 20 comandi tipici, i 12 comuni, i 14
   di Linux, i 13 del telefono e i 15 di macOS, e nessuno dei 23.272 comandi a caso dei revisori, chiede per questo.
+- The price of the limit of 4 MiB on what the variables of a command may add: on Linux, Android and macOS an honest command
+  that sets a PATH of 16,384 characters or more in several subshells (eight in the case we measured) can reach it, and then
+  gets one card more («too complex to read before it runs»).
+- Il prezzo del limite di 4 MiB su quanto le variabili di un comando possono aggiungere: su Linux, Android e macOS un comando
+  onesto che scrive un PATH di 16.384 caratteri o più in più sottoshell (otto nel caso che abbiamo misurato) può arrivarci, e
+  allora riceve una carta in più («troppo complesso per essere letto prima che parta»).
 - Three cases are not followed, as in 0.2.1 (measured): a `)` in quotes inside `$( … )` hides the commands after it (`bash -c
   'x=$(echo ")"); rm -rf *'`), a `cd` inside a function (`function f { cd ..; }; cd src; f; rm -rf *`), and a `cd` that fails
   (`cd nonesiste; rm -rf *`: bash stays where it was). A critical delete after them can pass with no card.

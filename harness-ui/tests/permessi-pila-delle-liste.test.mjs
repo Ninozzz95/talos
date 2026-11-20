@@ -93,7 +93,11 @@ const ONESTE = [
 for (const [id, comando] of ONESTE) {
   test(`PILA-${id} — onesta: \`cd K && ( … & )\` cancella K, non il progetto: nessuna carta, dalla funzione e dal cancello`, { skip: SALTA }, async () => {
     assert.equal(critica(comando), null, `funzione: ${comando}`);
-    for (const livello of DUE) assert.equal((await carte(comando, livello)).length, 0, `${livello}: ${comando}`);
+    for (const livello of DUE) {
+      const chieste = await carte(comando, livello);
+      /* 0.2.4 B3 (owner 17/11/2026): in «Scrive nel progetto» cancellare K, FUORI dal progetto, chiede con la carta del fuori, mai la critica */
+      assert.equal(chieste.filter((x) => !(livello === 'scrittura-progetto' && x.fuoriDalProgetto && !x.cancellazioneCritica)).length, 0, `${livello}: ${comando}`);
+    }
   });
 }
 

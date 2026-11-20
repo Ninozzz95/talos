@@ -39,14 +39,14 @@
  *     paid for that call live, forever. Only files older than REPAIR_AFTER_MS are removed: a younger one may be a writer of
  *     the no-link path (pubblica-una-volta.mjs) still between its exclusive create and its write.
  *   - workflowId is lowercase only and never a Windows device name: 'W1' and 'w1' shared one folder on Windows.
- *   - sweepTemporaries() removes index temporaries a crash left in temp/replay (older than an hour).
+ *   - sweepTemporaries() removes index and value temporaries a crash left in temp/replay and temp/cas (older than an hour).
  *
  * THIRD REVIEW CURES (06/11): only ENOENT is a missing index, any other read error is unreadable (never 'already', never
  * removed); a future mtime counts as old; every diagnostic carries a path-free safeMessage beside its log message.
  */
 import { randomUUID } from 'node:crypto';
-import { mkdir, open, readFile, readdir, stat, unlink } from 'node:fs/promises';
-import { isAbsolute, join } from 'node:path';
+import { mkdir, open, readFile, readdir, realpath, stat, unlink } from 'node:fs/promises';
+import { isAbsolute, join, relative } from 'node:path';
 
 import { improntaStabile, jsonStabile } from './json-stabile.mjs';
 import { pubblicaUnaVolta } from './pubblica-una-volta.mjs';
@@ -68,9 +68,11 @@ const SAFE_MESSAGES = Object.freeze({
   WORKFLOW_REPLAY_INDEX_UNREADABLE: 'A saved answer index could not be read; the call ran live.',
   WORKFLOW_REPLAY_REPAIRED: 'A damaged saved answer was removed.',
   WORKFLOW_RESULT_CORRUPT: 'A saved answer was damaged; the call ran live.',
+  WORKFLOW_RESULT_REPAIRED: 'A damaged saved answer was replaced with the right bytes.',
   WORKFLOW_RESULT_NOT_FOUND: 'A saved answer was missing; the call ran live.',
   WORKFLOW_LIMIT_EXCEEDED: 'An answer was too large to save for replay.',
   WORKFLOW_STORE_IO: 'The saved answers could not be read or written; the call ran live.',
+  WORKFLOW_STORE_LOCATION_INVALID: 'A folder of the saved answers points outside their folder; it was left alone.',
 });
 /** A fixed English text for a journal diagnostic code: never a path, never text read from disk or from an fs error. */
 export const safeDiagnosticMessage = (code) => SAFE_MESSAGES[code] ?? 'The saved answers had a problem; the call ran live.';
@@ -111,8 +113,13 @@ export function createKeyedJournal({ workflowDataRoot, workflowId, maxResultByte
   if (!Number.isSafeInteger(maxResultBytes) || maxResultBytes < 1) throw new WorkflowReplayError('maxResultBytes must be a positive integer');
   const folder = join(workflowDataRoot, 'replay', workflowId);
   const tempFolder = join(workflowDataRoot, 'temp', 'replay');
+  const casTempFolder = join(workflowDataRoot, 'temp', 'cas');
   const diagnostics = [];
-  const diagnose = (code, key, message) => {
+  let valuesRepaired = 0;
+  const diagnose =(code, key, message) => {
+    // 19/11/2026 (0.2.4 block 4, item 3): the same obstacle read twice in one run (a folder at the index path: lookup, then
+    // record) is ONE diagnostic, not one per read (measured: 3 per run with the runner's own).
+    if (diagnostics.some((d) => d.code === code && d.key === key && d.message === message)) return;
     if (diagnostics.length < MAX_DIAGNOSTICS) diagnostics.push({ code, key, message, safeMessage: safeDiagnosticMessage(code) });
   };
   const indexPath = (hex) => join(folder, hex.slice(0, 2), `${hex}.json`);
@@ -199,6 +206,11 @@ export function createKeyedJournal({ workflowDataRoot, workflowId, maxResultByte
     const hex = parseKey(key);
     const bytes = Buffer.from(jsonStabile(value), 'utf8');
     const stored = await putResultBytes({ workflowDataRoot, bytes, maxBytes: maxResultBytes });
+    // 0.2.4 block 4, round 2, item A: a damaged value replaced by the put is counted and said once (hash and reason, no content).
+    if (stored.repaired) {
+      valuesRepaired += 1;
+      diagnose('WORKFLOW_RESULT_REPAIRED', key, `replaced a damaged saved answer with the right bytes: ${stored.sha256}`);
+    }
     const index = Buffer.from(`${JSON.stringify({
       schema: REPLAY_SCHEMA,
       workflowId,
@@ -248,19 +260,35 @@ export function createKeyedJournal({ workflowDataRoot, workflowId, maxResultByte
     };
   }
 
-  /** Removes index temporaries older than an hour (a crash between write and publish leaves them). Never throws. */
+  /**
+   * Removes temporaries older than an hour (a crash between write and publish leaves them). Never throws. The age is checked
+   * on every platform: on Windows an unlink removes even a file another process still has open (libuv src/win/fs.c:1192).
+   * 19/11/2026 (0.2.4 block 4, item 2): also temp/cas, the value temporaries of result-store.mjs (measured: 2 left for good
+   * after 12 kills), with the same rule.
+   */
   async function sweepTemporaries({ now = Date.now() } = {}) {
     let removed = 0;
-    let names = [];
-    try { names = await readdir(tempFolder); } catch { return 0; }
-    for (const name of names.filter((n) => n.endsWith('.tmp'))) {
+    for (const temp of [tempFolder, casTempFolder]) {
+      let names = [];
       try {
-        const path = join(tempFolder, name);
-        if (now - (await stat(path)).mtimeMs > TEMPORARY_MAX_AGE_MS) { await unlink(path); removed += 1; }
-      } catch { /* gone or busy: next time */ }
+        // Round 2, item D: a temp folder replaced by a junction or a link to elsewhere is not ours to sweep (the same rule as
+        // result-store.mjs ensureContainedDirectory); said once in the run.
+        const delta = relative(join(await realpath(workflowDataRoot), 'temp'), await realpath(temp));
+        if (delta.startsWith('..') || isAbsolute(delta)) {
+          diagnose('WORKFLOW_STORE_LOCATION_INVALID', null, `a temporary folder resolves outside the data root, not swept: ${temp}`);
+          continue;
+        }
+        names = await readdir(temp);
+      } catch { continue; }
+      for (const name of names.filter((n) => n.endsWith('.tmp'))) {
+        try {
+          const path = join(temp, name);
+          if (now - (await stat(path)).mtimeMs > TEMPORARY_MAX_AGE_MS) { await unlink(path); removed += 1; }
+        } catch { /* gone or busy: next time */ }
+      }
     }
     return removed;
   }
 
-  return { workflowId, lookup, record, beginRun, sweepTemporaries, diagnostics };
+  return { workflowId, lookup, record, beginRun, sweepTemporaries, diagnostics, get valuesRepaired() { return valuesRepaired; } };
 }

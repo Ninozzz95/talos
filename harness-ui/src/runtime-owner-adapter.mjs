@@ -23,7 +23,7 @@ import { classificaErroreDiCorsa } from './research-orchestrator.mjs';
 import { creaRilevatoreZai } from './zai-indirizzo.mjs';
 import { leggiAttesaRichiestaDalFornitore, leggiAttesaResetDalCorpo, erroreEsitoProviderIncerto, codiceDiRichiestaNonPartita, consumoPubblico, marcaRifiutoProvider } from './provider-retry.mjs';
 import { normalizzaUsage, scontoDaCache } from './usage-cache.mjs'; // 12/09, P-B: i nomi della cache sono uno per fornitore, il lettore uno solo
-import { nativeProviderResponse, stripNativeMetadata } from './native-provider-adapter.mjs';
+import { nativeProviderResponse, stripNativeMetadata, googleRifiutaStore, corpoSenzaStore, AVVISO_STORE_RIFIUTATO } from './native-provider-adapter.mjs';
 import { ATTESA_LIMITE_DEL_PIANO_MASSIMA_MS, attesaDelLimiteDelPiano, conPrimoPezzo, creaFetchDelPiano, erroreDelPiano } from './chatgpt-richiesta.mjs';
 import { attesaFinoAlRipristino, leggiLimitiDelPiano, nomiVisti } from './chatgpt-limiti.mjs';
 import { preparaRichiestaCompatibile, OpenAiCompatibleRuntimeError, aliasGrafiaRagionamento, livelloRagionamentoMinimo, livelloRagionamentoPiuVicino } from './openai-compatible-runtime.mjs'; // P-D (12/09): Z.AI accetta solo alcuni livelli di ragionamento — BUG-18 gen.2: alias, minimo e clamp in UNA scala condivisa (D5)
@@ -2014,6 +2014,7 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
       return new Response(contesto.errore.message, { status: contesto.errore.stato });
     }
     contesto.errore = null;
+    contesto.geminiSenzaStore = false; // 0.2.4 S5: una ripetizione senza `store` al massimo per invio, mai ricordata fra invii
     contesto.rispostaAccettata = false;
     contesto.headersRitenta = {};
     contesto.scelta = scelta; contesto.fonte = fonte;
@@ -2116,6 +2117,19 @@ export function creaFetchMultiProvider(fetchDiRete = fetch, {
         if (rilevatoreZai && fonte === 'zai' && scelta && classificazione.classe === 'credito' && !contesto.zaiCambiato) {
           const altrove = await rilevatoreZai.dopoCredito(target, scelta, modelloRemoto);
           if (altrove) { contesto.zaiCambiato = true; return rete(altrove, init); }
+        }
+        /* 0.2.4 S5, giro 2 (revisore R1): QUI il corpo vero del rifiuto c'è ancora. Se Google rifiuta proprio lo `store: false` messo in
+           cima dall'involucro della Gemini nativa (`fetchGeminiSenzaConservazione`), la stessa richiesta riparte UNA volta senza il campo,
+           con un avviso nel registro (né corpo né chiave). Lo schema è quello di Z.AI qui sopra: l'indicatore impedisce una seconda
+           ripetizione. Nessun `segnala` prima: `contesto.errore` resta vuoto e una ripetizione riuscita è un giro riuscito. L'indicatore
+           si azzera a ogni invio (`invia`): nessuna memoria fra richieste, un rifiuto non spegne la protezione per le altre. */
+        if (fonte === 'gemini' && response.status === 400 && !contesto.geminiSenzaStore && googleRifiutaStore(testo)) {
+          const senza = corpoSenzaStore(init.body);
+          if (senza !== null) {
+            contesto.geminiSenzaStore = true;
+            console.warn(AVVISO_STORE_RIFIUTATO);
+            return rete(target, { ...init, body: senza });
+          }
         }
         // BUG-25: gli header dicono per primi; solo se tacciono, le grammatiche di reset nel corpo (parity Hermes).
         await segnala(classificazione, response.headers, response.status, leggiAttesaResetDalCorpo(testo),

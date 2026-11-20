@@ -64,7 +64,12 @@ const RISERVE_PUBBLICHE = {
   // P-G: proiezione indipendente del GET, stessa impronta pubblica del 12/09/2026.
   ...Object.fromEntries(Object.entries(JSON.parse(leggi('tests/fixtures/provider-pg-models-dev-2026-09-12.json')).fornitori)
     .map(([id, p]) => [id, Object.fromEntries(Object.entries(p.models).map(([id, m]) => [id, m.tool_call]))])),
-  openai: { 'gpt-5-nano': true, 'gpt-5-mini': true },
+  /* S6 della 0.2.4 (18/11/2026): proiezione indipendente di api.json letto quel giorno (`models-dev-esempio-2026-11-18.json`) per i
+     fornitori le cui riserve sono cambiate: gpt-5-mini si spegne l'11/12, MiniMax-M2.5 e Llama 3.3 «deprecated», LFM 2.5 sparito. */
+  ...Object.fromEntries(Object.entries(JSON.parse(leggi('tests/fixtures/models-dev-esempio-2026-11-18.json')))
+    .map(([id, p]) => [id, Object.fromEntries(Object.entries(p.models).map(([id, m]) => [id, m.tool_call]))])),
+  /* giudice v2229 (19/11/2026): gpt-5-nano esce dall'elenco incorporato, resta solo luna */
+  openai: { 'gpt-6-luna': true },
   deepseek: { 'deepseek-flash': true, 'deepseek-v4-pro': true },
   zai: { 'glm-4.7-flash': true, 'glm-4.7': true },
   /* claude-haiku-5-5: models.dev api.json read 09/10/2026 (TALOS cache), tool_call true, release_date 2026-10-07. */
@@ -72,7 +77,7 @@ const RISERVE_PUBBLICHE = {
   /* gemini-3.5-flash-lite: models.dev api.json read 18/10/2026, tool_call true, release_date 2026-07-21 (the 2.5 Flash-Lite answers
      404 to new accounts). */
   google: { 'gemini-2.5-flash-lite': true, 'gemini-3.1-flash-lite': true, 'gemini-3.5-flash-lite': true },
-  openrouter: { 'liquid/lfm-2.5-2.6b:free': true, 'openai/gpt-5-nano': true },
+  openrouter: { 'liquid/lfm-3-1.7b:free': true, 'openai/gpt-6-luna': true, 'google/gemma-4-26b-a4b-it:free': true },
 };
 
 function verificaRiservePubbliche(registro, catalogo) {
@@ -103,7 +108,9 @@ test('PF-PAR-01 — riserve non vuote per ogni chat remota; locali e download di
         assert.ok(Object.isFrozen(m));
         assert.equal(m.toolCalling, true);
         assert.match(m.fonte, /^https:\/\//u);
-        assert.equal(m.data, m.id === 'claude-haiku-5-5' ? '2026-10-09' : m.id === 'gemini-3.5-flash-lite' ? '2026-10-18' : '2026-09-12');
+        /* S6 della 0.2.4: le riserve entrate il 18/11/2026 al posto dei modelli morti */
+        const del1811 = ['openai/gpt-6-luna', 'openrouter/openai/gpt-6-luna', 'openrouter/liquid/lfm-3-1.7b:free', 'openrouter/google/gemma-4-26b-a4b-it:free', 'minimax/MiniMax-M3.1-Flash', 'minimax-anthropic/MiniMax-M3.1-Flash', 'together/openai/gpt-oss-120b'].includes(`${r.id}/${m.id}`);
+        assert.equal(m.data, m.id === 'claude-haiku-5-5' ? '2026-10-09' : m.id === 'gemini-3.5-flash-lite' ? '2026-10-18' : del1811 ? '2026-11-18' : '2026-09-12');
       }
     } else {
       assert.equal(r.modelliDiRiserva, null, r.id);
@@ -130,9 +137,9 @@ test('PF-PAR-02 — campi obbligatori: assenza, vuoto, duplicati e ausiliario fu
 test('PF-PAR-03 — lettore ausiliario puro: id upstream esatti, null dichiarati e id sconosciuti', () => {
   assert.equal(typeof APIRegistro.modelloAusiliarioPer, 'function');
   const attesi = {
-    openai: 'gpt-5-nano', deepseek: 'deepseek-flash', zai: 'glm-4.7-flash',
+    openai: 'gpt-6-luna', deepseek: 'deepseek-flash', zai: 'glm-4.7-flash',
     anthropic: 'claude-haiku-4-5-20251001', gemini: 'gemini-3.5-flash-lite',
-    openrouter: 'liquid/lfm-2.5-2.6b:free', ollama: null, lmstudio: null, local: null, huggingface: null,
+    openrouter: 'google/gemma-4-26b-a4b-it:free', ollama: null, lmstudio: null, local: null, huggingface: null,
   };
   for (const [id, modello] of Object.entries(attesi)) assert.equal(APIRegistro.modelloAusiliarioPer(id), modello, id);
   for (const id of ['inesistente', '__proto__', 'constructor', null, undefined]) assert.equal(APIRegistro.modelloAusiliarioPer(id), null);

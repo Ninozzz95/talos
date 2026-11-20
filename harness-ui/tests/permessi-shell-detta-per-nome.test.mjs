@@ -50,6 +50,9 @@ const carte = async (comando, livelloAccesso, cartella = sessione) => {
   }
   return chieste;
 };
+/* 0.2.4 B3 (owner 17/11/2026, richiesta 154): in «Scrive nel progetto» un comando che scrive o cancella FUORI dal progetto chiede con la
+   carta del fuori (`fuoriDalProgetto`), mai con la critica: le prove di questo file contano le altre carte. */
+const senzaIlFuori = (chieste, livello) => chieste.filter((x) => !(livello === 'scrittura-progetto' && x.fuoriDalProgetto && !x.cancellazioneCritica));
 
 /* I 13 comandi onesti del revisore B: la shell detta per nome sposta davvero, e si cancella il contenuto di K:\dati\build */
 const ONESTI_B = [
@@ -73,7 +76,8 @@ const VERI_B = [`cd ${K} && del /s /q *`, `cd ${K} && rd /s /q .`, `cmd /c "cd $
 test('SHELL-B1 — i 13 comandi onesti del revisore B: nessuna carta critica, dalla funzione e dal cancello ai tre livelli', { skip: SALTA }, async () => {
   for (const comando of ONESTI_B) {
     assert.equal(critica(comando), null, `funzione: ${comando}`);
-    for (const livello of LIVELLI) assert.equal((await carte(comando, livello)).length, 0, `${livello}: ${comando}`);
+    /* 0.2.4 B3 (owner 17/11/2026): in «Scrive nel progetto» cancellare fuori dal progetto chiede con la carta del fuori, mai la critica */
+    for (const livello of LIVELLI) assert.equal(senzaIlFuori(await carte(comando, livello), livello).length, 0, `${livello}: ${comando}`);
   }
 });
 
@@ -123,7 +127,7 @@ test('SHELL-T1 — le tre oneste scritte in testa, senza la shell detta per nome
      che fallisce, e `Remove-Item` non parte (misurato con cmd.exe). */
   for (const comando of [`cd /mnt/${a}/tmp/build && rm -rf *`, `cd /${a}/tmp/build && rm -rf *`, `cd ${T}; Remove-Item -Recurse -Force *`]) {
     assert.equal(critica(comando), null, comando);
-    for (const livello of LIVELLI) assert.equal((await carte(comando, livello)).length, 0, `${livello}: ${comando}`);
+    for (const livello of LIVELLI) assert.equal(senzaIlFuori(await carte(comando, livello), livello).length, 0, `${livello}: ${comando}`);
   }
   /* al contrario: in cmd dopo il `cd` col `;` la cartella resta il progetto, e ciò che viene dopo un `&` parte lì */
   assert.deepEqual(critica(`cd ${T}; echo pulizia & rd /s /q .`), { percorso: sessione, perche: 'progetto' }, 'cmd: `cd` fallito, `rd` nel progetto');

@@ -67,7 +67,7 @@ if (profile.preview && process.argv.includes('--talos-pulizia-dati')) {
     try {
       const percorsi = risolviPercorsi({ appPath: app.getAppPath(), isPackaged: app.isPackaged, resourcesPath: process.resourcesPath });
       const { puliziaDatiDesktop } = await import(pathToFileURL(join(percorsi.root, 'src', 'pulizia-dati.mjs')).href);
-      const esito = await puliziaDatiDesktop();
+      const esito = await puliziaDatiDesktop({ delPacchetto: () => app.isPackaged }); // 0.2.4 B1, round 2: the installed app's keychain namespace only from the package (Electron app.isPackaged)
       app.exit(esito.ok ? 0 : 1);
     } catch (errore) {
       console.error('Pulizia dati non riuscita: ' + (errore?.message ?? errore));

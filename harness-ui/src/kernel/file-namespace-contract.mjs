@@ -22,7 +22,12 @@ export function classificaPercorsoDiRete(percorso, {platform = process.platform}
     if (s.startsWith('\\??\\') || s.startsWith('\\\\??\\') || s.startsWith('\\\\.\\')) return 'nt'
     if (s.startsWith('\\\\?\\')) {
         const resto = s.slice(4).toUpperCase()
-        return resto.startsWith('UNC\\') || resto.startsWith('GLOBALROOT') ? 'nt' : null
+        if (resto.startsWith('UNC\\') || resto.startsWith('GLOBALROOT')) return 'nt'
+        /* BUG-024-UNC giro 2 (20/11/2026): `GLOBAL\` è un altro nome dello stesso spazio (`\GLOBAL??\GLOBAL` → `\GLOBAL??`), quindi
+           `\\?\GLOBAL\UNC\ospite` porta alla rete come `\\?\UNC\ospite` (Hermes `file_safety.py:160` guarda solo UNC e GLOBALROOT). Solo
+           le forme che vanno alla rete: `\\?\GLOBAL\C:\…` resta locale. Giro 3: `\\?\GLOBAL\GLOBALROOT…` è prefisso NT per intero,
+           come `\\?\GLOBALROOT…` qui sopra (LanmanRedirector, `??\UNC`, `DosDevices\UNC`, `GLOBAL??\UNC` portano alla rete). */
+        return /^(?:GLOBAL\\)+(?:UNC\\|GLOBALROOT)/u.test(resto) ? 'nt' : null
     }
     if (platform !== 'win32' || !s.startsWith('\\\\')) return null
     const ospite = s.slice(2).split('\\', 1)[0].toLowerCase()
@@ -63,8 +68,16 @@ function dentroCartellaWin(radice, percorso) {
  * ⛔ Un'unità di rete MAPPATA (`Z:`) resta fuori: è una sessione SMB già autenticata dalla persona, non un contatto nuovo.
  * @returns {Promise<{genere:'nt'|'rete', ospite:string|null, via:'stringa'|'cartella'|'collegamento', collegamento?:string}|null>}
  */
-export async function destinazioneDiRete(percorso, { cartella = null, platform = process.platform, fs = { lstat, readlink } } = {}) {
+export async function destinazioneDiRete(percorso, { cartella = null, platform = process.platform, fs = { lstat, readlink }, visti = null } = {}) {
     if (typeof percorso !== 'string') return null
+    /* BUG-024-UNC giro 2 (tempo): `visti` è la memoria di UN comando (`cp` verso 3.237 cartelle): un pezzo già letto con `lstat` o
+       `readlink` non si rilegge (come `knownHard` di `realpathSync` in Node). Senza `visti` si legge ogni volta, come prima. */
+    const leggi = (porta, p) => {
+        if (!(visti instanceof Map)) return fs[porta](p)
+        const k = `${porta}\u0000${p}` // maiuscole ESATTE (giro 3): in una cartella che le distingue `link` e `Link` sono due posti
+        if (!visti.has(k)) visti.set(k, fs[porta](p))
+        return visti.get(k)
+    }
     const genere = classificaPercorsoDiRete(percorso, { platform })
     if (genere === 'nt') return { genere, ospite: null, via: 'stringa' }
     if (platform !== 'win32') return null
@@ -83,11 +96,11 @@ export async function destinazioneDiRete(percorso, { cartella = null, platform =
         for (let i = 0; i < pezzi.length; i += 1) {
             corrente = win32.join(corrente, pezzi[i])
             let info
-            try { info = await fs.lstat(corrente) }
+            try { info = await leggi('lstat', corrente) }
             catch { return null } // non esiste (o non si legge): da qui il disco non attraversa nessun collegamento
             if (!info.isSymbolicLink()) continue
             let bersaglio
-            try { bersaglio = await fs.readlink(corrente) }
+            try { bersaglio = await leggi('readlink', corrente) }
             catch { return null }
             const rete = bersaglioDiRete(bersaglio)
             if (rete) return { ...rete, via: 'collegamento', collegamento: corrente }

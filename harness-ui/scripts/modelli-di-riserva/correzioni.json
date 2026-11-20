@@ -1,0 +1,14 @@
+{
+  "nota": "Hand corrections for scripts/genera-elenco-modelli.mjs (S6 of 0.2.4, 18/11/2026). Only what models.dev does not say: announced retirements and motivated exceptions. Every exception needs a reason; the gate tests/modelli-scritti-a-mano-cancello.test.mjs rejects an exception that is no longer needed.",
+  "candidatiPerFornitore": 3,
+  "ritiriAnnunciati": [
+    { "fornitore": "openai", "id": "gpt-5-nano", "data": "2026-12-11", "fonte": "https://developers.openai.com/api/docs/deprecations" },
+    { "fornitore": "openai", "id": "gpt-5-mini", "data": "2026-12-11", "fonte": "https://developers.openai.com/api/docs/deprecations" },
+    { "fornitore": "openrouter", "id": "openai/gpt-5-nano", "data": "2026-12-11", "fonte": "https://openrouter.ai/api/v1/models (expiration_date)" }
+  ],
+  "esclusiDaiCandidati": [],
+  "eccezioni": [
+    { "fornitore": "fireworks", "id": "accounts/fireworks/models/gpt-oss-120b", "motivo": "Absent from models.dev on 11/11 and 18/11/2026; the old price is not known, so no replacement can be shown to cost the same or less. Question in the S6 report of 18/11/2026." },
+    { "fornitore": "novita", "id": "qwen/qwen3-coder-30b-a3b-instruct", "motivo": "Absent from models.dev on 11/11 and 18/11/2026; the old price is not known, so no replacement can be shown to cost the same or less. Question in the S6 report of 18/11/2026." }
+  ]
+}

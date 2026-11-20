@@ -123,15 +123,16 @@ export const REGISTRO_FORNITORI = congela({
     id: 'openai',
     // P-F, fonti e strumenti verificati il 12/09/2026; parità con models.dev nel test.
     modelliDiRiserva: congela([
-      // 12/09/2026 — https://developers.openai.com/api/docs/models/gpt-5-nano
-      congela({ id: 'gpt-5-nano', nome: 'GPT-5 Nano', toolCalling: true,
-        fonte: 'https://developers.openai.com/api/docs/models/gpt-5-nano', data: '2026-09-12' }),
-      // 12/09/2026 — https://developers.openai.com/api/docs/models/gpt-5-mini
-      congela({ id: 'gpt-5-mini', nome: 'GPT-5 Mini', toolCalling: true,
-        fonte: 'https://developers.openai.com/api/docs/models/gpt-5-mini', data: '2026-09-12' }),
+      /* S6 della 0.2.4 (18/11/2026): gpt-5-mini si spegne l'11/12/2026 (developers.openai.com/api/docs/deprecations). Al suo posto
+         GPT-6 Luna, più economico su ogni voce (models.dev api.json del 18/11: 0,10/0,50 contro 0,25/2,00 USD per milione, cache 0,01 contro
+         0,025). Giudice v2229 (19/11/2026): anche gpt-5-nano si spegne l'11/12 e OpenAI indica GPT-6 Luna come suo sostituto (stessa pagina,
+         letta il 19/11); Luna c'era già, quindi resta UNA voce sola. Costa di più di nano (0,10/0,50 contro 0,05/0,40; 0,20/0,75 oltre
+         272.000 token di contesto): il CHANGELOG lo dice. */
+      congela({ id: 'gpt-6-luna', nome: 'GPT-6 Luna', toolCalling: true,
+        fonte: 'https://models.dev/api.json', data: '2026-11-18' }),
     ]),
-    // 12/09/2026 — Nano: 0,05/0,40 USD per milione ingresso/uscita; fonte prezzi nelle schede ufficiali.
-    modelloAusiliario: 'gpt-5-nano',
+    // 19/11/2026 (giudice v2229) — Luna al posto di nano, che si spegne l'11/12/2026: 0,10/0,50 USD per milione (models.dev api.json del 18/11).
+    modelloAusiliario: 'gpt-6-luna',
     modelsDevId: 'openai',
     etichetta: 'OpenAI',
     descrizione: 'Direct OpenAI API, on the Responses wire.',
@@ -364,11 +365,12 @@ export const REGISTRO_FORNITORI = congela({
     modelliDiRiserva: congela([
       congela({ id: 'MiniMax-M3', nome: 'MiniMax M3', toolCalling: true,
         fonte: 'https://platform.minimax.io/docs/api-reference/text-openai-api', data: '2026-09-12' }),
-      congela({ id: 'MiniMax-M2.5', nome: 'MiniMax M2.5', toolCalling: true,
-        fonte: 'https://platform.minimax.io/docs/api-reference/text-openai-api', data: '2026-09-12' }),
+      /* S6 della 0.2.4 (18/11/2026): MiniMax-M2.5 è «deprecated» su models.dev. M3.1 Flash costa la metà su ogni voce (api.json del 18/11:
+         0,15/0,60 contro 0,30/1,20 USD per milione, cache 0,015 contro 0,03), ha gli attrezzi ed è il più economico vivo. */
+      congela({ id: 'MiniMax-M3.1-Flash', nome: 'MiniMax M3.1 Flash', toolCalling: true,
+        fonte: 'https://models.dev/api.json', data: '2026-11-18' }),
     ]),
-    // Minimo ingresso/uscita condiviso con M3; M2.5 ha un prezzo di lettura cache inferiore.
-    modelloAusiliario: 'MiniMax-M2.5', modelsDevId: 'minimax',
+    modelloAusiliario: 'MiniMax-M3.1-Flash', modelsDevId: 'minimax',
     // Anthropic raccomandato upstream; OpenAI è un percorso ufficialmente supportato.
     wire: 'openai-chat', baseUrl: 'https://api.minimax.io/v1',
     indirizzoModificabile: true, envIndirizzo: congela(['MINIMAX_BASE_URL']),
@@ -662,15 +664,24 @@ export const REGISTRO_FORNITORI = congela({
     instradamento: congela({ campo: 'session_id', fonte: 'https://openrouter.ai/docs/guides/best-practices/prompt-caching', data: '2026-10-21' }),
     // P-F, fonti e strumenti verificati il 12/09/2026; parità con models.dev nel test.
     modelliDiRiserva: congela([
-      // 12/09/2026 — https://openrouter.ai/api/v1/models
-      congela({ id: 'liquid/lfm-2.5-2.6b:free', nome: 'LiquidAI LFM 2.5 2.6B (gratuito)', toolCalling: true,
-        fonte: 'https://openrouter.ai/api/v1/models', data: '2026-09-12' }),
-      // 12/09/2026 — https://openrouter.ai/api/v1/models
-      congela({ id: 'openai/gpt-5-nano', nome: 'OpenAI GPT-5 Nano', toolCalling: true,
-        fonte: 'https://openrouter.ai/api/v1/models', data: '2026-09-12' }),
+      /* S6 della 0.2.4 (18/11/2026): `liquid/lfm-2.5-2.6b:free` non esiste più (404 su OpenRouter, assente da models.dev). Al suo posto
+         il suo successore gratuito, con gli attrezzi (models.dev api.json del 18/11: 0/0, tool_call true, 262K). */
+      congela({ id: 'liquid/lfm-3-1.7b:free', nome: 'LiquidAI LFM 3 1.7B (free)', toolCalling: true,
+        fonte: 'https://models.dev/api.json', data: '2026-11-18' }),
+      /* Giudice v2229 (19/11/2026): `openai/gpt-5-nano` si spegne l'11/12/2026 (expiration_date su OpenRouter; OpenAI indica GPT-6 Luna
+         come sostituto, developers.openai.com/api/docs/deprecations letta il 19/11). Luna al suo posto, con gli attrezzi (models.dev
+         api.json del 18/11: 0,10/0,50 USD per milione contro 0,05/0,40, tool_call true, contesto 1.050.000). */
+      congela({ id: 'openai/gpt-6-luna', nome: 'OpenAI GPT-6 Luna', toolCalling: true,
+        fonte: 'https://models.dev/api.json', data: '2026-11-18' }),
+      /* S6, giro 2 (revisore G2, 18/11/2026): l'ausiliario resta gratuito ma non più piccolo del 2.5 che sostituisce (2,6B, contesto 65.536
+         nella copia di models.dev dell'11/11). Gemma 4 26B A4B: pagina https://openrouter.ai/google/gemma-4-26b-a4b-it:free letta il
+         18/11/2026 («Google: Gemma 4 26B A4B (free)», `tools` e `tool_choice` accettati, nessuna scadenza); models.dev api.json del 18/11:
+         0/0, contesto 262.144, tool_call true. */
+      congela({ id: 'google/gemma-4-26b-a4b-it:free', nome: 'Google Gemma 4 26B A4B (free)', toolCalling: true,
+        fonte: 'https://openrouter.ai/google/gemma-4-26b-a4b-it:free', data: '2026-11-18' }),
     ]),
-    // 12/09/2026 — LFM: 0/0, minimo a pari merito tra SKU gratuiti; https://openrouter.ai/liquid/lfm-2.5-2.6b:free.
-    modelloAusiliario: 'liquid/lfm-2.5-2.6b:free',
+    // 18/11/2026, giro 2 — gratuito (0/0) come il 2.5, di taglia e contesto maggiori (vedi sopra).
+    modelloAusiliario: 'google/gemma-4-26b-a4b-it:free',
     modelsDevId: 'openrouter',
     etichetta: 'OpenRouter',
     descrizione: 'Aggregator: hundreds of models behind a single key.',
@@ -987,8 +998,10 @@ export const REGISTRO_FORNITORI = congela({
        (`openai-completions.ts:955-963`, thinkingFormat "together"). */
     ragionamento: congela({ formato: 'together', livelli: congela(['low', 'medium', 'high']), fonte: 'https://docs.together.ai/reference/chat-completions-1', data: '2026-10-21' }),
     modelliDiRiserva: congela([
-      congela({ id: 'meta-llama/Llama-3.3-70B-Instruct-Turbo', nome: 'Llama 3.3 70B', toolCalling: true,
-        fonte: 'https://docs.together.ai/docs/serverless/models', data: '2026-09-12' }),
+      /* S6 della 0.2.4 (18/11/2026): Llama 3.3 70B Turbo è «deprecated» su models.dev. GPT OSS 120B costa meno su ogni voce
+         (api.json del 18/11: 0,15/0,60 contro 1,04/1,04 USD per milione) e ha gli attrezzi. */
+      congela({ id: 'openai/gpt-oss-120b', nome: 'GPT OSS 120B', toolCalling: true,
+        fonte: 'https://models.dev/api.json', data: '2026-11-18' }),
     ]),
     modelloAusiliario: null,
     motivoAusiliario: 'No qualified auxiliary model for this provider.',
@@ -1476,11 +1489,12 @@ export const REGISTRO_FORNITORI = congela({
     catalogo: congela({ fonte: 'fornitore', forma: 'anthropic-data', percorso: '/models', inUI: true }),
     prezzi: congela({ fonte: 'https://platform.minimax.io/docs/guides/pricing-paygo', data: '2026-09-12', valuta: 'USD', unita: 'million tokens' }),
     modelliDiRiserva: congela([
-      congela({ id: 'MiniMax-M2.5', nome: 'MiniMax M2.5', toolCalling: true, fonte: 'https://platform.minimax.io/docs/api-reference/text-anthropic-api', data: '2026-09-12' }),
+      /* S6 della 0.2.4 (18/11/2026): M2.5 «deprecated» su models.dev; M3.1 Flash costa la metà su ogni voce (vedi `minimax` sopra). */
+      congela({ id: 'MiniMax-M3.1-Flash', nome: 'MiniMax M3.1 Flash', toolCalling: true, fonte: 'https://models.dev/api.json', data: '2026-11-18' }),
       congela({ id: 'MiniMax-M3', nome: 'MiniMax M3', toolCalling: true, fonte: 'https://platform.minimax.io/docs/api-reference/text-anthropic-api', data: '2026-09-12' }),
     ]),
-    // Minimo a pari merito in/out; lettura cache più economica di M3/M2.7 (fonte prezzi sopra).
-    modelloAusiliario: 'MiniMax-M2.5', modelsDevId: 'minimax',
+    // 18/11/2026 — il più economico vivo con gli attrezzi, anche in lettura cache (models.dev api.json del 18/11).
+    modelloAusiliario: 'MiniMax-M3.1-Flash', modelsDevId: 'minimax',
     limiti: congela({ timeoutPredefinitoSecondi: 60, tempoMassimoModificabile: true }),
     sonda: congela({ attiva: true, auth: 'x-api-key', percorso: '/models', urlAssoluto: null, conta: c => c?.data?.length, richiedeCatalogoValido: true,
       fonte: 'https://platform.minimax.io/docs/api-reference/models/anthropic/list-models', data: '2026-09-12' }),

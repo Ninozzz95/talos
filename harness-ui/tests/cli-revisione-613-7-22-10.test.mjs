@@ -498,9 +498,14 @@ function fornitoreOnesto(finestra, { risposta = 'OK' } = {}) {
 const giroPesante = (t, extra) => giro(t, { toolMcp: ATTREZZI_PESANTI, chiamaToolMcpFn: async () => ({ content: [], isError: false }), ...extra });
 
 test('R8-N1-01 — schemi pesanti e fornitore onesto: lo scarto ereditato è stato misurato con meno attrezzi (un server MCP collegato a metà sessione), e il giro aggiunge la differenza — si compatta prima, nessun rifiuto; AL CONTRARIO con gli stessi attrezzi la misura ereditata si rispetta e niente si paga', async (t) => {
-  const finestra = 10_240;
   const messaggi = [{ role: 'system', content: 'You are a coding agent' }, ...coppie(5, 1_200), { role: 'user', content: 'Rispondi OK.' }];
   const base = compattazione.stimaDegliAttrezzi(ATTREZZI_OPENAI);
+  /* 0.2.4 (R8-N1-01): la finestra era tarata a 10.240 sugli schemi del kernel di allora (2.357 token stimati). Ogni campo nuovo degli
+     schemi (B6, `images` di `naviga`: +36) spostava la richiesta compattata contro la soglia e la prova misurava il peso degli schemi,
+     non la compattazione. La finestra segue ora il peso degli schemi del kernel: lo stesso margine di quando la prova è nata, a ogni
+     schema nuovo. Le tre premesse qui sotto restano controllate a ogni corsa. */
+  const SCHEMI_DELLA_TARATURA = 2_357;
+  const finestra = 10_240 + (base - SCHEMI_DELLA_TARATURA);
   const f = fornitoreOnesto(finestra);
   /* ⛔ 28/10/2026 (contratto C1, owner 27/10/2026, «Sì, mai aspettare»): «si compatta prima» resta l'intento — la differenza degli schemi
      porta la richiesta all'emergenza e la compattazione avviene PRIMA della richiesta, senza rifiuti. Ma all'emergenza la richiesta non

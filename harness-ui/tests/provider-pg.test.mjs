@@ -29,7 +29,12 @@ const ATTESI = {
   huggingface: ['Hugging Face', 'https://router.huggingface.co/v1', 'HF_TOKEN', 'huggingface'],
 };
 const PUBBLICI = ['deepinfra', 'novita', 'ollama-cloud', 'huggingface'];
-const FIXTURE = JSON.parse(readFileSync(new URL('./fixtures/provider-pg-models-dev-2026-09-12.json', import.meta.url), 'utf8'));
+const FIXTURE_12_09 = JSON.parse(readFileSync(new URL('./fixtures/provider-pg-models-dev-2026-09-12.json', import.meta.url), 'utf8'));
+/* S6 della 0.2.4 (18/11/2026): Llama 3.3 70B di Together è «deprecated» su models.dev; la riserva nuova (GPT OSS 120B) e i suoi fatti
+   vengono dalla proiezione del 18/11 (voci vere di api.json, `models-dev-esempio-2026-11-18.json`). */
+const DEL_18_11 = JSON.parse(readFileSync(new URL('./fixtures/models-dev-esempio-2026-11-18.json', import.meta.url), 'utf8'));
+const FIXTURE = { ...FIXTURE_12_09, fornitori: { ...FIXTURE_12_09.fornitori, togetherai: DEL_18_11.togetherai } };
+const dataDellaFixture = (id) => (ATTESI[id][3] === 'togetherai' ? '2026-11-18' : FIXTURE_12_09.data);
 const CHIAVE_FINTA = 'credenziale-fittizia-pg';
 const deps = store => ({ leggiChiave: store.getKey, leggiRuntime: store.getRuntime });
 const modelloPer = id => Object.keys(FIXTURE.fornitori[ATTESI[id][3]].models)[0];
@@ -231,7 +236,7 @@ test('PG-08 — fixture pubblica indipendente e verso contrario su modelli e str
     assert.equal(r.modelli[0].id, `${id}:${modelloPer(id)}`);
     assert.equal(r.modelli[0].prezzoPrompt, null);
     assert.equal(r.modelli[0].contestoVerificato, false);
-    assert.equal(r.modelli[0].dataDichiarazione, FIXTURE.data);
+    assert.equal(r.modelli[0].dataDichiarazione, dataDellaFixture(id));
   }
 });
 

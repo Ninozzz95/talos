@@ -450,25 +450,69 @@ test('EC-14 — un controllo appeso che torna libera il posto, e la cartella mai
   assert.equal((await b.dopoIlCalcolo(registro, viva)).cartella?.cartellaId, 'viva', 'non deve aspettare il giro del minuto, e non paga il primo disco che torna a non rispondere');
 });
 
+/*
+ * L 106 (0.2.4, blocco 0) — le attese del registro le fa scadere la prova. EC-15 era a orologio vero: i 200 ms di `attesaControlloCartellaMs`
+ *   correvano anche sul controllo VERO di «altra» (stat e realpath sul disco, nel pool di libuv), e sotto carico lo superavano: «altra»
+ *   risultava assente e la prova rossa (PR 96, giri 6 e 8: undefined al posto di 'altra'; misurato: con 250 ms in più sullo stat di
+ *   «altra» la vecchia prova è rossa 5 volte su 5). Qui ogni attesa di `ms` del registro è presa dalla prova e scade solo quando la prova
+ *   la fa scadere; le altre passano all'orologio vero. Il disco fa il suo senza un orologio contro.
+ */
+function attesePilotate(t, ms) {
+  const vero = { setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
+  const attese = [];
+  let avvisa = null;
+  globalThis.setTimeout = function setTimeoutPilotato(fn, durata, ...argomenti) {
+    if (durata !== ms) return vero.setTimeout(fn, durata, ...argomenti);
+    const a = { fn, argomenti, finita: false, unref() { return this; }, ref() { return this; }, hasRef() { return false; } };
+    attese.push(a);
+    const chi = avvisa;
+    avvisa = null;
+    chi?.(a);
+    return a;
+  };
+  globalThis.clearTimeout = function clearTimeoutPilotato(h) { if (attese.includes(h)) h.finita = true; else vero.clearTimeout(h); };
+  t.after(() => { globalThis.setTimeout = vero.setTimeout; globalThis.clearTimeout = vero.clearTimeout; });
+  return {
+    vero,
+    aperte: () => attese.filter((a) => !a.finita),
+    /** la prossima attesa di `ms` che il registro apre da adesso */
+    prossima: () => new Promise((r) => { avvisa = r; }),
+    scadi: (a) => { assert.equal(a.finita, false, 'si fa scadere solo un attesa ancora aperta'); a.finita = true; a.fn(...a.argomenti); },
+  };
+}
+
 /* R11 (revisione del Blocco 21): `descrivi` legge il segreto sul disco dei dati, e non aveva un tempo massimo */
 test('EC-15 — una `descrivi` appesa non ferma il giro: le altre cartelle si calcolano, mai due sullo stesso percorso, e la risposta tardiva vale', async (t) => {
   const b = banco(t);
-  const registro = b.nuovoRegistro({ attesaControlloCartellaMs: 200 });
+  let controllataLenta = null;
+  /* lo stat vero; dice alla prova quando quello di «lenta» è tornato (l'attesa che il registro apre DOPO è quella della sua `descrivi`) */
+  const statCartellaFn = async (p) => { const info = await fs.promises.stat(p); if (p.endsWith('lenta')) controllataLenta?.(); return info; };
+  const registro = b.nuovoRegistro({ attesaControlloCartellaMs: 200, statCartellaFn });
   const lenta = await b.avvia(registro, b.crea('lenta'));
   const altra = await b.avvia(registro, b.crea('altra'));
+  const orologio = attesePilotate(t, 200);
   let rispondi = null;
   let chiamate = 0;
+  let partita = null;
+  const descrivePartita = new Promise((r) => { partita = r; });
   registro.usaDescrizioneCartelle((p) => {
     if (!p.endsWith('lenta')) return Promise.resolve({ cartellaId: 'y'.repeat(32), nome: 'altra' });
     chiamate += 1;
+    partita();
     return new Promise((ok) => { rispondi = ok; });
   });
-  const entroIlTempo = () => Promise.race([registro.attendiCartelle().then(() => 'finito'), new Promise((r) => { setTimeout(r, 2000, 'appeso'); })]);
+  /* 2 s veri: non è il tempo del registro (quello è pilotato), è il cane da guardia di un giro che non finisce mai */
+  const entroIlTempo = () => Promise.race([registro.attendiCartelle().then(() => 'finito'), new Promise((r) => { orologio.vero.setTimeout(r, 2000, 'appeso'); })]);
+  await descrivePartita;
+  assert.equal(orologio.aperte().length, 1, 'aperta è solo l attesa della `descrivi` di «lenta» (il suo controllo è già tornato)');
+  orologio.scadi(orologio.aperte()[0]);
   assert.equal(await entroIlTempo(), 'finito', 'il giro resta appeso: nessuna riga nuova porterà più la cartella fino al riavvio');
   assert.equal(b.riga(registro, altra).cartella?.nome, 'altra', 'la cartella dopo non paga quella appesa');
   assert.equal(b.riga(registro, lenta).cartella, null);
   b.avanza(61_000);
+  const attesaDellaDescrizione = new Promise((r) => { controllataLenta = () => { controllataLenta = null; orologio.prossima().then(r); }; });
   registro.elenca();
+  orologio.scadi(await attesaDellaDescrizione);
   assert.equal(await entroIlTempo(), 'finito');
   assert.equal(chiamate, 1, 'la stessa operazione è ancora appesa: non se ne apre un\'altra');
   rispondi({ cartellaId: 'z'.repeat(32), nome: 'lenta' });
@@ -476,6 +520,7 @@ test('EC-15 — una `descrivi` appesa non ferma il giro: le altre cartelle si ca
   b.avanza(61_000);
   assert.deepEqual((await b.dopoIlCalcolo(registro, lenta)).cartella, { cartellaId: 'z'.repeat(32), nome: 'lenta' }, 'la risposta arrivata tardi non si butta');
   assert.equal(chiamate, 1);
+  assert.equal(orologio.aperte().length, 0, 'nessuna attesa lasciata aperta');
 });
 
 /* ROSSO 4 della PR 91 (09/11/2026): con 5 ms il `stat` + `realpath` vero di una cartella sul disco del runner di GitHub scadeva, la cartella

@@ -1,0 +1,7 @@
+{
+  "schema": "talos.nucleo-condiviso.v1",
+  "perche": "I file del nucleo condiviso fra PC, CLI e telefono (richiesta 161, decisione 402). Una fonte sola: il cancello impronte-nucleo.mjs legge solo questo elenco. È l'unione misurata dal lettore il 18/11/2026 (RAPPORTO-ALLINEAMENTO-TRE-PRODOTTI, «Che cosa servirebbe a un cancello comune», punto 1): ciò che la CLI impacchetta (cli/scripts/pack-vendor.mjs, VENDOR_TREES) più ciò che il telefono copia (mobile/scripts/kernel-r4/copia-r4.mjs, PERCORSI_R4), senza le prove.",
+  "cartelle": ["harness-ui/src", "context-engine/src"],
+  "file": ["harness-ui/server.mjs", "harness-ui/package.json", "harness-ui/package-lock.json", "harness-ui/aiuto/index.json", "context-engine/package.json"],
+  "fuori": { "cartelle": ["node_modules"], "file": "\\.test\\.m?[jt]s$" }
+}

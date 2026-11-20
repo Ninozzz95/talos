@@ -29,6 +29,10 @@ const DEBITO_DICHIARATO = new Map([
   ['scripts/bench-local-resume.mjs', 'banco di misura di sviluppo, non spedito col prodotto'],
   ['scripts/bench-llama-preflight.mjs', 'banco di misura di sviluppo: percorsi finti di fixture, nessuna cartella creata'],
   ['desktop/scripts/ledger-preview-smoke.mjs', 'prova di CI: usa `RUNNER_TEMP` e ricade su TEMP solo fuori dalla CI'],
+  /* 19/11/2026, 0.2.4 blocco 3 («Scrive nel progetto», giudice v2228): questi due NON creano niente nella TEMP di sistema.
+     Chiedono solo DOV'È, per riconoscere che un comando scrive lì e non chiedere la carta. */
+  ['src/kernel/scritture-della-shell.mjs', 'legge dov è la temporanea, non ci scrive: serve a riconoscere un comando che scrive nella TEMP'],
+  ['src/kernel/talosHarness.mjs', 'legge dov è la temporanea, non ci scrive: l elenco delle cartelle temporanee esenti dalla carta'],
 ]);
 
 const RADICE = fileURLToPath(new URL('..', import.meta.url));

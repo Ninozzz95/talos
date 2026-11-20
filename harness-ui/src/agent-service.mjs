@@ -488,6 +488,8 @@ export async function avviaSessione({
   /* Owner 27/10/2026, `view_image`: inoltrati com'è al nucleo (`onGuardaImmagine`, `vedeImmaginiFn`) — vedi `guarda-immagine-ospite.mjs` */
   guardaImmagineFn = null,
   vedeImmaginiFn = null,
+  /* 0.2.4, blocco 6, giro 2 (giudice v2220): () => string[], le chiavi della persona dalla memoria dell'ospite; inoltrata com'è al nucleo */
+  segretiConosciutiFn = null,
   /* 01/11/2026: inoltrata com'è al nucleo (`motoreInCaricamentoFn`), il punto della carta dell'arresto durante un'apertura */
   motoreInCaricamentoFn = null,
   /* Decisioni 57 e 144 (04/11/2026): inoltrata com'è al nucleo (`prezzoDelModelloFn`), il prezzo pubblicato per i dollari sulla carta della ricerca */
@@ -2954,6 +2956,7 @@ export async function avviaSessione({
       onConsumoDiServizio: async valore => onEvento({ type: 'CUSTOM', name: 'consumo-di-servizio', value: { ...valore, runId } }, { durable: true }),
       strumentiEstesi, ricercaWeb, richiediRicercaFn, onArtefatto, onAggiornaArtefatto, onDocumento, onImmagine, modelloPlanner,
       ...(typeof guardaImmagineFn === 'function' ? { onGuardaImmagine: guardaImmagineFn, vedeImmaginiFn } : {}), // owner 27/10/2026, view_image
+      ...(typeof segretiConosciutiFn === 'function' ? { segretiConosciutiFn } : {}), // blocco 6, giro 2: le chiavi per valore, foto del web
       ...(typeof apriPaginaLocaleFn === 'function' ? { apriPaginaLocaleFn, vedeImmaginiFn } : {}), // owner 27/10/2026, local_page
       ...(typeof leggiPaginaBrowserFn === 'function' ? { leggiPaginaBrowserFn } : {}), // decisione 201, browser_page
       ...(paginaBrowser !== undefined ? { paginaBrowser } : {}), // decisione 201: la nota della pagina, solo se il messaggio la porta

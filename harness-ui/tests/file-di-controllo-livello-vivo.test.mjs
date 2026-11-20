@@ -11,7 +11,7 @@
 // Real wire: registry + agent-service + kernel with a fake network, temp projects, fake Library, no keys, no network.
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtempSync, mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, existsSync, linkSync, readFileSync, writeFileSync } from 'node:fs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -259,4 +259,115 @@ test('VIVO-07 — the SAME session: a first document_create in Full access, then
     assert.equal(esiti[1]?.ok, false, `${nome}, after the lowering: ${JSON.stringify(esiti[1])?.slice(0, 200)}`);
     assert.equal(leggiFile(cartella, rel), null, `${nome}: ${rel} written after the lowering`);
   }
+});
+
+// ---- P011, 13/11/2026: four behaviours of the secrets refusal of library_export that no test of the candidate held. They were
+// written on 11/11 on the 0.1.48 branch (S-12..S-15 of `segreti-livello-vivo.test.mjs`, a file the candidate does not have) and
+// never run. Here they use this file's helpers. The code they hold: `onLibreriaEsporta` in src/agent-service.mjs (the read with
+// `leggiBytesVoceFn`, then `inAccessoPieno()` and `motivoDelSegreto({ tipo: 'scrivi', percorso: letta.nome, cartella })`), and the
+// recognizer `motivoDaChiedere` of src/path-policy.mjs. Direct calls on the door, no wire: the level is what the live reader says. ----
+const libreriaDi = (nomi) => {
+  const voci = nomi.map((nome, i) => ({ id: `voce-${i}`, nome }));
+  return {
+    elencaVociFn: async () => voci.map((v) => ({ ...v, fileType: 'document', origine: 'uploaded' })),
+    leggiBytesVoceFn: async ({ id }) => { const v = voci.find((x) => x.id === id); return v ? { bytes: Buffer.from('FROM LIBRARY'), nome: v.nome, mediaType: 'text/plain' } : null; },
+  };
+};
+async function esporta(cartella, reference, opzioni) {
+  const chiamate = [{ porta: 'esporta', argomenti: { reference } }];
+  await avviaSessione({ cartella, task: { consegna: 'prova' }, modello: 'm', chiave: 'k', onEvento: () => {}, talosLavoraFn: kernelFinto(chiamate), ...opzioni });
+  return chiamate[0].esito;
+}
+// the turn STARTED in Full access; the level of now is the one given here
+const vivo = (livello) => ({ livelloAccesso: 'accesso-pieno', permessiCorrentiFn: () => ({ livelloAccesso: livello }) });
+const rifiutato = (esito, cartella, rel) => (esito?.ok !== false ? `not refused (${JSON.stringify(esito)?.slice(0, 160)})`
+  : !RIFIUTO_SEGRETO.test(String(esito.esito)) ? `refused with other words (${String(esito.esito).slice(0, 160)})`
+    : leggiFile(cartella, rel) !== null ? `refused in words but ON DISK (${JSON.stringify(leggiFile(cartella, rel))})` : null);
+
+test('S-12 — secrets on library_export: the secrets recognizer decides, not a short list (id_rsa, .npmrc, service-account.json, .env.local, key.pem refused below Full access and copied in Full access; id_rsa.pub and .env.example copied as ordinary files)', async (t) => {
+  const nomi = ['id_rsa', '.npmrc', 'service-account.json', '.env.local', 'key.pem'];
+  const ordinari = ['id_rsa.pub', '.env.example'];
+  const libro = libreriaDi([...nomi, ...ordinari]);
+  const rossi = [];
+  for (const nome of nomi) {
+    const giu = temporanea(t, 'vivo-altri-nomi-');
+    const guasto = rifiutato(await esporta(giu, nome, { ...libro, ...vivo('scrittura-progetto') }), giu, nome);
+    if (guasto) rossi.push(`${nome} in Workspace write: ${guasto}`);
+    const su = temporanea(t, 'vivo-altri-nomi-su-');
+    const pieno = await esporta(su, nome, { ...libro, ...vivo('accesso-pieno') });
+    if (pieno?.ok !== true || leggiFile(su, nome) !== 'FROM LIBRARY') rossi.push(`${nome} in Full access: not copied (${JSON.stringify(pieno)?.slice(0, 160)})`);
+  }
+  // the reverse (decision 375, no noise): a public key and an example file are ordinary, copied in Workspace write
+  for (const nome of ordinari) {
+    const liscio = temporanea(t, 'vivo-altri-nomi-ordinari-');
+    const si = await esporta(liscio, nome, { ...libro, ...vivo('scrittura-progetto') });
+    if (si?.ok !== true || leggiFile(liscio, nome) !== 'FROM LIBRARY') rossi.push(`${nome} in Workspace write: an ordinary file not copied (${JSON.stringify(si)?.slice(0, 160)})`);
+  }
+  assert.deepEqual(rossi, []);
+});
+
+test('S-13 — secrets on library_export: the level is read at the moment of the WRITE (lowered while the Library reads the file, a secret is refused; raised while it reads, it is copied)', async (t) => {
+  const rossi = [];
+  for (const [prima, durante, copiato] of [['accesso-pieno', 'scrittura-progetto', false], ['scrittura-progetto', 'accesso-pieno', true]]) {
+    const base = libreriaDi(['.env']);
+    let livello = prima; let letture = 0;
+    const cartella = temporanea(t, 'vivo-durante-lettura-');
+    const esito = await esporta(cartella, '.env', {
+      elencaVociFn: base.elencaVociFn,
+      leggiBytesVoceFn: async (a) => { letture += 1; livello = durante; return base.leggiBytesVoceFn(a); },
+      livelloAccesso: prima, permessiCorrentiFn: () => ({ livelloAccesso: livello }),
+    });
+    const caso = `${prima} → ${durante} during the Library read`;
+    t.diagnostic(`${caso} | reads=${letture} | ok=${esito?.ok} | on disk .env = ${JSON.stringify(leggiFile(cartella, '.env'))}`);
+    if (letture !== 1) rossi.push(`${caso}: the Library was read ${letture} times`);
+    else if (copiato && (esito?.ok !== true || leggiFile(cartella, '.env') !== 'FROM LIBRARY')) rossi.push(`${caso}: not copied (${JSON.stringify(esito)?.slice(0, 160)})`);
+    else if (!copiato) { const guasto = rifiutato(esito, cartella, '.env'); if (guasto) rossi.push(`${caso}: ${guasto}`); }
+  }
+  assert.deepEqual(rossi, []);
+});
+
+test('S-14 — secrets on library_export: the destination is judged INSIDE the project (an ordinary name that is a hard link to .env is refused in words and .env is untouched; with no link the same name is copied)', async (t) => {
+  const alias = libreriaDi(['alias.txt']);
+  const legata = temporanea(t, 'vivo-collegamento-');
+  scriviFile(legata, '.env', 'K=1');
+  try { linkSync(join(legata, '.env'), join(legata, 'alias.txt')); } catch (e) { t.skip(`hard links not allowed here (${e?.code ?? e})`); return; }
+  const no = await esporta(legata, 'alias.txt', { ...alias, ...vivo('scrittura-progetto') });
+  t.diagnostic(`hard link alias.txt → .env | ok=${no?.ok} | ${String(no?.esito).slice(0, 160)}`);
+  assert.equal(no?.ok, false, JSON.stringify(no)?.slice(0, 200));
+  assert.match(String(no.esito), RIFIUTO_SEGRETO, `refused, but not as a secret: ${String(no.esito).slice(0, 200)}`);
+  assert.equal(leggiFile(legata, '.env'), 'K=1');
+  // the reverse: the same name with no link in the project is an ordinary file and is copied (no noise)
+  const libera = temporanea(t, 'vivo-collegamento-');
+  scriviFile(libera, '.env', 'K=1');
+  const si = await esporta(libera, 'alias.txt', { ...alias, ...vivo('scrittura-progetto') });
+  assert.equal(si?.ok, true, JSON.stringify(si)?.slice(0, 200));
+  assert.equal(leggiFile(libera, 'alias.txt'), 'FROM LIBRARY');
+  assert.equal(leggiFile(libera, '.env'), 'K=1');
+});
+
+test('S-15 — secrets on library_export: the name that counts is the one the Library READ returns, not the listed one, and the refusal names that file first (also when asked by Library id)', async (t) => {
+  const rinominata = (elencato, letto) => ({
+    elencaVociFn: async () => [{ id: 'voce-0', nome: elencato, fileType: 'document', origine: 'uploaded' }],
+    leggiBytesVoceFn: async () => ({ bytes: Buffer.from('FROM LIBRARY'), nome: letto, mediaType: 'text/plain' }),
+  });
+  const inizia = (esito, rel) => String(esito?.esito ?? '').startsWith(`"${rel}" may hold keys or passwords`);
+  const rossi = [];
+  // listed as notes.txt, read back as .env: refused, nothing written under either name
+  const giu = temporanea(t, 'vivo-rinominata-');
+  const no = await esporta(giu, 'notes.txt', { ...rinominata('notes.txt', '.env'), ...vivo('scrittura-progetto') });
+  const guasto = rifiutato(no, giu, '.env');
+  if (guasto) rossi.push(`listed notes.txt, read .env: ${guasto}`);
+  else if (!inizia(no, '.env')) rossi.push(`listed notes.txt, read .env: the refusal does not start with the file it read (${String(no.esito).slice(0, 160)})`);
+  if (leggiFile(giu, 'notes.txt') !== null) rossi.push('listed notes.txt, read .env: notes.txt written');
+  // the reverse: listed as .env, read back as notes.txt: an ordinary file, copied under the name it was read with
+  const su = temporanea(t, 'vivo-rinominata-');
+  const si = await esporta(su, '.env', { ...rinominata('.env', 'notes.txt'), ...vivo('scrittura-progetto') });
+  if (si?.ok !== true || leggiFile(su, 'notes.txt') !== 'FROM LIBRARY') rossi.push(`listed .env, read notes.txt: not copied (${JSON.stringify(si)?.slice(0, 160)})`);
+  // asked by Library id: the refusal starts with the file's name, not with the id
+  const perId = temporanea(t, 'vivo-rinominata-');
+  const id = await esporta(perId, 'voce-0', { ...libreriaDi(['credentials.json']), ...vivo('scrittura-progetto') });
+  const guastoId = rifiutato(id, perId, 'credentials.json');
+  if (guastoId) rossi.push(`credentials.json asked as "voce-0": ${guastoId}`);
+  else if (!inizia(id, 'credentials.json')) rossi.push(`credentials.json asked as "voce-0": the refusal does not start with the file (${String(id.esito).slice(0, 160)})`);
+  assert.deepEqual(rossi, []);
 });

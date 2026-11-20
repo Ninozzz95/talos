@@ -129,9 +129,13 @@ test('DUE-LETTURE-X — su Windows le due letture di `/x/…` contano nello stes
 });
 
 test('DUE-LETTURE-X-BASH — la stessa cosa dentro `bash -c`, col cancello intero e nei due livelli', { skip: SALTA_W }, async () => {
-  assert.equal(critiche.cancellazioneCritica(DUE_LETTURE_BASH(74), mondo('W')), null);
+  /* 0.2.4, apice ANSI (Forma 2, giudice v2304 strada a): su Windows il testo con un apostrofo si rilegge ANCHE come lo legge cmd
+     (dove `'` non è un apice), nello STESSO tetto del comando: il limite scende da 74/75 a 48/49 (misurato: 48 = 298 letture, 49 = la carta) */
+  assert.equal(critiche.cancellazioneCritica(DUE_LETTURE_BASH(48), mondo('W')), null);
+  assert.equal(letture(), 298);
   for (const livello of ['accesso-pieno', 'scrittura-progetto']) {
-    assert.deepEqual(await carteDelCancello('W', DUE_LETTURE_BASH(75), livello), ['troppo-annidato'], livello);
+    assert.deepEqual(await carteDelCancello('W', DUE_LETTURE_BASH(49), livello), ['troppo-annidato'], livello);
+    assert.deepEqual(await carteDelCancello('W', DUE_LETTURE_BASH(75), livello), ['troppo-annidato'], `${livello}: oltre il limite di prima, sempre la carta`);
   }
 });
 
@@ -147,10 +151,14 @@ test('IN-PIU-TETTO — le letture in più di `${…&}` contano nel tetto e oltre
 });
 
 test('IN-PIU-TETTO-CANCELLO — dentro `bash -c` su Windows e col cancello intero su Linux: oltre il tetto la carta, mai il silenzio', { skip: SALTA_W }, async () => {
-  assert.equal(critiche.cancellazioneCritica(`bash -c '${IN_PIU(99)}'`, mondo('W')), null, '300 letture');
-  assert.equal(critiche.cancellazioneCritica(`bash -c '${IN_PIU(100)}'`, mondo('W'))?.perche, 'troppo-annidato', '301 letture');
+  /* 0.2.4, apice ANSI (Forma 2, giudice v2304 strada a): su Windows il testo con un apostrofo si rilegge ANCHE come lo legge cmd, nello
+     STESSO tetto del comando: il limite dentro `bash -c '…'` scende da 99/100 a 73/74 (misurato: 73 = 297 letture, 74 = la carta) */
+  assert.equal(critiche.cancellazioneCritica(`bash -c '${IN_PIU(73)}'`, mondo('W')), null, '297 letture');
+  assert.equal(letture(), 297);
+  assert.equal(critiche.cancellazioneCritica(`bash -c '${IN_PIU(74)}'`, mondo('W'))?.perche, 'troppo-annidato', '301 letture');
+  assert.equal(critiche.cancellazioneCritica(`bash -c '${IN_PIU(100)}'`, mondo('W'))?.perche, 'troppo-annidato', 'oltre il limite di prima, sempre la carta');
   assert.deepEqual(await carteDelCancello('L', IN_PIU(150)), ['troppo-annidato']);
-  assert.deepEqual(await carteDelCancello('W', `bash -c '${IN_PIU(100)}'`, 'scrittura-progetto'), ['troppo-annidato']);
+  assert.deepEqual(await carteDelCancello('W', `bash -c '${IN_PIU(74)}'`, 'scrittura-progetto'), ['troppo-annidato']);
 });
 
 /* R06, R12: i giri di cmd e PowerShell (un `cd` verso un altro disco senza /d) contano nello stesso tetto e non lo tacciono. */
@@ -204,9 +212,13 @@ test('CONFINE-LAVORO-ESATTO — ogni unità conta col suo peso: lettura (2 + 1 o
     ['robocopy vuota build /MIR', 6], // 2 + 1 + 3
     ['X=$HOME; rm -rf "$X$IGNOTA"/x', 7], // 2 + 2 + 3 (0.2.3: con `"$IGNOTA"/x` da sola è la radice, e si giudica)
   ];
+  /* 0.2.4, apice ANSI (Forma 2, giudice v2304 strada a): su Windows `bash -c 'rm -rf dist/'` si rilegge ANCHE come lo legge cmd (dove
+     `'` non è un apice), nello STESSO tetto del comando: 21 + 6 = 27, misurato. Le 6 unità sono due letture in più: il testo letto come
+     cmd (lettura 2 + 1 comando) e il corpo di `bash -c` come lo vede cmd, `'rm` (lettura 2 + 1 comando); L A M restano 21 */
+  const suWindows = { [`bash -c 'rm -rf dist/'`]: 27 };
   for (const s of tuttiISistemi) for (const [comando, unita] of casi) {
     critiche.__perLeProve.letturaNuova(comando, mondo(s));
-    assert.equal(lavoro(), unita, `${s}: ${comando.slice(0, 50)}`);
+    assert.equal(lavoro(), s === 'W' ? suWindows[comando] ?? unita : unita, `${s}: ${comando.slice(0, 50)}`);
   }
   for (const s of ['L', 'A', 'M']) {
     critiche.__perLeProve.letturaNuova('(cd a && npm i); rm -rf dist', mondo(s));

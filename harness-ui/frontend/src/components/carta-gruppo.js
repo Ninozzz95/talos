@@ -44,8 +44,12 @@ export function gruppoDellaCarta(azione) {
   const chiamate = g.chiamate
     .filter((c) => c && typeof c === 'object' && typeof c.toolCallId === 'string' && c.toolCallId !== '')
     .map((c) => ({ toolCallId: c.toolCallId, argomenti: c.argomenti && typeof c.argomenti === 'object' && !Array.isArray(c.argomenti) ? c.argomenti : {} }));
-  if (chiamate.length < 2 || chiamate.length !== g.totale) return null;
-  return { totale: g.totale, chiamate };
+  /* 0.2.4 blocco 1, voce 7: il nucleo manda al più 20 chiamate (`TETTO_CHIAMATE_DEL_GRUPPO`) e dice quante altre copre (`nonMostrate`):
+     quelle elencate più le altre devono fare il totale, mai meno (una carta che copre chiamate non dette non è una carta di gruppo) */
+  const nonMostrate = g.nonMostrate === undefined ? 0 : g.nonMostrate;
+  if (!Number.isInteger(nonMostrate) || nonMostrate < 0) return null;
+  if (chiamate.length < 2 || chiamate.length + nonMostrate !== g.totale) return null;
+  return { totale: g.totale, chiamate, ...(nonMostrate > 0 ? { nonMostrate } : {}) };
 }
 
 /** The words of a group card: the count in the head, the two answers, the note under them. */
@@ -106,14 +110,24 @@ export function bloccoDelGruppo(doc, gruppo, { visibili = CHIAMATE_VISIBILI } = 
     tutto.type = 'button';
     tutto.className = 'talos-button talos-button--ghost talos-button--sm talos-approval__mostra-tutto';
     tutto.setAttribute('aria-expanded', 'false');
-    tutto.textContent = t('chat.approval.group.showAll', { count: gruppo.totale });
+    const elencate = gruppo.chiamate.length; // with calls left out, «Show all» opens the ones listed, and the line below says the rest
+    tutto.textContent = t('chat.approval.group.showAll', { count: elencate });
     tutto.addEventListener('click', () => {
       const apri = tutto.getAttribute('aria-expanded') !== 'true';
       for (const v of nascoste) v.hidden = !apri;
       tutto.setAttribute('aria-expanded', apri ? 'true' : 'false');
-      tutto.textContent = apri ? t('chat.approval.group.showLess') : t('chat.approval.group.showAll', { count: gruppo.totale });
+      tutto.textContent = apri ? t('chat.approval.group.showLess') : t('chat.approval.group.showAll', { count: elencate });
     });
     blocco.append(tutto);
+  }
+  /* 0.2.4 block 1, item 7: the calls the kernel did not list are said, with the answer that covers them (never approved unseen in silence) */
+  const altre = Number.isInteger(gruppo.nonMostrate) && gruppo.nonMostrate > 0 ? gruppo.nonMostrate : 0;
+  if (altre > 0) {
+    const resto = doc.createElement('p');
+    resto.className = 'talos-muted talos-approval__chiamate-in-piu';
+    resto.dataset.chiamateNonMostrate = String(altre);
+    resto.textContent = tn('chat.approval.group.moreCallsOne', 'chat.approval.group.moreCallsMany', altre, { count: altre });
+    blocco.append(resto);
   }
   return blocco;
 }

@@ -14,7 +14,8 @@ import { chiamaConRitenta, consumaFlussoSSE } from '../src/kernel/talosHarness.m
 
 const ATTESI = {
   'zai-anthropic': { nome: 'Z.AI (porta Anthropic)', base: 'https://api.z.ai/api/anthropic/v1', env: 'ZAI_ANTHROPIC_API_KEY', modello: 'glm-5.3-flash', auth: 'authorization' },
-  'minimax-anthropic': { nome: 'MiniMax (porta Anthropic)', base: 'https://api.minimax.io/anthropic/v1', env: 'MINIMAX_API_KEY', modello: 'MiniMax-M2.5', auth: 'x-api-key' },
+  /* S6 della 0.2.4 (18/11/2026): MiniMax-M2.5 «deprecated» su models.dev, la riserva con gli attrezzi è M3.1 Flash */
+  'minimax-anthropic': { nome: 'MiniMax (porta Anthropic)', base: 'https://api.minimax.io/anthropic/v1', env: 'MINIMAX_API_KEY', modello: 'MiniMax-M3.1-Flash', auth: 'x-api-key' },
 };
 const messaggi = [{ role: 'system', content: 'Aiuta la persona.' }, { role: 'user', content: 'Dimmi pronto.' }];
 const attrezzi = [{ type: 'function', function: { name: 'leggi', description: 'Legge una nota', parameters: { type: 'object', properties: { percorso: { type: 'string' } }, required: ['percorso'] } } }];
@@ -52,12 +53,13 @@ test('PJ-01 — record distinti, sorgenti e SDK comuni; Z.AI OpenAI resta invari
     assert.equal(r.etichetta, a.nome); assert.equal(r.baseUrl, a.base);
     assert.equal(r.wire, 'anthropic-messages'); assert.ok(ID_NATIVI_SDK.includes(p));
     assert.deepEqual(r.auth.nomeVariabile, [a.env]);
-    assert.ok(r.modelliDiRiserva.every(m => m.toolCalling && m.data === '2026-09-12' && m.fonte.startsWith('https://')));
+    /* S6 della 0.2.4 (18/11/2026): M3.1 Flash è entrato quel giorno, con la sua data */
+    assert.ok(r.modelliDiRiserva.every(m => m.toolCalling && m.data === (m.id === 'MiniMax-M3.1-Flash' ? '2026-11-18' : '2026-09-12') && m.fonte.startsWith('https://')));
     assert.equal(validaFallbackProviders([{ provider: p, model: a.modello }], { usaAttrezzi: true }).length, 1);
   }
   assert.equal(REGISTRO_FORNITORI.zai.wire, 'openai-chat');
   assert.equal(REGISTRO_FORNITORI.zai.baseUrl, 'https://api.z.ai/api/paas/v4');
-  assert.equal(REGISTRO_FORNITORI['minimax-anthropic'].modelloAusiliario, 'MiniMax-M2.5');
+  assert.equal(REGISTRO_FORNITORI['minimax-anthropic'].modelloAusiliario, 'MiniMax-M3.1-Flash');
 });
 
 test('PJ-02 — entrambi i record attraversano router e SDK con propria base, chiave e modello', async t => {
@@ -244,7 +246,8 @@ test('PJ-13 — opzioni terze esplicite: i livelli documentati passano, il resto
   assert.equal(b.richieste.at(-1).body.thinking.type, 'adaptive');
   for (const [p, body] of [
     ['zai-anthropic', { reasoning_effort: 'medium' }], ['zai-anthropic', { reasoning_effort: 'minimal' }],
-    ['minimax-anthropic', { reasoning_effort: 'high' }], ['minimax-anthropic', { stop: ['ALT'] }], ['minimax-anthropic', { reasoning: { enabled: false } }],
+    /* S6 della 0.2.4: la riserva di serie è diventata M3.1 Flash (che ha i livelli, PJ-19); il modello senza livelli si dice per nome */
+    ['minimax-anthropic', { model: 'MiniMax-M2.5', reasoning_effort: 'high' }], ['minimax-anthropic', { model: 'MiniMax-M2.5', stop: ['ALT'] }], ['minimax-anthropic', { model: 'MiniMax-M2.5', reasoning: { enabled: false } }],
   ]) {
     const prima = b.richieste.length;
     await assert.rejects(() => b.invia(p, body), { code: 'PROVIDER_REASONING_UNSUPPORTED' });
@@ -322,7 +325,7 @@ test('PJ-16 — fallback nel kernel nei due versi OpenAI e Anthropic, storia str
     json(res, risposta(r.body.model));
   });
   const storia = [...messaggi, { role: 'assistant', content: null, tool_calls: [{ id: 'tool_pj', type: 'function', function: { name: 'leggi', arguments: '{"percorso":"nota.txt"}' } }] }, { role: 'tool', tool_call_id: 'tool_pj', content: 'Nota già letta.' }, { role: 'user', content: 'contnua su https://esempio.test/nota' }];
-  for (const [origine, riserva, model] of [['openrouter', 'minimax-anthropic', 'MiniMax-M2.5'], ['minimax-anthropic', 'openrouter', 'openai/gpt-5-nano']]) {
+  for (const [origine, riserva, model] of [['openrouter', 'minimax-anthropic', 'MiniMax-M3.1-Flash'], ['minimax-anthropic', 'openrouter', 'openai/gpt-6-luna']]) { // 19/11/2026: luna al posto di nano nelle riserve di OpenRouter
     guasto = origine; b.store.setKey('minimax-anthropic', 'finta-minimax-anthropic'); b.store.setKey('openrouter', 'finta-openrouter');
     const eventi = [];
     const f = creaFetchMultiProvider(b.rete, { providerStore: b.store, dipendenze: dipendenze(b.store), fallbackProviders: [{ provider: riserva, model }], onCambioFornitore: e => eventi.push(e), onConsumoFornitore: () => {} });

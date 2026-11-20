@@ -235,6 +235,10 @@ export function createModelsDevCatalog({
       verificatoAlle: new Date(copia.verificatoAlle).toISOString(), etaCacheMs: eta(clock().getTime(), copia.acquisitoAlle),
       daCache, fallbackRete, avvisi: structuredClone([...avvisi.values()]) };
     if (!Object.hasOwn(copia.dati, modelsDevId)) return { ...indisponibile, ...metadati };
+    /* ⛔ S6 della 0.2.4, giro 2 (revisore 18/11/2026): NESSUN filtro su `status: "deprecated"` di models.dev. models.dev lo mette anche
+       su modelli che il fornitore serve ancora (claude-sonnet-4-5-20250929: «still functional», ritiro 30/11/2026); toglierli qui faceva
+       sparire il modello scelto, l'avviso «tolto» bloccava Nuova sessione e la finestra scendeva da 200000 a 128000. Un ritirato si
+       nasconderà solo con la data di spegnimento del FORNITORE (in lista). */
     const modelli = Object.values(copia.dati[modelsDevId].models)
       .map(m => normalizza(m, record, metadati))
       .sort((a, b) => a.nome.localeCompare(b.nome, 'it') || a.id.localeCompare(b.id));

@@ -43,7 +43,9 @@ export async function eseguiProgramma({ source, args, workflowDataRoot, workflow
     try { await journal.record(key, { value, costUsd, runId }); } catch (error) {
       counts.recordFailures += 1;
       const code = typeof error?.code === 'string' ? error.code : 'WORKFLOW_REPLAY_RECORD_FAILED';
-      if (extraDiagnostics.length < 100) extraDiagnostics.push({ code, key, message: String(error?.message ?? error), safeMessage: safeDiagnosticMessage(code) });
+      // 0.2.4 block 4, item 3: a refusal the journal already diagnosed for this key (same code) is counted, not written twice.
+      const told = journal.diagnostics.some((d) => d.code === code && d.key === key);
+      if (!told && extraDiagnostics.length < 100) extraDiagnostics.push({ code, key, message: String(error?.message ?? error), safeMessage: safeDiagnosticMessage(code) });
     }
     return { value, costUsd };
   };
@@ -77,5 +79,5 @@ export async function eseguiProgramma({ source, args, workflowDataRoot, workflow
   };
 
   const outcome = await eseguiNelRecinto({ source, args, agent, spend, caps, signal, onEvent });
-  return { ...outcome, usage: { ...outcome.usage, journal: { ...counts } }, diagnostics: [...journal.diagnostics, ...extraDiagnostics] };
+  return { ...outcome, usage: { ...outcome.usage, journal: { ...counts, repaired: journal.valuesRepaired } }, diagnostics: [...journal.diagnostics, ...extraDiagnostics] };
 }

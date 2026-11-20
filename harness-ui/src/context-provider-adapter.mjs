@@ -342,7 +342,7 @@ export async function buildPreparedProviderRequest({ messages: storia, tools = [
   try {
     await nativeProviderResponse({
       provider: model.provider, model: model.model, apiKey: 'context-local-serialization-only',
-      body: { messages: prepared.messages, tools: clone(tools), ...clone(requestOptions), stream: false }, signal,
+      body: { messages: prepared.messages, tools: clone(tools), ...clone(requestOptions), stream: false }, signal, soloCompilazione: true, // S5: il conteggio resta il corpo dell'SDK
       fetchFn: async (_url, init) => {
         signal?.throwIfAborted();
         const headers = new Headers(init.headers);

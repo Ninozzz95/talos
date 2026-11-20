@@ -214,7 +214,87 @@ function responseMessage(response, provider, model, finishReason, nomiVeri = new
   };
 }
 
-export async function nativeProviderResponse({ provider, model, apiKey, baseURL, body, fetchFn = fetch, signal }) {
+/*
+ * S5 della 0.2.4 (18/11/2026), strada A: «store=false» a Gemini. Google, changelog del 26/10/2026 (aistudio.google.com/docs/changelog,
+ *   riletto il 18/11/2026): «New projects using the Generate Content API (`generateContent`, `streamGenerateContent`, and
+ *   `batchGenerateContent`) on the paid tier now store requests by default (`store=true`) … To opt out, set `store=false` on individual
+ *   requests»; riferimento GenerateContentRequest (ai.google.dev/api): «`store` (boolean) Optional. Configures the logging behavior for a
+ *   given request. If set, it takes precedence over the project-level logging config.» Il campo sta in CIMA al corpo (lo mette lì l'SDK
+ *   ufficiale `@google/genai` 2.31.0, `dist/node/index.mjs:4964-4966`, e solo sulla Gemini API: su Vertex lo rifiuta, `:10846`).
+ *   `@ai-sdk/google` (4.0.64 nel lock, e ancora 4.0.122 del 17/11) costruisce il corpo campo per campo e `store` non c'è
+ *   (`dist/index.js` di 4.0.111:1867-1895): si aggiunge qui, come OpenAI riceve `store: false` (sotto, `providerOptions`; Codex
+ *   `codex-rs/core/src/client.rs:1163`). Solo `:generateContent`/`:streamGenerateContent` di generativelanguage.googleapis.com con corpo
+ *   JSON-oggetto senza `store`; tutto il resto (conteggio dei token, cache, file, intestazioni, chiave) passa intatto. Il cancello
+ *   «la libreria lo manda da sé» in `tests/gemini-store-falso-024-s5.test.mjs` dice quando togliere questo involucro.
+ */
+const HOST_GEMINI = 'generativelanguage.googleapis.com';
+export function fetchGeminiSenzaConservazione(fetchFn, { avvisa = (m) => console.warn(m) } = {}) {
+  return async function fetchGemini(input, init) {
+    let url = null;
+    try { url = typeof input === 'string' || input instanceof URL ? new URL(String(input)) : null; } catch { url = null; }
+    const generazione = url?.protocol === 'https:' && url.hostname === HOST_GEMINI && /:(?:generateContent|streamGenerateContent)$/u.test(url.pathname);
+    if (!generazione || typeof init?.body !== 'string') return fetchFn(input, init);
+    let corpo;
+    try { corpo = JSON.parse(init.body); } catch {
+      avvisa('[talos] Gemini: request body is not readable JSON; sent unchanged, without store=false.');
+      return fetchFn(input, init);
+    }
+    if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || Object.hasOwn(corpo, 'store')) return fetchFn(input, init);
+    // Byte per byte il corpo dell'SDK, con `store` in coda: niente si riordina né si riscrive.
+    const testo = init.body.trimEnd();
+    const nuovo = Object.keys(corpo).length ? `${testo.slice(0, -1)},"store":false}` : '{"store":false}';
+    const risposta = await fetchFn(input, { ...init, body: nuovo });
+    /* Paracadute (giudice v2181): se Google rifiuta PROPRIO il campo, una sola ripetizione col corpo originale e un avviso. Si decide
+       sullo stato HTTP, prima di ogni pezzo (anche in streaming un 400 arriva prima del flusso); il corpo si legge da un clone, così chi
+       chiama ritrova la risposta intatta. Ogni altro errore (altro 400, 401, 403, 404, 429, 5xx, rete, annullamento) passa com'era.
+       ⛔ Niente memoria fra richieste: ogni richiesta riprova col campo. Un rifiuto di un modello (o di un momento) non deve spegnere
+       la protezione per gli altri modelli né per le richieste dopo. */
+    if (risposta?.status !== 400) return risposta;
+    let errore = '';
+    try { errore = await risposta.clone().text(); } catch { return risposta; }
+    if (!googleRifiutaStore(errore)) return risposta;
+    avvisa(AVVISO_STORE_RIFIUTATO);
+    return fetchFn(input, init); // stesso init: corpo originale e stesso signal di annullamento
+  };
+}
+/* Giro 2 (revisore 024-S5, R1): sulla chat il fetch qui sotto è la `rete` del multi-fornitore (`runtime-owner-adapter.mjs`), che SOSTITUISCE
+   il corpo di ogni rifiuto col messaggio pubblico: lì il paracadute qui sopra non vede mai il campo. Il rifiuto si riconosce allora dentro
+   `rete`, dove il corpo vero c'è ancora, con queste stesse due funzioni. Qui resta per le strade col fetch nudo; due ripetizioni per la
+   stessa richiesta non possono esserci (dopo la ripetizione di `rete` quassù arriva solo il messaggio pubblico, che non nomina il campo). */
+export const AVVISO_STORE_RIFIUTATO = '[talos] Gemini: Google rejected the store field; this request was sent again without it.';
+/** Il corpo come l'SDK l'aveva scritto, senza lo `store: false` in CIMA messo dall'involucro; null se non c'è. */
+export function corpoSenzaStore(testo) {
+  if (typeof testo !== 'string') return null;
+  let corpo;
+  try { corpo = JSON.parse(testo); } catch { return null; }
+  if (!corpo || typeof corpo !== 'object' || Array.isArray(corpo) || corpo.store !== false) return null;
+  const t = testo.trimEnd();
+  if (t === '{"store":false}') return '{}';
+  if (t.endsWith(',"store":false}')) return `${t.slice(0, -',"store":false}'.length)}}`;
+  const { store: _tolto, ...resto } = corpo;
+  return JSON.stringify(resto);
+}
+
+/* La forma di Google per un campo sconosciuto (errore JSON→protobuf del front-end delle API Google): `error.message` «Invalid JSON payload
+   received. Unknown name "store": Cannot find field.» e, in `details`, un `google.rpc.BadRequest` con `fieldViolations` (descrizione uguale,
+   a volte `field`). Hermes la cita per lo stesso fornitore («Unknown name 'thinking_config': Cannot find field», `agent/transports/
+   chat_completions.py:179-180`) e ripete una volta senza il campo (`agent/auxiliary_client.py:3409-3412`). Confronto STRETTO (giro 2, G1
+   del revisore): tutta la frase, dall'inizio alla fine, per il campo IN CIMA al corpo («Unknown name "store": Cannot find field.»), o
+   `field === 'store'`. Non scatta su un campo annidato («Unknown name "store" at 'generation_config'», `field` «generation_config.store»)
+   né sul testo della persona rimandato dentro un altro errore («Invalid value at 'contents[0]…' … "Unknown name \"store\""»). */
+const SCONOSCIUTO_STORE = /^(?:Invalid JSON payload received\. )?Unknown name (?:"store"|'store'): Cannot find field\.?$/u;
+export function googleRifiutaStore(testo) {
+  if (typeof testo !== 'string' || !testo) return false;
+  let dati = null;
+  try { dati = JSON.parse(testo); } catch { return SCONOSCIUTO_STORE.test(testo.trim()); }
+  const errore = dati?.error ?? (Array.isArray(dati) ? dati[0]?.error : null);
+  if (!errore || typeof errore !== 'object') return false;
+  if (typeof errore.message === 'string' && SCONOSCIUTO_STORE.test(errore.message.trim())) return true;
+  const violazioni = (Array.isArray(errore.details) ? errore.details : []).flatMap((d) => (Array.isArray(d?.fieldViolations) ? d.fieldViolations : []));
+  return violazioni.some((v) => v?.field === 'store' || (typeof v?.description === 'string' && SCONOSCIUTO_STORE.test(v.description.trim())));
+}
+
+export async function nativeProviderResponse({ provider, model, apiKey, baseURL, body, fetchFn = fetch, signal, soloCompilazione = false }) {
   signal?.throwIfAborted();
   /* ⛔ 12/09 — P-A: la mappa resta (un pacchetto npm non si deriva da un dato), ma il registro
      dichiara CHI passa di qui: se le due divergono, si ferma subito invece di costruire un client
@@ -230,7 +310,9 @@ export async function nativeProviderResponse({ provider, model, apiKey, baseURL,
     throw Object.assign(new Error(`The key for ${record.etichetta} is missing.`), { code: 'PROVIDER_KEY_MISSING' });
   }
   const credenziale = wireAnthropic && record.auth.tipo === 'bearer' ? { authToken: apiKey } : { apiKey };
-  const client = factory({ ...credenziale, ...(wireAnthropic ? { baseURL: baseURL || record.baseUrl } : baseURL ? { baseURL } : {}), fetch: fetchFn });
+  /* S5: solo la Gemini nativa; la compilazione locale (conteggio dei token, `context-provider-adapter.mjs`) resta il corpo dell'SDK. */
+  const fetchDelFilo = factory === createGoogleGenerativeAI && !soloCompilazione ? fetchGeminiSenzaConservazione(fetchFn) : fetchFn;
+  const client = factory({ ...credenziale, ...(wireAnthropic ? { baseURL: baseURL || record.baseUrl } : baseURL ? { baseURL } : {}), fetch: fetchDelFilo });
   // P-J — FINE scelta del trasporto.
   const languageModel = wireResponses ? client.responses(model) : client.chat(model);
   /* ⛔ R-01 (12/10/2026, S1): sul filo Responses un attrezzo senza `strict` viene NORMALIZZATO in strict, dove ogni campo è

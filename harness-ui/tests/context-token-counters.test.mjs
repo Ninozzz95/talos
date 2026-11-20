@@ -42,6 +42,8 @@ for (const provider of ['openai', 'anthropic', 'gemini']) test(`CTX-WIRE-${provi
   let generation; let counting;
   const stop = new Error('capture-only');
   await assert.rejects(nativeProviderResponse({ provider, model: models[provider], apiKey: 'fixture-key', body: { messages, tools, stream: false }, fetchFn: async (_url, init) => { generation = JSON.parse(init.body); throw stop; } }));
+  // 0.2.4 S5: the Gemini generation carries the logging flag `store: false`; it is not counted content, and countTokens stays the SDK body.
+  if (provider === 'gemini') { assert.equal(generation.store, false); delete generation.store; }
   const counter = createContextTokenCounter({ resolveProfile: async () => ({ apiKey: 'injected-key' }), fetchFn: async (url, init) => { counting = { url: String(url), body: JSON.parse(init.body), headers: new Headers(init.headers) }; return Response.json(provider === 'gemini' ? { totalTokens: 731 } : { input_tokens: 731 }); } });
   const measurement = await counter.countPreparedContext({ messages, tools, model: model(provider) });
   const fields = provider === 'openai' ? ['model', 'input', 'instructions', 'tools', 'tool_choice', 'text', 'reasoning', 'parallel_tool_calls'] : ['model', 'messages', 'system', 'tools', 'tool_choice', 'thinking', 'output_config'];
@@ -98,6 +100,7 @@ for (const provider of ['openai', 'anthropic', 'gemini']) test(`CTX-WIRE-OPTIONS
   const requestOptions = { reasoning_effort: 'low', max_completion_tokens: 512, tool_choice: 'auto', top_p: 0.9 };
   let outbound;
   await assert.rejects(nativeProviderResponse({ provider, model: models[provider], apiKey: 'fixture-only', body: { messages, tools, ...requestOptions, stream: false }, fetchFn: async (_url, init) => { outbound = JSON.parse(init.body); throw new Error('local capture'); } }));
+  if (provider === 'gemini') { assert.equal(outbound.store, false); delete outbound.store; } // 0.2.4 S5: logging flag only, never in the compiled count body
   const compiled = await buildPreparedProviderRequest({ messages, tools, model: model(provider), requestOptions });
   assert.deepEqual(compiled.body, outbound);
   assert.deepEqual(Object.keys(compiled.headers).filter(name => !['anthropic-version', 'anthropic-beta'].includes(name)), []);

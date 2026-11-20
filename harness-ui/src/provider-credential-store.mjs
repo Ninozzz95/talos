@@ -847,5 +847,9 @@ export function createProviderCredentialStore({ env = process.env, keyring = nul
   }
 
   return Object.freeze({ getKey, getKeySync: getKey, hasKey, setKey, clearKey, loadFromKeyring, getRuntime, indirizzoRilevato, impostaIndirizzoRilevato, setRuntime, impostaEsclusi, impostaDiSerie, impostaEsclusioni, resetEndpoint, listPublic,
-    aggiungiChiave, rimuoviChiave, elencaPool, scegliChiave, mettiInPanchina, esportaPool, tracciaInCustodia });
+    aggiungiChiave, rimuoviChiave, elencaPool, scegliChiave, mettiInPanchina, esportaPool, tracciaInCustodia,
+    /* 0.2.4, blocco 6, giro 2 (giudice v2220, forma B): i valori delle chiavi salvate, dalla MEMORIA del deposito (caricata una volta dal
+       portachiavi), per chi deve riconoscere una chiave vera della persona per valore (le foto del web, `segretiConosciutiFn` del nucleo).
+       Nessuna lettura del portachiavi qui; chi la riceve non la stampa, non la salva, dice solo sì o no. */
+    segretiInMemoria: () => segretiRuntime() });
 }

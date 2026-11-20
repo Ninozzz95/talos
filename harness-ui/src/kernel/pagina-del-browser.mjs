@@ -94,15 +94,27 @@ export function titoloPulito(titolo, url = null) {
     return taglia(t, TETTO_TITOLO)
 }
 
+/** Al posto dell'indirizzo e del titolo che contengono una chiave della persona (0.2.4, chiavi in ricerca e Chrome). */
+export const INDIRIZZO_CON_UNA_CHIAVE = '(address hidden: it contains one of your keys)'
+export const TITOLO_CON_UNA_CHIAVE = '(title hidden: it contains one of your keys)'
+
 /**
  * La pagina riportata dal compositore, pulita; `null` se non c'è o non è http(s).
- * @param {{ url?: string, titolo?: string|null } | null | undefined} pagina
+ * 0.2.4: il nucleo segna (`paginaPerLaNota`) l'indirizzo o il titolo che contengono il VALORE di una chiave della persona
+ * (`chiaveNellIndirizzo`, `chiaveNelTitolo`): restano nascosti. Senza titolo il ripiego sarebbe il nome del sito, preso dallo stesso
+ * indirizzo: con l'indirizzo nascosto, nascosto anche lui. Senza i segni la nota è byte per byte quella di prima.
+ * @param {{ url?: string, titolo?: string|null, chiaveNellIndirizzo?: boolean, chiaveNelTitolo?: boolean } | null | undefined} pagina
  */
 export function paginaPulita(pagina) {
     if (!pagina || typeof pagina !== 'object') return null
     const indirizzo = indirizzoPulito(pagina.url)
     if (!indirizzo) return null
-    return { indirizzo, titolo: titoloPulito(pagina.titolo, pagina.url) }
+    const nascondiIndirizzo = pagina.chiaveNellIndirizzo === true
+    const titolo = titoloPulito(pagina.titolo, nascondiIndirizzo ? null : pagina.url)
+    return {
+        indirizzo: nascondiIndirizzo ? INDIRIZZO_CON_UNA_CHIAVE : indirizzo,
+        titolo: pagina.chiaveNelTitolo === true || (nascondiIndirizzo && titolo === '') ? TITOLO_CON_UNA_CHIAVE : titolo,
+    }
 }
 
 /** Il testo della nota per una pagina (o la forma «chiusa» per `null`). */

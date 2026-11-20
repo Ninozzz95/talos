@@ -60,60 +60,13 @@ function controllaManifesto(testo, { versione, nome, sha512, byte }) {
   return m;
 }
 
-export async function preparaRelease({ versione, tag, repository, distDir, smoke, changelogPath, chiavePrivata, chiavePubblicaApp }) {
+/*
+ * Il corpo della release del PC, così com'è: lo scrive `preparaRelease` e lo misura il cancello sulla lunghezza delle note
+ * (`scripts/cancello/lunghezza-note.mjs`), che gira PRIMA dell'etichetta. Un testo solo, due lettori.
+ */
+export function noteDellaRelease({ versione, tag, repository, cambiamenti, somme }) {
   const nomi = nomiArtefatti(versione);
-  if (tag !== `desktop-v${versione}`) throw Error('Il tag deve corrispondere alla versione del package desktop.');
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw Error('Repository GitHub non valido.');
-  if (smoke?.completato !== true) throw Error('Smoke installato non riuscito: pubblicazione vietata.');
-  if (!changelogPath) throw Error('Serve il percorso del CHANGELOG: una release che non dice cosa è cambiato non si pubblica.');
-  const cambiamenti = sezioneDelChangelog(await readFile(changelogPath, 'utf8'), tag);
-  if (!cambiamenti) throw Error(`Il CHANGELOG non ha una sezione "## ${tag}": scrivila prima di taggare — cosa è nuovo, cosa è stato corretto.`);
-  /*
-   * ⛔ 01/10/2026 — la 0.1.19 è uscita con «This release candidate addresses…» nelle note. Un tag `desktop-vX.Y.Z` senza
-   *   suffisso è una release FINALE (SemVer 2.0.0 §9: una pre-release si scrive col trattino, `1.0.0-rc.1`): le sue note non si
-   *   presentano come candidata. Le note già pubblicate non si riscrivono; la prossima non ci ricade.
-   */
-  if (/\brelease[\s-]+candidates?\b/iu.test(cambiamenti)) {
-    throw Error(`La sezione "## ${tag}" del CHANGELOG si presenta come «release candidate»: un tag finale non è una candidata. Correggi la sezione prima di taggare.`);
-  }
-  if (!chiavePrivata) throw Error('Manca la chiave che firma gli aggiornamenti (segreto TALOS_UPDATE_SIGN_KEY): senza, le app installate rifiuterebbero l’aggiornamento.');
-  if (!chiavePubblicaApp) throw Error('Manca la chiave pubblica che l’app porta con sé (assets/aggiornamenti-pubblica.pem).');
-  let gemelle = false;
-  try { gemelle = chiavePubblicaDa(chiavePrivata).trim() === createPublicKey(chiavePubblicaApp).export({ type: 'spki', format: 'pem' }).toString().trim(); }
-  catch (errore) { throw Error(`Chiavi degli aggiornamenti illeggibili: ${errore.message}`); }
-  if (!gemelle) throw Error('La chiave del segreto TALOS_UPDATE_SIGN_KEY non è la gemella di assets/aggiornamenti-pubblica.pem: le app installate rifiuterebbero l’aggiornamento.');
-  const artefatti = [];
-  for (const nome of [nomi.exe, nomi.zip]) {
-    const path = resolve(distDir, nome);
-    const info = await stat(path);
-    if (!info.isFile() || info.size === 0) throw Error(`Artefatto vuoto o non regolare: ${nome}`);
-    const hash = createHash('sha256');
-    for await (const dati of createReadStream(path)) hash.update(dati);
-    artefatti.push({ nome, path, bytes: info.size, sha256: hash.digest('hex') });
-  }
-  if (artefatti[0].sha256 !== smoke.installerSha256) throw Error('Lo SHA256 dell’installer differisce da quello provato nello smoke.');
-  const installer = await readFile(artefatti[0].path);
-  const testoManifesto = await readFile(join(distDir, nomi.manifesto));
-  controllaManifesto(testoManifesto.toString('utf8'), { versione, nome: nomi.exe, sha512: sha512Base64(installer), byte: installer.length });
-  const firma = firmaManifesto(testoManifesto, chiavePrivata);
-  if (!verificaFirmaManifesto(testoManifesto, firma, chiavePubblicaApp)) throw Error('La firma appena fatta non si verifica con la chiave dell’app.');
-  await writeFile(join(distDir, nomi.firma), `${firma}\n`, 'utf8');
-  /* La mappa dei blocchi (owner 11/10/2026, scarico a blocchi): l'aggiornatore la cerca accanto all'installer, in QUESTA release
-     e in quella installata. Se manca, o e' vuota, la release non esce: tutti scaricherebbero l'installer intero, in silenzio. */
-  for (const nome of [nomi.manifesto, nomi.firma, nomi.mappa]) {
-    const dati = await readFile(join(distDir, nome));
-    if (dati.length === 0) throw Error(`Artefatto vuoto: ${nome}`);
-    artefatti.push({ nome, path: resolve(distDir, nome), bytes: dati.length, sha256: createHash('sha256').update(dati).digest('hex') });
-  }
-  const somme = artefatti.map(a => `${a.sha256}  ${a.nome}\n`).join('');
-  /*
-   * ⛔ IN INGLESE, e non è una preferenza: è la stessa trappola che il mobile ha già pagato. La sua
-   * v0.1.0 uscì in italiano, fu corretta A MANO, e la SORGENTE rimase italiana — quindi la release
-   * dopo sarebbe tornata italiana da sola (vedi il commento in `.github/workflows/release.yml`).
-   * Correggere il sintomo e lasciare la causa è come non aver corretto niente. Qui la sorgente è
-   * inglese: tutto ciò che si pubblica lo è.
-   */
-  const note = `# TALOS Desktop ${versione}
+  return `# TALOS Desktop ${versione}
 
 Windows 10 1809 or later, x64, or Windows 11 x64. Node does not need to be installed.
 Build and smoke test run on a Windows Server 2025 runner; the minimum Windows 10 compatibility still needs a test on that system.
@@ -175,6 +128,62 @@ gh attestation verify .\\${nomi.zip} --repo ${repository}
 The provenance ties the artifacts to the workflow and to the commit of tag ${tag}.
 The desktop job runs the gates before packaging, then verifies silent install, start of the installed EXE, health with cookie, reload, close and uninstall with no processes left behind.
 `;
+}
+
+export async function preparaRelease({ versione, tag, repository, distDir, smoke, changelogPath, chiavePrivata, chiavePubblicaApp }) {
+  const nomi = nomiArtefatti(versione);
+  if (tag !== `desktop-v${versione}`) throw Error('Il tag deve corrispondere alla versione del package desktop.');
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) throw Error('Repository GitHub non valido.');
+  if (smoke?.completato !== true) throw Error('Smoke installato non riuscito: pubblicazione vietata.');
+  if (!changelogPath) throw Error('Serve il percorso del CHANGELOG: una release che non dice cosa è cambiato non si pubblica.');
+  const cambiamenti = sezioneDelChangelog(await readFile(changelogPath, 'utf8'), tag);
+  if (!cambiamenti) throw Error(`Il CHANGELOG non ha una sezione "## ${tag}": scrivila prima di taggare — cosa è nuovo, cosa è stato corretto.`);
+  /*
+   * ⛔ 01/10/2026 — la 0.1.19 è uscita con «This release candidate addresses…» nelle note. Un tag `desktop-vX.Y.Z` senza
+   *   suffisso è una release FINALE (SemVer 2.0.0 §9: una pre-release si scrive col trattino, `1.0.0-rc.1`): le sue note non si
+   *   presentano come candidata. Le note già pubblicate non si riscrivono; la prossima non ci ricade.
+   */
+  if (/\brelease[\s-]+candidates?\b/iu.test(cambiamenti)) {
+    throw Error(`La sezione "## ${tag}" del CHANGELOG si presenta come «release candidate»: un tag finale non è una candidata. Correggi la sezione prima di taggare.`);
+  }
+  if (!chiavePrivata) throw Error('Manca la chiave che firma gli aggiornamenti (segreto TALOS_UPDATE_SIGN_KEY): senza, le app installate rifiuterebbero l’aggiornamento.');
+  if (!chiavePubblicaApp) throw Error('Manca la chiave pubblica che l’app porta con sé (assets/aggiornamenti-pubblica.pem).');
+  let gemelle = false;
+  try { gemelle = chiavePubblicaDa(chiavePrivata).trim() === createPublicKey(chiavePubblicaApp).export({ type: 'spki', format: 'pem' }).toString().trim(); }
+  catch (errore) { throw Error(`Chiavi degli aggiornamenti illeggibili: ${errore.message}`); }
+  if (!gemelle) throw Error('La chiave del segreto TALOS_UPDATE_SIGN_KEY non è la gemella di assets/aggiornamenti-pubblica.pem: le app installate rifiuterebbero l’aggiornamento.');
+  const artefatti = [];
+  for (const nome of [nomi.exe, nomi.zip]) {
+    const path = resolve(distDir, nome);
+    const info = await stat(path);
+    if (!info.isFile() || info.size === 0) throw Error(`Artefatto vuoto o non regolare: ${nome}`);
+    const hash = createHash('sha256');
+    for await (const dati of createReadStream(path)) hash.update(dati);
+    artefatti.push({ nome, path, bytes: info.size, sha256: hash.digest('hex') });
+  }
+  if (artefatti[0].sha256 !== smoke.installerSha256) throw Error('Lo SHA256 dell’installer differisce da quello provato nello smoke.');
+  const installer = await readFile(artefatti[0].path);
+  const testoManifesto = await readFile(join(distDir, nomi.manifesto));
+  controllaManifesto(testoManifesto.toString('utf8'), { versione, nome: nomi.exe, sha512: sha512Base64(installer), byte: installer.length });
+  const firma = firmaManifesto(testoManifesto, chiavePrivata);
+  if (!verificaFirmaManifesto(testoManifesto, firma, chiavePubblicaApp)) throw Error('La firma appena fatta non si verifica con la chiave dell’app.');
+  await writeFile(join(distDir, nomi.firma), `${firma}\n`, 'utf8');
+  /* La mappa dei blocchi (owner 11/10/2026, scarico a blocchi): l'aggiornatore la cerca accanto all'installer, in QUESTA release
+     e in quella installata. Se manca, o e' vuota, la release non esce: tutti scaricherebbero l'installer intero, in silenzio. */
+  for (const nome of [nomi.manifesto, nomi.firma, nomi.mappa]) {
+    const dati = await readFile(join(distDir, nome));
+    if (dati.length === 0) throw Error(`Artefatto vuoto: ${nome}`);
+    artefatti.push({ nome, path: resolve(distDir, nome), bytes: dati.length, sha256: createHash('sha256').update(dati).digest('hex') });
+  }
+  const somme = artefatti.map(a => `${a.sha256}  ${a.nome}\n`).join('');
+  /*
+   * ⛔ IN INGLESE, e non è una preferenza: è la stessa trappola che il mobile ha già pagato. La sua
+   * v0.1.0 uscì in italiano, fu corretta A MANO, e la SORGENTE rimase italiana — quindi la release
+   * dopo sarebbe tornata italiana da sola (vedi il commento in `.github/workflows/release.yml`).
+   * Correggere il sintomo e lasciare la causa è come non aver corretto niente. Qui la sorgente è
+   * inglese: tutto ciò che si pubblica lo è.
+   */
+  const note = noteDellaRelease({ versione, tag, repository, cambiamenti, somme });
   await writeFile(join(distDir, nomi.sha), somme, 'utf8');
   await writeFile(join(distDir, nomi.note), note, 'utf8');
   return { nomi, artefatti };

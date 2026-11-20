@@ -14,7 +14,7 @@
  */
 import { t } from './lingua.js';
 import { etichettaArgomento } from './etichette-argomenti.js';
-import { nomeDiCampoSegreto, oscuraFormeDiSegreto, oscuraPerStruttura, SEGRETO_OSCURATO, siNoLeggibile } from '../../../src/forme-di-segreto.mjs';
+import { campoSegreto, nomeDiCampoSegreto, oscuraFormeDiSegreto, oscuraPerStruttura, oscuraTestoInArrivo, SEGRETO_OSCURATO, siNoLeggibile } from '../../../src/forme-di-segreto.mjs';
 
 const CHIAVI_DEL_BERSAGLIO = ['percorso', 'path', 'file', 'file_path', 'comando', 'command', 'cmd', 'url', 'indirizzo', 'query', 'domanda'];
 const CHIAVI_DEL_COMANDO = ['comando', 'command', 'cmd'];
@@ -55,7 +55,7 @@ const primoTesto = (a, chiavi) => {
 /** Il valore di un argomento come si legge sulla carta: testo com'è, il resto in JSON ordinato; segreti oscurati. */
 export function valoreLeggibile(chiave, valore) {
   /* cura gemella 0.2.2, giro 6: un sì/no sotto un nome che la base non oscurava resta leggibile (`clear_cookies: true`), come nel nucleo */
-  if (nomeDiCampoSegreto(String(chiave)) && !siNoLeggibile(String(chiave), valore)) return SEGRETO_OSCURATO;
+  if ((nomeDiCampoSegreto(String(chiave)) && !siNoLeggibile(String(chiave), valore)) || campoSegreto(String(chiave), valore)) return SEGRETO_OSCURATO; // 0.2.4 blocco 1: anche `tokens` che non conta
   /* giro 7 (revisore della pagina, punto 1): un oggetto o una lista si oscura per STRUTTURA prima del JSON, come il nucleo fa per la carta
      di un connettore: `{"db":{"password":"hunter2"}}` si leggeva in chiaro su questa carta e oscurato sull'altra. Poi le forme sul JSON,
      come prima: niente di ciò che la 0.2.1 oscurava torna in chiaro. */
@@ -134,13 +134,19 @@ export function leggiArgomentiDellaRiga(grezzo) {
   const chiuso = contenitore ? chiudiJsonParziale(testo) : testo;
   let v;
   try { v = JSON.parse(chiuso); } catch { return { interi: null, mostrati: null }; }
-  return { interi: chiuso === testo ? v : null, mostrati: contenitore && v !== null && typeof v === 'object' ? oscuraPerStruttura(v) : null };
+  /* 0.2.4 blocco 1, voce 5: i testi già chiusi non ripassano dalle forme a ogni pezzo (`ricorda`, forme-di-segreto.mjs) */
+  return { interi: chiuso === testo ? v : null, mostrati: contenitore && v !== null && typeof v === 'object' ? oscuraPerStruttura(v, { ricorda: true }) : null };
 }
-/** Un testo di argomenti che non è JSON (un modello che non scrive JSON), da mostrare: con le forme dei segreti oscurate. */
-export function argomentiGrezziDellaRiga(grezzo) {
+/** Un testo di argomenti che non è JSON (un modello che non scrive JSON), da mostrare: con le forme dei segreti oscurate. Si disegna solo
+    mentre arriva (`renderizzaArgomentiAttrezzo`, a ogni pezzo): 0.2.4 blocco 1, voce 5, l'ultima parola che può ancora diventare un segreto
+    resta «…» finché non si chiude (`oscuraTestoInArrivo`), così un segreto spezzato fra due pezzi non si vede mai a metà. */
+export function argomentiGrezziDellaRiga(grezzo, { finito = false } = {}) {
   const testo = String(grezzo ?? '');
   const t = testo.trim();
-  return t[0] === '{' || t[0] === '[' ? '' : oscuraFormeDiSegreto(testo);
+  if (t[0] === '{' || t[0] === '[') return '';
+  /* 0.2.4 B1 giro 2 (revisore, giallo 2): finiti gli argomenti (`chiudiArgomentiInArrivo` in app.js) non arriva più niente e la coda
+     trattenuta si mostra con le maschere di sempre: `which npm` non resta `which …` */
+  return finito ? oscuraFormeDiSegreto(testo) : oscuraTestoInArrivo(testo);
 }
 
 /** Il bersaglio in testa alla carta: dagli argomenti; senza, il nome umano dell'attrezzo (`nomeUmano`, dato dalla pagina). */

@@ -128,6 +128,7 @@ import { creaRegistroRicerche } from './kernel/ricerche-in-corso.mjs'; // F001b 
 import { NOME_DEL_BATTITO } from './kernel/riga-del-ragionamento.mjs'; // revisione D R1 (30/10/2026): il battito del ragionamento è effimero
 import { creaCasaLinuxSessione } from './kernel/casa-linux.mjs'; // Fase B (owner 01/10/2026): la casa Linux della sessione
 import { ambienteSenzaCredenziali } from './kernel/talosHarness.mjs'; // Fase B: l'ambiente della casa Linux, mai le chiavi del server
+import { valoriDelleChiaviConosciute } from './kernel/talosHarness.mjs'; // 0.2.4: le chiavi per valore fuori dal giro (ricerca, Assistente)
 import { imageMessageContent } from './chat-image-attachments.mjs';
 import { TaskCatalogError, preparaEsecuzione as preparaEsecuzioneReale } from './task-catalog.mjs';
 import { leggiAlberoWorkspace as leggiAlberoWorkspaceReale, WorkspaceTreeError } from './workspace-tree.mjs';
@@ -3559,6 +3560,8 @@ export function createSessionRegistry({
      Configurazione di server, inoltrate SENZA logica propria; assenti ⇒ l'attrezzo non si offre. */
   guardaImmagineFn = null,
   vedeImmaginiFn = null,
+  /* 0.2.4, blocco 6, giro 2 (giudice v2220): () => string[], le chiavi della persona dalla memoria del deposito; inoltrata SENZA logica */
+  segretiConosciutiFn = null,
   /* 01/11/2026: (modello) => true | false, il motore locale si sta ancora aprendo? Inoltrata com'è al nucleo (punto della carta dell'arresto) */
   motoreInCaricamentoFn = null,
   /* Decisioni 57 e 144 (04/11/2026): (modello) => { in, out } | null, dollari per milione dal catalogo (server.mjs, `prezzoPerMilione`). Inoltrata
@@ -4300,8 +4303,19 @@ export function createSessionRegistry({
     ? modelliGiudiceFn
     : ({ autore } = {}) => candidatiGiudice(typeof autore?.model === 'string' ? autore.model : null);
 
+  /* 0.2.4, chiavi in ricerca e Chrome (giudice v2239): le chiavi della persona per valore FUORI dal giro (la ri-verifica della ricerca,
+     l'Assistente), con le stesse fonti del nucleo: la chiave della ricerca web, l'ambiente del server, le salvate dalla memoria
+     (`segretiConosciutiFn`). Una funzione che lancia non chiude: si tiene il resto.
+     0.2.4 ASS-37: chi ha GIÀ letto la ricerca (l'Assistente, `confRicerca`) la passa: si confronta la chiave USATA per cercare, e la
+     domanda legge la configurazione una volta sola (come Hermes lega i segreti al giro, `agent/secret_scope.py:242-246`). Senza
+     configurazione passata (la ricerca profonda) o con una lettura fallita (null), si rilegge come prima. */
+  const valoriDelleChiaviFuoriDalGiro = (confGiaLetta) => {
+    let chiaveRicerca = null;
+    try { chiaveRicerca = (confGiaLetta ?? (typeof ricercaWebFn === 'function' ? ricercaWebFn() : { ricercaWeb }))?.ricercaWeb?.apiKey ?? null; } catch { chiaveRicerca = null; }
+    return valoriDelleChiaviConosciute({ chiavi: [chiaveRicerca], ambiente: process.env, segretiConosciutiFn, ospiteRottoChiude: false });
+  };
   const researchOrchestrator = creaResearchOrchestrator({
-    sessioni, avviaESeguiFn: avviaESegui,
+    sessioni, avviaESeguiFn: avviaESegui, valoriDelleChiaviFn: valoriDelleChiaviFuoriDalGiro,
     creaRicercaFn, leggiRicercaFn, aggiornaRicercaFn, eliminaRicercaFn, elencaRicercheFn, leggiRapportoFn,
     // ⭐ L4 — il giornale, il piano, le fonti e l'istantanea della cache: stessa disciplina DI.
     accodaEventoFn, leggiGiornaleFn, leggiPianoFn, statRapportoFn, elencaFontiFn,
@@ -11371,6 +11385,7 @@ function fileDelComputerUseNominati(comando, custoditi) {
         ...(typeof ospitiDelComputerUse.onComputerUseFn === 'function' && !strumentiEstesi.includes(NOME_COMPUTER_USE) ? [NOME_COMPUTER_USE] : [])],
       ...(typeof ricercaWebFn === 'function' ? ricercaWebFn() : { ricercaWeb }), firma, immagine, baseImmaginiFn, persistGeneratedImageFn, removeGeneratedImageFn,
       guardaImmagineFn, vedeImmaginiFn, // owner 27/10/2026, view_image
+      segretiConosciutiFn, // blocco 6, giro 2: le chiavi per valore (foto del web)
       motoreInCaricamentoFn, // 01/11/2026: «while the model was still loading»
       prezzoDelModelloFn, // decisioni 57 e 144: i dollari sulla carta della ricerca
       /* owner 27/10/2026, local_page: la porta e la scheda sono di QUESTA conversazione, e lo dice l'ospite, non il modello */
@@ -14914,13 +14929,16 @@ function fileDelComputerUseNominati(comando, custoditi) {
       };
       const ctx = portePerLAssistente({
         sessionId, cartella: voce.cartella, eventi: Array.isArray(voce.eventi) ? voce.eventi : [], permessiPerAttrezzo: voce.permessiPerAttrezzo ?? {},
-        git: typeof repositoryFn === 'function' ? repositoryFn() : null, ricercaWebFn: typeof ricercaWebFn === 'function' ? ricercaWebFn : () => ({ ricercaWeb }),
+        git: typeof repositoryFn === 'function' ? repositoryFn() : null,
         spesa: () => spesaPerLAssistente(voce),
         /* la seconda rete (owner 21:40): ciò che la conversazione ha già letto — esiti, testo dell'agente, riassunti, domande di prima — lo si
            confronta con l'indirizzo solo per dirlo sulla carta; la carta c'è comunque, perché l'Assistente ha letto la chat (`haLetto`) */
         letti: [...fotografia.filter((m) => m?.role !== 'system'), ...messaggiDelFilo(letto.filo)].map((m) => (typeof m?.content === 'string' ? m.content
           : Array.isArray(m?.content) ? m.content.map((p) => (typeof p?.text === 'string' ? p.text : '')).join('\n') : '')).filter(Boolean),
+        /* 0.2.4 S3: la ricerca si legge UNA volta per domanda (`confRicerca`, sopra): lo stesso fornitore decide se lo strumento si offre e
+           poi cerca. Prima qui c'era anche una seconda chiave `ricercaWebFn` (lettura a ogni chiamata) che perdeva in silenzio: tolta. */
         haLetto: true, ...(chiediCarta ? { chiediCarta } : {}), ricercaWebFn: () => confRicerca,
+        valoriDelleChiaviFn: () => valoriDelleChiaviFuoriDalGiro(confRicerca), // 0.2.4: una chiave della persona nell'indirizzo o nella ricerca non parte; ASS-37: la chiave usata
         ...(typeof apriPaginaALatoFn === 'function' ? { apriPaginaFn: apriPaginaALatoFn } : {}),
       });
       try {

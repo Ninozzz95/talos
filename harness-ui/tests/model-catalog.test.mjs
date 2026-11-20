@@ -74,7 +74,8 @@ test('PF-OR-01 — rete assente senza copia: riserva con motivo, senza dettagli 
   const catalogo = createModelCatalog({ fetchFn: async () => { throw new Error('ECONNREFUSED'); } });
   const r = await catalogo.ottieni();
   assert.equal(r.fonte, 'riserva');
-  assert.equal(r.motivo, 'catalog unreachable: fallback list of 2026-09-12');
+  /* 18/11/2026 (S6 della 0.2.4): LFM 3 al posto di LFM 2.5, sparito da OpenRouter */
+  assert.equal(r.motivo, 'catalog unreachable: fallback list of 2026-11-18');
   assert.ok(r.modelli.length > 0);
   assert.deepEqual(r.modelliDiRiserva, r.modelli);
   assert.equal(r.daCache, false);
