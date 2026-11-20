@@ -19,7 +19,8 @@ const { talosLavora, verificaPermessoScrittura, cartaForzataPrevista } = kernel;
 
 /** Una radice di prova con progetto, fuori, casa e temporanea SUE (la temporanea del sistema non deve contenere progetto e fuori). */
 function radice(t) {
-  const r = realpathSync(mkdtempSync(join(tmpdir(), 'talos-b3-')));
+  /* .native: on Windows the temp folder can sit under an 8.3 short name (RUNNER~1); the plain realpathSync keeps it short. */
+  const r = realpathSync.native(mkdtempSync(join(tmpdir(), 'talos-b3-')));
   const progetto = join(r, 'lavori', 'progetto');
   const fuori = join(r, 'lavori', 'fuori');
   const casa = join(r, 'casa');

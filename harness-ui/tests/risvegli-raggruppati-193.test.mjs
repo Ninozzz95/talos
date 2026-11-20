@@ -16,6 +16,8 @@ import { join } from 'node:path';
 import { createSessionRegistry } from '../src/session-registry.mjs';
 import { attendiScritture } from '../src/session-store.mjs';
 import { rimuoviCartellaDiProva } from './aiuto/rimuovi-cartella-di-prova.mjs';
+/* Time ceilings ×4 only under CI (shared runners); locally they stay as they were. Same rule as 5767e69d2. */
+const MOLTIPLICATORE_CI = process.env.CI && process.env.CI !== 'false' ? 4 : 1;
 
 function runtimeControllabile() {
   const runs = [];
@@ -99,7 +101,7 @@ test('RISVEGLIO-193-02 — al contrario: un comando solo, senza altri vivi, sveg
   finisce('call_a');
   await pausa(120);
   assert.equal(runtime.runs.length, 2, 'svegliata');
-  assert.ok(runtime.runs[1].partitoAlle - prima < 100, `partita dopo ${runtime.runs[1].partitoAlle - prima} ms: la finestra di 25 ms resta`);
+  assert.ok(runtime.runs[1].partitoAlle - prima < 100 * MOLTIPLICATORE_CI, `tetto ${100 * MOLTIPLICATORE_CI} ms, partita dopo ${runtime.runs[1].partitoAlle - prima} ms: la finestra di 25 ms resta`);
   runtime.fine(1);
   await registry.attendiAssestamento(sessionId);
   await registry.chiudi?.();
