@@ -93,6 +93,5 @@ By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Licence
 
-Contributions are accepted under the [Apache License 2.0](LICENSE), the same as
-the project. There is no CLA to sign: the Apache licence already grants what is
-needed, patents included.
+Contributions are accepted under the [GNU AGPL v3.0 only](../LICENSE), the same as the project.
+There is no CLA to sign.
