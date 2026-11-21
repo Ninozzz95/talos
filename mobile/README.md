@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="Apache 2.0"></a>
+  <a href="../LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="AGPL-3.0-only"></a>
   <a href="https://github.com/Ninozzz95/talos/actions/workflows/ci.yml"><img src="https://github.com/Ninozzz95/talos/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/Android-arm64--v8a-3ddc84.svg" alt="Android arm64">
   <img src="https://img.shields.io/badge/local--first-no%20TALOS%20backend-blueviolet.svg" alt="Local first">
@@ -467,10 +467,6 @@ Some operations require Android system permissions, Accessibility or the optiona
 
 <img src="docs/immagini/tablet-16-code-running.png" alt="Codice on a real session, seven seconds in: Running, one step, the tool feed says a file was read and a command ran, and the context rail shows the workspace root on the device">
 
-The same session forty seconds later — four steps, zero errors, a script written and executed on the device, and the answer:
-
-<img src="docs/immagini/tablet-17-code-done.png" alt="Codice at the end of the session: Stopped, four steps, the script top10_download.sh saved and run, and a two-sentence explanation of the result">
-
 TALOS's own coding agent is under active development, on the same principles as the rest of the project: typed tools, explicit authority, and results that are checked instead of assumed.
 
 It already runs against real projects today — read/search/edit/test, a sandboxed shell (WSL2 first, honestly labelled `none` when no isolation is available, never a silent bluff), and an SSRF-safe page reader ported from TALOS's own on-device web-reading policy (DNS pinning, redirect revalidation, no private-network access) — driven through the same kind of typed-tool loop already shipping in the app, benchmarked against other coding agents on cost-per-solved-task rather than vibes.
@@ -675,6 +671,6 @@ Using AI this heavily to build software is a legitimate point of disagreement. T
 
 # License
 
-[Apache License 2.0](LICENSE).
+[GNU Affero General Public License v3.0 only (AGPL-3.0-only)](../LICENSE), as the whole repository.
 
 Third-party components and shipped-binary provenance are documented in [NOTICE](NOTICE).

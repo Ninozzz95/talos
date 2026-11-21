@@ -157,16 +157,16 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
   requests». Every chat request TALOS sends to Gemini with your key (`generateContent` and `streamGenerateContent`) now carries
   `store: false`, which in Google's words «configures the logging behavior for a given request» and takes precedence over the
   project setting. Nothing else changes: token counts, other Google requests and every other provider are sent as before, and
-  Gemini models used through OpenRouter follow OpenRouter's rules. The same holds in the TALOS CLI and in Code on the phone,
-  which share this core. Limits: with Gemini reached at an address of your own (a base URL other than
+  Gemini models used through OpenRouter follow OpenRouter's rules. The TALOS CLI and Code on the phone get this with their
+  next update of the core. Limits: with Gemini reached at an address of your own (a base URL other than
   generativelanguage.googleapis.com, for example a proxy) TALOS does not add `store: false`. If Google rejects the field,
   the request is sent once more without it and TALOS writes that in its log. The details are in PRIVACY.md.
   - In italiano: dal 26 ottobre 2026 Google conserva di serie le richieste di Generate Content dei progetti nuovi a pagamento
     della Gemini API, e dice «per non partecipare, metti `store=false` sulle singole richieste». Ora ogni richiesta della chat
     che TALOS manda a Gemini con la tua chiave porta `store: false`, che regola la registrazione di quella richiesta e vale sopra
     l'impostazione del progetto. Il resto non cambia: conteggio dei token, altre richieste a Google e gli altri fornitori partono
-    come prima; i modelli Gemini usati da OpenRouter seguono le regole di OpenRouter. Vale anche nella CLI e nel Codice del
-    telefono, che hanno lo stesso nucleo. Limiti: con Gemini raggiunto da un indirizzo tuo (un indirizzo diverso da
+    come prima; i modelli Gemini usati da OpenRouter seguono le regole di OpenRouter. La CLI e il Codice del telefono lo
+    ricevono col prossimo aggiornamento del nucleo. Limiti: con Gemini raggiunto da un indirizzo tuo (un indirizzo diverso da
     generativelanguage.googleapis.com, per esempio un proxy) TALOS non aggiunge `store: false`. Se Google rifiuta il campo, la
     richiesta riparte una volta senza e TALOS lo scrive nel suo registro. I dettagli in PRIVACY.md.
 - **«Writes to the project»: a command that writes or deletes outside the project now asks you.** Until 0.2.3 only the file
