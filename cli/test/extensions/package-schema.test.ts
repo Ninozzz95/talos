@@ -1,0 +1,5 @@
+import assert from 'node:assert/strict';import test from 'node:test';
+import {validateExtensionManifest,validateArchiveEntries} from '../../src/extensions/package-schema.ts';
+test('manifest validates compatible v1 package',()=>{const m=validateExtensionManifest({schema:'talos.cli.extension.v1',id:'review-kit',name:'Review Kit',version:'1.2.3',talosCli:'>=1 <2',components:{plugin:'plugin.json'}},'1.0.0');assert.equal(m.id,'review-kit');});
+test('manifest rejects incompatible CLI major',()=>{assert.throws(()=>validateExtensionManifest({schema:'talos.cli.extension.v1',id:'review-kit',name:'x',version:'1.0.0',talosCli:'>=2 <3',components:{}},'1.0.0'),/EXTENSION_INCOMPATIBLE/);});
+test('archive paths reject traversal absolute and windows case collision',()=>{assert.throws(()=>validateArchiveEntries(['../evil']),/EXTENSION_PATH_TRAVERSAL/);assert.throws(()=>validateArchiveEntries(['/abs']),/EXTENSION_PATH_ABSOLUTE/);assert.throws(()=>validateArchiveEntries(['A/x','a/X'],true),/EXTENSION_PATH_COLLISION/);});

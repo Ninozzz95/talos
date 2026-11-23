@@ -48,3 +48,9 @@ harness-ui/public.nuovo-*/
 harness-ui/native/lanciatore-bin/
 harness-ui/native/lanciatore/target/
 harness-ui/native/lanciatore/uscita/
+
+# TALOS CLI 0.7.0 (23/11/2026, row 225): what the CLI build writes stays out of the public repository; the robot
+# rebuilds it from the published sources (cli/dist the compiled code, cli/vendor and cli/kernel the copies of the core).
+cli/dist/
+cli/vendor/
+cli/kernel/

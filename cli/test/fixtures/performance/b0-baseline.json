@@ -1,0 +1,15 @@
+{
+  "schema": "talos.cli.tui-performance-baseline.v1",
+  "capturedAt": "2026-09-16T00:00:00.000Z",
+  "environment": {
+    "os": "windows",
+    "node": "24.18.0",
+    "terminal": "contract-baseline"
+  },
+  "budgets": {
+    "idleRenderCount": 0,
+    "eventToVisibleP95Ms": 50,
+    "renderCoalescingWindowMs": 16
+  },
+  "status": "baseline"
+}

@@ -1,0 +1,13 @@
+{
+ "source": "lavoro/mockup-golden (approved mockup 01/10), the activity row of each frame",
+ "lines": {
+  "120x40/step-03-domande-del-modello-t0": " ⠦ Reading the login flow · 0s · ↓ 0 tokens · esc to stop   turn 0s",
+  "120x40/step-03-domande-del-modello-t2s": " ⠇ Reading the login flow · 2s · ↓ 76 tokens · esc to stop   turn 2s",
+  "120x40/step-03-domande-del-modello-t6s": " ⠸ Searching for \"retry\" · 0s · esc to stop   turn 6s",
+  "120x40/step-03-domande-del-modello-t12s": " ? Waiting for your answer · 5s · the turn is paused until you answer",
+  "80x24/step-03-domande-del-modello-t2s": " ⠇ Reading the login flow · 2s · ↓ 76 tokens · esc to stop",
+  "120x40/step-05-stallo-e-nuovi-tentativi-t0": " ↻ Retrying · attempt 2 of 4 · HTTP 429 · in 7s · esc to stop",
+  "120x40/step-05-stallo-e-nuovi-tentativi-t2s": " ↻ Retrying · attempt 2 of 4 · HTTP 429 · in 5s · esc to stop",
+  "120x40/step-05-stallo-e-nuovi-tentativi-t12s": " ⠦ Writing the answer · 2s · ↓ 211 tokens · esc to stop   turn 12s"
+ }
+}

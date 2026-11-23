@@ -1,0 +1,53 @@
+{
+ "source": "lavoro/MOCKUP-FASE-UI-2026-10-01.html golden frames step-17-server-mcp-che-chiedono-t12s (approved 01/10)",
+ "frames": {
+  "120x40": {
+   "text": [
+    "│ ╭─ github (MCP server) needs details to create the pull request",
+    "│",
+    "│  › Repository        acme/shop-api▍",
+    "│    Base branch       main",
+    "│    Draft pull request[x] yes",
+    "│    Labels            [x] auth  [x] tests  [ ] bug",
+    "│",
+    "│    Review and send     Decline    ↑/↓ field · type to edit · space toggle · esc cancel",
+    "╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"
+   ],
+   "style": [
+    "0+5:acc 5+6:acc,b 11+54:dim",
+    "0+2:acc",
+    "0+5:acc 5+18:acc,b 23+14:code",
+    "0+2:acc 5+18:dim 23+4:code",
+    "0+2:acc 5+18:dim",
+    "0+2:acc 5+18:dim",
+    "0+2:acc",
+    "0+2:acc 4+17:pill 24+9:dim 33+55:faint",
+    "0+120:acc"
+   ]
+  },
+  "80x24": {
+   "text": [
+    "│ ╭─ github (MCP server) needs details to create the pull request",
+    "│",
+    "│  › Repository        acme/shop-api▍",
+    "│    Base branch       main",
+    "│    Draft pull request[x] yes",
+    "│    Labels            [x] auth  [x] tests  [ ] bug",
+    "│",
+    "│    Review and send     Decline    ↑/↓ field · type to edit · space toggle · e",
+    "╰──────────────────────────────────────────────────────────────────────────────╯"
+   ],
+   "style": [
+    "0+5:acc 5+6:acc,b 11+54:dim",
+    "0+2:acc",
+    "0+5:acc 5+18:acc,b 23+14:code",
+    "0+2:acc 5+18:dim 23+4:code",
+    "0+2:acc 5+18:dim",
+    "0+2:acc 5+18:dim",
+    "0+2:acc",
+    "0+2:acc 4+17:pill 24+9:dim 33+46:faint",
+    "0+80:acc"
+   ]
+  }
+ }
+}

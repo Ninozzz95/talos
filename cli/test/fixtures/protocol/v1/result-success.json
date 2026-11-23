@@ -1,0 +1,1 @@
+{"schema":"talos.cli.result.v1","ok":true,"sessionId":"session-1","result":{"text":"OK","outcome":"success","changedFiles":["src/example.ts"],"usage":{"inputTokens":3,"outputTokens":1}},"warnings":[]}
