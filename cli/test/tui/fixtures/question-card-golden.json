@@ -1,0 +1,85 @@
+{
+ "source": "lavoro/MOCKUP-FASE-UI-2026-10-01.html golden frames step-03-domande-del-modello-t12s (approved 01/10)",
+ "frames": {
+  "120x40": {
+   "text": [
+    "│ ╭─ TALOS asks · 1 of 3 · 3 unanswered · closes in 4m 54s",
+    "│    Fix   Verify   Commit",
+    "│",
+    "│   How should the test wait for the session?",
+    "│   This decides whether the test or the product changes.",
+    "│",
+    "│  › 1. Wait for the cookie  (Recommended)                     │ preview",
+    "│      replace the sleep with waitForSession(); product unch…  │ -  await page.waitForTimeout(500)",
+    "│    2. Shorten the retry                                      │ +  await waitForSession(page)",
+    "│      cap the jitter in refreshSession(); faster, changes t…  │",
+    "│    3. Both                                                   │",
+    "│      robust test and a shorter worst case                    │",
+    "│    4. Other                                                  │",
+    "│      type your own answer                                    │",
+    "│",
+    "│   enter next · tab note · ←/→ questions · ctrl+] skip · esc cancel",
+    "╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"
+   ],
+   "style": [
+    "0+5:acc 5+10:acc,b 15+24:dim 39+19:faint",
+    "0+2:acc 4+5:inv 10+8:dim 19+8:dim",
+    "0+2:acc",
+    "0+2:acc 4+41:b",
+    "0+2:acc 2+55:dim,i",
+    "0+2:acc",
+    "0+5:acc 5+37:acc,b 63+9:faint",
+    "0+2:acc 2+59:dim 63+2:faint 65+33:del",
+    "0+2:acc 63+2:faint 65+29:add",
+    "0+2:acc 2+59:dim 63+2:faint",
+    "0+2:acc 63+2:faint",
+    "0+2:acc 2+41:dim 63+2:faint",
+    "0+2:acc 63+2:faint",
+    "0+2:acc 2+25:dim 63+2:faint",
+    "0+2:acc",
+    "0+2:acc 2+66:faint",
+    "0+120:acc"
+   ]
+  },
+  "80x24": {
+   "text": [
+    "│ ╭─ TALOS asks · 1 of 3 · 3 unanswered · closes in 4m 54s",
+    "│    Fix   Verify   Commit",
+    "│",
+    "│   How should the test wait for the session?",
+    "│   This decides whether the test or the product changes.",
+    "│",
+    "│  › 1. Wait for the cookie  (Recommended)",
+    "│      replace the sleep with waitForSession(); product unchanged",
+    "│    2. Shorten the retry",
+    "│      cap the jitter in refreshSession(); faster, changes the product",
+    "│    3. Both",
+    "│      robust test and a shorter worst case",
+    "│    4. Other",
+    "│      type your own answer",
+    "│",
+    "│   enter next · tab note · ←/→ questions · ctrl+] skip · esc cancel",
+    "╰──────────────────────────────────────────────────────────────────────────────╯"
+   ],
+   "style": [
+    "0+5:acc 5+10:acc,b 15+24:dim 39+19:faint",
+    "0+2:acc 4+5:inv 10+8:dim 19+8:dim",
+    "0+2:acc",
+    "0+2:acc 4+41:b",
+    "0+2:acc 2+55:dim,i",
+    "0+2:acc",
+    "0+5:acc 5+37:acc,b",
+    "0+2:acc 2+63:dim",
+    "0+2:acc",
+    "0+2:acc 2+68:dim",
+    "0+2:acc",
+    "0+2:acc 2+41:dim",
+    "0+2:acc",
+    "0+2:acc 2+25:dim",
+    "0+2:acc",
+    "0+2:acc 2+66:faint",
+    "0+80:acc"
+   ]
+  }
+ }
+}

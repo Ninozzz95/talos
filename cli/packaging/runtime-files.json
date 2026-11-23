@@ -1,0 +1,85 @@
+{
+  "schema": "talos.cli.runtime-files.v1",
+  "talosCommit": "0c432153a288f64237e98403869d02d20d8fabc7",
+  "nodeVersion": "24.18.0",
+  "platform": "win32-x64",
+  "entries": [
+    {
+      "source": "cli/dist",
+      "target": "app/dist",
+      "kind": "tree"
+    },
+    {
+      "source": "cli/package.json",
+      "target": "app/package.json",
+      "kind": "file"
+    },
+    {
+      "source": "cli/package-lock.json",
+      "target": "app/package-lock.json",
+      "kind": "file"
+    },
+    {
+      "source": "harness-ui/src",
+      "target": "app/vendor/harness-ui/src",
+      "kind": "tree"
+    },
+    {
+      "source": "harness-ui/package.json",
+      "target": "app/vendor/harness-ui/package.json",
+      "kind": "file"
+    },
+    {
+      "source": "context-engine/src",
+      "target": "app/vendor/context-engine/src",
+      "kind": "tree"
+    },
+    {
+      "source": "context-engine/package.json",
+      "target": "app/vendor/context-engine/package.json",
+      "kind": "file"
+    },
+    {
+      "source": "LICENSE",
+      "target": "LICENSE.txt",
+      "kind": "file"
+    },
+    {
+      "source": "THIRD_PARTY_NOTICES.md",
+      "target": "THIRD_PARTY_NOTICES.txt",
+      "kind": "file"
+    },
+    {
+      "source": "cli/THIRD_PARTY_NOTICES.md",
+      "target": "THIRD_PARTY_NOTICES-CLI.txt",
+      "kind": "file"
+    },
+    {
+      "source": "harness-ui/THIRD_PARTY_NOTICES.md",
+      "target": "THIRD_PARTY_NOTICES-DESKTOP.txt",
+      "kind": "file"
+    },
+    {
+      "source": "context-engine/THIRD_PARTY_NOTICES.md",
+      "target": "THIRD_PARTY_NOTICES-CONTEXT.txt",
+      "kind": "file"
+    }
+  ],
+  "dependencyTrees": [
+    {
+      "manifest": "cli/package.json",
+      "source": "cli/node_modules",
+      "target": "app/node_modules"
+    },
+    {
+      "manifest": "harness-ui/package.json",
+      "source": "harness-ui/node_modules",
+      "target": "app/vendor/harness-ui/node_modules"
+    },
+    {
+      "manifest": "context-engine/package.json",
+      "source": "context-engine/node_modules",
+      "target": "app/vendor/context-engine/node_modules"
+    }
+  ]
+}

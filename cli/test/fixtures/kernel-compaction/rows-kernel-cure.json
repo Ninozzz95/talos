@@ -1,0 +1,360 @@
+{
+ "kernel": {
+  "head": "0143b1bd91395249a4a7ee7d30ff8d570f6bf8f7",
+  "lastKernelCommit": "0143b1bd91395249a4a7ee7d30ff8d570f6bf8f7",
+  "sha256": {
+   "harness-ui/src/kernel/talosHarness.desktop-hotfix.mjs": "360cb6b1e2e743077b12589b08767aac9d134328f0c44acf396b9a9e57797b90",
+   "harness-ui/src/agent-service.mjs": "2795c6bbc0827f543ccd7f97029b6250f12ac35fb0d667a72630800df8559cc6",
+   "harness-ui/src/kernel/compattazione-desktop.mjs": "312e22956cd86c20664f745f14bc858fc69fa12a632a3e70c9b613109d5674dd"
+  }
+ },
+ "thresholds": {
+  "cap-200k": {
+   "soglia": 200000,
+   "warningTokens": 160000,
+   "emergenza": 240000,
+   "fonte": "tetto",
+   "tettoToken": 200000,
+   "finestraToken": null
+  },
+  "window-1m": {
+   "soglia": 200000,
+   "warningTokens": 160000,
+   "emergenza": 240000,
+   "fonte": "finestra",
+   "tettoToken": null,
+   "finestraToken": 1000000
+  },
+  "cap-200k-window-1m": {
+   "soglia": 200000,
+   "warningTokens": 160000,
+   "emergenza": 240000,
+   "fonte": "tetto",
+   "tettoToken": 200000,
+   "finestraToken": 1000000
+  }
+ },
+ "scenes": {
+  "adopted-at-emergency-cap-200k": {
+   "live": [
+    {
+     "giro": 0,
+     "tipo": "compattazione-fine",
+     "compattato": true,
+     "record": {
+      "at": "2026-11-12T07:40:56.039Z",
+      "tokenPrima": 250393,
+      "tokenDopo": 65477,
+      "coveredThrough": 336,
+      "misura": "stimato",
+      "modello": "z-ai/glm-5.3-flash"
+     },
+     "istantanea": true,
+     "motivo": "emergenza",
+     "soglia": 240000,
+     "adottato": {
+      "at": "2026-11-12T07:40:56.002Z",
+      "origine": "giro",
+      "tokenDopo": 65477,
+      "conResto": false
+     }
+    }
+   ],
+   "journal": [
+    {
+     "type": "CUSTOM",
+     "name": "talos.compattazione",
+     "value": {
+      "fase": "fine",
+      "giro": 0,
+      "compattato": true,
+      "tokenPrima": 250393,
+      "tokenDopo": 65477,
+      "misura": "stimato",
+      "coveredThrough": 336,
+      "at": "2026-11-12T07:40:56.039Z",
+      "modello": "z-ai/glm-5.3-flash",
+      "idRiassunto": "rias-2c7e78850a35-1",
+      "motivo": "emergenza",
+      "istantanea": true,
+      "soglia": 240000,
+      "adottato": {
+       "at": "2026-11-12T07:40:56.002Z",
+       "origine": "giro",
+       "tokenDopo": 65477,
+       "conResto": false
+      }
+     }
+    }
+   ]
+  },
+  "adopted-at-emergency-window-1m": {
+   "live": [
+    {
+     "giro": 0,
+     "tipo": "compattazione-fine",
+     "compattato": true,
+     "record": {
+      "at": "2026-11-12T07:40:56.247Z",
+      "tokenPrima": 250393,
+      "tokenDopo": 65477,
+      "coveredThrough": 336,
+      "misura": "stimato",
+      "modello": "z-ai/glm-5.3-flash"
+     },
+     "istantanea": true,
+     "motivo": "emergenza",
+     "soglia": 240000,
+     "adottato": {
+      "at": "2026-11-12T07:40:56.204Z",
+      "origine": "giro",
+      "tokenDopo": 65477,
+      "conResto": false
+     }
+    }
+   ],
+   "journal": [
+    {
+     "type": "CUSTOM",
+     "name": "talos.compattazione",
+     "value": {
+      "fase": "fine",
+      "giro": 0,
+      "compattato": true,
+      "tokenPrima": 250393,
+      "tokenDopo": 65477,
+      "misura": "stimato",
+      "coveredThrough": 336,
+      "at": "2026-11-12T07:40:56.247Z",
+      "modello": "z-ai/glm-5.3-flash",
+      "idRiassunto": "rias-2c7e78850a35-2",
+      "motivo": "emergenza",
+      "istantanea": true,
+      "soglia": 240000,
+      "adottato": {
+       "at": "2026-11-12T07:40:56.204Z",
+       "origine": "giro",
+       "tokenDopo": 65477,
+       "conResto": false
+      }
+     }
+    }
+   ]
+  },
+  "adopted-at-emergency-cap-200k-window-1m": {
+   "live": [
+    {
+     "giro": 0,
+     "tipo": "compattazione-fine",
+     "compattato": true,
+     "record": {
+      "at": "2026-11-12T07:40:56.428Z",
+      "tokenPrima": 250393,
+      "tokenDopo": 65477,
+      "coveredThrough": 336,
+      "misura": "stimato",
+      "modello": "z-ai/glm-5.3-flash"
+     },
+     "istantanea": true,
+     "motivo": "emergenza",
+     "soglia": 240000,
+     "adottato": {
+      "at": "2026-11-12T07:40:56.391Z",
+      "origine": "giro",
+      "tokenDopo": 65477,
+      "conResto": false
+     }
+    }
+   ],
+   "journal": [
+    {
+     "type": "CUSTOM",
+     "name": "talos.compattazione",
+     "value": {
+      "fase": "fine",
+      "giro": 0,
+      "compattato": true,
+      "tokenPrima": 250393,
+      "tokenDopo": 65477,
+      "misura": "stimato",
+      "coveredThrough": 336,
+      "at": "2026-11-12T07:40:56.428Z",
+      "modello": "z-ai/glm-5.3-flash",
+      "idRiassunto": "rias-2c7e78850a35-3",
+      "motivo": "emergenza",
+      "istantanea": true,
+      "soglia": 240000,
+      "adottato": {
+       "at": "2026-11-12T07:40:56.391Z",
+       "origine": "giro",
+       "tokenDopo": 65477,
+       "conResto": false
+      }
+     }
+    }
+   ]
+  },
+  "adopted-at-threshold-cap-200k": {
+   "live": [
+    {
+     "giro": 0,
+     "tipo": "compattazione-fine",
+     "compattato": true,
+     "record": {
+      "at": "2026-11-12T07:40:56.613Z",
+      "tokenPrima": 220233,
+      "tokenDopo": 35317,
+      "coveredThrough": 296,
+      "misura": "stimato",
+      "modello": "z-ai/glm-5.3-flash"
+     },
+     "istantanea": true,
+     "motivo": "soglia",
+     "adottato": {
+      "at": "2026-11-12T07:40:56.610Z",
+      "origine": "giro",
+      "tokenDopo": 35317,
+      "conResto": false
+     }
+    }
+   ],
+   "journal": [
+    {
+     "type": "CUSTOM",
+     "name": "talos.compattazione",
+     "value": {
+      "fase": "fine",
+      "giro": 0,
+      "compattato": true,
+      "tokenPrima": 220233,
+      "tokenDopo": 35317,
+      "misura": "stimato",
+      "coveredThrough": 296,
+      "at": "2026-11-12T07:40:56.613Z",
+      "modello": "z-ai/glm-5.3-flash",
+      "idRiassunto": "rias-2c7e78850a35-4",
+      "motivo": "soglia",
+      "istantanea": true,
+      "adottato": {
+       "at": "2026-11-12T07:40:56.610Z",
+       "origine": "giro",
+       "tokenDopo": 35317,
+       "conResto": false
+      }
+     }
+    }
+   ]
+  },
+  "quick-at-emergency-cap-200k": {
+   "live": [
+    {
+     "giro": 0,
+     "tipo": "compattazione-inizio",
+     "tokenMisurati": 250352,
+     "soglia": 240000,
+     "motivo": "emergenza"
+    },
+    {
+     "giro": 0,
+     "tipo": "compattazione-fine",
+     "compattato": true,
+     "record": {
+      "at": "2026-11-12T07:40:56.706Z",
+      "tokenPrima": 250352,
+      "tokenDopo": 3697,
+      "coveredThrough": 335,
+      "misura": "stimato",
+      "modello": "z-ai/glm-5.3-flash"
+     },
+     "ripiego": true,
+     "classe": "in-arrivo",
+     "ragione": "in-arrivo"
+    }
+   ],
+   "journal": [
+    {
+     "type": "CUSTOM",
+     "name": "talos.compattazione",
+     "value": {
+      "fase": "inizio",
+      "giro": 0,
+      "tokenPrima": 250352,
+      "soglia": 240000,
+      "motivo": "emergenza"
+     }
+    },
+    {
+     "type": "CUSTOM",
+     "name": "talos.compattazione",
+     "value": {
+      "fase": "fine",
+      "giro": 0,
+      "compattato": true,
+      "tokenPrima": 250352,
+      "tokenDopo": 3697,
+      "misura": "stimato",
+      "coveredThrough": 335,
+      "at": "2026-11-12T07:40:56.706Z",
+      "modello": "z-ai/glm-5.3-flash",
+      "idRiassunto": "rias-2c7e78850a35-5",
+      "motivo": "emergenza",
+      "ripiego": true,
+      "ragione": "in-arrivo",
+      "classe": "in-arrivo"
+     }
+    }
+   ]
+  },
+  "adopted-after-refusal-cap-8k": {
+   "live": [
+    {
+     "giro": 0,
+     "tipo": "compattazione-fine",
+     "compattato": true,
+     "record": {
+      "at": "2026-11-12T07:40:56.843Z",
+      "tokenPrima": 7731,
+      "tokenDopo": 5154,
+      "coveredThrough": 14,
+      "misura": "stimato",
+      "modello": "z-ai/glm-5.3-flash"
+     },
+     "istantanea": true,
+     "motivo": "overflow",
+     "adottato": {
+      "at": "2026-11-12T07:40:56.839Z",
+      "origine": "giro",
+      "tokenDopo": 5154,
+      "conResto": false
+     }
+    }
+   ],
+   "journal": [
+    {
+     "type": "CUSTOM",
+     "name": "talos.compattazione",
+     "value": {
+      "fase": "fine",
+      "giro": 0,
+      "compattato": true,
+      "tokenPrima": 7731,
+      "tokenDopo": 5154,
+      "misura": "stimato",
+      "coveredThrough": 14,
+      "at": "2026-11-12T07:40:56.843Z",
+      "modello": "z-ai/glm-5.3-flash",
+      "idRiassunto": "rias-2c7e78850a35-7",
+      "motivo": "overflow",
+      "istantanea": true,
+      "adottato": {
+       "at": "2026-11-12T07:40:56.839Z",
+       "origine": "giro",
+       "tokenDopo": 5154,
+       "conResto": false
+      }
+     }
+    }
+   ]
+  }
+ }
+}

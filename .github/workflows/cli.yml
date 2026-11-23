@@ -1,0 +1,114 @@
+name: cli
+
+# CLI 0.7.0, step 4 of «one line» (owner 23/11/2026, «public code + provenance», row 225): the CLI gates are part of the
+# common check. `ci.yml` («gates», on every pull request and on main) calls this workflow when the checkout has
+# `cli/package.json`, so a change to the shared core is proven by the CLI too before it is merged. By hand it runs alone.
+# What left with the rewrite: the Windows installer and stage pinned to a stale version (packaging lives in cli-release.yml, which
+# builds, smokes and dry-runs the real version) and the two steps that checked a ledger which stays private.
+# The broad harness-ui verify:all gate is intentionally NOT executed here: the desktop job of ci.yml and release.yml own it.
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cli-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Two tests read the build id and the history of the repository: a shallow checkout would fail them.
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.18.0'
+      - name: install CLI dependencies
+        run: |
+          npm --prefix cli install --package-lock-only --ignore-scripts --no-audit --no-fund
+          node cli/scripts/verify-lock.mjs
+          npm --prefix cli ci --ignore-scripts
+      - name: install TALOS runtime dependencies
+        run: |
+          npm --prefix context-engine ci
+          npm --prefix harness-ui ci
+      - name: typecheck
+        run: npm --prefix cli run typecheck
+      - name: build
+        run: npm --prefix cli run build
+      - name: unit and contract tests
+        run: npm --prefix cli test
+
+  cli-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.18.0'
+      - name: install CLI dependencies
+        shell: pwsh
+        run: |
+          npm --prefix cli install --package-lock-only --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw "CLI package-lock refresh failed with exit code $LASTEXITCODE" }
+          node cli/scripts/verify-lock.mjs
+          if ($LASTEXITCODE -ne 0) { throw "CLI lock verification failed with exit code $LASTEXITCODE" }
+          npm --prefix cli ci --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw "CLI dependency install failed with exit code $LASTEXITCODE" }
+      - name: install TALOS runtime dependencies
+        shell: pwsh
+        run: |
+          npm --prefix context-engine ci
+          if ($LASTEXITCODE -ne 0) { throw "context-engine dependency install failed with exit code $LASTEXITCODE" }
+          npm --prefix harness-ui ci
+          if ($LASTEXITCODE -ne 0) { throw "harness-ui dependency install failed with exit code $LASTEXITCODE" }
+      - name: typecheck, build and test
+        shell: pwsh
+        run: |
+          npm --prefix cli run typecheck
+          if ($LASTEXITCODE -ne 0) { throw "CLI typecheck failed with exit code $LASTEXITCODE" }
+          npm --prefix cli run build
+          if ($LASTEXITCODE -ne 0) { throw "CLI build failed with exit code $LASTEXITCODE" }
+          npm --prefix cli test
+          if ($LASTEXITCODE -ne 0) { throw "CLI tests failed with exit code $LASTEXITCODE" }
+
+  cli-desktop-regression:
+    name: cli-shared-kernel
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.18.0'
+      - name: install shared runtime dependencies
+        run: |
+          npm --prefix harness-ui ci --ignore-scripts
+          npm --prefix context-engine ci
+      - name: shared runtime boundary
+        working-directory: harness-ui
+        # The keyring trip wire on every node --test (owner 11/11; harness-ui SHELL-KEYRING-HOOK-EVERY-LAUNCH checks it).
+        run: |
+          node --test --import=./desktop/tests/gancio-portachiavi.mjs \
+            tests/agent-service.test.mjs \
+            tests/duckduckgo-search.test.mjs \
+            tests/model-destination.test.mjs \
+            tests/plugin-registry.test.mjs \
+            tests/provider-credential-store.test.mjs \
+            tests/provider-probe.test.mjs \
+            tests/provider-registry-parita.test.mjs \
+            tests/runtime-owner-adapter-fallback.test.mjs \
+            tests/runtime-owner-contract.test.mjs \
+            tests/search-source-store.test.mjs \
+            tests/session-registry.test.mjs \
+            tests/sessione-pronta.test.mjs
+      - name: M1-E focused kernel tests
+        working-directory: harness-ui
+        run: node --test --import=./desktop/tests/gancio-portachiavi.mjs --test-name-pattern='M1-E-' src/kernel/talosHarness.test.mjs
+      - name: TALOS kernel source check
+        run: npm --prefix harness-ui run kernel:controlla

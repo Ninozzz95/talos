@@ -1,0 +1,12 @@
+# R6 (owner 2026-09-25): the kernel copy scripts/pack-vendor.mjs writes at build is generated, never committed.
+# The root .gitignore still re-includes cli/vendor/** from B2 (Hermes's Ink fork, removed in 8b6b49ae6); a rule in this
+# nearer file takes precedence, so the root file (shared with the other lanes) is left as it is.
+/vendor/
+# P-F (owner 08/10/2026): the bundled kernel scripts/bundle-kernel.mjs builds from vendor/ at build; generated, never committed.
+/kernel/
+# R6: the licence copied from the repository root at pack time (scripts/pack-vendor.mjs).
+/LICENSE
+# Installation (owner 02/10): the release staged by scripts/stage-release.mjs and the platform packages of
+# scripts/pack-platforms.mjs when run with their default output folders; generated, never committed.
+/release/
+/platforms/

@@ -1,0 +1,237 @@
+name: talos-cli-release
+
+# Owner, 09/10/2026: «Pipeline sul tag, come Codex» and «Dal pubblico, col bollino». A `talos-cli-v<version>` tag on the
+# public repository runs the gate, builds the npm packages (the main one and one per Windows platform) and the standalone
+# downloads, publishes to npm by trusted publishing (OIDC: no token is stored anywhere; from a public repository npm adds
+# provenance) and opens the GitHub release with the version's CHANGELOG section. The tag is pushed only on the owner's yes.
+# npm publishing runs only when the repository variable TALOS_NPM_TRUSTED_PUBLISHING is 'true', which the owner sets once
+# the trusted publisher is configured on npmjs.com (package talos-code, repository Ninozzz95/talos, workflow
+# cli-release.yml); unset, the release is built, gated and published on GitHub only.
+# Every multi-command PowerShell step sets $PSNativeCommandUseErrorActionPreference: without it a failing npm or node in
+# the middle of a step does not stop the job (GitHub checks only the last command's exit code).
+
+# Step 5 (owner 09/11/2026 20:14, voice 7a: «la 0.7.0 esce già dal robot»; owner 23/11/2026 08:08, «Codice pubblico + bollino»,
+# row 225; judge v2630-v2631): switched on again, publishing ONLY from the public repository, with provenance. Two ways in:
+# - a `talos-cli-v<version>` tag pushed to the PUBLIC repository: the whole release, npm included when
+#   TALOS_NPM_TRUSTED_PUBLISHING is 'true' (the same tag in the private repository builds and gates but publishes nothing);
+# - a run by hand (workflow_dispatch) on the release commit: the DRY RUN. It builds, gates and smokes everything with the
+#   version of cli/package.json and uploads the files as a workflow artifact, but never publishes to npm and never opens a
+#   GitHub release, whatever the variables say. It is the run to make before the tag.
+on:
+  push:
+    tags: ['talos-cli-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: talos-cli-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.18.0'
+      - id: version
+        name: Resolve CLI version, channel and release notes
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $packageVersion = (Get-Content cli/package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_EVENT_NAME -eq 'push') {
+            if ($env:GITHUB_REF_TYPE -ne 'tag' -or -not $env:GITHUB_REF_NAME.StartsWith('talos-cli-v')) { throw "a push that is not a talos-cli-v tag: $env:GITHUB_REF" }
+            $version = $env:GITHUB_REF_NAME.Substring('talos-cli-v'.Length)
+            if ($packageVersion -ne $version) { throw "tag version $version does not match cli/package.json $packageVersion" }
+          } else {
+            $version = $packageVersion
+            Write-Host "DRY RUN of $version on $env:GITHUB_REF: nothing is published to npm and no GitHub release is opened."
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') { throw "invalid CLI release version: $version" }
+          $preview = $version -match '-preview\.'
+          $channel = if ($preview) { 'preview' } else { 'stable' }
+          $prerelease = $version.Contains('-')
+          node cli/scripts/release-plan.mjs notes "$version" cli/CHANGELOG.md cli/RELEASE-NOTES.md
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "channel=$channel" >> $env:GITHUB_OUTPUT
+          "prerelease=$($prerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+      - name: Install CLI dependencies and verify
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm --prefix cli install --package-lock-only --ignore-scripts --no-audit --no-fund
+          node cli/scripts/verify-lock.mjs
+          npm --prefix cli ci --ignore-scripts
+          npm --prefix cli run typecheck
+          npm --prefix cli test
+          npm --prefix cli run build
+      - name: Install TALOS runtime dependencies for kernel, provider and desktop gates
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm --prefix harness-ui ci --ignore-scripts
+          npm --prefix harness-ui/frontend ci
+          npm --prefix context-engine ci
+      - name: Kernel suite the CLI loads
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm --prefix cli run test:kernel
+      - name: Build the npm packages and prove the installed one works on its own
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          node cli/scripts/stage-release.mjs cli/.release-npm
+          node cli/scripts/prove-standalone.ts
+          npm --prefix cli prune --omit=dev --ignore-scripts
+      # Owner, 2026-09-26 (release 0.2.0): "non deve partire nessuna chiamata a pagamento". The live gate makes real, paid
+      # calls to OpenAI, Anthropic and Gemini; it runs only when the repository variable TALOS_CLI_LIVE_GATE is 'true'
+      # (Settings > Secrets and variables > Actions > Variables). Unset, as it is today, the release makes no provider call.
+      - name: Live provider release gate
+        if: vars.TALOS_CLI_LIVE_GATE == 'true'
+        shell: pwsh
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+        run: |
+          $ErrorActionPreference='Stop'
+          foreach ($name in @('OPENAI_API_KEY','ANTHROPIC_API_KEY','GOOGLE_GENERATIVE_AI_API_KEY')) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) { throw "missing release secret $name" }
+          }
+          $project = Join-Path $env:RUNNER_TEMP 'talos-cli-live-provider'
+          New-Item -ItemType Directory -Force $project | Out-Null
+          function Test-TalosProvider([string]$label,[string]$model) {
+            $raw = & node cli/dist/main.js --project $project --model $model -p 'Reply with exactly LIVE_PROVIDER_OK and nothing else.' --json --permission-mode plan --timeout 90
+            if ($LASTEXITCODE -ne 0) { throw "$label live call failed: $raw" }
+            $result = ($raw -join "`n") | ConvertFrom-Json
+            if (-not $result.ok -or $result.result.text -notmatch 'LIVE_PROVIDER_OK') { throw "$label live response mismatch: $raw" }
+            Write-Host "$label live provider gate: ok"
+          }
+          Test-TalosProvider 'OpenAI' 'openai:gpt-5-nano'
+          Test-TalosProvider 'Anthropic' 'anthropic:claude-haiku-4-5-20251001'
+          Test-TalosProvider 'Gemini' 'google:gemini-2.5-flash-lite'
+      - name: Re-run existing desktop gate on release commit
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm --prefix harness-ui run verify:all
+          npm --prefix harness-ui prune --omit=dev --ignore-scripts
+          npm --prefix context-engine prune --omit=dev --ignore-scripts
+      - name: Download and verify official Node runtime
+        id: node_runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $name = 'node-v24.18.0-win-x64.zip'
+          $base = 'https://nodejs.org/dist/v24.18.0'
+          Invoke-WebRequest "$base/SHASUMS256.txt" -OutFile SHASUMS256.txt
+          $line = Get-Content SHASUMS256.txt | Where-Object { $_ -match "  $([regex]::Escape($name))$" } | Select-Object -First 1
+          if (-not $line) { throw "Node checksum missing for $name" }
+          $expected = ($line -split '\s+')[0].ToLowerInvariant()
+          Invoke-WebRequest "$base/$name" -OutFile $name
+          $actual = (Get-FileHash $name -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw 'Node archive checksum mismatch' }
+          "archive=$((Resolve-Path $name).Path)" >> $env:GITHUB_OUTPUT
+          "sha256=$expected" >> $env:GITHUB_OUTPUT
+      - name: Build standalone ZIP and installer
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $version = '${{ steps.version.outputs.version }}'
+          node cli/scripts/stage-windows.mjs --repo-root . --out cli/.stage/win-x64 --node-archive "${{ steps.node_runtime.outputs.archive }}" --node-sha256 "${{ steps.node_runtime.outputs.sha256 }}"
+          Compress-Archive -Path cli/.stage/win-x64/* -DestinationPath "cli/TALOS-CLI-$version-win.zip" -Force
+          choco install nsis --version=3.12 -y --no-progress
+          $makensis = (Get-Command makensis.exe -ErrorAction SilentlyContinue).Source
+          if (-not $makensis) { $makensis = 'C:\Program Files (x86)\NSIS\makensis.exe' }
+          node cli/scripts/build-installer.mjs --stage cli/.stage/win-x64 --out cli/.release --version "$version" --makensis "$makensis"
+      - name: Smoke the portable and installed release with bundled Node
+        shell: pwsh
+        run: |
+          ./cli/e2e/windows-smoke.ps1 -Stage "$PWD\cli\.stage\win-x64" -Project "$PWD" -Installer (Resolve-Path "cli/.release/TALOS-CLI-Setup-${{ steps.version.outputs.version }}.exe")
+      - name: Generate release manifest and checksums, and collect the release files
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $version = '${{ steps.version.outputs.version }}'
+          $channel = '${{ steps.version.outputs.channel }}'
+          $installer = "cli/.release/TALOS-CLI-Setup-$version.exe"
+          $zip = "cli/TALOS-CLI-$version-win.zip"
+          $base = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+          node cli/scripts/create-release-manifest.mjs --version "$version" --channel "$channel" --base-url "$base" --out cli/talos-cli-release.json --asset "win32-x64:installer:$installer" --asset "win32-x64:zip:$zip"
+          $out = 'cli/.release-files'
+          New-Item -ItemType Directory -Force $out | Out-Null
+          $files = @($installer,$zip,'cli/talos-cli-release.json') + @(Get-ChildItem cli/.release-npm -Filter '*.tgz' | ForEach-Object { $_.FullName })
+          foreach ($file in $files) { Copy-Item $file $out }
+          Get-ChildItem $out | ForEach-Object {
+            $hash=(Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          } | Set-Content cli/SHA256SUMS.txt -Encoding ascii
+          Copy-Item cli/SHA256SUMS.txt $out
+          Copy-Item cli/RELEASE-NOTES.md $out
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: talos-cli-release
+          path: cli/.release-files/
+          if-no-files-found: error
+          retention-days: 30
+
+  # npm trusted publishing (OIDC): July 31, 2025, https://github.blog/changelog/2025-07-31-npm-trusted-publishing-with-oidc-is-generally-available/
+  # and https://docs.npmjs.com/trusted-publishers. Only this job can mint the OIDC token; it holds no other permission.
+  publish-npm:
+    needs: release
+    # Only from a talos-cli-v tag on the PUBLIC repository: a run by hand is the dry run, and the private repository never publishes.
+    if: vars.TALOS_NPM_TRUSTED_PUBLISHING == 'true' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/talos-cli-v') && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: '24.18.0'
+          registry-url: 'https://registry.npmjs.org'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: talos-cli-release
+          path: release-files
+      # No npm token in the environment: npm signs in by OIDC. Platforms first, the main package last; a rerun skips what is published.
+      # npm makes no provenance from a private repository, even with trusted publishing (docs.npmjs.com/trusted-publishers,
+      # «Provenance generation is not supported for private repositories»): ask for it only from a public one.
+      - name: Publish to npm
+        env:
+          TALOS_NPM_PROVENANCE: ${{ github.event.repository.private && 'false' || 'true' }}
+        run: node cli/scripts/release-plan.mjs publish "${{ needs.release.outputs.version }}" release-files
+
+  github-release:
+    needs: [release, publish-npm]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.event.repository.private == false && needs.release.result == 'success' && (needs.publish-npm.result == 'success' || needs.publish-npm.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: talos-cli-release
+          path: release-files
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.release.outputs.version }}
+          PRERELEASE: ${{ needs.release.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          extra=()
+          if [[ "$PRERELEASE" == 'true' ]]; then extra+=(--prerelease); fi
+          files=()
+          for file in release-files/*; do [[ "$(basename "$file")" == 'RELEASE-NOTES.md' ]] || files+=("$file"); done
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --title "TALOS CLI $VERSION" \
+            --notes-file release-files/RELEASE-NOTES.md "${extra[@]}" "${files[@]}"
