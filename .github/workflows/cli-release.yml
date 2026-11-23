@@ -32,6 +32,9 @@ concurrency:
 jobs:
   release:
     runs-on: windows-latest
+    # 23/11/2026, first public dry run (45238099424, judge v2666): a gate that stops answering held the job for 70 minutes
+    # until it was cancelled by hand (GitHub's own limit is 6 hours). The whole job, live gate and desktop gate included, fits in 90.
+    timeout-minutes: 90
     outputs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
@@ -62,23 +65,30 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
           "channel=$channel" >> $env:GITHUB_OUTPUT
           "prerelease=$($prerelease.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
-      - name: Install CLI dependencies and verify
+      - name: Install CLI dependencies and verify the lock
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           npm --prefix cli install --package-lock-only --ignore-scripts --no-audit --no-fund
           node cli/scripts/verify-lock.mjs
           npm --prefix cli ci --ignore-scripts
-          npm --prefix cli run typecheck
-          npm --prefix cli test
-          npm --prefix cli run build
-      - name: Install TALOS runtime dependencies for kernel, provider and desktop gates
+      # The CLI tests run the real kernel from harness-ui (eventsource-parser and the rest), so its dependencies come BEFORE
+      # them, as in cli.yml. 23/11/2026, first public dry run (45238099424): installed after, 61 tests could not load the
+      # kernel and two files never ended.
+      - name: Install TALOS runtime dependencies for the CLI tests, kernel, provider and desktop gates
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           npm --prefix harness-ui ci --ignore-scripts
           npm --prefix harness-ui/frontend ci
           npm --prefix context-engine ci
+      - name: CLI typecheck, build and test
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm --prefix cli run typecheck
+          npm --prefix cli run build
+          npm --prefix cli test
       - name: Kernel suite the CLI loads
         shell: pwsh
         run: |
