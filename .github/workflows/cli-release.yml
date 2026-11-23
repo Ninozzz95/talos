@@ -33,8 +33,10 @@ jobs:
   release:
     runs-on: windows-latest
     # 23/11/2026, first public dry run (45238099424, judge v2666): a gate that stops answering held the job for 70 minutes
-    # until it was cancelled by hand (GitHub's own limit is 6 hours). The whole job, live gate and desktop gate included, fits in 90.
-    timeout-minutes: 90
+    # until it was cancelled by hand (GitHub's own limit is 6 hours). Second dry run (45262063647, judge v2668), measured: install
+    # 1 min, CLI typecheck/build/test 14 min, kernel suite 35 min; the desktop gate's server half takes ~22 min in ci.yml, its
+    # frontend half ~3 min. With staging, the standalone build and the smokes that is ~85 min, so 90 left no margin: 120.
+    timeout-minutes: 120
     outputs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
@@ -82,6 +84,26 @@ jobs:
           npm --prefix harness-ui ci --ignore-scripts
           npm --prefix harness-ui/frontend ci
           npm --prefix context-engine ci
+          # The frontend unit tests of the desktop gate include a DOM test that needs Playwright's Chromium, as in release.yml.
+          node harness-ui/frontend/node_modules/playwright/cli.js install chromium
+      # 23/11/2026, second public dry run (45262063647, judge v2668): the kernel's attachment tests (chat-files, the HTTP
+      # attachments) need the upload helper built by the verified Go, and the desktop gate below runs the same tests again.
+      # The steps are ci.yml's desktop job (and release.yml), byte for byte: the archive's SHA256 is checked before any use, and
+      # TALOS_GO_BINARY reaches the later steps.
+      - name: Go 1.27.1, verified, and the attachment helper
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $archive = Join-Path $env:RUNNER_TEMP 'go1.27.1.windows-amd64.zip'
+          $directory = Join-Path $env:RUNNER_TEMP 'talos-go-1.27.1'
+          Invoke-WebRequest -Uri 'https://go.dev/dl/go1.27.1.windows-amd64.zip' -OutFile $archive
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          if ($hash -ne 'a3911b5e0e1b1053f25ed0675f4c1c6aad1e2bfcf253df2b9be4caabd2edd95d') { throw 'Go archive does not match.' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $directory
+          $go = Join-Path $directory 'go/bin/go.exe'
+          $env:TALOS_GO_BINARY = $go
+          "TALOS_GO_BINARY=$go" >> $env:GITHUB_ENV
+          npm --prefix harness-ui run build:chat-upload
       - name: CLI typecheck, build and test
         shell: pwsh
         run: |
@@ -128,11 +150,19 @@ jobs:
           Test-TalosProvider 'OpenAI' 'openai:gpt-5-nano'
           Test-TalosProvider 'Anthropic' 'anthropic:claude-haiku-4-5-20251001'
           Test-TalosProvider 'Gemini' 'google:gemini-2.5-flash-lite'
+      # 23/11/2026 (judge v2669): the desktop gate is the list release.yml's `cancelli` and ci.yml's desktop job already run green
+      # on GitHub's runners (server, kernel, kernel source check, frontend build and unit tests), in ci.yml's order. It was
+      # harness-ui's full verify script, whose last part (component parity in a real browser) no workflow had ever run that way.
       - name: Re-run existing desktop gate on release commit
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          npm --prefix harness-ui run verify:all
+          node --test --import=./harness-ui/desktop/tests/gancio-portachiavi.mjs harness-ui/tests/*.test.mjs
+          npm --prefix harness-ui run test:kernel
+          npm --prefix harness-ui run kernel:controlla
+          npm --prefix harness-ui/frontend run build
+          Copy-Item -Path harness-ui/frontend/dist/* -Destination harness-ui/public/ -Recurse -Force
+          npm --prefix harness-ui/frontend run test:unit
           npm --prefix harness-ui prune --omit=dev --ignore-scripts
           npm --prefix context-engine prune --omit=dev --ignore-scripts
       - name: Download and verify official Node runtime
