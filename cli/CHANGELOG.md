@@ -5,7 +5,7 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 `src/version.ts`, and in the `talos-cli-vX.Y.Z` tag. The package is published on npm as
 [`talos-code`](https://www.npmjs.com/package/talos-code); the command is `talos`.
 
-## talos-cli-v0.7.0 — 2026-11-23
+## talos-cli-v0.7.0 — 2026-11-24
 
 ### Added
 - **A Projects page.** `/projects` (and the folder shown in the footer, now clickable) opens the list of the folders you have
