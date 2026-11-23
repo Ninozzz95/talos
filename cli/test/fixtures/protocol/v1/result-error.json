@@ -1,0 +1,1 @@
+{"schema":"talos.cli.result.v1","ok":false,"sessionId":"session-1","error":{"code":"PROVIDER_UNREACHABLE","message":"offline","details":{"code":"PROVIDER_UNREACHABLE","message":"offline"}},"warnings":[]}

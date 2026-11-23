@@ -1,0 +1,321 @@
+{
+ "source": "MOCKUP-FASE-UI-2026-10-01-v2-aggiornamenti.html COMMANDS/GROUPS",
+ "groups": [
+  [
+   "session",
+   "Session"
+  ],
+  [
+   "turn",
+   "Model and turn"
+  ],
+  [
+   "view",
+   "View"
+  ],
+  [
+   "work",
+   "Work"
+  ],
+  [
+   "extensions",
+   "Extensions"
+  ]
+ ],
+ "commands": [
+  {
+   "name": "resume",
+   "group": "session",
+   "desc": "Pick up an earlier conversation",
+   "usage": "[session-id]",
+   "fresh": false
+  },
+  {
+   "name": "fork",
+   "group": "session",
+   "desc": "Branch this conversation from a message",
+   "usage": "[session-id]",
+   "fresh": false
+  },
+  {
+   "name": "rename",
+   "group": "session",
+   "desc": "Name this conversation",
+   "usage": "<name>",
+   "fresh": false
+  },
+  {
+   "name": "export",
+   "group": "session",
+   "desc": "Save the conversation to a file or the clipboard",
+   "usage": "[md|json|jsonl] [file]",
+   "fresh": false
+  },
+  {
+   "name": "undo",
+   "group": "session",
+   "desc": "Go back to an earlier point (/rewind, /checkpoint)",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "history",
+   "group": "session",
+   "desc": "Your messages in this project",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "clear",
+   "group": "session",
+   "desc": "Clear the screen; the conversation stays saved",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "compact",
+   "group": "session",
+   "desc": "Summarise the conversation to free context",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "exit",
+   "group": "session",
+   "desc": "Leave TALOS",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "provider",
+   "group": "turn",
+   "desc": "Choose the AI provider",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "setup",
+   "group": "turn",
+   "desc": "Provider, key, model step by step",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "model",
+   "group": "turn",
+   "desc": "Choose a model and its reasoning effort",
+   "usage": "[provider:model]",
+   "fresh": false
+  },
+  {
+   "name": "effort",
+   "group": "turn",
+   "desc": "Choose reasoning effort",
+   "usage": "[level]",
+   "fresh": false
+  },
+  {
+   "name": "busy",
+   "group": "turn",
+   "desc": "Choose what Enter does while TALOS works",
+   "usage": "[queue|steer|interrupt]",
+   "fresh": false
+  },
+  {
+   "name": "queue",
+   "group": "turn",
+   "desc": "Show or manage queued follow-ups",
+   "usage": "[show|clear|run]",
+   "fresh": false
+  },
+  {
+   "name": "agents",
+   "group": "turn",
+   "desc": "Agents of this session, live",
+   "usage": "[stop|show] [n|id|all]",
+   "fresh": false
+  },
+  {
+   "name": "retry",
+   "group": "turn",
+   "desc": "Send the last message again",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "plan",
+   "group": "turn",
+   "desc": "Plan first, change nothing until you approve",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "permissions",
+   "group": "turn",
+   "desc": "Permission mode and rules",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "help",
+   "group": "view",
+   "desc": "Commands and keys",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "status",
+   "group": "view",
+   "desc": "Version, model, project, connections",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "context",
+   "group": "view",
+   "desc": "What fills the context window",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "usage",
+   "group": "view",
+   "desc": "Tokens, context window, cost, compactions",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "diff",
+   "group": "view",
+   "desc": "Current Git diff, file by file",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "copy",
+   "group": "view",
+   "desc": "Copy an answer or one of its code blocks",
+   "usage": "[n]",
+   "fresh": false
+  },
+  {
+   "name": "theme",
+   "group": "view",
+   "desc": "Pick a theme, previewed live",
+   "usage": "[name]",
+   "fresh": false
+  },
+  {
+   "name": "config",
+   "group": "view",
+   "desc": "Personal display settings for this project",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "redraw",
+   "group": "view",
+   "desc": "Repaint the whole screen",
+   "usage": "",
+   "fresh": false
+  },
+  {
+   "name": "tui",
+   "group": "view",
+   "desc": "Fullscreen or classic view",
+   "usage": "[fullscreen|classic]",
+   "fresh": true
+  },
+  {
+   "name": "transcript",
+   "group": "view",
+   "desc": "Search the whole conversation (ctrl+o)",
+   "usage": "",
+   "fresh": true
+  },
+  {
+   "name": "whatsnew",
+   "group": "view",
+   "desc": "What changed in the versions you got",
+   "usage": "",
+   "fresh": true
+  },
+  {
+   "name": "memory",
+   "group": "work",
+   "desc": "What TALOS remembers about you and the project",
+   "usage": "[args...]",
+   "fresh": false
+  },
+  {
+   "name": "notes",
+   "group": "work",
+   "desc": "Your notes, in Markdown",
+   "usage": "[args...]",
+   "fresh": false
+  },
+  {
+   "name": "tasks",
+   "group": "work",
+   "desc": "Tasks of this project",
+   "usage": "[args...]",
+   "fresh": false
+  },
+  {
+   "name": "library",
+   "group": "work",
+   "desc": "Files you keep for TALOS to read",
+   "usage": "[args...]",
+   "fresh": false
+  },
+  {
+   "name": "research",
+   "group": "work",
+   "desc": "Deep Research reports",
+   "usage": "[args...]",
+   "fresh": false
+  },
+  {
+   "name": "automations",
+   "group": "work",
+   "desc": "Runs that start by themselves",
+   "usage": "[args...]",
+   "fresh": false
+  },
+  {
+   "name": "forge",
+   "group": "work",
+   "desc": "Tools TALOS built for this project",
+   "usage": "[args...]",
+   "fresh": false
+  },
+  {
+   "name": "mcp",
+   "group": "extensions",
+   "desc": "MCP servers, their tools and trust",
+   "usage": "[list|test|trust|untrust] [server-id]",
+   "fresh": false
+  },
+  {
+   "name": "hooks",
+   "group": "extensions",
+   "desc": "What runs on which event",
+   "usage": "[list|dry-run|trust|...] [hook-id]",
+   "fresh": false
+  },
+  {
+   "name": "plugins",
+   "group": "extensions",
+   "desc": "Installed and available plugins",
+   "usage": "[list|install|remove|...] [plugin-id]",
+   "fresh": false
+  },
+  {
+   "name": "doctor",
+   "group": "extensions",
+   "desc": "Check the installation",
+   "usage": "[args...]",
+   "fresh": false
+  }
+ ]
+}

@@ -14,11 +14,12 @@
 # mai, e quando si manifesta è un crash senza stack leggibile. Un cancello non
 # può dichiarare pronta una release su codice che non ha mai compilato.
 #
-# ⛔⛔ QUESTO FILE VIVE IN DUE REPOSITORY CON DUE DISPOSIZIONI DIVERSE.
+# ⛔⛔ QUESTO FILE È VISSUTO IN DUE REPOSITORY CON DUE DISPOSIZIONI DIVERSE.
 #
-# Nello sviluppo l'app sta in `mobile/`. Nel repo pubblicato **quella cartella È
-# la radice**, e `mobile/` non esiste. Un percorso scritto a mano è quindi
-# giusto in uno e falso nell'altro, e lo sbaglia in silenzio.
+# Nell'agosto 2026 c'era anche un repo pubblico del solo mobile, dove
+# **`mobile/` era la radice**. Dal monorepo pubblico (verificato il 23/11/2026:
+# l'account pubblico ha solo il monorepo) l'app sta in `mobile/` ovunque, ma la
+# domanda al checkout qui sotto resta: costa un passo e non sbaglia in silenzio.
 #
 # MISURATO il 2026-08-16: la prima corsa sul repo pubblico è morta in **16
 # secondi** su `cache-dependency-path: mobile/package-lock.json` — «Some
@@ -135,8 +136,8 @@ jobs:
         with:
           submodules: recursive
 
-      # La stessa domanda del lavoro web: nel repo pubblicato `mobile/` non
-      # esiste, è la radice. Si chiede al checkout, non si scrive a mano.
+      # La stessa domanda del lavoro web: dove sta l'app si chiede al checkout,
+      # non si scrive a mano.
       - id: dove
         name: dove sta l'app
         run: |
@@ -259,7 +260,7 @@ jobs:
   # release.yml). Un cancello che non guarda un prodotto non lo protegge: ogni rosso del desktop si
   # scopriva a mano, sulla macchina di chi lo stava scrivendo.
   #
-  # ⛔ Gira SOLO dove il desktop esiste. Nel repo pubblicato del mobile `harness-ui/` non c'è, e un
+  # ⛔ Gira SOLO dove il desktop esiste. In un albero senza `harness-ui/` un
   # job che fallisse per una cartella assente sarebbe rumore, non un cancello: il primo passo lo
   # dichiara e gli altri se ne vanno se non c'è.
   #
@@ -395,6 +396,33 @@ jobs:
           if-no-files-found: ignore
           include-hidden-files: true
           retention-days: 7
+
+  # 23/11/2026, CLI 0.7.0 (owner, riga 225, «codice pubblico + bollino»): anche il terminale entra nel controllo comune.
+  # Le sue prove stanno in cli.yml, una volta sola, e qui si chiamano su ogni proposta e su main: un cambio al nucleo
+  # condiviso passa anche dalle prove del terminale prima di entrare. Come per il desktop si chiede al checkout:
+  # in un albero senza `cli/package.json` il job delle prove non parte, e non e' un rosso.
+  cli-dove:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ci: ${{ steps.dove.outputs.ci }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: dove
+        name: c'e il terminale in questo repo?
+        run: |
+          if [ -f cli/package.json ]; then
+            echo "ci=si" >> "$GITHUB_OUTPUT"
+            echo "cli c'e: le prove del terminale girano"
+          else
+            echo "ci=no" >> "$GITHUB_OUTPUT"
+            echo "cli non c'e in questo repo: niente da provare"
+          fi
+
+  cli:
+    needs: cli-dove
+    if: needs.cli-dove.outputs.ci == 'si'
+    uses: ./.github/workflows/cli.yml
 
   browser:
     runs-on: ubuntu-latest

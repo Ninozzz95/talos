@@ -1,0 +1,1 @@
+{"schema":"talos.cli.event.v2","version":2,"sessionId":"session-3","eventId":"talos:session-3:native:5","cursor":{"sessionId":"session-3","sequence":5},"ts":"2026-09-24T09:00:00.000Z","durability":"durable","type":"run.cancelled","data":{"reason":"cancelled by user","runId":"run-5"}}

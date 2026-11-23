@@ -1,0 +1,49 @@
+{
+ "source": "lavoro/MOCKUP-FASE-UI-2026-10-01.html golden frames step-04-permessi-e-piano-t12s (approved 01/10)",
+ "frames": {
+  "120x40": {
+   "text": [
+    "│ ╭─ Plan mode · TALOS proposes this plan and waits for you",
+    "│   1. Move the resize pipeline into src/export/worker.ts",
+    "│   2. Post jobs through a bounded queue (4 at a time)",
+    "│   3. Keep the sync path for files under 1 MB",
+    "│   4. Add a test that exports 50 images without blocking the event loop",
+    "│",
+    "│    Approve and start     Edit the plan     Keep planning    enter approve · e edit · esc keep planning",
+    "╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"
+   ],
+   "style": [
+    "0+5:acc 5+9:acc,b 14+45:dim",
+    "0+7:acc",
+    "0+7:acc",
+    "0+7:acc",
+    "0+7:acc",
+    "0+2:acc",
+    "0+2:acc 4+19:pill 26+15:dim 44+15:dim 59+45:faint",
+    "0+120:acc"
+   ]
+  },
+  "80x24": {
+   "text": [
+    "│ ╭─ Plan mode · TALOS proposes this plan and waits for you",
+    "│   1. Move the resize pipeline into src/export/worker.ts",
+    "│   2. Post jobs through a bounded queue (4 at a time)",
+    "│   3. Keep the sync path for files under 1 MB",
+    "│   4. Add a test that exports 50 images without blocking the event loop",
+    "│",
+    "│    Approve and start     Edit the plan     Keep planning    enter approve · e",
+    "╰──────────────────────────────────────────────────────────────────────────────╯"
+   ],
+   "style": [
+    "0+5:acc 5+9:acc,b 14+45:dim",
+    "0+7:acc",
+    "0+7:acc",
+    "0+7:acc",
+    "0+7:acc",
+    "0+2:acc",
+    "0+2:acc 4+19:pill 26+15:dim 44+15:dim 59+20:faint",
+    "0+80:acc"
+   ]
+  }
+ }
+}
