@@ -41,7 +41,10 @@ test('F-022 M5: boot reconcile sweeps a dead marker, the kill-switch spares it, 
   try{
     const paths=resolveCliPaths(process.env,process.platform,home);
     const dir=join(paths.dataRoot,'active-runs');
-    const deadMarker=()=>writeFile(join(dir,'999999.json'),JSON.stringify({pid:999999,projectRoot:'/gone',startedAt:new Date().toISOString()}));
+    /* 24/11/2026 (judge v2684): the dead marker's id is a multiple of 4 past any real one. Windows ignores the two low bits of a
+       process id, so the old 999999 read as 999996, alive whenever a process held that id; 2147483644 is past every id Windows and
+       Linux hand out, and process.kill(id, 0) still accepts it. */
+    const deadMarker=()=>writeFile(join(dir,'2147483644.json'),JSON.stringify({pid:2147483644,projectRoot:'/gone',startedAt:new Date().toISOString()}));
     const boot=async()=>{
       const f=fakeIo();
       const code=await main(['-p','hi','--json'],{io:f.io as any,createRuntime:async()=>stubRuntime()});
@@ -50,11 +53,11 @@ test('F-022 M5: boot reconcile sweeps a dead marker, the kill-switch spares it, 
     await mkdir(dir,{recursive:true});
     await deadMarker();
     await boot();
-    await assert.rejects(()=>readFile(join(dir,'999999.json')),'the dead marker is swept at boot');
+    await assert.rejects(()=>readFile(join(dir,'2147483644.json')),'the dead marker is swept at boot');
     await assert.rejects(()=>readFile(join(dir,`${process.pid}.json`)),'the own marker is released by the finally');
     process.env.TALOS_ACTIVE_RUN_RECONCILE='0';
     await deadMarker();
     await boot();
-    await readFile(join(dir,'999999.json'),'utf8'); /* the kill-switch left it alone */
+    await readFile(join(dir,'2147483644.json'),'utf8'); /* the kill-switch left it alone */
   }finally{for(const[k,v]of saved){if(v===undefined)delete (process.env as Record<string,string|undefined>)[k];else process.env[k]=v;}}
 });

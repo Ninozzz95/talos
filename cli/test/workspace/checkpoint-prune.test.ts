@@ -30,12 +30,23 @@ async function writeJournal(rootDir:string,rows:{id:string;createdAt:string;stat
   for(const row of rows)await writeFile(join(recordsDir,`${row.id}.json`),`${JSON.stringify(record(row.id,row.createdAt,row.state,{pre:row.refs}))}\n`,'utf8');
   await Promise.all(rows.map((row,index)=>writeFile(join(rootDir,'blobs',row.refs[0]??ref(index+1)),'x'.repeat(100),'utf8')));
 }
+/* The blobs of a pruned record are old in real life. Written a moment ago they can look born AFTER the prune's clock: on
+   Windows a file's time is often ahead of Date.now() (measured on this PC, 1,369 writes in 1,500, up to 1.5 ms; on the
+   public runner the clock is coarser), and `minAgeMs: 0` still keeps a blob whose age is below zero. That stopped
+   two public runs in a row at the dry-run test (blobsDeleted 0 and 1 of 2, runs 45399037302 and 45407986939). A test
+   that expects orphans collected therefore ages them first, as the grace-window test below already does: by one minute,
+   far past any clock step and still inside the default one-hour grace, so these tests keep proving `minAgeMs: 0` is honored. */
+async function ageBlobs(rootDir:string){
+  const when=new Date(Date.now()-60*1000);
+  for(const name of await readdir(join(rootDir,'blobs')))await utimes(join(rootDir,'blobs',name),when,when);
+}
 
 test('F-023: prune keeps the newest records and garbage-collects the blobs only they pinned',async()=>{
   const root=await mkdtemp(join(tmpdir(),'talos-prune-'));
   const rows=journal(5);
   const rootDir=await fakeStore(root,[],rows.map((row,index)=>({ref:ref(index+1),bytes:100})));
   await writeJournal(rootDir,rows);
+  await ageBlobs(rootDir);
   const report=await pruneCheckpoints({rootDir,keep:3,minAgeMs:0});
   assert.deepEqual(report.recordsDeleted.map(name=>name.split('/')[1]).sort(),[`${rows[0].id}.json`,`${rows[1].id}.json`]);
   assert.equal(report.recordsKept,3);
@@ -50,6 +61,7 @@ test('F-023: dry run reports exactly what would go and deletes nothing',async()=
   const rows=journal(3);
   const rootDir=await fakeStore(root,[],rows.map((row,index)=>({ref:ref(index+1),bytes:50})));
   await writeJournal(rootDir,rows);
+  await ageBlobs(rootDir);
   const report=await pruneCheckpoints({rootDir,keep:1,dryRun:true,minAgeMs:0});
   assert.equal(report.dryRun,true);
   assert.equal(report.recordsDeleted.length,2);

@@ -163,7 +163,10 @@ test('nobody hosts: talos remote takes the lease as a command, renews it, and re
     assert.equal(got.via,'own');
     const lease=JSON.parse(readFileSync(leaseFile(f.dir),'utf8'));
     assert.equal(lease.kind,'command');assert.equal(lease.label,'talos remote');
-    const before=lease.beatAt;await pause(5);timers[0]!();
+    /* 24/11/2026 (judge v2684): the beat writes the time of the beat; after a fixed 5 ms a clock that steps every 15.6 ms (the
+       Windows default) can still read the same millisecond, and the renewal looked missing. The real beat is 15 s apart. The test
+       waits until the clock has passed the first beat, however coarse it is. */
+    const before=lease.beatAt;while(Date.now()<=Date.parse(before))await pause(2);timers[0]!();
     assert.notEqual(JSON.parse(readFileSync(leaseFile(f.dir),'utf8')).beatAt,before,'the beat renewed it');
     await got.close();
     assert.equal(existsSync(leaseFile(f.dir)),false,'released');assert.equal(stopped,1);

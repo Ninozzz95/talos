@@ -16,7 +16,11 @@ async function fixture(t:{after:(fn:()=>Promise<void>)=>void}){
   const projectRoot=join(root,'project');await mkdir(projectRoot,{recursive:true});
   return{projectRoot,store:createCheckpointStore({rootDir:join(root,'state'),projectRoot})};
 }
-async function turn(store:CheckpointStore,operation:'start'|'resume'|'shell',change:()=>Promise<void>){const handle=await store.begin({operation,sessionId:'s1'});await change();return (await handle.finalize()).id;}
+/* 24/11/2026 (judge v2685, choice A): two checkpoints begun in the same clock tick sort at random (checkpoint-store.ts:125/:127, the
+   first item of the 0.7.1 list, where the cure is). Until then each turn here begins after the clock has moved; with the cure this
+   wait goes. */
+async function clockMoved(){const at=Date.now();while(Date.now()===at)await new Promise(resolve=>setTimeout(resolve,1));}
+async function turn(store:CheckpointStore,operation:'start'|'resume'|'shell',change:()=>Promise<void>){await clockMoved();const handle=await store.begin({operation,sessionId:'s1'});await change();return (await handle.finalize()).id;}
 
 test('the mockup\'s rows: the first sentence of a long message, a short one whole',()=>{
   assert.equal(shortMessage('The login e2e test is flaky. Find out why and fix it.'),'The login e2e test is flaky…');
