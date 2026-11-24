@@ -30,6 +30,83 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 24/11/2026, fifth public dry run (45353460392, attempt 1, judge v2675): inside the release job the desktop gate came after an
+  # hour of CLI tests, and 7 of its 16130 tests were red: six of the EPERM family (a background child alive in the test folder on a
+  # loaded runner) and DESK-TEMP-2 (the shared TEMP was no longer clean). release.yml and ci.yml run the same list as the first
+  # work of a clean machine, and are green there. So the desktop gate is a job of its own, prepared as release.yml's desktop
+  # job prepares its `cancelli` (full checkout on a local branch, the four lockfiles with their native addons, Chromium, the
+  # verified Go and the attachment helper). It starts together with the release job, which only builds and uploads an artifact;
+  # what publishes (npm, the GitHub release) needs both (judge v2676: the same safety, ~35 minutes less). The Electron shell,
+  # the installer and the downloads of release.yml stay out: the CLI ships none of them.
+  desktop-gate:
+    runs-on: windows-latest
+    # release.yml's `cancelli` and ci.yml's desktop job: 40 minutes (server ~22, frontend ~3), plus the installs.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          # As in ci.yml and release.yml: the frontend unit tests resolve `desktop-v0.1.13^{commit}` with git (ripresa-run.mjs);
+          # the default depth-1 checkout has no tags and the RIPRESA-R0 tests die with «ambiguous argument».
+          fetch-depth: 0
+      - id: commit
+        name: The release commit, on a local branch for the existing gates
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $before = git rev-parse HEAD
+          if ($before -cne $env:GITHUB_SHA) { throw 'The checkout is not the commit of this run.' }
+          # As release.yml: some server tests need a real branch; no new commit.
+          git switch --create ci-desktop-release HEAD
+          $after = git rev-parse HEAD
+          if ($after -cne $before) { throw 'The commit to release changed.' }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            harness-ui/package-lock.json
+            harness-ui/frontend/package-lock.json
+            harness-ui/desktop/package-lock.json
+            context-engine/package-lock.json
+      - name: Dependencies from the four lockfiles, with native addons, and Chromium
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm ci --prefix harness-ui --no-audit --no-fund
+          npm ci --prefix harness-ui/frontend --no-audit --no-fund
+          npm ci --prefix harness-ui/desktop --no-audit --no-fund
+          npm ci --prefix context-engine --no-audit --no-fund
+          # The frontend unit tests include a DOM test that needs Playwright's Chromium.
+          node harness-ui/frontend/node_modules/playwright/cli.js install chromium
+      - name: Go 1.27.1, verified, and the attachment helper
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $archive = Join-Path $env:RUNNER_TEMP 'go1.27.1.windows-amd64.zip'
+          $directory = Join-Path $env:RUNNER_TEMP 'talos-go-1.27.1'
+          Invoke-WebRequest -Uri 'https://go.dev/dl/go1.27.1.windows-amd64.zip' -OutFile $archive
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          if ($hash -ne 'a3911b5e0e1b1053f25ed0675f4c1c6aad1e2bfcf253df2b9be4caabd2edd95d') { throw 'Go archive does not match.' }
+          Expand-Archive -LiteralPath $archive -DestinationPath $directory
+          $go = Join-Path $directory 'go/bin/go.exe'
+          $env:TALOS_GO_BINARY = $go
+          "TALOS_GO_BINARY=$go" >> $env:GITHUB_ENV
+          npm --prefix harness-ui run build:chat-upload
+      # 23/11/2026 (judge v2669): the list release.yml's `cancelli` and ci.yml's desktop job already run green on GitHub's runners
+      # (server, kernel, kernel source check, frontend build and unit tests), in ci.yml's order.
+      - name: Desktop gate on the release commit
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          node --test --import=./harness-ui/desktop/tests/gancio-portachiavi.mjs harness-ui/tests/*.test.mjs
+          npm --prefix harness-ui run test:kernel
+          npm --prefix harness-ui run kernel:controlla
+          npm --prefix harness-ui/frontend run build
+          Copy-Item -Path harness-ui/frontend/dist/* -Destination harness-ui/public/ -Recurse -Force
+          npm --prefix harness-ui/frontend run test:unit
+
   release:
     runs-on: windows-latest
     # 23/11/2026, first public dry run (45238099424, judge v2666): a gate that stops answering held the job for 70 minutes
@@ -77,17 +154,15 @@ jobs:
       # The CLI tests run the real kernel from harness-ui (eventsource-parser and the rest), so its dependencies come BEFORE
       # them, as in cli.yml. 23/11/2026, first public dry run (45238099424): installed after, 61 tests could not load the
       # kernel and two files never ended.
-      - name: Install TALOS runtime dependencies for the CLI tests, kernel, provider and desktop gates
+      - name: Install TALOS runtime dependencies for the CLI tests, kernel and provider gates
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           npm --prefix harness-ui ci --ignore-scripts
           npm --prefix harness-ui/frontend ci
           npm --prefix context-engine ci
-          # The frontend unit tests of the desktop gate include a DOM test that needs Playwright's Chromium, as in release.yml.
-          node harness-ui/frontend/node_modules/playwright/cli.js install chromium
       # 23/11/2026, second public dry run (45262063647, judge v2668): the kernel's attachment tests (chat-files, the HTTP
-      # attachments) need the upload helper built by the verified Go, and the desktop gate below runs the same tests again.
+      # attachments) need the upload helper built by the verified Go; the desktop-gate job builds its own, the same way.
       # The steps are ci.yml's desktop job (and release.yml), byte for byte: the archive's SHA256 is checked before any use, and
       # TALOS_GO_BINARY reaches the later steps.
       - name: Go 1.27.1, verified, and the attachment helper
@@ -150,19 +225,11 @@ jobs:
           Test-TalosProvider 'OpenAI' 'openai:gpt-5-nano'
           Test-TalosProvider 'Anthropic' 'anthropic:claude-haiku-4-5-20251001'
           Test-TalosProvider 'Gemini' 'google:gemini-2.5-flash-lite'
-      # 23/11/2026 (judge v2669): the desktop gate is the list release.yml's `cancelli` and ci.yml's desktop job already run green
-      # on GitHub's runners (server, kernel, kernel source check, frontend build and unit tests), in ci.yml's order. It was
-      # harness-ui's full verify script, whose last part (component parity in a real browser) no workflow had ever run that way.
-      - name: Re-run existing desktop gate on release commit
+      # The desktop gate runs in its own job (desktop-gate, above); here only what the standalone build ships is kept.
+      - name: Keep only the runtime dependencies the standalone build ships
         shell: pwsh
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
-          node --test --import=./harness-ui/desktop/tests/gancio-portachiavi.mjs harness-ui/tests/*.test.mjs
-          npm --prefix harness-ui run test:kernel
-          npm --prefix harness-ui run kernel:controlla
-          npm --prefix harness-ui/frontend run build
-          Copy-Item -Path harness-ui/frontend/dist/* -Destination harness-ui/public/ -Recurse -Force
-          npm --prefix harness-ui/frontend run test:unit
           npm --prefix harness-ui prune --omit=dev --ignore-scripts
           npm --prefix context-engine prune --omit=dev --ignore-scripts
       - name: Download and verify official Node runtime
@@ -226,7 +293,7 @@ jobs:
   # npm trusted publishing (OIDC): July 31, 2025, https://github.blog/changelog/2025-07-31-npm-trusted-publishing-with-oidc-is-generally-available/
   # and https://docs.npmjs.com/trusted-publishers. Only this job can mint the OIDC token; it holds no other permission.
   publish-npm:
-    needs: release
+    needs: [release, desktop-gate]
     # Only from a talos-cli-v tag on the PUBLIC repository: a run by hand is the dry run, and the private repository never publishes.
     if: vars.TALOS_NPM_TRUSTED_PUBLISHING == 'true' && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/talos-cli-v') && github.event.repository.private == false
     runs-on: ubuntu-latest
@@ -252,8 +319,8 @@ jobs:
         run: node cli/scripts/release-plan.mjs publish "${{ needs.release.outputs.version }}" release-files
 
   github-release:
-    needs: [release, publish-npm]
-    if: ${{ !cancelled() && github.event_name == 'push' && github.event.repository.private == false && needs.release.result == 'success' && (needs.publish-npm.result == 'success' || needs.publish-npm.result == 'skipped') }}
+    needs: [release, desktop-gate, publish-npm]
+    if: ${{ !cancelled() && github.event_name == 'push' && github.event.repository.private == false && needs.release.result == 'success' && needs.desktop-gate.result == 'success' && (needs.publish-npm.result == 'success' || needs.publish-npm.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
