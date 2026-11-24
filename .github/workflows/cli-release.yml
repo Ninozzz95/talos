@@ -329,6 +329,10 @@ jobs:
         with:
           name: talos-cli-release
           path: release-files
+      # Desktop, phone and CLI release from the same repository: the repository's «Latest» stays with the desktop, as release.yml
+      # keeps it for the phone (`make_latest: false`). gh marks a new full release Latest unless told not to. Nothing reads
+      # /releases/latest (the desktop, the phone and `talos update` each pick their own tags from the list), but the Latest badge
+      # on the repository page is what a person downloading the PC app clicks.
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -340,5 +344,5 @@ jobs:
           if [[ "$PRERELEASE" == 'true' ]]; then extra+=(--prerelease); fi
           files=()
           for file in release-files/*; do [[ "$(basename "$file")" == 'RELEASE-NOTES.md' ]] || files+=("$file"); done
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --title "TALOS CLI $VERSION" \
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --latest=false --title "TALOS CLI $VERSION" \
             --notes-file release-files/RELEASE-NOTES.md "${extra[@]}" "${files[@]}"

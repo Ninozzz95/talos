@@ -13,6 +13,10 @@ $compatProvider = Join-Path $env:TEMP 'talos-cli-e2e-openai-provider.mjs'
 if (-not (Test-Path $talos)) { throw 'talos.cmd missing from stage' }
 if (-not (Test-Path $bundledNode)) { throw 'runtime\node.exe missing from stage' }
 if (-not (Test-Path $fakeProvider)) { throw 'fake-provider.mjs missing' }
+# The version the portable and the installed CLI must print is the one being released: cli/package.json, which the
+# release workflow also checks against the tag. A literal here stopped the sixth public dry run (45383581947) on 0.7.0.
+$expectedVersion = (Get-Content -Raw (Join-Path $PSScriptRoot '..\package.json') | ConvertFrom-Json).version
+if (-not $expectedVersion) { throw 'cli/package.json has no version' }
 
 $env:TALOS_FAKE_PROVIDER_SOURCE=$fakeProvider
 $compatProviderSource=@'
@@ -128,13 +132,19 @@ $provider = Start-Process $bundledNode -ArgumentList ('"' + $compatProvider + '"
 try {
   Start-Sleep -Milliseconds 600
   $version = & $talos --version
-  if ($LASTEXITCODE -ne 0 -or $version.Trim() -ne '1.0.0') { throw "version smoke failed: $version" }
+  if ($LASTEXITCODE -ne 0 -or $version.Trim() -ne $expectedVersion) { throw "version smoke failed: $version (expected $expectedVersion)" }
 
   & $talos --project $Project project trust --include-nested | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'project trust preparation failed' }
 
   & $talos --project $Project model use 'ollama:qwen3-coder-test' --scope user | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'model use failed' }
+
+  # Since 11/11/2026 a start that cannot ask (`talos -p`) does not run in a folder nobody decided
+  # (src/security/project-trust-gate.ts, assertProjectTrusted): the folder outside the checkout is trusted first, as a person
+  # would. Found running these steps by hand for judge v2679: without it every run there ends PROJECT_TRUST_REQUIRED, exit 2.
+  & $talos --project $outside project trust | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'outside folder trust failed' }
 
   Push-Location $outside
   try {
@@ -187,7 +197,7 @@ try {
     $installed = Join-Path $windowsLocalAppData 'Programs\TALOS CLI\bin\talos.cmd'
     if (-not (Test-Path $installed)) { throw "installed talos.cmd missing under Windows LocalApplicationData: $installed" }
     $installedVersion = & $installed --version
-    if ($LASTEXITCODE -ne 0 -or $installedVersion.Trim() -ne '1.0.0') { throw 'installed CLI smoke failed' }
+    if ($LASTEXITCODE -ne 0 -or $installedVersion.Trim() -ne $expectedVersion) { throw "installed CLI smoke failed: $installedVersion (expected $expectedVersion)" }
     Push-Location $outside
     try {
       $installedJson = & $installed --project $outside -p 'reply OK from installed CLI' --json --permission-mode dontAsk

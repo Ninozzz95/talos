@@ -51,3 +51,27 @@ test('windows installed smoke uses bundled node and validates runtime from an ex
   assert.match(text,/Uninstall\.exe/iu);
   assert.match(text,/sentinel/iu);
 });
+
+test('windows smoke expects the version being released, read from cli/package.json, at both version checks',async()=>{
+  /* 24/11/2026, sixth public dry run (45383581947, judge v2679): both checks compared --version with a literal '1.0.0' and
+     stopped the release of 0.7.0 */
+  const text=await readFile(new URL('../../e2e/windows-smoke.ps1',import.meta.url),'utf8');
+  assert.match(text,/\$expectedVersion\s*=\s*\(Get-Content -Raw \(Join-Path \$PSScriptRoot '\.\.\\package\.json'\) \| ConvertFrom-Json\)\.version/u);
+  assert.match(text,/if \(-not \$expectedVersion\) \{ throw/u);
+  assert.match(text,/\$version\.Trim\(\) -ne \$expectedVersion/u);
+  assert.match(text,/\$installedVersion\.Trim\(\) -ne \$expectedVersion/u);
+  assert.doesNotMatch(text,/-(?:ne|eq) '\d+\.\d+\.\d+'/u,'no version literal in a comparison');
+  assert.ok(text.indexOf('$expectedVersion =')<text.indexOf('& $talos --version'),'the expected version is read before the first check');
+});
+
+test('windows smoke trusts the folder outside the checkout before any headless run there',async()=>{
+  /* Since 11/11/2026 `talos -p` does not run in a folder nobody decided (src/security/project-trust-gate.ts, assertProjectTrusted).
+     The steps after the version check never ran in CI; run by hand for judge v2679, every -p outside ended PROJECT_TRUST_REQUIRED. */
+  const text=await readFile(new URL('../../e2e/windows-smoke.ps1',import.meta.url),'utf8');
+  const trust=text.search(/& \$talos --project \$outside project trust \| Out-Null\r?\n\s*if \(\$LASTEXITCODE -ne 0\) \{ throw 'outside folder trust failed' \}/u);
+  assert.ok(trust>=0,'the outside folder is trusted and a failure stops the smoke');
+  for(const run of ["-p 'reply OK'","--resume last","--output-format stream-json","-p 'reply OK from installed CLI'"]){
+    const at=text.indexOf(run);assert.ok(at>=0,run);
+    assert.ok(trust<at,`the outside folder is trusted before ${run}`);
+  }
+});
