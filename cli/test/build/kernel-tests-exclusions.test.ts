@@ -36,3 +36,23 @@ test('the kernel startup file runs whole in the gate: none of its tests is skipp
   /* none of the file's tests is named in the exclusion file any more */
   assert.deepEqual(Object.keys(EXCLUDED.tests).filter(name=>name.startsWith('KERNEL-AVVIO-')),[]);
 });
+
+/* CLI 0.7.0, fourth public dry run (45281344821, 24/11/2026, judge v2671): the two files whose cleanup meets a background child
+   alive (EPERM, which rmSync does not retry) failed a different test on each loaded runner; skipping them by name never ended.
+   They are excluded whole here, and the coverage stays where the exclusion reasons say: the release job's desktop gate runs the
+   whole server suite, these two files included, with no skip. */
+const EPERM_FILES=['riserva-del-riassunto-c6bis.test.mjs','r21-attese-e-sveglia.test.mjs'];
+
+test('the two EPERM-prone kernel files are excluded whole, none of their tests by name, and the release desktop gate still runs them',()=>{
+  for(const file of EPERM_FILES){
+    assert.ok(file in EXCLUDED.files,`${file} is not excluded whole: on a loaded runner another of its tests fails each time`);
+    assert.match(EXCLUDED.files[file]!,/desktop gate/u,`${file}: the reason says where the file still runs`);
+    const source=readFileSync(new URL(`../../../harness-ui/tests/${file}`,import.meta.url),'utf8');
+    assert.deepEqual(Object.keys(EXCLUDED.tests).filter(name=>source.includes(name)),[],`${file}: a skip by name is useless once the file is excluded`);
+  }
+  const workflow=readFileSync(new URL('../../../.github/workflows/cli-release.yml',import.meta.url),'utf8');
+  const server=workflow.split(/\r?\n/u).filter(line=>line.trim().startsWith('node --test --import=./harness-ui/desktop/tests/gancio-portachiavi.mjs'));
+  assert.equal(server.length,1,'the release job runs the server suite once');
+  assert.match(server[0]!,/ harness-ui\/tests\/\*\.test\.mjs$/u,'the server suite runs every harness-ui test file, these two included');
+  assert.doesNotMatch(server[0]!,/--test-skip-pattern/u,'the server suite skips nothing');
+});
