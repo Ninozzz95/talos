@@ -218,7 +218,9 @@ test('after a crash the same message is a new start, and the interrupted turn is
     const sessions=[{id:'s-old',sessionId:'s-old',name:'Flaky login test',project:null,path:null,model:'openai:gpt',parentId:null,depth:0,delegatedTask:null,forkedFrom:null,startedAt:null,updatedAt:null,endedAt:null,outcome:'interrupted',interrupted:true} as any];
     const runtime=createRuntimeSupervisor({
       runtimeFactory:async()=>baseRuntime({start:async input=>{seen.push(input.operationId!);return input.operationId==='op-dead'?'s-old':'s-new';},listSessions:async()=>sessions}),
-      journal:createStartOperationJournal({rootDir:root,pid:process.pid,operationId:()=>'op-fresh'}),
+      /* 24/11/2026: this reading journal was the one left on the real check, and Windows read 4242 as 4240 — public run
+         45407986939 stopped here when a process held that id (judge v2684). It is told that only this process lives too. */
+      journal:createStartOperationJournal({rootDir:root,pid:process.pid,isProcessAlive:onlyThisProcess,operationId:()=>'op-fresh'}),
       sleep:async()=>{},
     });
     assert.equal(await runtime.start(startInput),'s-new','the same message after a crash starts anew');

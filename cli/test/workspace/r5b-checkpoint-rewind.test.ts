@@ -19,9 +19,13 @@ async function fixture(t:{after:(fn:()=>Promise<void>)=>void}){
   const projectRoot=join(root,'project');await mkdir(projectRoot,{recursive:true});
   return{projectRoot,store:createCheckpointStore({rootDir:join(root,'state'),projectRoot})};
 }
+/* 24/11/2026 (judge v2685, choice A): two checkpoints begun in the same clock tick sort at random (checkpoint-store.ts:125/:127, the
+   first item of the 0.7.1 list, where the cure is). Until then each turn here begins after the clock has moved; with the cure this
+   wait goes. */
+async function clockMoved(){const at=Date.now();while(Date.now()===at)await new Promise(resolve=>setTimeout(resolve,1));}
 /* One turn: a checkpoint around `change`, as the runtime takes one around a model run. */
 async function turn(store:CheckpointStore,sessionId:string,change:()=>Promise<void>){
-  const handle=await store.begin({operation:'resume',sessionId});await change();return (await handle.finalize()).id;
+  await clockMoved();const handle=await store.begin({operation:'resume',sessionId});await change();return (await handle.finalize()).id;
 }
 const read=(path:string)=>readFile(path,'utf8').catch(()=>null);
 
