@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
+import {isAbsolute,join,resolve} from 'node:path';
 import test from 'node:test';
 import {publishAll,publishPlan,releaseNotes} from '../../scripts/release-plan.mjs';
 
@@ -75,6 +75,22 @@ test('npm publish: an npm older than trusted publishing, or a missing tarball, s
     rmSync(join(dir,'talos-code-0.5.1-win32-x64.tgz'));
     assert.throws(()=>publishAll({version:'0.5.1',folder:dir,npm:npm('12.0.0')}),/missing npm tarball: talos-code-0\.5\.1-win32-x64\.tgz/u);
     assert.equal(published,0);
+  }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('npm publish from a relative folder, as cli-release.yml passes release-files: npm gets absolute paths, never a GitHub shortcut',()=>{
+  // npm takes «release-files/x.tgz» for the GitHub repository release-files/x.tgz (npm-package-arg isFileSpec wants «.», «~/», «/»
+  // or a drive letter first): the first real publish stopped at `git ls-remote ssh://git@github.com/release-files/...`.
+  const dir=mkdtempSync('talos-release-plan-rel-');
+  try{
+    assert.ok(!isAbsolute(dir),dir);
+    for(const step of publishPlan('0.5.1'))writeFileSync(join(dir,step.file),'x');
+    const calls:string[][]=[];
+    publishAll({version:'0.5.1',folder:dir,npm:(args:string[])=>{calls.push(args);return args[0]==='--version'?{status:0,output:'11.6.2'}:{status:0,output:'+ talos-code'};}});
+    const files=calls.slice(1).map(args=>args[1]!);
+    assert.equal(files.length,3);
+    for(const file of files)assert.ok(isAbsolute(file),`npm publish ${file}`);
+    assert.deepEqual(files,publishPlan('0.5.1').map(step=>resolve(dir,step.file)));
   }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
