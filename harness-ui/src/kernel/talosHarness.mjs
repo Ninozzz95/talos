@@ -134,7 +134,7 @@ import { discoNode, fontiDaDisco, cancelloSemantico, libreriaStandard, ESTENSION
 import { cancelloWorkerAmmesso, giudicaNelWorker, scaldaIlCancello, PERCORSO_DEL_CANCELLO_WORKER, statoCancelloWorker } from './cancello-in-worker.mjs'
 export { PERCORSO_DEL_CANCELLO_WORKER, statoCancelloWorker }
 import { pezzoConSeparatore } from './accoda-con-a-capo.mjs' // T-15 28/09: l'append non salda le righe (il modulo documenta fonti e perché)
-import { classificaPercorsoDiRete, destinazioneDiRete, motivoNamespacePercorso } from './file-namespace-contract.mjs'
+import { classificaPercorsoDiRete, destinazioneDiRete, motivoNamespacePercorso, reteEstranea } from './file-namespace-contract.mjs'
 import { TETTO_PAGINA_WEB, paginaTagliataPerIlModello, salvaPaginaIntera, eUnaPaginaSalvata } from './pagina-web-tagliata.mjs' // politica di taglio di `naviga`, owner 01/10/2026 «Come Hermes»
 import { collegamentoLinuxSulPercorso, spiegazioneCollegamentoLinux, erroriDiRipgrep, avvisoCollegamentiDiRipgrep } from './collegamento-linux.mjs' // 5a, owner 01/10/2026: collegamenti Linux su un disco di Windows, errore onesto
 import { worktreeDiWindowsLettoDaLinux, spiegazioneWorktreeWindows } from './worktree-windows.mjs' // F-016, owner 01-02/10/2026: worktree di Windows letto dal git di Linux
@@ -15081,6 +15081,9 @@ export async function talosLavora({
         if (!cartella || mobile || inCasaLinux?.()) return null
         for (const azione of azioniSulLavoro(comando)) {
             const dove = cartellaDellAzione(cartella, azione)
+            /* ⛔ Riga 199 (0.2.5, T8, già nella 0.2.3): git con la cartella su un altro computer sarebbe già il contatto SMB prima della carta.
+               Lo stato non si legge, quindi si NEGA come sopra (un rifiuto in più, nei limiti noti); dentro un progetto su quella condivisione si legge. */
+            if (reteEstranea(dove, [cartella])) return { azione, dellaPersona: ['(a folder on another computer: its state is not read before you approve)'] }
             let stato
             try { stato = await statoDelRepository(dove, { ignorati: azione.ignorati }) }
             catch { return { azione, dellaPersona: ['(the repository state could not be read)'] } }

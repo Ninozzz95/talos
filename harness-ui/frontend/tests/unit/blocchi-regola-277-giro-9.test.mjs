@@ -94,6 +94,7 @@ function app({ stato = 'turn running', chiaveDelMessaggio = 'vecchia', upload = 
       if (o.ripristino) { state.pendingCustomSession = state.pendingCustomSession ?? o.ripristino.pendente; f.rimettiNelCompositore(o.ripristino); }
     },
     progettiConfigurati: async () => rete.progetti,
+    predefinitoChatNuova: () => ({}), // righe 223-224: la chat nuova nasce dal predefinito (prove in r224-porte-della-chat-nuova)
     mappaPerUnaSessioneNuova: (x) => x, avvisaModelloMancanteSenzaSessione: () => n.avvisi.push('no model'),
     allineaLinguaDellaSessione: async () => {},
     apiPost: async (url, corpoPost) => {

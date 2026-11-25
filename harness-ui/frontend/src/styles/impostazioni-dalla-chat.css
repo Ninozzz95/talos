@@ -63,3 +63,6 @@
 #userQuestionDock .talos-question-card__option-row { cursor: pointer; }
 #userQuestionDock .talos-question-card__option-row:hover { background: var(--talos-accent-soft); box-shadow: inset 0 0 0 1px var(--talos-accent-border); }
 .talos-notification-panel .talos-tabs__tab[aria-selected="true"]:hover { background: var(--talos-accent-soft); border-radius: 6px; }
+/* P2-B (c), 22/11/2026: 38 settings and no ceiling, the list left the window upwards (13 of 38 hidden, no scroll bar). A fixed height that
+   scrolls, as Codex keeps its command popup to a fixed number of rows; the arrows bring the chosen row into view (app.js). */
+.talos-suggerimento-impostazioni:not([hidden]) { max-height: min(420px, 55vh); overflow-y: auto; overscroll-behavior: contain; }

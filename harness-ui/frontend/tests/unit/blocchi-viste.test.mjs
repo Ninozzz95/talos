@@ -159,7 +159,8 @@ test('VISTE-10 senza colonna (pagina stretta, vista piena) il blocco si apre a t
 test('VISTE-11 la chat è cablata: colonna vera, chiusura al cambio di chat, stili', () => {
   const app = readFileSync(new URL('../../src/legacy/app.js', import.meta.url), 'utf8');
   /* decision 399: the column under the name the bridge gives it (`#inspectorPanel`); the page-level proof is `blocchi-lato-pagina-vera-browser.test.mjs` */
-  assert.match(app, /creaVisteDelBlocco\(\{ document, colonna: \(\) => inspectorPanel, apriColonna: \(\) => openPanel\('inspector'\) \}\)/u);
+  /* P2-C riga 40: la colonna si apre come prima, e dice se l'ha aperta lei sopra la chat (finestra stretta) perché «Chiudi» la richiuda */
+  assert.match(app, /creaVisteDelBlocco\(\{ document, colonna: \(\) => inspectorPanel, chiudiColonna: closePanels,\s+apriColonna: \(\) => \{ const sopra = pannelloFlottante\('inspector'\) && !inspectorPanel\.classList\.contains\('open'\); openPanel\('inspector'\); return sopra; \} \}\)/u);
   assert.match(app, /\n  const inspectorPanel = \$\('#inspectorPanel'\);/u);
   assert.match(app, /azioni: \{ lato: visteDeiBlocchi\.lato, schermo: visteDeiBlocchi\.schermo, libreria: salvaBloccoInLibreria \}/u); // decisione 142
   /* cura 288 round 3: the views close on every row click, the hook resets only when the chat really changes (after the parking) */

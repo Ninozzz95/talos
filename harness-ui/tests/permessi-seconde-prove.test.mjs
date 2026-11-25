@@ -227,8 +227,9 @@ test('SECONDA-P15 — la giunzione sul disco del processo verso `.ssh`, nominata
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const gemello = realpathSync.native(mkdtempSync(join(tmpdir(), 'talos-seconde-gemello-')));
 mkdirSync(join(gemello, 'src', 'kernel'), { recursive: true });
-/* 0.2.4: `path-policy.mjs` legge `$'…'` col lettore unico del nucleo (`kernel/apici-ansi-c.mjs`, soli builtin): va nel gemello anche lui */
-for (const nome of ['path-policy.mjs', 'forme-di-segreto.mjs', 'kernel/apici-ansi-c.mjs']) {
+/* 0.2.4: `path-policy.mjs` legge `$'…'` col lettore unico del nucleo (`kernel/apici-ansi-c.mjs`, soli builtin): va nel gemello anche lui.
+   Riga 199 (0.2.5): e riconosce la rete dal testo con `kernel/file-namespace-contract.mjs` (soli builtin): anche lui nel gemello. */
+for (const nome of ['path-policy.mjs', 'forme-di-segreto.mjs', 'kernel/apici-ansi-c.mjs', 'kernel/file-namespace-contract.mjs']) {
   const testo = readFileSync(join(SRC, nome), 'utf8');
   writeFileSync(join(gemello, 'src', nome), testo.replaceAll("from 'node:path'", () => "from 'node:path/posix'").replaceAll('process.platform', () => "'linux'"));
 }

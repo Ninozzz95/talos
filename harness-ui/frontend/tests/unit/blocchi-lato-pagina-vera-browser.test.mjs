@@ -41,7 +41,8 @@ const TABELLA = readFileSync(resolve(progetto, 'harness-ui/tests/fixtures/blocch
 
 /** The selector `app.js` uses for the column of the side view: `colonna: () => $('#x')`, or `colonna: () => nome` with `const nome = $('#x');`. */
 function selettoreDellaColonna(app) {
-  const chiamata = app.match(/creaVisteDelBlocco\(\{ document, colonna: \(\) => ([^,]+?), apriColonna/u);
+  /* the keys of the call can come in any order (row 40 added `chiudiColonna`): read the `colonna` key wherever it sits */
+  const chiamata = app.match(/creaVisteDelBlocco\(\{ document,[\s\S]*?\bcolonna: \(\) => ([^,}]+?)\s*[,}]/u);
   assert.ok(chiamata, 'app.js still hands a column to creaVisteDelBlocco');
   const espressione = chiamata[1].trim();
   const diretto = espressione.match(/^\$\('([^']+)'\)$/u);

@@ -496,6 +496,8 @@ export function creaChiediAlModelloGiudice({ chiediAlModelloUnaVoltaFn, chiaveDi
 }
 import {
   attendiScritture as attendiScrittureReale, // F3 (24/09): il flush del negozio per `chiudi()`
+  avanziDellArchivio as avanziDellArchivioReale, // 13/11/2026 (giudice v1804 punto 3): temporanei e copie della rinumerazione
+  avanziDellaRinumerazione as avanziDellaRinumerazioneReale,
   elencaSessioniPersistite as elencaSessioniPersistiteReale,
   eliminaSessionePersistita as eliminaSessionePersistitaReale,
   esisteSessionePersistita,
@@ -509,8 +511,12 @@ import {
   registraRigaSync as registraRigaSyncReale,
   registraIntestazioneSync as registraIntestazioneSyncReale,
   attivaAffittiArchivio, // affitto fra processi (10/10/2026): lo accende `affittoFraProcessi`
+  detentoreCheRifiuta as detentoreCheRifiutaReale, // 14/11/2026 (sesto giro dell'affitto): il rifiuto si sa prima del numero
+  adottaRigheInAttesaSync as adottaRigheInAttesaReale,
 } from './session-store.mjs';
+import { CAMPO_ATTESA, TIPO_ADOTTATA, TIPO_ATTESA, aggiungiAllAttesaSync, leggiAttesa, righeAncoraInAttesa, sessioniConAttesa } from './session-attesa.mjs';
 import { fraseDetentore } from './session-lease.mjs';
+import { applicaLaVista, eRigaDiAdozione, intervalliDellaRinumerazione, sogliaDellaRinumerazione } from './rinumerazione-giornale.mjs'; // 13/11/2026: pezzo 4; 14/11/2026: la regola V del terzo giro
 /* Owner 17/10/2026 («Adottarli come Hermes»): i fatti durevoli dei comandi in sottofondo che sopravvivono al server (vedi `adottaSfondiOrfani`) */
 export const EVENTO_SFONDO_IMPRONTA = 'talos.sfondo-impronta';
 export const EVENTO_SFONDO_ADOTTATO = 'talos.sfondo-adottato';
@@ -1350,8 +1356,46 @@ const MOTIVO_ARGOMENTI_ROTTI = "the call arguments did not reassemble into valid
 function eventiInOrdine(eventi) {
   if (!Array.isArray(eventi)) return [];
   return eventi.every((evento) => Number.isSafeInteger(evento?._sequenza))
-    ? [...eventi].sort((a, b) => a._sequenza - b._sequenza)
+    ? ordinaPerSequenza(eventi)
     : eventi;
+}
+
+/*
+ * ⭐ 13/11/2026 — i DOPPI seguono l'ordine del disco (pezzo 4 della cura dell'affitto compromesso, i lettori). Un giornale scritto da
+ *   due processi dopo un affitto compromesso ha numeri d'ordine doppi (`[1..7, 3, 4]`): l'ordinamento per numero metteva il giro
+ *   nuovo IN MEZZO a quello vecchio. Qui un numero GIÀ VISTO più su nel giornale resta dopo tutto ciò che il disco ha prima di lui
+ *   (chiave: il numero più alto visto fin lì, più una frazione nell'ordine delle righe); i numeri mai visti si ordinano come sempre
+ *   (le righe 28, 27, 29 qui sopra). Senza doppi è esattamente l'ordinamento di prima. Niente si scarta.
+ */
+export function ordinaPerSequenza(eventi) {
+  const visti = new Set();
+  let doppi = false;
+  for (const evento of eventi) {
+    if (visti.has(evento._sequenza)) { doppi = true; break; }
+    visti.add(evento._sequenza);
+  }
+  if (!doppi) return [...eventi].sort((a, b) => a._sequenza - b._sequenza);
+  const gia = new Set();
+  const chiavi = new Map();
+  let massimo = 0;
+  let doppiVisti = 0;
+  for (const evento of eventi) {
+    const numero = evento._sequenza;
+    if (gia.has(numero)) {
+      doppiVisti += 1;
+      chiavi.set(evento, massimo + doppiVisti / (eventi.length + 1));
+    } else {
+      gia.add(numero);
+      massimo = Math.max(massimo, numero);
+      chiavi.set(evento, numero);
+    }
+  }
+  return [...eventi].sort((a, b) => chiavi.get(a) - chiavi.get(b));
+}
+
+/** 13/11/2026 — chi è un evento a parità di numero d'ordine (i doppi di un affitto compromesso): numero, tipo, nome e id. */
+export function improntaEvento(evento) {
+  return `${evento?._sequenza}|${evento?.type ?? ''}|${evento?.name ?? ''}|${evento?.messageId ?? evento?.toolCallId ?? evento?.runId ?? ''}`;
 }
 
 /**
@@ -3050,6 +3094,11 @@ export function createSessionRegistry({
   affittoFraProcessi = null,
   /* review Y1 (10/10/2026): ogni quanto si riprova a scrivere un risultato rifiutato perché la chat è tenuta da un altro processo */
   ritentaCodaAffittataMs = 5_000,
+  /* 14/11/2026 (sesto giro dell'affitto): la riga che un altro TALOS rifiuterebbe aspetta sul disco (`session-attesa.mjs`); le prove
+     iniettano un disco che si spegne prima dell'`fsync` */
+  detentoreCheRifiutaFn = detentoreCheRifiutaReale,
+  aggiungiAllAttesaFn = aggiungiAllAttesaSync,
+  adottaRigheInAttesaFn = adottaRigheInAttesaReale,
   /*
    * ⭐ F3 (24/09/2026), decisione 2 dell'owner — la FINESTRA del modello dal catalogo del fornitore
    *   (`model-catalog.mjs`, `contextLength`), in SOLA LETTURA e SINCRONA: `avviaESegui` è sincrona e
@@ -3165,6 +3214,10 @@ export function createSessionRegistry({
       const prima = righe[0];
       return prima && typeof prima === 'object' && prima.tipo === 'intestazione' ? { stato: 'ok', intestazione: prima } : { stato: 'non-intestazione' };
     },
+  /* 14/11/2026 (mai riscrivere): `rinumeraGiornaleFn` del pezzo 4 non c'è più — il ripristino non riscrive mai il giornale (regola V). */
+  /* 13/11/2026 (giudice v1804 punto 3): al ripristino si riconoscono temporanei e copie della rinumerazione; spenta come la rinumerazione */
+  avanziDellaRinumerazioneFn = leggiRegistroFn === leggiRegistroReale
+    ? { archivio: avanziDellArchivioReale, giornale: avanziDellaRinumerazioneReale } : null,
   /*
    * ⭐ F2-bis B (24/09/2026), decisione 9 — i due parametri del checkpoint: ogni N giri conclusi (0 = mai per conteggio) e la
    *   regola di dimensione (Redis `auto-aof-rewrite-percentage`). Il brief dice N = 20; la misura di A (§2.6) dice che a
@@ -5273,13 +5326,15 @@ export function createSessionRegistry({
    *   (durevole, in ordine) invece di scavalcare o di perdersi. Ogni altro errore si propaga com'era.
    * @returns {true|Promise<void>} `true` se scritta subito, la promessa della scrittura accodata altrimenti.
    */
-  function scriviRigaSyncOInCoda(voce, record, { suErroreInCoda } = {}) {
+  function scriviRigaSyncOInCoda(voce, record, { suErroreInCoda, dopoIlRecinto = null } = {}) {
+    /* 13/11/2026: `dopoIlRecinto` (solo per gli eventi numerati) risolve un rifiuto del recinto dentro la stessa scrittura */
+    const recinto = typeof dopoIlRecinto === 'function' ? { dopoIlRecinto } : {};
     try {
-      registraRigaSyncFn({ cartellaStore, sessionId: voce.sessionId, record });
+      registraRigaSyncFn({ cartellaStore, sessionId: voce.sessionId, record, ...recinto });
       return true;
     } catch (errore) {
       if (errore?.code !== 'SESSION_STORE_BUSY') throw errore;
-      const promessa = registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record, durable: true });
+      const promessa = registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record, durable: true, ...recinto });
       promessa.catch((e) => {
         console.error(`[session-store] row ${record?.tipo ?? record?.type} queued and NOT written for ${voce.sessionId}:`, e instanceof Error ? e.message : e);
         suErroreInCoda?.(e);
@@ -5498,7 +5553,327 @@ export function createSessionRegistry({
    *     scritta; la ricarica si porta dietro le voci non ancora scritte) e si riscrive la coda; scritta, il padre si sveglia come sempre.
    */
   const eRifiutoDellAffitto = (errore) => errore?.code === 'SESSION_LEASED' || errore?.code === 'SESSION_CHANGED_ELSEWHERE';
+  /*
+   * ⭐⭐⭐ 13/11/2026 — LA SCRITTURA RIFATTA DA SOLA dopo un rifiuto del recinto (pezzo 2 della cura dell'affitto compromesso; owner 10/10
+   *   «Ricaricarla da sola»: nessuna carta, nessun avviso). Lo store ha trovato il giornale diverso dall'atteso (un altro processo ci ha
+   *   scritto mentre questo era fermo) e non ha scritto niente. Qui: si legge SOLO la coda dell'altro (dentro lo store, nella stessa
+   *   operazione della coda), l'evento rifiutato prende un numero d'ordine sopra l'ultimo del disco (mai un doppio), e si accoda.
+   *   ⛔ Giudice v1656: si ripete SOLO l'accodamento — mai un giro del modello né un comando già eseguito (questa funzione non chiama
+   *   altro che lo store). La chat in memoria non ha ancora le righe dell'altro: si rilegge dal disco appena è ferma (subito, se lo è;
+   *   se no alla prossima apertura o scrittura, `allineaSessione`). L'evento era già arrivato a chi ascolta col numero vecchio: chi si
+   *   ricollega con quel numero lo ritrova (`voce.rinumerate`, in `iscriviti`).
+   */
+  function rinumeraSopraLaCodaAltrui(voce, evento, ultimaSulDisco) {
+    const vecchio = evento._sequenza;
+    if (!Number.isSafeInteger(vecchio) || !Number.isSafeInteger(ultimaSulDisco) || vecchio > ultimaSulDisco) return;
+    const nuovo = Math.max(Number.isSafeInteger(voce.prossimaSequenza) ? voce.prossimaSequenza : 0, ultimaSulDisco) + 1;
+    voce.prossimaSequenza = nuovo;
+    evento._sequenza = nuovo; // lo stesso oggetto che sta in `voce.eventi`: memoria e disco restano lo stesso numero
+    const istante = voce.istantiEvento?.get?.(vecchio);
+    if (istante !== undefined) { voce.istantiEvento.delete(vecchio); voce.istantiEvento.set(nuovo, istante); }
+    if (voce.sequenzaUltimoRunStarted === vecchio) voce.sequenzaUltimoRunStarted = nuovo;
+    (voce.rinumerate ??= new Map()).set(vecchio, nuovo);
+  }
+  /*
+   * ⭐⭐⭐ 13/11/2026 sera — MAI SCARTARE (giudice v1804 punto 1, REVAFF-03 26/40 sul disco con due scrittori). Prima il rifiuto si
+   *   rifaceva IN FONDO alla coda: fra il rifiuto e il rifacimento le scritture già in fila passavano davanti con numeri più alti, e
+   *   dopo il terzo rifiuto l'evento si perdeva. Ora il rifiuto si risolve DENTRO la stessa operazione della coda dello store
+   *   (`dopoIlRecinto`): lo store rilegge la coda scritta altrove, la adotta, chiama questa funzione (che dà all'evento il numero dopo
+   *   l'ultimo del disco) e accoda, tutto senza un `await` in mezzo — l'ordine della coda resta l'ordine del disco, nessuna finestra.
+   *   Hermes controlla il detentore e scrive dentro la stessa transazione `BEGIN IMMEDIATE` (`hermes-agent-2026-11-01/hermes_state.py:1013`,
+   *   `hermes_state_messages.py:251-253` «refusing transcript write»); opencode numera dentro l'operazione che scrive
+   *   (`opencode-2026-10-15/packages/core/src/bus.ts:371` «const seq = input?.seq ?? latest + 1»). La persona legge UNA riga in chat per giro (EN poi IT, niente
+   *   carte): «Un altro TALOS ha scritto in questa chat nello stesso momento. Niente è andato perso.» La chat in memoria si rilegge
+   *   dal disco appena è ferma.
+   */
+  /*
+   * ⭐⭐⭐ 14/11/2026 — UN NUMERO GIÀ MOSTRATO NON PASSA MAI A UN'ALTRA RIGA (terzo giro dell'affitto, «mai riscrivere», giudice v1838).
+   *   Con la coda dell'altro letta dallo store (`adottate`), il NOSTRO evento tiene il numero che la pagina ha già visto; sono le righe
+   *   dell'altro a prendere numeri nuovi, sopra ogni numero già dato qui (`prossimaSequenza`): lo store li scrive in una riga «adozione»
+   *   prima della nostra (`{ primo }`), e la lettura li ritrova uguali dopo ogni ricarica o riavvio (regola V). Le righe dell'altro
+   *   arrivano SUBITO a chi ascolta, coi numeri nuovi: per chi ascolta i numeri crescono sempre, quindi lo scarto «numero già visto»
+   *   del telefono (`mobile/public/harness-ui/app.js:5909-5910`) e il `sequence<=cursor` della CLI (`supervisor.ts:159`) restano giusti.
+   *   Senza `adottate` (lo store non sa da dove parte la coda) resta la strada di prima: il nostro evento prende il numero sopra.
+   */
+  function adottaRigheAltrui(voce, adottate) {
+    const attuale = sessioni.get(voce.sessionId) ?? voce; // una ricarica può aver già sostituito la voce: i numeri futuri li dà lei
+    const numerate = adottate.filter((r) => r && typeof r === 'object' && Number.isSafeInteger(r._sequenza));
+    const primo = Math.max(Number.isSafeInteger(attuale.prossimaSequenza) ? attuale.prossimaSequenza : 0, Number.isSafeInteger(voce.prossimaSequenza) ? voce.prossimaSequenza : 0) + 1;
+    numerate.forEach((r, i) => { r._sequenza = primo + i; });
+    if (numerate.length > 0) {
+      attuale.prossimaSequenza = primo + numerate.length - 1;
+      if (voce !== attuale) voce.prossimaSequenza = attuale.prossimaSequenza;
+    }
+    for (const evento of numerate) {
+      if (typeof evento.type !== 'string' || evento.type === 'WorkspaceChanged') continue;
+      attuale.eventi.push(evento);
+      for (const ascoltatore of attuale.ascoltatori) {
+        if (!eventoVisibileA(evento, ascoltatore)) continue;
+        try { ascoltatore(evento); } catch { /* un ascoltatore rotto non ferma gli altri */ }
+      }
+    }
+    return primo;
+  }
+  /*
+   * ⭐⭐⭐ 14/11/2026 — LA RIGA TARDIVA DI UNA VOCE SOSTITUITA SI ADOTTA IN CODA, MAI SI PERDE (quinto giro dell'affitto, owner 13:10,
+   *   giudice v1869-v1871). Una ricarica sostituisce la voce di una chat (l'altro TALOS ci ha scritto), ma chi aveva in mano la voce
+   *   VECCHIA la tiene ancora: l'`onEvento` del giro del modello e quello del `!` (`broadcast(voce, evento)`). Prima l'evento tardivo
+   *   prendeva il numero della voce vecchia: sotto le righe che l'altro aveva scritto prima della ricarica il recinto lo rifiutava e la
+   *   riga non arrivava mai al disco (giro 4, VS-01; dal vivo, due processi server veri: 19 righe perse in 19 corse su 20); sopra, si
+   *   scriveva ma nessuno la vedeva (gli ascoltatori erano già sulla voce nuova) e il giro dopo si scontrava col suo numero. Ora:
+   *   · `broadcast` passa l'evento alla voce di ADESSO (come già l'uscita in sottofondo, `segnalaUscitaSfondoIn`): prende il numero
+   *     sopra ogni numero dato, arriva a chi ascolta e alla memoria, e se l'altro ha scritto lo si adotta come ogni riga (giro 3);
+   *   · se la scrittura di un evento numerato dalla voce vecchia arriva allo store DOPO la ricarica, il recinto la adotta in coda:
+   *     prende un numero sopra ogni numero dato e sopra il disco, entra nella memoria della voce di adesso, e il diario cresce solo in
+   *     coda (forma «mai riscrivere»). Chi ascoltava l'aveva già vista: non si rimanda (sarebbe due volte); chi si ricollega col numero
+   *     vecchio la ritrova (`rinumerate`). Una riga nel log del server lo dice.
+   *   Codex non scarta mai una riga non scritta: la tiene e la riscrive in coda (`codex-2026-11-01/codex-rs/rollout/src/recorder.rs:1828-1830`,
+   *   «remove each item from that queue only after it is written successfully»; `:1804-1808`, `.append(true)`); Hermes rifiuta e LANCIA,
+   *   mai in silenzio (`hermes-agent-2026-11-01/hermes_state_messages.py:251-253`).
+   */
+  /*
+   * ⭐⭐⭐ 14/11/2026 — LA RIGA CHE NON SI PUÒ SCRIVERE ASPETTA SUL DISCO E SI ADOTTA QUANDO LA CHAT SI LIBERA (sesto giro dell'affitto,
+   *   owner 16:26 «attesa su disco», giudice v1882 e v1888). Prima: una riga (tardiva o no) che arrivava mentre un ALTRO TALOS teneva la
+   *   chat era rifiutata (`SESSION_LEASED`) e si perdeva — dal vivo 30 su 30 nella forma a2s, SENZA nota (revisore 1 del giro 5) —, e
+   *   quella che si mostrava lo faceva con un numero che il disco non aveva mai: l'altro scriveva poi con quegli stessi numeri e la finestra
+   *   e la CLI nascondevano 2 sue righe per ogni rifiuto (60 in 30 corse). Ora:
+   *   · chi manda la riga sa PRIMA di numerarla se sarà rifiutata (`detentoreCheRifiutaFn`, in `consegnaEvento`): allora la riga NON
+   *     prende un numero, non entra nella memoria della chat e non arriva a chi ascolta; va nel file di attesa accanto al diario
+   *     (`session-attesa.mjs`: solo in aggiunta, con `fsync`, mai sovrascritto né svuotato), e chi ascolta vede SUBITO una nota per
+   *     ogni riga in attesa (EN poi IT, `server.sessionPersistence.lateLineWaiting`), senza numero; una riga nel log del server;
+   *   · il ritento che c'è già (`programmaRitentoCodaAffittata`, ogni `ritentaCodaAffittataMs`) riallinea la chat e, quando la chat è
+   *     nostra, la adotta in coda (`adottaLeRigheInAttesa`): numero sopra ogni numero già dato, preso dal disco, poi la riga «adottata»
+   *     nel file di attesa; solo allora la riga arriva a chi ascolta, una volta, col numero del disco, e la nota dice che è salvata
+   *     (`server.sessionPersistence.lateLineAdded`);
+   *   · dopo un arresto la riga è nel file: il ripristino la rilegge e la adotta quando la chat è libera; una riga già nel diario
+   *     (`_attesa`) o già «adottata» non si scrive due volte.
+   *   La forma del giro 3 resta: il diario cresce solo in coda.
+   */
+  const righeInAttesaDi = new Map(); // sessionId → [{ id, record, giaMostrata, numeroMostrato, alle, daRiscrivere? }], nell'ordine di arrivo
+  const NOTA_IN_ATTESA = 'A line that arrived late is waiting to be saved: this chat is open in another TALOS window. It is kept on this computer and added here as soon as that window lets the chat go.';
+  /* 21/11/2026 (ottavo giro, revisore 2 del giro 7): la «salvata» non dice più DOVE sta la riga («ora è in fondo a questa chat» era
+     falso 28 su 30: un testo tardivo del giro prima si disegna nel SUO messaggio, più in alto). E la riga che il disco non ha preso non
+     dice più «resta su questo computer» (revisore 1): lo dice com'è, e torna alla frase di sempre appena il ritento la scrive. */
+  const NOTA_ADOTTATA = 'The line that was waiting has been saved in this chat.';
+  const NOTA_IN_ATTESA_SENZA_DISCO = 'A line that arrived late is waiting to be saved: this chat is open in another TALOS window. The disk did not take it (it may be full), so for now it is kept only while TALOS stays open, and it is added here as soon as that window lets the chat go.';
+  /*
+   * ⭐⭐ 15/11/2026 — SETTIMO GIRO DELL'AFFITTO, le note (revisore 2 del giro 6, owner 23:55, giudice v1919-v1921). Prima le due note erano
+   *   `RunError`: la pagina disegnava una carta rossa «Il giro si è interrotto per un errore · Riprova il giro» col testo chiuso nei
+   *   dettagli, chiudeva il giro a schermo (la «salvata» arrivava a metà giro e toglieva lo Stop: mt 30 su 30, misto 28 su 30), il
+   *   telefono 0.1.48 mostrava la carta UNKNOWN con «nuova sessione» e la CLI un `run.failed`. Una riga che aspetta non è un errore del
+   *   giro: ora è un evento informativo, `CUSTOM` `talos.riga-in-attesa` con `value: { id, stato, sequenza?, message, messageChiave }`,
+   *   lo stesso `id` dall'attesa al salvataggio (la pagina ne fa UNA nota che cambia stato, anche dopo un ricollegamento); senza numero,
+   *   mai sul diario. La «salvata» arriva a chi ascolta solo a giro chiuso (`consegnaNotaSalvata`). I lettori già usciti (telefono
+   *   0.1.48, PC 0.2.1, CLI della linea) non conoscono questo nome e lo ignorano (`default: break`; CLI `MAP[type]` assente ⇒ niente):
+   *   niente più carte d'errore né giri chiusi a metà; la riga arriva da loro alla rilettura.
+   *   Concorrenti: Codex separa informazione, avviso ed errore (`codex-2026-11-01/codex-rs/tui/src/chatwidget.rs:1583`, `:1600`, `:1613`);
+   *   Hermes registra l'affitto perso come informazione e non fa fallire il giro (`hermes-agent-2026-11-01/agent/session_persistence.py:
+   *   296-298`, `logger.info`).
+   */
+  const EVENTO_RIGA_IN_ATTESA = 'talos.riga-in-attesa';
+  /* righe adottate per volta (settimo giro): un lotto costa la rilettura del file di attesa (~70-100 ms a 11-17 MB) più poco a riga.
+     Misurato col banco (50.000 righe, CPU 14-21%): lotti da 5.000 ⇒ blocco più lungo 202 ms, adozione 1,3 s; lotti da 2.000 ⇒ 172-200 ms
+     (gli intervalli fra i colpi del ciclo al più 150 ms), adozione 2,3 s, avvio 68-79 ms. */
+  const LOTTO_ADOZIONE = 2000;
+  const notaInAttesa = (attesa) => ({ type: 'CUSTOM', name: EVENTO_RIGA_IN_ATTESA, value: { id: attesa.id, stato: 'in-attesa',
+    ...(attesa.daRiscrivere ? { message: NOTA_IN_ATTESA_SENZA_DISCO, messageChiave: 'server.sessionPersistence.lateLineWaitingNotOnDisk' }
+      : { message: NOTA_IN_ATTESA, messageChiave: 'server.sessionPersistence.lateLineWaiting' }) } });
+  const notaSalvata = (attesa, sequenza) => ({ type: 'CUSTOM', name: EVENTO_RIGA_IN_ATTESA, value: { id: attesa.id, stato: 'adottata', sequenza, message: NOTA_ADOTTATA, messageChiave: 'server.sessionPersistence.lateLineAdded' } });
+  /* le note dell'attesa non hanno numero e non vanno sul diario: sono lo stato della riga, come l'annuncio della coda */
+  function consegnaNota(voce, nota, soloA = null) {
+    for (const ascoltatore of soloA ? [soloA] : voce.ascoltatori) {
+      if (!eventoVisibileA(nota, ascoltatore)) continue;
+      try { ascoltatore(nota); } catch { /* un ascoltatore rotto non ferma gli altri */ }
+    }
+  }
+  /* la «salvata» a giro chiuso: mentre il modello scrive si tiene, e parte dopo il `RunFinished`/`RunError` del giro (`consegnaEvento`) */
+  const noteSalvateInSospeso = new Map(); // sessionId → [nota]
+  const giroInCorso = (voce) => voce?.giroAperto === true || (voce?.conclusa === false && voce?.interrotta !== true);
+  function consegnaNotaSalvata(voce, nota) {
+    if (!giroInCorso(voce)) { consegnaNota(voce, nota); return; }
+    if (!noteSalvateInSospeso.has(voce.sessionId)) noteSalvateInSospeso.set(voce.sessionId, []);
+    noteSalvateInSospeso.get(voce.sessionId).push(nota);
+  }
+  function consegnaNoteSalvateInSospeso(voce) {
+    const note = noteSalvateInSospeso.get(voce?.sessionId);
+    if (!note?.length) return;
+    const attuale = voceDiAdesso(voce);
+    if (giroInCorso(attuale)) return;
+    noteSalvateInSospeso.delete(voce.sessionId);
+    for (const nota of note) consegnaNota(attuale, nota);
+  }
+  /* una riga che il file di attesa non ha preso intera (scrittura corta, disco pieno) resta in memoria e si riscrive a ogni ritento */
+  function riscriviLeAtteseNonScritte(sessionId) {
+    if (sessioniEliminate.has(sessionId)) return; // 21/11/2026 (ottavo giro, revisore 1 del giro 7): la chat se ne va o se n'è andata, mai un file di attesa per lei
+    for (const attesa of righeInAttesaDi.get(sessionId) ?? []) {
+      if (!attesa.daRiscrivere) continue;
+      try {
+        aggiungiAllAttesaFn(cartellaStore, sessionId, [{ tipo: TIPO_ATTESA, id: attesa.id, alle: attesa.alle, record: attesa.record }]);
+        delete attesa.daRiscrivere;
+      } catch { return; } // il disco non la prende ancora: il prossimo ritento
+      /* ora è sul disco: la STESSA nota (stesso id) torna alla frase di sempre, «resta su questo computer» */
+      if (!attesa.giaMostrata) { const voce = sessioni.get(sessionId); if (voce) consegnaNota(voceDiAdesso(voce), notaInAttesa(attesa)); }
+    }
+  }
+  function mettiInAttesa(voce, evento, { giaMostrata = false } = {}) {
+    const sessionId = voce.sessionId;
+    const numeroMostrato = giaMostrata && Number.isSafeInteger(evento._sequenza) ? evento._sequenza : null;
+    const record = { ...evento };
+    delete record._sequenza;
+    delete record[CAMPO_ATTESA];
+    const attesa = { id: randomUUID(), record, giaMostrata, numeroMostrato, alle: clock().toISOString() };
+    let scritta = true;
+    try { aggiungiAllAttesaFn(cartellaStore, sessionId, [{ tipo: TIPO_ATTESA, id: attesa.id, alle: attesa.alle, record }]); }
+    catch (errore) {
+      scritta = false; // resta in memoria (il ritento la adotta finché il processo vive) e si riscrive nel file al prossimo ritento
+      attesa.daRiscrivere = true;
+      console.error(`[affitto] waiting file NOT written for ${sessionId}:`, errore instanceof Error ? errore.message : errore);
+    }
+    if (!righeInAttesaDi.has(sessionId)) righeInAttesaDi.set(sessionId, []);
+    righeInAttesaDi.get(sessionId).push(attesa);
+    console.warn(`[affitto] late line waiting for ${sessionId}: the chat is held by another TALOS process; ${scritta ? `kept in ${sessionId}.attesa` : 'kept in memory until the disk takes it'} and added at the end when the chat is free`);
+    if (!giaMostrata) consegnaNota(voceDiAdesso(voce), notaInAttesa(attesa));
+    programmaRitentoCodaAffittata(sessionId);
+    return scritta;
+  }
+  /* La strada di prima, se la scrittura è rifiutata DOPO il numero (l'affitto perso mentre la scrittura era in coda): la riga era già
+     stata mostrata col suo numero; esce dalla memoria (il disco non l'ha) e va in attesa, e chi si ricollega col numero vecchio la
+     ritroverà col numero nuovo (`rinumerate`). Una scrittura rifiutata per un altro motivo (il disco) resta com'era: niente nota falsa. */
+  function rifiutataDopoIlNumero(voce, evento, errore) {
+    if (errore?.code !== 'SESSION_LEASED') return;
+    const attuale = voceDiAdesso(voce);
+    for (const v of new Set([voce, attuale])) {
+      const posto = v.eventi.lastIndexOf(evento);
+      if (posto >= 0) v.eventi.splice(posto, 1);
+    }
+    return mettiInAttesa(attuale, evento, { giaMostrata: true }); // la strada durevole lo passa a chi aspetta: `true` se il file l'ha
+  }
+  /*
+   * L'adozione, sincrona: `'fatto'`, `'niente'`, `'riprova'` (chat non nostra, scritta altrove, scrittura in volo) o `'ancora'` (un lotto
+   *   adottato, altre righe dopo: il ritento riparte subito). 15/11/2026 (settimo giro, revisore 3 del giro 6): al più `LOTTO_ADOZIONE`
+   *   righe per volta, così 50.000 righe in attesa non fermano il server in un colpo solo (prima avvio 9 s, adozione 17 s, fermo 8,5 s).
+   */
+  function adottaLeRigheInAttesa(sessionId) {
+    const tutte = righeInAttesaDi.get(sessionId);
+    if (!tutte?.length) { righeInAttesaDi.delete(sessionId); return 'niente'; }
+    if (sessioniEliminate.has(sessionId)) { righeInAttesaDi.delete(sessionId); return 'niente'; }
+    const voce = sessioni.get(sessionId);
+    if (!voce || !cartellaStore) return 'riprova';
+    const lista = tutte.length > LOTTO_ADOZIONE ? tutte.slice(0, LOTTO_ADOZIONE) : tutte;
+    const base = Number.isSafeInteger(voce.prossimaSequenza) ? voce.prossimaSequenza : 0;
+    let numerate = [];
+    let esito;
+    try {
+      /* 15/11/2026 (settimo giro): una mappa, non due `find` per riga — con 50.000 righe l'adozione costava 17 s (revisore 3) */
+      const perId = new Map(lista.map((a) => [a.id, a]));
+      esito = adottaRigheInAttesaFn({ cartellaStore, sessionId, ids: [...perId.keys()], prepara: (ids) => {
+        numerate = ids.map((id, i) => { const attesa = perId.get(id); return { attesa, record: { ...attesa.record, _sequenza: base + 1 + i, [CAMPO_ATTESA]: id } }; });
+        return numerate.map((n) => n.record);
+      } });
+    } catch (errore) {
+      if (!eRifiutoDellAffitto(errore) && errore?.code !== 'SESSION_STORE_BUSY') console.error(`[affitto] waiting lines of ${sessionId} not added yet:`, errore instanceof Error ? errore.message : errore);
+      return 'riprova';
+    }
+    if (esito.rigaAdottataMancante) console.error(`[affitto] waiting lines of ${sessionId} are in the journal, but the "adopted" row was not written:`, esito.rigaAdottataMancante instanceof Error ? esito.rigaAdottataMancante.message : esito.rigaAdottataMancante);
+    const chiuse = new Set([...esito.scritte, ...esito.gia]);
+    /* 21/11/2026 (ottavo giro, revisore 3 del giro 7): si guarda solo il lotto (le chiuse vengono da lì), il resto si attacca com'è —
+       prima `tutte.filter` a ogni lotto: un conto che cresceva col quadrato delle righe */
+    const restano = lista.length < tutte.length ? lista.filter((a) => !chiuse.has(a.id)).concat(tutte.slice(lista.length)) : tutte.filter((a) => !chiuse.has(a.id));
+    if (restano.length) righeInAttesaDi.set(sessionId, restano); else righeInAttesaDi.delete(sessionId);
+    const seguito = restano.length === 0 ? 'fatto' : lista.length < tutte.length && lista.every((a) => chiuse.has(a.id)) ? 'ancora' : 'riprova';
+    const scritte = new Set(esito.scritte);
+    const fatte = numerate.filter((n) => scritte.has(n.attesa.id));
+    if (fatte.length === 0) return seguito;
+    voce.prossimaSequenza = base + numerate.length;
+    for (const { attesa, record } of fatte) {
+      voce.eventi.push(record);
+      (voce.istantiEvento ??= new Map()).set(record._sequenza, clock().getTime());
+      if (attesa.giaMostrata) { if (Number.isSafeInteger(attesa.numeroMostrato)) (voce.rinumerate ??= new Map()).set(attesa.numeroMostrato, record._sequenza); continue; }
+      for (const ascoltatore of voce.ascoltatori) {
+        if (!eventoVisibileA(record, ascoltatore)) continue;
+        try { ascoltatore(record); } catch { /* un ascoltatore rotto non ferma gli altri */ }
+      }
+    }
+    console.warn(`[affitto] ${fatte.length} waiting line(s) of ${sessionId} added at the end of the journal: numbers ${fatte[0].record._sequenza}-${fatte[fatte.length - 1].record._sequenza}`);
+    for (const { attesa, record } of fatte) consegnaNotaSalvata(voce, notaSalvata(attesa, record._sequenza));
+    return seguito;
+  }
+  /* Il ripristino (all'avvio o per una ricarica): il file di attesa confrontato col diario appena letto (`nelDiario`: gli `_attesa`). */
+  function riconciliaAttesa(sessionId, nelDiario) {
+    let stato = null;
+    try { stato = leggiAttesa(cartellaStore, sessionId); }
+    catch (errore) { console.error(`[affitto] waiting file of ${sessionId} not read:`, errore instanceof Error ? errore.message : errore); }
+    const inMemoria = righeInAttesaDi.get(sessionId) ?? [];
+    if (stato) {
+      /* già nel diario ma senza la riga «adottata» (un arresto in mezzo): si aggiunge adesso, così la prossima lettura non deve cercarla */
+      const mancanti = stato.attese.filter((a) => !stato.adottate.has(a.id) && nelDiario.has(a.id)).map((a) => ({ tipo: TIPO_ADOTTATA, id: a.id, alle: clock().toISOString(), sequenza: null }));
+      if (mancanti.length) { try { aggiungiAllAttesaFn(cartellaStore, sessionId, mancanti); } catch { /* la lettura la confronta di nuovo col diario */ } }
+    }
+    const daFile = stato ? righeAncoraInAttesa(stato, nelDiario) : [];
+    const chiuse = (id) => nelDiario.has(id) || stato?.adottate.has(id);
+    const unite = inMemoria.filter((a) => !chiuse(a.id));
+    /* 15/11/2026 (settimo giro): un insieme, non `unite.some` per ogni riga del file — 50.000 righe in attesa: avvio 9 s (revisore 3) */
+    const gia = new Set(unite.map((a) => a.id));
+    for (const a of daFile) {
+      if (gia.has(a.id)) continue;
+      gia.add(a.id);
+      unite.push({ id: a.id, record: a.record, giaMostrata: false, numeroMostrato: null, alle: a.alle });
+    }
+    if (unite.length) { righeInAttesaDi.set(sessionId, unite); programmaRitentoCodaAffittata(sessionId); } else righeInAttesaDi.delete(sessionId);
+  }
+  function voceDiAdesso(voce) {
+    let v = voce;
+    for (let i = 0; i < 16 && v?.sostituitaDa; i += 1) v = v.sostituitaDa;
+    return v !== voce && sessioni.get(voce.sessionId) === v ? v : voce;
+  }
+  function adottaRigaTardiva(vecchia, attuale, evento, ultimaSulDisco) {
+    const vecchio = evento._sequenza;
+    const intero = (n) => (Number.isSafeInteger(n) ? n : 0);
+    const nuovo = Math.max(intero(attuale.prossimaSequenza), intero(vecchia.prossimaSequenza), intero(ultimaSulDisco)) + 1;
+    attuale.prossimaSequenza = nuovo;
+    vecchia.prossimaSequenza = nuovo;
+    evento._sequenza = nuovo; // lo stesso oggetto: la memoria e il disco hanno lo stesso numero
+    const posto = vecchia.eventi.lastIndexOf(evento);
+    if (posto >= 0) vecchia.eventi.splice(posto, 1);
+    if (attuale.eventi.lastIndexOf(evento) < 0) attuale.eventi.push(evento);
+    const istante = vecchia.istantiEvento?.get?.(vecchio);
+    (attuale.istantiEvento ??= new Map()).set(nuovo, istante ?? clock().getTime());
+    if (Number.isSafeInteger(vecchio)) (attuale.rinumerate ??= new Map()).set(vecchio, nuovo);
+    console.warn(`[affitto] late line from a replaced entry of ${attuale.sessionId} adopted at the end: number ${vecchio} -> ${nuovo}`);
+  }
+  function numeraDopoIlRecinto(voce, evento) {
+    return (ultimaSulDisco, { righe = 0, adottate = null, dopoLaScrittura = false } = {}) => {
+      let risposta;
+      const attuale = dopoLaScrittura ? voce : voceDiAdesso(voce);
+      if (Array.isArray(adottate)) risposta = { primo: adottaRigheAltrui(voce, adottate) };
+      else if (attuale === voce) rinumeraSopraLaCodaAltrui(voce, evento, ultimaSulDisco);
+      if (attuale !== voce) {
+        adottaRigaTardiva(voce, attuale, evento, ultimaSulDisco);
+        risposta = { ...(risposta ?? {}), rinumerata: true }; // lo store scrive la riga col numero nuovo
+      }
+      if (!(righe > 0)) return risposta;
+      voce.scrittureRifatteDopoIlRecinto = (voce.scrittureRifatteDopoIlRecinto ?? 0) + 1;
+      setImmediate(() => avvisaScritturaAltrove(voce)); // dopo l'accodamento in corso: l'avviso prende il numero dopo l'evento
+      return risposta;
+    };
+  }
+  function avvisaScritturaAltrove(voce) {
+    if (sessioni.get(voce.sessionId) !== voce) return;
+    if (!voce.avvisoScritturaAltroveDato) {
+      voce.avvisoScritturaAltroveDato = true; // una volta per giro: si azzera al prossimo RunStarted
+      broadcast(voce, { type: 'CUSTOM', name: 'talos.journal-riparato', value: {
+        riparato: true, completata: true, righeScartate: 0, byteScartati: null, backup: null, scrittaAltrove: true,
+      } }, { durable: true });
+    }
+    if (sessioneFermaQui(voce.sessionId, voce)) ricaricaDalDisco(voce.sessionId).catch(() => {});
+  }
+  async function riaccodaDopoIlRecinto(voce, evento, { durable = false } = {}) {
+    /* resta solo per la strada sincrona che ha scavalcato il recinto adottabile (un evento senza la coda dello store): una sola
+       operazione con `dopoIlRecinto`, come le altre */
+    return registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento, dopoIlRecinto: numeraDopoIlRecinto(voce, evento), ...(durable ? { durable: true } : {}) });
+  }
   const ritentiCodaAffittata = new Map();
+  const avanziDellaRinumerazioneDi = new Map(); // 13/11/2026: sessionId → avanzi riconosciuti all'ultimo ripristino (punto 3)
   function aspettaLAffitto(voce, origine) {
     voce.codaAspettaAffitto = true;
     annunciaCoda(voce, { persisti: false });
@@ -5512,13 +5887,22 @@ export function createSessionRegistry({
     }
     programmaRitentoCodaAffittata(voce.sessionId);
   }
-  function programmaRitentoCodaAffittata(sessionId) {
+  function programmaRitentoCodaAffittata(sessionId, dopoMs = ritentaCodaAffittataMs) {
     if (ritentiCodaAffittata.has(sessionId) || chiuso) return;
     const timer = setTimeout(async () => {
       ritentiCodaAffittata.delete(sessionId);
-      if (chiuso || !sessioni.has(sessionId)) return;
+      if (chiuso) return;
+      riscriviLeAtteseNonScritte(sessionId); // 15/11/2026 (settimo giro): la riga che il file non ha preso intera si riscrive qui
+      /* 14/11/2026 (sesto giro): con righe nel file di attesa una ricarica in volo (la voce manca un attimo) non ferma il ritento */
+      if (!sessioni.has(sessionId)) { if (righeInAttesaDi.get(sessionId)?.length && ricaricheInCorso.has(sessionId)) programmaRitentoCodaAffittata(sessionId); return; }
       let allineamento = null;
       try { allineamento = await registryApi.allineaSessione(sessionId, { scrivere: true }); } catch { allineamento = null; }
+      if (chiuso) return;
+      if (righeInAttesaDi.get(sessionId)?.length) {
+        const adozione = allineamento?.stato === 'altrove' ? 'riprova' : adottaLeRigheInAttesa(sessionId);
+        if (adozione === 'riprova') programmaRitentoCodaAffittata(sessionId);
+        else if (adozione === 'ancora') programmaRitentoCodaAffittata(sessionId, 0); // il lotto dopo, subito: fra due lotti il server risponde
+      }
       const voce = sessioni.get(sessionId); // dopo una ricarica è la voce NUOVA (che porta le voci in attesa)
       if (chiuso || !voce?.codaAspettaAffitto) return;
       if (allineamento?.stato === 'altrove') { programmaRitentoCodaAffittata(sessionId); return; }
@@ -5528,7 +5912,7 @@ export function createSessionRegistry({
         return;
       }
       if (eRifiutoDellAffitto(voce.erroreUltimaCoda)) programmaRitentoCodaAffittata(sessionId);
-    }, ritentaCodaAffittataMs);
+    }, dopoMs);
     timer.unref?.();
     ritentiCodaAffittata.set(sessionId, timer);
   }
@@ -7474,7 +7858,12 @@ export function createSessionRegistry({
     }
   }
 
-  function broadcast(voce, evento, opzioni = {}) {
+  function broadcast(voceDiPartenza, evento, opzioni = {}) {
+    const voce = voceDiAdesso(voceDiPartenza); // 14/11/2026 (quinto giro): l'evento tardivo di una voce sostituita va a quella di adesso
+    /* ...e durante la ricarica (la voce è fuori, la lettura del disco in volo) aspetta la voce nuova: mai un numero della voce vecchia
+       scritto dopo la lettura */
+    const ricaricaInVolo = sessioni.get(voce.sessionId) !== voce ? ricaricaInCorsoDi(voce) : null;
+    if (ricaricaInVolo) return ricaricaInVolo.catch(() => false).then(() => broadcast(voce, evento, opzioni));
     /* C06 (a), review del desktop (bite 3): un comando in PRIMO PIANO fermato dalla persona finisce col suo risultato e non avrà
        mai un'uscita in sottofondo che consumi il segno: lo si toglie qui. Uno sfondato ha già avuto il suo risultato prima del «Ferma». */
     if (evento?.type === 'ToolCallResult' && typeof evento.toolCallId === 'string') voce.fermatiDallaPersona?.delete(evento.toolCallId);
@@ -7883,7 +8272,7 @@ export function createSessionRegistry({
      *   rigiocarla a ogni riapertura della sessione.
      */
     /* ⭐ 14/09 — e così l'annuncio della coda: è STATO, non storia. Chi si collega dopo lo riceve dalla rotta degli eventi. */
-    const effimero = workspaceCambiato || evento.type === 'ToolCallOutput'
+    let effimero = workspaceCambiato || evento.type === 'ToolCallOutput'
       || (evento.type === 'CUSTOM' && (evento.name === 'talos.coda' || evento.name === 'talos.agenti' || evento.name === EVENTO_OBIETTIVO || evento.name === EVENTO_RICHIESTA_DEL_GIRO
         || evento.name === compattazione.NOME_EVENTO_PROGRESSO_COMPATTAZIONE // lane CLI 03/10: avanzamento, non storia
         || evento.name === NOME_DEL_BATTITO // revisione D R1 (30/10): il battito del ragionamento, mai nel giornale (condizione della CLI)
@@ -7894,6 +8283,18 @@ export function createSessionRegistry({
          scheda ogni 60 s su disco e nella cronologia. Marcatura esplicita, mai un type nuovo: la forma resta quella. */
       || (evento.type === 'ApprovalRequested' && evento.rigiocoAttesa === true)
       || (evento.type === 'CUSTOM' && evento.name === 'attesa-approvazione-silenzio');
+    /*
+     * ⭐⭐⭐ 14/11/2026 (sesto giro dell'affitto, giudice v1888 punto 2): un ALTRO TALOS tiene la chat ferma qui, e la scrittura di
+     *   questa riga sarebbe rifiutata (`SESSION_LEASED`). Si sa ADESSO, prima del numero: la riga va nel file di attesa e non mostra mai
+     *   un numero che il disco non avrà (l'altro lo prenderebbe, e la finestra e la CLI nasconderebbero la sua riga); un avviso di fine
+     *   (`RunError`, `RunFinished` su una chat senza giro aperto) si mostra senza numero e non va sul diario. Con un giro aperto qui la
+     *   chat è nostra: si resta sulla strada di sempre.
+     */
+    if (!effimero && !durableSync && cartellaStore && voce.sessionId && !voce.giroAperto && sessioni.get(voce.sessionId) === voce
+      && detentoreCheRifiutaFn(cartellaStore, voce.sessionId)) {
+      if (evento.type === 'RunError' || evento.type === 'RunFinished') effimero = true;
+      else return mettiInAttesa(voce, evento);
+    }
     /* ⛔ P-13 — i file sono cambiati davvero: il prossimo giro ricostruirà l'elenco. Si chiama
        SOLO da qui, cioè quando il disco cambia: farlo a ogni evento annullerebbe la cache e con
        essa tutto il vantaggio, riportando l'elenco a costare pieno ogni volta. */
@@ -7907,20 +8308,28 @@ export function createSessionRegistry({
     /* lo stesso istante che va sul disco (`timestamp`, sopra): vivo e ripristino (`istantiDellUltimoGiro`) dicono la stessa ora */
     /* seconda revisione del 21/10 (S4): un RunError di solo avviso su una chat ferma (`SESSION_LEASED`, una scrittura fallita) non
        chiude nessun giro — la fine si scrive solo se c'è un giro aperto, o il telefono lo prendeva per un «giro fallito» */
-    if (evento.type === 'RunStarted') { voce.inizioGiroAlle = new Date(evento.timestamp).toISOString(); voce.giroAperto = true; }
+    if (evento.type === 'RunStarted') { voce.inizioGiroAlle = new Date(evento.timestamp).toISOString(); voce.giroAperto = true; voce.avvisoScritturaAltroveDato = false; }
     let chiudeUnGiro = false; // notifiche: solo la fine di un giro APERTO è una «fine» (un avviso su una chat ferma no)
     if ((evento.type === 'RunFinished' || evento.type === 'RunError') && voce.giroAperto) { voce.fineGiroAlle = new Date(evento.timestamp).toISOString(); voce.giroAperto = false; chiudeUnGiro = true; }
     /* F3 (24/09): un evento `durableSync` con la coda in volo si accoda in ordine (mai più il leapfrog di J3); `scrittaInCoda` è la promessa. */
     let scrittaInCoda = null;
+    /* 13/11/2026 sera (giudice v1804 punto 1): un rifiuto del recinto si risolve DENTRO la scrittura, mai rifatto in fondo alla coda */
+    const dopoIlRecinto = !effimero && Number.isSafeInteger(evento._sequenza) ? numeraDopoIlRecinto(voce, evento) : null;
     if (durableSync && !effimero && cartellaStore && voce.sessionId) {
       try {
-        const esitoSync = scriviRigaSyncOInCoda(voce, evento);
+        const esitoSync = scriviRigaSyncOInCoda(voce, evento, { dopoIlRecinto });
         if (esitoSync !== true) scrittaInCoda = esitoSync;
       } catch (errore) {
+        if (errore?.code === 'SESSION_CHANGED_ELSEWHERE' && Number.isSafeInteger(evento._sequenza)) {
+          // la strada sincrona ha scavalcato il recinto adottabile (coda dello store in volo): una sola operazione accodata
+          scrittaInCoda = riaccodaDopoIlRecinto(voce, evento, { durable: true });
+          scrittaInCoda.catch((e) => { console.error(`[session-store] synchronous write NOT redone for ${voce.sessionId}:`, e instanceof Error ? e.message : e); });
+        } else {
         voce.prossimaSequenza -= 1;
         delete evento._sequenza;
         console.error(`[session-store] synchronous write failed for ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore);
         return false;
+        }
       }
     }
     if (!effimero) voce.eventi.push(evento);
@@ -8014,6 +8423,7 @@ export function createSessionRegistry({
     if (evento.type === 'RunFinished' || evento.type === 'RunError') {
       voce.conclusa = true;
       rilasciaWatcherSessioneSeInattiva(voce);
+      consegnaNoteSalvateInSospeso(voce); // 15/11/2026 (settimo giro dell'affitto): la nota «salvata» dopo la fine del giro, mai dentro
     }
     if (!effimero && (operazioneAgenteDaEvento(voce, evento) || ['RunStarted', 'RunFinished', 'RunError'].includes(evento.type))) {
       voce.timelineUltimaAlle = clock().toISOString();
@@ -8037,11 +8447,20 @@ export function createSessionRegistry({
      */
     let esito = true;
     if (!effimero && cartellaStore && voce.sessionId) {
+      /* 13/11/2026 sera: un rifiuto del recinto (`SESSION_CHANGED_ELSEWHERE`) si risolve dentro la stessa operazione (`dopoIlRecinto`) */
+      const recinto = dopoIlRecinto ? { dopoIlRecinto } : {};
       if (durableSync) esito = scrittaInCoda ?? true;
-      else if (durable) esito = registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento, durable: true });
-      else {
-        registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento })
-          .catch((errore) => { console.error(`[session-store] write failed for ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore); });
+      else if (durable) {
+        /* 14/11/2026 (sesto giro): rifiutata per l'affitto DOPO il numero ⇒ in attesa sul disco (chi aspetta riceve `true` se il file
+           di attesa l'ha); ogni altro rifiuto arriva a chi aspetta com'era */
+        esito = Promise.resolve(registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento, durable: true, ...recinto }))
+          .catch((errore) => { if (errore?.code === 'SESSION_LEASED') return rifiutataDopoIlNumero(voce, evento, errore); throw errore; });
+      } else {
+        registraRigaFn({ cartellaStore, sessionId: voce.sessionId, record: evento, ...recinto })
+          .catch((errore) => {
+            console.error(`[session-store] write failed for ${voce.sessionId}:`, errore instanceof Error ? errore.message : errore);
+            rifiutataDopoIlNumero(voce, evento, errore);
+          });
       }
     }
     /* v6 (Codex v5, punto 4): le domande si annullano DOPO che il terminale è stato consegnato e accodato su disco — lo fa
@@ -10568,7 +10987,8 @@ function fileDelComputerUseNominati(comando, custoditi) {
       // 26/09, difetto (4): lo stesso nome che il ripristino le darebbe; 16/10: col «-N» se una sessione in elenco ha già quel nome.
       // 16/10 sera (owner): anche una DELEGA nasce col nome corto del suo compito (prima `null`, e la barra mostrava il compito: due
       // deleghe dello stesso compito erano gemelle), lo stesso testo di `taskDelega`.
-      nome: nomeUnicoInElenco(nomeDiNascita(taskId, task, padreId), null, padreId),
+      // P2-C 11q (decision 411): a branch is born with the CURRENT name of its chat (renamed by the person), not the one of its first message
+      nome: nomeUnicoInElenco((forkDa ? sessioni.get(forkDa)?.nome : null) || nomeDiNascita(taskId, task, padreId), null, padreId),
       avviataAlle: clock().toISOString(), messaggiFinali: null, modello: modelloEffettivo,
       modelloPlanner: modelloPlannerEffettivo,
       /* Modalità veloce: sta solo qui, in memoria. Niente timbro né giornale: riavvio, biforcazione e figlie partono spente (Desktop, owner 31/10). */
@@ -12908,6 +13328,20 @@ function fileDelComputerUseNominati(comando, custoditi) {
    *   quindi per chi guarda è come se quegli eventi accadessero adesso. Se la rilettura fallisce resta la voce di prima.
    */
   const ricaricheInCorso = new Map();
+  /* 14/11/2026 (quinto giro dell'affitto): la voce tolta per la ricarica, finché la lettura del disco è in volo; `broadcast` fa aspettare
+     i suoi eventi tardivi (solo i suoi: la voce nuova che il ripristino sta costruendo non aspetta mai se stessa) */
+  const vociInRicarica = new WeakSet();
+  /* 21/11/2026 (candidata 0.2.5, S3-05): la voce tolta, per id, finché la ricarica è in volo. Chi LEGGE (`esiste`, `esporta`,
+     `statoPerIlBattito`) trova lei invece di un buco: prima, in quei millisecondi, la chat non esisteva e il telefono che la apriva
+     riceveva «Session not found». Come Hermes (`gateway/session_api_media.py:51-53`): la copia nuova si prepara a parte e prende il
+     posto della vecchia, chi legge vede l'una o l'altra. Chi SCRIVE resta su `sessioni` (aspetta la ricarica in `allineaSessione`). */
+  const vecchiaInRicaricaDi = new Map();
+  const voceAncheInRicarica = (sessionId) => sessioni.get(sessionId) ?? vecchiaInRicaricaDi.get(sessionId) ?? null;
+  function ricaricaInCorsoDi(voce) {
+    let v = voce;
+    for (let i = 0; i < 16 && v?.sostituitaDa; i += 1) v = v.sostituitaDa;
+    return vociInRicarica.has(v) ? ricaricheInCorso.get(voce.sessionId) ?? null : null;
+  }
   function ricaricaDalDisco(sessionId) {
     const inCorso = ricaricheInCorso.get(sessionId);
     if (inCorso) return inCorso;
@@ -12917,17 +13351,26 @@ function fileDelComputerUseNominati(comando, custoditi) {
       await attendiScrittureFn({ cartellaStore, sessionId });
       if (sessioni.get(sessionId) !== vecchia || !sessioneFermaQui(sessionId, vecchia)) return false;
       sessioni.delete(sessionId);
+      vociInRicarica.add(vecchia);
+      vecchiaInRicaricaDi.set(sessionId, vecchia);
       try { await registryApi.ripristina({ soloSessioni: [sessionId], perRicarica: true }); }
-      catch (errore) { if (!sessioni.has(sessionId)) sessioni.set(sessionId, vecchia); throw errore; }
+      catch (errore) { vociInRicarica.delete(vecchia); vecchiaInRicaricaDi.delete(sessionId); if (!sessioni.has(sessionId)) sessioni.set(sessionId, vecchia); throw errore; }
+      vociInRicarica.delete(vecchia);
+      vecchiaInRicaricaDi.delete(sessionId);
       const nuova = sessioni.get(sessionId);
       if (!nuova) { sessioni.set(sessionId, vecchia); return false; }
       const ultima = Number.isSafeInteger(vecchia.prossimaSequenza) ? vecchia.prossimaSequenza : 0;
-      const nuovi = (nuova.eventi ?? []).filter((evento) => typeof evento?._sequenza === 'number' && evento._sequenza > ultima);
+      /* 13/11/2026 (pezzo 4, lettori): anche un evento con un numero già usato qui, se la voce di prima non l'aveva (la coda di un
+         altro processo scritta coi numeri vecchi, o sotto una nostra scrittura rinumerata dal recinto) */
+      const giaQui = new Set((vecchia.eventi ?? []).map(improntaEvento));
+      const nuovi = (nuova.eventi ?? []).filter((evento) => typeof evento?._sequenza === 'number' && (evento._sequenza > ultima || !giaQui.has(improntaEvento(evento))));
       for (const ascoltatore of vecchia.ascoltatori) {
         for (const evento of nuovi) { try { ascoltatore(evento); } catch { /* un ascoltatore rotto non ferma gli altri */ } }
         nuova.ascoltatori.add(ascoltatore);
       }
       vecchia.ascoltatori.clear();
+      vecchia.sostituitaDa = nuova; // 14/11/2026 (quinto giro): un evento tardivo della voce vecchia va alla nuova (`voceDiAdesso`)
+      if (vecchia.avvisoScritturaAltroveDato) nuova.avvisoScritturaAltroveDato = true; // l'avviso resta uno per giro anche dopo la ricarica
       /*
        * ⛔ REV-GOAL-07 (revisione del bugfixer, 14/10/2026): la ricarica scatta per QUALUNQUE riga scritta da un altro processo
        *   (un giro di chat dell'app), non per una riga dell'obiettivo. Se la riga obiettivo sul giornale è ancora quella che QUESTO
@@ -12947,6 +13390,8 @@ function fileDelComputerUseNominati(comando, custoditi) {
       fermaWatcherSessione(vecchia);
       if (nuova.ascoltatori.size > 0) attivaWatcherSessione(nuova, nuova.cartella);
       if (vecchia.casaLinux && !nuova.casaLinux) nuova.casaLinux = vecchia.casaLinux; // risorsa di processo: resta di chi l'ha aperta
+      if (vecchia.rinumerate?.size) nuova.rinumerate = vecchia.rinumerate; // 13/11/2026: chi si ricollega col numero vecchio
+      if (vecchia.rinumerazioneDelGiornale && !nuova.rinumerazioneDelGiornale) nuova.rinumerazioneDelGiornale = vecchia.rinumerazioneDelGiornale; // pezzo 4
       /*
        * ⛔ Owner 17/10/2026 sera («Sì, nello stesso ramo»): i comandi FERMABILI sono di questo processo, come la casa Linux — i vivi
        *   lanciati qui (un `!` della persona, uno sfondato del modello) e i ripresi dopo un riavvio. La voce nuova nasceva senza: uno
@@ -13150,8 +13595,25 @@ function fileDelComputerUseNominati(comando, custoditi) {
         sessionId,
         motivo: motivo === 'intestazione-pendente-senza-journal' ? motivo : 'intestazione-in-quarantena',
       }));
+      /* 13/11/2026 (giudice v1804 punto 3, limite v1805): UNA lettura della cartella per ripristino; gli avanzi della rinumerazione si
+         riconoscono per sessione qui sotto, prima della lettura del giornale (mai presi per un giornale né per una copia buona) */
+      const avanziDellaCartella = avanziDellaRinumerazioneFn ? avanziDellaRinumerazioneFn.archivio({ cartellaStore }) : null;
+      const conAttesa = sessioniConAttesa(cartellaStore); // 14/11/2026 (sesto giro dell'affitto): una lettura della cartella, come sopra
       for (const sessionId of id) {
         if (sessioni.has(sessionId) || sessioniEliminate.has(sessionId)) continue; // never restore a session being deleted
+        const nomiAvanzi = avanziDellaCartella?.get(sessionId);
+        if (avanziDellaCartella) avanziDellaRinumerazioneDi.delete(sessionId);
+        if (nomiAvanzi?.length) {
+          try {
+            const avanzi = await avanziDellaRinumerazioneFn.giornale({ cartellaStore, sessionId, nomi: nomiAvanzi });
+            avanziDellaRinumerazioneDi.set(sessionId, avanzi);
+            if (avanzi.copieDaVerificare.length || avanzi.copieAMeta.length || avanzi.temporaneiRimasti) {
+              console.error(`[session-store] session ${sessionId}: renumbering leftovers kept — ${avanzi.copieDaVerificare.length} interrupted cop${avanzi.copieDaVerificare.length === 1 ? 'y' : 'ies'}, ${avanzi.copieAMeta.length} half cop${avanzi.copieAMeta.length === 1 ? 'y' : 'ies'} (never used as good copies), ${avanzi.temporaneiRimasti} temporary file(s) not ours to remove now`);
+            }
+          } catch (errore) {
+            console.error(`[session-store] session ${sessionId}: renumbering leftovers not checked:`, errore instanceof Error ? errore.message : errore);
+          }
+        }
         /*
          * ⭐⭐⭐ F2-bis B (24/09/2026) — IL REPLAY LEGGE A STREAM. Prima: `leggiRegistroFn` (l'array intero: a 1.000 turni 550 MB
          *   di RSS, e col formato di oggi il muro della stringa a ~218 turni — rapporto A §2.6). Ora: `leggiRegistroAStream`
@@ -13162,14 +13624,35 @@ function fileDelComputerUseNominati(comando, custoditi) {
         let record;
         let lettura;
         let dimensioneLetta = null; // affitto (10/10/2026): ciò che questo processo sa del giornale
+        let rinumerazione = null; // 13/11/2026: pezzo 4 dell'affitto compromesso
+        const attesaNelDiario = new Set(); // 14/11/2026 (sesto giro dell'affitto): gli `_attesa` del diario, per il file di attesa
         try {
-          const consumatore = creaConsumatoreDiStoria();
-          const esitoLettura = await leggiRegistroAStreamFn({ cartellaStore, sessionId, perRiga: consumatore.perRiga });
-          dimensioneLetta = esitoLettura?.riparazione?.riparato === true ? esitoLettura.riparazione.byteConservati : esitoLettura?.byte;
-          lettura = esitoLettura === null || esitoLettura === undefined
-            ? null
-            : { ...consumatore.esito(), riparazione: esitoLettura.riparazione ?? null, totale: esitoLettura.record };
-          record = lettura?.record ?? null;
+          const leggiIlGiornale = async () => {
+            const consumatore = creaConsumatoreDiStoria();
+            /* 14/11/2026 (mai riscrivere): le righe numerate e le righe «adozione» col loro byte d'inizio, per la regola V */
+            const voci = [];
+            attesaNelDiario.clear();
+            const perRiga = (r, info) => {
+              if (typeof r?.[CAMPO_ATTESA] === 'string') attesaNelDiario.add(r[CAMPO_ATTESA]); // 14/11/2026: le righe adottate dall'attesa
+              if (r && typeof r === 'object' && (Number.isSafeInteger(r._sequenza) || eRigaDiAdozione(r))) voci.push({ inizio: info?.inizio, record: r });
+              return consumatore.perRiga(r, info);
+            };
+            const esitoLettura = await leggiRegistroAStreamFn({ cartellaStore, sessionId, perRiga });
+            applicaLaVista(voci);
+            dimensioneLetta = esitoLettura?.riparazione?.riparato === true ? esitoLettura.riparazione.byteConservati : esitoLettura?.byte;
+            lettura = esitoLettura === null || esitoLettura === undefined
+              ? null
+              : { ...consumatore.esito(), riparazione: esitoLettura.riparazione ?? null, totale: esitoLettura.record };
+            record = lettura?.record ?? null;
+          };
+          await leggiIlGiornale();
+          /*
+           * ⭐⭐⭐ 14/11/2026 — UN GIORNALE GIÀ SPORCO NON SI RISCRIVE PIÙ (terzo giro dell'affitto, «mai riscrivere», scelta dell'owner,
+           *   giudice v1838). Fino a ieri qui la porta dello store lo rinumerava sul disco (copia, temporaneo, `rename`): chi scriveva senza
+           *   affitto perdeva le righe accodate al file vecchio nel momento del `rename` (revisore 2: 51 su 2308) e prendeva EBUSY durante
+           *   la copia. Ora i numeri li dà la lettura qui sopra (`applicaLaVista`, regola V): stessi numeri in ogni processo e dopo ogni
+           *   riavvio, il file intatto, niente copie. Codex non riscrive mai il rollout (`codex-rs/rollout/src/recorder.rs:1804-1806`).
+           */
         } catch (errore) {
           console.error(`[session-store] session ${sessionId} not restored:`, errore instanceof Error ? errore.message : errore);
           if (errore?.code === 'SESSION_STORE_CORRUPT') { corrotte.push(sessionId); scartate.push({ sessionId, motivo: 'corrotta', dettaglio: errore.message, ...(errore?.chiave ? { dettaglioChiave: errore.chiave, ...(errore.params ? { dettaglioParams: errore.params } : {}) } : {}) }); }
@@ -13218,7 +13701,7 @@ function fileDelComputerUseNominati(comando, custoditi) {
           contextReplay.add(identity); return true;
         });
         const eventiOrdinati = eventiFisici.every((evento) => Number.isSafeInteger(evento._sequenza))
-          ? [...eventiFisici].sort((a, b) => a._sequenza - b._sequenza)
+          ? ordinaPerSequenza(eventiFisici) // 13/11/2026: i doppi seguono l'ordine del disco, niente si scarta
           : eventiFisici;
         /*
          * ⛔ 17/09 — LE LAPIDI SI ONORANO QUI, non a valle. Il registro è a sola aggiunta: un
@@ -13236,6 +13719,7 @@ function fileDelComputerUseNominati(comando, custoditi) {
           (massimo, evento) => Number.isSafeInteger(evento._sequenza) ? Math.max(massimo, evento._sequenza) : massimo,
           0,
         );
+        const ultimaSequenzaSulDisco = ultimaSequenza; // 13/11/2026: il recinto dello store (le chiusure in memoria qui sotto non sono sul disco)
         /*
          * ⛔ 24/09/2026 (review avversaria su F3+F5) — UN RIASSUNTO NON SOPRAVVIVE A UN RIAVVIO. `talos.compattazione
          *   {fase:'inizio'}` è durevole, ma allo spegnimento le sintesi in background si abbandonano senza un «fine» (`chiudi()`
@@ -13624,7 +14108,9 @@ function fileDelComputerUseNominati(comando, custoditi) {
         sessioni.set(sessionId, voce);
         ripristinateOra.push(voce);
         compattazioniInVigore(voce); // Blocco 21, condizione 1 di Performance: il conto nasce in questa lettura
-        if (affitti && Number.isSafeInteger(dimensioneLetta)) affitti.ricordaDimensione(sessionId, dimensioneLetta);
+        if (affitti && Number.isSafeInteger(dimensioneLetta)) affitti.ricordaDimensione(sessionId, dimensioneLetta, ultimaSequenzaSulDisco);
+        /* 14/11/2026 (sesto giro dell'affitto): le righe in attesa sul disco (anche di prima di un arresto) si confrontano col diario appena letto */
+        if (conAttesa.has(sessionId) || righeInAttesaDi.has(sessionId)) riconciliaAttesa(sessionId, attesaNelDiario);
         /*
          * ⭐ F3 (24/09/2026), decisione 7 — LA RIPARAZIONE SI DICE, mai in silenzio: un evento persistito che F5 mostra
          *   come riga in chat («recuperata, N righe scartate»). Un file sano non ha `riparazione` e non annuncia niente;
@@ -13644,6 +14130,27 @@ function fileDelComputerUseNominati(comando, custoditi) {
             buco: { recuperataFinoAlGiro: bucoJournal.recuperataFinoAlGiro, deltaScartati: bucoJournal.deltaScartati },
           } }, { durable: true });
         }
+        /*
+         * 13/11/2026 (pezzo 4): la rinumerazione si dice come la coda spezzata — una riga «recuperata», la copia di prima a un clic,
+         *   niente carte. E chi si ricollega con un cursore DAL primo numero rinumerato in su (ambiguo: prima due righe lo avevano)
+         *   riceve il rigioco da sotto quel numero (`iscriviti`); la pagina scarta ciò che ha già con lo stesso numero e la stessa
+         *   impronta. Limite dichiarato: le righe rinumerate che quella finestra aveva col numero vecchio possono comparire due volte
+         *   fino alla riapertura (il segnale «storia riscritta» è una voce a parte, giudice v1779). Solo in memoria: dopo un riavvio il
+         *   giornale non ha più doppi e i cursori nuovi sono tutti validi.
+         */
+        /* 13/11/2026 sera (giudice v1804 punto 2): la soglia non è più solo in memoria — sta nella riga «recuperata» del giornale
+           (`value.soglia`), e vale fino a quella riga esclusa (`fino`): chi ha già la riga ha i numeri nuovi, niente rigioco in più */
+        const intervalliRinumerazione = intervalliDellaRinumerazione(eventi);
+        if (rinumerazione && rinumerazione.rigaScritta !== true) {
+          // la porta non ha scritto la riga (una porta finta, o di prima): si dice come prima, e la soglia resta solo in memoria
+          intervalliRinumerazione.push({ soglia: rinumerazione.sogliaVecchia, fino: null });
+          broadcast(voce, { type: 'CUSTOM', name: 'talos.journal-riparato', value: {
+            riparato: true, completata: true, righeScartate: 0, byteScartati: null, backup: rinumerazione.copia ?? null,
+            rinumerate: rinumerazione.righeRinumerate,
+            ...(Number.isSafeInteger(rinumerazione.righeDoppie) ? { doppie: rinumerazione.righeDoppie } : {}),
+          } }, { durable: true });
+        }
+        if (intervalliRinumerazione.length > 0) voce.rinumerazioneDelGiornale = { intervalli: intervalliRinumerazione };
         timeline.ripristina(sessionId, record.filter(r => r.tipo === 'grafo-agenti'));
         const risolteDomande = new Set(eventi.filter((evento) => evento?.type === 'UserQuestionResolved').map((evento) => evento.requestId));
         const domandaOrfana = [...eventi].reverse().find((evento) => evento?.type === 'UserQuestionRequested' && !risolteDomande.has(evento.requestId));
@@ -17080,7 +17587,9 @@ function fileDelComputerUseNominati(comando, custoditi) {
       /* Decisione 373, giudice 07/11 19:56: anche la carta di un FILE DI CONTROLLO (W1-13 e la shell che nomina i file del computer use) è
          della persona: quei file sono la politica di sicurezza (Hermes, `tools/approval_detection.py:24`), e una regola o la modalità
          che li apre da sola toglierebbe il senso della carta. */
-      if (si && (pendente.azione?.[CARTA_SEMPRE] === true || pendente.azione?.semprePersona === true || pendente.azione?.cancellazioneCritica || pendente.azione?.fileDiControllo === true) && MOTIVI_DEL_SI_SENZA_PERSONA.includes(motivo)) {
+      /* Riga 194 (owner 19/11/2026 23:01, PC 0.2.5): anche la carta di «Solo lettura» (`soloUnaVolta`) è della persona, una volta; difesa in profondità per il sì automatico della CLI.
+         Row 194: the «Read only» card (`soloUnaVolta`) is the person's too, once; a yes from a rule, the mode or the classifier closes it with an automatic No. */
+      if (si && (pendente.azione?.[CARTA_SEMPRE] === true || pendente.azione?.semprePersona === true || pendente.azione?.cancellazioneCritica || pendente.azione?.fileDiControllo === true || pendente.azione?.soloUnaVolta === true) && MOTIVI_DEL_SI_SENZA_PERSONA.includes(motivo)) {
         pendente.fermaOsservatore?.();
         voce.approvazionePendente = null;
         /* P018 nella 0.2.2, dopo il controllore: un no che nessuna persona ha dato, segnato `automatico: true` (il nucleo non lo ricorda come suo) */
@@ -17748,6 +18257,14 @@ function fileDelComputerUseNominati(comando, custoditi) {
       return sessioni.has(sessionId);
     },
 
+    /** 21/11/2026 (S3-05): la chat è fuori da `sessioni` solo perché la si sta rileggendo dal disco (`ricaricaDalDisco`): esiste, torna
+     *  fra un attimo. Chi apre la chat da un'altra porta (il telefono, `remoto/operazioni.mjs`) la tratta come presente e aspetta la
+     *  ricarica in `allineaSessione`, invece di rispondere «Session not found». `esiste` resta com'era (le prove la usano per vedere la
+     *  ricarica in volo). */
+    inRicarica(sessionId) {
+      return !sessioni.has(sessionId) && vecchiaInRicaricaDi.has(sessionId);
+    },
+
     /**
      * «Segnala un problema» (owner 29/10/2026) — gli ultimi errori della conversazione per la diagnostica: SOLO il codice del RunError
      *   e l'ora (dagli istanti in memoria; dopo un riavvio l'ora non c'è e resta `null`), mai il messaggio. Dal più recente, al più 5.
@@ -17773,7 +18290,7 @@ function fileDelComputerUseNominati(comando, custoditi) {
      *   ancora aperto da lui ⇒ il giro è finito o interrotto. `null` per una sessione che non c'è.
      */
     statoPerIlBattito(sessionId) {
-      const voce = sessioni.get(sessionId);
+      const voce = voceAncheInRicarica(sessionId);
       if (!voce) return null;
       return { ultimaSequenza: Number.isSafeInteger(voce.prossimaSequenza) ? voce.prossimaSequenza : 0, lavora: voce.conclusa !== true && voce.interrotta !== true };
     },
@@ -17787,8 +18304,16 @@ function fileDelComputerUseNominati(comando, custoditi) {
      * Senza affitto acceso ⇒ `{ stato: 'spento' }`: tutto come prima.
      * @returns {Promise<{stato:'spento'|'assente'|'nostra'|'libera'|'altrove', ricaricata?:boolean, detentore?:object, messaggio?:string}>}
      */
+    /** 14/11/2026 (sesto giro dell'affitto): le righe di questa chat ancora nel file di attesa, in sola lettura (diagnosi e prove). */
+    righeInAttesa(sessionId) {
+      return (righeInAttesaDi.get(sessionId) ?? []).map((a) => ({ id: a.id, type: a.record?.type ?? null, giaMostrata: a.giaMostrata === true }));
+    },
+
     async allineaSessione(sessionId, { scrivere = true } = {}) {
       if (!affitti) return { stato: 'spento' };
+      /* 13/11/2026 sera: durante una ricarica dal disco la voce manca per un attimo (`ricaricaDalDisco`); chi apre la chat in quel
+         momento aspetta la ricarica invece di leggere «assente» (la ricarica la fa partire anche l'avviso «scritta altrove») */
+      if (!sessioni.has(sessionId) && ricaricheInCorso.has(sessionId)) await ricaricheInCorso.get(sessionId).catch(() => false);
       if (!sessioni.has(sessionId)) return { stato: 'assente' };
       const altrui = affitti.detentoreAltrui(sessionId);
       if (altrui) {
@@ -17846,11 +18371,33 @@ function fileDelComputerUseNominati(comando, custoditi) {
       const voce = sessioni.get(sessionId);
       if (!voce) return () => {};
       capacitaDegliAscoltatori.set(ascoltatore, capacitaDichiarate(capacita)); // R-34 parte 2: in memoria, per questo ascoltatore
+      /*
+       * 13/11/2026 (pezzo 4, lettori) — il recinto ha rinumerato eventi che questo ascoltatore può aver visto col numero VECCHIO, e
+       *   sotto quel numero ora c'è la coda di un altro processo. Se il cursore arriva là, si rigioca da sotto il primo numero
+       *   rinumerato, saltando solo i rinumerati già visti (col numero vecchio): la coda dell'altro arriva, niente due volte.
+       */
+      let cursore = daSequenza;
+      let giaVisteRinumerate = null;
+      if (voce.rinumerate?.size && daSequenza > 0) {
+        const vecchi = [...voce.rinumerate.keys()];
+        const primo = Math.min(...vecchi);
+        if (daSequenza >= primo) {
+          cursore = primo - 1;
+          giaVisteRinumerate = new Set(vecchi.filter((v) => v <= daSequenza).map((v) => voce.rinumerate.get(v)));
+        }
+      }
+      /* 13/11/2026 (pezzo 4): il giornale è stato rinumerato dal ripristino; un cursore dal primo doppio in su è ambiguo ⇒ rigioco da
+         sotto, senza saltare niente (non si sa quale delle due righe col numero vecchio avesse); sotto, nessuna differenza */
+      const sogliaRinumerazione = sogliaDellaRinumerazione(voce.rinumerazioneDelGiornale?.intervalli, daSequenza);
+      if (sogliaRinumerazione !== null) cursore = Math.min(cursore, sogliaRinumerazione - 1);
       for (const evento of voce.eventi) {
-        if (typeof evento._sequenza === 'number' && evento._sequenza <= daSequenza) continue;
+        if (typeof evento._sequenza === 'number' && evento._sequenza <= cursore) continue;
+        if (giaVisteRinumerate?.has(evento._sequenza)) continue;
         if (!eventoVisibileA(evento, ascoltatore)) continue;
         ascoltatore(evento);
       }
+      /* 14/11/2026 (sesto giro dell'affitto): chi apre la chat dopo vede lo stesso la nota di ogni riga ancora in attesa (stato, non storia) */
+      for (const attesa of righeInAttesaDi.get(sessionId) ?? []) if (!attesa.giaMostrata) consegnaNota(voce, notaInAttesa(attesa), ascoltatore);
       voce.ascoltatori.add(ascoltatore);
       attivaWatcherSessione(voce, voce.cartella);
       let attiva = true;
@@ -18273,6 +18820,7 @@ function fileDelComputerUseNominati(comando, custoditi) {
           sessioniEliminate.delete(sessionId);
           sessioni.set(sessionId, voce);
           ripristiniInCorso.delete(sessionId);
+          if (righeInAttesaDi.get(sessionId)?.length) programmaRitentoCodaAffittata(sessionId); // 21/11/2026: la chat resta, le sue righe in attesa riprendono
         }
         if (errore?.code === 'OUTPUT_SESSION_BUSY') return rifiuto('SESSION_NOT_READY', 'command-output-being-saved', 'The command result is being saved: try again in a moment.');
         throw errore;
@@ -18281,6 +18829,11 @@ function fileDelComputerUseNominati(comando, custoditi) {
       }
       for (const [, lasciaCadere] of scrittureInSospeso.get(sessionId) ?? []) lasciaCadere();
       scrittureInSospeso.delete(sessionId);
+      /* 21/11/2026 (ottavo giro, revisore 1 del giro 7): le righe in attesa della chat se ne vanno con lei, col loro ritento. Prima il
+         ritento riscriveva `<id>.attesa` col testo della chat eliminata (disco pieno, poi libero): un file per sempre senza diario. */
+      righeInAttesaDi.delete(sessionId); noteSalvateInSospeso.delete(sessionId);
+      const ritento = ritentiCodaAffittata.get(sessionId);
+      if (ritento) { clearTimeout(ritento); ritentiCodaAffittata.delete(sessionId); }
       fermaWatcherSessione(voce);
       try { osservatoreNotifiche?.eliminata?.(sessionId); } catch { /* le notifiche non fermano mai un'eliminazione */ }
       /* revisione avversaria del 1/11, nota 3 (riservatezza): la foto della scheda contiene i token, cioè il testo della conversazione: se ne va
@@ -18769,6 +19322,14 @@ function fileDelComputerUseNominati(comando, custoditi) {
       chiuso = true;
       if (sorveglianzaAdottati) { clearInterval(sorveglianzaAdottati); sorveglianzaAdottati = null; } // owner 17/10: i ripresi
       togliPredicatoInUso?.(); // l'affitto resta del processo: lo rilascia il battito, o l'uscita
+      /* 21/11/2026 (ottavo giro, revisore 1 del giro 7): come Codex allo spegnimento (`codex-rs/rollout/src/recorder.rs:1867-1872`), un
+         ultimo tentativo per le righe in attesa che il disco non aveva preso; quelle che restano si perdono, e il log lo dice */
+      for (const [sessionId, attese] of righeInAttesaDi) {
+        if (sessioniEliminate.has(sessionId)) continue;
+        riscriviLeAtteseNonScritte(sessionId); // ultimo tentativo
+        const perse = attese.filter((a) => a.daRiscrivere).length;
+        if (perse) console.error(`[affitto] ${perse} waiting line${perse === 1 ? '' : 's'} of ${sessionId} LOST at close: the disk did not take ${perse === 1 ? 'it' : 'them'}`);
+      }
       for (const timer of ritentiCodaAffittata.values()) clearTimeout(timer);
       ritentiCodaAffittata.clear();
       for (const v of sessioni.values()) v.ricercheInCorso?.fermaTutte('fermata'); // F001b: nessun rg orfano dopo lo spegnimento
@@ -18798,13 +19359,22 @@ function fileDelComputerUseNominati(comando, custoditi) {
     },
 
     /**
+     * 13/11/2026 (giudice v1804 punto 3): gli avanzi della rinumerazione trovati all'ultimo ripristino di questa sessione — copie
+     * buone, interrotte, a metà (percorsi), temporanei nostri tolti e rimasti — o `null` se accanto al giornale non c'era niente.
+     */
+    avanziDellaRinumerazione(sessionId) {
+      const avanzi = avanziDellaRinumerazioneDi.get(sessionId);
+      return avanzi ? structuredClone(avanzi) : null;
+    },
+
+    /**
      * L'intera storia di una sessione, pronta per essere scaricata — `null`
      * se non esiste. ⛔ Non richiede che sia conclusa: esportare una
      * sessione ancora in corso mostra tutto ciò che è successo FIN QUI,
      * onestamente — non finge un finale che non c'è ancora.
      */
     esporta(sessionId) {
-      const voce = sessioni.get(sessionId);
+      const voce = voceAncheInRicarica(sessionId);
       if (!voce) return null;
       return {
         schema: EXPORT_SCHEMA,

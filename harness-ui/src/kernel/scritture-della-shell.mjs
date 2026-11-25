@@ -31,7 +31,8 @@
  */
 import { homedir, tmpdir } from 'node:os'
 import { __lettoreDeiComandi as L } from './cancellazioni-critiche.mjs'
-
+import { portaInRete, senzaFornitore } from './file-namespace-contract.mjs' // riga 199 (0.2.5): la rete si riconosce dal testo
+const WIN = { platform: 'win32' }
 const { comandiSemplici, separaHeredoc, senzaInvolucri, cartellaDopo, argomentoDelCd, bersaglioAssoluto, contesto, ricordaAssegnazioni,
   sostituzioniDi, nomeDelComando, decodificaPowerShell, legateNelTesto, SHELL_POSIX, SHELL_POWERSHELL, COMANDI_CHE_SPOSTANO,
   OPZIONE_COMANDO_PS, OPZIONE_CODIFICATA_PS, OPZIONI_PS_CON_VALORE } = L
@@ -356,7 +357,12 @@ function leggiTestoCon(testo, ctx, dove, profondita, esito, apici) {
       if (nome === 'popd' || nome === 'pop-location') { cartella = pila.length ? pila.pop() : null; continue }
       if (nome === 'pushd' || nome === 'push-location') pila.push(cartella)
       ctx.comeIlSistema = conIlSistema
-      cartella = cartellaDopo(argomentoDelCd(parole, ctx), ctx, cartella)
+      const verso = argomentoDelCd(parole, ctx)
+      const prima = cartella
+      cartella = cartellaDopo(verso, ctx, cartella)
+      /* giro unico (C-R1, A-R2): come 4.1 per il bersaglio, una cartella `\\<altro>\C$\…` (o lunga) dopo `cd` è sulla rete, non `C:` */
+      const cdInRete = ctx.windows && cartella && !portaInRete(cartella, WIN) && /^(?:[\\/]{2}|[$%])/u.test(senzaFornitore(String(verso ?? ''))) ? portaInRete(L.espanso(verso, ctx, prima) ?? '', WIN) : null
+      if (cdInRete) cartella = cdInRete.breve
       ctx.comeIlSistema = false
       continue
     }
@@ -417,6 +423,11 @@ function aggiungi(scritto, { cartella = false, come }, ctx, qui, esito) {
   if (MKTEMP.test(s) && !/(?:^|\s)(?:-p|--tmpdir)|[\\/]/u.test(MKTEMP.exec(s)[1])) return
   let assoluto = bersaglioAssoluto(s, ctx, qui)
   if (assoluto === null) { esito.illeggibili.push({ scritto: s, come }); return }
+  /* ⛔ Riga 199 (0.2.5, reperti 4.1 e 4.2): la lettura delle cancellazioni porta ogni `\\x\C$` a `C:` (apposta, per la carta critica) e
+     Node legge `\\\ospite` come `C:\ospite`; per una SCRITTURA la condivisione amministrativa di un altro computer (anche il nostro nome
+     con un dominio dopo) e le tre barre sono la rete, come le aprono cmd e PowerShell: il bersaglio è la forma `\\ospite\…`. */
+  const diRete = ctx.windows && /^(?:[\\/]{2}|[$%])/u.test(senzaFornitore(s)) &&!portaInRete(assoluto, WIN) ? portaInRete(L.espanso(s, ctx, qui) ?? '', WIN) : null
+  if (diRete) assoluto = diRete.breve
   let suCartella = cartella || /[\\/]$/u.test(s)
   const pezzi = assoluto.split(/[\\/]/u)
   const k = pezzi.findIndex((p, i) => i > 0 && GLOB.test(p))

@@ -4,6 +4,519 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 [SemVer](https://semver.org/): in 0.y.z anything may still change. The version lives in
 `package.json` and in the `desktop-vX.Y.Z` tag.
 
+## desktop-v0.2.5 — 2026-11-25
+
+### Fixed
+
+- **The Browser page of one chat no longer goes to the model in another chat.** The pages you opened in the Browser
+  stayed when you started a new chat, and its first message told the model about a page open there, which you had not
+  opened in that chat. Now the Browser's pages belong to the chat where you opened them: a new chat starts with an empty
+  Browser, and going back to a chat brings back its pages (a live page is paused and reopens when you click its tab).
+  A page opened in a new chat before its first message still goes with that message. A reading waiting for your
+  decision, the list of local servers and a reread planned for the end of the turn no longer pass to the next chat.
+  In italiano: **La pagina del Browser di una chat non va più al modello in un'altra chat.** Le pagine aperte nel Browser
+  restavano quando cominciavi una chat nuova, e il suo primo messaggio diceva al modello di una pagina aperta lì, che in
+  quella chat non avevi aperto. Ora le pagine del Browser appartengono alla chat dove le hai aperte: una chat nuova parte
+  col Browser vuoto, e tornando a una chat tornano le sue pagine (una pagina viva va a riposo e si riapre al clic sulla sua
+  scheda). Una pagina aperta in una chat nuova prima del suo primo messaggio va ancora con quel messaggio. Una lettura che
+  aspetta la tua decisione, l'elenco dei server locali e una rilettura prevista a fine giro non passano più alla chat dopo.
+- **A new chat no longer shows what belonged to the chat before it.** The ▶ Resume button could stay on with the turn
+  stopped in the previous chat, tools still marked as running there were counted in the new one, and the panels said
+  whether the model reads the `!` commands according to the previous chat. They now start empty in a new chat.
+  In italiano: **Una chat nuova non mostra più ciò che era della chat di prima.** Il tasto ▶ Riprendi poteva restare acceso
+  col giro fermato nella chat di prima, gli attrezzi ancora segnati in corso lì si contavano in quella nuova, e i pannelli
+  dicevano se il modello legge i comandi `!` secondo la chat di prima. Ora in una chat nuova partono vuoti.
+
+- **A command whose name is built while it runs asks before a critical deletion.** When the name of a command held a
+  variable whose value TALOS cannot know (also in the middle of the name), and a critical place such as the home folder or
+  the root of a disk came after it, the critical-deletion check let it pass with no card, already so in 0.2.4. Now it asks
+  as "too complex" on Windows, Linux, macOS and Android, unless another reading gives a more precise card; a name whose value is known is read with that value. The project
+  folder itself asks only with a recursive switch, so opening the project in an editor named by a variable still asks
+  nothing. Measured on the 74 everyday commands and 17 nearby everyday commands, most with a variable in the name: no new card.
+  A name built while it runs followed by the parent folder or the home folder now asks also in a command that only looks
+  there: that is the card this change adds.
+  In italiano: **Un comando il cui nome si forma mentre gira chiede prima di una cancellazione critica.** Quando il nome di
+  un comando conteneva una variabile dal valore che TALOS non può sapere (anche in mezzo al nome), seguita da un posto
+  critico come la cartella di casa o la radice di un disco, il controllo delle cancellazioni critiche lo lasciava passare
+  senza carta, già così nella 0.2.4. Ora chiede come «troppo complesso» su Windows, Linux, macOS e Android, se nessun'altra lettura dà una carta più precisa; un nome il cui
+  valore si sa si legge con quel valore. La cartella del progetto chiede solo con un interruttore ricorsivo, così aprire il
+  progetto in un editor scritto con una variabile non chiede niente. Misurato sui 74 comandi di tutti i giorni e su 17
+  comandi vicini di tutti i giorni, quasi tutti con una variabile nel nome: nessuna carta nuova. Un nome che si forma mentre
+  gira seguito dalla cartella superiore o dalla cartella di casa ora chiede anche in un comando che lì guarda soltanto: è
+  la carta che questa modifica aggiunge.
+- **On Windows, a command name made of a cmd variable after `call` asks before a critical deletion.** After `call`, cmd
+  expands the percent variables a second time, with the values set earlier in the same command, so the name can become
+  a deletion command only while it runs; the check's first filter skipped such a text and the deletion passed with no
+  card. Now the name is read with the values set in the same command (the usual card), and an unknown one next to a
+  critical place asks as "too complex". Measured on the 74 everyday commands and 22 nearby Windows commands: no new card.
+  In italiano: **Su Windows, un nome di comando fatto di una variabile di cmd dopo `call` chiede prima di una cancellazione
+  critica.** Dopo `call` cmd espande una seconda volta le variabili fra percentuali, coi valori messi prima nello stesso
+  comando, così il nome può diventare un comando che cancella solo mentre gira; il primo filtro del controllo saltava quel
+  testo e la cancellazione passava senza carta. Ora il nome si legge coi valori messi nello stesso comando (la carta di
+  sempre), e uno ignoto accanto a un posto critico chiede come «troppo complesso». Misurato sui 74 comandi di tutti i giorni
+  e su 22 comandi vicini di Windows: nessuna carta nuova.
+- **On Windows, a command name made of a delayed variable asks before a critical deletion.** With delayed expansion on
+  (the cmd switch for it, or the registry setting), cmd also expands variables between exclamation marks while each
+  command runs, so a name written that way became a deletion command with no card. Now such a name is read with the
+  values set in the same command (the usual card), and an unknown one next to a critical place asks as "too complex".
+  Measured on the 74 everyday commands and 22 nearby Windows commands: no new card.
+  In italiano: **Su Windows, un nome di comando fatto di una variabile ritardata chiede prima di una cancellazione
+  critica.** Con l'espansione ritardata accesa (l'interruttore di cmd o l'impostazione del registro), cmd espande anche le
+  variabili fra punti esclamativi mentre ogni comando gira, così un nome scritto in quel modo diventava un comando che
+  cancella senza carta. Ora quel nome si legge coi valori messi nello stesso comando (la carta di sempre), e uno ignoto
+  accanto a un posto critico chiede come «troppo complesso». Misurato sui 74 comandi di tutti i giorni e su 22 comandi
+  vicini di Windows: nessuna carta nuova.
+- **On Windows, a deletion given to WSL is read the way the Linux shell reads it.** Without the switch that runs a
+  program directly, WSL hands the rest of the command to the Linux shell, where a backslash only escapes the next letter;
+  the check read it with the Windows rules, so a deletion name split by a backslash passed with no card. Now the rest is
+  read again with the quotes and backslashes of bash, as for a command given to bash by name (only added cards). The
+  backslash reading stays only for WSL: inside a command given to bash by name on Windows it would have added a card to
+  an everyday command with a Windows path. Measured on the 74 everyday commands and 22 nearby Windows commands, nine of
+  them with WSL: no new card.
+  In italiano: **Su Windows, una cancellazione data a WSL si legge come la legge la shell di Linux.** Senza l'interruttore
+  che avvia un programma direttamente, WSL passa il resto del comando alla shell di Linux, dove una barra rovescia toglie
+  solo il senso della lettera dopo; il controllo lo leggeva con le regole di Windows, così il nome di una cancellazione
+  spezzato da una barra passava senza carta. Ora il resto si rilegge con gli apici e le barre di bash, come un comando dato
+  a bash per nome (solo carte in più). La lettura delle barre resta solo per WSL: dentro un comando dato a bash per nome
+  su Windows avrebbe dato una carta a un comando di tutti i giorni con un percorso di Windows. Misurato sui 74 comandi di
+  tutti i giorni e su 22 comandi vicini di Windows, nove con WSL: nessuna carta nuova.
+- **On Windows, a no-break space, vertical tab or form feed in a command asks before a critical deletion.** With one of
+  those characters right after a deletion command, its name was read wrong and a deletion of a critical place passed with
+  no card. How cmd treats a no-break space in a Unicode command line has no source we could find, and TALOS does not run
+  cmd to find out, so the check takes the careful way: a command with one of those characters in its name or between its
+  words, next to a critical place, asks as "too complex"; a critical place written without them keeps its usual card.
+  Without a critical place nothing changes. Measured on the 74
+  everyday commands and 22 nearby Windows commands: no new card.
+  In italiano: **Su Windows, uno spazio insecabile, un tabulatore verticale o un salto pagina in un comando chiede prima di
+  una cancellazione critica.** Con uno di quei caratteri subito dopo un comando che cancella, il suo nome si leggeva male e
+  la cancellazione di un posto critico passava senza carta. Come cmd tratta uno spazio insecabile in una riga Unicode non
+  ha una fonte che abbiamo trovato, e TALOS non esegue cmd per scoprirlo, così il controllo sceglie la strada prudente: un
+  comando con uno di quei caratteri nel nome o fra le parole, accanto a un posto critico, chiede come «troppo complesso»;
+  un posto critico scritto senza di loro tiene la sua carta di sempre. Senza un posto critico non cambia niente. Misurato sui 74 comandi di tutti i giorni e su 22 comandi vicini di Windows:
+  nessuna carta nuova.
+
+- **A chat written by two TALOS processes no longer gets two events with the same number.** When the computer slept or
+  stalled for more than 30 seconds, another TALOS could take over a chat while this one still believed it held it, and both
+  wrote into the same file. Now this TALOS notices it lost the chat (at the next heartbeat, at release and at the next
+  take), checks before every write that the file is exactly as it left it (its size and the last event number, kept in
+  memory: no extra disk read), and when the other process wrote in the meantime it reads only the new lines, keeps for its
+  own event the number the window already showed, gives the other's lines new numbers above every number shown, and writes
+  both, all in the same step of the write queue, so the events keep the order they happened in.
+  Before this fix an event could be lost in that case: the write was retried at the back of the queue, later events passed
+  it, and after the third refusal it was dropped with only a line in the server log (in a test with another process
+  writing a turn before every third piece, 14 to 16 of 40 pieces were missing from the file). Now nothing is dropped: 40 of
+  40 on the disk and in the chat, in order, also with a real second TALOS process, and every number the window showed is
+  the number of the same line on the disk. The chat says it almost always once for each turn,
+  with no card: «Another TALOS wrote in this chat at the same time. Its messages and these are all saved, one after the
+  other. Nothing was lost.» Rarely, when that line is due exactly while this TALOS is reading the chat again from the disk,
+  the turn shows no such line; nothing else is missing or shown twice, and no number moves. A model reply or a command is never run twice: only the write is repeated. The Processes and Spend panels, the reload and the live stream no
+  longer hide an event only because its number was already seen: two different events with the same number are both shown,
+  the same event received twice still once. Measured on 1,000 normal writes: 0 false «changed elsewhere».
+  In italiano: **Una chat scritta da due processi di TALOS non riceve più due eventi con lo stesso numero.** Se il computer andava in
+  sospensione o si bloccava per più di 30 secondi, un altro TALOS poteva prendere la chat mentre questo credeva ancora di
+  tenerla, ed entrambi scrivevano nello stesso file. Ora questo TALOS si accorge di averla persa (al battito dopo, al rilascio
+  e alla presa dopo), controlla prima di ogni scrittura che il file sia esattamente come l'aveva lasciato (la dimensione e
+  l'ultimo numero d'ordine, tenuti in memoria: nessuna lettura in più dal disco) e, quando l'altro processo ha scritto nel
+  frattempo, legge solo le righe nuove, tiene per il suo evento il numero che la finestra ha già mostrato, dà alle righe
+  dell'altro numeri nuovi sopra ogni numero mostrato e scrive entrambi, tutto nello stesso passo della coda di scrittura,
+  così gli eventi restano nell'ordine in cui sono successi. Prima di questa cura in quel caso un evento poteva
+  perdersi: la scrittura si ritentava in fondo alla coda, gli eventi dopo la superavano, e al terzo rifiuto si scartava con
+  una sola riga nel registro del server (in una prova con un altro processo che scriveva un giro prima di ogni terzo pezzo,
+  mancavano dal file da 14 a 16 pezzi su 40). Ora niente si scarta: 40 su 40 sul disco e in chat, in ordine, anche con un
+  secondo processo di TALOS vero, e ogni numero che la finestra ha mostrato è il numero della stessa riga sul disco. La chat lo dice quasi sempre una volta per giro, senza carte: «Un altro TALOS ha scritto in questa
+  chat nello stesso momento. I suoi messaggi e questi sono salvati tutti, uno dopo l'altro. Niente è andato perso.» Di rado,
+  quando quella riga cade proprio mentre questo TALOS rilegge la chat dal disco, per quel giro la riga non compare; nient'altro
+  manca, niente compare due volte e nessun numero si sposta. Una
+  risposta del modello o un comando non partono mai due volte: si ripete solo la scrittura. I
+  pannelli Processi e Spesa, la ricarica e il flusso dal vivo non nascondono più un evento solo perché il suo numero era già
+  stato visto: due eventi diversi con lo stesso numero si vedono entrambi, lo stesso evento ricevuto due volte una sola.
+  Misurato su 1.000 scritture normali: 0 falsi «cambiata altrove».
+- **A chat already saved with two events under the same number is read in order, and the file is never rewritten.** Chats
+  written by two TALOS processes at once can have numbers used twice. TALOS no longer rewrites such a file: it gives each
+  event its number while reading — an event keeps its own number if no earlier one took it, otherwise it gets the first free
+  number above the highest seen so far, in the order the events were written — so every TALOS process, and the same one
+  after a restart, shows the same numbers. Nothing is copied, nothing is put in place of the file and nothing is cut from
+  it. Before this fix TALOS renumbered the file on the disk (a copy beside it, a new file, then a swap): another TALOS that
+  kept writing to the chat without holding it lost the lines it wrote at the moment of the swap (51 of 2,308 in a test with
+  two TALOS reopening the chat and a third writing every 30 ms, 7 in 7 runs of 40 with one), got «busy» errors while the
+  copy was made (1,286 of 1,619 openings), and every interrupted attempt left one more full copy (21 copies, 63.6 MB, for a
+  3 MB chat). Now, measured the same way over 40 runs: 0 lines lost in the three tests (the version before, measured again
+  the same day: 33 lines lost in 13 of 40 runs with two TALOS reopening the chat, 13 in 13 of 40 with one), 0 copies, 0
+  temporary files and 0 «busy» errors for the writer (the version before: one full copy in every run, 40 of 40, and 6 «busy»
+  errors), and opening a 55 MB chat with repeated numbers takes 310-330 ms instead of 0.96-1.45 s, with 336 MB of memory
+  instead of 386 MB, and adds nothing on the disk instead of 57.7 MB more. When the TALOS that holds a chat finds lines
+  written by another one in the middle of its turn, its own event keeps the number the window already showed, the other's
+  lines get new numbers above every number shown, written as one extra line at the end of the file, and the open window
+  receives them at once: a number already shown never moves to another line, and a window, the phone or the command line
+  that reconnects with its last number — after a reload or after a restart — gets exactly what it missed: 0 missing and 0
+  shown again (before: up to 195 missing and 160 shown again in 3 runs of the same test, and 45 of 51 numbers shown by a
+  TALOS killed in the middle of its turn pointed to another line after the restart). Known limits: a line the other TALOS
+  writes in the few microseconds between our line and the extra line is taken by our next write, or, if none comes, numbered
+  by the reading rule above the highest; a third TALOS with the chat open that reads the other's lines before the extra line
+  arrives shows them first with their old numbers and then, after it reads the chat again from the disk, a second time with
+  the new ones: in that window some messages of the other TALOS appear twice, never missing (542, 280 and 336 such lines in
+  three kinds of tests), and reloading the page or reopening the chat shows them once; in the file the written numbers can
+  repeat, and TALOS 0.2.2 and earlier — the computer app, the phone page and the command line — do not show them twice but
+  hide them: in such a chat the reply has pieces missing and some turns of the other TALOS lack a line (about 25 of the 40
+  pieces of a turn with the other TALOS in the same process or in a second one, about 10 with a writer that holds no lease,
+  439 of 1,000 in a long chat; 0.2.1 already hid 40 of 40 on chats written by two processes), while this version shows the
+  same chats with nothing missing: updating is the fix; a half line at the very end of the file (a crash in the middle of a
+  write) is still cut away as before, and when the crash cuts the extra line itself, about 5 lines of the other TALOS take
+  numbers already shown after the restart, so a window, the phone or the command line left open through the restart does not
+  show them (106 lines in 20 crashes) until it is reloaded from the start (reload the page or reopen the chat); a resume refused as «ambiguous» after another TALOS
+  wrote a whole turn inside ours is not changed by this fix.
+  In italiano: **Una chat già salvata con due eventi sotto lo stesso numero si legge in ordine, e il file non si riscrive mai.** Le chat
+  scritte da due processi di TALOS insieme possono avere numeri usati due volte. TALOS non riscrive più un file così: dà a
+  ogni evento il suo numero mentre lo legge — un evento tiene il suo numero se nessuno prima l'ha preso, se no prende il
+  primo numero libero sopra il più alto visto fin lì, nell'ordine in cui gli eventi sono stati scritti — così ogni processo
+  di TALOS, e lo stesso dopo un riavvio, mostra gli stessi numeri. Niente si copia, niente si mette al posto del file e
+  niente si taglia. Prima di questa cura TALOS rinumerava il file sul disco (una copia accanto, un file nuovo, poi lo
+  scambio): un altro TALOS che continuava a scrivere nella chat senza tenerla perdeva le righe scritte nel momento dello
+  scambio (51 su 2.308 in una prova con due TALOS che riaprivano la chat e un terzo che scriveva ogni 30 ms, 7 in 7 giri su
+  40 con uno solo), prendeva errori «occupato» mentre si faceva la copia (1.286 aperture su 1.619), e ogni tentativo
+  interrotto lasciava una copia intera in più (21 copie, 63,6 MB, per una chat da 3 MB). Ora, misurato allo stesso modo su
+  40 giri: 0 righe perse nelle tre prove (la versione di prima, rimisurata lo stesso giorno: 33 righe perse in 13 giri su 40
+  con due TALOS che riaprono la chat, 13 in 13 su 40 con uno), 0 copie, 0 file temporanei e 0 errori «occupato» per chi
+  scrive (la versione di prima: una copia intera a ogni giro, 40 su 40, e 6 errori «occupato»), e aprire una chat da 55 MB
+  coi numeri doppi richiede 310-330 ms invece di 0,96-1,45 s, con 336 MB di memoria invece di 386 MB, e non aggiunge niente
+  sul disco invece di 57,7 MB in più. Quando il TALOS che tiene una chat trova righe scritte da un altro in mezzo al suo
+  giro, il suo evento tiene il numero che la finestra ha già mostrato, le righe dell'altro prendono numeri nuovi sopra ogni
+  numero mostrato, scritti in una riga in più in fondo al file, e la finestra aperta le riceve subito: un numero già
+  mostrato non passa mai a un'altra riga, e una finestra, il telefono o la riga di comando che si ricollegano col loro
+  ultimo numero — dopo una ricarica o dopo un riavvio — ricevono esattamente ciò che mancava: 0 mancanti e 0 rivisti (prima:
+  fino a 195 mancanti e 160 rivisti in 3 giri della stessa prova, e 45 numeri su 51 mostrati da un TALOS ucciso a metà giro
+  puntavano a un'altra riga dopo il riavvio). Limiti noti: una riga che l'altro TALOS scrive nei pochi microsecondi fra la
+  nostra riga e la riga in più la prende la nostra scrittura dopo o, se non ne arrivano, la regola di lettura le dà un
+  numero sopra il più alto; un terzo TALOS con la chat aperta che legge le righe dell'altro prima che arrivi la riga in più
+  le mostra prima coi numeri vecchi e poi, quando rilegge la chat dal disco, una seconda volta coi numeri nuovi: in quella
+  finestra alcuni messaggi dell'altro TALOS compaiono due volte, mai mancanti (542, 280 e 336 righe così in tre tipi di
+  prove), e ricaricare la pagina o riaprire la chat li mostra una volta sola; nel file i numeri scritti possono ripetersi, e
+  TALOS 0.2.2 e prima — l'app del computer, la pagina del telefono e la riga di comando — non li mostrano due volte ma li
+  nascondono: in una chat così alla risposta mancano dei pezzi e ad alcuni giri dell'altro TALOS manca una riga (circa 25 dei
+  40 pezzi di un giro con l'altro TALOS nello stesso processo o in un secondo, circa 10 con uno che scrive senza affitto, 439
+  su 1.000 in una chat lunga; lo 0.2.1 nascondeva già 40 pezzi su 40 nelle chat scritte da due processi), mentre questa
+  versione mostra le stesse chat senza che manchi niente: la cura è aggiornare; una mezza riga proprio in fondo al file (un
+  arresto a metà scrittura) si taglia ancora come prima, e quando l'arresto taglia proprio la riga in più, dopo il riavvio
+  circa 5 righe dell'altro TALOS prendono numeri già mostrati, quindi una finestra, il telefono o la riga di comando rimasti
+  aperti durante il riavvio non le mostrano (106 righe in 20 arresti) finché non si ricaricano da capo (ricaricare la pagina
+  o riaprire la chat); una ripresa rifiutata come «ambigua» dopo che un altro
+  TALOS ha scritto un giro intero dentro il nostro non cambia con questa cura.
+- **The last line of a turn or of a `!` command no longer goes missing after the chat is read again from the disk.**
+  When another TALOS wrote in a chat and this TALOS read the chat again from the disk while the end of a turn or the
+  result of a `!` command was still on its way, that line was shown in the window but never reached the disk, so it was
+  missing when the chat was reopened. Measured live with two real TALOS processes: 19 lines lost in 19 of 20 runs when the
+  turn ended after the reload, and 2 lines lost in 1 of 20 runs for a `!` command, with 54 lines on the disk that the
+  window never showed (4 lost and 72 never shown in 30 runs with the computer busy). Now the late line is added at the end
+  of the chat with a number above every number shown, once: 0 lost and 0 never shown in 70 runs for the command, and in the
+  turn case only when the other TALOS holds the chat at that very moment (3 lines in 40 runs): then the line cannot be
+  saved, and the chat says so once in the turn («A line that arrived late was not saved: this chat is open in another TALOS
+  window. It is shown here, but it will be missing when the chat is reopened.») with one line in the server log, instead of
+  losing it in silence. Opening a 55 MB chat still takes 325-337 ms and adds nothing on the disk. Known limit: with the
+  computer busy and a second TALOS writing without holding the chat, a window can still show two lines with the same number
+  (3 in 30 runs; 4 in 30 runs before this fix).
+  In italiano: **L'ultima riga di un giro o di un comando `!` non si perde più dopo che la chat è stata riletta dal disco.** Quando un
+  altro TALOS scriveva in una chat e questo TALOS la rileggeva dal disco mentre la fine di un giro o il risultato di un
+  comando `!` erano ancora per strada, quella riga si vedeva nella finestra ma non arrivava mai al disco, e mancava quando
+  la chat si riapriva. Misurato dal vivo con due processi TALOS veri: 19 righe perse in 19 corse su 20 quando il giro finiva
+  dopo la rilettura, e 2 righe perse in 1 corsa su 20 per un comando `!`, con 54 righe sul disco che la finestra non aveva
+  mai mostrato (4 perse e 72 mai mostrate in 30 corse col computer occupato). Ora la riga tardiva si aggiunge in fondo alla
+  chat con un numero sopra ogni numero mostrato, una volta sola: 0 perse e 0 mai mostrate in 70 corse per il comando, e nel
+  caso del giro solo quando l'altro TALOS tiene la chat proprio in quell'istante (3 righe in 40 corse): allora la riga non si
+  può salvare, e la chat lo dice una volta nel giro («Una riga arrivata in ritardo non è stata salvata: questa chat è aperta
+  in un’altra finestra di TALOS. Si vede qui, ma mancherà quando la chat si riapre.») con una riga nel registro del server,
+  invece di perderla in silenzio. Aprire una chat da 55 MB richiede ancora 325-337 ms e non aggiunge niente sul disco. Limite
+  noto: col computer occupato e un secondo TALOS che scrive senza tenere la chat, una finestra può ancora mostrare due righe
+  con lo stesso numero (3 in 30 corse; 4 in 30 corse prima di questa cura).
+- **A line that arrives while another TALOS window holds the chat now waits on the disk and is added when the chat is
+  free.** Before, such a line (the end of a turn, the result of a `!` command) was refused and lost even after the chat
+  became free, with no word in the chat; and the window showed it with a number the disk never got, so the other TALOS
+  then wrote its own lines with that number and the window and the command line hid them. Measured live with two real
+  TALOS processes: 30 lines lost in 30 runs, in silence, with 60 lines of the other TALOS hidden. Now the line takes no
+  number while it waits: it goes to a waiting file next to the chat (`<chat>.attesa`, written only by adding, synced to
+  the disk, never rewritten or emptied), and the chat shows one note for each waiting line («A line that arrived late is
+  waiting to be saved: this chat is open in another TALOS window. It is kept on this computer and added here as soon as
+  that window lets the chat go.»). As soon as the chat is free (within about 5 seconds), the line is added at the end of
+  the chat with a number above every number shown, once, and a second note says so («The line that was waiting has been
+  saved: it is now at the end of this chat.»). It survives a crash or a forced stop: the next start finds it and adds it.
+  Measured live, 240 runs in 8 shapes: 0 lines lost, 0 lines hidden, 0 lines twice, 0 out of order, the chat never
+  rewritten; the waiting line on the disk in 30 of 30 runs in every shape where it waits, also when the TALOS that held
+  it is stopped by force 0-3 ms later. Opening a 55 MB chat still takes 278-311 ms (276-305 ms before) and adds nothing
+  on the disk; reading a chat again takes 25-30 ms; a waiting file with 1,000 waiting and 1,000 saved lines weighs 448 KB
+  and is read in about 3 ms. Known limits: an older TALOS (0.2.1 and before, phone 0.1.48) does not know the waiting
+  file: a line waits until a TALOS with this fix opens the chat. A line written normally (not refused) while TALOS is
+  stopped by force in the same few milliseconds can still be lost (9 in 30 runs, as before).
+  In italiano: **Una riga che arriva mentre un'altra finestra di TALOS tiene la chat ora aspetta sul disco e si aggiunge quando la chat
+  si libera.** Prima una riga così (la fine di un giro, il risultato di un comando `!`) veniva rifiutata e si perdeva anche
+  dopo che la chat si era liberata, senza una parola in chat; e la finestra la mostrava con un numero che il disco non aveva
+  mai, così l'altro TALOS scriveva poi le sue righe con quel numero e la finestra e la riga di comando le nascondevano.
+  Misurato dal vivo con due processi TALOS veri: 30 righe perse in 30 corse, in silenzio, con 60 righe dell'altro TALOS
+  nascoste. Ora la riga non prende un numero mentre aspetta: va in un file di attesa accanto alla chat (`<chat>.attesa`,
+  scritto solo aggiungendo, sincronizzato sul disco, mai riscritto né svuotato), e la chat mostra una nota per ogni riga in
+  attesa («Una riga arrivata in ritardo aspetta di essere salvata: questa chat è aperta in un’altra finestra di TALOS. Resta
+  su questo computer e si aggiunge qui appena quella finestra lascia la chat.»). Appena la chat è libera (entro circa 5
+  secondi) la riga si aggiunge in fondo alla chat con un numero sopra ogni numero mostrato, una volta sola, e una seconda
+  nota lo dice («La riga che aspettava è stata salvata: ora è in fondo a questa chat.»). Sopravvive a un arresto o a una
+  chiusura forzata: l'avvio dopo la trova e la aggiunge. Misurato dal vivo, 240 corse in 8 forme: 0 righe perse, 0 righe
+  nascoste, 0 righe due volte, 0 fuori ordine, la chat mai riscritta; la riga in attesa sul disco in 30 corse su 30 in ogni
+  forma in cui aspetta, anche quando il TALOS che la teneva viene chiuso a forza 0-3 ms dopo. Aprire una chat da 55 MB
+  richiede ancora 278-311 ms (276-305 ms prima) e non aggiunge niente sul disco; rileggere una chat richiede 25-30 ms; un
+  file di attesa con 1.000 righe in attesa e 1.000 salvate pesa 448 KB e si legge in circa 3 ms. Limiti noti: un TALOS di
+  prima (0.2.1 e precedenti, telefono 0.1.48) non conosce il file di attesa: una riga aspetta finché non apre la chat un
+  TALOS con questa cura. Una riga scritta normalmente (non rifiutata) mentre TALOS viene chiuso a forza negli stessi pochi
+  millisecondi può ancora perdersi (9 in 30 corse, come prima).
+- **When two TALOS write in the same chat, a line that waits is never lost, and the chat says so calmly.** This follows
+  the waiting line of 0.2.2. What you now see: one short information note for each line that waits («A line that arrived
+  late is waiting to be saved: this chat is open in another TALOS window. It is kept on this computer and added here as
+  soon as that window lets the chat go.»), and the same note changes to «The line that was waiting has been saved: it is
+  now at the end of this chat.» when the line is added. Before, both notes looked like an error card (a «Retry the turn»
+  button, the sentence closed under technical details), a page that reconnected showed the waiting note twice (30 of 30
+  runs in the review), and the saved note could arrive while the model was still writing and take the Stop button away
+  (30 of 30 runs in one shape, 28 of 30 in another). Now a reconnection draws nothing new, and the saved note waits for
+  the end of the turn that is running.
+  In italiano: **Quando due TALOS scrivono nella stessa chat, una riga che aspetta non si perde mai, e la chat lo dice con calma.**
+  Segue la riga in attesa della 0.2.2. Che cosa vedi ora: una breve nota informativa per ogni riga che aspetta («Una riga
+  arrivata in ritardo aspetta di essere salvata: questa chat è aperta in un’altra finestra di TALOS. Resta su questo
+  computer e si aggiunge qui appena quella finestra lascia la chat.»), e la stessa nota diventa «La riga che aspettava è
+  stata salvata: ora è in fondo a questa chat.» quando la riga si aggiunge. Prima le due note sembravano una carta d'errore
+  (un pulsante «Riprova il giro», la frase chiusa sotto i dettagli tecnici), una pagina che si ricollegava mostrava la nota
+  d'attesa due volte (30 corse su 30 nella revisione), e la nota di salvataggio poteva arrivare mentre il modello scriveva
+  ancora e togliere il pulsante Stop (30 corse su 30 in una forma, 28 su 30 in un'altra). Ora un ricollegamento non
+  disegna niente di nuovo, e la nota di salvataggio aspetta la fine del giro in corso.
+- **The waiting file no longer loses lines in rare cases.** A file whose last line was cut by a crash in the middle of a
+  write now gets a line break before the next line, so that line is no longer glued to the broken one and lost (30 of 30
+  runs in the review); a write the disk takes only in part (a full disk) counts as an error, and the line stays in memory
+  and is written again at the next try (two lines were lost in 30 of 30 runs); a file that an outside editor saved with a
+  byte-order mark is read normally. Now the tests of each case lose 0 lines.
+  In italiano: **Il file di attesa non perde più righe nei casi rari.** Un file la cui ultima riga è stata tagliata da un arresto a metà
+  scrittura ora riceve un a capo prima della riga dopo, così quella riga non resta incollata alla riga rotta e non si perde
+  (30 corse su 30 nella revisione); una scrittura che il disco prende solo in parte (disco pieno) conta come errore, e la
+  riga resta in memoria e si riscrive al tentativo dopo (si perdevano due righe in 30 corse su 30); un file salvato da un
+  editor esterno col segno d'ordine dei byte (BOM) si legge normalmente. Ora le prove di ogni caso perdono 0 righe.
+- **Thousands of waiting lines no longer slow TALOS down.** With 50,000 waiting lines (a case far from real use: a chat
+  has had at most 2), starting TALOS took about 9 s and adding the lines 17 s more; now the start takes 68-79 ms and the
+  lines are added in groups of 2,000 in about 2.3 s, and the server never stops answering for more than about 0.2 s
+  (measured 3 times with the computer at 14-21% CPU).
+  In italiano: **Migliaia di righe in attesa non rallentano più TALOS.** Con 50.000 righe in attesa (un caso lontano dall'uso vero: una
+  chat ne ha avute al massimo 2) l'avvio di TALOS durava circa 9 s e l'aggiunta delle righe altri 17 s; ora l'avvio dura
+  68-79 ms e le righe si aggiungono a gruppi di 2.000 in circa 2,3 s, e il server non smette mai di rispondere per più di
+  circa 0,2 s (misurato 3 volte col computer al 14-21% di CPU).
+- **After switching to another chat and back, the window no longer hides a line written by the other TALOS.** Before, a
+  chat taken back from the ready chats forgot which line each number belonged to, and the line the other TALOS wrote with
+  the number of a waiting line was hidden (30 of 30 runs in two shapes in the review); now it is shown.
+  In italiano: **Dopo essere passati a un'altra chat e tornati, la finestra non nasconde più una riga scritta dall'altro TALOS.** Prima
+  una chat ripresa fra quelle tenute pronte dimenticava a quale riga apparteneva ogni numero, e la riga che l'altro TALOS
+  aveva scritto col numero di una riga in attesa restava nascosta (30 corse su 30 in due forme nella revisione); ora si
+  vede.
+- **A chat that is being read again from the disk no longer disappears for a moment.** When the other TALOS had written
+  in a chat and the turn here ended, the chat was read again from the disk, and for those few milliseconds it did not exist:
+  the phone that opened it right then got «Session not found», and an export gave nothing. Now the chat as it was stays
+  visible until the new copy is in place. Measured with the reload held open on purpose: before, «Session not found» every
+  time; now the chat opens and its history arrives once the reload is done.
+  In italiano: **Una chat che si sta rileggendo dal disco non sparisce più per un attimo.** Quando l'altro TALOS aveva scritto in
+  una chat e il giro di qui finiva, la chat si rileggeva dal disco e per quei pochi millisecondi non esisteva: il telefono che
+  la apriva proprio allora riceveva «Sessione non trovata», ed esportarla non dava niente. Ora la chat com'era resta visibile
+  finché la copia nuova non è al suo posto. Misurato con la rilettura tenuta aperta di proposito: prima «Sessione non trovata»
+  ogni volta; ora la chat si apre e la sua storia arriva appena la rilettura finisce.
+- **Tens of thousands of waiting lines no longer stop the server while they are added.** Every batch of 2,000 lines read the
+  whole waiting file again, so the work grew with the square of the lines. Now the file is read once and then only what was
+  added. Measured with 50,000 waiting lines: the rows are parsed 98,007 times instead of 1,900,007, the longest stop of the
+  server is 22 to 47 ms in 5 runs (before: 198 to 424 ms in 3 runs), and all of them are added in about 0.3 seconds
+  instead of 2.4 to 4 seconds.
+  In italiano: **Decine di migliaia di righe in attesa non fermano più il server mentre si aggiungono.** Ogni lotto di 2.000
+  righe rileggeva tutto il file di attesa, quindi il lavoro cresceva col quadrato delle righe. Ora il file si legge una volta e
+  poi solo ciò che si è aggiunto. Misurato con 50.000 righe in attesa: le righe si analizzano 98.007 volte invece di 1.900.007,
+  il fermo più lungo del server è da 22 a 47 ms in 5 corse (prima: da 198 a 424 ms in 3 corse), e si aggiungono tutte in
+  circa 0,3 secondi invece di 2,4-4 secondi.
+- **A waiting line the disk could not take is said plainly, kept until TALOS closes, and gone with a deleted chat.** When the
+  disk refused a line that had to wait (for example a full disk), the note still said «It is kept on this computer»; a
+  normal close before the next retry lost it without a word; and if the chat was deleted before the retry, the retry wrote
+  the deleted chat's line into a new waiting file that stayed on the disk for ever. Now the note says the disk did not take
+  the line and that for now it is kept only while TALOS stays open, and the same note goes back to «kept on this computer»
+  as soon as the retry writes it; closing TALOS tries once more, and the server log says it when the line is lost; deleting
+  the chat drops its waiting lines and their retry. Measured with the disk failure simulated: 0 waiting files left for a
+  deleted chat (before: 1 in 1), the line on the disk after a close (before: lost).
+  In italiano: **Una riga in attesa che il disco non ha preso si dice chiaramente, resta finché TALOS è aperto e se ne va con
+  una chat eliminata.** Quando il disco rifiutava una riga che doveva aspettare (per esempio un disco pieno), la nota diceva
+  lo stesso «Resta su questo computer»; una chiusura normale prima del ritento la perdeva senza dire niente; e se la chat
+  veniva eliminata prima del ritento, il ritento scriveva la riga della chat eliminata in un file di attesa nuovo che restava
+  sul disco per sempre. Ora la nota dice che il disco non ha preso la riga e che per ora resta solo finché TALOS è aperto, e
+  la stessa nota torna a «Resta su questo computer» appena il ritento la scrive; chiudere TALOS ci prova un'ultima volta, e il
+  registro del server lo dice quando la riga si perde; eliminare la chat toglie le sue righe in attesa e il loro ritento.
+  Misurato col guasto del disco simulato: 0 file di attesa rimasti per una chat eliminata (prima: 1 su 1), la riga sul disco
+  dopo una chiusura (prima: persa).
+- **The note of a saved line no longer says where the line is, and a stale «waiting» note goes away.** The note said «it is now
+  at the end of this chat», but a late text of an earlier turn is drawn in its own message higher up (false in 28 of 30
+  runs). Now it says «The line that was waiting has been saved in this chat.» And when you came back to a chat kept ready
+  while its line was saved, the note still said the line was waiting (30 of 30): now the waiting notes of a chat that comes
+  back are taken away, and those of the lines that still wait come back from the server.
+  In italiano: **La nota di una riga salvata non dice più dove sta la riga, e una nota «aspetta» rimasta indietro se ne va.** La
+  nota diceva «ora è in fondo a questa chat», ma un testo tardivo di un giro precedente si disegna nel suo messaggio più in alto
+  (falso in 28 corse su 30). Ora dice «La riga che aspettava è stata salvata in questa chat.» E tornando a una chat tenuta
+  pronta mentre la sua riga si salvava, la nota diceva ancora che la riga aspettava (30 su 30): ora le note «aspetta» di una
+  chat che torna si tolgono, e quelle delle righe che aspettano ancora le rimanda il server.
+- **The animated background rests while the TALOS window is not the one in use.** Until now it stopped only when the page was
+  hidden. Now it also stops when you switch to another app, and starts again when you come back, from where it was: no jump
+  back to the start, and while it rests the last picture stays on screen, not an empty background. When the focus was inside
+  a page shown in TALOS (a side artifact, a report, the Browser, an Office file), only that page hears about your return, so
+  while the background rests for this reason it checks once a second and moves again within about a second. It makes no such
+  check while it moves, or while it rests for another reason (hidden page, reduced motion, background off).
+  In italiano: **Lo sfondo animato si riposa mentre la finestra di TALOS non è quella in uso.** Finora si fermava solo con la
+  pagina nascosta. Ora si ferma anche quando si passa a un'altra app e riparte quando si torna, da dove era: nessun salto
+  all'inizio, e mentre riposa resta l'ultima immagine, non uno sfondo vuoto. Quando il fuoco era dentro una pagina mostrata in
+  TALOS (un artefatto a lato, un rapporto, il Browser, un file Office), del ritorno lo sa solo quella pagina: così, mentre lo
+  sfondo riposa per questo motivo, controlla una volta al secondo e si muove di nuovo entro circa un secondo. Non fa questo
+  controllo mentre si muove, né quando riposa per un altro motivo (pagina nascosta, movimento ridotto, sfondo spento).
+- **A place on another computer is no longer contacted by the permission checks before the card.** When a file tool named
+  a path on another computer (`\\computer\share\…`, also in its long forms, even with dots or spaces at the end of a piece), three checks looked up where that path really
+  leads before any card: the check for TALOS control files, the check for the login credentials of this computer and, in a
+  turn sent by a device, the check for the folders blocked for it. A delete command did the same with its target, in
+  every access level, to see whether it was a link to a critical place. On Windows that lookup already contacts the other
+  computer with your Windows credentials. Now such a path is recognised from its text alone and compared in words: the
+  control-file card, the credential refusal, the blocked-folder refusal and the critical-delete card stay as they were,
+  and the other computer is contacted only after you say yes. A project folder or a home folder that is itself on a share
+  is measured as before, and so is a disk of this computer written in the long device form: no card goes away. A git
+  command that could discard your work (a hard reset, a checkout of files, a clean) in a folder on another computer
+  started git there to read the state of the repository, before any card; now that state is not read and the command is
+  refused, as when the state cannot be read. Already in 0.2.3 (the delete check since 0.2.1).
+  In italiano: **Un posto su un altro computer non viene più contattato dai controlli dei permessi prima della carta.**
+  Quando un attrezzo dei file nominava un percorso su un altro computer (`\\computer\condivisione\…`, anche nelle sue forme
+  lunghe, anche con punti o spazi in coda a un pezzo), tre controlli cercavano dove porta davvero quel percorso prima di ogni carta: quello dei file di controllo di
+  TALOS, quello delle credenziali di accesso di questo computer e, in un giro mandato da un dispositivo, quello delle
+  cartelle bloccate per lui. Un comando che cancella faceva lo stesso col suo bersaglio, a ogni livello di accesso, per
+  vedere se era un collegamento verso un posto critico. Su Windows quella ricerca contatta già l'altro computer con le tue
+  credenziali di Windows. Ora un percorso così si riconosce dal solo testo e si confronta a parole: la carta dei file di
+  controllo, il rifiuto delle credenziali, quello delle cartelle bloccate e la carta delle cancellazioni critiche restano
+  come prima, e l'altro computer si contatta solo dopo il tuo sì. Una cartella di progetto o una casa che sta essa stessa
+  su una condivisione si misura come prima, e così un disco di questo computer scritto nella forma lunga di dispositivo:
+  nessuna carta se ne va. Un comando git che può buttare il tuo lavoro (un reset forzato, un checkout di file, una pulizia)
+  in una cartella su un altro computer faceva partire git lì per leggere lo stato del repository, prima di ogni carta; ora
+  quello stato non si legge e il comando si rifiuta, come quando lo stato non si legge. Già nella 0.2.3 (il controllo delle
+  cancellazioni dalla 0.2.1).
+- **«Writes to the project»: two more ways of naming another computer now ask with its card.** The check of where a
+  command writes read the administrative share of another computer (`\\computer\C$\…`, also when the computer's name was
+  this computer's name followed by a domain) as the `C:` disk of this computer, so inside the project it asked nothing
+  while the write went to that computer; and it read a path that starts with three slashes as a folder on `C:`, while
+  cmd and PowerShell open it on the network, so the card named `C:` and offered «for this session». Now both are places
+  on another computer: the card names that computer, never «for this session», and nothing is opened before your yes. The same holds for a relative write after `cd`, `pushd` or `Set-Location` to such a folder, and for a long device path that climbs back to a share with `..`.
+  The administrative share of this computer (`\\localhost\C$`, its own plain name) is still this disk, and deleting
+  the `C$` share of another computer still asks with the critical card.
+  In italiano: **«Scrive nel progetto»: altri due modi di nominare un altro computer ora chiedono con la sua carta.** Il
+  controllo di dove scrive un comando leggeva la condivisione amministrativa di un altro computer (`\\computer\C$\…`,
+  anche quando il nome era quello di questo computer seguito da un dominio) come il disco `C:` di questo computer, quindi
+  dentro il progetto non chiedeva niente mentre la scrittura andava a quel computer; e leggeva un percorso che comincia con
+  tre barre come una cartella di `C:`, mentre cmd e PowerShell lo aprono sulla rete, quindi la carta nominava `C:` e
+  offriva «per questa sessione». Ora sono tutti e due posti su un altro computer: la carta nomina quel computer, mai «per
+  questa sessione», e niente si apre prima del tuo sì; lo stesso per una scrittura relativa dopo `cd`, `pushd` o `Set-Location` verso una cartella così, e per un percorso lungo di dispositivo che risale a una condivisione con `..`. La condivisione amministrativa di questo computer (`\\localhost\C$`,
+  il suo nome semplice) resta questo disco, e cancellare la condivisione `C$` di un altro computer chiede ancora con la
+  carta critica.
+- **A path written with the PowerShell file-system provider name in front is the same place as without it.** PowerShell
+  opens `FileSystem::<path>` and `Microsoft.PowerShell.Core\FileSystem::<path>` exactly as `<path>`, but the permission
+  checks read them as a name inside the project: a recursive delete of a critical folder lost its critical card, a write
+  outside the project or on another computer asked nothing, and a folder blocked for a device was no longer blocked. Now
+  the provider name is set aside before every check, so the command asks exactly as it does without it. Already in 0.2.3.
+  In italiano: **Un percorso scritto col nome del fornitore dei file di PowerShell davanti è lo stesso posto che senza.**
+  PowerShell apre `FileSystem::<percorso>` e `Microsoft.PowerShell.Core\FileSystem::<percorso>` esattamente come
+  `<percorso>`, ma i controlli dei permessi li leggevano come un nome dentro il progetto: una cancellazione ricorsiva di una
+  cartella critica perdeva la carta critica, una scrittura fuori dal progetto o su un altro computer non chiedeva niente, e
+  una cartella bloccata per un dispositivo non era più bloccata. Ora il nome del fornitore si mette da parte prima di ogni
+  controllo, quindi il comando chiede esattamente come senza. Già nella 0.2.3.
+- **A recursive delete on another computer written as `\\.\UNC\…` asks like the short form.** In Full access,
+  `Remove-Item -Recurse` of a folder just under a share asks with the critical card when the share is written
+  `\\computer\share`, but asked nothing when the same place was written as `\\.\UNC\computer\share`. Now that form is
+  read as the short one. Already in 0.2.3.
+  In italiano: **Una cancellazione ricorsiva su un altro computer scritta come `\\.\UNC\…` chiede come la forma corta.** In
+  Accesso pieno `Remove-Item -Recurse` di una cartella appena sotto una condivisione chiede con la carta critica quando la
+  condivisione è scritta `\\computer\condivisione`, ma non chiedeva niente quando lo stesso posto era scritto
+  `\\.\UNC\computer\condivisione`. Ora quella forma si legge come la corta. Già nella 0.2.3.
+- **A login credential of this computer written through another loopback name of its `C$` share is recognised.** Writing
+  it through `\\localhost\C$` was refused at every level, but not through `localhost.` with a dot at the end, the loopback
+  address written as one number, or written in IPv6. Now these names are this computer too. Already in 0.2.3.
+  In italiano: **Una credenziale di questo computer scritta attraverso un altro nome di loopback della sua condivisione
+  `C$` si riconosce.** Scriverla attraverso `\\localhost\C$` era rifiutato a ogni livello, ma non attraverso `localhost.`
+  col punto in coda, l'indirizzo di loopback scritto come un solo numero o scritto in IPv6. Ora anche questi nomi sono
+  questo computer. Già nella 0.2.3.
+
+- **A title of a collapsible block shows bold, italic and code written in HTML, and a summary with attributes is the
+  title.** A long title now wraps between words while the answer arrives.
+  In italiano: **Il titolo di un blocco richiudibile mostra grassetto, corsivo e codice scritti in HTML, e un riassunto con
+  attributi è il titolo.** Un titolo lungo ora va a capo fra le parole mentre la risposta arriva.
+- **A downloaded code block takes its name from a path comment on its first line.**
+  In italiano: **Un blocco di codice scaricato prende il nome da un commento col percorso sulla sua prima riga.**
+- **A line chart that is still arriving skips the point without a value**, instead of drawing a broken point.
+  In italiano: **Un grafico a linee che sta ancora arrivando salta il punto senza valore**, invece di disegnare un punto rotto.
+- **The /settings list stays inside the window and scrolls to the chosen row.**
+  In italiano: **L'elenco di /settings resta dentro la finestra e scorre fino alla riga scelta.**
+- **A branch takes the current name of its chat.** «Duplicate as branch» of a renamed chat gave the branch the old title,
+  born from the first message. The name is saved like any chosen name and survives a restart.
+  In italiano: **Un ramo prende il nome attuale della sua chat.** «Duplica come ramo» di una chat rinominata dava al ramo il
+  titolo vecchio, nato dal primo messaggio. Il nome si salva come ogni nome scelto e resta dopo un riavvio.
+- **A block's answer that did not leave is said once.** A choice clicked without network left a bubble and an error note
+  under a block that already said the choice was not sent; now the block says it and the notice says why. The network
+  failure is said in the interface's language, and a second failure replaces the notice instead of stacking.
+  In italiano: **La risposta di un blocco che non è partita si dice una volta sola.** Una scelta cliccata senza rete lasciava
+  un fumetto e una nota d'errore sotto un blocco che diceva già che la scelta non era partita; ora lo dice il blocco e
+  l'avviso dice perché. Il guasto di rete si dice nella lingua dell'interfaccia, e un secondo guasto sostituisce l'avviso
+  invece di accumularsi.
+- **On a narrow window, «Close» of the side view closes the panel that «Open on the side» opened over the chat.**
+  In italiano: **In una finestra stretta, «Chiudi» della vista a lato chiude il pannello che «Apri a lato» ha aperto sopra la
+  chat.**
+
+### Security
+
+- **A new chat no longer starts with the permissions of the chat you opened before.** Opening a chat, or replaying its
+  history, saved its access level, work mode, model, reasoning and per-tool permissions as the default for new chats:
+  opening a chat in "Full access" made the next new chat start in "Full access". The same happened with a change that
+  arrived from the server or from another window. Now only a choice you make yourself (the selectors in the chat, the new
+  chat window) becomes the default, and the new chat window starts from that default. The approvals bar and the reason
+  on an approval card no longer use the access level of the chat you left until the new chat's first turn starts.
+  In italiano: **Una chat nuova non parte più coi permessi della chat aperta prima.** Aprire una chat, o rigiocarne la
+  storia, salvava il suo livello d'accesso, il modo di lavoro, il modello, il ragionamento e i permessi per attrezzo come
+  predefinito delle chat nuove: aprire una chat in «Accesso pieno» faceva partire in «Accesso pieno» la chat nuova dopo. Lo
+  stesso succedeva con un cambio arrivato dal server o da un'altra finestra. Ora diventa predefinito solo ciò che scegli tu
+  (i selettori nella chat, la finestra della chat nuova), e la finestra della chat nuova parte da quel predefinito. La barra
+  delle approvazioni e il motivo su una carta d'approvazione non usano più il livello d'accesso della chat lasciata finché
+  non parte il primo giro della chat nuova.
+- **Every way of starting a new chat now starts from your saved default.** "Use as root" in the file tree, "New research",
+  the sky (also when it is your "New session" view), the start with your only project and `/goal` in a chat waiting for
+  its first message sent the access level, work mode and per-tool permissions of the chat open before, "Full access"
+  included. They now start from the default, like the new chat window, and a chat waiting for its first message sends
+  the permissions it shows. A change you make by hand (the access level, the work mode, the model, the reasoning) now
+  saves only that choice as the default, no longer everything the open chat had.
+  In italiano: **Ogni modo di cominciare una chat nuova ora parte dal tuo predefinito salvato.** «Usa come radice»
+  nell'albero dei file, «Nuova ricerca», il cielo (anche quando è la tua vista «Nuova sessione»), l'avvio col tuo unico
+  progetto e `/goal` in una chat che aspetta il primo messaggio mandavano il livello d'accesso, il modo di lavoro e i
+  permessi per attrezzo della chat aperta prima, «Accesso pieno» compreso. Ora partono dal predefinito, come la finestra
+  della chat nuova, e una chat che aspetta il primo messaggio manda i permessi che mostra. Un cambio fatto a mano (il
+  livello d'accesso, il modo di lavoro, il modello, il ragionamento) ora salva come predefinito solo quella scelta, non più
+  tutto ciò che aveva la chat aperta.
+
+- **On a «Read only» card, an automatic yes becomes an automatic No.** The card of «Read only» is answered by you, once.
+  A yes that does not come from a person (a rule, the work mode, the classifier) was already turned into No on the other
+  cards that only a person answers, but not on this one. Your own yes stays a yes.
+  In italiano: **Su una carta di «Sola lettura», un sì automatico diventa un No automatico.** Alla carta di «Sola lettura»
+  rispondi tu, una volta. Un sì che non viene da una persona (una regola, il modo di lavoro, il classificatore) diventava
+  già No sulle altre carte a cui risponde solo una persona, ma non su questa. Il tuo sì resta un sì.
+
+### Known limits
+
+- Mixed versions: the phone app 0.1.48, TALOS Desktop 0.2.1 and today's command line do not know the new note and show
+  nothing for it; when a line was shown before it went to wait, they hide one line of the other TALOS until the chat is
+  read again (reopen the chat or reload the page).
+  In italiano: Versioni miste: l'app del telefono 0.1.48, TALOS Desktop 0.2.1 e la riga di comando di oggi non conoscono la nuova nota
+  e non mostrano niente al suo posto; quando una riga era già stata mostrata prima di andare in attesa, nascondono una riga
+  dell'altro TALOS finché la chat non si rilegge (riaprire la chat o ricaricare la pagina).
+- Model pill of a branch: after «Retry» or «Duplicate as branch», the model pill can show the model of the chat the
+  branch came from until the branch's first answer starts, and a note can say that the settings changed outside this
+  tab. The cure tried for this version broke the «2 / 2» arrows between answers and is not in it; it comes later.
+  In italiano: Pillola del modello di un ramo: dopo «Riprova» o «Duplica come ramo», la pillola del modello può mostrare
+  il modello della chat da cui nasce il ramo finché non parte la prima risposta del ramo, e una nota può dire che le
+  impostazioni sono cambiate fuori da questa scheda. La cura provata per questa versione rompeva le frecce «2 / 2» fra
+  le risposte e non c'è; arriva più avanti.
+- Two TALOS windows on the same chat: some secondary settings of that chat (for example the pause on summaries that do not
+  help) may not be saved. Your messages and the answers are saved. It is fixed in the next version.
+  In italiano: Due finestre di TALOS sulla stessa chat: alcune impostazioni secondarie di quella chat (per esempio la pausa
+  dei riassunti che non aiutano) possono non salvarsi. I tuoi messaggi e le risposte si salvano. Si cura nella prossima versione.
+
 ## desktop-v0.2.4 — 2026-11-20
 
 ### Added

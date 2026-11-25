@@ -26,8 +26,11 @@ export function servizioDaEventi(eventi) {
     const valore = evento.value;
     if (!valore || typeof valore !== 'object' || GIA_IN_USAGE_SESSIONE.includes(valore.scopo)) continue;
     if (Number.isSafeInteger(evento._sequenza)) {
-      if (viste.has(evento._sequenza)) continue;
-      viste.add(evento._sequenza);
+      /* 13/11/2026 (cura dell'affitto compromesso, i lettori): due righe DIVERSE con lo stesso numero (un giornale scritto da due
+         processi) si contano tutte e due; la stessa riga rigiocata una volta sola */
+      const impronta = `${evento._sequenza}|${valore.scopo ?? ''}|${valore.at ?? ''}|${valore.usage?.prompt_tokens ?? ''}|${valore.usage?.completion_tokens ?? ''}`;
+      if (viste.has(impronta)) continue;
+      viste.add(impronta);
     }
     const dentro = conto(valore.usage?.prompt_tokens);
     const fuori = conto(valore.usage?.completion_tokens);

@@ -990,7 +990,9 @@ export function creaOperazioni({ chiama, sessionRegistry, iscriviConRigiocata, c
         const after = Number.isSafeInteger(args?.after) && args.after >= 0 ? args.after : 0;
         const sub = typeof args?.sub === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(args.sub) ? args.sub : null;
         if (!sub) throw errore('BAD_MESSAGE', 'A subscription needs a short id chosen by the device.');
-        if (!sessionRegistry.esiste(id)) throw errore('NOT_FOUND', 'Session not found.');
+        /* 21/11/2026 (candidata 0.2.5, S3-05): una chat che il PC sta rileggendo dal disco esiste (`inRicarica`): l'attesa qui sotto la
+           aspetta. Prima, in quei millisecondi, il telefono riceveva «Session not found». */
+        if (!sessionRegistry.esiste(id) && !sessionRegistry.inRicarica?.(id)) throw errore('NOT_FOUND', 'Session not found.');
         /* La stessa iscrizione due volte (il telefono la richiede dopo una «Riprova»): la vecchia si chiude prima, e PRIMA dell'attesa qui
            sotto (revisore 12/11, punto 3): ancora viva durante la rilettura riceveva la coda nuova dal vivo, e poi la rigiocata la
            rimandava, ogni numero due volte sul filo. Come Hermes, un'iscrizione sola per sessione e cliente (`gateway/session_controls.py:673`) */

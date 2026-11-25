@@ -49,6 +49,7 @@ function banco(sorgente = APP, { chiusaDalServer = true, eventoTerminaleVisto = 
     nuovaGenerazioneSessione: () => { conti.generazioni += 1; return 5; },
     /* the real `collegaEventiSessione` opens the new stream and says «no terminal event seen yet» (app.js, its first lines) */
     collegaEventiSessione: () => { conti.collegate += 1; state.realSession.eventoTerminaleVisto = false; },
+    ultimaSequenzaVista: () => 0, // P2-B (a): resumeSession asks the stream for the unseen events
     aggiornaElencoSessioniReali() {},
   };
   contesto.runRealeAttivo = funzioneDa(sorgente, 'runRealeAttivo', contesto);

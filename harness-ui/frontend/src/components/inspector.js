@@ -2264,8 +2264,11 @@ export function processiDagliEventi(eventi = [], { adesso = Date.now(), nomiComa
   };
   for (const e of eventi) {
     if (Number.isFinite(e?._sequenza)) {
-      if (sequenzeViste.has(e._sequenza)) continue;
-      sequenzeViste.add(e._sequenza);
+      /* 13/11/2026 (cura dell'affitto compromesso, i lettori): la chiave è numero + tipo + id: un doppio del giornale (un altro processo,
+         lo stesso numero) è un'altra riga, la stessa rigiocata no */
+      const chiave = `${e._sequenza}|${e.type ?? ''}|${e.name ?? ''}|${e.toolCallId ?? e.messageId ?? e.runId ?? ''}`;
+      if (sequenzeViste.has(chiave)) continue;
+      sequenzeViste.add(chiave);
     }
     /*
      * ⛔ 02/10/2026 — il consenso. `ApprovalRequested` nomina la chiamata (`azione.toolCallId`, G02); la risposta no, solo
