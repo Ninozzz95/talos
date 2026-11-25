@@ -16,7 +16,7 @@
  */
 import {execFileSync} from 'node:child_process';
 import {existsSync,readFileSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {PACKAGE_NAME,PLATFORMS} from './pack-platforms.mjs';
 
@@ -58,10 +58,14 @@ export function publishAll({version,folder,npm,provenance=true}){
   const npmVersion=npm(['--version']);
   if(npmVersion.status!==0||!atLeast(npmVersion.output,MIN_NPM))throw new Error(`npm ${MIN_NPM} or newer is required for trusted publishing (found ${npmVersion.output.trim()||'none'})`);
   const plan=publishPlan(version);
-  for(const step of plan)if(!existsSync(join(folder,step.file)))throw new Error(`missing npm tarball: ${step.file}`);
+  // Always an absolute path, as Codex passes "${GITHUB_WORKSPACE}/${tarball}": npm reads a spec as a file only when it begins
+  // with «.», «~/», «/» or a drive letter (npm-package-arg isFileSpec), and takes «release-files/x.tgz» for the GitHub repository
+  // release-files/x.tgz first. That stopped the first real publish at `git ls-remote ssh://git@github.com/release-files/...`.
+  const tarball=step=>resolve(folder,step.file);
+  for(const step of plan)if(!existsSync(tarball(step)))throw new Error(`missing npm tarball: ${step.file}`);
   const done=[];
   for(const step of plan){
-    const result=npm(['publish',join(folder,step.file),'--tag',step.tag,...(provenance?['--provenance']:[])]);
+    const result=npm(['publish',tarball(step),'--tag',step.tag,...(provenance?['--provenance']:[])]);
     if(result.status===0){done.push({...step,outcome:'published'});continue;}
     if(ALREADY.test(result.output)){done.push({...step,outcome:'already-published'});continue;}
     throw new Error(`npm publish ${step.file} --tag ${step.tag} failed:\n${result.output}`);
