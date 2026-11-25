@@ -1,6 +1,6 @@
 {
   "name": "talos-code",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "TALOS in the terminal: a coding agent with per-tool permissions, file checkpoints and resumable sessions, on the model you choose.",
   "keywords": [
     "coding-agent",

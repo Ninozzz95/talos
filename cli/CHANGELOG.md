@@ -5,6 +5,29 @@ Format: [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/). Versions
 `src/version.ts`, and in the `talos-cli-vX.Y.Z` tag. The package is published on npm as
 [`talos-code`](https://www.npmjs.com/package/talos-code); the command is `talos`.
 
+## talos-cli-v0.7.1 — 2026-11-25
+
+The CLI 0.7.0 with the core of the TALOS PC app 0.2.5.
+
+### Security
+- **Deleting an important folder asks you in more cases, also in Full access.**
+  In italiano: cancellare una cartella importante ti chiede conferma in più casi, anche in Accesso pieno.
+
+### Fixed
+- **A conversation written by two TALOS processes no longer gets two events with the same number.** When a computer woke
+  up from sleep while another TALOS had taken the conversation, both could write with the same order numbers. Now every
+  write checks that it still holds the conversation; a conversation already saved with two events under the same number is
+  read in order, and its file is never rewritten.
+  In italiano: una conversazione scritta da due processi TALOS non riceve più due eventi con lo stesso numero. Quando un
+  computer si risvegliava mentre un altro TALOS aveva preso la conversazione, tutti e due potevano scrivere con gli stessi
+  numeri d'ordine. Ora ogni scrittura controlla di avere ancora la conversazione; una conversazione già salvata con due eventi
+  sotto lo stesso numero si legge in ordine, e il suo file non si riscrive mai.
+- **A line that arrives while another TALOS holds the conversation is kept and added later.** It waits in a file next to
+  the conversation, written only by appending, and is added at the end when the conversation is free, also after a restart.
+  In italiano: una riga che arriva mentre un altro TALOS tiene la conversazione si conserva e si aggiunge dopo. Aspetta in un
+  file accanto alla conversazione, scritto solo in aggiunta, e si aggiunge in fondo quando la conversazione è libera, anche
+  dopo un riavvio.
+
 ## talos-cli-v0.7.0 — 2026-11-24
 
 ### Added
