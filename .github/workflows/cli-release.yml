@@ -273,7 +273,9 @@ jobs:
           $zip = "cli/TALOS-CLI-$version-win.zip"
           $base = "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
           node cli/scripts/create-release-manifest.mjs --version "$version" --channel "$channel" --base-url "$base" --out cli/talos-cli-release.json --asset "win32-x64:installer:$installer" --asset "win32-x64:zip:$zip"
-          $out = 'cli/.release-files'
+          # No dot in the folder: upload-artifact v4.4+ leaves out every path with a segment that begins with «.» (hidden files are off
+          # by default, and stay off: nothing hidden is ever uploaded by mistake). cli/.release-files stopped the eighth dry run there.
+          $out = 'cli/release-files'
           New-Item -ItemType Directory -Force $out | Out-Null
           $files = @($installer,$zip,'cli/talos-cli-release.json') + @(Get-ChildItem cli/.release-npm -Filter '*.tgz' | ForEach-Object { $_.FullName })
           foreach ($file in $files) { Copy-Item $file $out }
@@ -286,7 +288,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: talos-cli-release
-          path: cli/.release-files/
+          path: cli/release-files/
           if-no-files-found: error
           retention-days: 30
 
