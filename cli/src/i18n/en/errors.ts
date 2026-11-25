@@ -1106,4 +1106,11 @@ export const errors={
   'error.code.COMPUTER_USE_FILE_NOT_SET_ASIDE.todo':'Close any program that has the file open, then save the setting again. The changed file was left as it is.',
   'error.code.FILE_CHANGED_AFTER_WRITE.what':'TALOS wrote the approved computer use settings back, but the file read differently right after: another program is changing it.',
   'error.code.FILE_CHANGED_AFTER_WRITE.todo':'Close the program that keeps rewriting the file. Until the file matches, computer use keeps the approved settings, and TALOS checks again before the next command.',
+  /* PC 0.2.5 core (rinumerazione-giornale.mjs, a5a05cf55): the two codes of the conversation-file renumbering. The product has not
+     called it since 3ddc664c2 (a journal is never rewritten) and the store's entry point does not throw, but the codes are in the
+     kernel closure the CLI loads, so they get words like every other (E5, judge v2702). */
+  'error.code.JOURNAL_CHANGED.what':'The conversation file changed while TALOS was renumbering it, so the file was left as it was.',
+  'error.code.JOURNAL_CHANGED.todo':'Open the conversation again with talos --resume; nothing in it was rewritten.',
+  'error.code.RIGA_ILLEGGIBILE.what':'A line of the conversation file could not be read, so TALOS left the file as it was.',
+  'error.code.RIGA_ILLEGGIBILE.todo':'Keep talos logs for a report; the conversation still opens from the file as it is.',
 } as const;

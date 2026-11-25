@@ -17,6 +17,7 @@ import { dirname, isAbsolute, join, posix, relative, resolve, sep } from 'node:p
 import { existsSync as esisteSync, readdirSync as elencaSync, realpathSync as realpathSyncNativa, statSync as statSyncNativa, lstatSync as lstatSyncNativa, readlinkSync as readlinkSyncNativa, openSync as apriSync, readSync as leggiSync, closeSync as chiudiSync, fstatSync as fstatSyncNativa } from 'node:fs';
 import { formaDiSegretoNelTesto } from './forme-di-segreto.mjs';
 import { decodificaAnsiC as decodificaAnsiCDelNucleo } from './kernel/apici-ansi-c.mjs'; // 0.2.4, apice ANSI: un solo lettore di `$'…'`
+import { reteEstranea, senzaFornitore } from './kernel/file-namespace-contract.mjs'; // riga 199 (0.2.5): la rete si riconosce dal testo
 import { createHash } from 'node:crypto';
 import { homedir, hostname } from 'node:os';
 import { basename as nomeBase, dirname as cartellaDi, parse as parsePercorso, relative as relativoA, resolve as risolvi, sep as separatore } from 'node:path';
@@ -63,7 +64,11 @@ export const FILE_DI_CONTROLLO = Object.freeze({
 });
 
 /** Il percorso REALE anche di un file che non esiste ancora: si risale al primo antenato esistente, lo si risolve (symlink/junction), si riattacca il resto. */
-function percorsoRealeAncheSeManca(assoluto, realpathFn) {
+function percorsoRealeAncheSeManca(assoluto, realpathFn, radici = []) {
+  /* ⛔ Riga 199 (0.2.5): un posto su un altro computer fuori dalle `radici` (cartella, casa) non si apre per saperne il percorso vero:
+     `existsSync`/`realpath` sono già il contatto SMB, prima della carta. Resta com'è scritto, come oggi con l'ospite spento, e nomi di
+     controllo, credenziali e cartelle bloccate si confrontano a parole. I dischi di questa macchina scritti per esteso si misurano. */
+  if (reteEstranea(assoluto, radici)) return assoluto;
   const resto = [];
   let corrente = assoluto;
   while (!esisteSync(corrente)) {
@@ -134,11 +139,11 @@ export function ePercorsoDiControllo(cartella, percorso, { realpathFn = realpath
   let radice;
   let reale;
   try {
-    radice = percorsoRealeAncheSeManca(risolvi(cartella), realpathFn);
+    radice = percorsoRealeAncheSeManca(risolvi(cartella), realpathFn, [cartella]);
     /* R1 della revisione del blocco permessi (04/11/2026): su NTFS `CLAUDE.md::$DATA` È `CLAUDE.md` (e `.claude::$INDEX_ALLOCATION`
        è la cartella `.claude`), quindi il nome dello stream si toglie PRIMA del confronto. */
     const scritto = risolvi(cartella, percorso);
-    reale = percorsoRealeAncheSeManca(piattaforma === 'win32' ? senzaStreamNtfs(scritto) : scritto, realpathFn);
+    reale = percorsoRealeAncheSeManca(piattaforma === 'win32' ? senzaStreamNtfs(scritto) : scritto, realpathFn, [cartella]);
   } catch {
     return true;
   }
@@ -1938,7 +1943,7 @@ const ESITO_DEI_BIGLIETTI = Symbol('esitoDeiBiglietti');
 /** La credenziale della casa che questa scrittura toccherebbe (`{ percorso }`, il percorso reale), o `null`. */
 export function scritturaDiUnaCredenziale(percorso, { cartella, home = homeDiSistema(), realpathFn = realpathSyncNativa } = {}) {
   if (typeof percorso !== 'string' || percorso.trim() === '' || typeof home !== 'string' || home === '') return null;
-  const reale = (p) => { try { return percorsoRealeAncheSeManca(p, realpathFn); } catch { return p; } };
+  const reale = (p) => { try { return percorsoRealeAncheSeManca(p, realpathFn, [cartella, home]); } catch { return p; } };
   /* ⛔ 12/11/2026, giro 2: su Windows i posti di `postiPossibili` per un attrezzo dei file: la cartella della sessione (è lì che
      `scrivi` e `file_edit` aprono, anche `\cartella\file` senza disco e `X:file`) e il disco del processo, come la 0.2.1. Le grafie
      dello stesso disco scritte per esteso (`\\?\C:\…`, `\\.\C:\…`, `\\localhost\C$\…`) si riportano a `C:\…` come fa da sempre la
@@ -1993,10 +1998,12 @@ function credenzialeDellaCasaToccata(assoluto, casa) {
  */
 const nomeDellaMacchina = (() => { try { return hostname(); } catch { return ''; } })();
 const PER_ESPRESSIONE = (testo) => testo.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-const QUESTA_MACCHINA = new RegExp(String.raw`^\\\\(?:[?.]\\UNC\\)?(?:localhost|127(?:\.\d{1,3}){1,3}|\[?::1\]?|0--1\.ipv6-literal\.net`
-  + (nomeDellaMacchina ? `|${PER_ESPRESSIONE(nomeDellaMacchina)}(?:\\.[^\\\\]*)?` : '') + String.raw`)\\([A-Za-z])\$(\\.*)?$`, 'isu');
+/* giro unico della riga 199 (A-R4): anche i punti in coda all'ospite, il 127/8 scritto come intero (`2130706433`; la regola è un po' più
+   larga, ma qui leggere `C:` dà solo rifiuti in più) e il loopback IPv4 scritto in IPv6 (`[::ffff:127.0.0.1]`, `[::ffff:7f00:1]`) */
+const QUESTA_MACCHINA = new RegExp(String.raw`^\\\\(?:[?.]\\UNC\\)?(?:localhost|127(?:\.\d{1,3}){1,3}|\[?::1\]?|0--1\.ipv6-literal\.net|21[34]\d{7}|\[?::ffff:(?:127(?:\.\d{1,3}){3}|7f[0-9a-f]{2}:[0-9a-f]{1,4})\]?`
+  + (nomeDellaMacchina ? `|${PER_ESPRESSIONE(nomeDellaMacchina)}(?:\\.[^\\\\]*)?` : '') + String.raw`)\.*\\([A-Za-z])\$(\\.*)?$`, 'isu');
 function comeDiscoLocale(testo, home) {
-  let t = testo;
+  let t = senzaFornitore(testo); // riga 199, giro unico: `FileSystem::` di PowerShell è lo stesso posto
   if (typeof home === 'string' && home !== '') {
     t = t.replace(/%HOMEDRIVE%%HOMEPATH%|\$env:HOMEDRIVE\$env:HOMEPATH|\$\{env:HOMEDRIVE\}\$\{env:HOMEPATH\}/giu, home);
     t = t.replace(/\$\{env:(?:USERPROFILE|HOME)\}|\$env:HOME(?![A-Za-z0-9_])/giu, home);
@@ -2564,14 +2571,14 @@ function bloccataInUnaForma(forma, { cartella, radici, realpathFn, luoghi = null
   for (const [indice, assoluto] of posti.entries()) {
     let vero;
     /* il primo posto è quello di sempre: se il suo percorso vero non si sa dire si rifiuta; un posto in più che non si risolve si salta */
-    try { vero = percorsoRealeAncheSeManca(assoluto, realpathFn); } catch { if (indice === 0) return { radice: radici[0], irrisolvibile: true }; continue; }
+    try { vero = percorsoRealeAncheSeManca(assoluto, realpathFn, [cartella]); } catch { if (indice === 0) return { radice: radici[0], irrisolvibile: true }; continue; }
     const perVero = radici.find((r) => dentroOUguale(vero, r));
     if (perVero) return { radice: perVero };
   }
   if (prefissoDiDispositivo) {
     /* la domanda della 0.2.1, tale e quale, sulla grafia com'è scritta */
     let vero;
-    try { vero = percorsoRealeAncheSeManca(risolvi(grezzo), realpathFn); } catch { return { radice: radici[0], irrisolvibile: true }; }
+    try { vero = percorsoRealeAncheSeManca(risolvi(grezzo), realpathFn, [cartella]); } catch { return { radice: radici[0], irrisolvibile: true }; }
     const perVero = radici.find((r) => dentroOUguale(vero, r));
     if (perVero) return { radice: perVero };
   }

@@ -139,3 +139,20 @@ test('CODICE-ESPORTA-10 — riverifica R3-R5: url/scf/inf/hta/application come �
   /* AL CONTRARIO: un nome che CONTIENE quelle parole non è riservato */
   assert.equal(sanificaNomeFile('console.txt'), 'console.txt');
 });
+
+/* P2-B (riga 68, revisione del 10/11 reperto 15): con `// src/esempio.js` in prima riga il file usciva `talos-js-<data>.js`. */
+test('CODICE-ESPORTA-11 — un commento-percorso in prima riga dà il nome; AL CONTRARIO una frase, uno shebang, la seconda riga o un eseguibile di un’altra lingua no', () => {
+  const ora = new Date(2026, 10, 22, 13, 30);
+  const nome = (testo, linguaggio, info = linguaggio, formato = 'sorgente') => fileDelCodice(formato, { testo, linguaggio, info, ora }).nome;
+  assert.equal(nome('// src/esempio.js\nconsole.log(1);\n', 'js'), 'esempio.js');
+  assert.equal(nome('# utils/sync.py\nprint(1)\n', 'python'), 'sync.py');
+  assert.equal(nome('/* stile.css */\nbody{}\n', 'css'), 'stile.css');
+  assert.equal(nome('<!-- pagina.html -->\n<p>x</p>\n', 'html'), 'pagina.html');
+  assert.equal(nome('// src/esempio.js\nx\n', 'js', 'js', 'md'), 'esempio.md');
+  /* al contrario */
+  assert.equal(nome('// stampa la riga 1\nx\n', 'js'), 'talos-js-20261122-1330.js');
+  assert.equal(nome('#!/usr/bin/env python\nprint(1)\n', 'python'), 'talos-python-20261122-1330.py');
+  assert.equal(nome('x = 1\n# dopo.py\n', 'python'), 'talos-python-20261122-1330.py');
+  assert.equal(nome('# b.py\nx\n', 'python', 'python a.py'), 'a.py'); // il nome del recinto vince
+  assert.equal(nome('// run.bat\nx\n', 'js'), 'talos-js-20261122-1330.js'); // F5: un eseguibile di un’altra lingua no
+});

@@ -119,7 +119,8 @@ const CHIAMANTI = [
 ];
 
 test('G5-0 every chat-change caller reaches the view closing with no `continua`; the resumes keep it', () => {
-  for (const [nome] of CHIAMANTI) assert.deepEqual(argomentiDi(nome), [], nome);
+  /* righe 223-224: il primo invio di una chat in attesa dice che è la stessa chat (`primoInvio`), non una ripresa */
+  for (const [nome] of CHIAMANTI) assert.deepEqual(argomentiDi(nome), nome === 'startCustomSession' ? [{ primoInvio: true }] : [], nome);
   for (const nome of ['resumeSession', 'runDirectShell']) assert.deepEqual(argomentiDi(nome), [{ continua: true }], `${nome}: a resume`);
   assert.equal(PASSA_CHIUDE, true, 'passaASessione keeps its own FE-003 closing (a selection-mode click returns before the generation)');
 });

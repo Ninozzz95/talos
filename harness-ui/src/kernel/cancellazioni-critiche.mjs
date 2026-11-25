@@ -52,6 +52,7 @@ import path from 'node:path'
 /* la decisione della 0.2.1, ferma: vedi la nota qui sopra. ⛔ Mai importarla da un altro posto né cambiarla oltre i cambi scritti del nono giro. */
 import { cancellazioneCritica as decisioneDella021, dimenticaPercorsiVeri as dimenticaQuelliDella021 } from './fermo-0.2.1-5e9fdc1b9/cancellazioni-critiche.mjs'
 import { chiusuraAnsiC, decodificaAnsiC } from './apici-ansi-c.mjs' // 0.2.4, apice ANSI: il lettore unico di `$'…'` del nucleo
+import { portaInRete, reteEstranea, senzaFornitore } from './file-namespace-contract.mjs' // riga 199 (0.2.5): la rete si riconosce dal testo
 
 const COMANDI_CHE_CANCELLANO = new Set(['rm', 'rmdir', 'rd', 'del', 'erase', 'remove-item', 'ri'])
 const INTERRUTTORI_DI_CMD = new Set(['rd', 'del', 'erase'])
@@ -658,7 +659,7 @@ function senzaLeVuoteInTesta(parola, ctx, dove) {
 
 function espanso(parola, ctx, dove) {
   let ignoto = false
-  let t = senzaLeVuoteInTesta(parola, ctx, dove)
+  let t = senzaLeVuoteInTesta(senzaFornitore(parola), ctx, dove) // riga 199, giro unico: `FileSystem::` di PowerShell
   if (!ctx.windows) t = t.replace(/\\(.)/gsu, (_, c) => c) // su POSIX `\.\.` è `..`
   /* ⛔ decimo giro: ogni valore si conta (`espande`) PRIMA di entrare nella stringa; oltre il tetto la lettura si ferma */
   const sost = (re) => { t = t.replace(re, (tutto, nome) => { const v = valoreDi(nome, ctx, dove); if (v === null) { ignoto = true; return tutto } espande(ctx, v.length); return v }) }
@@ -730,7 +731,9 @@ function discoLocale(t, ctx) {
   if (esteso) return `${esteso[1] ? `${esteso[1]}:` : esteso[2]}${esteso[3] ?? '\\'}`
   const amministrativa = /^\\\\[^\\?.][^\\]*\\([A-Za-z])\$(\\.*)?$/iu.exec(b)
   if (amministrativa) return `${amministrativa[1]}:${amministrativa[2] ?? '\\'}`
-  const unix = /^\/(?:mnt\/)?([A-Za-z])(\/.*)?$/su.exec(t)
+  const lunga = /^\\\\[?.]\\/u.test(b) ? portaInRete(b, { platform: 'win32' }) : null // giro unico (A-R3): `\\.\UNC\H\c` è `\\H\c`
+  if (lunga) return lunga.breve
+  const unix =/^\/(?:mnt\/)?([A-Za-z])(\/.*)?$/su.exec(t)
   if (unix) ctx.senzaDisco = true
   if (unix && !ctx.comeIlSistema) return `${unix[1]}:${unix[2] ?? '\\'}`
   return t
@@ -1319,6 +1322,8 @@ function cartellaDopo(scritto, ctx, dove) {
   if (sostituzione) return cartellaDellaSostituzione(sostituzione[1] ?? sostituzione[2], ctx, dove)
   const t = espanso(scritto, ctx, dove)
   if (t === null || t === '') return null
+  const treBarre = ctx.windows && /^[\\/]{3}/u.test(t) ? portaInRete(t, { platform: 'win32' }) : null // giro unico (C-R2): cmd e PowerShell
+  if (treBarre) return treBarre.breve // collassano le barre, Node no: `cd \\\h\c` va sulla rete, non in `C:\h\c`
   const disco = ctx.windows ? discoLocale(t, ctx) : t
   if (dove === null && !ctx.p.isAbsolute(disco)) return null
   return ctx.p.resolve(dove ?? ctx.cartella, disco)
@@ -2373,6 +2378,22 @@ function giudicaIlBersaglio(bersaglio, ricorsiva, ctx, dove2, realpathFn) {
   return { carta: motivo ? { percorso: assoluto, perche: motivo } : null, assoluto }
 }
 
+/* r192 (1a): Codex non approva un nome con un'espansione (`bash.rs:36-51`), Claude Code chiede («simple_expansion», `CHANGELOG.md:1744`) */
+/* r192 (1b): anche `%…%` di cmd: dopo `call` si espande una seconda volta, coi `set` dello stesso testo (learn.microsoft.com, `call`) */
+/* r192 (1c): e `!x!` (`cmd /v:on`, o la chiave DelayedExpansion del registro: `cmd /?`); su Windows `espanso` lo legge sempre */
+const ESPANSIONE_NEL_NOME = /\$(?:\{|[A-Za-z_])|%[^%\s]+%|![A-Za-z_]\w*!/u
+/** r192: un bersaglio critico dopo il nome (non un'opzione, una redirezione, né su ogni sistema un interruttore di cmd: il nome ignoto può
+    essere cmd, come `$COMSPEC`); il progetto stesso solo se ricorsivo. Chi lo trova segna `conto.incerto`: «troppo complesso» alla fine,
+    solo se nessuna lettura dà una carta più precisa (come l'apice aperto in fondo). */
+function unBersaglioCritico(parole, ctx, dove, realpathFn) {
+  return parole.slice(1).some((w) => {
+    if (w.gruppo !== undefined || /^-.|^\d*[<>]|^(?:\/[A-Za-z?])+(?::\S*)?$/u.test(w.testo)) return false
+    if (conta(ctx, PESI.bersaglio)) return true // ottavo giro: ogni bersaglio è lavoro; oltre il tetto si chiede
+    const { carta } = giudicaIlBersaglio(w, false, ctx, dove, realpathFn)
+    return carta !== null && (carta.perche !== 'progetto' || ricorsivo(parole))
+  })
+}
+
 const chiaveDelFile = (nome, ctx, qui) => { const p = ctx.p.resolve(qui ?? ctx.cartella, nome); return ctx.windows ? p.toLowerCase() : p }
 /** `echo "…" > x.py`, `printf … >> x.js`: il file scritto nello stesso comando, per l'interprete che lo esegue dopo. */
 function ricordaIlFileScritto(parole, ctx, qui) {
@@ -2525,15 +2546,33 @@ function giudicaUnTesto(testo, ctx, realpathFn, profondita, dove, scelte = null,
     ricordaAssegnazioni(comando, ctx, cartella)
     const tolti = senzaInvolucri(comando, ctx, cartella)
     if (tolti.testo !== undefined) { const trovata = rileggi(tolti.testo, tolti.cartella); if (trovata) return trovata; continue }
+    /* r192 (2): senza `-e`/`--exec` wsl dà il resto alla shell di Linux (learn.microsoft.com/windows/wsl/basic-commands): come `bash -c` */
+    const opzioniDiWsl = comando.slice(1, comando.length - tolti.parole.length)
+    if (ctx.windows && tolti.parole.length && nomeDelComando(comando[0].testo) === 'wsl' && !opzioniDiWsl.some((w) => /^(?:-e|--exec)$/u.test(w.testo))) {
+      /* una parola con spazi o operatori era fra apici: ci torna (`wsl bash -c '…'` resta un testo solo); le barre restano a bash */
+      const trovata = rileggiCon(true, tolti.parole.map((w) => (/[\s;&|<>()]/u.test(w.testo) ? `'${w.testo.replace(/'/gu, "'\\''")}'` : w.testo)).join(' '), tolti.cartella, true, GUSCIO_WSL)
+      if (trovata) return trovata
+    }
     let parole = tolti.parole
     const prima = precedente
     precedente = parole
     if (parole.length === 0) continue
+    /* r192 (3): sul PC U+00A0, VT o FF nel nome o fra le parole. Nessuna fonte su U+00A0 in una riga Unicode (jeb, Stack Overflow
+       4094699: lo 0xFF della code page OEM separa, ma non nel nome): la strada prudente, «troppo complesso» con un bersaglio critico */
+    const insecabile = (w) => /[\u00a0\v\f]/u.test(w.testo)
+    if (ctx.windows && parole.some(insecabile)) {
+      const pezzi = parole.flatMap((w) => w.testo.split(/[\u00a0\v\f]+/u).filter(Boolean).map((testo) => ({ ...w, testo })))
+      if (unBersaglioCritico(pezzi, ctx, tolti.cartella, realpathFn)) ctx.conto.incerto = true
+    }
     /* P: il nome del comando scritto con una variabile (`R=rm; $R -rf ..`): il valore se si sa, altrimenti carta se cancella ricorsivo */
-    if (/^[$%]/u.test(parole[0].testo)) {
+    /* r192 (1a): anche un'espansione in mezzo al nome (`r${x}m`); un nome che non si sa, accanto a un bersaglio critico, chiede */
+    const inTesta = /^[$%]/u.test(parole[0].testo)
+    if (inTesta || ESPANSIONE_NEL_NOME.test(parole[0].testo)) {
       const vero = espanso(parole[0].testo, ctx, tolti.cartella)
-      if (vero === null || vero === '') { if (ricorsivo(parole) && sembraCancellare(testo)) return TROPPO_ANNIDATO; continue }
-      parole = [{ ...parole[0], testo: vero }, ...parole.slice(1)]
+      if (inTesta && !vero && ricorsivo(parole) && sembraCancellare(testo)) return TROPPO_ANNIDATO
+      if (vero === null && unBersaglioCritico(parole, ctx, tolti.cartella, realpathFn)) ctx.conto.incerto = true
+      if (inTesta && !vero) continue
+      if (vero) parole = [{ ...parole[0], testo: vero }, ...parole.slice(1)]
     }
     const nome = nomeDelComando(parole[0].testo)
     const qui = tolti.cartella
@@ -2983,6 +3022,7 @@ function casiDiUnTesto(testo, ctx, realpathFn, profondita, dove) {
  *   Come Codex, che non dà il sì a un `ansi_c_string` (`codex-rs/shell-command/src/bash.rs:36-62`) né a un albero con errori (`:30-31`).
  */
 const GUSCIO_POSIX = Object.freeze(['posix'])
+const GUSCIO_WSL = Object.freeze(['posix']) // r192 (2): gli apici di bash, solo per il testo dopo `wsl`
 const GUSCIO_CMD = Object.freeze(['cmd'])
 const GUSCIO_POWERSHELL = Object.freeze(['powershell'])
 /** I comandi semplici con gli apici della lettura in corso: quelli di sempre, o quelli del guscio (`ctx.apici`). */
@@ -3004,7 +3044,9 @@ function apiceApertoPosix(testo) {
 function cambiaIlGuscio(testo, guscio, ctx) {
   if (guscio === 'cmd') return /['^]/u.test(testo)
   if (guscio === 'powershell') return /''|`/u.test(testo)
-  return /\$['"]/u.test(testo) || (!ctx.windows && apiceApertoPosix(testo))
+  /* r192 (2): nel testo dopo `wsl` (`GUSCIO_WSL`: lo legge di sicuro bash) anche le barre rovesce sono di bash; in `bash -c` no: sul PC
+     ci si scrivono percorsi di Windows (`cd K:\x && …`), e lì la lettura in più dava una carta a un comando di tutti i giorni */
+  return /\$['"]/u.test(testo) || (!ctx.windows && apiceApertoPosix(testo)) || (ctx.gusci === GUSCIO_WSL && testo.includes('\\'))
 }
 /*
  * Le parole che la lettura vede con gli apici `apici` (null = quelli di sempre), in tutti i punti in cui `giudicaUnTesto` le chiede
@@ -3096,7 +3138,8 @@ function letturaNuova(comando, { cartella, home = homedir(), piattaforma = proce
   try {
     const testo = String(comando ?? '')
     /* S1 (0.2.4): un testo che nomina un interprete si legge anche senza `rm` (`python -c "import shutil; shutil.rmtree('/')"`) */
-    if (testo.trim() === '' || (!sembraCancellare(testo) && !NOMINA_UN_INTERPRETE.test(testo) && !(piattaforma === 'win32' && sembraCancellare(comeLoLeggeCmd(testo))))) return null
+    /* r192 (1a): anche un testo con un'espansione (il nome del comando può essere calcolato) */
+    if (testo.trim() === '' || (!sembraCancellare(testo) && !NOMINA_UN_INTERPRETE.test(testo) && !(piattaforma === 'win32' && sembraCancellare(comeLoLeggeCmd(testo))) && !ESPANSIONE_NEL_NOME.test(testo))) return null
     if (typeof cartella !== 'string' || cartella === '') return null
     /* K: un elenco di stringhe; altro = ignorato. Assente = come prima */
     const critici = Array.isArray(progettiCritici) ? progettiCritici.filter((x) => typeof x === 'string' && x !== '' && x !== cartella) : []
@@ -3129,13 +3172,13 @@ function letturaNuova(comando, { cartella, home = homedir(), piattaforma = proce
     const comeGitBash = leggi(false)
     /* 12/11/2026, le due letture di `/x/…` (vedi `discoLocale`): solo se il comando ha una di quelle grafie */
     /* 0.2.4, apice ANSI: un apice della shell POSIX rimasto aperto in fondo (`conGliApiciDelGuscio`) chiede se nessuna lettura chiede */
-    if (!visto.grafia) return comeGitBash?.trovata ?? (conto.apertoInFondo ? TROPPO_COMPLESSO : null)
+    if (!visto.grafia) return comeGitBash?.trovata ?? (conto.apertoInFondo || conto.incerto ? TROPPO_COMPLESSO : null)
     const comeSistema = leggi(true)
     /* giro 2 (limite 2 del revisore C): la carta di un'azione che non si annulla nomina il posto che verrà cancellato DAVVERO. Se
        tutte e due le letture sono critiche vale quella del sistema (`Remove-Item /T/progetto` è `C:\T\progetto`, non `T:\progetto`),
        tranne per un `rm` scritto alla POSIX (`rm -rf /c/…`), che gira in Git Bash o in WSL: lì `/c` è il disco. */
     if (comeSistema && comeGitBash) return comeGitBash.allaPosix ? comeGitBash.trovata : comeSistema.trovata
-    return (comeSistema ?? comeGitBash)?.trovata ?? (conto.apertoInFondo ? TROPPO_COMPLESSO : null)
+    return (comeSistema ?? comeGitBash)?.trovata ?? (conto.apertoInFondo || conto.incerto ? TROPPO_COMPLESSO : null)
   } catch {
     /* ⛔ decimo giro: FALLISCE CHIUSA. Il tetto dell'espansione, una stringa troppo lunga, un ambiente illeggibile, qualunque errore:
        un comando che la lettura non sa leggere fino in fondo chiede (prima un errore qui era `null`, nessuna carta, e la cancellazione
@@ -3175,7 +3218,16 @@ function unaCartaSeUnaChiede(nuova, ferma) {
       const o = opzioni ?? {}
       const realpathFn = typeof o.realpathFn === 'function' ? o.realpathFn : realpathSync.native
       const letti = new Map()
+      /* ⛔ Riga 199 (0.2.5, T7, già dalla 0.2.1): il percorso vero di un posto su un altro computer non si cerca (il `realpath` è già il
+         contatto SMB, prima della carta): «non c'è, niente da seguire», come oggi con l'ospite spento. Il percorso vero di un posto
+         remoto non è mai un posto critico di questa macchina; dentro cartella, casa e progetti (scelti dalla persona) si legge come prima.
+         Vale per la lettura nuova e per la copia ferma, che resta byte per byte. */
+      const piattaforma = { platform: o.piattaforma ?? process.platform }
+      let radici = null
+      const estranea = (p) => portaInRete(p, piattaforma) !== null && reteEstranea(p, radici ??= [o.cartella, o.home ?? homedir(),
+        ...cartelleDeiProgetti(o.ambiente ?? process.env), ...(Array.isArray(o.progettiCritici) ? o.progettiCritici : [])], piattaforma)
       const unaVolta = (p) => {
+        if (!letti.has(p) && estranea(p)) letti.set(p, { errore: Object.assign(new Error('ENOENT: not followed before the card'), { code: 'ENOENT' }) })
         if (!letti.has(p)) { try { letti.set(p, { valore: realpathFn(p) }) } catch (errore) { letti.set(p, { errore }) } }
         const r = letti.get(p)
         if ('errore' in r) throw r.errore

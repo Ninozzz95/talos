@@ -67,7 +67,7 @@ function linee(doc, serie, unita) {
   const py = (y) => M.su + (1 - (y - lo) / ampiezza) * (A - M.su - M.giu);
   s.append(svg(doc, 'path', { class: 'gc-asse', d: `M${M.s} ${py(0)}H${L - M.d}` }));
   serie.forEach((x, k) => {
-    const punti = lista(x.punti);
+    const punti = lista(x.punti).filter((p) => Number.isFinite(Number(p?.y))); // P2-B: a point still arriving (no value yet) is skipped, no NaN
     if (!punti.length) return;
     s.append(svg(doc, 'polyline', { class: `gc-serie ${classeSerie(k)}${k >= 3 ? ' gu-tratteggio' : ''}`, points: punti.map((p) => `${px(p.x).toFixed(1)},${py(p.y).toFixed(1)}`).join(' ') }));
     for (const p of punti) {

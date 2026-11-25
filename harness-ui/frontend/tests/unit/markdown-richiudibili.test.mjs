@@ -246,6 +246,29 @@ test('DET-16 — un blocco chiuso dal modello col corpo vuoto è una riga di tit
   assert.equal(rendi('<details>\n<summary>T</summary>\n```\n\n```\n</details>').forma.startsWith(`${R}{`), true);
 });
 
+/* P2-B (riga 68, revisione del 10/11 reperto 6): `<summary><b>Titolo</b></summary>` mostrava `<b>` e `</b>` nel titolo, e
+   `<summary style=…>` dava «Dettagli» col tag nel corpo. I segni di stile del titolo diventano il Markdown che hanno già; gli
+   attributi del summary si ignorano (non arrivano al DOM). Tutto il resto resta testo, come prima. */
+test('DET-17 — nel titolo grassetto, corsivo e codice scritti in HTML si vedono come tali, e un summary con attributi è il titolo', () => {
+  assert.equal(rendi('<details>\n<summary><b>Titolo</b></summary>\nCorpo\n</details>').forma, `${R}{${T}{strong{"Titolo"}}${C}{p{"Corpo"}}}`);
+  assert.equal(rendi('<details>\n<summary><strong>A</strong> e <em>b</em>, <i>c</i> <code>d</code></summary>\nCorpo\n</details>').forma,
+    `${R}{${T}{strong{"A"}" e "em{"b"}", "em{"c"}" "code{"d"}}${C}{p{"Corpo"}}}`);
+  const conAttributi = rendi('<details>\n<summary style="color:red" onclick="alert(1)">Titolo</summary>\nCorpo\n</details>');
+  assert.equal(conAttributi.forma, `${R}{${T}{"Titolo"}${C}{p{"Corpo"}}}`);
+  assert.doesNotMatch(testoUnito(conAttributi.frammento), /summary|style|onclick/u);
+  /* al contrario: un titolo senza tag resta com'è, e gli altri tag nel titolo restano testo (niente script, niente img) */
+  assert.equal(rendi('<details>\n<summary>2 < 3 e a*b</summary>\nx\n</details>').forma, `${R}{${T}{"2 < 3 e a*b"}${C}{p{"x"}}}`);
+  const altri = rendi('<details>\n<summary><script>x</script> <img src=x></summary>\nx\n</details>');
+  assert.deepEqual([...tagUsati(altri.frammento)].sort(), ['details', 'div', 'p', 'summary']);
+  assert.match(testoUnito(altri.frammento), /<script>x<\/script> <img src=x>/u);
+  assert.deepEqual(altri.document.htmlAssegnati, []);
+  /* e un summary con attributi che sta arrivando non si vede a metà */
+  for (const parziale of ['<summary style', '<summary style="c']) {
+    const t = `Ecco.\n${parziale}`;
+    assert.equal(confineDiRivelazione(t, t.length), 'Ecco.\n'.length, parziale);
+  }
+});
+
 /* ------------------------------------------------------------------ il testo che sta arrivando */
 
 const scansiona = (testo, limite = testo.length) => {

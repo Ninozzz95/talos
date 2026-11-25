@@ -158,7 +158,8 @@ test('E1 the hook is reset in ONE place: nuovaGenerazioneSessione, right after t
 });
 
 test('E1 every caller that changes chat goes through the reset (no `continua`), the resumes do not', () => {
-  for (const [nome] of CHIAMANTI) assert.deepEqual(argomentiDi(nome), [], nome);
+  /* righe 223-224: il primo invio di una chat in attesa dice che è la stessa chat (`primoInvio`), non una ripresa */
+  for (const [nome] of CHIAMANTI) assert.deepEqual(argomentiDi(nome), nome === 'startCustomSession' ? [{ primoInvio: true }] : [], nome);
   for (const nome of ['resumeSession', 'runDirectShell']) assert.deepEqual(argomentiDi(nome), [{ continua: true }], `${nome}: a resume`);
 });
 

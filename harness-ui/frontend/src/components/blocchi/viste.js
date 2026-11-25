@@ -13,10 +13,12 @@ import { disegnaBlocco } from './guscio.js';
 const FOCALIZZABILI = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href]';
 
 /**
- * @param {{ document: Document, colonna: () => HTMLElement|null, apriColonna: () => void }} o
+ * P2-C riga 40 (decisione 401): `apriColonna` dice `true` se ha aperto lei un pannello che prima era chiuso (finestra stretta: sopra la chat);
+ * allora «Chiudi» della vista a lato lo richiude con `chiudiColonna`. Un pannello già aperto prima resta com'era.
+ * @param {{ document: Document, colonna: () => HTMLElement|null, apriColonna: () => boolean|void, chiudiColonna?: () => void }} o
  * @returns {{ lato: Function, schermo: Function, chiudi: () => void }}
  */
-export function creaVisteDelBlocco({ document: doc, colonna, apriColonna }) {
+export function creaVisteDelBlocco({ document: doc, colonna, apriColonna, chiudiColonna = () => {} }) {
   let lato = null;
   let schermo = null;
 
@@ -40,6 +42,7 @@ export function creaVisteDelBlocco({ document: doc, colonna, apriColonna }) {
     const posto = colonna();
     if (!posto) { apriSchermo(blocco, contesto); return; }
     esci();
+    const colonnaNostra = lato?.colonnaNostra === true; // una vista sopra l'altra: il pannello resta di chi l'ha aperto
     chiudiLato();
     const nodo = el(doc, 'div', 'gu-lato');
     nodo.dataset.latoAperto = blocco.id;
@@ -47,7 +50,7 @@ export function creaVisteDelBlocco({ document: doc, colonna, apriColonna }) {
     const aSchermo = tasto(doc, t('blocchi.actions.fullScreen'));
     aSchermo.addEventListener('click', () => apriSchermo(blocco, contesto));
     const chiudi = tasto(doc, t('chat.common.close'));
-    chiudi.addEventListener('click', chiudiLato);
+    chiudi.addEventListener('click', () => { const nostra = lato?.colonnaNostra; chiudiLato(); if (nostra) chiudiColonna(); });
     testa.append(el(doc, 'h2', '', blocco.titolo || ''), aSchermo, chiudi);
     const dentro = el(doc, 'div', 'gu-lato__corpo');
     dentro.append(corpo(contesto));
@@ -59,8 +62,7 @@ export function creaVisteDelBlocco({ document: doc, colonna, apriColonna }) {
       sotto.append(frase);
     }
     posto.append(nodo);
-    lato = { nodo, frase };
-    apriColonna();
+    lato = { nodo, frase, colonnaNostra: apriColonna() === true || colonnaNostra };
   }
 
   function apriSchermo(blocco, contesto) {

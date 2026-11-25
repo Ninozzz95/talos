@@ -679,6 +679,34 @@ for (const modo of ['dark', 'light']) {
       await expect(pannello.locator('.talos-list-row__title').filter({ hasText: /^Sessione$/u })).toHaveCount(0);
       await foto(page, testInfo, '21-titolo-impostazioni');
     });
+
+    /* P2-B (riga 61 (c), revisione del controllo del 10/11, reperto 3): 38 voci e nessun tetto, l'elenco usciva dalla finestra verso
+       l'alto (a 1920×1080 partiva a −504 px, 13 voci su 38 invisibili e senza barra). Si misura l'elenco e la voce scelta. */
+    test(`IMPC-UI-09 — l’elenco di /settings con 38 voci sta nella finestra, scorre, e la voce scelta con le frecce è in vista (${modo})`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width: 1920, height: 1080 });
+      await prepara(page);
+      const tante = Array.from({ length: 38 - CATALOGO.voci.length }, (_, i) => ({ ...CATALOGO.voci[0], key: `appearance.prova${String(i + 1).padStart(2, '0')}`, text: { en: `Test ${i + 1}`, it: `Prova ${i + 1}` } }));
+      await page.route('**/api/v1/app-settings/catalog', (route) => route.fulfill({ contentType: 'application/json', body: INVOLUCRO({ ...CATALOGO, voci: [...CATALOGO.voci, ...tante] }) }));
+      const campo = page.locator('#composerInput');
+      await campo.fill('/settings ');
+      const elenco = page.locator('#suggerimentoImpostazioni');
+      await expect(elenco.locator('[role="option"]')).toHaveCount(38);
+      const misura = () => elenco.evaluate((e) => { const r = e.getBoundingClientRect(); return { sopra: Math.round(r.top), sotto: Math.round(r.bottom), alta: window.innerHeight, scorre: e.scrollHeight > e.clientHeight + 1 }; });
+      const m = await misura();
+      expect(m.sopra, JSON.stringify(m)).toBeGreaterThanOrEqual(0);
+      expect(m.sotto).toBeLessThanOrEqual(m.alta);
+      expect(m.scorre).toBe(true);
+      const inVista = () => elenco.evaluate((e) => { const v = e.querySelector('[aria-selected="true"]'); const a = e.getBoundingClientRect(); const b = v.getBoundingClientRect(); return { voce: v.textContent, dentro: b.top >= a.top - 1 && b.bottom <= a.bottom + 1 }; });
+      await campo.press('ArrowUp'); // dalla prima all'ultima
+      expect(await inVista()).toEqual({ voce: expect.stringContaining(`appearance.prova${38 - CATALOGO.voci.length}`), dentro: true });
+      await campo.press('ArrowDown'); // e di nuovo la prima
+      expect((await inVista()).dentro).toBe(true);
+      await foto(page, testInfo, '22-settings-elenco-lungo');
+      /* al contrario: un elenco corto resta com'era, intero e senza barra */
+      await campo.fill('/settings tools.');
+      await expect(elenco.locator('[role="option"]')).toHaveCount(2);
+      expect((await misura()).scorre).toBe(false);
+    });
   });
 }
 
