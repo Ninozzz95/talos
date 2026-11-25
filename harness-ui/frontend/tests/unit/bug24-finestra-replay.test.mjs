@@ -585,6 +585,7 @@ function bancoCambioSessione(b) {
     artefattiChiusi: [], artefattoALato: { chiudi: (come) => { b.artefattiChiusi.push({ ...come }); } },
     atteseAzzerate: 0, attesaArtefatti: { azzera: () => { b.atteseAzzerate += 1; } },
     rigaVivaMotore: { chatCambiata: niente }, // FE-050 (01/11/2026): la riga viva del modello locale si dimentica al cambio (prove in riga-viva-motore)
+    vistaVivaDi: null, browserDelleChat: new Map(), CAMPI_DEL_BROWSER_DELLA_CHAT: [], // righe 223-224: il Browser della chat lasciata (prove in r223-stato-della-sessione)
     risorseProcessi: { timer: 0, inVolo: false, letture: 2, vivi: 0, agganciato: true }, // C1 (10/10/2026): CPU e memoria, la lettura riparte al cambio
     $: (selector) => selector === '#conversation' ? b.colonna : null,
   });
@@ -1172,6 +1173,8 @@ function bancoBolleRigiocate({ restoring = false, differito = false } = {}) {
     EVENTO_FINESTRA_LOCALE: 'talos.finestra-locale', aggiornaRigaFinestraLocale: () => null,
     // FE-053 (01/11/2026): la riga del modello dei riassunti inutilizzabile, nello stesso gestore (prove nelle sue)
     EVENTO_MODELLO_INUTILIZZABILE: 'talos.riassunto-modello-inutilizzabile', aggiornaRigaModelloInutilizzabile: () => null,
+    // settimo giro dell'affitto (15/11/2026): la nota della riga in attesa, nello stesso gestore (prove in `affitto-note-giro-7.test.mjs`)
+    EVENTO_RIGA_IN_ATTESA: 'talos.riga-in-attesa', aggiornaNotaRigaInAttesa: () => null,
     // FE-050 (01/11/2026): le righe del ripiego del motore locale e della scheda lenta, nello stesso gestore (prove nelle loro)
     EVENTO_RIPIEGO_LOCALE: 'talos.ripiego-locale', aggiornaRigaRipiegoLocale: () => null, EVENTO_SCHEDA_LENTA: 'talos.scheda-lenta', aggiornaRigaSchedaLenta: () => null,
     // 29/10/2026 (owner, CONTRATTO-CONTROLLO-SPENTO): la riga del controllo delle scritture spento, nello stesso gestore

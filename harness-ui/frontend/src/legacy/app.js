@@ -87,7 +87,7 @@ import { segnaTurniDisegnati } from '../components/turni-disegnati.js'; // 22/10
 import { confermaModale } from '../components/modale-td.js'; // 11/09 lotto G: al posto di window.confirm()
 import { montaScorciatoiaTemi } from '../components/theme-studio.js'; // 11/09 lotto F
 import { aggiornaBoard, creaRigaBoard, cartellaDaExport, sottoAgentiDellaBacheca } from '../components/board.js'; // 05/9 Fase 2: Board
-import { applicaCollocazioneToast, azioneAnnulla, creaPilaToast } from '../components/toast.js';
+import { applicaCollocazioneToast, azioneAnnulla, creaPilaToast, messaggioUmano } from '../components/toast.js';
 import { creaAvvisiEliminazione } from '../components/session-deletion-feedback.js';
 import { normalizzaRicevutaOutput, creaLettoreOutput } from '../components/process-output.js';
 import { eventoPerLoSchermo } from '../contracts/confine-dati.js'; // F-027 (owner 02/10/2026): il confine dei dati è per il modello
@@ -108,7 +108,7 @@ import { nomeUmanoAttrezzo as nomeUmanoAttrezzoCondiviso, nomeDiRipiegoAttrezzo,
 import { collegaRidimensionamentoDialoghi, preparaMisuraDialogo } from '../components/dialoghi.js'; // 06/9 B7: dialoghi ridimensionabili e ricordati
 import { creaSchedeTerminale, ETICHETTA_STATO as ETICHETTA_STATO_TERMINALE, TESTI as TESTI_TERMINALE, prossimaAttivaDopoChiusura, SCHEDE_MASSIME as SCHEDE_MASSIME_TERMINALE } from '../components/terminale.js'; // 06/9 B1: il Terminale a schede (K-G)
 import { collegaDomandaAppiccicata } from '../components/domanda-appiccicata.js'; // 27/10/2026: la domanda ferma in cima, una sola alla volta
-import { creaChatPronte, chatParcheggiabile, campiDellaChat, ultimaSequenzaVista } from '../components/chat-pronte.js'; // B1 (owner 10/10/2026): le ultime 3 chat pronte
+import { creaChatPronte, chatParcheggiabile, campiDellaChat, ultimaSequenzaVista, CAMPI_DEL_BROWSER_DELLA_CHAT } from '../components/chat-pronte.js'; // B1 (owner 10/10/2026): le ultime 3 chat pronte
 import { LINGUE as LINGUE_MENU, risolviLingua, linguaDaIndirizzo, applicaLingua, etichettaLinguaRisolta, t as tr, tn as trn, elenco as elencoNellaLingua, linguaCorrenteDiT, EVENTO_LINGUA } from '../components/lingua.js'; // 06/9 B8 + P-i18n: la lingua dei menu e delle superfici
 import { ritraduciImpostazioni } from '../components/impostazioni.js'; // P-i18n
 import { creaCopiaSulServer } from '../features/settings/copia-sul-server.js'; // Fase 8 (01/11/2026): le preferenze della finestra, copia sul server
@@ -200,6 +200,7 @@ import { EVENTO_MCP_AVVIO, creaRicordoAvvisiMcp, nuoviServerNonPartiti, creaNota
 import { leggiControlloSpento, aggiornaRigaControlloSpento } from '../components/avviso-controllo-spento.js'; // owner 29/10/2026: il controllo delle scritture spento, una volta per chat
 import { leggiAvvisoFileComputerUse, aggiornaRigaAvvisoFileComputerUse } from '../components/avviso-file-computer-use.js'; // decisione 374 giro 2: le impostazioni del computer use cambiate fuori da TALOS, nella chat del comando
 import { interpretaEventoCompattazione, valutaSogliaContesto, testoRigaCompattazione, montaAvvisoContesto, aggiornaAvvisoContesto, aggiornaNotaJournalRiparato, compattaLegacy, annullaCompattazioneLegacy, saltaRiassuntoLegacy, fineMuta, chiaveNotaCompactManuale } from '../components/compattazione-legacy.js'; // F5, 24/09/2026: la compattazione legacy che si vede e si può fare
+import { EVENTO_RIGA_IN_ATTESA, aggiornaNotaRigaInAttesa, togliNoteInAttesa } from '../components/nota-riga-in-attesa.js'; // settimo giro dell'affitto (15/11/2026): la riga che aspetta, una nota informativa
 import { aggiornaDiffReview, aggiornaSommarioSchedeReview, chiaveFileReview, creaSchedeReview, etichettaFileReview, nascondiAzioniFase3, riassuntoReviewTestata as riassuntoReviewPerTestata } from '../components/review.js'; // 05/9 Fase 2: Review — elenco dei file e diff nel disegno; 17/09 BC-75: `etichettaFileReview` è la regola del nome, e non si riscrive qui del mockup; 17/09 BC-63: le linguette sono il componente condiviso col Terminale
 import { creaStatoVuoto, suggerimentiDallaCartella } from '../components/stato-vuoto.js'; // 05/9 Fase 2: EmptyState — lo stato vuoto del mockup, dai fatti della cartella
 import { montaGuscioLaboratorio } from '../components/lab-cornice-v3.js'; // 18/09 corsia 2: il guscio a quattro schede del Laboratorio modelli — monta i comandi legacy in una scheda sola
@@ -525,10 +526,12 @@ const TIPI_STRUMENTO_DI_FUORI = new Set(['mcp_tool', 'plugin_tool', 'forge_tool'
       /* R5.11 (18/10/2026): l'ultima sequenza della STORIA, fissata al confine; un evento con una sequenza più alta è dal vivo. Non basta
          `inRigiocata`: la storia differita si disegna AL confine, quando il segno è già spento (misurato con una sonda, ANNULLA-UI-05). */
       sequenzaFineStoria: 0,
-      preferenzeDaSalvareAlConfine: false, // B3 09/10: un giro della storia ha cambiato il modo; si salva al confine, una volta
       ragionamentiInCorso: null, // ⭐ 13/09 notte: { sessionId, inizi } — l'inizio vero dei ragionamenti aperti, dal registro
       /** ⛔⛔⛔ 27/8, owner: "ricevo risposte duplicate" — ogni evento.`_sequenza` (assegnato dal server, vedi session-registry.mjs broadcast()) entra qui la PRIMA volta che passa da handleRealEvent; una riconnessione (EventSource nativo dopo una caduta, o runDirectShell che ne apre una fresca) rimanda l'intero buffer da capo, e questo Set lo riconosce e lo scarta invece di duplicare bubble/testo. Sopravvive a un `continua:true` (stessa sessione, nuovo giro) — si azzera SOLO per una sessione davvero diversa. */
       sequenzeViste: new Set(),
+      /** 13/11/2026 (cura dell'affitto compromesso, i lettori): numero → impronta (tipo, nome, id) dell'evento visto con quel numero. Un DOPPIO
+          del giornale (un altro processo ha scritto coi numeri già usati) ha un'impronta diversa e si mostra; la stessa impronta è un rigioco. */
+      impronteViste: new Map(),
       /** ⛔⛔⛔ 27/8, owner: "verifica che i messaggi... persistano dopo il refresh" — vero SOLO fra l'appendUserFollowUp ottimista di resumeSession() e il RunStarted (seguito:true) che arriva davvero: consumato una volta, evita che handleRealEvent mostri lo stesso follow-up due volte dal vivo. Vedi il case RunStarted per il perché non è sempre così. */
       followUpBubbleInAttesa: false,
       /** ⭐⭐⭐ 27/8, owner: "non esiste nessun loading quando il modello elabora... fa sembrare che si sia piantato" — l'elemento DOM della bolla di attesa (porta di TalosLineLoader.vue, mobile), o null quando non ce n'è una a schermo. Vedi mostraAttesaRisposta()/nascondiAttesaRisposta(). */
@@ -3574,7 +3577,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   const idDelMessaggioReale = new WeakMap();
   /* decision 399 (08/11/2026): the bridge renames the right column `#inspectorSessione` → `#inspectorPanel` before this file runs
      (`bridge/legacy-dom.js`, «La colonna dei dettagli»): the old name found nothing and «Open on the side» always fell back to the full screen */
-  const visteDeiBlocchi = creaVisteDelBlocco({ document, colonna: () => inspectorPanel, apriColonna: () => openPanel('inspector') });
+  /* P2-C riga 40 (decisione 401): on a narrow window the column opens over the chat; the side view's «Close» closes it again if it opened it */
+  const visteDeiBlocchi = creaVisteDelBlocco({ document, colonna: () => inspectorPanel, chiudiColonna: closePanels,
+    apriColonna: () => { const sopra = pannelloFlottante('inspector') && !inspectorPanel.classList.contains('open'); openPanel('inspector'); return sopra; } });
   /* Decisione 142 (owner 04/11/2026): «Salva in Libreria» sotto il blocco, l'avviso «Salvato in Libreria» con «Apri», e «Apri» che porta
      alla voce nella pagina della Libreria (la prima volta la voce aspetta l'elenco: `prendiVoceInAttesa` in `caricaPannelloLibreria`). */
   const voceDellaLibreria = creaApriVoceDellaLibreria({ schermo: () => $('#schermoLibreria'), statoSezione, mostraPagina: () => setView('libreria') });
@@ -7847,7 +7852,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       if (state.realSession.id === id) await caricaPannelloAttrezzi({ pagina: true });
     } catch (error) {
       if (state.realSession.id === id) {
-        if (state.permessiPerAttrezzo[nome] === (valore || undefined)) { if (precedente === undefined) delete state.permessiPerAttrezzo[nome]; else state.permessiPerAttrezzo[nome] = precedente; salvaPreferenzeChatDesktop(); }
+        if (state.permessiPerAttrezzo[nome] === (valore || undefined)) { if (precedente === undefined) delete state.permessiPerAttrezzo[nome]; else state.permessiPerAttrezzo[nome] = precedente; salvaPreferenzeChatDesktop(['permessiPerAttrezzo']); }
         mostraCapability({ erroreAzione: tr('app.permissions.toolNotSaved', { nome: nomeUmanoAttrezzo(nome) || tr('app.permissions.thisTool'), motivo: error.message }) });
       }
     } finally { scritturaCapability = false; mostraCapability(); }
@@ -9264,7 +9269,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         aggiornaInUso();
         if (aggiornaModelloPrincipale) {
           aggiornaPillolaModello();
-          salvaPreferenzeChatDesktop();
+          salvaPreferenzeChatDesktop(['model']); // B-05
         }
         chiudi();
         alSelezionato?.(valore);
@@ -12101,7 +12106,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         impostaPermesso(button.dataset.permissionChoice);
         // ⭐ 04/9, R-02 — scegliere qui è decidere: stesso gesto dell'intro, stesso flag (mai marcato «scelto» un valore che nessuno ha toccato).
         state.autonomiaScelta = true;
-        salvaPreferenzeChatDesktop();
+        salvaPreferenzeChatDesktop(['permissions', 'autonomiaScelta']); // B-05
         dopoLaScelta();
       });
     });
@@ -12128,7 +12133,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
           state.modalitaOperativa = modo.value;
           try {
             await sincronizzaImpostazioniSessione({ modalitaOperativa: modo.value });
-            salvaPreferenzeChatDesktop();
+            salvaPreferenzeChatDesktop(['modalitaOperativa']); // B-05
             /* F3-12 (24/09/2026): scegliere il modo qui È la risposta alla fascia del modo tolto. */
             if (state.realSession.id) risolviFasciaModoRitirato(state.realSession.id);
             toast(tr('app.permissions.workModeUpdated'), modo.options[modo.selectedIndex].textContent);
@@ -12458,7 +12463,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   function rigaMostraRagionamento(opzioni) {
     return rigaInterruttoreDelRiquadro({ ...opzioni, id: 'showReasoningToggle', testo: tr('app.reasoning.toggleLabel'), acceso: state.mostraRagionamento, alCambio: (acceso) => {
       state.mostraRagionamento = acceso;
-      salvaPreferenzeChatDesktop();
+      salvaPreferenzeChatDesktop(['mostraRagionamento']); // B-05
       aggiornaVisibilitaRagionamento();
     } });
   }
@@ -14732,8 +14737,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     const etichetta = etichettaPermessiGiro(contesto);
     const ultimaMeta = $$('#conversation .user-message .message-meta span').at(-1);
     if (etichetta && ultimaMeta && ultimaMeta.textContent === (ultimaMeta.closest('.talos-message--user')?.dataset.etichettaBase ?? tr('chat.child.followUp'))) ultimaMeta.textContent += etichetta;
-    if (cambi.length > 0) {
-      salvaPreferenzeChatDesktop();
+    if (cambi.length > 0) { // D1 di riga 224: un cambio fatto fuori da qui non è il predefinito delle chat nuove
       // ⭐ 04/9, W1-12 — etichetta del giro corrente, non «concluso»: il giro è appena partito.
       appendStatusNote(tr('app.status.settingsChanged', { cambi: cambi.join(', ') }), false, { meta: tr('app.status.talosTurn', { n: state.realSession.runCount || 1 }) });
     }
@@ -21169,7 +21173,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       if (!giroGiaVivo) {
         const generation = nuovaGenerazioneSessione({ continua: true });
         state.realSession.taskId = taskId;
-        collegaEventiSessione(sessionId, generation);
+        collegaEventiSessione(sessionId, generation, { dopo: ultimaSequenzaVista(state.realSession.sequenzeViste) }); // P2-B (a): as in resumeSession
       }
       aggiornaElencoSessioniReali();
       /*
@@ -22755,23 +22759,29 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     salvaImpostazioniDesktop(documento);
     applicaAspettoDesktop(documento.appearance);
   }
-  function salvaPreferenzeChatDesktop() {
+  /* Righe 223-224, giro unico (revisore B, B-05): `campi` dice QUALI scelte fatte a mano entrano nel predefinito; gli altri campi restano
+     quelli salvati. Senza elenco (la finestra della chat nuova, la migrazione) si salva tutto, come prima. */
+  function salvaPreferenzeChatDesktop(campi = null) {
     const documento = leggiImpostazioniDesktop();
+    const daStato = { model: state.model, effort: state.effort, mostraRagionamento: state.mostraRagionamento, permissions: state.permissions,
+      modalitaOperativa: state.modalitaOperativa, permessiPerAttrezzo: mappaPerUnaSessioneNuova(state.permessiPerAttrezzo), autonomiaScelta: state.autonomiaScelta };
     documento.chat = normalizzaPreferenzeChatDesktop({
-      model: state.model,
-      effort: state.effort,
-      mostraRagionamento: state.mostraRagionamento,
-      permissions: state.permissions,
-      modalitaOperativa: state.modalitaOperativa,
-      // C2b: il predefinito delle sessioni nuove non porta Coordinazione (owner, «spenta di serie»)
-      permessiPerAttrezzo: mappaPerUnaSessioneNuova(state.permessiPerAttrezzo),
-      autonomiaScelta: state.autonomiaScelta,
+      ...documento.chat,
+      // C2b: il predefinito delle sessioni nuove non porta Coordinazione (owner, «spenta di serie»): `mappaPerUnaSessioneNuova` qui sopra
+      ...(campi ? Object.fromEntries(campi.map((c) => [c, daStato[c]])) : daStato),
       // 29/10/2026: le due liste del selettore dei modelli non vivono in `state`: si portano avanti dal documento, o un salvataggio le cancellerebbe
       modelliPreferiti: documento.chat.modelliPreferiti,
       modelliRecenti: documento.chat.modelliRecenti,
     });
     salvaImpostazioniDesktop(documento);
   }
+  /* Righe 223-224, giro unico (revisori A RA-01..03, B B-04): una chat nuova nasce dal predefinito salvato da QUALUNQUE porta, come la
+     finestra (D1), mai da `state.*`, che dopo un'apertura è la chat aperta (Accesso pieno compreso). Predefinito senza modello: com'era. */
+  function predefinitoChatNuova() {
+    const p = leggiImpostazioniDesktop().chat;
+    return { modello: p.model || state.model, effort: p.model ? p.effort : state.effort, permessi: p.permissions, modalitaOperativa: p.modalitaOperativa, permessiPerAttrezzo: mappaPerUnaSessioneNuova(p.permessiPerAttrezzo) };
+  }
+  const inizialeDelCielo = () => { const p = predefinitoChatNuova(); return { modello: p.modello, sforzo: p.effort ?? null, accesso: p.permessi }; };
   function inizializzaPreferenzeChatDesktop() {
     const preferenze = leggiImpostazioniDesktop().chat;
     state.model = preferenze.model;
@@ -24269,7 +24279,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     // ⛔ 12/09 BC-14: non si alza più il permesso al posto della persona. Serviva solo a superare il
     // cancello del server, che non c'è più; una promozione silenziosa ad «Accesso pieno» è esattamente
     // ciò che la consegna del 01/09 vieta («la selezione non promuove silenziosamente i permessi»).
-    avviaSessionePendente({ cartellaLibera: percorsoAssoluto, nomeCartella: nome, modello: state.model, effort: state.effort, permessi: state.permissions, permessiPerAttrezzo: mappaPerUnaSessioneNuova(state.permessiPerAttrezzo) }); // C2b: spenta di serie
+    avviaSessionePendente({ cartellaLibera: percorsoAssoluto, nomeCartella: nome }); // giro unico 223-224: dal predefinito // C2b: spenta di serie
   }
 
   function impostaComeRadice(percorsoRelativo, nome) {
@@ -25119,6 +25129,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      */
     const compattazione = interpretaEventoCompattazione(evento);
     if (compattazione) { applicaEventoCompattazioneLegacy(compattazione, evento); return; }
+    /* Settimo giro dell'affitto (15/11/2026, revisore 2 del giro 6): la riga che aspetta un'altra finestra di TALOS è una nota informativa,
+       UNA per riga (idempotente per `id`, anche dopo un ricollegamento), nel posto della nota del journal riparato; non chiude il giro
+       e non tocca lo Stop (prima era un `RunError`: carta rossa e giro chiuso a schermo, anche a metà giro) */
+    if (evento.type === 'CUSTOM' && evento.name === EVENTO_RIGA_IN_ATTESA) { const colonna = colonnaConversazione(ROOT()); if (colonna && state.realSession.id) aggiornaNotaRigaInAttesa(colonna, evento.value, { document, inserisci: inserisciRigaCompattazione }); return; }
     /* FE-053 (owner 01/11/2026): il modello dei riassunti non si può usare: una riga fissa, mai un avviso a comparsa. Il tasto solo se l'aveva scelto la persona */
     if (evento.type === 'CUSTOM' && evento.name === EVENTO_MODELLO_INUTILIZZABILE) {
       const colonna = colonnaConversazione(ROOT());
@@ -25244,7 +25258,6 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       evidenziaInAttesa(colonnaConversazione(ROOT())); // B1: si colorano solo i blocchi dei turni montati (la finestra)
       aggiornaSegmentiRinviati(colonnaConversazione(ROOT())); // B1 parte 2: e si riassumono solo i loro segmenti
       // B3 (09/10/2026): il modo dell'ULTIMO giro rigiocato si salva qui, una volta sola (vedi il `RunStarted` della storia)
-      if (state.realSession.preferenzeDaSalvareAlConfine) { state.realSession.preferenzeDaSalvareAlConfine = false; salvaPreferenzeChatDesktop(); }
       disegnaFasciaPianoRichiesto();
       /*
        * ⛔ 14/09, giro vero della coda (due finestre): aperta una sessione CONCLUSA, `deferHistoricalRendering` restava vero per
@@ -25338,8 +25351,18 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
      * handler sotto uno per uno.
      */
     if (typeof evento._sequenza === 'number') {
-      if (state.realSession.sequenzeViste.has(evento._sequenza)) return;
-      state.realSession.sequenzeViste.add(evento._sequenza);
+      /* 13/11/2026 (cura dell'affitto compromesso, i lettori): lo stesso numero con un'ALTRA impronta è un doppio del giornale (un altro
+         processo ha scritto coi numeri già usati), non un rigioco: si mostra, nell'ordine in cui arriva (quello del disco). */
+      const impronta = `${evento.type ?? ''}|${evento.name ?? ''}|${evento.messageId ?? evento.toolCallId ?? evento.runId ?? ''}`;
+      const impronte = (state.realSession.impronteViste ??= new Map());
+      if (state.realSession.sequenzeViste.has(evento._sequenza)) {
+        const nota = impronte.get(evento._sequenza);
+        if (nota === undefined || nota === impronta || (nota instanceof Set && nota.has(impronta))) return;
+        impronte.set(evento._sequenza, nota instanceof Set ? nota.add(impronta) : new Set([nota, impronta]));
+      } else {
+        state.realSession.sequenzeViste.add(evento._sequenza);
+        impronte.set(evento._sequenza, impronta);
+      }
     }
     sequenzaEventoInCorso = typeof evento._sequenza === 'number' ? evento._sequenza : null; // ATTESA-DA-CAPO: chi apre la bolla
     if (evento.type === 'CUSTOM' && evento.name === 'talos.plan') {
@@ -25416,8 +25439,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       }
       if (['normale', 'piano'].includes(valore.modalitaOperativa)) state.modalitaOperativa = valore.modalitaOperativa;
       if (['Read only', 'Workspace write', 'On request', 'Full access'].includes(valore.permessi)) state.permissions = valore.permessi;
-      salvaPreferenzeChatDesktop();
-      aggiornaPillolaPermessi();
+      aggiornaPillolaPermessi(); // D1 di riga 224: un cambio arrivato dal server è della sessione, non il predefinito delle chat nuove
       return;
     }
     if (['RunStarted', 'RunFinished', 'RunError'].includes(evento.type)) ultimoEventoGrafoMadre = { type: evento.type, code: evento.code };
@@ -25731,8 +25753,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
              In memoria il modo si aggiorna come prima; il valore salvato alla fine è lo stesso. localStorage è sincrono: si
              tiene lo stato in memoria e si salva nei momenti giusti (soldevelo «77% faster logins»; itch.io, letti il
              09/10/2026). Dal vivo nulla cambia: il giro si salva subito. */
-          if (state.realSession.inRigiocata) state.realSession.preferenzeDaSalvareAlConfine = true;
-          else salvaPreferenzeChatDesktop();
+          /* D1 di riga 224 (22/11/2026): il modo di un giro, dalla storia o dal vivo, non diventa più il predefinito delle chat nuove;
+             con lui se ne va il salvataggio al confine di B3 (P9) */
           registraGiroPerFasciaModo(state.realSession.id, modoDelGiro, { dalVivo: !state.realSession.inRigiocata });
         }
         /*
@@ -27098,6 +27120,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   function collegaEventiSessione(sessionId, generation, { dopo = 0 } = {}) {
     state.realSession.id = sessionId;
     rememberOpenSession(workspacePreferences, sessionId); // decisione 42: qui passano TUTTE le chat, anche quella nata col primo invio, un ramo, una ripresa
+    const browserSuo = browserDelleChat.get(sessionId); // righe 223-224: tornando a una chat tornano le SUE pagine, e solo quelle
+    if (browserSuo) { browserDelleChat.delete(sessionId); Object.assign(state.realSession, browserSuo); renderizzaBrowser(); }
     riprendiBozzaAllegati(); // D27: la chat a cui si torna riprende i suoi allegati non inviati
     chatALato?.perSessione(); // FE-010: il filo è della sua sessione
     const fasciaPiano = statoFasciaPianoRichiesto();
@@ -27216,7 +27240,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
 
   /** Chiude l'EventSource corrente (se c'è) e apre una nuova generazione. */
-  function nuovaGenerazioneSessione({ continua = false, parcheggia = true } = {}) {
+  const browserDelleChat = new Map(); // righe 223-224: sessionId → le pagine che la persona ha aperto in quella chat
+  function nuovaGenerazioneSessione({ continua = false, parcheggia = true, primoInvio = false } = {}) {
     if (!continua) parcheggiaBozzaAllegati(); // D27: prima che la chat cambi, altrimenti la bozza finisce nella chat dopo
     if (!continua && parcheggia) parcheggiaChatAperta(); // B1 (owner 10/10): la chat che si lascia resta pronta, se è ferma — PRIMA di ogni reset
     /* Cura BG3 round 4 (E1): the generative blocks' hook is reset HERE, right after the parking (which took the page's state), for every
@@ -27286,10 +27311,25 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       state.realSession.previewProjectId = null;
       state.realSession.previewWorkspaceName = null;
       state.realSession.sequenzeViste = new Set();
+      state.realSession.impronteViste = new Map();
       state.realSession.testoGrezzoMessaggi = new Map();
       state.realSession.renderIncrementale = new Map();
       state.realSession.browserPagine = [];
       state.realSession.browserIndice = -1;
+      /* Righe 223-224 (owner 22/11/2026: «deve essere legata a QUELLA sessione»): le pagine aperte dalla persona sono della chat che si
+         lascia, tenute col suo id (`browserDelleChat`) e rimesse da `collegaEventiSessione`; la vista viva va a riposo. Il primo invio
+         di una chat in attesa (`primoInvio` senza id) resta la stessa chat. Hermes lega le schede a chi le possiede (apps/desktop/src/store/preview.ts:381). */
+      if (!primoInvio || state.realSession.id) {
+        if (vistaVivaDi) void smontaVistaViva();
+        if (state.realSession.id) browserDelleChat.set(state.realSession.id, Object.fromEntries(CAMPI_DEL_BROWSER_DELLA_CHAT.map((c) => [c, state.realSession[c]])));
+        state.realSession.browserVive = []; state.realSession.browserChiuse = new Set(); state.realSession.browserAttiva = null; state.realSession.browserAnnotazioni = {};
+        state.realSession.browserAnnotaAttivo = false; state.realSession.browserErroriPagina = {};
+      }
+      state.realSession.browserRichiesta = null; state.realSession.browserProssimoId = 0; state.realSession.rileggiDopoIlGiro = null; // P2, P3
+      state.realSession.serverLocali = new Map(); state.realSession.righeServerLocali = new Map(); // P4: li ridicono la storia e `aggiornaServerLocali`
+      state.realSession.permessiDelGiro = null; // P5: fino al primo RunStarted la barra e le carte parlavano col permesso della chat di prima
+      state.realSession.statoDaRiprendere = null; state.realSession.rigaRiprendiPresente = true; state.realSession.toolCallNomi = new Map(); // P6, P7
+      state.realSession.comandiNellaConversazione = false; state.realSession.doveGiranoIComandi = null; // P8: li rilegge l'apertura della sessione
       state.realSession.ragionamentoBubble = new Map();
       state.realSession.durateRagionamento = null; // le durate di una chat non finiscono su un'altra
       state.realSession.followUpBubbleInAttesa = false;
@@ -27802,7 +27842,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
        * `conclusa:true`), dove la cronologia si costruisce davvero da zero.
        */
       state.realSession.taskId = taskId;
-      collegaEventiSessione(sessionId, generation);
+      /* P2-B (a), 22/11/2026: the old stream may already have shown the first pieces of the answer; the replay merges the following
+         pieces with them under the LAST number (`sse-replay-coalescente.mjs`), which the number check does not know, and the start was
+         written twice. The new stream asks only for what this page has not seen, as a ready chat does (`?after=`). */
+      collegaEventiSessione(sessionId, generation, { dopo: ultimaSequenzaVista(state.realSession.sequenzeViste) });
       aggiornaElencoSessioniReali();
       if (!messaggioFollowUp && !ripresaDopo) toast(tr('app.run.resumed'), tr('app.run.resumedBody')); // 116 C: la riga quieta lo dice già (un avviso solo)
       return true; // «Continua adesso con…» lo legge (la ripresa è partita), e chi manda e deve sapere se è arrivato («Invia come allegato», revisione del blocco 19)
@@ -27813,9 +27856,10 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       }
       if (!giroGiaVivo) nascondiAttesaRisposta(); // ▶ a giro in corso: l'attesa è del giro vivo, non di questa ripresa
       /* G6 (revisione del bugfixer, 15/10): il primo giro di una chat ferma passa da qui — la chiave mancante si dice per nome */
-      const motivoInvio = fraseDelMotivo(error) || error.message;
+      /* P2-C 11p (decision 411): the browser's own words («Failed to fetch») never reach the chat: the dictionary's sentence does */
+      const motivoInvio = fraseDelMotivo(error) || messaggioUmano(error) || error.message;
       if (messaggioFollowUp) appendStatusNote(tr('app.run.sendFailedWith', { motivo: motivoInvio }), true); // il bubble utente resta — l'ha scritto davvero, solo non e' arrivato
-      toast(messaggioFollowUp ? tr('app.run.sendFailed') : tr('app.run.resumeFailed'), motivoInvio);
+      toast(messaggioFollowUp ? tr('app.run.sendFailed') : tr('app.run.resumeFailed'), motivoInvio, { chiave: messaggioFollowUp ? 'invioNonRiuscito' : 'ripresaNonRiuscita' }); // 11p: the same warning replaces the live one
       if (ripristino && !viaCodaId) rimettiInvioFallito(sessionId, ripristino, immagini); // R8: come la chat nuova, tornano anche i file
       else if (sessionId === state.realSession.id && !viaCodaId) ripristinaImmagini(immagini, messaggioFollowUp); // ⭐ 14/09: un messaggio della coda resta in coda sul server, non torna nel composer
       return false;
@@ -27851,7 +27895,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     try {
       await sincronizzaImpostazioniSessione({ modello: valore });
       if (sessionId !== state.realSession.id) return false;
-      state.model = valore; aggiornaPiedeSidebar(); aggiornaPillolaModello(); salvaPreferenzeChatDesktop();
+      state.model = valore; aggiornaPiedeSidebar(); aggiornaPillolaModello(); salvaPreferenzeChatDesktop(['model']); // B-05
       if (runRealeAttivo()) {
         /* lo stop fa parte della scelta: la fine del giro non disegna «Hai fermato il giro» (vedi `case 'RunError'`) */
         state.realSession.fermoPerContinuare = sessionId;
@@ -28570,7 +28614,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     if (trattenuta) applicaIstantaneaImpostazioni(trattenuta, sessionId);
   }
   function sincronizzaImpostazioniSessione(patch) {
-    salvaPreferenzeChatDesktop();
+    salvaPreferenzeChatDesktop(Object.keys(patch || {}).map((k) => ({ permessi: 'permissions', modello: 'model', reasoning: 'effort', modalitaOperativa: 'modalitaOperativa', permessiPerAttrezzo: 'permessiPerAttrezzo' })[k]).filter(Boolean)); // B-05
     const sessionId = state.realSession.id;
     if (!sessionId || !patch || Object.keys(patch).length === 0) return Promise.resolve({ locale: true });
     const inVolo = statoImpostazioniDalVivo().inVolo;
@@ -28800,7 +28844,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       stato.inVolo = false;
       if (state.realSession.id === sessionId) {
         state.modalitaOperativa = precedente;
-        salvaPreferenzeChatDesktop();
+        salvaPreferenzeChatDesktop(['modalitaOperativa']); // B-05
       }
       disegnaFasciaModoRitirato();
     }
@@ -28875,7 +28919,8 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       : {};
     aggiornaPillolaModello();
     aggiornaPillolaPermessi();
-    salvaPreferenzeChatDesktop();
+    /* D1 di riga 224 (giudice v2560, 22/11/2026): APRIRE una chat non scrive più il predefinito delle chat nuove — una chat in Accesso
+       pieno lo passava alla prossima. Lo scrive solo una scelta fatta a mano (i selettori, la finestra della chat nuova). */
   }
 
   function aggiornaToolbarSelezioneSessioni() {
@@ -29238,6 +29283,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     aggancioDeiBlocchi?.ripristina(voce.moduli.blocchi); // cura 288 round 3 (D1): the blocks' gestures come back with THIS page, no replay
     const colonna = $('#conversation');
     colonna.replaceChildren(voce.frammento);
+    togliNoteInAttesa(colonna); // ottavo giro del salvataggio (21/11/2026): le note «aspetta» se ne vanno, il server rimanda quelle delle righe che aspettano ancora
     turniFuoriFinestra.length = 0; turniFuoriFinestra.push(...voce.finestra.turni);
     segmentiRinviati.clear(); for (const segmento of voce.finestra.segmenti) segmentiRinviati.add(segmento);
     const separatori = separatoriStaccati(); separatori.clear(); for (const [chiave, nodo] of voce.finestra.separatori) separatori.set(chiave, nodo);
@@ -30702,10 +30748,11 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     form.id = 'workspaceChooser';
     form.noValidate = true;
 
+    const predefinito = leggiImpostazioniDesktop().chat; // D1 di riga 224: una chat nuova parte dal predefinito, non dalla chat aperta
     const local = {
       current: null,
       selected: null,
-      permission: state.permissions,
+      permission: predefinito.permissions,
       mostraRagionamento: state.mostraRagionamento,
       requestGeneration: 0,
       busy: false,
@@ -30862,9 +30909,9 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     );
     rightHead.querySelector('h3').id = 'workspaceChooserSettingsTitle';
 
-    const modelPicker = creaModelPicker({ valoreIniziale: state.model || '', aggiornaModelloPrincipale: false, alLasciare: () => closeEmbeddedDialog(sheetDialog),
+    const modelPicker = creaModelPicker({ valoreIniziale: predefinito.model || state.model || '', aggiornaModelloPrincipale: false, alLasciare: () => closeEmbeddedDialog(sheetDialog),
       alSelezionato: () => { aggiornaConfermaWorkspaceChooser(); void aggiornaAvvisoModello(); } }); // FE-040: riepilogo del piede e avviso seguono il modello scelto
-    const effortPicker = creaEffortPicker({ valoreIniziale: state.effort, livelliAmmessi: livelliEffortDelModello(), forma: 'segmenti' }); // BUG-7: livelli del modello; FE-040: segmenti
+    const effortPicker = creaEffortPicker({ valoreIniziale: predefinito.model ? predefinito.effort : state.effort, livelliAmmessi: livelliEffortDelModello(), forma: 'segmenti' }); // BUG-7: livelli del modello; FE-040: segmenti
     const plannerPicker = creaModelPicker({ valoreIniziale: '', etichettaVuota: tr('app.common.none'), aggiornaModelloPrincipale: false, alLasciare: () => closeEmbeddedDialog(sheetDialog) });
 
     const modelSection = document.createElement('div');
@@ -31661,6 +31708,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       state.mostraRagionamento = local.mostraRagionamento;
       aggiornaVisibilitaRagionamento(); // A14-R1 (review 08/10): come gli altri due interruttori, la radice lo dice subito
       state.permissions = local.permission;
+      state.modalitaOperativa = predefinito.modalitaOperativa; state.permessiPerAttrezzo = { ...predefinito.permessiPerAttrezzo }; // D1 di riga 224
       aggiornaPillolaModello();
       aggiornaPillolaPermessi();
       salvaPreferenzeChatDesktop();
@@ -31765,7 +31813,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     lasciaModalitaVeloce();
     state.model = modello; state.effort = sforzo; state.permissions = accesso;
     aggiornaPillolaModello(); aggiornaPillolaPermessi();
-    avviaSessionePendente({ cartellaLibera: percorso, nomeCartella: stella.nomeVisto, modello, effort: sforzo, permessi: accesso, permessiPerAttrezzo: mappaPerUnaSessioneNuova(state.permessiPerAttrezzo) });
+    avviaSessionePendente({ cartellaLibera: percorso, nomeCartella: stella.nomeVisto, modello, effort: sforzo, permessi: accesso });
     submitPrompt(testo);
     return { ok: true };
   }
@@ -31776,7 +31824,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     cieloAperto = apriCielo({
       document, contenitore: document.body, dati: datiDelCielo(automazioni),
       scelte: {
-        iniziale: { modello: state.model, sforzo: state.effort ?? null, accesso: state.permissions },
+        iniziale: inizialeDelCielo(), // giro unico 223-224: il cielo propone il predefinito, non la chat aperta
         modelli: modelliPerIlCielo(), sforzi: [{ valore: null, nome: tr('sezioni.cielo.effortAuto') }, ...livelliDaMostrare({ tutti: LIVELLI_RAGIONAMENTO, livelliAmmessi: livelliEffortDelModello(), filo: filoEffortDelModello() }).map((l) => ({ valore: l.valore, nome: l.etichetta }))],
         accessi: PERMESSI_SESSIONE_VALIDI.map((valore) => ({ valore, nome: etichettaPermesso(valore) })),
       },
@@ -32030,8 +32078,12 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     conversation.closest('.talos-conversation')?.classList.remove('talos-conversation--empty');
   }
 
-  function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa }) {
+  function avviaSessionePendente({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa }) {
     nuovaGenerazioneSessione();
+    const predefinito = predefinitoChatNuova(); // giro unico 223-224 (B-04): chi non sceglie parte dal predefinito, mai dalla chat aperta
+    ({ modello = predefinito.modello, effort = predefinito.effort, permessi = predefinito.permessi } = { modello, effort, permessi }); // campo per campo
+    modalitaOperativa ??= predefinito.modalitaOperativa; permessiPerAttrezzo ??= predefinito.permessiPerAttrezzo;
+    Object.assign(state, { permissions: permessi, modalitaOperativa, permessiPerAttrezzo: { ...permessiPerAttrezzo } }); aggiornaPillolaPermessi(); // il primo invio legge lo stato
     azzeraModalitaVeloce(); // FE-047 (owner 31/10): una chat nuova parte sempre spenta
     state.pendingCustomSession = { cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa };
     state.realSession.previewProjectId = cartellaId || null;
@@ -32042,7 +32094,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
         ? `launch:${workspaceLaunchId}`
         : `path:${cartellaLibera || nomeCartella}`;
     if (modello) { state.model = modello; aggiornaPillolaModello(); }
-    if (effort) { state.effort = effort; aggiornaPillolaRagionamento(); }
+    if (effort !== undefined) { state.effort = effort; aggiornaPillolaRagionamento(); }
     state.session = tr('app.sessions.newIn', { cartella: nomeCartella });
     sessionTitle.textContent = state.session; aggiornaTestataSessione(); // 05/9 Fase 2: Topbar
     $$('[data-current-session-title]').forEach((label) => { label.textContent = state.session; });
@@ -32143,7 +32195,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
   }
   async function startCustomSession({ cartellaId, cartellaLibera, workspaceLaunchId, nomeCartella, consegna, comandoProva, modello, effort, modelloPlanner, permessi, permessiPerAttrezzo, modalitaOperativa = state.modalitaOperativa, immagini = [], bolla = null, ferma = false, ripristino = null, ricerca = null }) {
     iniziaMisuraLatenza('primo-messaggio-della-sessione');
-    const generation = nuovaGenerazioneSessione();
+    const generation = nuovaGenerazioneSessione({ primoInvio: true }); // righe 223-224: il primo invio di una chat in attesa non cambia chat
     const taskSintetico = { id: `libero:${nomeCartella}`, consegna, immagini };
     state.realSession.taskId = taskSintetico.id;
     state.realSession.treeWorkspaceKey = cartellaId
@@ -32635,6 +32687,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
     voci.forEach((voce, i) => voce.setAttribute('aria-selected', i === scelta ? 'true' : 'false'));
     elenco.dataset.scelta = String(scelta);
     composerInput.setAttribute('aria-activedescendant', voci[scelta].id);
+    voci[scelta].scrollIntoView?.({ block: 'nearest' }); // P2-B (c): the list scrolls; the chosen row stays in view
   }
   function scegliVoceImpostazioni(voce) {
     if (!voce) return;
@@ -33135,7 +33188,7 @@ ${nota?.contenuto || ''}`.trim(), tr('app.notes.copied')),
       return;
     }
     const [{ id: cartellaId, nome: nomeCartella }] = progetti;
-    startCustomSession({ cartellaId, nomeCartella, consegna, immagini, bolla, ripristino, modello: state.model, effort: state.effort });
+    startCustomSession({ cartellaId, nomeCartella, consegna, immagini, bolla, ripristino, ...predefinitoChatNuova() }); // giro unico 223-224
   }
 
   function announceComposerAction(action) {
@@ -33902,7 +33955,7 @@ ${testo}`;
       sheetDialog?.addEventListener('close', () => { window.setTimeout(() => { state.ricercaInAttesaDelProgetto = null; }, 0); }, { once: true });
       return;
     }
-    avviaSessionePendente({ ...progetto, modello: state.model, effort: state.effort, permessi: state.permissions, permessiPerAttrezzo: mappaPerUnaSessioneNuova(state.permessiPerAttrezzo) });
+    avviaSessionePendente({ ...progetto }); // giro unico 223-224: dal predefinito
     avviaRicercaNellaChatInAttesa({ domanda, profondita });
   }
   function apriNuovaRicercaDallaSezione() {
@@ -34097,7 +34150,7 @@ ${testo}`;
       },
       alMostra: (acceso) => {
         state.mostraRagionamento = acceso;
-        salvaPreferenzeChatDesktop();
+        salvaPreferenzeChatDesktop(['mostraRagionamento']); // B-05
         aggiornaVisibilitaRagionamento();
       },
       alVeloce: cambiaModalitaVeloce,
@@ -35090,6 +35143,8 @@ ${testo}`;
     domandaAppiccicata: () => domandaAppiccicata,
     /* /goal G6 (15/10/2026): la chat NUOVA con la cartella già scelta, per le prove di `/goal` in una chat che nasce ferma */
     avviaSessionePendente,
+    /* righe 223-224, giro unico: le altre porte di una chat nuova, per le prove che leggono il primo invio */
+    porteChatNuova: { avviaComeNuovaRadice, avviaRicercaDallaSezione, avviaSessioneImplicitaSeUnaSolaCartella, inizialeDelCielo },
     /* B1 (10/10/2026): le chat pronte, per le prove (quali, quanti nodi, l'esito dell'ultimo parcheggio) */
     chatPronte: () => { const r = registroChatPronte(); return { ids: r.ids(), nodi: r.nodi(), ultimoEsito: r.ultimoEsito ?? null }; },
     /* 26/09: la scala del composer, adattata SUBITO — per le prove che scrivono lo stato e misurano nella stessa battuta. */

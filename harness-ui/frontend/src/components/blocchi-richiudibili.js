@@ -58,12 +58,14 @@ export const rigaDiRecinto = (riga) => /^\s*```/.test(String(riga));
  */
 export function titoloECorpo(contenuto) {
   const testo = String(contenuto);
-  const apre = /^\s*<summary[ \t]*>/i.exec(testo);
+  const apre = /^\s*<summary(?:[ \t][^<>\n]*)?>/i.exec(testo); // P2-B: the summary's attributes are ignored, never copied
   if (!apre) return { titolo: null, corpo: testo };
   const resto = testo.slice(apre[0].length);
   const chiude = /<\/summary[ \t]*>/i.exec(resto);
   const taglio = chiude ? chiude.index : (resto.indexOf('\n') === -1 ? resto.length : resto.indexOf('\n'));
-  const titolo = resto.slice(0, taglio).replace(/\s+/g, ' ').trim();
+  /* P2-B: the style marks a model writes in HTML become the Markdown the title already renders; every other tag stays text */
+  const titolo = resto.slice(0, taglio).replace(/<\/?(?:b|strong)>/gi, '**').replace(/<\/?(?:i|em)>/gi, '*').replace(/<\/?code>/gi, '`')
+    .replace(/\s+/g, ' ').trim();
   return { titolo: titolo || null, corpo: resto.slice(chiude ? taglio + chiude[0].length : taglio) };
 }
 
@@ -71,7 +73,7 @@ export function titoloECorpo(contenuto) {
 const TAG_INTERI = ['<details>', '</details>', '<summary>', '</summary>'];
 export function tagRichiudibileInArrivo(coda) {
   const c = String(coda).toLowerCase();
-  return TAG_INTERI.some((t) => t.startsWith(c)) || /^<details[ \t]+[a-z="']*$/.test(c);
+  return TAG_INTERI.some((t) => t.startsWith(c)) || /^<details[ \t]+[a-z="']*$/.test(c) || /^<summary[ \t][^<>\n]*$/.test(c);
 }
 /** Un tag intero del blocco, dovunque nella riga: non si vede, quindi passa in un colpo. */
 export const TAG_RICHIUDIBILE = String.raw`<\/?(?:details|summary)(?:[ \t][^<>\n]*)?>`;

@@ -67,7 +67,8 @@ test('NOMI-DOPPI-05 — owner 16/10 sera: una DELEGA nasce col nome corto del su
 test('NOMI-DOPPI-06 — owner 16/10 sera: il giro di un\'automazione si numera con la stessa regola (escludendo se stesso)', () => {
   const sorgente = readFileSync(new URL('../src/session-registry.mjs', import.meta.url), 'utf8');
   assert.match(sorgente, /const nomeDelGiro = nomeUnicoInElenco\(titoloBreve\(titoloCorto\), sessionId\);/u);
-  assert.match(sorgente, /nome: nomeUnicoInElenco\(nomeDiNascita\(taskId, task, padreId\), null, padreId\),/u, 'e alla nascita passa dalla stessa regola, fra sorelle per una delega');
+  /* P2-C 11q: un ramo nasce col nome attuale della sua chat, e passa dalla stessa regola del «-N» */
+  assert.match(sorgente, /nome: nomeUnicoInElenco\(\(forkDa \? sessioni\.get\(forkDa\)\?\.nome : null\) \|\| nomeDiNascita\(taskId, task, padreId\), null, padreId\),/u, 'e alla nascita passa dalla stessa regola, fra sorelle per una delega');
 });
 
 test('NOMI-DOPPI-03 — un nome lungo: il numero sta dentro il tetto e prima dei puntini, come nel client', async (t) => {

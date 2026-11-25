@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   creaChatPronte, chatParcheggiabile, ultimaSequenzaVista, campiDellaChat,
-  CAMPI_DELLA_CHAT, CAMPI_DELL_APERTURA, CAMPI_VIVI, CHAT_PRONTE_MASSIME,
+  CAMPI_DELLA_CHAT, CAMPI_DELL_APERTURA, CAMPI_VIVI, CHAT_PRONTE_MASSIME, CAMPI_DEL_BROWSER_DELLA_CHAT,
 } from '../../src/components/chat-pronte.js';
 
 const voce = (nodi = 10) => ({ nodi });
@@ -101,7 +101,22 @@ test('B1-PRONTE-INVENTARIO: every field the chat switch resets is declared in on
   const scheda = sorgente.slice(sorgente.indexOf('function azzeraSchedaContesto('), sorgente.indexOf('function applicaRichiestaDelGiro('));
   for (const m of scheda.matchAll(/([A-Za-z_]+): null/gu)) azzerati.add(m[1]);
   assert.ok(azzerati.size > 40, `premise: the reset was read (${azzerati.size} fields)`);
-  const dichiarati = new Set([...CAMPI_DELLA_CHAT, ...CAMPI_DELL_APERTURA, ...CAMPI_VIVI]);
+  const dichiarati = new Set([...CAMPI_DELLA_CHAT, ...CAMPI_DELL_APERTURA, ...CAMPI_VIVI, ...CAMPI_DEL_BROWSER_DELLA_CHAT]); // righe 223-224
   const mancanti = [...azzerati].filter((campo) => !dichiarati.has(campo));
   assert.deepEqual(mancanti, [], 'reset fields with no declared fate: add each to CAMPI_DELLA_CHAT, CAMPI_DELL_APERTURA or CAMPI_VIVI');
+});
+
+/* Righe 223-224 (owner 22/11/2026): le pagine aperte dalla PERSONA nel Browser seguono l'id della chat. La prova lega la lista al punto
+   unico del cambio: ogni campo si azzera lì, la chat che si lascia li consegna a `browserDelleChat` e `collegaEventiSessione` li rende. */
+test('R224-INVENTARIO-BROWSER: the person\'s Browser fields are reset at the switch, kept by chat id and given back on return', () => {
+  const sorgente = readFileSync(fileURLToPath(new URL('../../src/legacy/app.js', import.meta.url)), 'utf8');
+  const inizio = sorgente.indexOf('function nuovaGenerazioneSessione(');
+  const reset = sorgente.slice(inizio, sorgente.indexOf('state.realSession.generation += 1', inizio));
+  for (const campo of CAMPI_DEL_BROWSER_DELLA_CHAT) {
+    assert.match(reset, new RegExp(`state\\.realSession\\.${campo}\\s*=(?!=)`, 'u'), `${campo} is reset at the switch`);
+    assert.equal(CAMPI_DELLA_CHAT.includes(campo), false, `${campo} follows the chat id, not the parking`);
+  }
+  assert.match(reset, /browserDelleChat\.set\(state\.realSession\.id, /u, 'the chat being left hands its pages over, by id');
+  const collega = sorgente.slice(sorgente.indexOf('function collegaEventiSessione('), sorgente.indexOf('riprendiBozzaAllegati();', sorgente.indexOf('function collegaEventiSessione(')));
+  assert.match(collega, /browserDelleChat\.get\(sessionId\)/u, 'the chat one returns to takes ITS pages back');
 });

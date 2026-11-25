@@ -139,7 +139,9 @@ test('P — si fallisce chiusi: xargs rm -r, parallel, .NET Delete, il comando i
   assert.equal(motivo('[System.IO.Directory]::Delete("C:\\x", $true)', W), 'troppo-annidato')
   assert.equal(motivo('(Get-Item .).Delete($true)', W), 'troppo-annidato')
   assert.equal(motivo('X=$(command -v rm); $X -rf ..', U), 'troppo-annidato', 'il nome del comando in una variabile che non si sa, e il testo cancella')
-  assert.equal(motivo('$CANCELLA -rf ..', U), null, 'forma, punto 3: solo «se il testo sembra cancellare» (qui nessuna parola che cancella)')
+  /* r192 (decisione dell'owner del 19/11 22:26, voce 1a): un nome dal valore ignoto accanto a un bersaglio critico chiede anche senza
+     una parola che cancella; prima qui era null (forma, punto 3). Senza bersaglio critico resta null (`$EDITOR notes.txt`, sotto) */
+  assert.equal(motivo('$CANCELLA -rf ..', U), 'troppo-complesso', 'r192 1a: il nome non si sa e `..` è critico')
   assert.equal(motivo('R=rm; $R -rf ..', U), 'sopra-il-progetto', 'il valore si sa: si segue')
   assert.equal(motivo('$EDITOR notes.txt', U), null)
   assert.equal(motivo('alias pulisci="rm -rf"', U), 'troppo-annidato')

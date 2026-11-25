@@ -34,6 +34,7 @@ export const CAMPI_DELLA_CHAT = Object.freeze([
   'eventiUsageContesto', 'fileSelezionati', 'followUpBubbleInAttesa', 'messageElements', 'previewProjectId',
   'previewWorkspaceName', 'prossimoOrdineAttivita', 'ragionamentoBubble', 'redirectInvalidatedIds', 'redirectPendingId',
   'redirectRequestInFlight', 'redirectRequestIntentId', 'renderIncrementale', 'reviewFiles', 'richieste', 'richiesteMcpPendenti', 'runCount',
+  'impronteViste', // settimo giro dell'affitto (15/11/2026, revisore 3): l'impronta di ogni numero visto torna coi numeri, o la riga dell'altro TALOS si scarta
   'segmentoAttivo', 'sequenzeViste', 'taskBubbleMostrata', 'testoGrezzoMessaggi', 'tettoGiriDichiarato', 'treeCache', 'treeOpen',
   'treeUiRestored', 'ultimaRichiesta', 'ultimoBatchChiuso', 'usage', 'usageEsecuzioniPrecedenti', 'usageSessione', 'usciteAgente',
   // `azzeraSchedaContesto` (C1, sessione desktop): la scheda Contesto della chat
@@ -47,9 +48,17 @@ export const CAMPI_DELLA_CHAT = Object.freeze([
   /* ⛔ E quelli che il reset NON tocca ma la RIGIOCATA riscrive (il `RunStarted`, i comandi della persona, gli esiti degli attrezzi):
      senza rigiocata resterebbero ai valori della chat di prima. Trovati leggendo ogni scrittura in `app.js` (10/10/2026). */
   'contesto', 'ultimaDomanda', 'giroComandoDiretto', 'comandoDirettoDaAprire', 'ultimoBersaglioAttrezzo', 'ragionamentiInCorso',
+  // righe 223-224 (22/11/2026): azzerati al cambio da allora; senza rigiocata li riporta solo il parcheggio
+  'browserRichiesta', 'browserProssimoId', 'rileggiDopoIlGiro', 'serverLocali', 'righeServerLocali',
+  'permessiDelGiro', // P5
+  'comandiNellaConversazione', 'doveGiranoIComandi', // P8
 ]);
 /* Azzerati anche loro al cambio di chat, ma li rimette chi APRE (o non sono della chat): non si parcheggiano. */
-export const CAMPI_DELL_APERTURA = Object.freeze(['generation', 'id', 'eventSource', 'deferHistoricalRendering', 'taskId', 'treeWorkspaceKey', 'figli']);
+export const CAMPI_DELL_APERTURA = Object.freeze(['generation', 'id', 'eventSource', 'deferHistoricalRendering', 'taskId', 'treeWorkspaceKey', 'figli',
+  'statoDaRiprendere', 'rigaRiprendiPresente', 'toolCallNomi']); // righe 223-224: il ▶ lo rimette `passaASessione`
+/* Righe 223-224: le pagine che la PERSONA ha aperto nel Browser (nessuna rigiocata le riporta) seguono l'id della chat, pronta o no:
+   le tiene `app.js` (`browserDelleChat`), non il parcheggio. */
+export const CAMPI_DEL_BROWSER_DELLA_CHAT = Object.freeze(['browserVive', 'browserChiuse', 'browserAttiva', 'browserAnnotazioni', 'browserAnnotaAttivo', 'browserErroriPagina']);
 /* Misure VIVE, azzerate al cambio di chat e rilette da sole (sessione desktop, 10/10: «la prima lettura riparte da sola»): non si
    parcheggiano, al ritorno restano azzerate. */
 export const CAMPI_VIVI = Object.freeze(['risorseProcessi', 'storiaCpu']); // pannello v2, P-04: la storia della CPU si rilegge come le risorse

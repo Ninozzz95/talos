@@ -39,13 +39,15 @@
  */
 import { randomUUID } from 'node:crypto';
 import { rigaJson } from './kernel/riga-json.mjs';
-import { promises as fsp, constants as fsConstants, createReadStream, createWriteStream, mkdirSync, appendFileSync, closeSync, existsSync, linkSync, openSync, readFileSync, readSync, statSync, truncateSync, unlinkSync, writeFileSync } from 'node:fs';
+import { promises as fsp, constants as fsConstants, createReadStream, createWriteStream, mkdirSync, appendFileSync, closeSync, existsSync, fstatSync, fsyncSync, linkSync, openSync, readdirSync, readFileSync, readSync, statSync, truncateSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { setTimeout as attendiMs } from 'node:timers/promises';
 
 import { creaAffittiArchivio, fraseDetentore } from './session-lease.mjs';
+import { rinumeraGiornale } from './rinumerazione-giornale.mjs'; // 13/11/2026: pezzo 4 della cura dell'affitto compromesso
+import { TIPO_ADOTTATA, aggiungiAllAttesaSync, leggiAttesa, percorsoAttesa } from './session-attesa.mjs'; // 14/11/2026: sesto giro dell'affitto
 
 export class SessionStoreError extends Error {
   constructor(message, code = 'SESSION_STORE_FAILED', dettaglio = null) {
@@ -117,17 +119,240 @@ function erroreAffittata(sessionId, detentore) {
   return errore;
 }
 
-function garantisciAffittoPerScrittura(cartellaStore, sessionId) {
+function erroreCambiataAltrove(sessionId, extra = {}) {
+  const errore = new SessionStoreError(`Session ${sessionId} was changed by another TALOS process since it was loaded here: it must be reloaded before writing.`, 'SESSION_CHANGED_ELSEWHERE', { chiave: 'server.sessionStore.changedElsewhere', params: { sessionId } });
+  Object.assign(errore, extra);
+  return errore;
+}
+
+/* `adottabile` (13/11/2026): chi scrive sa rinumerare la riga (`dopoIlRecinto`): una chat bloccata non rifiuta, la coda scritta
+   altrove si legge e si adotta nella stessa operazione (`recintaOAdotta`). Ritorna `true` se la chat era bloccata. */
+function garantisciAffittoPerScrittura(cartellaStore, sessionId, { adottabile = false } = {}) {
   const affitti = affittiDellArchivio(cartellaStore);
-  if (!affitti) return;
+  if (!affitti) return false;
   let esito;
   try { esito = affitti.prendi(sessionId); }
-  catch { return; } // come Hermes: il meccanismo che fallisce non blocca la scrittura (vedi sopra)
+  catch { return false; } // come Hermes: il meccanismo che fallisce non blocca la scrittura (vedi sopra)
   if (!esito.preso) throw erroreAffittata(sessionId, esito.detentore);
-  if (affitti.daRicaricare(sessionId)) {
-    throw new SessionStoreError(`Session ${sessionId} was changed by another TALOS process since it was loaded here: it must be reloaded before writing.`, 'SESSION_CHANGED_ELSEWHERE', { chiave: 'server.sessionStore.changedElsewhere', params: { sessionId } });
-  }
+  const bloccata = affitti.scritturaBloccata(sessionId);
+  if (bloccata && !adottabile) throw erroreCambiataAltrove(sessionId);
   affitti.tocca(sessionId);
+  return bloccata;
+}
+
+/*
+ * ⭐⭐⭐ 13/11/2026 — IL RECINTO ALLA SCRITTURA (pezzo 2 della cura dell'affitto compromesso; giudice v1649/v1656). L'affitto dice chi
+ *   DOVREBBE scrivere; il recinto guarda il FILE, come il «fencing» di Kleppmann adattato a un giornale accodato: prima di OGNI
+ *   accodamento (a) la dimensione vera del giornale, misurata comunque per la coda (`prima`: ZERO `stat` in più), deve essere quella
+ *   ATTESA (l'ultima nostra scrittura o lettura intera, `affitti.statoAtteso`), e (b) il numero d'ordine della riga deve stare SOPRA
+ *   l'ultimo numero che sappiamo sul disco, tenuto insieme alla dimensione (nessuna rilettura della coda: il numero cresce con le
+ *   nostre scritture e si rimette in pari con le letture intere). Diverso ⇒ `SESSION_CHANGED_ELSEWHERE`, niente scritto: chi chiama
+ *   passa `dopoIlRecinto`, e la coda si rilegge, si adotta e si accoda nella STESSA operazione (`recintaOAdotta`; decisione owner 10/10 «Ricaricarla da sola»; giudice v1656: mai un
+ *   giro del modello né un comando già eseguito).
+ *   Concorrenti letti alla fonte: DeepSeek `packages/session/session-persistence/src/storage-contract.ts:147` (`if (event.seq !==
+ *   cursor + index)` ⇒ «append seq mismatch»); opencode `packages/core/src/bus.ts:371` (il numero nasce dall'ultimo sul disco, dentro la
+ *   transazione); Hermes `hermes_state_messages.py:256-258` (il rifiuto alla scrittura col detentore). Qui i buchi sono ammessi (una
+ *   scrittura fallita lascia un numero non usato), i doppi no: per questo (b) è `<=` e non «diverso da +1».
+ *   ⛔ Una scrittura sincrona che scavalca una coda in volo (politica `scavalca`, solo diagnosi) non si recinta: la dimensione
+ *   misurata può contenere i byte della scrittura in volo. La dimensione attesa cresce comunque dei byte scritti.
+ */
+function recintoPrimaDellAccodamento(cartellaStore, sessionId, prima, record) {
+  const affitti = affittiDellArchivio(cartellaStore);
+  if (!affitti) return;
+  const atteso = affitti.statoAtteso(sessionId);
+  if (!atteso) return; // mai letto né scritto qui: la prima scrittura fa da base
+  const sequenza = Number.isSafeInteger(record?._sequenza) ? record._sequenza : null;
+  const dimensioneDiversa = Number.isSafeInteger(atteso.dimensione) && prima !== atteso.dimensione;
+  const sequenzaGiaUsata = sequenza !== null && Number.isSafeInteger(atteso.sequenza) && sequenza <= atteso.sequenza;
+  if (!dimensioneDiversa && !sequenzaGiaUsata) return;
+  if (dimensioneDiversa) affitti.segnaCambiato(sessionId);
+  throw erroreCambiataAltrove(sessionId, { recinto: { dimensioneAttesa: atteso.dimensione, dimensioneVera: prima, sequenzaAttesa: atteso.sequenza, sequenzaRiga: sequenza } });
+}
+
+function dopoAccodamento(cartellaStore, sessionId, prima, byte, record) {
+  const affitti = affittiDellArchivio(cartellaStore);
+  if (!affitti) return;
+  affitti.dopoScrittura(sessionId, { byte, prima, sequenza: Number.isSafeInteger(record?._sequenza) ? record._sequenza : null });
+}
+
+/*
+ * ⭐⭐⭐ 13/11/2026 — MAI SCARTARE UN EVENTO (cura del ROSSO del revisore affitto 1 di 3, giudice v1804 punti 1 e 4). Prima il rifiuto del
+ *   recinto tornava al registro, che rileggeva la coda in UN'operazione della coda e riaccodava in UN'ALTRA, in fondo alla fila: in mezzo
+ *   l'altro processo poteva scrivere di nuovo, e dopo tre rifiuti l'evento si scartava in silenzio (22-25 pezzi su 40 sul disco,
+ *   REVAFF-03); in più la riga rifatta finiva dietro a righe nate dopo di lei (fuori ordine). Ora chi scrive passa `dopoIlRecinto`
+ *   (il registro: «dammi il numero sopra l'ultimo del disco»), e il rifiuto si risolve DENTRO la stessa operazione, al suo posto nella
+ *   fila: si legge la coda scritta altrove (solo le righe intere), la si adotta, la riga prende il suo numero, e si accoda — dalla misura
+ *   all'accodamento nessun `await`, quindi nessun'altra scrittura di questo processo ci si infila, e l'ordine della fila resta l'ordine
+ *   del disco. Le righe dietro di lei (coi numeri vecchi) fanno lo stesso al loro turno: buchi sì, doppi mai.
+ *   Concorrenti letti alla fonte: Hermes rifiuta la scrittura dentro la transazione e LANCIA, non tace
+ *   (`hermes-agent-2026-11-01/hermes_state_messages.py:251-253`, SessionTurnLeaseLostError «refusing transcript write»); opencode fa
+ *   nascere il numero dall'ultimo sul disco dentro la stessa transazione (`opencode-2026-10-15/packages/core/src/bus.ts:371`, indice unico
+ *   `event/sql.ts:23`); DeepSeek rifiuta un numero che non segue (`storage-contract.ts:147`, «append seq mismatch»).
+ */
+/*
+ * 14/11/2026 (mai riscrivere) — ciò che questo processo sa di righe che NON vanno adottate, per percorso: le NOSTRE righe numerate
+ *   scritte mentre scriveva anche un altro processo (una scrittura «mescolata»: la nostra attesa non è avanzata, la coda si rilegge da
+ *   prima di lei) e i byte d'inizio delle righe dell'altro già adottate. Si azzera quando l'attesa torna in pari con la fine del file.
+ */
+const sospesiPerPercorso = new Map();
+const sospesiDi = (percorso) => {
+  let s = sospesiPerPercorso.get(percorso);
+  if (!s) { s = { nostre: new Set(), adottate: new Set() }; sospesiPerPercorso.set(percorso, s); }
+  return s;
+};
+
+function leggiCodaScrittaAltrove(percorso, atteso, dimensione) {
+  const da = Number.isSafeInteger(atteso?.dimensione) && atteso.dimensione <= dimensione ? atteso.dimensione : 0;
+  const coda = dimensione > da ? leggiByteDa(percorso, da, dimensione - da) : Buffer.alloc(0);
+  const fineUltimaRiga = coda.lastIndexOf(10) + 1; // solo righe intere: una coda a metà la tratta la scrittura dopo, come sempre
+  let ultimaSequenza = da > 0 && Number.isSafeInteger(atteso?.sequenza) ? atteso.sequenza : null;
+  let righe = 0;
+  /* 14/11/2026 (mai riscrivere): le righe dell'altro col loro byte d'inizio, per l'adozione coi numeri nuovi; mai le nostre, mai due volte */
+  const adottabili = [];
+  const sospesi = sospesiPerPercorso.get(percorso);
+  let posizione = da;
+  for (const testo of coda.subarray(0, fineUltimaRiga).toString('utf8').split('\n')) {
+    const inizio = posizione;
+    posizione += Buffer.byteLength(testo, 'utf8') + 1;
+    if (!testo) continue;
+    righe += 1;
+    let riga = null;
+    try { riga = JSON.parse(testo); } catch { continue; }
+    if (Number.isSafeInteger(riga?._sequenza)) ultimaSequenza = Math.max(ultimaSequenza ?? riga._sequenza, riga._sequenza);
+    if (riga?.tipo === TIPO_ADOZIONE || sospesi?.nostre.has(testo) || sospesi?.adottate.has(inizio)) continue;
+    adottabili.push({ inizio, record: riga });
+  }
+  return { da, dimensione: da + fineUltimaRiga, ultimaSequenza, righe, byte: fineUltimaRiga, adottabili };
+}
+
+/*
+ * ⭐⭐⭐ 14/11/2026 — L'ADOZIONE SCRITTA SOLO IN AGGIUNTA (terzo giro dell'affitto, «mai riscrivere», scelta dell'owner, giudice v1838;
+ *   forma `in-corso/FORMA-AFFITTO-MAI-RISCRIVERE-2026-11-14.md`). Prima la NOSTRA riga prendeva un numero sopra la coda dell'altro: ma la
+ *   pagina l'aveva già vista col numero di prima, e quel numero sul disco passava a una riga dell'altro (~23 per corsa, revisore 2; il
+ *   telefono e la CLI la scartavano). Ora, se chi scrive lo chiede (`dopoIlRecinto` ritorna `{ primo }`), la nostra riga TIENE il suo
+ *   numero e sono le righe dell'altro a prenderne di nuovi, `primo, primo+1…`, sopra ogni numero già mostrato: lo dice una riga senza
+ *   numero `{tipo:'adozione', inizi:[byte d'inizio di ogni riga adottata], primo, righe}`, accodata nella STESSA scrittura subito prima
+ *   della nostra (nessun `await` in mezzo). I byte d'inizio, uno per riga, e non un intervallo: se l'altro scrive nello stesso istante
+ *   della nostra riga, le sue righe e la nostra si mescolano, e un intervallo prenderebbe anche la nostra. La lettura (`numeraLaVista`,
+ *   `rinumerazione-giornale.mjs`) applica l'adozione: in ogni processo e dopo ogni riavvio i numeri sono gli stessi. Il file non si
+ *   riscrive mai. Chi non ritorna `{ primo }` (attrezzi di prova, chiamanti di prima) resta sulla strada di prima.
+ *   Concorrenti letti alla fonte: Codex apre il rollout solo in aggiunta (`codex-2026-11-01/codex-rs/rollout/src/recorder.rs:1804-1806`,
+ *   `.append(true)`), mai riscritto; Hermes scrive dentro `BEGIN IMMEDIATE` (`hermes-agent-2026-11-01/hermes_state.py:1013`).
+ */
+export const TIPO_ADOZIONE = 'adozione';
+
+/* La riga «adozione» delle righe numerate fra le adottabili (o `null` se non ce n'è nessuna), e i loro inizi segnati come adottati. */
+function rigaDiAdozione(percorso, adottabili, primo) {
+  const numerate = adottabili.filter((x) => Number.isSafeInteger(x.record?._sequenza));
+  if (numerate.length === 0) return null;
+  const sospesi = sospesiDi(percorso);
+  for (const x of numerate) sospesi.adottate.add(x.inizio);
+  return { tipo: TIPO_ADOZIONE, inizi: numerate.map((x) => x.inizio), primo, righe: numerate.length };
+}
+
+/* Il recinto, e se rifiuta e chi scrive sa rinumerare (`dopoIlRecinto`), l'adozione nella stessa operazione. `forza`: la chat era
+   bloccata (la coda altrui non ancora letta) e si legge comunque. Ritorna la coda adottata (con `adozione`, la riga da accodare prima
+   della nostra, o `rinumerata: true` se la nostra riga ha preso un numero nuovo), o `null` se il recinto è passato da solo. */
+function recintaOAdotta(cartellaStore, sessionId, percorso, prima, record, { dopoIlRecinto = null, forza = false } = {}) {
+  if (!forza) {
+    try { recintoPrimaDellAccodamento(cartellaStore, sessionId, prima, record); return null; }
+    catch (errore) { if (typeof dopoIlRecinto !== 'function' || errore?.code !== 'SESSION_CHANGED_ELSEWHERE') throw errore; }
+  }
+  const affitti = affittiDellArchivio(cartellaStore);
+  const atteso = affitti.statoAtteso(sessionId);
+  const coda = leggiCodaScrittaAltrove(percorso, atteso, prima);
+  /* l'adozione coi numeri nuovi solo se si sa da dove parte la coda dell'altro (`da > 0`: una dimensione attesa vera) */
+  const risposta = dopoIlRecinto(coda.ultimaSequenza ?? 0, { righe: coda.righe, byte: coda.byte, adottate: coda.da > 0 ? coda.adottabili.map((x) => x.record) : null });
+  const primo = coda.da > 0 && Number.isSafeInteger(risposta?.primo) && risposta.primo > 0 ? risposta.primo : null;
+  if (primo !== null) {
+    coda.adozione = rigaDiAdozione(percorso, coda.adottabili, primo);
+    affitti.adotta(sessionId, { dimensione: coda.dimensione, sequenza: atteso?.sequenza ?? null }); // la nostra riga tiene il suo numero
+    /* 14/11/2026 (quinto giro): tranne la riga tardiva di una voce sostituita da una ricarica, che chi scrive adotta in coda col numero
+       nuovo (`rinumerata`, `adottaRigaTardiva` in `session-registry.mjs`): si scrive col numero nuovo, mai scartata */
+    if (risposta?.rinumerata === true) coda.rinumerata = true;
+  } else {
+    affitti.adotta(sessionId, { dimensione: coda.dimensione, sequenza: coda.ultimaSequenza });
+    coda.rinumerata = true;
+  }
+  recintoPrimaDellAccodamento(cartellaStore, sessionId, prima, record); // ora passa; se il numero dato non basta si rifiuta: mai un doppio
+  return coda;
+}
+
+/* Ciò che si accoda: la riga «adozione» (se c'è) e la nostra riga, nella stessa scrittura. */
+function daAccodare(riga, record, adottata) {
+  const nostra = adottata?.rinumerata ? rigaRinumerata(riga, record) : riga;
+  return adottata?.adozione ? rigaDelGiornale(adottata.adozione) + nostra : nostra;
+}
+
+/* La riga com'era serializzata alla chiamata, col SOLO numero d'ordine nuovo (il resto del record può essere cambiato nel frattempo). */
+function rigaRinumerata(riga, record) {
+  const oggetto = JSON.parse(riga);
+  oggetto._sequenza = record._sequenza;
+  return rigaDelGiornale(oggetto);
+}
+
+/* Dopo l'accodamento: la dimensione è cresciuta SOLO dei nostri byte? Se no, un altro processo (un altro programma del sistema operativo:
+   in questo processo la fila lo esclude) ha scritto nello stesso istante; la nostra attesa resta com'era prima della riga e la chat si
+   segna da ricaricare: la scrittura dopo legge e adotta. Ritorna `true` se mescolata.
+   ⭐ 14/11/2026 (mai riscrivere): le nostre righe numerate di questa scrittura si ricordano (`sospesi.nostre`: la coda riletta da prima
+   di loro non le adotta mai), e se chi scrive sa adottare l'adozione si fa SUBITO, nella stessa operazione: altrimenti, se questa era
+   l'ultima scrittura del giro, una riga dell'altro scritta prima della nostra col nostro stesso numero lo prenderebbe alla lettura. */
+function dopoAccodamentoVerificato(cartellaStore, sessionId, prima, byte, dopo, record, { percorso = null, scritto = null, dopoIlRecinto = null } = {}) {
+  if (dopo === prima + byte) {
+    dopoAccodamento(cartellaStore, sessionId, prima, byte, record);
+    if (percorso && affittiDellArchivio(cartellaStore)?.statoAtteso(sessionId)?.dimensione === dopo) sospesiPerPercorso.delete(percorso);
+    return false;
+  }
+  const affitti = affittiDellArchivio(cartellaStore);
+  affitti?.segnaCambiato(sessionId);
+  if (!affitti || !percorso || typeof scritto !== 'string') return true;
+  ricordaLeNostre(percorso, scritto);
+  if (typeof dopoIlRecinto === 'function') adottaDopoUnaScritturaMescolata(cartellaStore, sessionId, percorso, dopo, record, dopoIlRecinto);
+  return true;
+}
+
+/* Le nostre righe numerate di una scrittura, per testo esatto: la coda riletta da prima di loro non le adotta mai. */
+function ricordaLeNostre(percorso, scritto) {
+  const sospesi = sospesiDi(percorso);
+  for (const testo of scritto.split('\n')) {
+    if (!testo) continue;
+    try { if (Number.isSafeInteger(JSON.parse(testo)?._sequenza)) sospesi.nostre.add(testo); } catch { /* non una riga intera */ }
+  }
+}
+
+function adottaDopoUnaScritturaMescolata(cartellaStore, sessionId, percorso, dopo, record, dopoIlRecinto) {
+  const affitti = affittiDellArchivio(cartellaStore);
+  const atteso = affitti.statoAtteso(sessionId);
+  if (!Number.isSafeInteger(atteso?.dimensione) || atteso.dimensione <= 0 || atteso.dimensione > dopo) return; // la scrittura dopo
+  let coda;
+  try { coda = leggiCodaScrittaAltrove(percorso, atteso, dopo); } catch { return; }
+  const sequenza = Math.max(atteso.sequenza ?? 0, Number.isSafeInteger(record?._sequenza) ? record._sequenza : 0) || null;
+  let adozione = null;
+  if (coda.adottabili.some((x) => Number.isSafeInteger(x.record?._sequenza))) {
+    let risposta;
+    try { risposta = dopoIlRecinto(coda.ultimaSequenza ?? 0, { righe: coda.righe, byte: coda.byte, adottate: coda.adottabili.map((x) => x.record), dopoLaScrittura: true }); }
+    catch { return; }
+    if (!Number.isSafeInteger(risposta?.primo) || risposta.primo <= 0) return;
+    adozione = rigaDiAdozione(percorso, coda.adottabili, risposta.primo);
+  }
+  if (!adozione) { if (coda.dimensione === dopo) { affitti.adotta(sessionId, { dimensione: dopo, sequenza }); sospesiPerPercorso.delete(percorso); } return; }
+  const riga = rigaDelGiornale(adozione);
+  let fd;
+  try {
+    fd = openSync(percorso, 'a');
+    const primaDellAdozione = fstatSync(fd).size;
+    appendFileSync(fd, riga, 'utf8');
+    const dopoLAdozione = fstatSync(fd).size;
+    /* in pari solo se nessuno ha scritto fra la nostra riga e l'adozione; se no resta da ricaricare, e la scrittura dopo rilegge da prima */
+    if (primaDellAdozione === dopo && dopoLAdozione === dopo + Buffer.byteLength(riga, 'utf8')) {
+      affitti.adotta(sessionId, { dimensione: dopoLAdozione, sequenza });
+      sospesiPerPercorso.delete(percorso);
+    }
+  } catch { /* la riga non c'è: le righe restano adottabili dalla scrittura dopo (gli inizi segnati si tolgono) */
+    for (const i of adozione.inizi) sospesiDi(percorso).adottate.delete(i);
+  } finally {
+    if (fd !== undefined) { try { closeSync(fd); } catch { /* già chiuso */ } }
+  }
 }
 
 /* Riparare: SOLO con l'affitto in mano (mai «come Hermes» qui: la riparazione riscrive il giornale). */
@@ -321,23 +546,60 @@ export function rigaDelGiornale(record) {
   return rigaJson(record);
 }
 
-export async function registraRiga({ cartellaStore, sessionId, record, durable = false }, deps = {}) {
+/*
+ * 13/11/2026 — `dopoIlRecinto(ultimaSulDisco, { righe })` (facoltativo): il recinto ha rifiutato perché un altro processo ha scritto;
+ *   la coda altrui è già letta e adottata, e chi scrive dà alla riga il numero sopra `ultimaSulDisco` (vedi `recintaOAdotta`). Senza,
+ *   il rifiuto torna a chi chiama come prima (`SESSION_CHANGED_ELSEWHERE`).
+ * ⛔ LA FINESTRA DI REVAFF-02 (giudice v1804 punto 4): prima la dimensione si misurava e POI si apriva il file in un `appendFile`
+ *   asincrono; nel mezzo un'altra scrittura poteva arrivare e far nascere un numero doppio. Ora si apre il file (in accodamento), e
+ *   dalla misura (`fstat` sul descrittore aperto) all'accodamento (`appendFileSync` sullo stesso descrittore) non c'è nessun `await`:
+ *   nessuna scrittura di questo processo si infila; quella di un altro processo si vede DOPO (la dimensione non torna) e la scrittura
+ *   successiva la legge. Doc Node v24 (ctx7 `/websites/nodejs_latest-v24_x_api`, 13/11/2026): `fs.appendFileSync(fd, …)` «The path may
+ *   be a numeric file descriptor opened for appending. The file descriptor will not be closed automatically». Un `appendFileFn`
+ *   iniettato (le prove dei guasti) resta sulla strada di prima, con la stessa adozione.
+ */
+export async function registraRiga({ cartellaStore, sessionId, record, durable = false, dopoIlRecinto = null }, deps = {}) {
   const mkdirFn = deps.mkdirFn ?? fsp.mkdir;
-  const appendFileFn = deps.appendFileFn ?? fsp.appendFile;
+  const appendFileFn = deps.appendFileFn ?? null;
   const percorso = percorsoDi(cartellaStore, sessionId);
   // ⛔ Serializzato SUBITO, non dentro la coda: `record` potrebbe cambiare mentre questa scrittura aspetta il suo turno.
   const riga = rigaDelGiornale(record);
   const precedente = codeDiScrittura.get(percorso) ?? Promise.resolve();
   const corrente = precedente.catch(() => {}).then(async () => {
-    garantisciAffittoPerScrittura(cartellaStore, sessionId);
+    const adottabile = typeof dopoIlRecinto === 'function';
+    const bloccata = garantisciAffittoPerScrittura(cartellaStore, sessionId, { adottabile });
     await mkdirFn(cartellaStore, { recursive: true });
-    verificaCodaAppendibile(percorso);
-    const prima = dimensioneOZero(percorso);
+    if (appendFileFn) {
+      verificaCodaAppendibile(percorso);
+      const prima = dimensioneOZero(percorso);
+      const adottata = recintaOAdotta(cartellaStore, sessionId, percorso, prima, record, { dopoIlRecinto, forza: bloccata });
+      const daScrivere = daAccodare(riga, record, adottata);
+      try {
+        await appendFileFn(percorso, daScrivere, durable ? { encoding: 'utf8', flush: true } : 'utf8');
+      } catch (errore) {
+        avvelenaSeIlFileECambiato(percorso, prima, errore); // 24/09/2026: zero byte scritti ⇒ nessun veleno
+        throw errore;
+      }
+      dopoAccodamento(cartellaStore, sessionId, prima, Buffer.byteLength(daScrivere, 'utf8'), record);
+      return;
+    }
+    const fh = await fsp.open(percorso, 'a');
     try {
-      await appendFileFn(percorso, riga, durable ? { encoding: 'utf8', flush: true } : 'utf8');
-    } catch (errore) {
-      avvelenaSeIlFileECambiato(percorso, prima, errore); // 24/09/2026: zero byte scritti ⇒ nessun veleno
-      throw errore;
+      // ⛔ da qui all'accodamento NESSUN `await`
+      verificaCodaAppendibile(percorso);
+      const prima = fstatSync(fh.fd).size;
+      const adottata = recintaOAdotta(cartellaStore, sessionId, percorso, prima, record, { dopoIlRecinto, forza: bloccata });
+      const daScrivere = daAccodare(riga, record, adottata);
+      try {
+        appendFileSync(fh.fd, daScrivere, 'utf8');
+      } catch (errore) {
+        avvelenaSeIlFileECambiato(percorso, prima, errore); // 24/09/2026: zero byte scritti ⇒ nessun veleno
+        throw errore;
+      }
+      dopoAccodamentoVerificato(cartellaStore, sessionId, prima, Buffer.byteLength(daScrivere, 'utf8'), fstatSync(fh.fd).size, record, { percorso, scritto: daScrivere, dopoIlRecinto });
+      if (durable) await fh.sync();
+    } finally {
+      await fh.close();
     }
   });
   codeDiScrittura.set(percorso, corrente);
@@ -373,23 +635,109 @@ export async function registraRiga({ cartellaStore, sessionId, record, durable =
  * millisecondi... scelta esplicita"), ma non può più cancellare
  * l'ESISTENZA stessa della sessione.
  */
-export function registraRigaSync({ cartellaStore, sessionId, record }, deps = {}) {
+export function registraRigaSync({ cartellaStore, sessionId, record, dopoIlRecinto = null }, deps = {}) {
   const mkdirSyncFn = deps.mkdirSyncFn ?? mkdirSync;
   const appendFileSyncFn = deps.appendFileSyncFn ?? appendFileSync;
   const percorso = percorsoDi(cartellaStore, sessionId);
   // 24/09/2026 — con politica 'busy' una coda in volo è un rifiuto pulito, PRIMA di guardare il disco
   // (l'ultimo byte di un append a metà non dice niente sulla coda: dice solo che è a metà).
   rifiutaSeCodaInVolo(percorso);
-  garantisciAffittoPerScrittura(cartellaStore, sessionId);
+  // 13/11/2026: il recinto; una scrittura che scavalca una coda in volo (politica `scavalca`) non si recinta (vedi il recinto)
+  const scavalca = codeDiScrittura.has(percorso);
+  const bloccata = garantisciAffittoPerScrittura(cartellaStore, sessionId, { adottabile: typeof dopoIlRecinto === 'function' && !scavalca });
   mkdirSyncFn(cartellaStore, { recursive: true });
   verificaCodaAppendibile(percorso);
   const prima = dimensioneOZero(percorso);
+  // 13/11/2026 (mai scartare): tutta sincrona, la misura e l'accodamento non hanno finestra; il rifiuto si risolve qui come in `registraRiga`
+  const adottata = scavalca ? null : recintaOAdotta(cartellaStore, sessionId, percorso, prima, record, { dopoIlRecinto, forza: bloccata });
+  /* 14/11/2026 (mai riscrivere): la riga «adozione» nella stessa scrittura, prima della nostra; qui la riga si serializza dopo il recinto */
+  const riga = (adottata?.adozione ? rigaDelGiornale(adottata.adozione) : '') + rigaDelGiornale(record);
   try {
-    appendFileSyncFn(percorso, rigaDelGiornale(record), 'utf8');
+    appendFileSyncFn(percorso, riga, 'utf8');
   } catch (errore) {
     avvelenaSeIlFileECambiato(percorso, prima, errore); // 24/09/2026: zero byte scritti ⇒ nessun veleno
     throw errore;
   }
+  /* 13/11/2026 sera (punto 4): come la strada asincrona, la dimensione dopo deve essere cresciuta SOLO dei nostri byte (un altro
+     processo nello stesso istante ⇒ la chat si segna da ricaricare); un `appendFileSyncFn` iniettato resta com'era */
+  if (!scavalca && appendFileSyncFn === appendFileSync) {
+    dopoAccodamentoVerificato(cartellaStore, sessionId, prima, Buffer.byteLength(riga, 'utf8'), dimensioneOZero(percorso), record, { percorso, scritto: riga, dopoIlRecinto });
+    return;
+  }
+  /* ⭐ 14/11/2026 (mai riscrivere, MR-05): una scrittura che scavalca su un giornale già cresciuto per mano di un altro (la dimensione
+     attesa non è quella misurata) NON fa crescere l'attesa dei suoi byte: l'attesa finirebbe a metà di una riga dell'altro, e la
+     scrittura dopo leggerebbe la coda da lì, perdendo dall'adozione la riga tagliata e quelle prima (3 numeri già mostrati su 142
+     cambiavano dopo il riavvio). L'attesa resta dov'era, la nostra riga si ricorda per testo (mai adottata) e la scrittura dopo adotta. */
+  const attesoOra = scavalca ? affittiDellArchivio(cartellaStore)?.statoAtteso(sessionId) : null;
+  if (Number.isSafeInteger(attesoOra?.dimensione) && attesoOra.dimensione !== prima) {
+    ricordaLeNostre(percorso, riga);
+    return;
+  }
+  dopoAccodamento(cartellaStore, sessionId, prima, Buffer.byteLength(riga, 'utf8'), scavalca ? null : record);
+}
+
+/*
+ * ⭐⭐⭐ 14/11/2026 — L'ATTESA SU DISCO (sesto giro dell'affitto, owner 16:26, giudice v1888; il file in `session-attesa.mjs`).
+ *   `detentoreCheRifiuta`: PRIMA di dare un numero a una riga, chi la manda sa se la scrittura sarà rifiutata perché un altro processo
+ *   vivo tiene la chat (`SESSION_LEASED`). Fa la stessa cosa che farà la scrittura (`prendi`): se la chat è libera la prende adesso, e
+ *   la tiene finché la scrittura accodata subito dopo è in volo (`aggiungiInUso` in `attivaAffittiArchivio`), quindi quella scrittura non
+ *   può più essere rifiutata per l'affitto. Anche con l'affitto «nostro» in memoria si rilegge il file d'affitto (`prendi`): l'altro può
+ *   averlo portato via mentre questo processo era fermo. Il registro lo chiede solo fuori da un giro (righe rare). `null` = nessun rifiuto.
+ */
+export function detentoreCheRifiuta(cartellaStore, sessionId) {
+  const affitti = affittiDellArchivio(cartellaStore);
+  if (!affitti) return null;
+  let esito;
+  try { esito = affitti.prendi(sessionId); } catch { return null; } // come la scrittura: il meccanismo che fallisce non blocca
+  return esito.preso ? null : (esito.detentore ?? {});
+}
+
+/** Una scrittura di questa chat è in volo nella coda dello store (l'adozione dall'attesa aspetta che non lo sia). */
+export function scrittureInVolo(cartellaStore, sessionId) {
+  return codeDiScrittura.has(percorsoDi(cartellaStore, sessionId));
+}
+
+/*
+ * L'ADOZIONE DALL'ATTESA, tutta sincrona (nessuna scrittura di questo processo si infila): con l'affitto in mano e il diario ESATTAMENTE
+ *   com'era all'ultima lettura o scrittura di qui (recinto pulito: niente adozione di righe altrui in questa operazione; se un altro ha
+ *   scritto, `SESSION_CHANGED_ELSEWHERE` e chi chiama ricarica la chat e riprova), (1) si rilegge il file di attesa e si tolgono le righe
+ *   già «adottata» (da un altro processo, o da questo prima di un arresto); (2) `prepara(ids)` dà i record numerati (il numero sopra ogni
+ *   numero già dato, `_attesa` = l'identità); (3) si accodano al diario in UNA scrittura con `fsync`; (4) solo dopo si aggiunge al file
+ *   di attesa una riga «adottata» per ciascuna, con `fsync`. Un arresto fra (3) e (4): la lettura trova `_attesa` nel diario e non la
+ *   riscrive. ⛔ Il file di attesa non si tocca in nessun altro modo.
+ *   `deps` (solo le prove): `{ openSync, writeSync, fsyncSync, closeSync, readFileSync }` per simulare un arresto prima del disco.
+ * @returns {{ scritte: string[], gia: string[] }}
+ */
+export function adottaRigheInAttesaSync({ cartellaStore, sessionId, ids, prepara }, deps = {}) {
+  const percorso = percorsoDi(cartellaStore, sessionId);
+  if (codeDiScrittura.has(percorso)) throw Object.assign(new Error(`Session ${sessionId} has a write in flight: the waiting lines wait for it.`), { code: 'SESSION_STORE_BUSY' });
+  garantisciAffittoPerScrittura(cartellaStore, sessionId);
+  const stato = leggiAttesa(cartellaStore, sessionId, deps);
+  const gia = ids.filter((id) => stato.adottate.has(id));
+  const daFare = ids.filter((id) => !stato.adottate.has(id));
+  if (daFare.length === 0) return { scritte: [], gia };
+  const record = prepara(daFare);
+  mkdirSync(cartellaStore, { recursive: true });
+  verificaCodaAppendibile(percorso);
+  const testo = record.map((r) => rigaDelGiornale(r)).join('');
+  const fs = { openSync, writeSync, fsyncSync, closeSync, ...deps };
+  const fd = fs.openSync(percorso, 'a');
+  try {
+    const prima = fstatSync(fd).size;
+    recintoPrimaDellAccodamento(cartellaStore, sessionId, prima, record[0]); // la dimensione attesa, il primo numero sopra l'ultimo noto
+    try { fs.writeSync(fd, testo); } catch (errore) { avvelenaSeIlFileECambiato(percorso, prima, errore); throw errore; }
+    fs.fsyncSync(fd); // il diario sul disco PRIMA della riga «adottata»
+    dopoAccodamentoVerificato(cartellaStore, sessionId, prima, Buffer.byteLength(testo, 'utf8'), fstatSync(fd).size, record[record.length - 1], { percorso, scritto: testo });
+  } finally {
+    fs.closeSync(fd);
+  }
+  const alle = new Date().toISOString();
+  /* il diario le ha già: se la riga «adottata» non si scrive (disco pieno, arresto) le righe restano scritte, e la lettura le ritrova
+     nel diario (`_attesa`) e non le riscrive */
+  let rigaAdottataMancante = null;
+  try { aggiungiAllAttesaSync(cartellaStore, sessionId, daFare.map((id, i) => ({ tipo: TIPO_ADOTTATA, id, alle, sequenza: record[i]?._sequenza ?? null })), deps); }
+  catch (errore) { rigaAdottataMancante = errore; }
+  return { scritte: daFare, gia, rigaAdottataMancante };
 }
 
 /*
@@ -686,6 +1034,7 @@ export function registraRigaConfermata({ cartellaStore, sessionId, record, puoAc
       percorsiConCodaIncerta.add(percorso);
       throw errore?.code === 'SESSION_STORE_AMBIGUOUS' ? errore : erroreCodaIncerta();
     }
+    recintoPrimaDellAccodamento(cartellaStore, sessionId, prima, record); // 13/11/2026: fuori dal try che avvelena
     let erroreScrittura = null;
     try { appendFileSyncFn(percorso, bytesAttesi, { flush: true }); }
     catch (errore) { erroreScrittura = errore; }
@@ -694,6 +1043,7 @@ export function registraRigaConfermata({ cartellaStore, sessionId, record, puoAc
       if (delta < 0 || delta > bytesAttesi.length) throw erroreCodaIncerta();
       const coda = delta ? leggiByteDa(percorso, prima, delta) : Buffer.alloc(0);
       if (delta === bytesAttesi.length && coda.equals(bytesAttesi)) {
+        dopoAccodamento(cartellaStore, sessionId, prima, bytesAttesi.length, record);
         if (typeof confermaFn === 'function') {
           try { confermaFn(); }
           catch { throw erroreCodaIncerta(); }
@@ -836,6 +1186,8 @@ export async function eliminaSessionePersistita({ cartellaStore, sessionId }, de
        */
       await rmFn(cartellaPagineWebDi(cartellaStore, sessionId), { recursive: true, force: true, maxRetries: 3 });
       await rmFn(cartellaIncollatiDi(cartellaStore, sessionId), { recursive: true, force: true, maxRetries: 3 });
+      /* 14/11/2026 (sesto giro dell'affitto): il file di attesa è parte della chat e se ne va SOLO con lei, quando la persona la elimina */
+      await rmFn(percorsoAttesa(cartellaStore, sessionId), { force: true, maxRetries: 3 });
       await unlinkFn(percorso);
     } catch (errore) {
       if (errore?.code === 'ENOENT') { liberaAffittoDiUnaEliminata(cartellaStore, sessionId); return; }
@@ -1028,6 +1380,81 @@ export function riparaCodaSpezzata({ percorso, cartellaStore, sessionId }, deps 
   return corrente;
 }
 
+/**
+ * ⭐ 13/11/2026 — LA PORTA DELLA RINUMERAZIONE (pezzo 4 della cura dell'affitto compromesso; la regola e la riscrittura sicura in
+ *   `rinumerazione-giornale.mjs`). In fila con le altre operazioni sul giornale (le scritture già in coda finiscono prima) e SOLO con
+ *   l'affitto in mano, come la riparazione della coda: chi non lo può prendere riceve `{ rinumerato:false, motivo:'affittata' }` e il
+ *   giornale non si tocca. Una coda incerta non si rinumera (prima la ripara la lettura). Non lancia: ritorna l'esito.
+ */
+export function rinumeraDoppiDelGiornale({ cartellaStore, sessionId, rigaFinale = null }, deps = {}) {
+  const percorso = percorsoDi(cartellaStore, sessionId);
+  return inCodaDelPercorso(percorso, async () => {
+    if (!puoRiparare(cartellaStore, sessionId)) return { rinumerato: false, motivo: 'affittata' };
+    if (percorsiConCodaIncerta.has(percorso)) return { rinumerato: false, motivo: 'coda-incerta' };
+    return rinumeraGiornale(percorso, deps, { rigaFinale }); // 13/11/2026: la riga «recuperata» DENTRO il giornale rinumerato
+  });
+}
+
+/*
+ * ⭐ 13/11/2026 — GLI AVANZI DELLA RINUMERAZIONE, riconosciuti al ripristino (giudice v1804 punto 3, col limite VINCOLANTE v1805).
+ *   Accanto al giornale `<id>.jsonl` la rinumerazione può lasciare, dopo un crash o un disco pieno:
+ *   · il SUO temporaneo `<id>.jsonl.<uuid>.rinumerazione` (ucciso dopo l'apertura, prima del rename; o rename e cancellazione rifiutati):
+ *     è l'unica cosa che il codice toglie, SOLO col nome esatto (un uuid di `randomUUID`) e SOLO con l'affitto in mano, in fila con le
+ *     scritture del giornale. Senza affitto il temporaneo può essere la rinumerazione in corso di chi lo tiene: resta e si conta;
+ *   · le copie `<id>.jsonl.prima-della-rinumerazione-<ora>`: buone (verificate, nome dato solo dopo la verifica); `<copia>.da-verificare`:
+ *     interrotte prima della verifica; `<copia>.a-meta`: a metà (disco pieno durante la copia, o dimensione diversa). ⛔ Le copie NON si tolgono
+ *     MAI in automatico: si riconoscono, si contano e si dichiarano; quelle non buone non portano mai il nome di una copia buona.
+ *   Nessuno di questi nomi finisce in `.jsonl`: nessuno è mai preso per un giornale (`elencaSessioniPersistite`).
+ */
+const NOME_UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const ORA_COPIA = '\\d{4}-\\d\\d-\\d\\dT\\d\\d-\\d\\d-\\d\\d-\\d{3}Z';
+const scappa = (testo) => testo.replace(/[.*+?^${}()|[\]\\]/g, (c) => `\\${c}`);
+/** Una lettura della cartella: `sessionId → nomi dei file accanto al suo giornale` (solo chi ne ha). Mai un errore: cartella illeggibile ⇒ vuota. */
+export function avanziDellArchivio({ cartellaStore }, deps = {}) {
+  const readdirSyncFn = deps.readdirSyncFn ?? readdirSync;
+  const perSessione = new Map();
+  let nomi = [];
+  try { nomi = readdirSyncFn(cartellaStore); } catch { return perSessione; }
+  for (const nome of nomi) {
+    const i = typeof nome === 'string' ? nome.indexOf('.jsonl.') : -1;
+    if (i <= 0) continue;
+    const sessionId = nome.slice(0, i);
+    if (!perSessione.has(sessionId)) perSessione.set(sessionId, []);
+    perSessione.get(sessionId).push(nome);
+  }
+  return perSessione;
+}
+/**
+ * Riconosce gli avanzi di UN giornale (i `nomi` da `avanziDellArchivio`) e toglie i SOLI temporanei nostri, con l'affitto.
+ * @returns {Promise<{copie:string[], copieDaVerificare:string[], copieAMeta:string[], temporaneiTolti:number, temporaneiRimasti:number}>}
+ */
+export function avanziDellaRinumerazione({ cartellaStore, sessionId, nomi = [] }, deps = {}) {
+  const unlinkFn = deps.unlinkFn ?? fsp.unlink;
+  const percorso = percorsoDi(cartellaStore, sessionId);
+  const base = scappa(`${sessionId}${ESTENSIONE}`);
+  const temporaneo = new RegExp(`^${base}\\.${NOME_UUID}\\.rinumerazione$`);
+  const buona = new RegExp(`^${base}\\.prima-della-rinumerazione-${ORA_COPIA}$`);
+  const daVerificare = new RegExp(`^${base}\\.prima-della-rinumerazione-${ORA_COPIA}\\.da-verificare$`);
+  const aMeta = new RegExp(`^${base}\\.prima-della-rinumerazione-${ORA_COPIA}\\.a-meta$`);
+  const esito = { copie: [], copieDaVerificare: [], copieAMeta: [], temporaneiTolti: 0, temporaneiRimasti: 0 };
+  const temporanei = [];
+  for (const nome of nomi) {
+    if (temporaneo.test(nome)) temporanei.push(join(cartellaStore, nome));
+    else if (buona.test(nome)) esito.copie.push(join(cartellaStore, nome));
+    else if (daVerificare.test(nome)) esito.copieDaVerificare.push(join(cartellaStore, nome));
+    else if (aMeta.test(nome)) esito.copieAMeta.push(join(cartellaStore, nome));
+  }
+  if (temporanei.length === 0) return Promise.resolve(esito);
+  return inCodaDelPercorso(percorso, async () => {
+    if (!puoRiparare(cartellaStore, sessionId)) { esito.temporaneiRimasti = temporanei.length; return esito; }
+    for (const p of temporanei) {
+      try { await unlinkFn(p); esito.temporaneiTolti += 1; }
+      catch (errore) { if (errore?.code !== 'ENOENT') esito.temporaneiRimasti += 1; } // già via: né tolto qui né rimasto
+    }
+    return esito;
+  });
+}
+
 /*
  * ⭐⭐⭐ 24/09/2026 — F2-bis, corsia A: IL JOURNAL SI LEGGE A STREAM, RIGA PER RIGA. Fino a stamattina
  * `leggiRegistro` faceva `readFile(percorso, 'utf8')` + `split('\n')`: TUTTO il file in una stringa, poi tutte
@@ -1096,7 +1523,8 @@ async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}, cart
     fermata = esito;
     input.destroy();
   };
-  const suRiga = (riga) => {
+  /* 14/11/2026 (mai riscrivere): `inizio` è il byte dove comincia la riga nel file, per le righe «adozione» (`numeraLaVista`) */
+  const suRiga = (riga, inizio) => {
     if (fermata) return; // `destroy()` non ferma le righe già in un blocco: si ignorano
     if (riga.trim() === '') return;
     if (rottaPendente) {
@@ -1108,13 +1536,14 @@ async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}, cart
     catch { rottaPendente = true; return; }
     letti += 1;
     let esito;
-    try { esito = perRiga(record, { indice: indice++, byte: Buffer.byteLength(riga, 'utf8') }); }
+    try { esito = perRiga(record, { indice: indice++, byte: Buffer.byteLength(riga, 'utf8'), inizio }); }
     catch (errore) { ferma({ errore }); return; }
     if (esito === false) ferma({ interrotta: true });
   };
   /* 22/10/2026 (revisione avversaria): i pezzi di una riga lunga si tengono in un elenco e si cerca `\n` solo nel pezzo NUOVO — prima
      `resto += pezzo` e la ricerca da capo erano quadratici su una riga sola (checkpoint): 96 MB in 12,9 s contro 0,29 di readline. */
   let pezziDellaRiga = [];
+  let posizione = 0; // i byte del file già divisi in righe (col loro `\r` e `\n`)
   const senzaCr = (riga) => (riga.endsWith('\r') ? riga.slice(0, -1) : riga);
   input.on('data', (pezzo) => {
     if (fermata) return;
@@ -1123,12 +1552,14 @@ async function leggiAStreamInterna(percorso, sessionId, perRiga, deps = {}, cart
       pezziDellaRiga.push(pezzo.slice(inizio, fine));
       const riga = pezziDellaRiga.length === 1 ? pezziDellaRiga[0] : pezziDellaRiga.join('');
       pezziDellaRiga = [];
-      suRiga(senzaCr(riga));
+      const daByte = posizione;
+      posizione += Buffer.byteLength(riga, 'utf8') + 1;
+      suRiga(senzaCr(riga), daByte);
       inizio = fine + 1;
     }
     if (!fermata && inizio < pezzo.length) pezziDellaRiga.push(pezzo.slice(inizio));
   });
-  input.on('end', () => { if (!fermata && pezziDellaRiga.length) suRiga(senzaCr(pezziDellaRiga.join(''))); pezziDellaRiga = []; });
+  input.on('end', () => { if (!fermata && pezziDellaRiga.length) suRiga(senzaCr(pezziDellaRiga.join('')), posizione); pezziDellaRiga = []; });
   await new Promise((resolve) => {
     input.on('error', (errore) => { if (!fermata) fermata = { errore: erroreDiLettura(errore) }; });
     // La chiusura dello STREAM (fd chiuso) è il segnale completo: arriva dopo l'ultima riga (`end` viene prima di `close`),

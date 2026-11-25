@@ -53,17 +53,20 @@ test('B3-PREFERENZE-01 — in rigiocata le scritture delle preferenze non cresco
   }
   expect(misure[30].scritture.length, `3 giri: ${JSON.stringify(misure[3].scritture)} · 30 giri: ${JSON.stringify(misure[30].scritture)}`).toBe(misure[3].scritture.length);
   expect(misure[30].scritture.length, 'al massimo una manciata di scritture per un\'apertura, non una per giro').toBeLessThanOrEqual(3);
-  expect(misure[3].salvato, 'il modo salvato è quello dell\'ULTIMO giro della storia').toBe('piano');
-  expect(misure[30].salvato).toBe('piano');
+  /* Riga 224, D1 (giudice v2560, 22/11/2026): il modo dei giri della storia non è più il predefinito delle chat nuove. Prima di
+     allora qui si pretendeva `piano`, cioè proprio la fuga. */
+  expect(misure[3].salvato, 'il modo della storia non diventa il predefinito delle chat nuove').not.toBe('piano');
+  expect(misure[30].salvato).not.toBe('piano');
 });
 
-test('B3-PREFERENZE-02 AL CONTRARIO — un giro DAL VIVO salva subito il suo modo', async ({ page }) => {
+test('B3-PREFERENZE-02 (riga 224, D1) — nemmeno un giro DAL VIVO scrive il predefinito delle chat nuove', async ({ page }) => {
   await apri(page, 'b3-pref-vivo', 3);
   const n = await page.evaluate(() => window.__scritture.length);
   await page.evaluate(() => {
     const r = window.__talosHarnessUiRuntime;
-    r.handleRealEvent({ type: 'RunStarted', _sequenza: 500, input: { consegna: 'dal vivo' }, contesto: { modalitaOperativa: 'normale', modello: 'z-ai/glm-5.3-flash' } }, r.realSessionState.generation);
+    r.handleRealEvent({ type: 'RunStarted', _sequenza: 500, input: { consegna: 'dal vivo' }, contesto: { modalitaOperativa: 'piano', modello: 'z-ai/glm-5.3-flash' } }, r.realSessionState.generation);
   });
-  await expect.poll(() => page.evaluate(() => window.__scritture.length)).toBeGreaterThan(n);
-  expect(await page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}')?.chat?.modalitaOperativa, CHIAVE)).toBe('normale');
+  await page.evaluate(() => new Promise((fatto) => setTimeout(fatto, 300)));
+  expect(await page.evaluate(() => window.__scritture.length), 'il giro dal vivo non ha scritto le preferenze').toBe(n);
+  expect(await page.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}')?.chat?.modalitaOperativa ?? null, CHIAVE)).not.toBe('piano');
 });

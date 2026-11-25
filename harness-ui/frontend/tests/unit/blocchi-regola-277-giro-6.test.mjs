@@ -21,6 +21,7 @@ import { creaVisteDelBlocco } from '../../src/components/blocchi/viste.js';
 import { comandoObiettivo } from '../../src/components/obiettivo-carta.js';
 import { bollaDaInviare } from '../../src/components/bolla-della-persona.js';
 import * as imps from '../../src/components/impostazioni-dalla-chat.js';
+import { ultimaSequenzaVista } from '../../src/components/chat-pronte.js'; // P2-B (a): the resumed stream asks only for the unseen events
 import { catalogoPubblico } from '../../../src/impostazioni/catalogo-impostazioni.mjs';
 
 impostaLingua('en');
@@ -194,7 +195,7 @@ test('G6-4 runDirectShell: a chat change during the POST /shell await keeps the 
   const colonna = document.createElement('aside');
   document.body.append(colonna);
   const viste = creaVisteDelBlocco({ document, colonna: () => colonna, apriColonna() {} });
-  const state = { realSession: { id: 's1', taskId: 't1', generation: 1 } };
+  const state = { realSession: { id: 's1', taskId: 't1', generation: 1, sequenzeViste: new Set([3, 9, 7]) } };
   const inviati = [];
   let pagina = 's1';
   const a = creaAggancioBlocchi({ document, sessione: () => state.realSession.id, timer: orologio().timer,
@@ -219,14 +220,14 @@ test('G6-4 runDirectShell: a chat change during the POST /shell await keeps the 
 });
 
 test('G6-5 runDirectShell in the same chat still re-attaches the stream (`continua`) after the POST /shell', async () => {
-  const state = { realSession: { id: 's1', taskId: 't1', generation: 1 } };
+  const state = { realSession: { id: 's1', taskId: 't1', generation: 1, sequenzeViste: new Set([3, 9, 7]) } };
   const fatti = [];
   const ambiente = { state, toast() {}, tr: (k) => k, aggiornaElencoSessioniReali() {}, runRealeAttivo: () => false,
     apiPost: () => Promise.resolve({}), nuovaGenerazioneSessione: (o) => { fatti.push(`generation ${JSON.stringify(o)}`); return 2; },
-    collegaEventiSessione: (sid, g) => fatti.push(`attach ${sid} ${g}`) };
+    collegaEventiSessione: (sid, g, o) => fatti.push(`attach ${sid} ${g} after ${o?.dopo}`), ultimaSequenzaVista };
   const runDirectShell = new Function(...Object.keys(ambiente), `return ${corpo('runDirectShell').trim()}`)(...Object.values(ambiente));
   await runDirectShell('ls', false);
-  assert.deepEqual(fatti, ['generation {"continua":true}', 'attach s1 2']);
+  assert.deepEqual(fatti, ['generation {"continua":true}', 'attach s1 2 after 9']); // P2-B (a): from the last number seen
 });
 
 /* ---- BG3 round 7 (reviewer B of round 6, MEDIO-2, probes SONDA-B16/B17 ported): what G6-4 did not pin about the guard of

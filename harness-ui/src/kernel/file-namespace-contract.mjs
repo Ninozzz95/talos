@@ -1,5 +1,6 @@
 import { lstat, readlink } from 'node:fs/promises'
 import { win32 } from 'node:path'
+import { hostname } from 'node:os'
 
 /**
  * Windows Node resolves a single-leading-slash path on the current drive, not in WSL.
@@ -34,6 +35,49 @@ export function classificaPercorsoDiRete(percorso, {platform = process.platform}
     if (ospite === '' || ospite === 'wsl.localhost' || ospite === 'wsl$') return null
     return 'rete'
 }
+
+/**
+ * ⛔ Riga 199 (PC 0.2.5, 22/11/2026, giudice v2539) — PORTA A UN ALTRO COMPUTER? Solo il testo, mai il disco. Più stretta di
+ *   `classificaPercorsoDiRete` (che dice «nt» anche a `\\.\C:\` e a `\\?\GLOBALROOT\Device\HarddiskVolumeN\` e serve a RIFIUTARE): questa
+ *   serve a SALTARE una misura, quindi dice «rete» solo per `UNC\<ospite>` (anche dopo `\\?\`, `\\.\`, `\??\`, `GLOBAL`, `GLOBALROOT`,
+ *   `??`, `DosDevices`, `GLOBAL??`), i redirettori di Windows e `\\<ospite>` con due o più barre (cmd e PowerShell collassano le altre).
+ *   Questa macchina (`localhost`, `127.x`, `::1`, il suo nome NUDO, WSL) non è «rete»; il suo nome con un dominio dopo sì: per il DNS è
+ *   un altro computer. Ogni altro oggetto (`X:`, `Volume{…}`, `HarddiskVolumeN`, `SystemRoot`, `pipe`) si misura come oggi.
+ * @returns {{ospite: string, breve: string} | null} `breve` = la forma `\\ospite\…` normalizzata
+ */
+const NOME_DELLA_MACCHINA = (() => { try { return hostname().toLowerCase() } catch { return '' } })()
+const QUESTA_MACCHINA = (o) => /^(?:localhost|127(?:\.\d{1,3}){1,3}|\[?::1\]?|0--1\.ipv6-literal\.net|wsl\$|wsl\.localhost)$/u.test(o) || (NOME_DELLA_MACCHINA !== '' && o === NOME_DELLA_MACCHINA)
+export function portaInRete(percorso, { platform = process.platform } = {}) {
+    if (platform !== 'win32' || typeof percorso !== 'string') return null
+    const s = percorso.replaceAll('/', '\\')
+    const prefisso = /^(?:\\\\[?.]|\\\\?\?\?)\\+/u.exec(s)
+    let resto = null
+    if (prefisso) {
+        /* giro unico (A-R1, C-L1): Win32 toglie punti e spazi in coda ai pezzi di `\\.\` (`UNC.` è `UNC`); modello largo, innocuo su `\\?\` */
+        let t = s.slice(prefisso[0].length).split('\\').map((p) => (p === '.' || p === '..' ? p : p.replace(/[. ]+$/u, '')))
+            .reduce((a, p) => (p === '.' ? a : p === '..' ? a.slice(0, -1) : [...a, p]), []).join('\\') // punto 6: `.`/`..` del testo grezzo, come Win32 su `\\.\`
+        for (let m; (m = /^(?:GLOBAL|GLOBALROOT|GLOBAL\?\?|\?\?|DosDevices)\\+/iu.exec(t));) t = t.slice(m[0].length)
+        resto = /^(?:UNC|Device\\+(?:Mup|LanmanRedirector|WebDavRedirector|RdpDr))\\+(.*)$/isu.exec(t)?.[1] ?? null
+    } else resto = /^\\{2,}(.*)$/su.exec(s)?.[1] ?? null
+    const ospite = resto?.split('\\', 1)[0].split('@', 1)[0].toLowerCase()
+    if (!ospite || QUESTA_MACCHINA(ospite)) return null
+    const breve = win32.normalize(`\\\\${resto}`) // `\\ospite` senza condivisione Node lo dà con una barra sola: resta com'è
+    return { ospite, breve: breve.startsWith('\\\\') ? breve : `\\\\${resto}` }
+}
+
+/** Riga 199: `percorso` porta a un altro computer e NON sta dentro una delle `radici` (cartella, casa, progetti) che è sulla rete anche lei. */
+export function reteEstranea(percorso, radici = [], opzioni = {}) {
+    const rete = portaInRete(percorso, opzioni)
+    if (!rete) return false
+    const p = rete.breve.toLowerCase()
+    return !radici.some((r) => {
+        const q = portaInRete(r, opzioni)?.breve.toLowerCase().replace(/\\+$/u, '')
+        return q !== undefined && (p.replace(/\\+$/u, '') === q || p.startsWith(`${q}\\`))
+    })
+}
+
+/** Riga 199, giro unico (A-R5, C-L2): in PowerShell `FileSystem::X` e `Microsoft.PowerShell.Core\FileSystem::X` sono il posto `X`. */
+export const senzaFornitore = (t) => (typeof t === 'string' ? t.replace(/^(?:Microsoft\.PowerShell\.Core[\\/]+)?FileSystem::/iu, '') : t)
 
 /** L'host di un percorso `\\host\…` (o `//host/…`). */
 export function ospiteDi(percorso) {

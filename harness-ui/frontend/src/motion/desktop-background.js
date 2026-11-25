@@ -137,8 +137,10 @@ function chatHasMessages() {
 /* ⛔ 28/10/2026: niente `getBoundingClientRect` a ogni fotogramma (RESIZE-COMPOSER: 81 letture di rettangoli e 32 di stile in 31 movimenti
    del trascinamento, col fondo acceso). La misura viene da `prepare`, che il ResizeObserver del contenitore richiama a ogni cambio di
    dimensione, compreso il passaggio a `display:none` (misura zero). */
-function stageVisible(stage) {
-  if (document.hidden || !stage.canvas.isConnected) return false;
+/* Owner 11/11/2026 («Sì, pausa fuori fuoco»): con la finestra non in uso la scena si ferma come con la scheda nascosta. Decide
+   `hasFocus()`, non l'evento: un `blur` verso un iframe della pagina lascia il fuoco al documento (Hermes `renderer-loop-pause.ts:53`). */
+function stageVisible(stage, conFuoco = document.hasFocus()) {
+  if (document.hidden || !conFuoco || !stage.canvas.isConnected) return false;
   return stage.width > 1 && stage.height > 1 && !stage.canvas.closest('[hidden]');
 }
 
@@ -154,8 +156,8 @@ function scriviDato(elemento, chiave, valore) {
   if (elemento.dataset[chiave] !== valore) elemento.dataset[chiave] = valore;
 }
 
-function stageShouldAnimate(stage, config) {
-  if (!stageVisible(stage) || config.off || reducedMotion() || stage.manualPaused || stage.budgetStatic) return false;
+function stageShouldAnimate(stage, config, conFuoco) {
+  if (!stageVisible(stage, conFuoco) || config.off || reducedMotion() || stage.manualPaused || stage.budgetStatic) return false;
   if (stage.preview) return config.mode !== 'off' && config.mode !== 'static';
   /*
    * ⛔ 11/09/2026, sera — QUI C'ERA `if (chatHasMessages()) return false;`: il pacchetto fermava la
@@ -298,7 +300,7 @@ function frame(now) {
   if (destroyed) return;
   const config = configCorrente();
   const active = [...stages].filter((stage) => stageShouldAnimate(stage, config));
-  if (!active.length) { lastFrame = 0; return; }
+  if (!active.length) { schedule(); return; }
   const elapsed = lastFrame ? now - lastFrame : 1000 / TARGET_FPS;
   if (elapsed >= 1000 / TARGET_FPS - 1) {
     lastFrame = now;
@@ -307,11 +309,17 @@ function frame(now) {
   raf = requestAnimationFrame(frame);
 }
 
+/* Revisore 22/11/2026 (R1): col fuoco rimasto in un iframe della pagina, al ritorno `focus` arriva solo all'iframe. Ferma SOLO per il
+   fuoco, la scena lo rilegge una volta al secondo; un solo timer, mai a scena accesa né ferma per altri motivi. */
+let ricontrolloFuoco = 0;
 function schedule() {
   if (raf) cancelAnimationFrame(raf);
-  raf = 0;
-  lastFrame = 0;
-  if (!destroyed && [...stages].some((stage) => stageShouldAnimate(stage, configCorrente()))) raf = requestAnimationFrame(frame);
+  clearTimeout(ricontrolloFuoco);
+  raf = ricontrolloFuoco = lastFrame = 0;
+  if (destroyed) return;
+  const config = configCorrente();
+  if ([...stages].some((stage) => stageShouldAnimate(stage, config))) raf = requestAnimationFrame(frame);
+  else if ([...stages].some((stage) => stageShouldAnimate(stage, config, true))) ricontrolloFuoco = setTimeout(schedule, 1000);
 }
 
 function refreshAll({ reset = false } = {}) {
@@ -443,6 +451,8 @@ export function initTalosDesktopBackground() {
   document.addEventListener('visibilitychange', () => { dimenticaConfig(); schedule(); });
   window.addEventListener('pageshow', () => { dimenticaConfig(); schedule(); });
   window.addEventListener('pagehide', () => { if (raf) cancelAnimationFrame(raf); raf = 0; });
+  window.addEventListener('blur', schedule);
+  window.addEventListener('focus', schedule);
 
   const api = Object.freeze({
     initialized: true,

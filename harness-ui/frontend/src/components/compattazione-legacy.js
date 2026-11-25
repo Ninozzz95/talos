@@ -222,6 +222,12 @@ export function interpretaEventoCompattazione(evento) {
         recuperataFinoAlGiro: Number.isSafeInteger(v.buco.recuperataFinoAlGiro) && v.buco.recuperataFinoAlGiro >= 0 ? v.buco.recuperataFinoAlGiro : null,
         deltaScartati: Number.isSafeInteger(v.buco.deltaScartati) && v.buco.deltaScartati >= 0 ? v.buco.deltaScartati : null,
       } } : {}),
+      /* 13/11/2026 (affitto compromesso, pezzo 4): righe scritte da due processi coi numeri d'ordine doppi, rimesse in ordine dal ripristino */
+      ...(Number.isSafeInteger(v.rinumerate) && v.rinumerate > 0 ? { rinumerate: v.rinumerate } : {}),
+      /* 13/11/2026 sera (giudice v1804 punto 5): le sole righe che avevano RIUSATO un numero, cioè quelle scritte dall'altro TALOS */
+      ...(Number.isSafeInteger(v.doppie) && v.doppie > 0 ? { doppie: v.doppie } : {}),
+      /* 13/11/2026 sera (punto 1): una scrittura messa dopo le righe di un altro TALOS, una riga per giro, niente carte */
+      ...(v.scrittaAltrove === true ? { scrittaAltrove: true } : {}),
     };
   }
   return null;
@@ -420,7 +426,7 @@ export function aggiornaAvvisoContesto(avviso, valutazione) {
 
 /* -------------------------------------------------------------- la nota del journal riparato */
 
-const chiaveRiparazione = (info) => JSON.stringify([info?.riparato !== false, info?.backup ?? null, info?.righeScartate ?? null, info?.byteScartati ?? null, info?.errore ?? null, info?.buco?.recuperataFinoAlGiro ?? null]);
+const chiaveRiparazione = (info) => JSON.stringify([info?.riparato !== false, info?.backup ?? null, info?.righeScartate ?? null, info?.byteScartati ?? null, info?.errore ?? null, info?.buco?.recuperataFinoAlGiro ?? null, info?.scrittaAltrove === true, info?.doppie ?? null]);
 
 /**
  * Decisione 7: la coda spezzata si ripara al riavvio e SI DICE. Una riga in chat, nella forma della nota
@@ -433,9 +439,20 @@ export function creaNotaJournalRiparato(info, { document: doc = globalThis.docum
      la conversazione riprende dall'ultimo punto completo, e si dice fino a quale giro. */
   const buco = !fallita && info?.buco && typeof info.buco === 'object' ? info.buco : null;
   const giroBuco = Number.isSafeInteger(buco?.recuperataFinoAlGiro) ? buco.recuperataFinoAlGiro : null;
+  /* 13/11/2026 (affitto compromesso, pezzo 4): righe rimesse in ordine dal ripristino — mai «0 righe scartate» */
+  /* 13/11/2026 sera (punto 5): il conto dice le righe dell'altro TALOS (`doppie`); le righe di prima di questa cura non lo hanno e
+     tengono `rinumerate` */
+  const doppie = !fallita && Number.isSafeInteger(info?.doppie) && info.doppie > 0 ? info.doppie : null;
+  const rinumerate = !fallita && Number.isSafeInteger(info?.rinumerate) && info.rinumerate > 0 ? (doppie ?? info.rinumerate) : null;
+  /* 13/11/2026 sera (punto 1): un altro TALOS ha scritto nello stesso momento, e la nostra riga è andata dopo le sue */
+  const altrove = !fallita && info?.scrittaAltrove === true;
   // `riparato:false` (session-registry.mjs:5212-5214): la coda resta incerta, e si dice — mai «recuperata» su una riparazione non riuscita
   const frase = fallita
     ? t('chat.context.recovery.repairFailed')
+    : altrove
+      ? t('chat.context.recovery.writtenElsewhere')
+    : rinumerate !== null
+      ? tn('chat.context.recovery.reorderedOne', 'chat.context.recovery.reorderedMany', rinumerate)
     : buco
       ? (giroBuco !== null
         ? t('chat.context.recovery.upToTurn', { g: giroBuco })
@@ -449,6 +466,10 @@ export function creaNotaJournalRiparato(info, { document: doc = globalThis.docum
   const dettaglio = doc.createElement('p'); dettaglio.className = 'talos-system-note__perche';
   dettaglio.textContent = fallita
     ? (info.errore ? t('chat.context.recovery.systemAnswered', { e: info.errore }) : t('chat.context.recovery.noLineDiscarded'))
+    : altrove
+      ? t('chat.context.recovery.writtenElsewhereWhy')
+    : rinumerate !== null
+      ? t('chat.context.recovery.reorderedWhy')
     : buco
       ? tn('chat.context.recovery.missingPartOne', 'chat.context.recovery.missingPartsMany', Number.isSafeInteger(buco.deltaScartati) ? buco.deltaScartati : 1)
     : Number.isSafeInteger(info?.byteScartati)

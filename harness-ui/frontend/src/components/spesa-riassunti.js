@@ -76,8 +76,11 @@ function aggiungi(c, token, cache = null, chiamate = 1) {
 export function registraSpesa(spesa, valore, sequenza = null) {
   if (!spesa || !valore || typeof valore !== 'object') return false;
   if (Number.isSafeInteger(sequenza)) {
-    if (spesa.viste.includes(sequenza)) return false;
-    spesa.viste.push(sequenza);
+    /* 13/11/2026 (cura dell'affitto compromesso, i lettori): due righe DIVERSE con lo stesso numero (un giornale scritto da due processi) si
+       contano tutte e due; la stessa riga rigiocata una volta sola */
+    const chiave = `${sequenza}|${valore.scopo ?? ''}|${valore.at ?? ''}|${valore.usage?.prompt_tokens ?? ''}|${valore.usage?.completion_tokens ?? ''}`;
+    if (spesa.viste.includes(chiave)) return false;
+    spesa.viste.push(chiave);
     if (spesa.viste.length > 4000) spesa.viste.splice(0, spesa.viste.length - 4000);
   }
   const token = tokenDellaRiga(valore);

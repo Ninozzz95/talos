@@ -313,6 +313,44 @@ test('RICHIUDIBILE-05 — la freccia misurata (chiusa dritta, aperta girata) e i
   expect(await pieno.evaluate((d) => getComputedStyle(d.querySelector(':scope > summary'), '::before').transform)).toBe('none');
 });
 
+/* P2-B (riga 61 (b), revisione del 10/11 reperto 1): dal vivo, in «Dissolvenza», ogni parola del titolo è un pezzo a sé e il titolo
+   in `display:flex` le stringeva una per una, spezzate dentro («Perc/hé»). Si misura ogni parola: le sue righe a schermo. */
+const paroleSpezzate = (copia) => copia.evaluate((c) => {
+  const fuori = [];
+  for (const s of c.querySelectorAll('.md-richiudibile__titolo')) {
+    const giro = document.createTreeWalker(s, NodeFilter.SHOW_TEXT);
+    while (giro.nextNode()) {
+      const nodo = giro.currentNode;
+      for (const m of nodo.data.matchAll(/\S+/gu)) {
+        const r = document.createRange(); r.setStart(nodo, m.index); r.setEnd(nodo, m.index + m[0].length);
+        if (new Set([...r.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top))).size > 1) fuori.push(m[0]);
+      }
+    }
+  }
+  return fuori;
+});
+const righeDel = (loc) => loc.evaluate((t) => { const s = getComputedStyle(t); return Math.round((t.getBoundingClientRect().height - parseFloat(s.paddingTop) - parseFloat(s.paddingBottom) - parseFloat(s.borderBottomWidth)) / parseFloat(s.lineHeight)); });
+
+test('RICHIUDIBILE-06 — il titolo lungo mentre arriva (Dissolvenza) va a capo fra le parole, mai dentro; quello corto resta una riga con la freccia', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await apri(page);
+  const lungo = 'Perché il servizio di prova si ferma dopo il riavvio della macchina e cosa ho cambiato nella configurazione per farlo ripartire da solo ogni volta';
+  const testo = ['Ecco cosa ho trovato.', '', '<details>', `<summary>${lungo}</summary>`, '', 'Corpo del blocco.', '', '</details>', '', '<details>', '<summary>Breve</summary>', '', 'Altro corpo.', '', '</details>', '', 'Fine.'].join('\n');
+  const corsa = await scorri(page, { testo, passi: cadenzaRegolare(testo.length, 8, 6), modo: 'fade', messageId: 'rich-06' });
+  expect(corsa.completo).toBe(true);
+  const copia = page.locator('.assistant-copy').last();
+  const titoli = copia.locator('.md-richiudibile__titolo');
+  await expect(titoli).toHaveCount(2);
+  expect(piatto(await titoli.first().innerText())).toBe(lungo);
+  expect(await righeDel(titoli.first())).toBeGreaterThan(1); // il caso c'è: il titolo occupa più righe
+  expect(await paroleSpezzate(copia)).toEqual([]);
+  /* al contrario: il titolo corto è una riga sola, e la freccia sta sulla sua riga */
+  expect(await righeDel(titoli.last())).toBe(1);
+  const freccia = await titoli.last().evaluate((t) => { const r = t.getBoundingClientRect(); const s = getComputedStyle(t, '::before'); return { contenuto: s.content, visibile: s.visibility, dentro: r.height < 2 * parseFloat(getComputedStyle(t).lineHeight) + 20 }; });
+  expect(freccia).toEqual({ contenuto: '"▸"', visibile: 'visible', dentro: true });
+});
+const piatto = (t) => String(t).replace(/\s+/gu, ' ').trim();
+
 test('RICHIUDIBILE-04 — le foto: chiuso, aperto e mentre arriva, in chiaro e in scuro', async ({ page }) => {
   test.skip(!FOTO, 'le foto si scattano solo con TALOS_FOTO_RICHIUDIBILI=<cartella>');
   mkdirSync(FOTO, { recursive: true });

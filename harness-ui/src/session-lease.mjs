@@ -36,6 +36,23 @@
  *   dell'ultimo rilascio. Quando l'affitto si prende di nuovo e il giornale ha un'altra dimensione, un altro processo ci ha
  *   scritto: `daRicaricare(sessionId)` lo dice finché una lettura non lo rimette in pari (decisione owner del 10/10: la sessione
  *   si ricarica da sola prima di scrivere).
+ *
+ * ⭐⭐⭐ 13/11/2026 — L'AFFITTO COMPROMESSO (giudice v1649/v1656, prova `REV-A14` del revisore di P4). Un processo FERMO più della
+ *   scadenza (PC sospeso, programma bloccato) non sa di esserlo: l'altro gli prende l'affitto, scrive, rilascia, e al risveglio il
+ *   primo `rilascia` segnava come «nota» la dimensione CON DENTRO le scritture dell'altro: la chat in memoria restava vecchia e la
+ *   scrittura dopo usava numeri d'ordine già usati sul disco. Ora, come `proper-lockfile` (doc letta via ctx7 il 13/11/2026:
+ *   `onCompromised`/`ECOMPROMISED`, «Unable to update lock within the stale threshold», «The lock is no longer owned — stop using
+ *   the guarded resource»):
+ *   · l'affitto è COMPROMESSO se il file non è più nostro (`battito`, `rilascia`, `prendi`): via dai tenuti, la dimensione attesa
+ *     NON si aggiorna, e la chat è «da ricaricare» se il giornale non ha più la dimensione attesa. Se fra due rinfreschi riusciti è
+ *     passata più della scadenza, l'affitto NON si dà per buono: si rinfresca e si rilegge subito, e se non è più nostro è
+ *     compromesso; se lo è ancora nessuno l'ha preso (chi lo porta via lo rinomina e scrive il suo; `portaVia` rimette quello
+ *     rinfrescato), e il rilascio non segna la dimensione di adesso. Un fermo di 31 s in cui nessuno ha scritto non ricarica niente;
+ *   · la dimensione ATTESA (`statoAtteso`) segue ogni NOSTRA scrittura (`dopoScrittura`, dallo store) e ogni lettura intera,
+ *     col numero d'ordine più alto che ci sta dentro: lo store la confronta prima di ogni accodamento (il recinto, pezzo 2);
+ *   · `cambiatoAltrove` con l'affitto in mano non si fida più a occhi chiusi quando l'ultimo rinfresco è più vecchio della
+ *     scadenza (la finestra fra il risveglio e il primo battito, pezzo 3).
+ *   Hermes fa il recinto nel database (`hermes_state_messages.py:256-258`, «Session turn lease lost; refusing transcript write»).
  */
 import { randomUUID } from 'node:crypto';
 import {
@@ -94,15 +111,21 @@ export function creaAffittiArchivio({
   impostaIntervallo = setInterval,
   cancellaIntervallo = clearInterval,
   collegaSync = linkSync, // iniettabile: le prove simulano un file system che rifiuta i collegamenti (Android, exFAT)
+  /* 13/11/2026 (P1-b del revisore affitto 1 di 3): SOLO per le prove, mai passato dal prodotto (lo controlla una prova sui sorgenti):
+     chiamato fra il rinfresco di un affitto fermo oltre la scadenza e la sua rilettura, dove un altro processo può portarlo via */
+  dopoIlRinfresco = null,
 } = {}) {
   if (typeof cartellaStore !== 'string' || !cartellaStore) throw new TypeError('creaAffittiArchivio requires cartellaStore.');
   if (typeof percorsoGiornale !== 'function') throw new TypeError('creaAffittiArchivio requires percorsoGiornale(sessionId).');
   const cartella = join(cartellaStore, CARTELLA_AFFITTI);
   const fileDi = (sessionId) => join(cartella, `${sessionId}.json`);
-  /* sessionId → { ultimaAttivita } per gli affitti che QUESTO processo tiene */
+  /* sessionId → { ultimaAttivita, ultimoRinfresco } per gli affitti che QUESTO processo tiene */
   const tenuti = new Map();
-  const dimensioniNote = new Map();
+  /* sessionId → { dimensione, sequenza }: il giornale come lo sa QUESTO processo (ultima lettura intera o ultima nostra scrittura) */
+  const attese = new Map();
   const daRicaricareSet = new Set();
+  /* il recinto dello store ha già accolto la coda scritta altrove (`adotta`): si scrive, ma la chat in memoria va ricaricata da ferma */
+  const adottate = new Set();
   const predicatiInUso = new Set();
   let intervallo = null;
   let chiuso = false;
@@ -111,6 +134,22 @@ export function creaAffittiArchivio({
     try { return statSync(percorsoGiornale(sessionId)).size; }
     catch (errore) { if (errore?.code === 'ENOENT') return 0; throw errore; }
   };
+  /* Il giornale non è più come lo sa questo processo (o non si sa com'è): qualcun altro ci ha scritto. */
+  const diversoDallAtteso = (sessionId) => {
+    const atteso = attese.get(sessionId);
+    if (!atteso || !Number.isSafeInteger(atteso.dimensione)) return true;
+    try { return dimensioneGiornale(sessionId) !== atteso.dimensione; } catch { return true; }
+  };
+  /*
+   * 13/11/2026 — l'affitto COMPROMESSO: perso (il file non è più nostro) o non rinfrescato entro la scadenza. Via dai tenuti; la
+   *   dimensione attesa resta quella di prima (mai la dimensione di adesso, che può avere dentro le scritture dell'altro); la chat
+   *   è da ricaricare solo se il giornale non è più come lo sappiamo.
+   */
+  const compromesso = (sessionId) => {
+    tenuti.delete(sessionId);
+    if (diversoDallAtteso(sessionId)) daRicaricareSet.add(sessionId);
+  };
+  const scadutoPerTempo = (mio, ora) => Boolean(mio) && ora - mio.ultimoRinfresco > scadenzaMs;
   const leggiDetentore = (file) => {
     let testo, mtimeMs;
     try { mtimeMs = statSync(file).mtimeMs; testo = readFileSync(file, 'utf8'); }
@@ -190,8 +229,18 @@ export function creaAffittiArchivio({
       const mio = tenuti.get(sessionId);
       if (mio) {
         const attuale = leggiDetentore(file);
-        if (attuale?.istanza === istanza) { mio.ultimaAttivita = adesso(); return { preso: true, nuovo: false }; }
-        tenuti.delete(sessionId); // perso (cancellato a mano, o portato via mentre questo processo era fermo): si riprende da capo
+        const ora = adesso();
+        let ancoraNostro = attuale?.istanza === istanza;
+        if (ancoraNostro && scadutoPerTempo(mio, ora)) {
+          /* fermo oltre la scadenza ma il file è ancora nostro: si rinfresca SUBITO e si rilegge (chi l'avesse portato via nel
+             frattempo l'avrebbe rinominato: la rilettura lo dice) */
+          try { utimesSync(file, new Date(ora), new Date(ora)); } catch { /* sparito: lo dice la rilettura */ }
+          dopoIlRinfresco?.(file, sessionId);
+          ancoraNostro = leggiDetentore(file)?.istanza === istanza;
+          if (ancoraNostro) mio.ultimoRinfresco = ora;
+        }
+        if (ancoraNostro) { mio.ultimaAttivita = ora; return { preso: true, nuovo: false }; }
+        compromesso(sessionId); // perso (cancellato a mano, o portato via mentre questo processo era fermo): si riprende da capo
       }
       mkdirSync(cartella, { recursive: true });
       for (let tentativo = 0; tentativo < 3; tentativo += 1) {
@@ -200,7 +249,10 @@ export function creaAffittiArchivio({
         } catch (errore) {
           if (errore?.code !== 'EEXIST') throw errore;
           const detentore = leggiDetentore(file);
-          if (detentore?.istanza === istanza) break; // nostro da prima (un `tenuti` perso): si tiene
+          if (detentore?.istanza === istanza) { // nostro da prima (un `tenuti` perso): si tiene, rinfrescato adesso (13/11)
+            try { const quando = new Date(adesso()); utimesSync(file, quando, quando); } catch { /* sparito: lo dice la rilettura sotto */ }
+            break;
+          }
           if (detentore && !scaduto(detentore)) return { preso: false, detentore };
           if (!portaVia(file, detentore ?? {})) return { preso: false, detentore: leggiDetentore(file) ?? detentore };
           continue;
@@ -209,8 +261,9 @@ export function creaAffittiArchivio({
       }
       const attuale = leggiDetentore(file);
       if (attuale?.istanza !== istanza) return { preso: false, detentore: attuale };
-      tenuti.set(sessionId, { ultimaAttivita: adesso() });
-      if (dimensioniNote.has(sessionId) && dimensioneGiornale(sessionId) !== dimensioniNote.get(sessionId)) daRicaricareSet.add(sessionId);
+      const presoAlle = adesso();
+      tenuti.set(sessionId, { ultimaAttivita: presoAlle, ultimoRinfresco: presoAlle });
+      if (attese.has(sessionId) && diversoDallAtteso(sessionId)) daRicaricareSet.add(sessionId);
       avviaBattito();
       return { preso: true, nuovo: true };
     },
@@ -228,51 +281,116 @@ export function creaAffittiArchivio({
     /** Segna un'attività (una scrittura): il rilascio conta da qui. */
     tocca(sessionId) { const mio = tenuti.get(sessionId); if (mio) mio.ultimaAttivita = adesso(); },
 
-    /** Rilascia l'affitto, ricordando la dimensione del giornale com'è adesso (tutto ciò che è stato scritto da noi). */
+    /**
+     * Rilascia l'affitto. Con l'affitto SANO (file nostro, rinfrescato entro la scadenza) ricorda la dimensione del giornale com'è
+     *   adesso: tutto ciò che c'è l'abbiamo scritto noi. 13/11/2026: con l'affitto COMPROMESSO no — prima si guarda di chi è il file,
+     *   e la dimensione si segna solo se è ancora nostro (prima la segnava PRIMA di guardare, con dentro le scritture dell'altro).
+     */
     rilascia(sessionId, { dimensione } = {}) {
-      if (!tenuti.has(sessionId)) return false;
-      tenuti.delete(sessionId);
-      try { dimensioniNote.set(sessionId, Number.isSafeInteger(dimensione) ? dimensione : dimensioneGiornale(sessionId)); }
-      catch { dimensioniNote.delete(sessionId); }
+      const mio = tenuti.get(sessionId);
+      if (!mio) return false;
       const file = fileDi(sessionId);
       const attuale = (() => { try { return leggiDetentore(file); } catch { return null; } })();
-      if (attuale?.istanza === istanza) { try { unlinkSync(file); } catch { /* già via */ } }
+      const nostro = attuale?.istanza === istanza;
+      if (Number.isSafeInteger(dimensione)) { // chi chiama sa la dimensione (lo store dopo aver tolto il giornale)
+        tenuti.delete(sessionId);
+        attese.set(sessionId, { dimensione, sequenza: null });
+      } else if (!nostro) {
+        compromesso(sessionId);
+      } else {
+        tenuti.delete(sessionId);
+        if (!scadutoPerTempo(mio, adesso())) {
+          try { attese.set(sessionId, { dimensione: dimensioneGiornale(sessionId), sequenza: attese.get(sessionId)?.sequenza ?? null }); }
+          catch { attese.delete(sessionId); }
+        }
+        // fermo oltre la scadenza ma il file è ancora nostro: la dimensione attesa resta quella delle nostre scritture
+      }
+      if (nostro) { try { unlinkSync(file); } catch { /* già via */ } }
       fermaBattitoSeVuoto();
       return true;
     },
 
-    /** Una lettura INTERA del giornale ha visto `dimensione` byte: è la dimensione nota, e la sessione è in pari. */
-    ricordaDimensione(sessionId, dimensione) {
+    /** Una lettura INTERA del giornale ha visto `dimensione` byte (e `sequenza` come numero d'ordine più alto): la sessione è in pari. */
+    ricordaDimensione(sessionId, dimensione, sequenza = null) {
       if (!Number.isSafeInteger(dimensione)) return;
-      dimensioniNote.set(sessionId, dimensione);
+      attese.set(sessionId, { dimensione, sequenza: Number.isSafeInteger(sequenza) ? sequenza : null });
       daRicaricareSet.delete(sessionId);
+      adottate.delete(sessionId);
     },
-    dimensioneNota(sessionId) { return dimensioniNote.get(sessionId) ?? null; },
+    dimensioneNota(sessionId) { return attese.get(sessionId)?.dimensione ?? null; },
+    /** Il giornale come lo sa questo processo: `{ dimensione, sequenza }` (la sequenza può essere `null`), o `null` se non lo sa. */
+    statoAtteso(sessionId) { const atteso = attese.get(sessionId); return atteso ? { ...atteso } : null; },
+    /**
+     * Lo store ha accodato `byte` byte (con `sequenza`, se la riga ne ha una) partendo da un giornale di `prima` byte. La dimensione
+     *   attesa cresce dei byte scritti; se non era nota, nasce da `prima`.
+     */
+    dopoScrittura(sessionId, { byte, sequenza = null, prima = null } = {}) {
+      if (!Number.isSafeInteger(byte) || byte < 0) return;
+      const atteso = attese.get(sessionId);
+      const base = atteso && Number.isSafeInteger(atteso.dimensione) ? atteso.dimensione : prima;
+      if (!Number.isSafeInteger(base)) { attese.delete(sessionId); return; }
+      const sequenzaNota = Number.isSafeInteger(atteso?.sequenza) ? atteso.sequenza : null;
+      const nuova = Number.isSafeInteger(sequenza) ? Math.max(sequenzaNota ?? sequenza, sequenza) : sequenzaNota;
+      attese.set(sessionId, { dimensione: base + byte, sequenza: nuova });
+    },
+    /** Il recinto dello store ha visto il giornale diverso dall'atteso: la chat è da ricaricare e le scritture si fermano. */
+    segnaCambiato(sessionId) { daRicaricareSet.add(sessionId); },
+    /**
+     * Il recinto ha LETTO la coda scritta altrove (dalla dimensione attesa a `dimensione`, numeri fino a `sequenza`): da qui si può
+     *   accodare dopo di lei, ma la chat in memoria non ce l'ha ancora (`daRicaricare` resta vero finché una lettura intera non la
+     *   rimette in pari).
+     */
+    adotta(sessionId, { dimensione, sequenza = null } = {}) {
+      if (!Number.isSafeInteger(dimensione)) return;
+      attese.set(sessionId, { dimensione, sequenza: Number.isSafeInteger(sequenza) ? sequenza : null });
+      daRicaricareSet.delete(sessionId);
+      adottate.add(sessionId);
+    },
     /** Il giornale è cambiato rispetto alla dimensione nota (lo scrive un altro): `true` finché una lettura non lo rimette in pari. */
-    daRicaricare(sessionId) { return daRicaricareSet.has(sessionId); },
+    daRicaricare(sessionId) { return daRicaricareSet.has(sessionId) || adottate.has(sessionId); },
+    /** Lo store rifiuta le scritture (la coda scritta altrove non è stata ancora né letta né adottata). */
+    scritturaBloccata(sessionId) { return daRicaricareSet.has(sessionId); },
     /** Come `daRicaricare`, ma misurato adesso, senza prendere l'affitto (per chi legge soltanto). */
     cambiatoAltrove(sessionId) {
-      if (daRicaricareSet.has(sessionId)) return true;
-      if (tenuti.has(sessionId)) return false; // con l'affitto in mano il giornale cresce solo per le NOSTRE scritture
-      if (!dimensioniNote.has(sessionId)) return false;
-      try { return dimensioneGiornale(sessionId) !== dimensioniNote.get(sessionId); } catch { return false; }
+      if (daRicaricareSet.has(sessionId) || adottate.has(sessionId)) return true;
+      /* con l'affitto in mano, e rinfrescato entro la scadenza, il giornale cresce solo per le NOSTRE scritture. 13/11/2026 (pezzo 3):
+         oltre la scadenza (un risveglio, prima del primo battito) non ci si fida: si misura */
+      const mio = tenuti.get(sessionId);
+      if (mio && !scadutoPerTempo(mio, adesso())) return false;
+      const atteso = attese.get(sessionId);
+      if (!atteso || !Number.isSafeInteger(atteso.dimensione)) return false;
+      try { return dimensioneGiornale(sessionId) !== atteso.dimensione; } catch { return false; }
     },
-    dimentica(sessionId) { dimensioniNote.delete(sessionId); daRicaricareSet.delete(sessionId); },
+    dimentica(sessionId) { attese.delete(sessionId); daRicaricareSet.delete(sessionId); adottate.delete(sessionId); },
 
     /** Un predicato «questa sessione è in uso qui» (un giro vivo, una ricerca): finché è vero l'affitto non si rilascia. */
     aggiungiInUso(predicato) { predicatiInUso.add(predicato); return () => predicatiInUso.delete(predicato); },
 
-    /** Un battito: rinfresca gli affitti tenuti e rilascia quelli inattivi. Esposto per i test. */
+    /**
+     * Un battito: rinfresca gli affitti tenuti e rilascia quelli inattivi. Esposto per i test.
+     * 13/11/2026: PRIMA si guarda se l'affitto è ancora nostro e rinfrescato entro la scadenza (prima si rilasciava per primo, e il
+     *   rilascio segnava la dimensione con dentro le scritture dell'altro); se no è COMPROMESSO.
+     */
     battito() {
       const ora = adesso();
       for (const [sessionId, mio] of [...tenuti]) {
-        const inUso = [...predicatiInUso].some((p) => { try { return p(sessionId) === true; } catch { return true; } });
-        if (!inUso && ora - mio.ultimaAttivita >= rilascioDopoMs) { api.rilascia(sessionId); continue; }
         const file = fileDi(sessionId);
         const attuale = leggiDetentore(file);
-        if (attuale?.istanza !== istanza) { tenuti.delete(sessionId); continue; } // portato via: la prossima scrittura lo riprende o rifiuta
+        if (attuale?.istanza !== istanza) { compromesso(sessionId); continue; }
+        if (scadutoPerTempo(mio, ora)) {
+          /* fermo oltre la scadenza ma il file dice ancora noi: nessuno l'ha preso (chi lo porta via lo rinomina e scrive il suo).
+             Si rinfresca SUBITO e si rilegge, come in `prendi`: se nel frattempo l'hanno portato via (o rimesso perché rinfrescato,
+             `portaVia`), la rilettura lo dice e l'affitto è compromesso. */
+          try { utimesSync(file, new Date(ora), new Date(ora)); } catch { /* sparito: lo dice la rilettura */ }
+          dopoIlRinfresco?.(file, sessionId);
+          if (leggiDetentore(file)?.istanza !== istanza) { compromesso(sessionId); continue; }
+          mio.ultimoRinfresco = ora;
+        }
+        const inUso = [...predicatiInUso].some((p) => { try { return p(sessionId) === true; } catch { return true; } });
+        if (!inUso && ora - mio.ultimaAttivita >= rilascioDopoMs) { api.rilascia(sessionId); continue; }
         const quando = new Date(ora);
         utimesSync(file, quando, quando);
+        mio.ultimoRinfresco = ora;
       }
       fermaBattitoSeVuoto();
     },

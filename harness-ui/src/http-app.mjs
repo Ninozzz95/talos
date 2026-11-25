@@ -11041,6 +11041,7 @@ export function createHttpApp({
             headers: SECURITY_HEADERS,
             heartbeatMs: INTERVALLO_BATTITO_SSE_MS,
             lastEventId: daSequenza,
+            filtraPerCursore: false, // 13/11/2026: il cursore lo applica già `iscriviti` (sotto, `daSequenza`), anche ai numeri rinumerati
             setIntervalFn: impostaIntervalloFn,
             clearIntervalFn: cancellaIntervalloFn,
           });

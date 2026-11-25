@@ -146,7 +146,9 @@ export const FORMATI_CODICE = Object.freeze(['sorgente', 'md', 'txt']);
  */
 export function fileDelCodice(formato, { testo = '', linguaggio = '', info = '', ora = new Date() } = {}) {
   const ext = estensioneDi(linguaggio);
-  const proposto = nomeDalRecinto(info);
+  /* P2-B: without a name on the fence line, a path comment alone on the FIRST line (`// src/app.js`, `# x.py`, `<!-- a.html -->`) */
+  const commento = /^\s*(?:\/\/|#|--|\/\*|<!--)\s*(\S+?)\s*(?:\*\/|-->)?\s*$/u.exec(String(testo ?? '').split('\n', 1)[0])?.[1];
+  const proposto = nomeDalRecinto(info) ?? nomeDalRecinto(commento);
   const extProposta = proposto ? ESTENSIONE_FINALE.exec(proposto)?.[1]?.toLowerCase() : null;
   const dalModello = proposto && extProposta && ESEGUIBILI.has(extProposta) && extProposta !== ext ? null : proposto;
   const lingua = String(linguaggio ?? '').trim().toLowerCase().replace(/[^a-z0-9]/gu, '') || 'code';

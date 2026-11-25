@@ -469,3 +469,17 @@ test('BLOCCHI-PC-20 una tabella in arrivo si vede ma non si filtra né si ordina
   assert.equal(vivo.nodo.querySelector('input.talos-field__input').disabled, false);
   impostaOrologioCaricamento(null);
 });
+
+/* P2-B (riga 68, revisione del 10/11 reperto 17): mentre il grafico arriva, un punto ancora senza valore dava `points … NaN` in console. */
+test('BLOCCHI-PC-GRAFICO-NAN — linee: un punto senza valore (ancora in arrivo) si salta, niente NaN; AL CONTRARIO i punti interi restano tutti', async () => {
+  const { disegnaGrafico } = await import('../../src/components/blocchi/grafico.js');
+  const doc = documento();
+  const g = disegnaGrafico({ forma: 'linee', serie: [{ nome: 'A', punti: [{ x: 'gen', y: 2 }, { x: 'feb', y: 5 }, { x: 'mar' }] }] }, { document: doc });
+  const punti = g.querySelector('polyline').getAttribute('points');
+  assert.doesNotMatch(punti, /NaN/u);
+  assert.equal(punti.split(' ').length, 2);
+  for (const c of g.querySelectorAll('circle')) assert.doesNotMatch(String(c.getAttribute('cy')), /NaN/u);
+  const intero = disegnaGrafico({ forma: 'linee', serie: [{ nome: 'A', punti: [{ x: 'gen', y: 2 }, { x: 'feb', y: 5 }, { x: 'mar', y: 1 }] }] }, { document: doc });
+  assert.equal(intero.querySelector('polyline').getAttribute('points').split(' ').length, 3);
+  assert.equal(intero.querySelectorAll('circle').length, 3);
+});

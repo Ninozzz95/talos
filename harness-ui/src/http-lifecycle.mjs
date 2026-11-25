@@ -71,14 +71,19 @@ export function applicaTempiDelServer(server, tempi = TEMPI_SERVER_HTTP) {
   return Object.freeze(Object.fromEntries(Object.keys(tempi).map((nome) => [nome, server[nome]])));
 }
 
-export function createSseSession({ response, heartbeatMs = 15_000, signal = null, lastEventId = 0, headers = {}, setIntervalFn = setInterval, clearIntervalFn = clearInterval } = {}) {
+/*
+ * 13/11/2026 (cura dell'affitto compromesso, pezzo 4 — i lettori): `filtraPerCursore: false` quando chi manda ha GIÀ applicato il
+ *   cursore (`iscriviti` del registro col suo `daSequenza`): sotto un numero già visto può arrivare un evento che il client non ha mai
+ *   visto (la coda di un altro processo scritta coi numeri vecchi, consegnata dalla ricarica), e qui verrebbe scartato in silenzio.
+ */
+export function createSseSession({ response, heartbeatMs = 15_000, signal = null, lastEventId = 0, filtraPerCursore = true, headers = {}, setIntervalFn = setInterval, clearIntervalFn = clearInterval } = {}) {
   let closed = false;
   let heartbeat = null;
   let onResponseClose;
   let onAbort;
   const send = (event) => {
     if (closed || response?.writableEnded || response?.destroyed) return false;
-    if (typeof event?._sequenza === 'number' && event._sequenza <= lastEventId) return false;
+    if (filtraPerCursore && typeof event?._sequenza === 'number' && event._sequenza <= lastEventId) return false;
     if (typeof event?._sequenza === 'number') response.write(`id: ${event._sequenza}\n`);
     response.write(`data: ${JSON.stringify(event)}\n\n`);
     return true;
