@@ -50,9 +50,19 @@ describe('TEMA-HASH: il tema «telemetry» del mobile', () => {
  */
 const ECCEZIONE_KERNEL_R4 = join('scripts', 'kernel-r4')
 
+/*
+ * ⛔ SECONDA ECCEZIONE, stretta e nominata (giudice v2710, strada A, 25/11/2026; riga 402 «una sola linea» e nucleo
+ * centralizzato, owner 21/10/2026): il SOLO file `harness-ui/src/forme-di-segreto.mjs`, con cui le righe dell'attività del
+ * Codice coprono i segreti come il PC (0.1.50 P5, fc9741cbb e 45f2d522a). Niente copia: il file è nel nucleo condiviso
+ * (`harness-ui/scripts/cancello/nucleo-condiviso.json`, cartella `harness-ui/src`) e `scripts/guardia-nucleo-pc.mjs` lo
+ * confronta per impronte col PC uscito prima di ogni uscita. Ogni altro percorso di harness-ui resta rosso (LANE-01c).
+ */
+const ALTRE_LANE = /['"](?:\.\.\/)*(?:control-plane|harness-ui\/src|context-engine|kadmos|AVM-harness-desktop)\//
+const FILE_CONDIVISO = /(['"])(?:\.\.\/)+harness-ui\/src\/forme-di-segreto\.mjs\1/g
+export const nominaAltreLane = (riga: string): boolean => ALTRE_LANE.test(riga.replace(FILE_CONDIVISO, "''"))
+
 describe('LANE-01: il mobile non legge file delle altre lane', () => {
     it('LANE-01: nessuna stringa in src/, scripts/, tests/ punta a control-plane, harness-ui, context-engine o alla CLI', () => {
-        const ALTRE_LANE = /['"](?:\.\.\/)*(?:control-plane|harness-ui\/src|context-engine|kadmos|AVM-harness-desktop)\//
         const trovati: string[] = []
         const visita = (cartella: string) => {
             for (const voce of readdirSync(cartella)) {
@@ -64,7 +74,7 @@ describe('LANE-01: il mobile non legge file delle altre lane', () => {
                     readFileSync(percorso, 'utf8').split('\n').forEach((riga, indice) => {
                         const testo = riga.trim()
                         if (testo.startsWith('//') || testo.startsWith('*') || testo.startsWith('/*')) return
-                        if (ALTRE_LANE.test(riga)) trovati.push(`${percorso.slice(MOBILE.length + 1)}:${indice + 1}`)
+                        if (nominaAltreLane(riga)) trovati.push(`${percorso.slice(MOBILE.length + 1)}:${indice + 1}`)
                     })
                 }
             }
@@ -96,5 +106,24 @@ describe('LANE-01: il mobile non legge file delle altre lane', () => {
         expect(copia).not.toMatch(/readFileSync\(\s*join\(\s*radiceR4/)
         // il pacchetto lavora sulla COPIA, mai su un checkout delle altre lane
         expect(readFileSync(join(cartella, 'prepara-pacchetto-r4.mjs'), 'utf8')).not.toMatch(/AVM-harness-desktop|radiceR4/)
+    })
+
+    it('LANE-01c: l’eccezione di forme-di-segreto.mjs vale per quel solo file, e il file è nel nucleo confrontato dalla guardia', () => {
+        // i percorsi si compongono qui, così questo file non nomina in una stringa le altre lane (LANE-01 lo legge)
+        const su = '../../../../../'
+        const ui = ['harness-ui', 'src'].join('/')
+        const ce = ['context-engine', 'src'].join('/')
+        expect(nominaAltreLane(`import { oscuraPerStruttura } from '${su}${ui}/forme-di-segreto.mjs'`)).toBe(false)
+        // ogni altro file di harness-ui, anche accanto a quello ammesso o con un nome che lo contiene, resta rosso
+        for (const riga of [
+            `import { x } from '${su}${ui}/session-store.mjs'`,
+            `import { a } from '${su}${ui}/forme-di-segreto.mjs'; import { b } from '${su}${ui}/path-policy.mjs'`,
+            `import { y } from '${su}${ui}/forme-di-segreto.mjs.bak'`,
+            `import { z } from '${su}${ui}/altre/forme-di-segreto.mjs'`,
+            `import { w } from '${su}${ce}/forme-di-segreto.mjs'`,
+        ]) expect(nominaAltreLane(riga), riga).toBe(true)
+        const nucleo = JSON.parse(readFileSync(join(MOBILE, '..', 'harness-ui', 'scripts', 'cancello', 'nucleo-condiviso.json'), 'utf8'))
+        expect(nucleo.cartelle).toContain('harness-ui/src')
+        expect(readFileSync(join(MOBILE, 'scripts', 'guardia-nucleo-pc.mjs'), 'utf8')).toContain('impronte-nucleo.mjs')
     })
 })

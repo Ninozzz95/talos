@@ -6,6 +6,67 @@ signed APK under [Releases](../../releases).
 
 Numbers in this file are measured on a device unless a version says otherwise.
 
+## mobile-v0.1.50
+
+A new top bar, Code on the same core as the computer app 0.2.5, and secrets hidden in the activity rows of Code.
+
+### Changed
+
+- **The top bar puts its buttons in one capsule.** Bell, update arrow, downloads and options sit together in one capsule
+  on the right; a long model name is shortened before the capsule instead of pushing it aside, there is no gap before the
+  time after a short model name, and on a tablet the header of a reply keeps clear of the back button.
+  - In italiano: la barra in alto mette i suoi tasti in una capsula. Campanella, freccia dell'aggiornamento, download e
+    opzioni stanno insieme in una capsula a destra; un nome di modello lungo si accorcia prima della capsula invece di
+    spingerla di lato, non c'è più un buco prima dell'ora dopo un nome corto, e sul tablet l'intestazione di una risposta
+    non copre il tasto indietro.
+- **Code on the device runs on the same core as the computer app 0.2.5.** More deletions hidden by quotes (an ANSI-C quote,
+  an apostrophe) ask first; with «Writes to the project» a command that writes or deletes outside the project asks; a
+  command whose name is formed only while it runs, next to a critical place such as the home folder, asks before it can
+  delete; on a «Read only» card an automatic yes becomes an automatic No; the assistant no longer opens a web page whose
+  address contains one of your saved keys; a card for many calls lists the first 20 and says how many more your answer
+  covers. The field with the pictures of a web page has its label, as on the computer app.
+  - In italiano: il Codice sul dispositivo gira sullo stesso nucleo dell'app del computer 0.2.5. Più cancellazioni nascoste
+    dalle virgolette (una virgoletta ANSI-C, un apostrofo) chiedono prima; con «Scrive nel progetto» un comando che scrive o
+    cancella fuori dal progetto chiede; un comando il cui nome si forma solo mentre gira, accanto a un posto critico come la
+    cartella di casa, chiede prima di poter cancellare; su una carta «Sola lettura» un sì automatico diventa un No
+    automatico; l'assistente non apre più una pagina web il cui indirizzo contiene una delle tue chiavi salvate; una carta
+    per molte chiamate elenca le prime 20 e dice quante altre copre la tua risposta. Il campo con le immagini di una pagina
+    web ha la sua etichetta, come sull'app del computer.
+
+### Security
+
+- **The activity rows in Code hide secrets, like the computer app.** Until 0.1.49 a key or a password in the arguments of
+  a call showed in clear in the activity row, while the permission cards already hid it. Now the row hides it in the
+  arguments, in their raw text, while they are still arriving (half-written JSON is closed and read by structure, with
+  «…» on the value still open), and in a call that was interrupted and saved, also after a reload.
+  - In italiano: le righe dell'attività nel Codice nascondono i segreti, come l'app del computer. Fino alla 0.1.49 una
+    chiave o una password negli argomenti di una chiamata si vedeva in chiaro nella riga dell'attività, mentre le carte dei
+    permessi la nascondevano già. Ora la riga la nasconde negli argomenti, nel loro testo grezzo, mentre stanno ancora
+    arrivando (un JSON a metà si chiude e si legge per struttura, con «…» sul valore ancora aperto) e in una chiamata
+    interrotta e salvata, anche dopo una ricarica.
+
+### Known limits
+
+- **Raw arguments that are not JSON.** While the arguments of a call arrive as plain text, the end of a Z.AI key or of
+  `user:password@` in an address can show until it is complete. The same happens on the computer app.
+  - In italiano: argomenti grezzi che non sono JSON. Mentre gli argomenti di una chiamata arrivano come testo semplice, la
+    fine di una chiave Z.AI o di `utente:password@` in un indirizzo può vedersi finché non è completa. Succede anche
+    sull'app del computer.
+- **The result of a tool is not masked.** A tool result that contains a secret in its text is shown as it is, also on the
+  computer app.
+  - In italiano: il risultato di uno strumento non è mascherato. Un risultato che contiene un segreto nel suo testo si
+    mostra così com'è, anche sull'app del computer.
+- **The keyboard over a permission card.** If the keyboard is open when a permission card appears, the card can scroll
+  out of view and show only its buttons. Close the keyboard and read the whole card before you choose.
+  - In italiano: la tastiera sopra una carta dei permessi. Se la tastiera è aperta quando compare una carta, la carta può
+    scorrere fuori vista e mostrare solo i tasti. Chiudi la tastiera e leggi tutta la carta prima di scegliere.
+- **Where the core is checked.** The check that Code's core is the released core of the computer app runs when the
+  release is prepared, from the private repository; the public build does not repeat it.
+  - In italiano: dove si controlla il nucleo. Il controllo che il nucleo del Codice sia quello uscito dell'app del
+    computer si fa quando si prepara l'uscita, dal deposito privato; la build pubblica non lo ripete.
+- The Chat still runs on its own engine and checks, unchanged in this version.
+  - In italiano: la Chat gira ancora su un motore e controlli suoi, invariati in questa versione.
+
 ## mobile-v0.1.49
 
 A security fix for Code on the device: it now runs on the same core as the computer app 0.2.3, so tools of connectors,

@@ -1,0 +1,22 @@
+{
+    "en": [
+        "New top bar: bell, update arrow, downloads and options sit together in one capsule, and a long model name is shortened before it instead of pushing it aside.",
+        "Code on the device now runs on the core of the computer app 0.2.5: more hidden deletions ask first, with \"Writes to the project\" a write outside the project asks, and an automatic yes on a \"Read only\" card becomes No.",
+        "The assistant no longer opens a web page whose address contains one of your saved keys, and a card for many calls lists at most 20 of them.",
+        "The activity rows in Code hide secrets like the computer app: in the arguments, in their raw text, while they are still arriving, and in a call that was interrupted and saved.",
+        "Known limit: while the arguments of a call arrive as plain text, not JSON, the end of a Z.AI key or of user:password@ in an address can show until it is complete. The same happens on the computer app.",
+        "Known limit: the result of a tool that contains a secret in its text is shown as it is, also on the computer app.",
+        "Known limit: if the keyboard is open when a permission card appears, the card can scroll out of view and show only its buttons. Close the keyboard and read the whole card before you choose.",
+        "The Chat still runs on its own engine and checks, unchanged in this version. The check that Code's core is the released core of the computer app runs when the release is prepared, not in the public build."
+    ],
+    "it": [
+        "Barra in alto nuova: campanella, freccia dell'aggiornamento, download e opzioni stanno insieme in una capsula, e un nome di modello lungo si accorcia prima di lei invece di spingerla di lato.",
+        "Il Codice sul dispositivo gira sul nucleo dell'app del computer 0.2.5: più cancellazioni nascoste chiedono prima, con «Scrive nel progetto» una scrittura fuori dal progetto chiede, e su una carta «Sola lettura» un sì automatico diventa No.",
+        "L'assistente non apre più una pagina web il cui indirizzo contiene una delle tue chiavi salvate, e una carta per molte chiamate ne elenca al massimo 20.",
+        "Le righe dell'attività nel Codice nascondono i segreti come l'app del computer: negli argomenti, nel loro testo grezzo, mentre stanno ancora arrivando e in una chiamata interrotta e salvata.",
+        "Limite noto: mentre gli argomenti di una chiamata arrivano come testo semplice, non JSON, la fine di una chiave Z.AI o di utente:password@ in un indirizzo può vedersi finché non è completa. Succede anche sull'app del computer.",
+        "Limite noto: il risultato di uno strumento che contiene un segreto nel suo testo si mostra così com'è, anche sull'app del computer.",
+        "Limite noto: se la tastiera è aperta quando compare una carta dei permessi, la carta può scorrere fuori vista e mostrare solo i tasti. Chiudi la tastiera e leggi tutta la carta prima di scegliere.",
+        "La Chat gira ancora su un motore e controlli suoi, invariati in questa versione. Il controllo che il nucleo del Codice sia quello uscito dell'app del computer si fa quando si prepara l'uscita, non nella build pubblica."
+    ]
+}

@@ -699,9 +699,11 @@ function messageStateLabel(state: string): string {
             <TalosMobileStatusMessage v-else-if="message.role === 'system'" :message="message" />
             <template v-else>
                 <TalosMobileAssistantHeader v-if="message.role === 'assistant'">
-                    <span v-if="modelLabel(message)">{{ modelLabel(message) }} · </span>
-                    <span>{{ relativeTime(message.created_at) }}</span>
-                    <span v-if="message.state !== 'persisted'"> · {{ messageStateLabel(message.state) }}</span>
+                    <!-- giudice v2245: si tronca il nome, non l'ora (regole in talosCalmMessages.css) -->
+                    <span class="talos-meta-riga">
+                        <span v-if="modelLabel(message)" class="talos-meta-modello"><span class="talos-meta-nome">{{ modelLabel(message) }}</span><span> · </span></span>
+                        <span><span>{{ relativeTime(message.created_at) }}</span><span v-if="message.state !== 'persisted'"> · {{ messageStateLabel(message.state) }}</span></span>
+                    </span>
                 </TalosMobileAssistantHeader>
                 <TalosMobileReasoningBlock
                     v-if="message.role === 'assistant' && ragionamentoDaMostrare(message, index)"

@@ -121,7 +121,7 @@ const harnessCollapsed = computed(() => props.variant === 'harness' && props.col
                 <ChevronLeft v-else aria-hidden="true" />
             </Button>
             <span v-if="!harnessCollapsed" class="talos-orbitron-brand text-sm tracking-[0.2em] text-[var(--talos-text)]">TALOS</span>
-            <div v-if="!harnessCollapsed" class="ml-auto"><TalosMobileNotificationBell /><TalosMobileUpdateSignal v-if="talosSegnaleAggiornamento.visibile" />
+            <div v-if="!harnessCollapsed" data-testid="talos-tablet-app-actions" class="ml-auto flex items-center"><TalosMobileNotificationBell /><TalosMobileUpdateSignal v-if="talosSegnaleAggiornamento.visibile" />
             <TalosMobileDownloadCenterTrigger /></div>
         </div>
         <HarnessScreen v-if="variant === 'harness' && !harnessCollapsed" embedded class="min-h-0 flex-1" />

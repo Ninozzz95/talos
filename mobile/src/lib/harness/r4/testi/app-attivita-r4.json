@@ -1,8 +1,8 @@
 {
   "origine": {
-    "commit": "4cee78f3349c5d34b4f44303a157b93542656aef",
+    "commit": "4cc08aa1007c5ca8651c95901f0466ec31e2232c",
     "percorso": "harness-ui/frontend/src/i18n/testi/app.js",
-    "sha256": "3520e3b597a275ab341a6976bf50c5f7492fbc8e78c53c64a192462a80ecd124",
+    "sha256": "b3eeb2267cf36c499a5eee0853a6ffb8e6b53d47340c4481119001f982c7d0b4",
     "prefisso": [
       "activity.noOutput",
       "activity.outputLabel",
@@ -64,6 +64,7 @@
     "activity.arg.html": "HTML",
     "activity.arg.id": "id",
     "activity.arg.ids": "id",
+    "activity.arg.images": "immagini",
     "activity.arg.include": "includi",
     "activity.arg.input_schema": "schema dell’input",
     "activity.arg.istruzioni": "istruzioni",
@@ -126,6 +127,7 @@
     "activity.arg.task": "compito",
     "activity.arg.testo": "testo",
     "activity.arg.text": "testo",
+    "activity.arg.oppure": "oppure",
     "activity.arg.theme": "tema",
     "activity.arg.this_conversation": "questa conversazione",
     "activity.arg.title": "titolo",
@@ -191,6 +193,7 @@
     "activity.arg.html": "HTML",
     "activity.arg.id": "id",
     "activity.arg.ids": "ids",
+    "activity.arg.images": "images",
     "activity.arg.include": "include",
     "activity.arg.input_schema": "input schema",
     "activity.arg.istruzioni": "instructions",
@@ -253,6 +256,7 @@
     "activity.arg.task": "task",
     "activity.arg.testo": "text",
     "activity.arg.text": "text",
+    "activity.arg.oppure": "or",
     "activity.arg.theme": "theme",
     "activity.arg.this_conversation": "this conversation",
     "activity.arg.title": "title",
