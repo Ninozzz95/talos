@@ -24,6 +24,7 @@ import {
 } from '@/lib/chat/sequenzaDelTurno'
 import { TALOS_METADATA_RISULTATO_DELEGA, vociRisultatoDelegaR4 } from './risultatiDelegaR4'
 import { esitoDellaChiamataR4 } from './esitoAttrezzoR4'
+import { oscuraPerStruttura } from '../../../../../harness-ui/src/forme-di-segreto.mjs'
 import { istantaneaR4, type IstantaneaR4 } from './impostazioniDalVivoR4'
 import { TALOS_METADATA_APPROVAZIONE, type VoceApprovazioneR4 } from './approvazioneChiave'
 import { TALOS_METADATA_DOMANDA, type EsitoDomandaR4, type VoceDomandaR4 } from './domandaChiave'
@@ -165,7 +166,7 @@ export function creaConversazioneR4(): ConversazioneR4 {
 
 function dettaglio(argomenti: string): string | null {
     try {
-        const valore: unknown = JSON.parse(argomenti)
+        const valore: unknown = oscuraPerStruttura(JSON.parse(argomenti)) // P5 0.1.50: la riga corta con le maschere del PC
         if (!valore || typeof valore !== 'object') return null
         for (const campo of CAMPI_DETTAGLIO) {
             const v = (valore as Record<string, unknown>)[campo]

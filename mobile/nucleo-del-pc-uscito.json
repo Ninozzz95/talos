@@ -1,0 +1,6 @@
+{
+  "schema": "talos.nucleo-del-pc-uscito.v1",
+  "perche": "Riga 28: il telefono esce solo col nucleo del PC uscito, confrontato per impronte (giudice 18/11 11:48, decisione 402). Il commit del PC uscito sta scritto qui e in nessun altro posto: lo legge scripts/guardia-nucleo-pc.mjs.",
+  "pc": "0.2.5",
+  "commit": "ee2d44803049b608620b7117f139b258849c1aff"
+}

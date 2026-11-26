@@ -12,6 +12,18 @@
 .talos-calm-thread .talos-message-content { line-height: inherit; }
 .assistant-header { display: flex; align-items: center; width: 100%; gap: .55rem; font-size: var(--text-xs); margin-bottom: .75rem; }
 .assistant-header small { margin-left: auto; min-width: 0; overflow-wrap: anywhere; text-align: right; opacity: .65; font-size: var(--text-3xs); }
+/* ⛔ Giudice v2245: la testa si toglie ai lati lo spazio della barra (variabili di TalosMobileImmersiveChrome, in px dal bordo del
+   riquadro della barra, che ne pubblica anche la larghezza; la colonna è `max-w-[820px] px-3` centrata in quel riquadro). Il nome si
+   tronca coi puntini prima della capsula; sotto i 6 caratteri (+1,5ch del « · ») va a capo su una seconda riga nascosta.
+   Giudice v2261 (foto vere dell'APK): (1) sul tablet il riquadro non è lo schermo (c'è il pannello), quindi la larghezza viene dalla
+   barra e non da 100vw; (2) la soglia sta nella BASE `7.5ch`, che `max-width: max-content` riduce al nome corto: un `min-width: 7.5ch`
+   vinceva sul massimo e lasciava un buco fra «gpt-5 ·» e l'ora. Prove: nomeDelModelloPrimaDellaCapsula.test.ts (unità) e
+   tests/e2e/mobile-barra-capsula.e2e.spec.ts (rettangoli veri, 4 misure × 2 temi). */
+.assistant-header { --talos-bordo-colonna: calc(max(0px, (var(--talos-barra-larghezza, 100vw) - 820px) / 2) + .75rem); padding-inline: max(0px, calc(var(--talos-barra-sinistra, 0px) - var(--talos-bordo-colonna))) max(0px, calc(var(--talos-barra-destra, 0px) - var(--talos-bordo-colonna))); }
+.talos-meta-riga { display: flex; flex-flow: row-reverse wrap; line-height: 1.5; max-height: 1.5em; overflow: hidden; }
+.talos-meta-riga > * { flex: none; white-space: pre; }
+.talos-meta-riga > .talos-meta-modello { order: 1; display: flex; flex: 1 1 7.5ch; min-width: 0; max-width: max-content; }
+.talos-meta-nome { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .talos-orb { position: relative; width: 2.25rem; height: 2.25rem; flex: none; border: 1px solid var(--talos-accent-soft); border-radius: 50%; display: grid; place-items: center; color: var(--talos-accent); }
 /*
  * Owner 02/10: il logo «tre quarti del cerchio», in attesa e in testa alle risposte. Conta il DISEGNO, non l'elemento:

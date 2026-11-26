@@ -68,8 +68,10 @@ describe('T8 — il corpo della riga d’attrezzo, come il PC', () => {
             { tipo: 'argomento', chiave: 'html', valore: lungo, forma: 'lungo', caratteri: '401 characters' },
             { tipo: 'argomento', chiave: 'n', valore: '3', forma: 'riga' },
         ])
-        // argomenti storti: il testo grezzo, mai un crash
-        expect(corpoAttrezzoR4({ nome: 'scrivi', argomenti: '{"percorso": "a' }, 'it')).toEqual([{ tipo: 'argomentiGrezzi', testo: '{"percorso": "a' }])
+        // argomenti a metà, mai un crash. Giro 2 delle maschere (0.1.50 P5): non più il testo grezzo, ma chiusi e letti per struttura
+        // come sul PC (`leggiArgomentiDellaRiga`), col valore aperto «…»; un JSON che non si chiude non si mostra
+        expect(corpoAttrezzoR4({ nome: 'scrivi', argomenti: '{"percorso": "a' }, 'it')).toEqual([{ tipo: 'argomento', chiave: 'percorso', etichetta: 'percorso', valore: '…', forma: 'riga' }])
+        expect(corpoAttrezzoR4({ nome: 'scrivi', argomenti: '{"percorso": a' }, 'it')).toEqual([])
     })
 
     it('CORPO-08 senza argomenti né risultato il corpo è vuoto: la riga non si apre (`nonApribileSeVuota`)', () => {
@@ -92,6 +94,9 @@ describe('T8 — il corpo della riga d’attrezzo, come il PC', () => {
         expect(campi.length).toBeGreaterThan(100)
         expect(corpoAttrezzoR4({ nome: 'scrivi', argomenti: '{"percorso":"a"}' }, 'it')[0]).toMatchObject({ etichetta: 'percorso' })
         expect(corpoAttrezzoR4({ nome: 'scrivi', argomenti: '{"percorso":"a"}' }, 'en')[0]).toMatchObject({ etichetta: 'path' })
+        // il campo `images` di «naviga» (PC 0.2.4): sul PC aveva la sua voce, sul telefono mancava
+        expect(corpoAttrezzoR4({ nome: 'naviga', argomenti: '{"images":true}' }, 'it')[0]).toMatchObject({ chiave: 'images', etichetta: 'immagini', valore: 'true' })
+        expect(corpoAttrezzoR4({ nome: 'naviga', argomenti: '{"images":true}' }, 'en')[0]).toMatchObject({ etichetta: 'images' })
         for (const [chiave, en] of campi) {
             const nome = chiave.slice('activity.arg.'.length)
             expect(corpoAttrezzoR4({ nome: 'scrivi', argomenti: JSON.stringify({ [nome]: 'v' }) }, 'en')[0]).toMatchObject({ etichetta: en })

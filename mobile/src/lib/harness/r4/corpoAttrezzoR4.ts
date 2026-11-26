@@ -14,6 +14,8 @@ import erroriTurnoNo from './testi/errori-turno-no-r4.json'
 import chatComando from './testi/chat-comando-r4.json'
 import appAttivita from './testi/app-attivita-r4.json'
 import { leggiEsitoComandoR4 } from './esitoAttrezzoR4'
+import { chiudiJsonParziale } from './chiudiJsonParzialeR4'
+import { oscuraFormeDiSegreto, oscuraPerStruttura, oscuraTestoInArrivo } from '../../../../../harness-ui/src/forme-di-segreto.mjs'
 import type { TalosRisultatoAttrezzo } from '@/lib/chat/sequenzaDelTurno'
 
 export type PezzoDelCorpoR4 =
@@ -117,11 +119,15 @@ function tagliato(testo: string, lingua: string): { testo: string; tagliato?: st
     }
 }
 
-function argomentiR4(grezzi: string, lingua: string): PezzoDelCorpoR4[] {
-    if (!grezzi.trim()) return []
+/* P5 della 0.1.50: le maschere della riga del PC (`renderizzaArgomentiAttrezzo`), dallo stesso file; senza risultato gli argomenti
+   possono ancora arrivare, e l'ultima parola che può diventare un segreto resta «…» (`argomentiGrezziDellaRiga`, carta-dal-testo.js) */
+function argomentiR4(grezzi: string, lingua: string, arrivati: boolean): PezzoDelCorpoR4[] {
+    const testo = grezzi.trim()
+    if (!testo) return []
+    if (testo[0] !== '{' && testo[0] !== '[') return [{ tipo: 'argomentiGrezzi', testo: arrivati ? oscuraFormeDiSegreto(grezzi) : oscuraTestoInArrivo(grezzi) }]
+    // giro 2: un JSON, anche a metà, si chiude e si legge per struttura come `leggiArgomentiDellaRiga` del PC; se non si chiude, niente
     let argomenti: unknown
-    try { argomenti = JSON.parse(grezzi) } catch { argomenti = null }
-    if (!argomenti || typeof argomenti !== 'object') return [{ tipo: 'argomentiGrezzi', testo: grezzi }]
+    try { argomenti = oscuraPerStruttura(JSON.parse(chiudiJsonParziale(testo))) } catch { return [] }
     const pezzi: PezzoDelCorpoR4[] = []
     for (const [chiave, valore] of Object.entries(argomenti as Record<string, unknown>)) {
         if (chiave === 'descrizione') continue
@@ -144,7 +150,7 @@ const haFlusso = (v: unknown): v is string => typeof v === 'string' && v !== ''
  * (`nonApribileSeVuota`, `app.js:4084`).
  */
 export function corpoAttrezzoR4(chiamata: { nome: string; argomenti: string; risultato?: RisultatoAttrezzoR4 }, lingua: string): PezzoDelCorpoR4[] {
-    const pezzi = argomentiR4(String(chiamata.argomenti ?? ''), lingua)
+    const pezzi = argomentiR4(String(chiamata.argomenti ?? ''), lingua, Boolean(chiamata.risultato))
     const risultato = chiamata.risultato
     if (!risultato) return pezzi
     const testoEsito = String(risultato.contenuto ?? '')

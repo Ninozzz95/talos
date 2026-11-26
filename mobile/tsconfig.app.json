@@ -6,6 +6,7 @@
         "baseUrl": ".",
         "paths": { "@/*": ["./src/*"] },
         "allowArbitraryExtensions": true,
+        "allowJs": true,
         "resolveJsonModule": true,
         "noUnusedLocals": true,
         "noUnusedParameters": true,

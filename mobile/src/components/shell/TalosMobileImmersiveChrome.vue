@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent } from 'vue'
+import { defineAsyncComponent, onBeforeUnmount, onMounted, onUpdated, ref } from 'vue'
 import { talosSegnaleAggiornamento } from '@/lib/updates/segnaleAggiornamento'
 import type { TalosSessionCleanupPlan } from '@/lib/chat/sessionCleanup'
 import { ChevronLeft, Menu } from '@lucide/vue'
@@ -91,10 +91,40 @@ const emit = defineEmits<{
     /** ⭐⭐ P4-ter passo 2 — «Compatta ora», già confermato nel menu. */
     compact: []
 }>()
+
+// ⛔ Giudice v2245: «Talos» e il nome del modello finivano sotto pillola e capsula. La barra pubblica quanto occupa ai lati, in px
+// dal bordo del SUO riquadro, e quanto è largo il riquadro; talosCalmMessages.css lo toglie alla testa. nomeDelModelloPrimaDellaCapsula.test.ts
+// Giudice v2261 (foto vere del Pad): anche il tablet, dove a sinistra c'è «indietro» e il riquadro comincia dopo il pannello.
+// Sul telefono il riquadro è lo schermo (sinistra 0, destra = larghezza): gli stessi numeri di prima.
+const radice = ref<HTMLElement | null>(null)
+const VARIABILI = ['--talos-barra-sinistra', '--talos-barra-destra', '--talos-barra-larghezza']
+const togli = () => VARIABILI.forEach((v) => document.documentElement.style.removeProperty(v))
+function misura() {
+    const azioni = radice.value?.querySelector('[data-testid="talos-immersive-actions"]')
+    if (!radice.value || !azioni) return togli()
+    const riquadro = radice.value.getBoundingClientRect()
+    const tasto = radice.value.querySelector('[data-testid="talos-shell-menu"], [data-testid="talos-chat-back"]')
+    const capsula = azioni.getBoundingClientRect()
+    const valori = [
+        tasto ? Math.ceil(tasto.getBoundingClientRect().right - riquadro.left) + 8 : 0,
+        capsula.width > 0 ? Math.ceil(riquadro.right - capsula.left) + 4 : 0,
+        riquadro.width,
+    ]
+    VARIABILI.forEach((v, i) => document.documentElement.style.setProperty(v, `${valori[i]}px`))
+}
+let osservatore: ResizeObserver | undefined
+onMounted(() => {
+    misura()
+    if (typeof ResizeObserver === 'undefined' || !radice.value) return
+    osservatore = new ResizeObserver(misura)
+    for (const e of [radice.value, radice.value.querySelector('[data-testid="talos-immersive-actions"]')]) if (e) osservatore.observe(e)
+})
+onUpdated(misura)
+onBeforeUnmount(() => { osservatore?.disconnect(); togli() })
 </script>
 
 <template>
-    <div data-testid="talos-mobile-immersive-chrome" class="pointer-events-none absolute inset-x-0 top-0 z-20">
+    <div ref="radice" data-testid="talos-mobile-immersive-chrome" class="pointer-events-none absolute inset-x-0 top-0 z-20">
         <!--
             ⛔⛔ IL VELO ARRIVA DOVE ARRIVANO I COMANDI, e non un pixel prima.
 
@@ -183,8 +213,23 @@ const emit = defineEmits<{
                 DUE gruppi, non uno: campanella e download il pannello del tablet
                 ce li ha, le opzioni della chat no. Vedi la nota accanto alle
                 proprieta.
+
+                ⛔ UNA CAPSULA SOLA (owner 19/11 09:10, variante A del bozzetto
+                BOZZETTO-BARRA-DEL-TELEFONO-2026-11-18): campanella, freccia e
+                download non avevano fondo e galleggiavano sul velo trasparente;
+                la riga «modello · ora» della risposta, allineata a destra, ci
+                scorreva sotto e si leggeva FRA le icone. Ora stanno con le
+                opzioni in una capsula coi colori della pillola di oggi. Il velo
+                non cambia (scelta dell'owner del 27/08).
+                Giudice v2245: il filo è un anello DENTRO (`ring-inset`): un bordo
+                aggiungeva 2 px e la capsula era alta 50 contro i 48 della pillola.
+                Lo stato premuto delle opzioni è tondo come la capsula, solo qui.
             -->
-            <div class="pointer-events-auto flex shrink-0 items-center">
+            <div
+                data-testid="talos-immersive-actions"
+                class="pointer-events-auto flex shrink-0 items-center"
+                :class="hideAppActions && hideChatOptions ? '' : 'rounded-full ring-1 ring-inset ring-[var(--talos-border)]/60 bg-[var(--talos-card)]/85 text-[var(--talos-text)] backdrop-blur [&>button]:text-[var(--talos-text)] [&_[aria-haspopup=menu]]:rounded-full'"
+            >
                 <template v-if="!hideAppActions">
                     <TalosMobileNotificationBell /><TalosMobileUpdateSignal v-if="talosSegnaleAggiornamento.visibile" />
                     <TalosMobileDownloadCenterTrigger />
@@ -196,7 +241,6 @@ const emit = defineEmits<{
                     :cleanup-plan="cleanupPlan"
                     :active-title="activeTitle"
                     :busy="busy"
-                    pill
                     @new-chat="emit('newChat')"
                     @temporary-chat="emit('temporaryChat')"
                     @normal-mode="emit('normalMode')"
